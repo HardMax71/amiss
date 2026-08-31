@@ -10,9 +10,10 @@ use amiss_controller::{
     LeaseFence, OidPair, OpaqueId, PendingRelation, PlanScope, ProviderIdentity, ProviderInstance,
     ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
     RELATION_REGISTRY_LIMIT, RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission,
-    RelationLimits, RelationPlan, RelationRegistryError, RelationScheduleError,
-    RelationStatusDestination, RelationStatusError, RelationSubject, RelationSubjectHead,
-    RelationSubjectTransition, RelationTransition, relation_registry, relation_status_targets,
+    RelationCredentialError, RelationCredentialRoute, RelationLimits, RelationPlan,
+    RelationRegistryError, RelationScheduleError, RelationStatusDestination, RelationStatusError,
+    RelationSubject, RelationSubjectHead, RelationSubjectTransition, RelationTransition,
+    relation_authority, relation_credential_router, relation_registry, relation_status_targets,
     relation_transition, relations_for_delivery, schedule_relation, verify_relation_acquired,
 };
 use amiss_fixtures::{CommitPair, commit_pair, git};
@@ -80,6 +81,16 @@ fn plan(identity: &str, source: &str, documentation: &str) -> RelationPlan {
             subject_role: artifact("documentation"),
             required_status_name: "Amiss cross-repository".to_owned(),
         }],
+    }
+}
+
+fn credential_route(
+    subject: &RelationSubject,
+    authority: &'static str,
+) -> RelationCredentialRoute<&'static str> {
+    RelationCredentialRoute {
+        identity: subject.credential.clone(),
+        authority,
     }
 }
 
@@ -252,6 +263,101 @@ fn relation_identities_and_subjects_are_closed_before_indexing() {
         relation_registry(too_many).err(),
         Some(RelationRegistryError::TooManyRelations)
     );
+}
+
+#[test]
+fn credential_router_freezes_one_authority_for_every_required_identity() {
+    let registered = plan("relation/api", "service", "handbook");
+    let [source, documentation] = registered.subjects.clone();
+    let registry = relation_registry(vec![registered]).unwrap();
+    let router = relation_credential_router(
+        &registry,
+        vec![
+            credential_route(&documentation, "documentation-client-and-git"),
+            credential_route(&source, "source-client-and-git"),
+        ],
+    )
+    .unwrap();
+
+    assert_eq!(
+        *relation_authority(&router, &source).unwrap(),
+        "source-client-and-git"
+    );
+    assert_eq!(
+        *relation_authority(&router, &documentation).unwrap(),
+        "documentation-client-and-git"
+    );
+
+    let mut missing = source.clone();
+    missing.credential = OpaqueId::new("git/unknown".to_owned()).unwrap();
+    assert_eq!(
+        relation_authority(&router, &missing).err(),
+        Some(RelationCredentialError::Missing)
+    );
+    let mut rebound = source;
+    rebound.scope.integration = IntegrationId::new("installation/other".to_owned()).unwrap();
+    assert_eq!(
+        relation_authority(&router, &rebound).err(),
+        Some(RelationCredentialError::Rebound)
+    );
+}
+
+#[test]
+fn credential_router_rejects_missing_unused_and_repeated_rows() {
+    let registered = plan("relation/api", "service", "handbook");
+    let [source, documentation] = registered.subjects.clone();
+    let registry = relation_registry(vec![registered]).unwrap();
+
+    assert_eq!(
+        relation_credential_router(&registry, vec![credential_route(&source, "source")]).err(),
+        Some(RelationCredentialError::Missing)
+    );
+
+    let mut unused = credential_route(&source, "unused");
+    unused.identity = OpaqueId::new("git/unused".to_owned()).unwrap();
+    assert_eq!(
+        relation_credential_router(
+            &registry,
+            vec![
+                credential_route(&source, "source"),
+                credential_route(&documentation, "documentation"),
+                unused,
+            ],
+        )
+        .err(),
+        Some(RelationCredentialError::Unused)
+    );
+
+    assert_eq!(
+        relation_credential_router(
+            &registry,
+            vec![
+                credential_route(&source, "source"),
+                credential_route(&source, "duplicate"),
+                credential_route(&documentation, "documentation"),
+            ],
+        )
+        .err(),
+        Some(RelationCredentialError::Unused)
+    );
+}
+
+#[test]
+fn one_credential_identity_has_one_provider_authority_scope() {
+    let mut rebound = plan("relation/api", "service", "handbook");
+    let [source, documentation] = &mut rebound.subjects;
+    documentation.credential = source.credential.clone();
+    assert_eq!(
+        relation_registry(vec![rebound]).err(),
+        Some(RelationRegistryError::ReboundCredential)
+    );
+
+    let mut shared = plan("relation/api", "service", "handbook");
+    let [source, documentation] = &mut shared.subjects;
+    documentation.credential = source.credential.clone();
+    documentation.scope.provider = source.scope.provider.clone();
+    documentation.scope.integration = source.scope.integration.clone();
+    assert!(relation_registry(vec![shared]).is_ok());
 }
 
 #[test]

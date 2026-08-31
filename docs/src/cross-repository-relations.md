@@ -7,9 +7,10 @@ and materialize those relations without letting repository content choose anothe
 credential, selector, limit, or publication target.
 
 This is not yet a complete cross-repository checking lane. The shared service can load one bounded
-operator file into an immutable registry, but no provider service supplies that registry or routes
-its independently scoped credentials yet. Closed plan, evidence, and assessment contracts represent
-the exact comparison selected after acquisition. The provider-neutral Git layer can project
+operator file into an immutable registry, and the controller can bind the complete set of opaque
+credential identities to caller-owned authorities. No provider service supplies that registry or
+constructs those authorities yet. Closed plan, evidence, and assessment contracts represent the
+exact comparison selected after acquisition. The provider-neutral Git layer can project
 repository-backed sources from all four acquired snapshots, but no trusted record producer is
 admitted yet. When a caller supplies a complete chain, the controller binds it to the accepted
 trigger report and frozen operator transition, replays the assessment, retains the exact bytes
@@ -49,6 +50,15 @@ is canonicalized before the private trigger index is exposed.
 There is no mutation API. A successful construction owns immutable relation plans behind shared
 references; changing operator configuration requires building and installing another complete
 registry. A rejected construction exposes no partial index and cannot replace a live entry.
+
+Credential routing is another atomic construction over that frozen registry. Every distinct opaque
+credential identity must have exactly one caller-owned authority under the provider instance and
+integration named by its subjects. One authority may cover several registered repositories under
+that scope. Missing authorities, extra or repeated rows, and reuse of one identity under another
+provider or integration are rejected. Lookup repeats the subject binding before returning the
+authority, and neither the registry nor the router exposes a mutation API. The authority value can
+directly contain its concrete provider client and Git acquisition credential; the controller does
+not erase it behind another provider trait or interpret its secret bytes.
 
 ## Authenticated triggering
 
@@ -341,7 +351,7 @@ reference.
 
 The remaining stages are deliberately separate:
 
-1. route each opaque credential identity into its independently scoped provider client;
+1. construct concrete provider authorities and install the frozen registry and router in a service;
 2. admit coordination and snapshot-bound records from authenticated producers;
 3. assemble and resume the complete relation lifecycle in live provider lanes.
 

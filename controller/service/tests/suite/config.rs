@@ -182,6 +182,10 @@ fn relation_files_reject_ambiguous_shape_and_invalid_complete_registries()
     split_repository_identity["relations"][0]["subjects"][0]["scope"]["repository"]["host"] =
         json!("elsewhere.example");
     cases.push(serde_json::to_vec(&split_repository_identity)?);
+    let mut rebound_credential = relation_registry();
+    rebound_credential["relations"][0]["subjects"][1]["credential"] =
+        rebound_credential["relations"][0]["subjects"][0]["credential"].clone();
+    cases.push(serde_json::to_vec(&rebound_credential)?);
 
     for bytes in cases {
         fs::write(&path, bytes)?;

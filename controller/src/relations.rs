@@ -1,4 +1,5 @@
 mod acquisition;
+mod credential;
 mod schedule;
 mod status;
 mod store;
@@ -13,11 +14,15 @@ use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat};
 use amiss_wire::relation::RelationPlanEnvelope;
 
-use crate::{AuthenticatedDelivery, OpaqueId, PlanScope};
+use crate::{AuthenticatedDelivery, IntegrationId, OpaqueId, PlanScope, ProviderIdentity};
 
 pub use acquisition::{
     RelationAcquiredRoot, RelationAcquisitionError, RelationSubjectTransition, RelationTransition,
     relation_transition, verify_relation_acquired,
+};
+pub use credential::{
+    RelationCredentialError, RelationCredentialRoute, RelationCredentialRouter, relation_authority,
+    relation_credential_router,
 };
 pub use schedule::{PendingRelation, RelationAdmission, RelationScheduleError, schedule_relation};
 pub use status::{
@@ -131,6 +136,8 @@ pub enum RelationRegistryError {
     DuplicateRelation,
     #[error("a provider repository status destination is owned by more than one relation")]
     DuplicateDestination,
+    #[error("a relation credential identity is rebound to another provider authority")]
+    ReboundCredential,
     #[error("a relation does not name two distinct repository subjects and roles")]
     InvalidSubjects,
     #[error("a relation resource budget is invalid")]
@@ -150,6 +157,7 @@ struct TriggerScope {
 pub struct RelationRegistry {
     plans: BTreeMap<ArtifactId, Arc<RelationPlan>>,
     triggers: BTreeMap<TriggerScope, Vec<TriggeredRelation>>,
+    credentials: BTreeMap<OpaqueId, (ProviderIdentity, IntegrationId)>,
 }
 
 /// Validates and freezes the complete operator-owned registry in one step.
@@ -158,8 +166,8 @@ pub struct RelationRegistry {
 ///
 /// # Errors
 ///
-/// The registry is too large, repeats a relation identity or external status
-/// destination, or contains an invalid subject, selector, budget, or destination.
+/// The registry is too large, repeats a relation identity or external status destination, rebinds
+/// one credential identity, or contains an invalid subject, selector, budget, or destination.
 pub fn relation_registry(
     mut plans: Vec<RelationPlan>,
 ) -> Result<RelationRegistry, RelationRegistryError> {
@@ -180,8 +188,21 @@ pub fn relation_registry(
     {
         return Err(RelationRegistryError::DuplicateRelation);
     }
+    let mut credentials = BTreeMap::new();
     let mut destinations = BTreeSet::new();
     for plan in &plans {
+        for subject in &plan.subjects {
+            let scope = (
+                subject.scope.provider.clone(),
+                subject.scope.integration.clone(),
+            );
+            credentials
+                .get(&subject.credential)
+                .is_none_or(|registered| registered == &scope)
+                .then_some(())
+                .ok_or(RelationRegistryError::ReboundCredential)?;
+            credentials.insert(subject.credential.clone(), scope);
+        }
         for destination in &plan.status_destinations {
             let subject = plan
                 .subjects
@@ -217,7 +238,11 @@ pub fn relation_registry(
                 });
         }
     }
-    Ok(RelationRegistry { plans, triggers })
+    Ok(RelationRegistry {
+        plans,
+        triggers,
+        credentials,
+    })
 }
 
 /// Selects every relation owned by one authenticated provider delivery.
