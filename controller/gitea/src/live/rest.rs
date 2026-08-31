@@ -5,7 +5,7 @@ use amiss_controller::{ForgeFact, ForgeNegative, ProviderError};
 pub(super) use amiss_controller::{
     ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
 };
-use amiss_wire::model::{Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
@@ -77,6 +77,13 @@ pub(super) trait GiteaRest: Send + Sync {
     fn deadline(&self) -> Result<OperationDeadline, ProviderError>;
 
     fn current_user(&self, deadline: OperationDeadline) -> Result<UserRecord, ProviderError>;
+
+    fn relation_head(
+        &self,
+        repository: &RepositoryIdentity,
+        target: &BranchRef,
+        deadline: OperationDeadline,
+    ) -> Result<CommitRecord, ProviderError>;
 
     fn refresh_data(
         &self,
@@ -164,6 +171,27 @@ impl GiteaRest for HttpRest {
 
     fn current_user(&self, deadline: OperationDeadline) -> Result<UserRecord, ProviderError> {
         self.get("/user", deadline)
+    }
+
+    fn relation_head(
+        &self,
+        repository: &RepositoryIdentity,
+        target: &BranchRef,
+        deadline: OperationDeadline,
+    ) -> Result<CommitRecord, ProviderError> {
+        let branch = target
+            .as_str()
+            .strip_prefix("refs/heads/")
+            .filter(|branch| !branch.is_empty())
+            .ok_or(ProviderError::InvalidResponse)?;
+        self.get(
+            &format!(
+                "{}/git/commits/{}?stat=false&verification=false&files=false",
+                repository_route(repository.owner(), repository.name()),
+                path_segment(branch)
+            ),
+            deadline,
+        )
     }
 
     fn refresh_data(

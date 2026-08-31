@@ -1,9 +1,9 @@
 use amiss_controller::{
     IntegrationId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
-    relation_status_publication,
+    RelationSubject, RelationSubjectHead, relation_status_publication,
 };
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::model::ObjectFormat;
+use amiss_wire::model::{ObjectFormat, Oid};
 
 use super::model::{CommitStatusRecord, CreateCommitStatus};
 use super::refresh::validate_reviewer;
@@ -19,6 +19,25 @@ pub(super) enum StatusDecision {
 }
 
 impl<R: GiteaRest> Client<R> {
+    pub(super) fn resolve_relation_head(
+        &self,
+        subject: &RelationSubject,
+    ) -> Result<RelationSubjectHead, ProviderError> {
+        validate_relation_scope(&self.config, &subject.scope, subject.object_format)?;
+        let deadline = self.rest.deadline()?;
+        validate_reviewer(&self.config, &self.rest.current_user(deadline)?)?;
+        let head = self
+            .rest
+            .relation_head(&subject.scope.repository, &subject.target, deadline)?;
+        let candidate_commit =
+            Oid::new(ObjectFormat::Sha1, head.sha).ok_or(ProviderError::InvalidResponse)?;
+        Oid::new(ObjectFormat::Sha1, head.commit.tree.sha).ok_or(ProviderError::InvalidResponse)?;
+        Ok(RelationSubjectHead {
+            subject: subject.clone(),
+            candidate_commit,
+        })
+    }
+
     pub(super) fn publish_relation_status(
         &self,
         status: &RelationStatusRecord,

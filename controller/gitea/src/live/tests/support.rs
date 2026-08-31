@@ -10,9 +10,10 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::super::model::{
-    BranchProtectionRecord, BranchRecord, CommitMetaRecord, CommitRecord, CommitStatusRecord,
-    CreateCommitStatus, CreateReview, PayloadCommitRecord, PullRefRecord, PullRepositoryRecord,
-    PullRequestRecord, RefreshData, RepositoryRecord, ReviewRecord, UserRecord,
+    BranchProtectionRecord, BranchRecord, CommitBodyRecord, CommitMetaRecord, CommitRecord,
+    CommitStatusRecord, CreateCommitStatus, CreateReview, PayloadCommitRecord, PullRefRecord,
+    PullRepositoryRecord, PullRequestRecord, RefreshData, RepositoryRecord, ReviewRecord,
+    UserRecord,
 };
 use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
@@ -98,6 +99,7 @@ pub(super) struct FakeState {
     pub(super) created: Vec<CreateReview>,
     pub(super) statuses: Vec<CommitStatusRecord>,
     pub(super) created_statuses: Vec<CreateCommitStatus>,
+    pub(super) relation_requests: Vec<(RepositoryIdentity, BranchRef)>,
 }
 
 impl FakeRest {
@@ -108,6 +110,7 @@ impl FakeRest {
                 created: Vec::new(),
                 statuses: Vec::new(),
                 created_statuses: Vec::new(),
+                relation_requests: Vec::new(),
             })),
         }
     }
@@ -120,6 +123,19 @@ impl GiteaRest for FakeRest {
 
     fn current_user(&self, _deadline: OperationDeadline) -> Result<UserRecord, ProviderError> {
         Ok(self.state.lock().unwrap().data.reviewer.clone())
+    }
+
+    fn relation_head(
+        &self,
+        repository: &RepositoryIdentity,
+        target: &BranchRef,
+        _deadline: OperationDeadline,
+    ) -> Result<CommitRecord, ProviderError> {
+        let mut state = self.state.lock().unwrap();
+        state
+            .relation_requests
+            .push((repository.clone(), target.clone()));
+        Ok(state.data.current_head.clone())
     }
 
     fn refresh_data(
@@ -316,9 +332,14 @@ pub(super) fn oid(value: char) -> Oid {
     Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()
 }
 
-pub(super) fn commit(commit: char, parents: &[char]) -> CommitRecord {
+pub(super) fn commit(commit: char, tree: char, parents: &[char]) -> CommitRecord {
     CommitRecord {
         sha: oid(commit).as_str().to_owned(),
+        commit: CommitBodyRecord {
+            tree: CommitMetaRecord {
+                sha: oid(tree).as_str().to_owned(),
+            },
+        },
         parents: parent_names(parents)
             .into_iter()
             .map(|sha| CommitMetaRecord { sha })
@@ -422,9 +443,9 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
             effective_branch_protection_name: "main".to_owned(),
         },
         protection,
-        target: commit('a', &[]),
-        candidate: commit('b', &['a']),
-        current_head: commit('b', &['a']),
+        target: commit('a', 'c', &[]),
+        candidate: commit('b', 'd', &['a']),
+        current_head: commit('b', 'd', &['a']),
         reviews: vec![ReviewRecord {
             id: 1,
             user: Some(UserRecord {

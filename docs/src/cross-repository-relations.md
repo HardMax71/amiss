@@ -173,13 +173,19 @@ normally reconciles the accepted run before the caller durably acknowledges the 
 GitHub API and local journal still have no shared transaction, so a stale provider read can expose a
 duplicate later and make subsequent reconciliation fail closed.
 
-The Gitea-family client projects the same checked, credential-free value onto the exact candidate
-commit through the native commit-status API. It requires the configured provider, flat canonical
-repository, dedicated reviewer identity, and SHA-1 candidate before listing statuses. The list is
-bounded to 1,000 rows and ordered by the provider's commit-status index. For the configured context,
-the client reuses an exact latest row, advances a different valid Amiss marker written by the same
-reviewer, and rejects a foreign, malformed, or same-marker conflict. A create succeeds only when the
-provider echoes every field and the exact reviewer.
+The Gitea-family client independently refreshes an operator-configured subject through the
+authenticated commit endpoint. It requires the configured provider and dedicated reviewer, a flat
+canonical repository on that provider instance, and SHA-1 before resolving the declared branch.
+Both the returned commit and tree must be exact SHA-1 names. The result is the same typed
+`RelationSubjectHead` used by provider-neutral finality; full object acquisition remains a separate
+bounded Git operation.
+
+The client projects the same checked, credential-free value onto the exact candidate commit through
+the native commit-status API. It applies the same scope requirements before listing statuses. The
+list is bounded to 1,000 rows and ordered by the provider's commit-status index. For the configured
+context, the client reuses an exact latest row, advances a different valid Amiss marker written by
+the same reviewer, and rejects a foreign, malformed, or same-marker conflict. A create succeeds only
+when the provider echoes every field and the exact reviewer.
 
 The short versioned description carries a domain-separated digest of the same complete projection;
 the status state carries success or failure. Gitea and Forgejo do not bind a required status context

@@ -12,7 +12,7 @@ use std::time::Duration;
 
 use amiss_controller::{
     ChangeSnapshot, ProviderError, ProviderIdentity, Publication, RelationStatusRecord,
-    RelationStatusTarget,
+    RelationStatusTarget, RelationSubject, RelationSubjectHead,
 };
 use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::RepositoryIdentity;
@@ -131,6 +131,20 @@ impl GiteaClient {
         target: &RelationStatusTarget,
     ) -> Result<(), ProviderError> {
         self.client.publish_relation_status(status, target)
+    }
+
+    /// Resolves the current commit of one operator-configured Gitea-family relation subject.
+    ///
+    /// # Errors
+    ///
+    /// The subject names another provider, reviewer, repository, or object format, the credential
+    /// no longer authenticates as the dedicated reviewer, or the provider does not return one
+    /// exact SHA-1 commit and tree.
+    pub fn resolve_relation_head(
+        &self,
+        subject: &RelationSubject,
+    ) -> Result<RelationSubjectHead, ProviderError> {
+        self.client.resolve_relation_head(subject)
     }
 }
 
