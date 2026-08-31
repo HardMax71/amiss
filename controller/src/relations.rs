@@ -125,7 +125,7 @@ pub struct TriggeredRelation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("the authenticated relation delivery identity is inconsistent")]
+#[error("the authenticated relation delivery or declaration is inconsistent")]
 pub struct RelationLookupError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
