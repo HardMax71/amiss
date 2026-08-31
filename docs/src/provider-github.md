@@ -405,6 +405,14 @@ together with the older `assessment-artifact` and `external-assessment` lines. T
 that already-created Check Run without rewriting it. Normal graceful drain avoids this state;
 every other mismatch still fails closed.
 
+A claimed cross-repository relation destination uses the same exact reconciliation machinery but
+targets its configured subject candidate commit and relation status name, not a pull request or
+test-merge commit. `aligned` and `resolved-drift` publish `success`; introduced or pre-existing
+drift and an unproven comparison publish `failure`. The credential-free summary and its
+domain-separated external ID bind the relation, coordination, fence, target, verdict, and all four
+audit digests. The caller may append the durable destination acknowledgement only after GitHub
+accepts that exact run or the adapter finds one exact prior match.
+
 | Controller result | GitHub Check Run conclusion |
 | --- | --- |
 | Pass | `success` |

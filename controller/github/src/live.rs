@@ -13,7 +13,8 @@ use std::time::Duration;
 
 use amiss_controller::{
     AcquiredSemanticTemplate, ChangeSnapshot, ProviderError, ProviderIdentity, Publication,
-    RelationSubject, RelationSubjectHead, WorkflowArtifactExpectation,
+    RelationStatusRecord, RelationStatusTarget, RelationSubject, RelationSubjectHead,
+    WorkflowArtifactExpectation,
 };
 use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::Oid;
@@ -22,7 +23,7 @@ use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use crate::{GitHubAcquisitionSource, GitHubApi, GitHubPullRequest};
 
 use self::publication::{
-    PublicationDecision, publication_decision, validate_created, validate_publication,
+    CheckRunDecision, publication_decision, validate_created, validate_publication,
 };
 use self::refresh::{publication_target_is_current, snapshot, validate_request};
 use self::rest::{GitHubRest, HttpRest};
@@ -146,6 +147,22 @@ impl GitHubApp {
     ) -> Result<RelationSubjectHead, ProviderError> {
         self.client.resolve_relation_head(subject)
     }
+
+    /// Publishes or exactly reconciles one claimed relation destination.
+    ///
+    /// The caller may durably acknowledge the destination only after this returns successfully.
+    ///
+    /// # Errors
+    ///
+    /// The status does not bind this configured installation and exact target, or GitHub does not
+    /// accept or reproduce the complete check run.
+    pub fn publish_relation_status(
+        &self,
+        status: &RelationStatusRecord,
+        target: &RelationStatusTarget,
+    ) -> Result<(), ProviderError> {
+        self.client.publish_relation_status(status, target)
+    }
 }
 
 impl GitHubApi for GitHubApp {
@@ -229,18 +246,20 @@ impl<R: GitHubRest> Client<R> {
             return Ok(());
         }
         let runs = self.rest.check_runs(
-            pull_request,
+            &pull_request.change.repository,
             &publication.gate_commit,
             self.config.app_id,
             &self.config.required_status_name,
             deadline,
         )?;
         match publication_decision(&self.config, publication, &runs)? {
-            PublicationDecision::Reuse => Ok(()),
-            PublicationDecision::Create(expected) => {
-                let created = self
-                    .rest
-                    .create_check_run(pull_request, &expected, deadline)?;
+            CheckRunDecision::Reuse => Ok(()),
+            CheckRunDecision::Create(expected) => {
+                let created = self.rest.create_check_run(
+                    &pull_request.change.repository,
+                    &expected,
+                    deadline,
+                )?;
                 validate_created(&self.config, &expected, &created)
             }
         }

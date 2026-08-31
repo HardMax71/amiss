@@ -7,12 +7,12 @@ and materialize those relations without letting repository content choose anothe
 credential, selector, limit, or publication target.
 
 This is not yet a complete cross-repository checking lane. No service loads this configuration or
-resolves foreign provider heads and credentials yet. Closed plan, evidence, and assessment
-contracts represent the exact comparison selected after acquisition. The provider-neutral Git
-layer can project repository-backed sources from all four acquired snapshots, but no trusted
-record producer is admitted yet, and no controller lane schedules the audit or publishes a status.
-When a caller supplies a complete chain, the controller binds it to the accepted trigger report
-and frozen operator transition, replays the assessment, and retains the exact bytes immutably.
+routes its independently scoped credentials yet. Closed plan, evidence, and assessment contracts
+represent the exact comparison selected after acquisition. The provider-neutral Git layer can
+project repository-backed sources from all four acquired snapshots, but no trusted record producer
+is admitted yet. When a caller supplies a complete chain, the controller binds it to the accepted
+trigger report and frozen operator transition, replays the assessment, retains the exact bytes
+immutably, and can deliver an already claimed GitHub destination through its installation client.
 
 ## One closed relation
 
@@ -156,6 +156,22 @@ declared branch and validates both the returned commit and its tree. The result 
 `RelationSubjectHead`; it does not choose a credential, schedule work, or authorize publication.
 Credential routing and the two-subject finality decision remain controller-lane responsibilities.
 
+The same client accepts one exact status record and one destination from a durable delivery claim.
+It rejects a completed or malformed batch, a target not present exactly once, another provider or
+installation, a noncanonical repository, a non-SHA-1 candidate, or an inconsistent relation audit
+before provider I/O. The check is attached to the subject candidate commit under the
+operator-configured relation status name. `aligned` and `resolved-drift` conclude `success`;
+`introduced-drift`, `pre-existing-drift`, and `unproven` conclude `failure`. Its credential-free
+summary binds the relation, coordination, fence, roles, target, verdict, and report, plan, evidence,
+and assessment digests. A domain-separated digest of that complete projection is the external ID.
+
+Before creating anything, the client lists the App-owned checks for that exact commit and name. It
+reuses one exact external-ID and output match, creates only when none exists, and rejects duplicate
+or conflicting matches. A lost create response therefore leaves the claim unacknowledged; a retry
+normally reconciles the accepted run before the caller durably acknowledges the destination. The
+GitHub API and local journal still have no shared transaction, so a stale provider read can expose a
+duplicate later and make subsequent reconciliation fail closed.
+
 ## Exact Git acquisition
 
 The existing strict HTTPS protocol-v2 shallow fetch now accepts a positive object and pack-byte
@@ -289,12 +305,13 @@ reference.
 The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
-2. resolve non-GitHub heads and assemble both independently credentialed finality facts;
-3. reconcile and publish each claimed value through its provider-specific status boundary.
+2. resolve and publish non-GitHub subjects through their native provider boundaries;
+3. load the registry and route both independently credentialed subjects in a live service lane.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
-caller supplies the frozen transition, checked plan, and two acquired roots. No provider lane yet
-claims that it performed or approved that comparison.
+caller supplies the frozen transition, checked plan, and two acquired roots. The GitHub adapter can
+deliver an already retained and claimed result, but no provider service yet assembles the complete
+relation lifecycle.
 
 The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),

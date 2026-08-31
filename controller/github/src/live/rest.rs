@@ -54,7 +54,7 @@ pub(super) trait GitHubRest: Send + Sync {
 
     fn check_runs(
         &self,
-        pull_request: GitHubPullRequest<'_>,
+        repository: &RepositoryIdentity,
         head_sha: &Oid,
         app_id: u64,
         name: &str,
@@ -63,7 +63,7 @@ pub(super) trait GitHubRest: Send + Sync {
 
     fn create_check_run(
         &self,
-        pull_request: GitHubPullRequest<'_>,
+        repository: &RepositoryIdentity,
         check: &CreateCheckRun,
         deadline: OperationDeadline,
     ) -> Result<CheckRunRecord, ProviderError>;
@@ -331,17 +331,17 @@ impl GitHubRest for HttpRest {
 
     fn check_runs(
         &self,
-        pull_request: GitHubPullRequest<'_>,
+        repository: &RepositoryIdentity,
         head_sha: &Oid,
         app_id: u64,
         name: &str,
         deadline: OperationDeadline,
     ) -> Result<Vec<CheckRunRecord>, ProviderError> {
+        let owner = path_segment(repository.owner());
+        let repository_name = path_segment(repository.name());
         let route = format!(
-            "/repos/{}/{}/commits/{}/check-runs",
-            pull_request.repository_owner,
-            pull_request.repository_name,
-            head_sha.as_str(),
+            "/repos/{owner}/{repository_name}/commits/{}/check-runs",
+            head_sha.as_str()
         );
         let mut runs = Vec::new();
         for page in 1..=MAX_PAGES {
@@ -369,13 +369,14 @@ impl GitHubRest for HttpRest {
 
     fn create_check_run(
         &self,
-        pull_request: GitHubPullRequest<'_>,
+        repository: &RepositoryIdentity,
         check: &CreateCheckRun,
         deadline: OperationDeadline,
     ) -> Result<CheckRunRecord, ProviderError> {
         let route = format!(
             "/repos/{}/{}/check-runs",
-            pull_request.repository_owner, pull_request.repository_name
+            path_segment(repository.owner()),
+            path_segment(repository.name())
         );
         self.transport.post(&route, check, deadline)
     }

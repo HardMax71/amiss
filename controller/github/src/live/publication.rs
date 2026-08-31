@@ -8,7 +8,7 @@ use crate::GitHubPullRequest;
 const COMPLETED: &str = "completed";
 const TITLE: &str = "Amiss provider verification";
 
-pub(super) enum PublicationDecision {
+pub(super) enum CheckRunDecision {
     Reuse,
     Create(CreateCheckRun),
 }
@@ -50,8 +50,15 @@ pub(super) fn publication_decision(
     config: &Config,
     publication: &Publication,
     runs: &[CheckRunRecord],
-) -> Result<PublicationDecision, ProviderError> {
-    let expected = expected(config, publication)?;
+) -> Result<CheckRunDecision, ProviderError> {
+    check_run_decision(config, expected(config, publication)?, runs)
+}
+
+pub(super) fn check_run_decision(
+    config: &Config,
+    expected: CreateCheckRun,
+    runs: &[CheckRunRecord],
+) -> Result<CheckRunDecision, ProviderError> {
     let mut matching = None;
     for run in runs {
         let app = run.app.as_ref().ok_or(ProviderError::InvalidResponse)?;
@@ -79,10 +86,10 @@ pub(super) fn publication_decision(
                 )
             });
             (compatible && matches_stable_fields(run, &expected))
-                .then_some(PublicationDecision::Reuse)
+                .then_some(CheckRunDecision::Reuse)
                 .ok_or(ProviderError::InvalidResponse)
         }
-        None => Ok(PublicationDecision::Create(expected)),
+        None => Ok(CheckRunDecision::Create(expected)),
     }
 }
 
