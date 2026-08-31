@@ -353,6 +353,12 @@ versioned Amiss marker, and requires an exact create response before the caller 
 durable destination. The marker is a digest of the complete credential-free relation projection;
 no credential or bearer artifact URL is exposed.
 
+Before a relation is frozen for evaluation, the client can also resolve a configured subject branch
+through `GET /repos/{owner}/{repo}/git/commits/{branch}`. It first proves that the token still names
+the configured dedicated reviewer, then requires exact SHA-1 commit and tree names in the response.
+This only supplies a current-head fact; the service must still route the declared credential and the
+existing bounded Git transport must acquire and verify the frozen objects.
+
 This does not turn a Gitea-family status into the dedicated-reviewer gate described above. Required
 status contexts are not bound to their writer, so another repository writer can imitate or replace
 one. Relation statuses are an honest native publication surface for an unchanged branch; an

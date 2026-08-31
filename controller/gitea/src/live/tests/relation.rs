@@ -6,24 +6,83 @@
 
 use amiss_controller::{
     ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, IntegrationId, LeaseFence,
-    ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
-    RelationStatusTargets, validate_relation_audit,
+    PlanScope, ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
+    RelationStatusTargets, RelationSubject, RelationSubjectHead, validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::model::RepositoryIdentity;
+use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 use amiss_wire::relation::RelationVerdict;
 
-use super::super::model::{CommitStatusRecord, CreateCommitStatus, UserRecord};
+use super::super::model::{CommitRecord, CommitStatusRecord, CreateCommitStatus, UserRecord};
 use super::super::relation::{
     MARKER, StatusDecision, relation_commit_status, status_decision, validate_created,
 };
 use super::support::Fixture;
 
 #[test]
-fn both_families_publish_one_exact_idempotent_status() {
+fn malformed_commit_or_tree_is_not_a_finality_fact() {
+    let malformed_commit = Fixture::mutated("gitea", |data| {
+        data.current_head.sha = "not-an-oid".to_owned();
+    });
+    let malformed_tree = Fixture::mutated("forgejo", |data| {
+        data.current_head.commit.tree.sha = "not-an-oid".to_owned();
+    });
+    for fixture in [malformed_commit, malformed_tree] {
+        assert_eq!(
+            fixture
+                .client
+                .resolve_relation_head(&subject_fixture(&fixture)),
+            Err(ProviderError::InvalidResponse)
+        );
+    }
+}
+
+#[test]
+fn subject_scope_is_rejected_before_head_resolution() {
+    let fixture = Fixture::new("gitea");
+    let subject = subject_fixture(&fixture);
+    let mut wrong_integration = subject.clone();
+    wrong_integration.scope.integration = IntegrationId::new("88".to_owned()).unwrap();
+    let mut nested_owner = subject.clone();
+    nested_owner.scope.repository = RepositoryIdentity::new(
+        "forge.example".to_owned(),
+        "group/acme".to_owned(),
+        "widget".to_owned(),
+    )
+    .unwrap();
+    let mut wrong_format = subject;
+    wrong_format.object_format = ObjectFormat::Sha256;
+
+    for malformed in [wrong_integration, nested_owner, wrong_format] {
+        assert_eq!(
+            fixture.client.resolve_relation_head(&malformed),
+            Err(ProviderError::InvalidResponse)
+        );
+    }
+    assert!(
+        fixture
+            .rest
+            .state
+            .lock()
+            .unwrap()
+            .relation_requests
+            .is_empty()
+    );
+}
+
+#[test]
+fn both_families_resolve_heads_and_publish_idempotent_statuses() {
     for namespace in ["gitea", "forgejo"] {
         let fixture = Fixture::new(namespace);
+        let subject = subject_fixture(&fixture);
+        assert_eq!(
+            fixture.client.resolve_relation_head(&subject),
+            Ok(RelationSubjectHead {
+                subject: subject.clone(),
+                candidate_commit: super::support::oid('b'),
+            })
+        );
         let (status, target) = status_fixture(&fixture);
 
         assert_eq!(
@@ -48,6 +107,10 @@ fn both_families_publish_one_exact_idempotent_status() {
                 .is_some()
         );
         assert!(!created.description.contains(target.credential.as_str()));
+        assert_eq!(
+            state.relation_requests,
+            [(subject.scope.repository, subject.target)]
+        );
     }
 }
 
@@ -76,6 +139,15 @@ fn all_relation_verdicts_map_to_the_two_provider_states() {
 
 #[test]
 fn commit_status_requests_and_responses_use_the_native_wire_shape() {
+    let head: CommitRecord = serde_json::from_value(serde_json::json!({
+        "sha": "b".repeat(40),
+        "commit": {"tree": {"sha": "d".repeat(40)}},
+        "parents": [{"sha": "a".repeat(40)}]
+    }))
+    .unwrap();
+    assert_eq!(head.sha, "b".repeat(40));
+    assert_eq!(head.commit.tree.sha, "d".repeat(40));
+
     let decoded: CommitStatusRecord = serde_json::from_value(serde_json::json!({
         "id": 42,
         "creator": {"id": 77, "login": "amiss-controller"},
@@ -244,6 +316,12 @@ fn the_relation_credential_must_authenticate_as_the_dedicated_reviewer() {
     });
     let (status, target) = status_fixture(&fixture);
     assert_eq!(
+        fixture
+            .client
+            .resolve_relation_head(&subject_fixture(&fixture)),
+        Err(ProviderError::AuthorizationRevoked)
+    );
+    assert_eq!(
         fixture.client.publish_relation_status(&status, &target),
         Err(ProviderError::AuthorizationRevoked)
     );
@@ -258,12 +336,35 @@ fn the_relation_credential_must_authenticate_as_the_dedicated_reviewer() {
     );
 }
 
+fn subject_fixture(fixture: &Fixture) -> RelationSubject {
+    let mut subject = relation_audit(true)
+        .unwrap()
+        .transition
+        .relation
+        .plan
+        .subjects[0]
+        .clone();
+    subject.scope = PlanScope {
+        provider: fixture.client.config.provider.clone(),
+        integration: IntegrationId::new("77".to_owned()).unwrap(),
+        repository: RepositoryIdentity::new(
+            "forge.example".to_owned(),
+            "acme".to_owned(),
+            "widget".to_owned(),
+        )
+        .unwrap(),
+    };
+    subject.target = BranchRef::new("refs/heads/release/v1".to_owned()).unwrap();
+    subject.object_format = ObjectFormat::Sha1;
+    subject
+}
+
 fn status_fixture(fixture: &Fixture) -> (RelationStatusRecord, RelationStatusTarget) {
     let audit_fixture = relation_audit(true).unwrap();
     let source = &audit_fixture.transition.relation.plan.subjects[0];
     let target = RelationStatusTarget {
         role: source.role.clone(),
-        scope: amiss_controller::PlanScope {
+        scope: PlanScope {
             provider: fixture.client.config.provider.clone(),
             integration: IntegrationId::new("77".to_owned()).unwrap(),
             repository: RepositoryIdentity::new(

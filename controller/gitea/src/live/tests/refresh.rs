@@ -293,7 +293,7 @@ fn dedicated_reviewer_rows_are_strict() {
 fn head_or_base_drift_is_superseded() {
     let stale_head = Fixture::mutated("gitea", |data| {
         data.pull_request.head.sha = oid('e').as_str().to_owned();
-        data.current_head = commit('e', &['a']);
+        data.current_head = commit('e', 'f', &['a']);
     });
     assert_eq!(
         stale_head
@@ -385,7 +385,7 @@ fn an_open_pull_request_that_claims_merged_is_invalid() {
 fn each_consistency_fact_refuses_alone() {
     let cases: [(&str, DataDeviation); 3] = [
         ("fetched head disagrees with the embedded head", |data| {
-            data.current_head = commit('e', &['a']);
+            data.current_head = commit('e', 'f', &['a']);
         }),
         ("embedded base disagrees with the target", |data| {
             data.pull_request.base.sha = oid('e').as_str().to_owned();
