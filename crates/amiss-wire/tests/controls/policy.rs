@@ -1,6 +1,6 @@
 use amiss_wire::controls::{
     BlobLineSelection, DOCUMENT_SUFFIX_BYTES, ProjectionKind, ProjectionSource,
-    SOURCE_MARKER_BYTES, ScannerPolicy, check_projection_source,
+    SOURCE_MARKER_BYTES, ScannerPolicy, check_projection_source, parse_projection_source,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::model::RepoPathText;
@@ -56,6 +56,14 @@ fn directly_constructed_projection_sources_reuse_the_policy_grammar() {
     let policy = ScannerPolicy::parse(POLICY).unwrap();
     let source = &policy.projection_assertions()[0].source;
     assert!(check_projection_source(ProjectionKind::CodeTextV1, source).is_ok());
+    assert_eq!(
+        parse_projection_source(
+            br#"{"kind":"blob-lines","path":"crates/amiss/src/request.rs","first_line":10,"last_line":14}"#,
+            ProjectionKind::CodeTextV1,
+        )
+        .unwrap(),
+        *source
+    );
     assert_eq!(
         check_projection_source(ProjectionKind::SortedRowsV1, source)
             .unwrap_err()

@@ -3,6 +3,7 @@ mod files;
 mod limits;
 mod paths;
 mod plan;
+mod relation;
 mod route;
 mod webhook;
 
@@ -17,5 +18,6 @@ pub use paths::{
     load_paths,
 };
 pub use plan::{CheckPlanFiles, load_plan};
+pub use relation::load_relation_registry;
 pub use route::framed_route_id;
 pub use webhook::{WebhookKeyFile, load_webhook_keyring};

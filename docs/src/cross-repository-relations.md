@@ -6,11 +6,12 @@ controller has the operator-owned registry and exact Git acquisition boundary ne
 and materialize those relations without letting repository content choose another repository,
 credential, selector, limit, or publication target.
 
-This is not yet a complete cross-repository checking lane. No service loads this configuration or
-routes its independently scoped credentials yet. Closed plan, evidence, and assessment contracts
-represent the exact comparison selected after acquisition. The provider-neutral Git layer can
-project repository-backed sources from all four acquired snapshots, but no trusted record producer
-is admitted yet. When a caller supplies a complete chain, the controller binds it to the accepted
+This is not yet a complete cross-repository checking lane. The shared service can load one bounded
+operator file into an immutable registry, but no provider service supplies that registry or routes
+its independently scoped credentials yet. Closed plan, evidence, and assessment contracts represent
+the exact comparison selected after acquisition. The provider-neutral Git layer can project
+repository-backed sources from all four acquired snapshots, but no trusted record producer is
+admitted yet. When a caller supplies a complete chain, the controller binds it to the accepted
 trigger report and frozen operator transition, replays the assessment, retains the exact bytes
 immutably, and can reconcile a claimed GitHub or Gitea-family destination. An authenticated live
 GitLab policy job can instead consume its exact synchronous destination.
@@ -340,9 +341,9 @@ reference.
 
 The remaining stages are deliberately separate:
 
-1. admit snapshot-bound record values and sets from an authenticated producer;
-2. resolve and publish non-GitHub subjects through their native provider boundaries;
-3. load the registry and route both independently credentialed subjects in a live service lane.
+1. route each opaque credential identity into its independently scoped provider client;
+2. admit coordination and snapshot-bound records from authenticated producers;
+3. assemble and resume the complete relation lifecycle in live provider lanes.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
 caller supplies the frozen transition, checked plan, and two acquired roots. The GitHub adapter can
@@ -351,6 +352,7 @@ relation lifecycle.
 
 The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),
+the [bounded registry loader](https://github.com/HardMax71/amiss/blob/main/controller/service/src/config/relation.rs),
 the [exact relation transport](https://github.com/HardMax71/amiss/blob/main/controller/git/src/relation.rs),
 the [repository projector](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/projection/repository.rs),
 the [durable scheduler](https://github.com/HardMax71/amiss/blob/main/controller/src/relations/store.rs),
