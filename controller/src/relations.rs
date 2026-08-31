@@ -32,7 +32,8 @@ pub use store::{
 
 pub const RELATION_REGISTRY_LIMIT: usize = 1_024;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationLimits {
     pub acquisition_objects: u64,
     pub acquisition_bytes: u64,

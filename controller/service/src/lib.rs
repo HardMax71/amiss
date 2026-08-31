@@ -32,7 +32,7 @@ pub use config::{
     HttpLimits, LedgerLimits, LoadedExecutionLimits, LoadedExecutionPaths, LoadedLimits,
     LoadedPaths, RunnerLimits, ServiceLimits, ServicePaths, WebhookKeyFile, WorkerLimits,
     framed_route_id, load_execution_limits, load_execution_paths, load_limits, load_paths,
-    load_plan, load_webhook_keyring, read_regular, read_strict_json,
+    load_plan, load_relation_registry, load_webhook_keyring, read_regular, read_strict_json,
 };
 pub use delivery::{Delivery, DeliveryHeader, IncomingDelivery, IncomingHeader};
 pub use endpoint::{EndpointConfig, EndpointConfigError};

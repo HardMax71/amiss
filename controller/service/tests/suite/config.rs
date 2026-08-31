@@ -2,13 +2,18 @@ use std::fs;
 use std::io::Write as _;
 use std::time::Duration;
 
-use amiss_controller::{ExternalPolicy, ProviderIdentity};
+use amiss_controller::{
+    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, ExternalPolicy,
+    IntegrationId, ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    relations_for_delivery,
+};
 use amiss_controller_service::{
     ExecutionLimits, ExecutionPaths, ServiceLimits, ServicePaths, framed_route_id,
-    load_execution_limits, load_limits, load_plan, read_regular,
+    load_execution_limits, load_limits, load_plan, load_relation_registry, read_regular,
 };
 use amiss_wire::controls::Profile;
-use amiss_wire::model::RepositoryIdentity;
+use amiss_wire::digest::sha256;
+use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use flate2::Compression;
@@ -16,6 +21,174 @@ use flate2::write::ZlibEncoder;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tempfile::TempDir;
+
+fn relation_registry() -> Value {
+    let limits = json!({
+        "acquisition_objects": 100,
+        "acquisition_bytes": 1_048_576,
+        "projection_records": 100,
+        "projection_bytes": 1_048_576
+    });
+    let subject = |role: &str,
+                   namespace: &str,
+                   instance: &str,
+                   integration: &str,
+                   repository: &str,
+                   credential: &str,
+                   set: &str| {
+        json!({
+            "role": role,
+            "scope": {
+                "provider": {"namespace": namespace, "instance": instance},
+                "integration": integration,
+                "repository": {"owner": "acme", "name": repository}
+            },
+            "target": "refs/heads/main",
+            "object_format": "sha1",
+            "credential": credential,
+            "source": {"kind": "record-set", "set": set},
+            "limits": limits
+        })
+    };
+    json!({
+        "relations": [{
+            "identity": "relation/public-api",
+            "context_digest": sha256(b"operator relation context").to_string(),
+            "projection": "sorted-rows-v1",
+            "subjects": [
+                subject(
+                    "source", "gitea", "forge.example", "77", "service",
+                    "credential/source", "rust/public-api"
+                ),
+                subject(
+                    "documentation", "github", "github.com", "7", "handbook",
+                    "credential/documentation", "docs/public-api"
+                )
+            ],
+            "aggregate_limits": {
+                "acquisition_objects": 150,
+                "acquisition_bytes": 1_572_864,
+                "projection_records": 150,
+                "projection_bytes": 1_572_864
+            },
+            "status_destinations": [{
+                "subject_role": "documentation",
+                "required_status_name": "Amiss cross-repository"
+            }]
+        }]
+    })
+}
+
+#[expect(clippy::unwrap_used, reason = "fixed relation fixture identities")]
+fn relation_delivery(
+    namespace: &str,
+    instance: &str,
+    integration: &str,
+    repository: &str,
+) -> AuthenticatedDelivery {
+    let provider = ProviderIdentity::new(namespace.to_owned(), instance.to_owned()).unwrap();
+    let repository = RepositoryIdentity::new(
+        instance.to_owned(),
+        "acme".to_owned(),
+        repository.to_owned(),
+    )
+    .unwrap();
+    AuthenticatedDelivery {
+        identity: DeliveryIdentity {
+            provider: provider.clone(),
+            integration: IntegrationId::new(integration.to_owned()).unwrap(),
+            delivery: DeliveryId::new("delivery/1".to_owned()).unwrap(),
+        },
+        change: ChangeLocator {
+            provider,
+            repository,
+            change: ChangeId::new("change/1".to_owned()).unwrap(),
+        },
+        provider_run: ProviderRunIdentity::new(
+            ProviderRunId::new("run/1".to_owned()).unwrap(),
+            ProviderRunAttempt::new(1).unwrap(),
+            ObjectFormat::Sha1,
+            Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
+        )
+        .unwrap(),
+    }
+}
+
+#[test]
+fn one_operator_file_freezes_both_trigger_routes_without_credential_bytes()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = TempDir::new()?;
+    let path = directory.path().join("relations.json");
+    fs::write(&path, serde_json::to_vec(&relation_registry())?)?;
+    let registry = load_relation_registry(&path)?;
+
+    let source = relations_for_delivery(
+        &registry,
+        &relation_delivery("gitea", "forge.example", "77", "service"),
+    )?;
+    let documentation = relations_for_delivery(
+        &registry,
+        &relation_delivery("github", "github.com", "7", "handbook"),
+    )?;
+    assert_eq!(source.len(), 1);
+    assert_eq!(documentation.len(), 1);
+    assert_eq!(source[0].trigger_role.as_str(), "source");
+    assert_eq!(documentation[0].trigger_role.as_str(), "documentation");
+    assert_eq!(source[0].plan, documentation[0].plan);
+    assert_eq!(
+        source[0]
+            .plan
+            .subjects
+            .iter()
+            .map(|subject| (
+                subject.scope.provider.instance.as_str(),
+                subject.scope.repository.host(),
+                subject.credential.as_str()
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("github.com", "github.com", "credential/documentation"),
+            ("forge.example", "forge.example", "credential/source")
+        ]
+    );
+    Ok(())
+}
+
+#[test]
+fn relation_files_reject_ambiguous_shape_and_invalid_complete_registries()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = TempDir::new()?;
+    let path = directory.path().join("relations.json");
+    let mut cases = vec![
+        br#"{"relations":[],"relations":[]}"#.to_vec(),
+        br#"{"relations":[],"unknown":true}"#.to_vec(),
+    ];
+    for pointer in [
+        "/relations/0/subjects/0/limits/projection_bytes",
+        "/relations/0/aggregate_limits/acquisition_objects",
+    ] {
+        let mut invalid = relation_registry();
+        let field = invalid
+            .pointer_mut(pointer)
+            .ok_or_else(|| std::io::Error::other("fixed relation pointer is absent"))?;
+        *field = json!(0);
+        cases.push(serde_json::to_vec(&invalid)?);
+    }
+    let mut incompatible = relation_registry();
+    incompatible["relations"][0]["subjects"][0]["source"] =
+        json!({"kind": "blob-lines", "path": "src/lib.rs", "first_line": 1, "last_line": 1});
+    cases.push(serde_json::to_vec(&incompatible)?);
+    let mut split_repository_identity = relation_registry();
+    split_repository_identity["relations"][0]["subjects"][0]["scope"]["repository"]["host"] =
+        json!("elsewhere.example");
+    cases.push(serde_json::to_vec(&split_repository_identity)?);
+
+    for bytes in cases {
+        fs::write(&path, bytes)?;
+        assert!(load_relation_registry(&path).is_err());
+    }
+    Ok(())
+}
 
 fn sphinx_inventory(body: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());

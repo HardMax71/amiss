@@ -267,6 +267,19 @@ pub fn check_projection_source(
     Ok(())
 }
 
+/// Parses one standalone projection source through the scanner-policy grammar.
+///
+/// # Errors
+///
+/// The JSON is not strict, the source is malformed, or it is incompatible with the selected
+/// projection.
+pub fn parse_projection_source(
+    bytes: &[u8],
+    projection: ProjectionKind,
+) -> Result<ProjectionSource, Error> {
+    decode_checked_projection_source("$", root(bytes)?, projection)
+}
+
 pub(crate) fn decode_checked_projection_source(
     path: &str,
     value: Value,
