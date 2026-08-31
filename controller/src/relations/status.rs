@@ -1,4 +1,6 @@
+use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::{ArtifactId, Oid};
+use amiss_wire::relation::RelationVerdict;
 
 use crate::artifacts::checked_reference;
 use crate::{
@@ -39,6 +41,12 @@ pub struct RelationStatusRecord {
     pub completed: bool,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RelationStatusPublication {
+    pub summary: String,
+    pub passing: bool,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RelationStatusError {
     #[error("the pending relation transition is invalid")]
@@ -51,6 +59,73 @@ pub enum RelationStatusError {
     InvalidAudit,
     #[error("the relation status identity is already bound to different immutable data")]
     BindingConflict,
+    #[error("the relation status record is not one exact unfinished publication")]
+    InvalidPublication,
+}
+
+/// Projects one staged destination into credential-free provider output.
+///
+/// # Errors
+///
+/// The record is completed, malformed, does not contain the target exactly
+/// once, or its retained artifact does not reproduce the relation audit.
+pub fn relation_status_publication(
+    status: &RelationStatusRecord,
+    target: &RelationStatusTarget,
+) -> Result<RelationStatusPublication, RelationStatusError> {
+    let destinations = &status.targets.destinations;
+    let exact_target = destinations.iter().filter(|item| *item == target).count() == 1;
+    let ordered_targets = (1..=2).contains(&destinations.len())
+        && destinations
+            .windows(2)
+            .all(|pair| matches!(pair, [left, right] if left.role < right.role));
+    let ArtifactAuditDigests::Relation(audit) = status.audit.audit else {
+        return Err(RelationStatusError::InvalidPublication);
+    };
+    let artifact = &status.audit.artifact;
+    if status.completed
+        || !exact_target
+        || !ordered_targets
+        || !valid_required_status_name(&target.required_status_name)
+        || artifact.report_digest != audit.report_digest
+        || artifact.semantic_digest.is_some()
+        || artifact.assessment_digest.is_some()
+        || artifact.external_tally.is_some()
+        || artifact.external_incomplete
+        || (audit.verdict != RelationVerdict::Unproven && audit.evidence_digest.is_none())
+    {
+        return Err(RelationStatusError::InvalidPublication);
+    }
+
+    let evidence = audit
+        .evidence_digest
+        .map_or_else(|| "none".to_owned(), |digest| digest.to_string());
+    let repository = &target.scope.repository;
+    Ok(RelationStatusPublication {
+        summary: format!(
+            "relation: {}\ncoordination: {}\nfence: {}\nverdict: {}\nprovider: {}/{}\nrepository: {}/{}/{}\ntrigger-role: {}\ndestination-role: {}\nstatus: {}\ncandidate-commit: {}\nreport: {}\nplan: {}\nevidence: {evidence}\nassessment: {}",
+            status.targets.relation.as_str(),
+            status.targets.coordination.as_str(),
+            status.targets.fence.get(),
+            audit.verdict.as_ref(),
+            target.scope.provider.namespace,
+            target.scope.provider.instance,
+            repository.host(),
+            repository.owner(),
+            repository.name(),
+            status.targets.trigger_role.as_str(),
+            target.role.as_str(),
+            target.required_status_name,
+            target.candidate_commit.as_str(),
+            audit.report_digest,
+            audit.plan_digest,
+            audit.assessment_digest,
+        ),
+        passing: matches!(
+            audit.verdict,
+            RelationVerdict::Aligned | RelationVerdict::ResolvedDrift
+        ),
+    })
 }
 
 /// Rechecks both independently refreshed subject heads and freezes only the

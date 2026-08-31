@@ -107,7 +107,7 @@ Create a scoped access token with the smallest instance-specific permissions tha
 - reading the current user;
 - reading the repository, branch protection, pull request, commits, and reviews;
 - cloning the checked and action repositories over HTTPS; and
-- creating a pull-request review.
+- creating a pull-request review and configured relation commit statuses.
 
 On current Forgejo this means `read:user` and `write:repository`; the account's repository access
 should supply the remaining boundary. Follow the equivalent current Gitea token scopes and
@@ -345,6 +345,18 @@ the pull request and existing reviews. It reuses one exact current review and re
 review carrying the same evaluation marker. If the provider accepted a create but its reply was
 lost, a later lookup normally finds the exact review; an ambiguous stale lookup can still create
 a duplicate, after which conflicting state fails closed.
+
+Cross-repository relation publication has no pull request to review. The same client therefore
+uses `GET` and `POST /repos/{owner}/{repo}/statuses/{sha}` on the exact frozen commit. It reconciles
+the provider's latest row for the configured context, accepts only the dedicated reviewer's
+versioned Amiss marker, and requires an exact create response before the caller may acknowledge its
+durable destination. The marker is a digest of the complete credential-free relation projection;
+no credential or bearer artifact URL is exposed.
+
+This does not turn a Gitea-family status into the dedicated-reviewer gate described above. Required
+status contexts are not bound to their writer, so another repository writer can imitate or replace
+one. Relation statuses are an honest native publication surface for an unchanged branch; an
+identity-bound destination must carry any protected cross-repository gate.
 
 Gitea-family approval freshness is based on changed pull-request content. The service posts a
 review on the exact candidate commit and checks the exact commit and tree before publication, but

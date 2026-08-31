@@ -10,9 +10,9 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::super::model::{
-    BranchProtectionRecord, BranchRecord, CommitMetaRecord, CommitRecord, CreateReview,
-    PayloadCommitRecord, PullRefRecord, PullRepositoryRecord, PullRequestRecord, RefreshData,
-    RepositoryRecord, ReviewRecord, UserRecord,
+    BranchProtectionRecord, BranchRecord, CommitMetaRecord, CommitRecord, CommitStatusRecord,
+    CreateCommitStatus, CreateReview, PayloadCommitRecord, PullRefRecord, PullRepositoryRecord,
+    PullRequestRecord, RefreshData, RepositoryRecord, ReviewRecord, UserRecord,
 };
 use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
@@ -96,6 +96,8 @@ pub(super) struct FakeRest {
 pub(super) struct FakeState {
     pub(super) data: RefreshData,
     pub(super) created: Vec<CreateReview>,
+    pub(super) statuses: Vec<CommitStatusRecord>,
+    pub(super) created_statuses: Vec<CreateCommitStatus>,
 }
 
 impl FakeRest {
@@ -104,6 +106,8 @@ impl FakeRest {
             state: Arc::new(Mutex::new(FakeState {
                 data,
                 created: Vec::new(),
+                statuses: Vec::new(),
+                created_statuses: Vec::new(),
             })),
         }
     }
@@ -112,6 +116,10 @@ impl FakeRest {
 impl GiteaRest for FakeRest {
     fn deadline(&self) -> Result<OperationDeadline, ProviderError> {
         OperationDeadline::after(Duration::from_secs(5))
+    }
+
+    fn current_user(&self, _deadline: OperationDeadline) -> Result<UserRecord, ProviderError> {
+        Ok(self.state.lock().unwrap().data.reviewer.clone())
     }
 
     fn refresh_data(
@@ -143,6 +151,38 @@ impl GiteaRest for FakeRest {
             dismissed: false,
         };
         state.data.reviews.push(created.clone());
+        Ok(created)
+    }
+
+    fn commit_statuses(
+        &self,
+        _repository: &RepositoryIdentity,
+        _commit: &Oid,
+        _deadline: OperationDeadline,
+    ) -> Result<Vec<CommitStatusRecord>, ProviderError> {
+        Ok(self.state.lock().unwrap().statuses.clone())
+    }
+
+    fn create_commit_status(
+        &self,
+        _repository: &RepositoryIdentity,
+        _commit: &Oid,
+        status: &CreateCommitStatus,
+        _deadline: OperationDeadline,
+    ) -> Result<CommitStatusRecord, ProviderError> {
+        let mut state = self.state.lock().unwrap();
+        state.created_statuses.push(status.clone());
+        let created = CommitStatusRecord {
+            id: u64::try_from(state.statuses.len())
+                .unwrap()
+                .saturating_add(200),
+            creator: Some(state.data.reviewer.clone()),
+            status: status.state.clone(),
+            target_url: status.target_url.clone(),
+            description: status.description.clone(),
+            context: status.context.clone(),
+        };
+        state.statuses.insert(0, created.clone());
         Ok(created)
     }
 }
