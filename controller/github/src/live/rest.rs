@@ -11,7 +11,7 @@ use amiss_controller::{
 pub(super) use amiss_controller::{
     ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
 };
-use amiss_wire::model::Oid;
+use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 
 use crate::GitHubPullRequest;
 
@@ -26,6 +26,7 @@ use super::model::{
     GitCommitRecord, PullRequestRecord, RefRecord, RefreshData, RepositoryCommitRecord,
     RepositoryRecord,
 };
+use super::relation::GitHubRelationRest;
 use super::{GitHubClientError, GitHubTimeouts};
 
 mod transport;
@@ -377,6 +378,31 @@ impl GitHubRest for HttpRest {
             pull_request.repository_owner, pull_request.repository_name
         );
         self.transport.post(&route, check, deadline)
+    }
+}
+
+impl GitHubRelationRest for HttpRest {
+    fn relation_head(
+        &self,
+        repository: &RepositoryIdentity,
+        target: &BranchRef,
+    ) -> Result<CommitRecord, ProviderError> {
+        let branch = target
+            .as_str()
+            .strip_prefix("refs/heads/")
+            .filter(|branch| !branch.is_empty())
+            .ok_or(ProviderError::InvalidResponse)?;
+        let owner = path_segment(repository.owner());
+        let name = path_segment(repository.name());
+        let branch = path_segment(branch);
+        let record: RepositoryCommitRecord = self.transport.get(
+            &format!("/repos/{owner}/{name}/commits/{branch}"),
+            self.transport.deadline()?,
+        )?;
+        Ok(CommitRecord {
+            sha: record.sha,
+            tree: record.commit.tree.sha,
+        })
     }
 }
 

@@ -235,6 +235,12 @@ Repository owner and name are lowercase. `target_branch` is one branch name such
 full `refs/heads/...` value. It binds admission, the plan route, effective-rules lookup, and the
 protected target of every run.
 
+The same installation client also exposes a provider-only finality read for a registered relation
+subject. The caller still selects the client through operator-owned credential routing. The client
+then requires that subject's provider instance, installation, canonical repository, branch, and
+SHA-1 format to match before it reads the current commit and validates the returned tree. This read
+does not acquire repository contents, stage a relation result, or publish a check run.
+
 `workflow_artifacts` defaults to an empty list. Each row becomes part of the plan digest and uses
 the configured provider and repository; neither is accepted again inside the row. The workflow
 identity is a workflow file name or numeric GitHub workflow ID. All rows use the same workflow and

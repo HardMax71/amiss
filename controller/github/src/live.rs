@@ -4,6 +4,7 @@ mod artifact;
 mod model;
 mod publication;
 mod refresh;
+mod relation;
 mod rest;
 mod verify;
 
@@ -12,7 +13,7 @@ use std::time::Duration;
 
 use amiss_controller::{
     AcquiredSemanticTemplate, ChangeSnapshot, ProviderError, ProviderIdentity, Publication,
-    WorkflowArtifactExpectation,
+    RelationSubject, RelationSubjectHead, WorkflowArtifactExpectation,
 };
 use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::Oid;
@@ -131,6 +132,19 @@ impl GitHubApp {
     /// GitHub cannot authenticate this exact installation.
     pub fn installation_access_token(&self) -> Result<SecretString, ProviderError> {
         self.client.rest.installation_access_token()
+    }
+
+    /// Resolves the current commit of one operator-configured GitHub relation subject.
+    ///
+    /// # Errors
+    ///
+    /// The subject names another provider, installation, repository, or object format, or
+    /// GitHub does not return one exact SHA-1 commit and tree.
+    pub fn resolve_relation_head(
+        &self,
+        subject: &RelationSubject,
+    ) -> Result<RelationSubjectHead, ProviderError> {
+        self.client.resolve_relation_head(subject)
     }
 }
 

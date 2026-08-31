@@ -149,6 +149,13 @@ The outbox still makes no provider call. Provider adapters must reconcile an amb
 the exact claimed value before acknowledging it, and a live relation lane must continue polling
 until the outbox has no claim.
 
+The GitHub installation client can independently refresh the final head of an operator-configured
+GitHub subject. It accepts the typed subject directly, requires the configured provider and
+installation, a canonical repository on that provider instance, and SHA-1, then resolves the
+declared branch and validates both the returned commit and its tree. The result is a typed
+`RelationSubjectHead`; it does not choose a credential, schedule work, or authorize publication.
+Credential routing and the two-subject finality decision remain controller-lane responsibilities.
+
 ## Exact Git acquisition
 
 The existing strict HTTPS protocol-v2 shallow fetch now accepts a positive object and pack-byte
@@ -282,7 +289,7 @@ reference.
 The remaining stages are deliberately separate:
 
 1. admit snapshot-bound record values and sets from an authenticated producer;
-2. resolve both current heads through their independently configured provider credentials;
+2. resolve non-GitHub heads and assemble both independently credentialed finality facts;
 3. reconcile and publish each claimed value through its provider-specific status boundary.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its
