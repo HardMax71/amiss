@@ -1,14 +1,15 @@
 use std::sync::Arc;
 
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeSnapshot, CheckConclusion, HandleOutcome, IngressCheck,
-    ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace, Publication,
-    VerifiedDelivery,
+    AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckConclusion, HandleOutcome,
+    IngressCheck, PlanScope, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace,
+    Publication, RelationStatusRecord, RelationStatusTarget, RelationSubject, RelationSubjectHead,
+    VerifiedDelivery, relation_status_publication,
 };
 use amiss_wire::model::ObjectFormat;
 
 use crate::identity::{
-    exact_sha1, parse_change_id, parse_delivery_id, parse_run_id, repository_identity,
+    branch_ref, exact_sha1, parse_change_id, parse_delivery_id, parse_run_id, repository_identity,
 };
 use crate::snapshot::{conclusion_matches, snapshot};
 use crate::{GitLabOidc, GitLabRefresh, GitLabRefreshQuery, PolicyBinding};
@@ -43,9 +44,73 @@ pub struct GitLabMergeTrainAdapter<A> {
     api: A,
 }
 
-impl<A> GitLabMergeTrainAdapter<A> {
+impl<A: GitLabApi> GitLabMergeTrainAdapter<A> {
     pub const fn new(source: Arc<GitLabOidc>, api: A) -> Self {
         Self { source, api }
+    }
+
+    /// Resolves the exact merge-train candidate represented by one active policy job.
+    ///
+    /// # Errors
+    ///
+    /// The subject is not this policy's project and protected target, or the
+    /// authenticated job and train are no longer active.
+    pub fn resolve_relation_head(
+        &self,
+        delivery: &AuthenticatedDelivery,
+        subject: &RelationSubject,
+    ) -> Result<RelationSubjectHead, ProviderError> {
+        validate_relation_scope(
+            &self.source,
+            delivery,
+            &subject.scope,
+            subject.object_format,
+        )?;
+        if branch_ref(&self.source.policy.target_branch).as_ref() != Some(&subject.target) {
+            return Err(ProviderError::InvalidResponse);
+        }
+        let current = policy_job_snapshot(&self.source, &self.api, delivery)?;
+        (current.state == ChangeState::Active)
+            .then(|| RelationSubjectHead {
+                subject: subject.clone(),
+                candidate_commit: current.run.commits.candidate,
+            })
+            .ok_or(ProviderError::AuthorizationRevoked)
+    }
+
+    /// Binds one staged relation result to the currently running policy job.
+    ///
+    /// The returned boolean is the HTTP success decision; this makes no
+    /// provider write and cannot be resumed after the job stops.
+    ///
+    /// # Errors
+    ///
+    /// The status or target is malformed, names another policy job, or the
+    /// authenticated job and train are no longer active.
+    pub fn relation_policy_job_result(
+        &self,
+        delivery: &AuthenticatedDelivery,
+        status: &RelationStatusRecord,
+        target: &RelationStatusTarget,
+    ) -> Result<bool, ProviderError> {
+        validate_relation_scope(
+            &self.source,
+            delivery,
+            &target.scope,
+            target.candidate_commit.object_format(),
+        )?;
+        if target.required_status_name != self.source.policy.job_name
+            || target.candidate_commit != delivery.provider_run.candidate_commit
+        {
+            return Err(ProviderError::InvalidResponse);
+        }
+        let publication = relation_status_publication(status, target)
+            .map_err(|_defect| ProviderError::InvalidResponse)?;
+        let current = policy_job_snapshot(&self.source, &self.api, delivery)?;
+        (current.state == ChangeState::Active
+            && current.run.commits.candidate == target.candidate_commit)
+            .then_some(publication.passing)
+            .ok_or(ProviderError::AuthorizationRevoked)
     }
 }
 
@@ -59,9 +124,7 @@ impl<A: GitLabApi> ProviderAdapter for GitLabMergeTrainAdapter<A> {
     }
 
     fn refresh(&self, delivery: &AuthenticatedDelivery) -> Result<ChangeSnapshot, ProviderError> {
-        let query = refresh_query(delivery, &self.source.provider, &self.source.policy)?;
-        let refresh = self.api.refresh(&query)?;
-        snapshot(delivery, &self.source.policy, &query, &refresh)
+        policy_job_snapshot(&self.source, &self.api, delivery)
     }
 
     fn publish(
@@ -72,9 +135,7 @@ impl<A: GitLabApi> ProviderAdapter for GitLabMergeTrainAdapter<A> {
         if publication.provider_run != delivery.provider_run {
             return Err(ProviderError::InvalidResponse);
         }
-        let query = refresh_query(delivery, &self.source.provider, &self.source.policy)?;
-        let refresh = self.api.refresh(&query)?;
-        let current = snapshot(delivery, &self.source.policy, &query, &refresh)?;
+        let current = policy_job_snapshot(&self.source, &self.api, delivery)?;
         let frozen = publication.run == current.run
             && publication.gate_commit == current.gate_commit
             && publication.gate_commit == delivery.provider_run.candidate_commit
@@ -91,6 +152,34 @@ impl<A: GitLabApi> ProviderAdapter for GitLabMergeTrainAdapter<A> {
     ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
         self.api.verify_external(plan, checked_at)
     }
+}
+
+fn policy_job_snapshot(
+    source: &GitLabOidc,
+    api: &impl GitLabApi,
+    delivery: &AuthenticatedDelivery,
+) -> Result<ChangeSnapshot, ProviderError> {
+    let query = refresh_query(delivery, &source.provider, &source.policy)?;
+    let refresh = api.refresh(&query)?;
+    snapshot(delivery, &source.policy, &query, &refresh)
+}
+
+fn validate_relation_scope(
+    source: &GitLabOidc,
+    delivery: &AuthenticatedDelivery,
+    scope: &PlanScope,
+    object_format: ObjectFormat,
+) -> Result<(), ProviderError> {
+    (scope
+        == &PlanScope {
+            provider: delivery.identity.provider.clone(),
+            integration: delivery.identity.integration.clone(),
+            repository: delivery.change.repository.clone(),
+        }
+        && delivery.identity.provider == source.provider
+        && object_format == ObjectFormat::Sha1)
+        .then_some(())
+        .ok_or(ProviderError::InvalidResponse)
 }
 
 pub fn policy_job_accepted(outcome: &HandleOutcome) -> bool {

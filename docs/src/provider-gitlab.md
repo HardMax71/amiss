@@ -15,6 +15,12 @@ execution policy injects one job into the merge train. That job presents a short
 token to the service and waits. Only an exact Amiss pass returns HTTP success, so the job's own
 result is the provider evidence required by the train.
 
+The provider adapter also has the narrow boundary needed by a future cross-repository relation
+lane. It can resolve this job's live merge-train candidate as a relation head and bind one exact
+staged relation result back to the same project, candidate, and configured job name. This remains
+synchronous: it does not create a GitLab status, and no service loads or runs relation configuration
+yet.
+
 ## Flow
 
 The request body contains only the merge request's project-local number, which GitLab calls its
