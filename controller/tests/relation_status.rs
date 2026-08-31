@@ -9,13 +9,15 @@ use std::time::Duration;
 use amiss_controller::{
     ArtifactAuditBundle, ArtifactAuditReference, ArtifactError, ArtifactStoreConfig,
     ControllerClock, ControllerEvaluationId, FileArtifactStore, FileRelationScheduleStore,
-    LeaseFence, PendingRelation, RelationAdmission, RelationAuditBundle, RelationScheduleError,
-    RelationScheduleStoreError, RelationStatusDestination, RelationStatusError,
-    RelationStatusRecord, RelationSubjectHead, complete_relation_status, relation_registry,
-    stage_relation_status,
+    LeaseFence, PendingRelation, RelationAdmission, RelationAuditBundle, RelationRegistry,
+    RelationScheduleError, RelationScheduleStoreError, RelationStatusDestination,
+    RelationStatusError, RelationStatusRecord, RelationSubjectHead, complete_relation_status,
+    relation_registry, stage_relation_status,
 };
 use amiss_controller_fixtures::clock::TestClock;
-use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
+use amiss_controller_fixtures::relation::{
+    RelationAuditFixture, relation_audit, relation_audit_with_coordination,
+};
 use amiss_wire::model::ArtifactId;
 
 fn store(root: &tempfile::TempDir, clock: Arc<dyn ControllerClock>) -> FileArtifactStore {
@@ -73,11 +75,20 @@ fn retain(
         .unwrap()
 }
 
-fn acknowledge_all(store: &FileRelationScheduleStore, staged: &RelationStatusRecord) {
-    for target in &staged.targets.destinations {
-        store
-            .acknowledge_status_destination(staged, target)
+fn acknowledge_all(
+    store: &FileRelationScheduleStore,
+    registry: &RelationRegistry,
+    artifacts: &FileArtifactStore,
+) -> RelationStatusRecord {
+    loop {
+        let claim = store
+            .claim_status_delivery(registry, artifacts)
+            .unwrap()
             .unwrap();
+        let status = store.acknowledge_status_destination(claim).unwrap();
+        if status.completed {
+            return status;
+        }
     }
 }
 
@@ -307,31 +318,37 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
         relations.complete_status(&staged),
         Err(RelationScheduleStoreError::DeliveryPending)
     ));
-    let [first, second] = staged.targets.destinations.as_slice() else {
-        panic!("both configured destinations are staged");
-    };
-    relations
-        .acknowledge_status_destination(&staged, first)
+    let first = relations
+        .claim_status_delivery(&registry, &artifacts)
+        .unwrap()
         .unwrap();
-    let acknowledged_bytes = std::fs::metadata(&journal_path).unwrap().len();
+    assert_eq!(first.status, staged);
+    let first_target = first.target.clone();
+    let parallel = relations
+        .claim_status_delivery(&registry, &artifacts)
+        .unwrap()
+        .unwrap();
+    assert_ne!(parallel.target, first_target);
+    drop(parallel);
+    assert!(
+        !relations
+            .acknowledge_status_destination(first)
+            .unwrap()
+            .completed
+    );
     drop(relations);
 
     let relations = FileRelationScheduleStore::open(relation_root.path(), 1).unwrap();
-    relations
-        .acknowledge_status_destination(&staged, first)
+    let second = relations
+        .claim_status_delivery(&registry, &artifacts)
         .unwrap();
-    assert_eq!(
-        std::fs::metadata(&journal_path).unwrap().len(),
-        acknowledged_bytes
-    );
+    let second = second.unwrap();
+    assert_ne!(second.target, first_target);
     assert!(matches!(
         relations.complete_status(&staged),
         Err(RelationScheduleStoreError::DeliveryPending)
     ));
-    relations
-        .acknowledge_status_destination(&staged, second)
-        .unwrap();
-    let completed = relations.complete_status(&staged).unwrap();
+    let completed = relations.acknowledge_status_destination(second).unwrap();
     assert!(completed.completed);
     drop(relations);
 
@@ -347,6 +364,112 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
             )
             .unwrap(),
         None
+    );
+}
+
+#[test]
+fn delivery_claim_recovers_the_oldest_fence_before_newer_work() {
+    let older = relation_audit(true).unwrap();
+    let newer = relation_audit_with_coordination(true, "workflow/release-43").unwrap();
+    let registry =
+        relation_registry(vec![older.transition.relation.plan.as_ref().clone()]).unwrap();
+    let artifact_root = tempfile::tempdir().unwrap();
+    let artifacts = store(&artifact_root, TestClock::new());
+    let older_audit = retain(&artifacts, "evaluation/relation/delivery-older", &older);
+    let newer_audit = retain(&artifacts, "evaluation/relation/delivery-newer", &newer);
+    let relation_root = tempfile::tempdir().unwrap();
+    let relations = FileRelationScheduleStore::open(relation_root.path(), 2).unwrap();
+    let contender = FileRelationScheduleStore::open(relation_root.path(), 2).unwrap();
+    let RelationAdmission::Scheduled(older_pending) =
+        relations.schedule(older.transition.clone()).unwrap()
+    else {
+        panic!("the older relation schedules");
+    };
+    let older_status = relations
+        .stage_status(
+            &artifacts,
+            &older_pending,
+            heads(&older),
+            older_audit,
+            bundle(&older),
+        )
+        .unwrap()
+        .unwrap();
+    let RelationAdmission::Scheduled(newer_pending) =
+        relations.schedule(newer.transition.clone()).unwrap()
+    else {
+        panic!("the newer relation schedules");
+    };
+    let newer_status = relations
+        .stage_status(
+            &artifacts,
+            &newer_pending,
+            heads(&newer),
+            newer_audit,
+            bundle(&newer),
+        )
+        .unwrap()
+        .unwrap();
+
+    let claim = relations
+        .claim_status_delivery(&registry, &artifacts)
+        .unwrap()
+        .unwrap();
+    assert_eq!(claim.status, older_status);
+    let target = claim.target.clone();
+    assert!(
+        contender
+            .claim_status_delivery(&registry, &artifacts)
+            .unwrap()
+            .is_none()
+    );
+    drop(claim);
+
+    let mut recovered = contender
+        .claim_status_delivery(&registry, &artifacts)
+        .unwrap()
+        .unwrap();
+    assert_eq!(recovered.status, older_status);
+    assert_eq!(recovered.target, target);
+    recovered.target.credential =
+        amiss_controller::OpaqueId::new("credential/rebound".to_owned()).unwrap();
+    assert!(matches!(
+        contender.acknowledge_status_destination(recovered),
+        Err(RelationScheduleStoreError::Status(
+            RelationStatusError::BindingConflict
+        ))
+    ));
+    let mut recovered = contender
+        .claim_status_delivery(&registry, &artifacts)
+        .unwrap()
+        .unwrap();
+    recovered.status.targets.fence = LeaseFence::new(99).unwrap();
+    assert!(matches!(
+        contender.acknowledge_status_destination(recovered),
+        Err(RelationScheduleStoreError::Status(
+            RelationStatusError::BindingConflict
+        ))
+    ));
+    let recovered = contender
+        .claim_status_delivery(&registry, &artifacts)
+        .unwrap()
+        .unwrap();
+    assert!(
+        contender
+            .acknowledge_status_destination(recovered)
+            .unwrap()
+            .completed
+    );
+    let next = relations
+        .claim_status_delivery(&registry, &artifacts)
+        .unwrap()
+        .unwrap();
+    assert_eq!(next.status, newer_status);
+    assert!(
+        relations
+            .acknowledge_status_destination(next)
+            .unwrap()
+            .completed
     );
 }
 
@@ -425,6 +548,8 @@ fn reopening_status_rejects_missing_rebound_and_expired_authorities() {
 #[test]
 fn status_rebinding_and_superseded_staging_do_not_change_the_journal() {
     let fixture = relation_audit(true).unwrap();
+    let registry =
+        relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()]).unwrap();
     let artifact_root = tempfile::tempdir().unwrap();
     let artifacts = store(&artifact_root, TestClock::new());
     let retained = retain(&artifacts, "evaluation/relation/exact-status", &fixture);
@@ -490,7 +615,7 @@ fn status_rebinding_and_superseded_staging_do_not_change_the_journal() {
     ));
     assert_eq!(std::fs::metadata(&journal).unwrap().len(), before_stale);
     assert!(relations.is_current(&next).unwrap());
-    acknowledge_all(&relations, &staged);
+    assert!(acknowledge_all(&relations, &registry, &artifacts).completed);
     assert!(relations.complete_status(&staged).unwrap().completed);
 }
 
@@ -532,6 +657,8 @@ fn an_expired_audit_cannot_create_a_status_stage() {
 #[test]
 fn concurrent_supersession_and_status_staging_commit_in_one_order() {
     let fixture = relation_audit(true).unwrap();
+    let registry =
+        relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()]).unwrap();
     let artifact_root = tempfile::tempdir().unwrap();
     let artifacts = Arc::new(store(&artifact_root, TestClock::new()));
     let retained = retain(
@@ -579,7 +706,7 @@ fn concurrent_supersession_and_status_staging_commit_in_one_order() {
     };
     let stage = stage_worker.join().unwrap();
     if let Ok(Some(staged)) = &stage {
-        acknowledge_all(&stores[0], staged);
+        assert!(acknowledge_all(&stores[0], &registry, artifacts.as_ref()).completed);
         assert!(stores[0].complete_status(staged).unwrap().completed);
     }
     assert!(matches!(

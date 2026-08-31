@@ -2,8 +2,10 @@ mod binding;
 mod outbox;
 mod status;
 
+pub use outbox::RelationStatusDeliveryClaim;
+
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io::{self, Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -23,6 +25,7 @@ use crate::atomic_write_recovery::{ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDir
 use crate::file_ledger::{FileLedgerError, frame};
 
 const LOCK_FILE: &str = ".amiss-relation-schedules.lock";
+const DELIVERY_LOCK_PREFIX: &str = ".amiss-relation-delivery-";
 const METADATA_FILE: &str = ".amiss-relation-schedules.root";
 const JOURNAL_FILE: &str = ".amiss-relation-schedules.journal";
 const ROOT_SCHEMA: &str = "amiss/controller-relation-journal-root-v3";
@@ -32,7 +35,8 @@ const MAX_ROOT_BYTES: u64 = 4_096;
 const MAX_ENTRY_BYTES: u64 = 16_384;
 const MAX_SMALL_ENTRY_BYTES: u64 = 4_096;
 const ENTRY_LENGTH_BYTES: u64 = 8;
-const MAX_ROOT_ENTRIES: usize = 16;
+const DELIVERY_LOCK_SHARDS: usize = 256;
+const MAX_ROOT_ENTRIES: usize = 16 + DELIVERY_LOCK_SHARDS;
 
 const ROOT_FRAME: frame::FrameFormat = frame::define(
     b"AMISS-RELATION-JOURNAL-ROOT",
@@ -213,7 +217,7 @@ impl FileRelationScheduleStore {
     ) -> Result<RelationAdmission, RelationScheduleStoreError> {
         let checked = checked_work(transition)?;
         let _lock = self.lock()?;
-        let metadata = self.load_metadata()?;
+        let mut metadata = self.load_metadata()?;
         let mut journal = self.open_committed_journal(&metadata)?;
         let mut state = self.state()?;
         synchronize(&mut state, &mut journal, &metadata, self.max_bindings)?;
@@ -257,19 +261,14 @@ impl FileRelationScheduleStore {
         };
         let mut binding = checked.binding;
         binding.fence = pending.fence.get();
-        let previous_tail = state.tail_digest.clone();
         self.append(
             &mut journal,
-            &metadata,
+            &mut metadata,
             &mut state,
-            JournalEntry {
-                schema: ENTRY_SCHEMA.to_owned(),
-                previous_tail,
-                action: JournalAction::Schedule {
-                    relation: checked.relation,
-                    plan_binding: checked.plan_binding,
-                    binding,
-                },
+            JournalAction::Schedule {
+                relation: checked.relation,
+                plan_binding: checked.plan_binding,
+                binding,
             },
         )?;
         Ok(RelationAdmission::Scheduled(pending))
@@ -296,10 +295,15 @@ impl FileRelationScheduleStore {
     fn append(
         &self,
         journal: &mut File,
-        metadata: &RootMetadata,
+        metadata: &mut RootMetadata,
         state: &mut State,
-        entry: JournalEntry,
+        action: JournalAction,
     ) -> Result<(), RelationScheduleStoreError> {
+        let entry = JournalEntry {
+            schema: ENTRY_SCHEMA.to_owned(),
+            previous_tail: state.tail_digest.clone(),
+            action,
+        };
         let chunk = encode_entry(&entry)?;
         let chunk_length =
             u64::try_from(chunk.len()).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
@@ -351,6 +355,7 @@ impl FileRelationScheduleStore {
         if !state.matches(&next) {
             return Err(RelationScheduleStoreError::Corrupt);
         }
+        *metadata = next;
         Ok(())
     }
 
@@ -361,24 +366,26 @@ impl FileRelationScheduleStore {
     }
 
     fn lock(&self) -> Result<File, RelationScheduleStoreError> {
-        let path = self.root.join(LOCK_FILE);
-        reject_non_file(&path)?;
-        let file = OpenOptions::new()
-            .read(true)
-            .write(true)
-            .create(true)
-            .truncate(false)
-            .open(path)
-            .map_err(RelationScheduleStoreError::Io)?;
-        if !file
-            .metadata()
-            .map_err(RelationScheduleStoreError::Io)?
-            .is_file()
-        {
-            return Err(RelationScheduleStoreError::Corrupt);
-        }
+        let file = open_lock(&self.root.join(LOCK_FILE))?;
         file.lock().map_err(RelationScheduleStoreError::Io)?;
         Ok(file)
+    }
+
+    fn try_delivery_lock(
+        &self,
+        destination: &str,
+    ) -> Result<Option<File>, RelationScheduleStoreError> {
+        let digest = Digest::from_wire(destination).ok_or(RelationScheduleStoreError::Corrupt)?;
+        let path = self.root.join(format!(
+            "{DELIVERY_LOCK_PREFIX}{:02x}.lock",
+            digest.as_bytes()[0]
+        ));
+        let file = open_lock(&path)?;
+        match file.try_lock() {
+            Ok(()) => Ok(Some(file)),
+            Err(TryLockError::WouldBlock) => Ok(None),
+            Err(TryLockError::Error(error)) => Err(RelationScheduleStoreError::Io(error)),
+        }
     }
 
     fn load_or_initialize(&self) -> Result<RootMetadata, RelationScheduleStoreError> {
@@ -941,6 +948,7 @@ fn scan_root(root: &Path) -> Result<(bool, bool), RelationScheduleStoreError> {
         let file_type = entry.file_type().map_err(RelationScheduleStoreError::Io)?;
         match name {
             LOCK_FILE if file_type.is_file() && !lock => lock = true,
+            name if is_delivery_lock(name) && file_type.is_file() => {}
             METADATA_FILE if file_type.is_file() && !metadata => metadata = true,
             JOURNAL_FILE if file_type.is_file() && !journal => journal = true,
             _ if name.starts_with(ATOMIC_WRITE_DIRECTORY_PREFIX) && file_type.is_dir() => {
@@ -967,6 +975,25 @@ fn scan_root(root: &Path) -> Result<(bool, bool), RelationScheduleStoreError> {
     Ok((metadata, journal))
 }
 
+fn is_delivery_lock(name: &str) -> bool {
+    let Some(shard) = name
+        .strip_prefix(DELIVERY_LOCK_PREFIX)
+        .and_then(|name| name.strip_suffix(".lock"))
+    else {
+        return false;
+    };
+    shard.len() == 2
+        && shard
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+}
+
+fn open_lock(path: &Path) -> Result<File, RelationScheduleStoreError> {
+    let mut options = OpenOptions::new();
+    options.read(true).write(true).create(true).truncate(false);
+    open_regular(path, &options)
+}
+
 fn create_journal(root: &Path) -> Result<(), RelationScheduleStoreError> {
     OpenOptions::new()
         .read(true)
@@ -979,20 +1006,22 @@ fn create_journal(root: &Path) -> Result<(), RelationScheduleStoreError> {
 
 fn open_journal(root: &Path) -> Result<File, RelationScheduleStoreError> {
     let path = root.join(JOURNAL_FILE);
-    reject_non_file(&path)?;
-    let journal = OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(path)
-        .map_err(RelationScheduleStoreError::Io)?;
-    if !journal
+    let mut options = OpenOptions::new();
+    options.read(true).write(true);
+    open_regular(&path, &options)
+}
+
+fn open_regular(path: &Path, options: &OpenOptions) -> Result<File, RelationScheduleStoreError> {
+    reject_non_file(path)?;
+    let file = options.open(path).map_err(RelationScheduleStoreError::Io)?;
+    if !file
         .metadata()
         .map_err(RelationScheduleStoreError::Io)?
         .is_file()
     {
         return Err(RelationScheduleStoreError::Corrupt);
     }
-    Ok(journal)
+    Ok(file)
 }
 
 fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), RelationScheduleStoreError> {
