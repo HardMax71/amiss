@@ -12,7 +12,8 @@ represent the exact comparison selected after acquisition. The provider-neutral 
 project repository-backed sources from all four acquired snapshots, but no trusted record producer
 is admitted yet. When a caller supplies a complete chain, the controller binds it to the accepted
 trigger report and frozen operator transition, replays the assessment, retains the exact bytes
-immutably, and can deliver an already claimed GitHub destination through its installation client.
+immutably, and can reconcile a claimed GitHub or Gitea-family destination. An authenticated live
+GitLab policy job can instead consume its exact synchronous destination.
 
 ## One closed relation
 
@@ -186,6 +187,20 @@ to its writer, so checking the response's reviewer protects Amiss reconciliation
 provider merge rule identity-secure. Use this surface for an unchanged relation subject only with
 that limitation understood; publish the actual protected gate on an identity-bound destination when
 one is required.
+
+GitLab has no asynchronous relation publisher. Its adapter accepts an already authenticated policy
+job and a relation subject only when both name the configured project, integration, SHA-1 format,
+and protected target branch. A fresh provider refresh must still prove that exact job, pipeline,
+merge-train car, candidate, runner, policy origin, project controls, and branch protection active.
+The resulting head fact is the ephemeral merge-train candidate, not the mutable protected-branch
+head.
+
+The same live-job boundary can consume one staged relation destination. Its scope and candidate must
+match the authenticated delivery, and its status name must be the exact configured policy job name.
+The shared relation projection supplies only a pass or block decision; another final refresh must
+still find the job and train active before the caller lets the endpoint return success. No GitLab API
+write occurs. A stopped job cannot be resumed by a background publisher, and a lost success response
+still fails the provider job closed even if Amiss retained the completed local result.
 
 ## Exact Git acquisition
 

@@ -71,10 +71,11 @@ fn decode_status_name(path: &str, value: Value) -> Result<String, Error> {
 pub fn valid_required_status_name(raw: &str) -> bool {
     let bytes = raw.as_bytes();
     let interior = |byte: &u8| {
-        byte.is_ascii_alphanumeric() || matches!(byte, b' ' | b'.' | b'_' | b'/' | b'-')
+        byte.is_ascii_alphanumeric() || matches!(byte, b' ' | b'.' | b'_' | b'/' | b':' | b'-')
     };
-    let edge =
-        |byte: &u8| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'/' | b'-');
+    let edge = |byte: &u8| {
+        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'/' | b':' | b'-')
+    };
     match (bytes.first(), bytes.last()) {
         (Some(first), Some(last)) => {
             bytes.len() <= 160

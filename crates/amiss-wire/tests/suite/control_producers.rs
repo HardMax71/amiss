@@ -133,10 +133,15 @@ fn producer_writers_preserve_the_validated_digests() {
 
 #[test]
 fn required_status_names_share_one_public_grammar() {
-    for valid in ["a", "amiss / documentation assurance", "docs.check_1"] {
+    for valid in [
+        "a",
+        "amiss / documentation assurance",
+        "docs.check_1",
+        "amiss:policy",
+    ] {
         assert!(valid_required_status_name(valid), "{valid}");
     }
-    for invalid in ["", " amiss", "amiss ", "amiss:docs", &"a".repeat(161)] {
+    for invalid in ["", " amiss", "amiss ", &"a".repeat(161)] {
         assert!(!valid_required_status_name(invalid), "{invalid}");
     }
 }
