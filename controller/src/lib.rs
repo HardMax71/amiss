@@ -90,14 +90,16 @@ pub use relation_audit::{RelationAuditBundle, RelationAuditDigests, validate_rel
 pub use relations::{
     FileRelationScheduleStore, PendingRelation, RELATION_REGISTRY_LIMIT,
     RELATION_SCHEDULE_BINDING_LIMIT, RelationAcquiredRoot, RelationAcquisitionError,
-    RelationAdmission, RelationLimits, RelationLookupError, RelationPlan, RelationRegistry,
-    RelationRegistryError, RelationScheduleError, RelationScheduleStoreError,
-    RelationStatusDeliveryClaim, RelationStatusDestination, RelationStatusError,
-    RelationStatusPublication, RelationStatusRecord, RelationStatusTarget, RelationStatusTargets,
-    RelationSubject, RelationSubjectHead, RelationSubjectTransition, RelationTransition,
-    TriggeredRelation, complete_relation_status, relation_registry, relation_status_publication,
-    relation_status_targets, relation_transition, relations_for_delivery, schedule_relation,
-    stage_relation_status, verify_relation_acquired, verify_relation_plan,
+    RelationAdmission, RelationCredentialError, RelationCredentialRoute, RelationCredentialRouter,
+    RelationLimits, RelationLookupError, RelationPlan, RelationRegistry, RelationRegistryError,
+    RelationScheduleError, RelationScheduleStoreError, RelationStatusDeliveryClaim,
+    RelationStatusDestination, RelationStatusError, RelationStatusPublication,
+    RelationStatusRecord, RelationStatusTarget, RelationStatusTargets, RelationSubject,
+    RelationSubjectHead, RelationSubjectTransition, RelationTransition, TriggeredRelation,
+    complete_relation_status, relation_authority, relation_credential_router, relation_registry,
+    relation_status_publication, relation_status_targets, relation_transition,
+    relations_for_delivery, schedule_relation, stage_relation_status, verify_relation_acquired,
+    verify_relation_plan,
 };
 pub use spelling::{ref_span, spelled_segments};
 pub use webhook::{
