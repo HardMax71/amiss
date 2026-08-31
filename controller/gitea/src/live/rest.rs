@@ -5,6 +5,7 @@ use amiss_controller::{ForgeFact, ForgeNegative, ProviderError};
 pub(super) use amiss_controller::{
     ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
 };
+use amiss_wire::model::{Oid, RepositoryIdentity};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use secrecy::SecretString;
 use serde::de::DeserializeOwned;
@@ -12,8 +13,9 @@ use serde::de::DeserializeOwned;
 use crate::GiteaPullRequest;
 
 use super::model::{
-    BranchProtectionRecord, BranchRecord, CommitRecord, CreateReview, PullRequestRecord, RefRecord,
-    RefreshData, RepositoryRecord, ReviewRecord, UserRecord,
+    BranchProtectionRecord, BranchRecord, CommitRecord, CommitStatusRecord, CreateCommitStatus,
+    CreateReview, PullRequestRecord, RefRecord, RefreshData, RepositoryRecord, ReviewRecord,
+    UserRecord,
 };
 use super::{Config, GiteaClientError, GiteaTimeouts};
 
@@ -22,7 +24,7 @@ mod transport;
 use self::transport::Transport;
 
 const PAGE_SIZE: usize = 50;
-const MAX_REVIEW_PAGES: u32 = 20;
+const MAX_PAGES: u32 = 20;
 // The paginated siblings trust at most ten hundred-row pages; one
 // unpaginated answer claiming more than that is not trusted either.
 const REF_CEILING: usize = 1000;
@@ -74,6 +76,8 @@ pub(super) trait GiteaVerification: Send + Sync {
 pub(super) trait GiteaRest: Send + Sync {
     fn deadline(&self) -> Result<OperationDeadline, ProviderError>;
 
+    fn current_user(&self, deadline: OperationDeadline) -> Result<UserRecord, ProviderError>;
+
     fn refresh_data(
         &self,
         config: &Config,
@@ -87,6 +91,21 @@ pub(super) trait GiteaRest: Send + Sync {
         review: &CreateReview,
         deadline: OperationDeadline,
     ) -> Result<ReviewRecord, ProviderError>;
+
+    fn commit_statuses(
+        &self,
+        repository: &RepositoryIdentity,
+        commit: &Oid,
+        deadline: OperationDeadline,
+    ) -> Result<Vec<CommitStatusRecord>, ProviderError>;
+
+    fn create_commit_status(
+        &self,
+        repository: &RepositoryIdentity,
+        commit: &Oid,
+        status: &CreateCommitStatus,
+        deadline: OperationDeadline,
+    ) -> Result<CommitStatusRecord, ProviderError>;
 }
 
 pub(super) struct HttpRest {
@@ -118,9 +137,9 @@ impl HttpRest {
         pull_request: GiteaPullRequest<'_>,
         deadline: OperationDeadline,
     ) -> Result<Vec<ReviewRecord>, ProviderError> {
-        let prefix = repository_route(pull_request);
+        let prefix = repository_route(pull_request.repository_owner, pull_request.repository_name);
         let mut reviews = Vec::new();
-        for page in 1..=MAX_REVIEW_PAGES {
+        for page in 1..=MAX_PAGES {
             let batch: Vec<ReviewRecord> = self.get(
                 &format!(
                     "{prefix}/pulls/{}/reviews?page={page}&limit={PAGE_SIZE}",
@@ -143,14 +162,18 @@ impl GiteaRest for HttpRest {
         self.transport.deadline()
     }
 
+    fn current_user(&self, deadline: OperationDeadline) -> Result<UserRecord, ProviderError> {
+        self.get("/user", deadline)
+    }
+
     fn refresh_data(
         &self,
         _config: &Config,
         pull_request: GiteaPullRequest<'_>,
         deadline: OperationDeadline,
     ) -> Result<RefreshData, ProviderError> {
-        let prefix = repository_route(pull_request);
-        let reviewer: UserRecord = self.get("/user", deadline)?;
+        let prefix = repository_route(pull_request.repository_owner, pull_request.repository_name);
+        let reviewer = self.current_user(deadline)?;
         let repository: RepositoryRecord = self.get(&prefix, deadline)?;
         let authoritative: PullRequestRecord =
             self.get(&format!("{prefix}/pulls/{}", pull_request.number), deadline)?;
@@ -216,10 +239,53 @@ impl GiteaRest for HttpRest {
         self.transport.post(
             &format!(
                 "{}/pulls/{}/reviews",
-                repository_route(pull_request),
+                repository_route(pull_request.repository_owner, pull_request.repository_name,),
                 pull_request.number
             ),
             review,
+            deadline,
+        )
+    }
+
+    fn commit_statuses(
+        &self,
+        repository: &RepositoryIdentity,
+        commit: &Oid,
+        deadline: OperationDeadline,
+    ) -> Result<Vec<CommitStatusRecord>, ProviderError> {
+        let prefix = repository_route(repository.owner(), repository.name());
+        let mut statuses = Vec::new();
+        for page in 1..=MAX_PAGES {
+            let batch: Vec<CommitStatusRecord> = self.get(
+                &format!(
+                    "{prefix}/statuses/{}?sort=highestindex&page={page}&limit={PAGE_SIZE}",
+                    path_segment(commit.as_str())
+                ),
+                deadline,
+            )?;
+            let complete = page_complete(batch.len())?;
+            statuses.extend(batch);
+            if complete {
+                return Ok(statuses);
+            }
+        }
+        Err(ProviderError::InvalidResponse)
+    }
+
+    fn create_commit_status(
+        &self,
+        repository: &RepositoryIdentity,
+        commit: &Oid,
+        status: &CreateCommitStatus,
+        deadline: OperationDeadline,
+    ) -> Result<CommitStatusRecord, ProviderError> {
+        self.transport.post(
+            &format!(
+                "{}/statuses/{}",
+                repository_route(repository.owner(), repository.name()),
+                path_segment(commit.as_str())
+            ),
+            status,
             deadline,
         )
     }
@@ -363,12 +429,8 @@ fn page_complete(batch: usize) -> Result<bool, ProviderError> {
     Ok(batch < PAGE_SIZE)
 }
 
-fn repository_route(pull_request: GiteaPullRequest<'_>) -> String {
-    format!(
-        "/repos/{}/{}",
-        path_segment(pull_request.repository_owner),
-        path_segment(pull_request.repository_name)
-    )
+fn repository_route(owner: &str, name: &str) -> String {
+    format!("/repos/{}/{}", path_segment(owner), path_segment(name))
 }
 
 fn path_segment(raw: &str) -> String {

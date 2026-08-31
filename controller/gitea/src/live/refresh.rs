@@ -159,11 +159,16 @@ pub(super) fn publication_target_is_current(
     })
 }
 
-fn validate_reviewer(config: &Config, reviewer: &UserRecord) -> Result<(), ProviderError> {
-    (reviewer.id == config.reviewer.id
-        && reviewer.login.eq_ignore_ascii_case(&config.reviewer.login))
-    .then_some(())
-    .ok_or(ProviderError::AuthorizationRevoked)
+pub(super) fn validate_reviewer(
+    config: &Config,
+    reviewer: &UserRecord,
+) -> Result<(), ProviderError> {
+    if reviewer.id != config.reviewer.id
+        || !reviewer.login.eq_ignore_ascii_case(&config.reviewer.login)
+    {
+        return Err(ProviderError::AuthorizationRevoked);
+    }
+    Ok(())
 }
 
 fn validate_change(

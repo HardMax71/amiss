@@ -3,13 +3,17 @@ mod tests;
 mod model;
 mod publication;
 mod refresh;
+mod relation;
 mod rest;
 mod verify;
 
 use std::sync::Arc;
 use std::time::Duration;
 
-use amiss_controller::{ChangeSnapshot, ProviderError, ProviderIdentity, Publication};
+use amiss_controller::{
+    ChangeSnapshot, ProviderError, ProviderIdentity, Publication, RelationStatusRecord,
+    RelationStatusTarget,
+};
 use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::RepositoryIdentity;
 use secrecy::{ExposeSecret as _, SecretString};
@@ -111,6 +115,22 @@ impl GiteaClient {
                 objects,
             }),
         })
+    }
+
+    /// Publishes or exactly reconciles one claimed relation destination.
+    ///
+    /// The caller may durably acknowledge the destination only after this returns successfully.
+    ///
+    /// # Errors
+    ///
+    /// The status does not bind this dedicated reviewer and exact target, or the provider does not
+    /// accept or reproduce the commit status.
+    pub fn publish_relation_status(
+        &self,
+        status: &RelationStatusRecord,
+        target: &RelationStatusTarget,
+    ) -> Result<(), ProviderError> {
+        self.client.publish_relation_status(status, target)
     }
 }
 

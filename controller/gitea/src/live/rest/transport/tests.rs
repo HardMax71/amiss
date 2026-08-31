@@ -113,7 +113,7 @@ fn a_repository_route_names_its_owner_and_repository() {
         change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
     };
     let candidate = Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap();
-    let route = super::super::repository_route(crate::GiteaPullRequest {
+    let pull_request = crate::GiteaPullRequest {
         change: &change,
         reviewer_id: 77,
         repository_id: 101,
@@ -122,7 +122,9 @@ fn a_repository_route_names_its_owner_and_repository() {
         pull_request_id: 4201,
         number: 42,
         candidate_commit: &candidate,
-    });
+    };
+    let route =
+        super::super::repository_route(pull_request.repository_owner, pull_request.repository_name);
     assert_eq!(route, "/repos/acme/widget");
 }
 

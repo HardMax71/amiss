@@ -21,8 +21,9 @@ pub use acquisition::{
 };
 pub use schedule::{PendingRelation, RelationAdmission, RelationScheduleError, schedule_relation};
 pub use status::{
-    RelationStatusError, RelationStatusRecord, RelationStatusTarget, RelationStatusTargets,
-    RelationSubjectHead, complete_relation_status, relation_status_targets, stage_relation_status,
+    RelationStatusError, RelationStatusPublication, RelationStatusRecord, RelationStatusTarget,
+    RelationStatusTargets, RelationSubjectHead, complete_relation_status,
+    relation_status_publication, relation_status_targets, stage_relation_status,
 };
 pub use store::{
     FileRelationScheduleStore, RELATION_SCHEDULE_BINDING_LIMIT, RelationScheduleStoreError,

@@ -172,6 +172,21 @@ normally reconciles the accepted run before the caller durably acknowledges the 
 GitHub API and local journal still have no shared transaction, so a stale provider read can expose a
 duplicate later and make subsequent reconciliation fail closed.
 
+The Gitea-family client projects the same checked, credential-free value onto the exact candidate
+commit through the native commit-status API. It requires the configured provider, flat canonical
+repository, dedicated reviewer identity, and SHA-1 candidate before listing statuses. The list is
+bounded to 1,000 rows and ordered by the provider's commit-status index. For the configured context,
+the client reuses an exact latest row, advances a different valid Amiss marker written by the same
+reviewer, and rejects a foreign, malformed, or same-marker conflict. A create succeeds only when the
+provider echoes every field and the exact reviewer.
+
+The short versioned description carries a domain-separated digest of the same complete projection;
+the status state carries success or failure. Gitea and Forgejo do not bind a required status context
+to its writer, so checking the response's reviewer protects Amiss reconciliation but cannot make the
+provider merge rule identity-secure. Use this surface for an unchanged relation subject only with
+that limitation understood; publish the actual protected gate on an identity-bound destination when
+one is required.
+
 ## Exact Git acquisition
 
 The existing strict HTTPS protocol-v2 shallow fetch now accepts a positive object and pack-byte
