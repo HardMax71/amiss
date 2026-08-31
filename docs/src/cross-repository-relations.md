@@ -8,9 +8,11 @@ credential, selector, limit, or publication target.
 
 This is not yet a complete cross-repository checking lane. The shared service can load one bounded
 operator file into an immutable registry, and the controller can bind the complete set of opaque
-credential identities to caller-owned authorities. No provider service supplies that registry or
-constructs those authorities yet. Closed plan, evidence, and assessment contracts represent the
-exact comparison selected after acquisition. The provider-neutral Git layer can project
+credential identities to caller-owned authorities. The service can also bind one opaque
+operator-declared coordination identity to the exact relation owned by an authenticated delivery.
+No provider service supplies that registry or constructs those authorities yet. Closed plan,
+evidence, and assessment contracts represent the exact comparison selected after acquisition. The
+provider-neutral Git layer can project
 repository-backed sources from all four acquired snapshots, but no trusted record producer is
 admitted yet. When a caller supplies a complete chain, the controller binds it to the accepted
 trigger report and frozen operator transition, replays the assessment, retains the exact bytes
@@ -70,6 +72,12 @@ file. Its key is the authenticated provider instance, integration, repository id
 format. Provider facts that disagree inside the delivery are an error. A coherent delivery outside
 the registry is ordinary authenticated no-work. A matching delivery returns every affected
 relation in stable relation-identity order together with the role that triggered it.
+
+Coordination admission consumes the authenticated delivery and accepts only an operator-declared
+relation among that exact trigger set. Its result keeps the delivery, frozen relation, trigger role,
+and bounded opaque coordination identity together for execution. An unknown relation or an
+internally inconsistent delivery is an error. The service does not expose a coordination-policy
+enum or derive identity from a commit, timestamp, branch name, URL, or provider event spelling.
 
 The configured target branch is not treated as an immutable revision. A provider resolver must
 refresh it and supply exact base/candidate commit and tree IDs for each role. The controller freezes
@@ -352,7 +360,7 @@ reference.
 The remaining stages are deliberately separate:
 
 1. construct concrete provider authorities and install the frozen registry and router in a service;
-2. admit coordination and snapshot-bound records from authenticated producers;
+2. resolve and acquire snapshot-bound records from the admitted coordination;
 3. assemble and resume the complete relation lifecycle in live provider lanes.
 
 Until those stages exist, the projector can prove an exact bounded repository comparison when its

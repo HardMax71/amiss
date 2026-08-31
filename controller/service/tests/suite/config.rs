@@ -5,15 +5,16 @@ use std::time::Duration;
 use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, ExternalPolicy,
     IntegrationId, ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
-    relations_for_delivery,
+    RelationRegistry, relations_for_delivery,
 };
 use amiss_controller_service::{
-    ExecutionLimits, ExecutionPaths, ServiceLimits, ServicePaths, framed_route_id,
-    load_execution_limits, load_limits, load_plan, load_relation_registry, read_regular,
+    ExecutionLimits, ExecutionPaths, ServiceLimits, ServicePaths, admit_relation_coordination,
+    framed_route_id, load_execution_limits, load_limits, load_plan, load_relation_registry,
+    read_regular,
 };
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::sha256;
-use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use flate2::Compression;
@@ -114,13 +115,19 @@ fn relation_delivery(
     }
 }
 
+fn load_relation_fixture(
+    directory: &TempDir,
+) -> Result<RelationRegistry, Box<dyn std::error::Error>> {
+    let path = directory.path().join("relations.json");
+    fs::write(&path, serde_json::to_vec(&relation_registry())?)?;
+    Ok(load_relation_registry(&path)?)
+}
+
 #[test]
 fn one_operator_file_freezes_both_trigger_routes_without_credential_bytes()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = TempDir::new()?;
-    let path = directory.path().join("relations.json");
-    fs::write(&path, serde_json::to_vec(&relation_registry())?)?;
-    let registry = load_relation_registry(&path)?;
+    let registry = load_relation_fixture(&directory)?;
 
     let source = relations_for_delivery(
         &registry,
@@ -151,6 +158,64 @@ fn one_operator_file_freezes_both_trigger_routes_without_credential_bytes()
             ("forge.example", "forge.example", "credential/source")
         ]
     );
+    Ok(())
+}
+
+#[test]
+fn authenticated_subjects_admit_only_the_operator_declared_relation()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = TempDir::new()?;
+    let registry = load_relation_fixture(&directory)?;
+    let relation = ArtifactId::new("relation/public-api".to_owned()).unwrap();
+    let coordination = ArtifactId::new("workflow/release-42".to_owned()).unwrap();
+    let source_delivery = relation_delivery("gitea", "forge.example", "77", "service");
+
+    let source = admit_relation_coordination(
+        &registry,
+        source_delivery.clone(),
+        &relation,
+        coordination.clone(),
+    )?;
+    let documentation = admit_relation_coordination(
+        &registry,
+        relation_delivery("github", "github.com", "7", "handbook"),
+        &relation,
+        coordination.clone(),
+    )?;
+
+    assert_eq!(source.coordination, coordination);
+    assert_eq!(source.delivery, source_delivery);
+    assert_eq!(source.relation.plan, documentation.relation.plan);
+    assert_eq!(source.relation.trigger_role.as_str(), "source");
+    assert_eq!(
+        documentation.relation.trigger_role.as_str(),
+        "documentation"
+    );
+    Ok(())
+}
+
+#[test]
+fn coordination_admission_rejects_unowned_or_incoherent_declarations()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = TempDir::new()?;
+    let registry = load_relation_fixture(&directory)?;
+    let relation = ArtifactId::new("relation/public-api".to_owned()).unwrap();
+    let coordination = ArtifactId::new("workflow/release-42".to_owned()).unwrap();
+    let unowned = ArtifactId::new("relation/other".to_owned()).unwrap();
+
+    assert!(
+        admit_relation_coordination(
+            &registry,
+            relation_delivery("gitea", "forge.example", "77", "service"),
+            &unowned,
+            coordination.clone(),
+        )
+        .is_err()
+    );
+    let mut incoherent = relation_delivery("gitea", "forge.example", "77", "service");
+    incoherent.change.provider =
+        ProviderIdentity::new("github".to_owned(), "github.com".to_owned()).unwrap();
+    assert!(admit_relation_coordination(&registry, incoherent, &relation, coordination).is_err());
     Ok(())
 }
 

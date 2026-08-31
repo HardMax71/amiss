@@ -18,6 +18,7 @@ mod probe;
 mod queued;
 mod receiver;
 mod record;
+mod relation;
 mod shutdown;
 mod store;
 mod supervision;
@@ -56,6 +57,7 @@ pub use receiver::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, router,
     router_with_clock, serve,
 };
+pub use relation::{CoordinatedRelation, admit_relation_coordination};
 pub use shutdown::shutdown_signal;
 pub use supervision::{Supervision, SupervisionError, supervise};
 pub use worker::{
