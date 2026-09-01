@@ -10,8 +10,9 @@ use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{
-    CompletedSite, DocsCandidate, PLAN_PAYLOAD_SCHEMA, PublicationPlan, PublicationProducer,
-    PublicationRelation, PublicationResource, PublicationTarget, parse_plan, plan,
+    CompletedSite, DocsCandidate, PLAN_PAYLOAD_SCHEMA, PlanPayloadSchema, PublicationPlan,
+    PublicationProducer, PublicationRelation, PublicationResource, PublicationTarget, parse_plan,
+    plan,
 };
 
 mod assessment;
@@ -35,6 +36,7 @@ fn identity(value: &str) -> ArtifactId {
 
 fn publication_plan() -> PublicationPlan {
     PublicationPlan {
+        schema: PlanPayloadSchema::Current,
         report_payload_digest: digest('1'),
         docs: DocsCandidate {
             repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
@@ -146,6 +148,65 @@ fn publication_plan_refuses_repository_values_that_bypass_construction() {
 }
 
 #[test]
+fn publication_plan_reports_derived_shape_errors_at_their_fields() {
+    let value = plan(&publication_plan()).unwrap();
+    let bytes = json::canonical(&value);
+    for (pointer, replacement, expected_path, expected_kind) in [
+        (
+            "/payload/report_payload_digest",
+            serde_json::Value::String(format!("sha256:{}", "z".repeat(64))),
+            "$.payload.report_payload_digest",
+            ErrorKind::InvalidValue,
+        ),
+        (
+            "/payload/report_payload_digest",
+            serde_json::Value::Bool(false),
+            "$.payload.report_payload_digest",
+            ErrorKind::WrongType,
+        ),
+        (
+            "/payload/docs/commit_oid",
+            serde_json::Value::String("z".repeat(40)),
+            "$.payload.docs.commit_oid",
+            ErrorKind::InvalidValue,
+        ),
+        (
+            "/payload/target/provider",
+            serde_json::Value::String("invalid identity".to_owned()),
+            "$.payload.target.provider",
+            ErrorKind::InvalidValue,
+        ),
+        (
+            "/payload/schema",
+            serde_json::Value::String("unknown".to_owned()),
+            "$.payload.schema",
+            ErrorKind::InvalidValue,
+        ),
+    ] {
+        let mut document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        *document.pointer_mut(pointer).unwrap() = replacement;
+        let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
+        document["payload_digest"] =
+            serde_json::json!(hb(PLAN_PAYLOAD_SCHEMA, &payload).to_string());
+
+        let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+        assert_eq!(error.path, expected_path);
+        assert_eq!(error.kind, expected_kind);
+    }
+
+    let mut document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    document["payload"]
+        .as_object_mut()
+        .unwrap()
+        .remove("schema");
+    let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
+    document["payload_digest"] = serde_json::json!(hb(PLAN_PAYLOAD_SCHEMA, &payload).to_string());
+    let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+    assert_eq!(error.path, "$.payload.schema");
+    assert_eq!(error.kind, ErrorKind::MissingField);
+}
+
+#[test]
 fn publication_plan_refuses_tampering_and_open_shapes() {
     let value = plan(&publication_plan()).unwrap();
     let bytes = json::canonical(&value);
@@ -172,6 +233,6 @@ fn publication_plan_refuses_tampering_and_open_shapes() {
         &hj(PLAN_PAYLOAD_SCHEMA, open_value.member("payload").unwrap()).to_string(),
     );
     let error = parse_plan(rebound.as_bytes()).unwrap_err();
-    assert_eq!(error.path, "$");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert_eq!(error.path, "$.payload.unknown");
+    assert_eq!(error.kind, ErrorKind::UnknownField);
 }

@@ -25,15 +25,24 @@ pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/publication-plan-payload";
 pub const PUBLICATION_DOCUMENT_BYTES: u64 = 65_536;
 pub const PUBLICATION_URI_BYTES: usize = 16_384;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicationPlanEnvelope {
+    pub schema: PlanEnvelopeSchema,
     pub payload: PublicationPlan,
     pub payload_digest: Digest,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlanEnvelopeSchema {
+    #[serde(rename = "amiss/publication-plan-envelope")]
+    Current,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PublicationPlan {
+    pub schema: PlanPayloadSchema,
     pub report_payload_digest: Digest,
     pub docs: DocsCandidate,
     pub target: PublicationTarget,
@@ -41,6 +50,12 @@ pub struct PublicationPlan {
     pub product: PublicationResource,
     pub producer: PublicationProducer,
     pub relation: PublicationRelation,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PlanPayloadSchema {
+    #[serde(rename = "amiss/publication-plan-payload")]
+    Current,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,20 +109,6 @@ pub struct PublicationRelation {
     pub context_digest: Digest,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum PlanEnvelope<T> {
-    #[serde(rename = "amiss/publication-plan-envelope")]
-    Current { payload: T, payload_digest: Digest },
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum PlanPayload<T> {
-    #[serde(rename = "amiss/publication-plan-payload")]
-    Current(T),
-}
-
 struct PublicationFacts {
     producer: PublicationProducer,
     docs: DocsCandidate,
@@ -127,20 +128,11 @@ pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
         return fail("$", ErrorKind::LimitExceeded);
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let document: PlanEnvelope<PlanPayload<PublicationPlan>> = serde_json::from_slice(bytes)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let PlanEnvelope::Current {
-        payload,
-        payload_digest,
-    } = document;
-    let PlanPayload::Current(payload) = payload;
-    if plan_payload_digest(&payload)? != payload_digest {
+    let document: PublicationPlanEnvelope = de::deserialize_json(bytes)?;
+    if plan_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
-    Ok(PublicationPlanEnvelope {
-        payload,
-        payload_digest,
-    })
+    Ok(document)
 }
 
 /// Builds the unique digest-bound value for one publication plan.
@@ -151,8 +143,9 @@ pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
 /// enforces or the encoded document exceeds its byte ceiling.
 pub fn plan(input: &PublicationPlan) -> Result<Value, Error> {
     let payload_digest = plan_payload_digest(input)?;
-    let document = PlanEnvelope::Current {
-        payload: PlanPayload::Current(input),
+    let document = PublicationPlanEnvelope {
+        schema: PlanEnvelopeSchema::Current,
+        payload: input.clone(),
         payload_digest,
     };
     let canonical = serde_json_canonicalizer::to_vec(&document)
@@ -172,7 +165,7 @@ pub(super) fn plan_payload_digest(input: &PublicationPlan) -> Result<Digest, Err
         &input.product,
         &input.producer,
     )?;
-    serde_json_canonicalizer::to_vec(&PlanPayload::Current(input))
+    serde_json_canonicalizer::to_vec(input)
         .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
