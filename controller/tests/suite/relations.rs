@@ -284,24 +284,24 @@ fn credential_router_freezes_one_authority_for_every_required_identity() {
     .unwrap();
 
     assert_eq!(
-        *relation_authority(&router, &source).unwrap(),
+        *relation_authority(&router, &source.credential, &source.scope).unwrap(),
         "source-client-and-git"
     );
     assert_eq!(
-        *relation_authority(&router, &documentation).unwrap(),
+        *relation_authority(&router, &documentation.credential, &documentation.scope).unwrap(),
         "documentation-client-and-git"
     );
 
     let mut missing = source.clone();
     missing.credential = OpaqueId::new("git/unknown".to_owned()).unwrap();
     assert_eq!(
-        relation_authority(&router, &missing).err(),
+        relation_authority(&router, &missing.credential, &missing.scope).err(),
         Some(RelationCredentialError::Missing)
     );
     let mut rebound = source;
     rebound.scope.integration = IntegrationId::new("installation/other".to_owned()).unwrap();
     assert_eq!(
-        relation_authority(&router, &rebound).err(),
+        relation_authority(&router, &rebound.credential, &rebound.scope).err(),
         Some(RelationCredentialError::Rebound)
     );
 }

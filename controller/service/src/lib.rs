@@ -59,7 +59,8 @@ pub use receiver::{
 };
 pub use relation::{
     CoordinatedRelation, CoordinatedTransition, RelationAuditExecutionError, RelationAuditRequest,
-    admit_relation_coordination, execute_relation_audit, freeze_relation_transition,
+    RelationOutboxError, admit_relation_coordination, drain_relation_outbox,
+    execute_relation_audit, freeze_relation_transition,
 };
 pub use shutdown::shutdown_signal;
 pub use supervision::{Supervision, SupervisionError, supervise};

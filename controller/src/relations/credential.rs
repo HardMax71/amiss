@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{IntegrationId, OpaqueId, ProviderIdentity, RelationSubject};
+use crate::{IntegrationId, OpaqueId, PlanScope, ProviderIdentity};
 
 use super::RelationRegistry;
 
@@ -53,20 +53,21 @@ pub fn relation_credential_router<A>(
         .ok_or(RelationCredentialError::Missing)
 }
 
-/// Selects the authority bound to one complete registered subject.
+/// Selects the authority bound to one registered credential and provider scope.
 ///
 /// # Errors
 ///
-/// The credential is absent or the subject changes its frozen provider or integration scope.
+/// The credential is absent or the scope changes its frozen provider or integration.
 pub fn relation_authority<'a, A>(
     router: &'a RelationCredentialRouter<A>,
-    subject: &RelationSubject,
+    credential: &OpaqueId,
+    scope: &PlanScope,
 ) -> Result<&'a A, RelationCredentialError> {
     let (provider, integration, authority) = router
         .routes
-        .get(&subject.credential)
+        .get(credential)
         .ok_or(RelationCredentialError::Missing)?;
-    (*provider == subject.scope.provider && *integration == subject.scope.integration)
+    (*provider == scope.provider && *integration == scope.integration)
         .then_some(authority)
         .ok_or(RelationCredentialError::Rebound)
 }

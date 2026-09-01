@@ -1,9 +1,10 @@
 use amiss_controller::{
     ArtifactAuditBundle, ArtifactError, AuthenticatedDelivery, ControllerEvaluationId,
-    FileArtifactStore, FileRelationScheduleStore, PendingRelation, RelationAcquiredRoot,
-    RelationAcquisitionError, RelationAuditBundle, RelationLookupError, RelationRegistry,
-    RelationScheduleStoreError, RelationStatusRecord, RelationSubjectHead,
-    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_audit_plan,
+    FileArtifactStore, FileRelationScheduleStore, PendingRelation, ProviderError,
+    RelationAcquiredRoot, RelationAcquisitionError, RelationAuditBundle, RelationCredentialError,
+    RelationCredentialRouter, RelationLookupError, RelationRegistry, RelationScheduleStoreError,
+    RelationStatusRecord, RelationStatusTarget, RelationSubjectHead, RelationSubjectTransition,
+    RelationTransition, TriggeredRelation, relation_audit_plan, relation_authority,
     relation_transition, relations_for_delivery,
 };
 use amiss_controller_git::{
@@ -47,6 +48,16 @@ pub enum RelationAuditExecutionError {
     Projection(#[from] RelationProjectionError),
     #[error(transparent)]
     Wire(#[from] amiss_wire::de::Error),
+    #[error(transparent)]
+    Schedule(#[from] RelationScheduleStoreError),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RelationOutboxError {
+    #[error(transparent)]
+    Credential(#[from] RelationCredentialError),
+    #[error(transparent)]
+    Provider(#[from] ProviderError),
     #[error(transparent)]
     Schedule(#[from] RelationScheduleStoreError),
 }
@@ -155,4 +166,32 @@ pub fn execute_relation_audit(
     let audit =
         artifacts.retain_audit(request.evaluation_id, ArtifactAuditBundle::Relation(bundle))?;
     Ok(schedules.stage_status(artifacts, request.pending, request.heads, audit, bundle)?)
+}
+
+/// Delivers every currently claimable relation status through its frozen credential authority.
+///
+/// The publisher must return success only after the provider accepts or reconciles the exact
+/// status and target. A failed route or publication drops the claim without acknowledging it.
+///
+/// # Errors
+///
+/// A credential route, provider publication, or durable schedule transition fails.
+pub fn drain_relation_outbox<A>(
+    registry: &RelationRegistry,
+    credentials: &RelationCredentialRouter<A>,
+    artifacts: &FileArtifactStore,
+    schedules: &FileRelationScheduleStore,
+    mut publish: impl FnMut(
+        &A,
+        &RelationStatusRecord,
+        &RelationStatusTarget,
+    ) -> Result<(), ProviderError>,
+) -> Result<(), RelationOutboxError> {
+    while let Some(claim) = schedules.claim_status_delivery(registry, artifacts)? {
+        let authority =
+            relation_authority(credentials, &claim.target.credential, &claim.target.scope)?;
+        publish(authority, &claim.status, &claim.target)?;
+        schedules.acknowledge_status_destination(claim)?;
+    }
+    Ok(())
 }
