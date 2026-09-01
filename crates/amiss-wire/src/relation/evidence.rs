@@ -79,10 +79,7 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<RelationEvidenceEnvelope, Error> {
         payload_digest,
     } = document;
     let EvidencePayload::Current(payload) = payload;
-    validate(&payload)?;
-    let canonical = serde_json_canonicalizer::to_vec(&EvidencePayload::Current(&payload))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
-    if hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical) != payload_digest {
+    if evidence_payload_digest(&payload)? != payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
     Ok(RelationEvidenceEnvelope {
@@ -99,13 +96,10 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<RelationEvidenceEnvelope, Error> {
 /// [`parse_evidence`] enforces or the encoded document exceeds its byte
 /// ceiling.
 pub fn evidence(input: &RelationEvidence) -> Result<Value, Error> {
-    validate(input)?;
-    let payload = EvidencePayload::Current(input);
-    let canonical_payload = serde_json_canonicalizer::to_vec(&payload)
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    let payload_digest = evidence_payload_digest(input)?;
     let document = EvidenceEnvelope::Current {
-        payload,
-        payload_digest: hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical_payload),
+        payload: EvidencePayload::Current(input),
+        payload_digest,
     };
     let canonical = serde_json_canonicalizer::to_vec(&document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
@@ -113,6 +107,13 @@ pub fn evidence(input: &RelationEvidence) -> Result<Value, Error> {
         return fail("$", ErrorKind::LimitExceeded);
     }
     json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+}
+
+pub(super) fn evidence_payload_digest(input: &RelationEvidence) -> Result<Digest, Error> {
+    validate(input)?;
+    serde_json_canonicalizer::to_vec(&EvidencePayload::Current(input))
+        .map(|canonical| hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical))
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate(evidence: &RelationEvidence) -> Result<(), Error> {
