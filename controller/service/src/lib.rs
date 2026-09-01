@@ -58,8 +58,8 @@ pub use receiver::{
     router_with_clock, serve,
 };
 pub use relation::{
-    CoordinatedRelation, CoordinatedTransition, admit_relation_coordination,
-    freeze_relation_transition,
+    CoordinatedRelation, CoordinatedTransition, RelationAuditExecutionError, RelationAuditRequest,
+    admit_relation_coordination, execute_relation_audit, freeze_relation_transition,
 };
 pub use shutdown::shutdown_signal;
 pub use supervision::{Supervision, SupervisionError, supervise};
