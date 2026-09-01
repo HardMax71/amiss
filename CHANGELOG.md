@@ -7,6 +7,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.27.0](https://github.com/HardMax71/amiss/compare/v0.26.0...v0.27.0) - 2026-09-01
+
+### Changes
+
+- *(wire)* assess relation projection transitions
+- *(wire)* define relation projection evidence
+- *(wire)* define relation audit plan
+- *(locale)* assess page coverage offline
+- *(locale)* define coverage evidence contract
+- *(locale)* define coverage plan contract
+- *(wire)* assess publication evidence offline
+- *(wire)* define publication evidence contract
+- *(wire)* define publication plan contract
+- *(symbols)* attach Rust API records to docs
+- *(cli)* produce canonical record-set templates
+- *(cli)* bind self-asserted semantic templates
+- *(semantic)* project exact record values
+- *(scan)* meter projection work independently
+- *(wire)* prepare projection selector primitives
+- *(scan)* select exact named source regions
+- *(scan)* evaluate policy-owned code projections
+- *(wire)* declare code projection assertions
+- *(site)* conform completed HTML fragment targets
+- *(cli)* split invocation classification domains
+- *(git)* [**breaking**] separate object protocols
+- *(scan)* preserve exact tree projection semantics
+- *(scan)* project exact repository sources
+- *(semantic)* project complete record inventories
+- *(scan)* compare complete inventory counts
+- *(scan)* explain tree inventory differences
+- *(scan)* compare exact tree path inventories
+- *(scan)* ratchet projection assertion removals
+- *(scan)* unify native resolution flow
+- *(scan)* split semantic evidence domains
+- *(md)* [**breaking**] keep corpus harvesters test-only
+- *(service)* load relation registries
+- *(gitlab)* bind relation status to policy jobs
+- *(relations)* bind coordination identity
+- *(relations)* freeze operator subject registry
+- *(locale)* align inventories with exact products
+- *(locale)* assess exact source lineage
+- *(locale)* bind fallback provenance
+- *(wire)* share bounded sidecar envelopes
+- *(wire)* separate model domains
+- *(wire)* separate strict JSON boundaries
+- *(wire)* isolate control item grammar
+
 ## [0.26.0](https://github.com/HardMax71/amiss/compare/v0.25.0...v0.26.0) - 2026-08-28
 
 ### Changes
