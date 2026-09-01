@@ -12,13 +12,14 @@ credential identities to caller-owned authorities. The service can also bind one
 operator-declared coordination identity to the exact relation owned by an authenticated delivery,
 then freeze caller-resolved revisions only when the live registry still admits that relation and
 the trigger candidate reproduces the delivery. No provider service supplies that registry or
-constructs those authorities yet. Closed plan, evidence, and assessment contracts represent the
-exact comparison selected after acquisition. The provider-neutral Git layer can project
-repository-backed sources from all four acquired snapshots, but no trusted record producer is
-admitted yet. When a caller supplies a complete chain, the controller binds it to the accepted
-trigger report and frozen operator transition, replays the assessment, retains the exact bytes
-immutably, and can reconcile a claimed GitHub or Gitea-family destination. An authenticated live
-GitLab policy job can instead consume its exact synchronous destination.
+constructs those authorities yet. The controller derives the canonical audit plan directly from
+the accepted trigger report and frozen transition; closed evidence and assessment contracts
+represent the later comparison. The provider-neutral Git layer can project repository-backed
+sources from all four acquired snapshots, but no trusted record producer is admitted yet. When a
+caller supplies a complete chain, the controller binds it to the accepted trigger report and frozen
+operator transition, replays the assessment, retains the exact bytes immutably, and can reconcile a
+claimed GitHub or Gitea-family destination. An authenticated live GitLab policy job can instead
+consume its exact synchronous destination.
 
 ## One closed relation
 
@@ -250,7 +251,8 @@ SHA-1-only provider transport.
 
 ## Report-bound audit plan
 
-After the four snapshots are frozen, a separate 64 KiB wire plan records the exact comparison that
+After the four snapshots are frozen, the controller derives a separate 64 KiB wire plan from that
+transition and the accepted trigger report. The canonical plan records the exact comparison that
 later evidence must reproduce. It contains:
 
 - the accepted scanner report payload digest and the role whose authenticated change selected it;
