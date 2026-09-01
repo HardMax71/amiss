@@ -39,6 +39,7 @@ fn subject(
         role: identity(role),
         repository: RepositoryIdentity::github("acme".to_owned(), repository.to_owned()).unwrap(),
         target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+        object_format,
         source: ProjectionSource::RecordSet(RecordSetSelection { set: identity(set) }),
         base: RelationSnapshot {
             commit: oid(digits[0], object_format),

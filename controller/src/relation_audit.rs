@@ -115,6 +115,7 @@ fn checked_relation_plan(
             role: frozen.role.clone(),
             repository: subject.scope.repository.clone(),
             target: subject.target.clone(),
+            object_format: subject.object_format,
             source: subject.source.clone(),
             base: relation::RelationSnapshot {
                 commit: frozen.commits.base.clone(),

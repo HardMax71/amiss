@@ -1,11 +1,9 @@
-use crate::controls::value::{object, repository, text};
-use crate::controls::{
-    ProjectionKind, ProjectionSource, decode_checked_projection_source, decode_enum,
-    decode_repository, projection_source_value,
-};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::Digest;
-use crate::json::Value;
+use serde::{Deserialize, Serialize};
+
+use crate::controls::{ProjectionKind, ProjectionSource, check_projection_source};
+use crate::de::{Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
+use crate::json::{self, Value};
 use crate::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 mod assessment;
@@ -32,7 +30,8 @@ pub struct RelationPlanEnvelope {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationPlan {
     pub report_payload_digest: Digest,
     pub relation: RelationIdentity,
@@ -42,26 +41,46 @@ pub struct RelationPlan {
     pub subjects: [RelationSubject; 2],
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationIdentity {
     pub identity: ArtifactId,
     pub context_digest: Digest,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationSubject {
     pub role: ArtifactId,
     pub repository: RepositoryIdentity,
     pub target: BranchRef,
+    pub object_format: ObjectFormat,
     pub source: ProjectionSource,
     pub base: RelationSnapshot,
     pub candidate: RelationSnapshot,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationSnapshot {
+    #[serde(rename = "commit_oid")]
     pub commit: Oid,
+    #[serde(rename = "tree_oid")]
     pub tree: Oid,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "schema", deny_unknown_fields)]
+enum PlanEnvelope<T> {
+    #[serde(rename = "amiss/relation-plan-envelope")]
+    Current { payload: T, payload_digest: Digest },
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "schema", deny_unknown_fields)]
+enum PlanPayload<T> {
+    #[serde(rename = "amiss/relation-plan-payload")]
+    Current(T),
 }
 
 /// Parses one closed, digest-bound cross-repository relation plan.
@@ -72,13 +91,23 @@ pub struct RelationSnapshot {
 /// identity, selector, branch, or Git object, unsorted subjects, inconsistent
 /// object formats, or a payload digest mismatch.
 pub fn parse_plan(bytes: &[u8]) -> Result<RelationPlanEnvelope, Error> {
-    let (payload, payload_digest) = crate::bounded_envelope::parse(
-        bytes,
-        PLAN_ENVELOPE_SCHEMA,
-        PLAN_PAYLOAD_SCHEMA,
-        RELATION_DOCUMENT_BYTES,
-        decode_plan,
-    )?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    let document: PlanEnvelope<PlanPayload<RelationPlan>> = serde_json::from_slice(bytes)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let PlanEnvelope::Current {
+        payload,
+        payload_digest,
+    } = document;
+    let PlanPayload::Current(payload) = payload;
+    validate_plan(&payload)?;
+    let canonical = serde_json_canonicalizer::to_vec(&PlanPayload::Current(&payload))
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    if hb(PLAN_PAYLOAD_SCHEMA, &canonical) != payload_digest {
+        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    }
     Ok(RelationPlanEnvelope {
         payload,
         payload_digest,
@@ -92,62 +121,27 @@ pub fn parse_plan(bytes: &[u8]) -> Result<RelationPlanEnvelope, Error> {
 /// Fails when a public field violates the same closed grammar [`parse_plan`]
 /// enforces or the encoded document exceeds its byte ceiling.
 pub fn plan(input: &RelationPlan) -> Result<Value, Error> {
-    let payload = plan_value(input);
-    let _validated = decode_plan("$.payload", payload.clone())?;
-    crate::bounded_envelope::build(
+    validate_plan(input)?;
+    let payload = PlanPayload::Current(input);
+    let canonical_payload = serde_json_canonicalizer::to_vec(&payload)
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    let document = PlanEnvelope::Current {
         payload,
-        PLAN_ENVELOPE_SCHEMA,
-        PLAN_PAYLOAD_SCHEMA,
-        RELATION_DOCUMENT_BYTES,
-    )
+        payload_digest: hb(PLAN_PAYLOAD_SCHEMA, &canonical_payload),
+    };
+    let canonical = serde_json_canonicalizer::to_vec(&document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
-fn decode_plan(path: &str, value: Value) -> Result<RelationPlan, Error> {
-    let mut plan = Obj::new(path, value)?;
-    plan.required("schema", |path, value| {
-        de::const_str(path, value, PLAN_PAYLOAD_SCHEMA)
-    })?;
-    let report_payload_digest = plan.required("report_payload_digest", de::digest)?;
-    let relation = plan.required("relation", |path, value| {
-        let mut relation = Obj::new(path, value)?;
-        let identity = relation.required("identity", |path, value| {
-            ArtifactId::new(de::string(path, value)?)
-                .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-        })?;
-        let context_digest = relation.required("context_digest", de::digest)?;
-        relation.finish()?;
-        Ok(RelationIdentity {
-            identity,
-            context_digest,
-        })
-    })?;
-    let coordination = plan.required("coordination", |path, value| {
-        ArtifactId::new(de::string(path, value)?)
-            .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-    })?;
-    let trigger_role = plan.required("trigger_role", |path, value| {
-        ArtifactId::new(de::string(path, value)?)
-            .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-    })?;
-    let projection = plan.required("projection", decode_enum)?;
-    let subjects_path = plan.field("subjects");
-    let subjects: [RelationSubject; 2] = de::array(&subjects_path, plan.take("subjects")?)?
-        .into_iter()
-        .enumerate()
-        .map(|(index, value)| {
-            decode_subject(&format!("{subjects_path}[{index}]"), value, projection)
-        })
-        .collect::<Result<Vec<_>, _>>()?
-        .try_into()
-        .map_err(|_subjects: Vec<RelationSubject>| {
-            Error::new(&subjects_path, ErrorKind::InvalidValue)
-        })?;
-    plan.finish()?;
-
-    let [left, right] = &subjects;
+fn validate_plan(plan: &RelationPlan) -> Result<(), Error> {
+    let [left, right] = &plan.subjects;
     if left.role >= right.role {
         return fail(
-            &subjects_path,
+            "$.payload.subjects",
             if left.role == right.role {
                 ErrorKind::DuplicateMember
             } else {
@@ -156,123 +150,45 @@ fn decode_plan(path: &str, value: Value) -> Result<RelationPlan, Error> {
         );
     }
     if left.repository == right.repository
-        || !subjects.iter().any(|subject| subject.role == trigger_role)
+        || !plan
+            .subjects
+            .iter()
+            .any(|subject| subject.role == plan.trigger_role)
     {
-        return fail(path, ErrorKind::Inconsistent);
+        return fail("$.payload", ErrorKind::Inconsistent);
     }
-    Ok(RelationPlan {
-        report_payload_digest,
-        relation,
-        coordination,
-        trigger_role,
-        projection,
-        subjects,
-    })
-}
-
-fn decode_subject(
-    path: &str,
-    value: Value,
-    projection: ProjectionKind,
-) -> Result<RelationSubject, Error> {
-    let mut subject = Obj::new(path, value)?;
-    let role = subject.required("role", |path, value| {
-        ArtifactId::new(de::string(path, value)?)
-            .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-    })?;
-    let repository = subject.required("repository", decode_repository)?;
-    let target = subject.required("target", |path, value| {
-        BranchRef::new(de::string(path, value)?)
-            .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-    })?;
-    let object_format = subject.required("object_format", decode_enum)?;
-    let source = subject.required("source", |path, value| {
-        decode_checked_projection_source(path, value, projection)
-    })?;
-    let base = subject.required("base", |path, value| {
-        decode_snapshot(path, value, object_format)
-    })?;
-    let candidate = subject.required("candidate", |path, value| {
-        decode_snapshot(path, value, object_format)
-    })?;
-    subject.finish()?;
-    Ok(RelationSubject {
-        role,
-        repository,
-        target,
-        source,
-        base,
-        candidate,
-    })
-}
-
-fn decode_snapshot(
-    path: &str,
-    value: Value,
-    object_format: ObjectFormat,
-) -> Result<RelationSnapshot, Error> {
-    let mut snapshot = Obj::new(path, value)?;
-    let commit_path = snapshot.field("commit_oid");
-    let commit = Oid::new(
-        object_format,
-        de::string(&commit_path, snapshot.take("commit_oid")?)?,
-    )
-    .ok_or_else(|| Error::new(&commit_path, ErrorKind::InvalidValue))?;
-    let tree_path = snapshot.field("tree_oid");
-    let tree = Oid::new(
-        object_format,
-        de::string(&tree_path, snapshot.take("tree_oid")?)?,
-    )
-    .ok_or_else(|| Error::new(&tree_path, ErrorKind::InvalidValue))?;
-    snapshot.finish()?;
-    Ok(RelationSnapshot { commit, tree })
-}
-
-fn plan_value(plan: &RelationPlan) -> Value {
-    object(vec![
-        ("schema", text(PLAN_PAYLOAD_SCHEMA)),
-        (
-            "report_payload_digest",
-            text(&plan.report_payload_digest.to_string()),
-        ),
-        (
-            "relation",
-            object(vec![
-                ("identity", text(plan.relation.identity.as_str())),
-                (
-                    "context_digest",
-                    text(&plan.relation.context_digest.to_string()),
-                ),
-            ]),
-        ),
-        ("coordination", text(plan.coordination.as_str())),
-        ("trigger_role", text(plan.trigger_role.as_str())),
-        ("projection", text(plan.projection.as_ref())),
-        (
-            "subjects",
-            Value::array(plan.subjects.iter().map(subject_value).collect()),
-        ),
-    ])
-}
-
-fn subject_value(subject: &RelationSubject) -> Value {
-    object(vec![
-        ("role", text(subject.role.as_str())),
-        ("repository", repository(&subject.repository)),
-        ("target", text(subject.target.as_str())),
-        (
-            "object_format",
-            text(subject.base.commit.object_format().as_ref()),
-        ),
-        ("source", projection_source_value(&subject.source)),
-        ("base", snapshot_value(&subject.base)),
-        ("candidate", snapshot_value(&subject.candidate)),
-    ])
-}
-
-fn snapshot_value(snapshot: &RelationSnapshot) -> Value {
-    object(vec![
-        ("commit_oid", text(snapshot.commit.as_str())),
-        ("tree_oid", text(snapshot.tree.as_str())),
-    ])
+    for (index, subject) in plan.subjects.iter().enumerate() {
+        if RepositoryIdentity::new(
+            subject.repository.host().to_owned(),
+            subject.repository.owner().to_owned(),
+            subject.repository.name().to_owned(),
+        )
+        .as_ref()
+            != Some(&subject.repository)
+        {
+            return fail(
+                &format!("$.payload.subjects[{index}].repository"),
+                ErrorKind::InvalidValue,
+            );
+        }
+        if let Err(error) = check_projection_source(plan.projection, &subject.source) {
+            return fail(&format!("$.payload.subjects[{index}].source"), error.kind);
+        }
+        for (snapshot_name, snapshot) in
+            [("base", &subject.base), ("candidate", &subject.candidate)]
+        {
+            for (oid_name, oid) in [
+                ("commit_oid", &snapshot.commit),
+                ("tree_oid", &snapshot.tree),
+            ] {
+                if oid.object_format() != subject.object_format {
+                    return fail(
+                        &format!("$.payload.subjects[{index}].{snapshot_name}.{oid_name}"),
+                        ErrorKind::InvalidValue,
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
 }

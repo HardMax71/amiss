@@ -1,8 +1,12 @@
+use core::{fmt, str::FromStr};
+
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+
 use crate::json::Value;
 
 /// A repository path whose bytes are valid UTF-8, mirroring the schema's
 /// `RepoPathText`: the form every configuration surface is confined to.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
 pub struct RepoPathText(String);
 
 impl RepoPathText {
@@ -14,6 +18,20 @@ impl RepoPathText {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl fmt::Display for RepoPathText {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl FromStr for RepoPathText {
+    type Err = &'static str;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        Self::new(raw.to_owned()).ok_or("invalid repository path")
     }
 }
 
