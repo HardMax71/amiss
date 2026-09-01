@@ -4,6 +4,7 @@ use amiss_controller::{
 };
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::relation::RelationSnapshot;
 
 use super::model::{CommitStatusRecord, CreateCommitStatus};
 use super::refresh::validate_reviewer;
@@ -29,12 +30,14 @@ impl<R: GiteaRest> Client<R> {
         let head = self
             .rest
             .relation_head(&subject.scope.repository, &subject.target, deadline)?;
-        let candidate_commit =
-            Oid::new(ObjectFormat::Sha1, head.sha).ok_or(ProviderError::InvalidResponse)?;
-        Oid::new(ObjectFormat::Sha1, head.commit.tree.sha).ok_or(ProviderError::InvalidResponse)?;
         Ok(RelationSubjectHead {
             subject: subject.clone(),
-            candidate_commit,
+            candidate: RelationSnapshot {
+                commit: Oid::new(ObjectFormat::Sha1, head.sha)
+                    .ok_or(ProviderError::InvalidResponse)?,
+                tree: Oid::new(ObjectFormat::Sha1, head.commit.tree.sha)
+                    .ok_or(ProviderError::InvalidResponse)?,
+            },
         })
     }
 

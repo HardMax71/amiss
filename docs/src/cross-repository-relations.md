@@ -90,11 +90,11 @@ repository prose are not pairing evidence.
 Status preparation requires a fresh head fact for both subjects, not only the repository whose
 delivery triggered the audit. Each fact must reproduce the complete registered subject, including
 its provider scope, target, credential identity, selector, and limits. A changed subject binding or
-object format is invalid; a changed candidate commit is superseded. Only then does the controller
-freeze the configured destination roles into a stable batch carrying the relation, coordination,
-trigger role, pending fence, exact provider scope and credential identity, candidate commit, and
-required status name. Selector, target-branch, and resource-limit fields have already served their
-finality proof and are not copied into the provider outbox.
+object format is invalid; a changed candidate commit or tree is superseded. Only then does the
+controller freeze the configured destination roles into a stable batch carrying the relation,
+coordination, trigger role, pending fence, exact provider scope and credential identity, candidate
+commit, and required status name. Selector, target-branch, and resource-limit fields have already
+served their finality proof and are not copied into the provider outbox.
 An unconfigured role never appears in that batch.
 
 ## Pending and supersession law

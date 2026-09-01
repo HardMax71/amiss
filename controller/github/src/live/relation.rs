@@ -6,6 +6,7 @@ use amiss_controller::{
 };
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::relation::RelationSnapshot;
 
 use super::Client;
 use super::model::{CommitRecord, CreateCheckRun, CreateCheckRunOutput};
@@ -33,12 +34,14 @@ impl<R: GitHubRelationRest> Client<R> {
         validate_relation_scope(&self.config, &subject.scope, subject.object_format)?;
 
         let head = self.rest.relation_head(repository, &subject.target)?;
-        let candidate_commit =
-            Oid::new(ObjectFormat::Sha1, head.sha).ok_or(ProviderError::InvalidResponse)?;
-        Oid::new(ObjectFormat::Sha1, head.tree).ok_or(ProviderError::InvalidResponse)?;
         Ok(RelationSubjectHead {
             subject: subject.clone(),
-            candidate_commit,
+            candidate: RelationSnapshot {
+                commit: Oid::new(ObjectFormat::Sha1, head.sha)
+                    .ok_or(ProviderError::InvalidResponse)?,
+                tree: Oid::new(ObjectFormat::Sha1, head.tree)
+                    .ok_or(ProviderError::InvalidResponse)?,
+            },
         })
     }
 }

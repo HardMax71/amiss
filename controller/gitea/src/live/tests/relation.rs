@@ -12,7 +12,7 @@ use amiss_controller::{
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
-use amiss_wire::relation::RelationVerdict;
+use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
 use super::super::model::{CommitRecord, CommitStatusRecord, CreateCommitStatus, UserRecord};
 use super::super::relation::{
@@ -80,7 +80,10 @@ fn both_families_resolve_heads_and_publish_idempotent_statuses() {
             fixture.client.resolve_relation_head(&subject),
             Ok(RelationSubjectHead {
                 subject: subject.clone(),
-                candidate_commit: super::support::oid('b'),
+                candidate: RelationSnapshot {
+                    commit: super::support::oid('b'),
+                    tree: super::support::oid('d'),
+                },
             })
         );
         let (status, target) = status_fixture(&fixture);
