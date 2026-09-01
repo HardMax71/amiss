@@ -1,9 +1,18 @@
 use amiss_controller::{
-    AuthenticatedDelivery, RelationAcquisitionError, RelationLookupError, RelationRegistry,
-    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_transition,
-    relations_for_delivery,
+    ArtifactAuditBundle, ArtifactError, AuthenticatedDelivery, ControllerEvaluationId,
+    FileArtifactStore, FileRelationScheduleStore, PendingRelation, RelationAcquiredRoot,
+    RelationAcquisitionError, RelationAuditBundle, RelationLookupError, RelationRegistry,
+    RelationScheduleStoreError, RelationStatusRecord, RelationSubjectHead,
+    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_audit_plan,
+    relation_transition, relations_for_delivery,
 };
+use amiss_controller_git::{
+    RelationProjectionError, RelationProjectionRequest, project_relation_evidence,
+};
+use amiss_wire::digest::Digest;
+use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
+use amiss_wire::relation::{assess, parse_evidence, parse_plan};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoordinatedRelation {
@@ -16,6 +25,30 @@ pub struct CoordinatedRelation {
 pub struct CoordinatedTransition {
     pub delivery: AuthenticatedDelivery,
     pub transition: RelationTransition,
+}
+
+pub struct RelationAuditRequest<'a> {
+    pub evaluation_id: &'a ControllerEvaluationId,
+    pub pending: &'a PendingRelation,
+    pub report: &'a [u8],
+    pub roots: [RelationAcquiredRoot<'a>; 2],
+    pub heads: [RelationSubjectHead; 2],
+    pub engine_version: &'a str,
+    pub engine_digest: Digest,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum RelationAuditExecutionError {
+    #[error("relation work was superseded before evaluation")]
+    Superseded,
+    #[error(transparent)]
+    Artifact(#[from] ArtifactError),
+    #[error(transparent)]
+    Projection(#[from] RelationProjectionError),
+    #[error(transparent)]
+    Wire(#[from] amiss_wire::de::Error),
+    #[error(transparent)]
+    Schedule(#[from] RelationScheduleStoreError),
 }
 
 /// Binds one operator-declared coordination identity to a relation owned by an authenticated
@@ -78,4 +111,48 @@ pub fn freeze_relation_transition(
             transition,
         })
         .ok_or(RelationAcquisitionError::InvalidTransition)
+}
+
+/// Projects, assesses, retains, and durably stages one current relation audit.
+///
+/// The early fence check avoids spending projection work on an already superseded transition. The
+/// durable stage rechecks the same fence under the scheduling lock before exposing destinations.
+///
+/// # Errors
+///
+/// The pending transition is stale, the report or acquired roots cannot reproduce it, assessment
+/// construction fails, immutable artifact retention fails, or status staging cannot commit.
+pub fn execute_relation_audit(
+    artifacts: &FileArtifactStore,
+    schedules: &FileRelationScheduleStore,
+    request: RelationAuditRequest<'_>,
+) -> Result<Option<RelationStatusRecord>, RelationAuditExecutionError> {
+    schedules
+        .is_current(request.pending)?
+        .then_some(())
+        .ok_or(RelationAuditExecutionError::Superseded)?;
+    let plan_bytes = relation_audit_plan(&request.pending.transition, request.report)?;
+    let plan = parse_plan(&plan_bytes)?;
+    let evidence_bytes = json::canonical(&project_relation_evidence(RelationProjectionRequest {
+        transition: &request.pending.transition,
+        plan: &plan,
+        roots: request.roots,
+    })?);
+    let evidence = parse_evidence(&evidence_bytes)?;
+    let assessment_bytes = json::canonical(&assess(
+        &plan,
+        Some(&evidence),
+        request.engine_version,
+        request.engine_digest,
+    )?);
+    let bundle = RelationAuditBundle {
+        transition: &request.pending.transition,
+        report: request.report,
+        plan: &plan_bytes,
+        evidence: Some(&evidence_bytes),
+        assessment: &assessment_bytes,
+    };
+    let audit =
+        artifacts.retain_audit(request.evaluation_id, ArtifactAuditBundle::Relation(bundle))?;
+    Ok(schedules.stage_status(artifacts, request.pending, request.heads, audit, bundle)?)
 }

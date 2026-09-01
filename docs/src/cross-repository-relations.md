@@ -13,13 +13,12 @@ operator-declared coordination identity to the exact relation owned by an authen
 then freeze caller-resolved revisions only when the live registry still admits that relation and
 the trigger candidate reproduces the delivery. No provider service supplies that registry or
 constructs those authorities yet. The controller derives the canonical audit plan directly from
-the accepted trigger report and frozen transition; closed evidence and assessment contracts
-represent the later comparison. The provider-neutral Git layer can project repository-backed
-sources from all four acquired snapshots, but no trusted record producer is admitted yet. When a
-caller supplies a complete chain, the controller binds it to the accepted trigger report and frozen
-operator transition, replays the assessment, retains the exact bytes immutably, and can reconcile a
-claimed GitHub or Gitea-family destination. An authenticated live GitLab policy job can instead
-consume its exact synchronous destination.
+the accepted trigger report and frozen transition. The service can project repository-backed
+sources from all four acquired snapshots, assess the result, retain the exact chain, and stage its
+destinations under the current scheduling fence. No provider service assembles those inputs into a
+live lane yet. The controller independently replays every supplied audit before storage and can
+reconcile a claimed GitHub or Gitea-family destination. An authenticated live GitLab policy job can
+instead consume its exact synchronous destination.
 
 ## One closed relation
 
@@ -353,6 +352,15 @@ trigger role, rechecks the operator plan, and independently replays the evidence
 The artifact store retains the report, plan, optional evidence, and assessment under one immutable,
 restart-safe identity; retries may reproduce the same bytes but cannot substitute any component.
 
+The service execution boundary composes those existing checks as one `Result` flow. It first rejects
+work whose fence is already stale, derives and parses the canonical plan, projects both independent
+roots, assesses the typed evidence under the caller-supplied evaluator identity, retains the complete
+audit, and asks the durable scheduler to stage its exact head-checked destinations. The early fence
+check avoids known-wasted projection work; it is not publication authority. Status staging repeats
+the fence and final-head checks under the scheduling lock, so supersession racing the projection can
+still expose no destination. An exact unfinished retry reproduces the retained artifact and staged
+record instead of rebuilding a parallel orchestration path.
+
 ## Trust boundary
 
 The registry lives only in the unpublished controller layer. The offline engine still has one
@@ -364,13 +372,13 @@ reference.
 The remaining stages are deliberately separate:
 
 1. construct concrete provider authorities and install the frozen registry and router in a service;
-2. resolve and acquire snapshot-bound records from the admitted coordination;
-3. assemble and resume the complete relation lifecycle in live provider lanes.
+2. resolve and acquire snapshot-bound records from the admitted coordination in live provider lanes;
+3. resume durable destination claims through those routed authorities after restart.
 
-Until those stages exist, the projector can prove an exact bounded repository comparison when its
-caller supplies the frozen transition, checked plan, and two acquired roots. The GitHub adapter can
-deliver an already retained and claimed result, but no provider service yet assembles the complete
-relation lifecycle.
+Until those stages exist, the service can execute and stage an exact bounded repository comparison
+when its caller supplies the current pending transition, accepted report, two acquired roots, final
+heads, stable evaluation identity, and evaluator identity. The GitHub adapter can deliver an already
+retained and claimed result, but no provider service yet assembles the complete relation lifecycle.
 
 The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),
