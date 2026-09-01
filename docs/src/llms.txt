@@ -69,3 +69,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 - [Reference coverage](https://hardmax71.github.io/amiss/completed/reference-coverage.html): the four resolver classes the scan ledger named, answered here or refused with a measurement
 - [Live provider evidence](https://hardmax71.github.io/amiss/completed/live-provider-evidence.html): provider-published verdicts on every lane, one positive and one revoked pair each, and the six live-found defects
 - [A settled wire](https://hardmax71.github.io/amiss/completed/a-settled-wire.html): how the report contract earned its freeze at 1, the quiet-period tripwire, and the retained frozen example
+- [Projection contracts](https://hardmax71.github.io/amiss/completed/projection-contracts.html): exact policy-owned code, inventory, count, and record-set relationships with stable identities and bounded comparison work
+- [Authoritative semantic artifacts](https://hardmax71.github.io/amiss/completed/authoritative-semantic-artifacts.html): exact provider-acquired semantic inputs, durable audit bytes, and the isolated Rustdoc function normalizer
+- [Offline audit sidecars](https://hardmax71.github.io/amiss/completed/offline-audit-sidecars.html): report-bound publication and locale plans, evidence, assessments, and the live integration boundaries they leave open
+- [Cross-repository relation core](https://hardmax71.github.io/amiss/completed/cross-repository-relation-core.html): four-snapshot comparison, fenced supersession, durable status delivery, and the deliberately uninstalled live lane
