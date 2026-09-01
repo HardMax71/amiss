@@ -10,10 +10,10 @@ This is not yet a complete cross-repository checking lane. The shared service ca
 operator file into an immutable registry, and the controller can bind the complete set of opaque
 credential identities to caller-owned authorities. The service can also bind one opaque
 operator-declared coordination identity to the exact relation owned by an authenticated delivery,
-then freeze caller-resolved revisions only when the trigger candidate reproduces that delivery.
-No provider service supplies that registry or constructs those authorities yet. Closed plan,
-evidence, and assessment contracts represent the exact comparison selected after acquisition. The
-provider-neutral Git layer can project
+then freeze caller-resolved revisions only when the live registry still admits that relation and
+the trigger candidate reproduces the delivery. No provider service supplies that registry or
+constructs those authorities yet. Closed plan, evidence, and assessment contracts represent the
+exact comparison selected after acquisition. The provider-neutral Git layer can project
 repository-backed sources from all four acquired snapshots, but no trusted record producer is
 admitted yet. When a caller supplies a complete chain, the controller binds it to the accepted
 trigger report and frozen operator transition, replays the assessment, retains the exact bytes

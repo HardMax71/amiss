@@ -3,10 +3,12 @@
     reason = "the fixture constructs known-valid relation and provider identities"
 )]
 
+use std::sync::Arc;
+
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
+    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity,
     ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RelationAcquisitionError,
-    RelationTransition,
+    RelationTransition, TriggeredRelation, relation_registry,
 };
 use amiss_controller_fixtures::relation::relation_audit;
 use amiss_controller_service::{
@@ -51,9 +53,11 @@ fn delivery(transition: &RelationTransition) -> AuthenticatedDelivery {
 #[test]
 fn either_authenticated_trigger_freezes_the_same_coordinated_revisions() {
     let source = relation_audit(false).unwrap().transition;
+    let registry = relation_registry(vec![source.relation.plan.as_ref().clone()]).unwrap();
     let source_delivery = delivery(&source);
     assert_eq!(
         freeze_relation_transition(
+            &registry,
             CoordinatedRelation {
                 delivery: source_delivery.clone(),
                 relation: source.relation.clone(),
@@ -72,6 +76,7 @@ fn either_authenticated_trigger_freezes_the_same_coordinated_revisions() {
     let documentation_delivery = delivery(&documentation);
     assert_eq!(
         freeze_relation_transition(
+            &registry,
             CoordinatedRelation {
                 delivery: documentation_delivery.clone(),
                 relation: documentation.relation.clone(),
@@ -89,6 +94,7 @@ fn either_authenticated_trigger_freezes_the_same_coordinated_revisions() {
 #[test]
 fn an_authenticated_trigger_cannot_freeze_another_candidate() {
     let transition = relation_audit(false).unwrap().transition;
+    let registry = relation_registry(vec![transition.relation.plan.as_ref().clone()]).unwrap();
     let delivery = delivery(&transition);
     let mut subjects = transition.subjects.clone();
     subjects
@@ -100,6 +106,7 @@ fn an_authenticated_trigger_cannot_freeze_another_candidate() {
 
     assert_eq!(
         freeze_relation_transition(
+            &registry,
             CoordinatedRelation {
                 delivery,
                 relation: transition.relation,
@@ -114,14 +121,20 @@ fn an_authenticated_trigger_cannot_freeze_another_candidate() {
 #[test]
 fn a_direct_stage_value_cannot_bypass_delivery_admission() {
     let transition = relation_audit(false).unwrap().transition;
-    let mut delivery = delivery(&transition);
-    delivery.identity.integration = IntegrationId::new("installation/other".to_owned()).unwrap();
+    let registry = relation_registry(vec![transition.relation.plan.as_ref().clone()]).unwrap();
+    let delivery = delivery(&transition);
+    let mut forged = transition.relation.plan.as_ref().clone();
+    forged.identity = ArtifactId::new("relation/unregistered".to_owned()).unwrap();
 
     assert_eq!(
         freeze_relation_transition(
+            &registry,
             CoordinatedRelation {
                 delivery,
-                relation: transition.relation,
+                relation: TriggeredRelation {
+                    plan: Arc::new(forged),
+                    trigger_role: transition.relation.trigger_role,
+                },
                 coordination: transition.coordination,
             },
             transition.subjects,
