@@ -46,39 +46,32 @@ pub fn admit_relation_coordination(
 ///
 /// # Errors
 ///
-/// The revisions do not reproduce the operator relation or the trigger candidate differs from the
-/// delivery-authenticated candidate.
+/// The live registry does not admit the relation and delivery, the revisions do not reproduce that
+/// relation, or the trigger candidate differs from the delivery-authenticated candidate.
 pub fn freeze_relation_transition(
+    registry: &RelationRegistry,
     coordinated: CoordinatedRelation,
     subjects: [RelationSubjectTransition; 2],
 ) -> Result<CoordinatedTransition, RelationAcquisitionError> {
+    let identity = coordinated.relation.plan.identity.clone();
     let CoordinatedRelation {
         delivery,
         relation,
         coordination,
-    } = coordinated;
+    } = admit_relation_coordination(
+        registry,
+        coordinated.delivery,
+        &identity,
+        coordinated.coordination,
+    )
+    .map_err(|_defect| RelationAcquisitionError::InvalidTransition)?;
     let transition = relation_transition(relation, coordination, subjects)?;
     transition
-        .relation
-        .plan
         .subjects
         .iter()
-        .find(|subject| subject.role == transition.relation.trigger_role)
-        .zip(
-            transition
-                .subjects
-                .iter()
-                .find(|subject| subject.role == transition.relation.trigger_role),
-        )
-        .is_some_and(|(subject, frozen)| {
-            delivery.identity.provider == delivery.change.provider
-                && subject.scope.provider == delivery.identity.provider
-                && subject.scope.integration == delivery.identity.integration
-                && subject.scope.repository == delivery.change.repository
-                && subject.object_format == delivery.provider_run.object_format
-                && delivery.provider_run.object_format
-                    == delivery.provider_run.candidate_commit.object_format()
-                && frozen.commits.candidate == delivery.provider_run.candidate_commit
+        .any(|subject| {
+            subject.role == transition.relation.trigger_role
+                && subject.commits.candidate == delivery.provider_run.candidate_commit
         })
         .then_some(CoordinatedTransition {
             delivery,
