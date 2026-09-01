@@ -11,6 +11,8 @@ mod paths;
 mod publication;
 mod record;
 mod relation;
+#[path = "../support/relation.rs"]
+mod relation_fixture;
 mod report;
 mod requests;
 mod resolution;

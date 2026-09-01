@@ -1,4 +1,4 @@
-use super::{digest, identity, relation_evidence, relation_plan};
+use crate::relation_fixture::{digest, identity, projected, relation_contract};
 
 use std::{fs, path::Path};
 
@@ -7,12 +7,12 @@ use amiss_wire::digest::hj;
 use amiss_wire::json;
 use amiss_wire::relation::{
     ASSESSMENT_PAYLOAD_SCHEMA, RelationAssessmentEnvelope, RelationEvidence,
-    RelationEvidenceEnvelope, RelationPlanEnvelope, RelationReason, RelationVerdict, assess,
-    evidence, parse_assessment, parse_evidence, parse_plan, plan,
+    RelationEvidenceEnvelope, RelationPlanEnvelope, RelationProjectionSlot, RelationReason,
+    RelationVerdict, assess, evidence, parse_assessment, parse_evidence, parse_plan, plan,
 };
 
 fn plan_envelope() -> RelationPlanEnvelope {
-    parse_plan(&json::canonical(&plan(&relation_plan()).unwrap())).unwrap()
+    parse_plan(&json::canonical(&plan(&relation_contract().plan).unwrap())).unwrap()
 }
 
 fn evidence_envelope(input: &RelationEvidence) -> RelationEvidenceEnvelope {
@@ -32,7 +32,7 @@ fn assessed(
 #[test]
 fn complete_projection_pairs_classify_all_four_equality_transitions() {
     let plan = plan_envelope();
-    let mut introduced = relation_evidence();
+    let mut introduced = relation_contract().evidence;
     introduced.plan_payload_digest = plan.payload_digest;
 
     let mut aligned = introduced.clone();
@@ -64,12 +64,12 @@ fn complete_projection_pairs_classify_all_four_equality_transitions() {
 #[test]
 fn digest_and_length_jointly_define_projected_value_equality() {
     let plan = plan_envelope();
-    let mut input = relation_evidence();
+    let mut input = relation_contract().evidence;
     input.plan_payload_digest = plan.payload_digest;
     input.subjects[1].candidate = input.subjects[0].candidate;
-    let mut candidate = input.subjects[1].candidate.unwrap();
+    let mut candidate = projected('a', 1_024);
     candidate.value_bytes = candidate.value_bytes.saturating_add(1);
-    input.subjects[1].candidate = Some(candidate);
+    input.subjects[1].candidate = RelationProjectionSlot::Projected(candidate);
 
     let evidence = evidence_envelope(&input);
     assert_eq!(
@@ -82,16 +82,18 @@ fn digest_and_length_jointly_define_projected_value_equality() {
 fn absent_unbound_misrouted_and_partial_evidence_stays_unproven() {
     let plan = plan_envelope();
 
-    let unbound = evidence_envelope(&relation_evidence());
+    let mut unbound = relation_contract().evidence;
+    unbound.plan_payload_digest = digest('9');
+    let unbound = evidence_envelope(&unbound);
 
-    let mut misrouted = relation_evidence();
+    let mut misrouted = relation_contract().evidence;
     misrouted.plan_payload_digest = plan.payload_digest;
     misrouted.subjects[0].role = identity("manual");
     let misrouted = evidence_envelope(&misrouted);
 
-    let mut partial = relation_evidence();
+    let mut partial = relation_contract().evidence;
     partial.plan_payload_digest = plan.payload_digest;
-    partial.subjects[1].base = None;
+    partial.subjects[1].base = RelationProjectionSlot::Unproven;
     let partial = evidence_envelope(&partial);
 
     for (evidence, expected) in [
@@ -119,7 +121,7 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
     let plan = plan_envelope();
-    let mut input = relation_evidence();
+    let mut input = relation_contract().evidence;
     input.plan_payload_digest = plan.payload_digest;
     let mut broken_evidence = evidence_envelope(&input);
     broken_evidence.payload_digest = digest('f');

@@ -1,4 +1,8 @@
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+use core::{fmt, str::FromStr};
+
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
 pub struct ArtifactId(String);
 
 impl ArtifactId {
@@ -10,6 +14,20 @@ impl ArtifactId {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl fmt::Display for ArtifactId {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl FromStr for ArtifactId {
+    type Err = &'static str;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        Self::new(raw.to_owned()).ok_or("invalid artifact identity")
     }
 }
 
