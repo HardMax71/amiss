@@ -1,22 +1,21 @@
+use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumString};
 
-use crate::assessment::{bindings_value, decode_bindings};
-use crate::controls::decode_enum;
-use crate::controls::value::{object, text};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::Digest;
-use crate::json::Value;
+use crate::assessment::{AssessmentEngine, AssessmentSubject, Nullable};
+use crate::de::{Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
+use crate::json::{self, Value};
+use crate::semantic::producer_version_valid;
 
-use super::evidence::{
-    RelationEvidenceEnvelope, RelationProjectionSlot, evidence as build_evidence,
-};
-use super::{RELATION_DOCUMENT_BYTES, RelationPlanEnvelope, plan as build_plan};
+use super::evidence::{RelationEvidenceEnvelope, RelationProjectionSlot, evidence_payload_digest};
+use super::{RELATION_DOCUMENT_BYTES, RelationPlanEnvelope, plan_payload_digest};
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/relation-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/relation-assessment-payload";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, Serialize, Deserialize)]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RelationVerdict {
     Aligned,
     IntroducedDrift,
@@ -25,8 +24,9 @@ pub enum RelationVerdict {
     Unproven,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, Serialize, Deserialize)]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RelationReason {
     EvidenceAbsent,
     EvidenceUnbound,
@@ -40,15 +40,27 @@ pub struct RelationAssessmentEnvelope {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationAssessment {
-    pub engine_version: String,
-    pub engine_digest: Digest,
-    pub report_payload_digest: Digest,
-    pub plan_payload_digest: Digest,
-    pub evidence_payload_digest: Option<Digest>,
+    pub engine: AssessmentEngine,
+    pub subject: AssessmentSubject,
     pub verdict: RelationVerdict,
-    pub reason: Option<RelationReason>,
+    pub reason: Nullable<RelationReason>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "schema", deny_unknown_fields)]
+enum AssessmentEnvelope<T> {
+    #[serde(rename = "amiss/relation-assessment-envelope")]
+    Current { payload: T, payload_digest: Digest },
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "schema", deny_unknown_fields)]
+enum AssessmentPayload<T> {
+    #[serde(rename = "amiss/relation-assessment-payload")]
+    Current(T),
 }
 
 /// Parses one closed, digest-bound relation transition assessment.
@@ -59,13 +71,24 @@ pub struct RelationAssessment {
 /// engine identity, an inconsistent verdict/reason pair, or a payload digest
 /// mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<RelationAssessmentEnvelope, Error> {
-    let (payload, payload_digest) = crate::bounded_envelope::parse(
-        bytes,
-        ASSESSMENT_ENVELOPE_SCHEMA,
-        ASSESSMENT_PAYLOAD_SCHEMA,
-        RELATION_DOCUMENT_BYTES,
-        decode_assessment,
-    )?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    let document: AssessmentEnvelope<AssessmentPayload<RelationAssessment>> =
+        serde_json::from_slice(bytes)
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let AssessmentEnvelope::Current {
+        payload,
+        payload_digest,
+    } = document;
+    let AssessmentPayload::Current(payload) = payload;
+    validate_assessment(&payload)?;
+    let canonical = serde_json_canonicalizer::to_vec(&AssessmentPayload::Current(&payload))
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    if hb(ASSESSMENT_PAYLOAD_SCHEMA, &canonical) != payload_digest {
+        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    }
     Ok(RelationAssessmentEnvelope {
         payload,
         payload_digest,
@@ -89,15 +112,13 @@ pub fn assess(
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Value, Error> {
-    let rebuilt_plan = build_plan(&plan.payload)?;
-    if rebuilt_plan.text("payload_digest") != Some(&plan.payload_digest.to_string()) {
+    if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
-    if let Some(evidence) = evidence {
-        let rebuilt_evidence = build_evidence(&evidence.payload)?;
-        if rebuilt_evidence.text("payload_digest") != Some(&evidence.payload_digest.to_string()) {
-            return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
-        }
+    if let Some(evidence) = evidence
+        && evidence_payload_digest(&evidence.payload)? != evidence.payload_digest
+    {
+        return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
     }
 
     let judgment = evidence
@@ -139,91 +160,66 @@ pub fn assess(
         |verdict| (verdict, None),
     );
     let assessment = RelationAssessment {
-        engine_version: engine_version.to_owned(),
-        engine_digest,
-        report_payload_digest: plan.payload.report_payload_digest,
-        plan_payload_digest: plan.payload_digest,
-        evidence_payload_digest: evidence.map(|evidence| evidence.payload_digest),
+        engine: AssessmentEngine {
+            engine_version: engine_version.to_owned(),
+            engine_digest,
+        },
+        subject: AssessmentSubject {
+            report_payload_digest: plan.payload.report_payload_digest,
+            plan_payload_digest: plan.payload_digest,
+            evidence_payload_digest: evidence.map_or(Nullable::Null, |evidence| {
+                Nullable::Value(evidence.payload_digest)
+            }),
+        },
         verdict,
-        reason,
+        reason: reason.map_or(Nullable::Null, Nullable::Value),
     };
-    let payload = assessment_value(&assessment);
-    let _validated = decode_assessment("$.payload", payload.clone())?;
-    crate::bounded_envelope::build(
+    validate_assessment(&assessment)?;
+    let payload = AssessmentPayload::Current(&assessment);
+    let canonical_payload = serde_json_canonicalizer::to_vec(&payload)
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    let document = AssessmentEnvelope::Current {
         payload,
-        ASSESSMENT_ENVELOPE_SCHEMA,
-        ASSESSMENT_PAYLOAD_SCHEMA,
-        RELATION_DOCUMENT_BYTES,
-    )
-}
-
-fn decode_assessment(path: &str, value: Value) -> Result<RelationAssessment, Error> {
-    let mut assessment = Obj::new(path, value)?;
-    assessment.required("schema", |path, value| {
-        de::const_str(path, value, ASSESSMENT_PAYLOAD_SCHEMA)
-    })?;
-    let bindings = decode_bindings(&mut assessment)?;
-    let verdict = assessment.required("verdict", decode_enum)?;
-    let reason = assessment.required("reason", |path, value| {
-        de::decode_nullable(path, value, decode_enum)
-    })?;
-    assessment.finish()?;
-
-    let valid = matches!(
-        (verdict, reason, bindings.evidence_payload_digest),
-        (
-            RelationVerdict::Aligned
-                | RelationVerdict::IntroducedDrift
-                | RelationVerdict::PreExistingDrift
-                | RelationVerdict::ResolvedDrift,
-            None,
-            Some(_),
-        ) | (
-            RelationVerdict::Unproven,
-            Some(RelationReason::EvidenceAbsent),
-            None
-        ) | (
-            RelationVerdict::Unproven,
-            Some(
-                RelationReason::EvidenceUnbound
-                    | RelationReason::RoleMismatch
-                    | RelationReason::ProjectionUnproven,
-            ),
-            Some(_),
-        )
-    );
-    if !valid {
-        return fail(path, ErrorKind::Inconsistent);
+        payload_digest: hb(ASSESSMENT_PAYLOAD_SCHEMA, &canonical_payload),
+    };
+    let canonical = serde_json_canonicalizer::to_vec(&document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
     }
-    Ok(RelationAssessment {
-        engine_version: bindings.engine_version,
-        engine_digest: bindings.engine_digest,
-        report_payload_digest: bindings.report_payload_digest,
-        plan_payload_digest: bindings.plan_payload_digest,
-        evidence_payload_digest: bindings.evidence_payload_digest,
-        verdict,
-        reason,
-    })
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
-fn assessment_value(assessment: &RelationAssessment) -> Value {
-    let (engine, subject) = bindings_value(
-        &assessment.engine_version,
-        assessment.engine_digest,
-        assessment.report_payload_digest,
-        assessment.plan_payload_digest,
-        assessment.evidence_payload_digest,
-    );
-    object(vec![
-        ("schema", text(ASSESSMENT_PAYLOAD_SCHEMA)),
-        ("engine", engine),
-        ("subject", subject),
-        ("verdict", text(assessment.verdict.as_ref())),
-        (
-            "reason",
-            assessment
-                .reason
-                .map_or(Value::Null, |reason| text(reason.as_ref())),
-        ),
-    ])
+fn validate_assessment(assessment: &RelationAssessment) -> Result<(), Error> {
+    if !producer_version_valid(&assessment.engine.engine_version) {
+        return fail("$.payload.engine.engine_version", ErrorKind::InvalidValue);
+    }
+    let valid = match assessment.reason {
+        Nullable::Null => {
+            assessment.verdict != RelationVerdict::Unproven
+                && matches!(
+                    assessment.subject.evidence_payload_digest,
+                    Nullable::Value(_)
+                )
+        }
+        Nullable::Value(RelationReason::EvidenceAbsent) => {
+            assessment.verdict == RelationVerdict::Unproven
+                && assessment.subject.evidence_payload_digest == Nullable::Null
+        }
+        Nullable::Value(
+            RelationReason::EvidenceUnbound
+            | RelationReason::RoleMismatch
+            | RelationReason::ProjectionUnproven,
+        ) => {
+            assessment.verdict == RelationVerdict::Unproven
+                && matches!(
+                    assessment.subject.evidence_payload_digest,
+                    Nullable::Value(_)
+                )
+        }
+    };
+    if !valid {
+        return fail("$.payload", ErrorKind::Inconsistent);
+    }
+    Ok(())
 }

@@ -102,10 +102,7 @@ pub fn parse_plan(bytes: &[u8]) -> Result<RelationPlanEnvelope, Error> {
         payload_digest,
     } = document;
     let PlanPayload::Current(payload) = payload;
-    validate_plan(&payload)?;
-    let canonical = serde_json_canonicalizer::to_vec(&PlanPayload::Current(&payload))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
-    if hb(PLAN_PAYLOAD_SCHEMA, &canonical) != payload_digest {
+    if plan_payload_digest(&payload)? != payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
     Ok(RelationPlanEnvelope {
@@ -121,13 +118,10 @@ pub fn parse_plan(bytes: &[u8]) -> Result<RelationPlanEnvelope, Error> {
 /// Fails when a public field violates the same closed grammar [`parse_plan`]
 /// enforces or the encoded document exceeds its byte ceiling.
 pub fn plan(input: &RelationPlan) -> Result<Value, Error> {
-    validate_plan(input)?;
-    let payload = PlanPayload::Current(input);
-    let canonical_payload = serde_json_canonicalizer::to_vec(&payload)
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    let payload_digest = plan_payload_digest(input)?;
     let document = PlanEnvelope::Current {
-        payload,
-        payload_digest: hb(PLAN_PAYLOAD_SCHEMA, &canonical_payload),
+        payload: PlanPayload::Current(input),
+        payload_digest,
     };
     let canonical = serde_json_canonicalizer::to_vec(&document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
@@ -135,6 +129,13 @@ pub fn plan(input: &RelationPlan) -> Result<Value, Error> {
         return fail("$", ErrorKind::LimitExceeded);
     }
     json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+}
+
+pub(super) fn plan_payload_digest(input: &RelationPlan) -> Result<Digest, Error> {
+    validate_plan(input)?;
+    serde_json_canonicalizer::to_vec(&PlanPayload::Current(input))
+        .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_plan(plan: &RelationPlan) -> Result<(), Error> {
