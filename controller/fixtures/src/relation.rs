@@ -3,16 +3,16 @@ use std::sync::Arc;
 use amiss_controller::{
     IntegrationId, OidPair, OpaqueId, PlanScope, ProviderIdentity, ProviderInstance,
     ProviderNamespace, RelationLimits, RelationPlan, RelationStatusDestination, RelationSubject,
-    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_transition,
+    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_audit_plan,
+    relation_transition,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
-use amiss_wire::digest::{Digest, hj, sha256};
+use amiss_wire::digest::{hj, sha256};
 use amiss_wire::json::{self, Value};
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationIdentity, RelationProjectedValue,
-    RelationSnapshot, RelationSubject as PlannedSubject, assess, evidence, parse_evidence,
-    parse_plan, plan,
+    RelationEvidence, RelationEvidenceSubject, RelationProjectedValue, assess, evidence,
+    parse_evidence, parse_plan,
 };
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
@@ -38,48 +38,8 @@ pub fn relation_audit_with_coordination(
     coordination: &str,
 ) -> Option<RelationAuditFixture> {
     let report = report()?;
-    let parsed = json::parse(&report).ok()?;
-    let (_, report_payload_digest, _) = amiss_wire::report::validate_envelope(&parsed).ok()?;
-    let report_payload_digest = Digest::from_wire(report_payload_digest)?;
     let transition = transition(coordination)?;
-    let registered = transition.relation.plan.as_ref();
-    let subjects = transition.subjects.clone().map(|frozen| {
-        let configured = registered
-            .subjects
-            .iter()
-            .find(|subject| subject.role == frozen.role)?;
-        Some(PlannedSubject {
-            role: frozen.role,
-            repository: configured.scope.repository.clone(),
-            target: configured.target.clone(),
-            source: configured.source.clone(),
-            base: RelationSnapshot {
-                commit: frozen.commits.base,
-                tree: frozen.trees.base,
-            },
-            candidate: RelationSnapshot {
-                commit: frozen.commits.candidate,
-                tree: frozen.trees.candidate,
-            },
-        })
-    });
-    let [Some(documentation), Some(source)] = subjects else {
-        return None;
-    };
-    let plan = json::canonical(
-        &plan(&amiss_wire::relation::RelationPlan {
-            report_payload_digest,
-            relation: RelationIdentity {
-                identity: registered.identity.clone(),
-                context_digest: registered.context_digest,
-            },
-            coordination: transition.coordination.clone(),
-            trigger_role: transition.relation.trigger_role.clone(),
-            projection: registered.projection,
-            subjects: [documentation, source],
-        })
-        .ok()?,
-    );
+    let plan = relation_audit_plan(&transition, &report).ok()?;
     let parsed_plan = parse_plan(&plan).ok()?;
     let evidence = if with_evidence {
         Some(relation_evidence(&parsed_plan)?)

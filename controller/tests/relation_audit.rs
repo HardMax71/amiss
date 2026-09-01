@@ -1,4 +1,6 @@
-use amiss_controller::{ArtifactError, RelationAuditBundle, validate_relation_audit};
+use amiss_controller::{
+    ArtifactError, RelationAuditBundle, relation_audit_plan, validate_relation_audit,
+};
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::digest::{hj, sha256};
 use amiss_wire::json::{self, Value};
@@ -9,6 +11,10 @@ use amiss_wire::relation::{RelationVerdict, assess, parse_assessment, parse_plan
 fn one_exact_chain_binds_every_byte_to_the_trigger_and_operator_plan() -> Result<(), ArtifactError>
 {
     let fixture = relation_audit(true).ok_or(ArtifactError::Corrupt)?;
+    assert_eq!(
+        relation_audit_plan(&fixture.transition, &fixture.report)?,
+        fixture.plan
+    );
     let audit = validate_relation_audit(bundle(&fixture))?;
 
     assert_eq!(audit.report_digest, sha256(&fixture.report));
@@ -38,6 +44,10 @@ fn changed_transition_report_and_assessment_bindings_are_refused() -> Result<(),
     let mut changed_transition = relation_audit(true).ok_or(ArtifactError::Corrupt)?;
     changed_transition.transition.subjects[1].trees.candidate =
         changed_transition.transition.subjects[1].trees.base.clone();
+    assert!(matches!(
+        relation_audit_plan(&changed_transition.transition, &changed_transition.report),
+        Err(ArtifactError::Corrupt)
+    ));
     assert!(matches!(
         validate_relation_audit(bundle(&changed_transition)),
         Err(ArtifactError::Corrupt)
@@ -78,6 +88,10 @@ fn the_trigger_report_must_name_the_registered_target_ref() -> Result<(), Artifa
     let fixture = relation_audit(false).ok_or(ArtifactError::Corrupt)?;
     let fixture = with_null_report_target(fixture)?;
 
+    assert!(matches!(
+        relation_audit_plan(&fixture.transition, &fixture.report),
+        Err(ArtifactError::Corrupt)
+    ));
     assert!(matches!(
         validate_relation_audit(bundle(&fixture)),
         Err(ArtifactError::Corrupt)

@@ -86,7 +86,9 @@ pub use provider::{
 pub use publication_audit::{
     PublicationAuditBundle, PublicationAuditDigests, validate_publication_audit,
 };
-pub use relation_audit::{RelationAuditBundle, RelationAuditDigests, validate_relation_audit};
+pub use relation_audit::{
+    RelationAuditBundle, RelationAuditDigests, relation_audit_plan, validate_relation_audit,
+};
 pub use relations::{
     FileRelationScheduleStore, PendingRelation, RELATION_REGISTRY_LIMIT,
     RELATION_SCHEDULE_BINDING_LIMIT, RelationAcquiredRoot, RelationAcquisitionError,

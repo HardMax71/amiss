@@ -1,10 +1,12 @@
 use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::json;
 use amiss_wire::relation::{
-    RELATION_DOCUMENT_BYTES, RelationVerdict, assess, parse_assessment, parse_evidence, parse_plan,
+    self, RELATION_DOCUMENT_BYTES, RelationVerdict, assess, parse_assessment, parse_evidence,
+    parse_plan,
 };
 
 use crate::audit_report::accepted_report;
-use crate::{ArtifactError, RelationTransition, verify_relation_plan};
+use crate::{ArtifactError, RelationSubjectTransition, RelationTransition, relation_transition};
 
 #[derive(Clone, Copy)]
 pub struct RelationAuditBundle<'a> {
@@ -22,6 +24,22 @@ pub struct RelationAuditDigests {
     pub evidence_digest: Option<Digest>,
     pub assessment_digest: Digest,
     pub verdict: RelationVerdict,
+}
+
+/// Builds the unique canonical audit plan for one accepted trigger report and frozen relation.
+///
+/// # Errors
+///
+/// The report is not accepted, the transition is invalid, or the report does not reproduce the
+/// registered trigger subject and its exact base/candidate snapshots.
+pub fn relation_audit_plan(
+    transition: &RelationTransition,
+    report: &[u8],
+) -> Result<Vec<u8>, ArtifactError> {
+    let plan = checked_relation_plan(transition, report)?.0;
+    relation::plan(&plan)
+        .map(|value| json::canonical(&value))
+        .map_err(|_defect| ArtifactError::Corrupt)
 }
 
 /// Validates one complete relation audit against its accepted trigger report
@@ -44,25 +62,11 @@ pub fn validate_relation_audit(
     {
         return Err(ArtifactError::TooLarge);
     }
-    let report = accepted_report(bundle.report)?;
+    let (expected, report_digest) = checked_relation_plan(bundle.transition, bundle.report)?;
     let plan = parse_plan(bundle.plan).map_err(|_defect| ArtifactError::Corrupt)?;
-    verify_relation_plan(&plan, bundle.transition).map_err(|_defect| ArtifactError::Corrupt)?;
-    let trigger = plan
-        .payload
-        .subjects
-        .iter()
-        .find(|subject| subject.role == plan.payload.trigger_role)
+    (plan.payload == expected)
+        .then_some(())
         .ok_or(ArtifactError::Corrupt)?;
-    if plan.payload.report_payload_digest != report.payload_digest
-        || trigger.repository != report.repository
-        || report.target_ref.as_ref() != Some(&trigger.target)
-        || trigger.base.commit != report.base.commit
-        || trigger.base.tree != report.base.tree
-        || trigger.candidate.commit != report.candidate.commit
-        || trigger.candidate.tree != report.candidate.tree
-    {
-        return Err(ArtifactError::Corrupt);
-    }
     let evidence = bundle
         .evidence
         .map(parse_evidence)
@@ -81,10 +85,73 @@ pub fn validate_relation_audit(
         return Err(ArtifactError::Corrupt);
     }
     Ok(RelationAuditDigests {
-        report_digest: report.report_digest,
+        report_digest,
         plan_digest: sha256(bundle.plan),
         evidence_digest: bundle.evidence.map(sha256),
         assessment_digest: sha256(bundle.assessment),
         verdict: assessment.payload.verdict,
     })
+}
+
+fn checked_relation_plan(
+    transition: &RelationTransition,
+    report: &[u8],
+) -> Result<(relation::RelationPlan, Digest), ArtifactError> {
+    let transition = relation_transition(
+        transition.relation.clone(),
+        transition.coordination.clone(),
+        transition.subjects.clone(),
+    )
+    .map_err(|_defect| ArtifactError::Corrupt)?;
+    let report = accepted_report(report)?;
+    let registered = transition.relation.plan.as_ref();
+    let planned = |frozen: &RelationSubjectTransition| -> Result<_, ArtifactError> {
+        let subject = registered
+            .subjects
+            .iter()
+            .find(|subject| subject.role == frozen.role)
+            .ok_or(ArtifactError::Corrupt)?;
+        Ok(relation::RelationSubject {
+            role: frozen.role.clone(),
+            repository: subject.scope.repository.clone(),
+            target: subject.target.clone(),
+            source: subject.source.clone(),
+            base: relation::RelationSnapshot {
+                commit: frozen.commits.base.clone(),
+                tree: frozen.trees.base.clone(),
+            },
+            candidate: relation::RelationSnapshot {
+                commit: frozen.commits.candidate.clone(),
+                tree: frozen.trees.candidate.clone(),
+            },
+        })
+    };
+    let [left, right] = transition.subjects.each_ref();
+    let subjects = [planned(left)?, planned(right)?];
+    subjects
+        .iter()
+        .find(|subject| subject.role == transition.relation.trigger_role)
+        .filter(|trigger| {
+            trigger.repository == report.repository
+                && report.target_ref.as_ref() == Some(&trigger.target)
+                && trigger.base.commit == report.base.commit
+                && trigger.base.tree == report.base.tree
+                && trigger.candidate.commit == report.candidate.commit
+                && trigger.candidate.tree == report.candidate.tree
+        })
+        .ok_or(ArtifactError::Corrupt)?;
+    Ok((
+        relation::RelationPlan {
+            report_payload_digest: report.payload_digest,
+            relation: relation::RelationIdentity {
+                identity: registered.identity.clone(),
+                context_digest: registered.context_digest,
+            },
+            coordination: transition.coordination,
+            trigger_role: transition.relation.trigger_role,
+            projection: registered.projection,
+            subjects,
+        },
+        report.report_digest,
+    ))
 }
