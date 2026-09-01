@@ -6,10 +6,11 @@
 use std::{fs, path::Path};
 
 use amiss_wire::controls::{
-    BlobLineSelection, ProjectionKind, ProjectionSource, TreePathSelection,
+    BlobLineSelection, NamedRegionSelection, ProjectionKind, ProjectionSource, RecordSetSelection,
+    RecordValueSelection, TreePathSelection, projection_source_value,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hj;
+use amiss_wire::digest::{hb, hj};
 use amiss_wire::json;
 use amiss_wire::model::{ObjectFormat, RepoPathText};
 use amiss_wire::relation::{
@@ -89,38 +90,78 @@ fn relation_plan_refuses_mixed_objects_and_incompatible_sources() {
 }
 
 #[test]
-fn relation_plan_reuses_code_and_inventory_projection_sources() {
-    let mut code = relation_contract().plan;
-    code.projection = ProjectionKind::CodeTextV1;
-    for subject in &mut code.subjects {
-        subject.source = ProjectionSource::BlobLines(BlobLineSelection {
-            path: RepoPathText::new("api.txt".to_owned()).unwrap(),
-            first_line: 1,
-            last_line: 4,
-        });
-    }
-    assert_eq!(
-        parse_plan(&json::canonical(&plan(&code).unwrap()))
-            .unwrap()
-            .payload,
-        code
-    );
+fn relation_plan_preserves_every_projection_source_shape() {
+    let path = RepoPathText::new("reference/api.md".to_owned()).unwrap();
+    let cases = [
+        (
+            ProjectionKind::CodeTextV1,
+            ProjectionSource::BlobLines(BlobLineSelection {
+                path: path.clone(),
+                first_line: 1,
+                last_line: 4,
+            }),
+        ),
+        (
+            ProjectionKind::CodeTextV1,
+            ProjectionSource::NamedRegion(NamedRegionSelection {
+                path: path.clone(),
+                start_marker: "API start".to_owned(),
+                end_marker: "API end".to_owned(),
+            }),
+        ),
+        (
+            ProjectionKind::DecimalCountV1,
+            ProjectionSource::TreePaths(TreePathSelection {
+                root: path,
+                suffix: Some(".md".to_owned()),
+                maximum_depth: 3,
+            }),
+        ),
+        (
+            ProjectionKind::CodeTextV1,
+            ProjectionSource::RecordValue(RecordValueSelection {
+                set: identity("rust/public-api"),
+                key: "item".to_owned(),
+            }),
+        ),
+        (
+            ProjectionKind::SortedRowsV1,
+            ProjectionSource::RecordSet(RecordSetSelection {
+                set: identity("rust/public-api"),
+            }),
+        ),
+    ];
 
-    let mut count = relation_contract().plan;
-    count.projection = ProjectionKind::DecimalCountV1;
-    for subject in &mut count.subjects {
-        subject.source = ProjectionSource::TreePaths(TreePathSelection {
-            root: RepoPathText::new("reference".to_owned()).unwrap(),
-            suffix: Some(".md".to_owned()),
-            maximum_depth: 3,
-        });
+    for (projection, source) in cases {
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&source).unwrap(),
+            json::canonical(&projection_source_value(&source))
+        );
+        let mut input = relation_contract().plan;
+        input.projection = projection;
+        for subject in &mut input.subjects {
+            subject.source = source.clone();
+        }
+        assert_eq!(
+            parse_plan(&json::canonical(&plan(&input).unwrap()))
+                .unwrap()
+                .payload,
+            input
+        );
     }
-    assert_eq!(
-        parse_plan(&json::canonical(&plan(&count).unwrap()))
-            .unwrap()
-            .payload,
-        count
-    );
+}
+
+#[test]
+fn relation_plan_refuses_repository_values_that_bypass_construction() {
+    let value = plan(&relation_contract().plan).unwrap();
+    let mut document: serde_json::Value = serde_json::from_slice(&json::canonical(&value)).unwrap();
+    document["payload"]["subjects"][0]["repository"]["host"] = serde_json::json!("invalid/host");
+    let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
+    document["payload_digest"] = serde_json::json!(hb(PLAN_PAYLOAD_SCHEMA, &payload).to_string());
+
+    let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+    assert_eq!(error.path, "$.payload.subjects[0].repository");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
 #[test]
@@ -214,7 +255,7 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
             payload_schema: PLAN_PAYLOAD_SCHEMA,
             first_payload_field: "report_payload_digest",
             parse: |bytes| parse_plan(bytes).map(|_envelope| ()),
-            open_error: ("$.payload.unknown", ErrorKind::UnknownField),
+            open_error: ("$", ErrorKind::InvalidValue),
         },
         Document {
             value: evidence(&relation_contract().evidence).unwrap(),

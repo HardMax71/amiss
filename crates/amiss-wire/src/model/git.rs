@@ -1,3 +1,7 @@
+use core::{fmt, str::FromStr};
+
+use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 
 /// The same-repository URL dialect a run applies: named in the report's
@@ -29,9 +33,21 @@ impl ForgeDialect {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumString,
+    IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 #[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum ObjectFormat {
     Sha1,
     Sha256,
@@ -65,7 +81,7 @@ impl TreeIdentity {
 }
 
 /// Full lowercase object ID for one declared object format.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
 pub struct Oid {
     object_format: ObjectFormat,
     raw: String,
@@ -85,6 +101,25 @@ impl Oid {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.raw
+    }
+}
+
+impl fmt::Display for Oid {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.raw)
+    }
+}
+
+impl FromStr for Oid {
+    type Err = &'static str;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        let object_format = match raw.len() {
+            40 => ObjectFormat::Sha1,
+            64 => ObjectFormat::Sha256,
+            _ => return Err("invalid object ID"),
+        };
+        Self::new(object_format, raw.to_owned()).ok_or("invalid object ID")
     }
 }
 

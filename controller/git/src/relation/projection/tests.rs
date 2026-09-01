@@ -134,6 +134,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
             role: frozen.role,
             repository: configured.scope.repository.clone(),
             target: configured.target.clone(),
+            object_format: configured.object_format,
             source: configured.source.clone(),
             base: RelationSnapshot {
                 commit: frozen.commits.base,
