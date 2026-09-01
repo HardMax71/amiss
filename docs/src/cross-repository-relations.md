@@ -17,8 +17,9 @@ the accepted trigger report and frozen transition. The service can project repos
 sources from all four acquired snapshots, assess the result, retain the exact chain, and stage its
 destinations under the current scheduling fence. No provider service assembles those inputs into a
 live lane yet. The controller independently replays every supplied audit before storage and can
-reconcile a claimed GitHub or Gitea-family destination. An authenticated live GitLab policy job can
-instead consume its exact synchronous destination.
+reconcile a claimed GitHub or Gitea-family destination. The service can drain reopened claims
+through the frozen credential router and acknowledges only a provider-confirmed delivery. An
+authenticated live GitLab policy job can instead consume its exact synchronous destination.
 
 ## One closed relation
 
@@ -59,9 +60,10 @@ credential identity must have exactly one caller-owned authority under the provi
 integration named by its subjects. One authority may cover several registered repositories under
 that scope. Missing authorities, extra or repeated rows, and reuse of one identity under another
 provider or integration are rejected. Lookup repeats the subject binding before returning the
-authority, and neither the registry nor the router exposes a mutation API. The authority value can
-directly contain its concrete provider client and Git acquisition credential; the controller does
-not erase it behind another provider trait or interpret its secret bytes.
+authority. Reopened status-target lookup repeats the same credential and provider-scope check, and
+neither the registry nor the router exposes a mutation API. The authority value can directly contain
+its concrete provider client and Git acquisition credential; the controller does not erase it behind
+another provider trait or interpret its secret bytes.
 
 ## Authenticated triggering
 
@@ -167,9 +169,13 @@ acknowledgement also appends completion under the journal lock. If failure lands
 commits, the next claim pass completes the fully acknowledged batch before selecting more provider
 work.
 
-The outbox still makes no provider call. Provider adapters must reconcile an ambiguous response for
-the exact claimed value before acknowledging it, and a live relation lane must continue polling
-until the outbox has no claim.
+The durable store still makes no provider call. A provider-neutral service loop obtains one claim,
+selects its authority from the frozen credential router, and passes the exact status and target to a
+caller-supplied publisher. Only publisher success consumes the claim and appends its acknowledgement.
+A routing or provider error drops the held shard unchanged, so restart selects the same durable
+destination again. Provider adapters must reconcile an ambiguous response for that exact value
+before returning success. The loop stops only when no destination is currently claimable; a live
+relation lane remains responsible for polling it again.
 
 The GitHub installation client can independently refresh the final head of an operator-configured
 GitHub subject. It accepts the typed subject directly, requires the configured provider and
@@ -369,16 +375,16 @@ follow a link into another repository. Projection sources in this registry are o
 similarly shaped repository policy does not add a relation or gain access to its credential
 reference.
 
-The remaining stages are deliberately separate:
+The remaining live-lane stages are deliberately separate:
 
 1. construct concrete provider authorities and install the frozen registry and router in a service;
-2. resolve and acquire snapshot-bound records from the admitted coordination in live provider lanes;
-3. resume durable destination claims through those routed authorities after restart.
+2. resolve and acquire snapshot-bound records from the admitted coordination in live provider lanes.
 
 Until those stages exist, the service can execute and stage an exact bounded repository comparison
 when its caller supplies the current pending transition, accepted report, two acquired roots, final
-heads, stable evaluation identity, and evaluator identity. The GitHub adapter can deliver an already
-retained and claimed result, but no provider service yet assembles the complete relation lifecycle.
+heads, stable evaluation identity, and evaluator identity. Given a frozen router and provider
+publisher, it can also resume and drain the retained destination batch after restart. No provider
+service yet assembles the complete relation lifecycle.
 
 The implementation is in the
 [provider-neutral relation registry](https://github.com/HardMax71/amiss/blob/main/controller/src/relations.rs),

@@ -9,15 +9,16 @@ use std::time::Duration;
 use amiss_controller::{
     ArtifactComponent, ArtifactStoreConfig, AuthenticatedDelivery, ChangeId, ChangeLocator,
     ControllerClock, ControllerEvaluationId, DeliveryId, DeliveryIdentity, FileArtifactStore,
-    FileRelationScheduleStore, PendingRelation, ProviderRunAttempt, ProviderRunId,
+    FileRelationScheduleStore, PendingRelation, ProviderError, ProviderRunAttempt, ProviderRunId,
     ProviderRunIdentity, RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission,
-    RelationSubjectHead, RelationSubjectTransition, RelationTransition, TriggeredRelation,
+    RelationCredentialRoute, RelationStatusDestination, RelationSubjectHead,
+    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_credential_router,
     relation_registry, relation_transition,
 };
 use amiss_controller_fixtures::{clock::TestClock, relation::relation_audit};
 use amiss_controller_service::{
     CoordinatedRelation, CoordinatedTransition, RelationAuditExecutionError, RelationAuditRequest,
-    execute_relation_audit, freeze_relation_transition,
+    RelationOutboxError, drain_relation_outbox, execute_relation_audit, freeze_relation_transition,
 };
 use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
 use amiss_wire::digest::{hj, sha256};
@@ -33,8 +34,10 @@ struct RelationWorkFixture {
 }
 
 struct RelationStores {
-    _artifact_root: tempfile::TempDir,
-    _schedule_root: tempfile::TempDir,
+    artifact_root: tempfile::TempDir,
+    schedule_root: tempfile::TempDir,
+    artifact_config: ArtifactStoreConfig,
+    clock: Arc<dyn ControllerClock>,
     artifacts: FileArtifactStore,
     schedules: FileRelationScheduleStore,
 }
@@ -247,6 +250,113 @@ fn superseded_relation_work_spends_no_projection_or_artifact_capacity()
     Ok(())
 }
 
+#[test]
+fn relation_outbox_retries_after_restart_and_acknowledges_only_success()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut fixture = relation_work()?;
+    let mut plan = fixture.transition.relation.plan.as_ref().clone();
+    plan.status_destinations.push(RelationStatusDestination {
+        subject_role: ArtifactId::new("source".to_owned()).unwrap(),
+        required_status_name: "Amiss source relation".to_owned(),
+    });
+    fixture.transition.relation.plan = Arc::new(plan);
+    let RelationStores {
+        artifact_root,
+        schedule_root,
+        artifact_config,
+        clock,
+        artifacts,
+        schedules,
+    } = relation_stores(1)?;
+    let RelationAdmission::Scheduled(pending) = schedules.schedule(fixture.transition.clone())?
+    else {
+        return Err(std::io::Error::other("new relation work was not scheduled").into());
+    };
+    let evaluation_id = ControllerEvaluationId::new("evaluation/relation-outbox".to_owned())
+        .ok_or_else(|| std::io::Error::other("invalid evaluation identity"))?;
+    let staged = execute_relation_audit(
+        &artifacts,
+        &schedules,
+        audit_request(&fixture, &pending, &evaluation_id),
+    )?
+    .ok_or_else(|| std::io::Error::other("current work did not stage"))?;
+    let relation = fixture.transition.relation.plan.identity.clone();
+    let coordination = fixture.transition.coordination.clone();
+    let registry = relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()])?;
+    let credentials = relation_credential_router(
+        &registry,
+        fixture
+            .transition
+            .relation
+            .plan
+            .subjects
+            .iter()
+            .map(|subject| RelationCredentialRoute {
+                identity: subject.credential.clone(),
+                authority: subject.role.clone(),
+            })
+            .collect(),
+    )?;
+    let expected_authorities = staged
+        .targets
+        .destinations
+        .iter()
+        .map(|target| target.role.clone())
+        .collect::<Vec<_>>();
+
+    drop(schedules);
+    drop(artifacts);
+    let artifacts = FileArtifactStore::open_with_clock(
+        artifact_root.path(),
+        artifact_config.clone(),
+        Arc::clone(&clock),
+    )?;
+    let schedules = FileRelationScheduleStore::open(schedule_root.path(), 1)?;
+    assert!(matches!(
+        drain_relation_outbox(
+            &registry,
+            &credentials,
+            &artifacts,
+            &schedules,
+            |authority, _status, target| {
+                assert_eq!(authority, &target.role);
+                Err(ProviderError::Unavailable)
+            },
+        ),
+        Err(RelationOutboxError::Provider(ProviderError::Unavailable))
+    ));
+    assert_eq!(
+        schedules.reopen_staged_status(&registry, &artifacts, &relation, &coordination)?,
+        Some(staged.clone())
+    );
+
+    drop(schedules);
+    drop(artifacts);
+    let artifacts =
+        FileArtifactStore::open_with_clock(artifact_root.path(), artifact_config, clock)?;
+    let schedules = FileRelationScheduleStore::open(schedule_root.path(), 1)?;
+    let mut delivered = Vec::new();
+    drain_relation_outbox(
+        &registry,
+        &credentials,
+        &artifacts,
+        &schedules,
+        |authority, status, target| {
+            assert_eq!(status, &staged);
+            assert_eq!(authority, &target.role);
+            delivered.push(authority.clone());
+            Ok(())
+        },
+    )?;
+    delivered.sort();
+    assert_eq!(delivered, expected_authorities);
+    assert_eq!(
+        schedules.reopen_staged_status(&registry, &artifacts, &relation, &coordination)?,
+        None
+    );
+    Ok(())
+}
+
 fn relation_work() -> Result<RelationWorkFixture, Box<dyn std::error::Error>> {
     let documentation = amiss_fixtures::commit_pair(&[("projection.txt", "timeout: u64\n")], &[])?;
     let source = amiss_fixtures::commit_pair(
@@ -336,21 +446,24 @@ fn relation_stores(max_bindings: u64) -> Result<RelationStores, Box<dyn std::err
     let artifact_root = tempfile::tempdir()?;
     let schedule_root = tempfile::tempdir()?;
     let clock: Arc<dyn ControllerClock> = TestClock::new();
+    let artifact_config = ArtifactStoreConfig {
+        base_url: "https://amiss.example/relation-artifacts".to_owned(),
+        retention: Duration::from_hours(1),
+        max_records: 4,
+        max_bytes: 16 * 1_024 * 1_024,
+        max_record_bytes: 4 * 1_024 * 1_024,
+    };
     let artifacts = FileArtifactStore::open_with_clock(
         artifact_root.path(),
-        ArtifactStoreConfig {
-            base_url: "https://amiss.example/relation-artifacts".to_owned(),
-            retention: Duration::from_hours(1),
-            max_records: 4,
-            max_bytes: 16 * 1_024 * 1_024,
-            max_record_bytes: 4 * 1_024 * 1_024,
-        },
-        clock,
+        artifact_config.clone(),
+        Arc::clone(&clock),
     )?;
     let schedules = FileRelationScheduleStore::open(schedule_root.path(), max_bindings)?;
     Ok(RelationStores {
-        _artifact_root: artifact_root,
-        _schedule_root: schedule_root,
+        artifact_root,
+        schedule_root,
+        artifact_config,
+        clock,
         artifacts,
         schedules,
     })
