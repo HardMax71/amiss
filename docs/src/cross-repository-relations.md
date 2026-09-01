@@ -9,7 +9,8 @@ credential, selector, limit, or publication target.
 This is not yet a complete cross-repository checking lane. The shared service can load one bounded
 operator file into an immutable registry, and the controller can bind the complete set of opaque
 credential identities to caller-owned authorities. The service can also bind one opaque
-operator-declared coordination identity to the exact relation owned by an authenticated delivery.
+operator-declared coordination identity to the exact relation owned by an authenticated delivery,
+then freeze caller-resolved revisions only when the trigger candidate reproduces that delivery.
 No provider service supplies that registry or constructs those authorities yet. Closed plan,
 evidence, and assessment contracts represent the exact comparison selected after acquisition. The
 provider-neutral Git layer can project
@@ -81,7 +82,8 @@ enum or derive identity from a commit, timestamp, branch name, URL, or provider 
 
 The configured target branch is not treated as an immutable revision. A provider resolver must
 refresh it and supply exact base/candidate commit and tree IDs for each role. The controller freezes
-all four revisions against the registered roles and object formats before acquisition. The same
+all four revisions against the registered roles and object formats before acquisition. The trigger
+role's candidate commit must also reproduce the delivery-authenticated provider run. The same
 trusted call supplies one bounded coordination identity naming the exact pair, release, or workflow
 occurrence. The relation configuration and its context digest define what that identity means;
 Amiss treats the spelling as opaque. Commit timestamps, nearby branch heads, URL versions, and
