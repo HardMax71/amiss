@@ -6,7 +6,7 @@
 use std::{fs, path::Path};
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{
@@ -38,6 +38,7 @@ fn publication_plan() -> PublicationPlan {
         report_payload_digest: digest('1'),
         docs: DocsCandidate {
             repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
+            object_format: ObjectFormat::Sha1,
             commit: oid('a', ObjectFormat::Sha1),
             tree: oid('b', ObjectFormat::Sha1),
             candidate_identity_digest: digest('2'),
@@ -132,6 +133,19 @@ fn publication_plan_refuses_ambiguous_resources_and_git_objects() {
 }
 
 #[test]
+fn publication_plan_refuses_repository_values_that_bypass_construction() {
+    let value = plan(&publication_plan()).unwrap();
+    let mut document: serde_json::Value = serde_json::from_slice(&json::canonical(&value)).unwrap();
+    document["payload"]["docs"]["repository"]["host"] = serde_json::json!("invalid/host");
+    let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
+    document["payload_digest"] = serde_json::json!(hb(PLAN_PAYLOAD_SCHEMA, &payload).to_string());
+
+    let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+    assert_eq!(error.path, "$.payload.docs.repository");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
+}
+
+#[test]
 fn publication_plan_refuses_tampering_and_open_shapes() {
     let value = plan(&publication_plan()).unwrap();
     let bytes = json::canonical(&value);
@@ -158,6 +172,6 @@ fn publication_plan_refuses_tampering_and_open_shapes() {
         &hj(PLAN_PAYLOAD_SCHEMA, open_value.member("payload").unwrap()).to_string(),
     );
     let error = parse_plan(rebound.as_bytes()).unwrap_err();
-    assert_eq!(error.path, "$.payload.unknown");
-    assert_eq!(error.kind, ErrorKind::UnknownField);
+    assert_eq!(error.path, "$");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
