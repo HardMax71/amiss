@@ -19,6 +19,7 @@ use amiss_controller_fixtures::relation::{
     RelationAuditFixture, relation_audit, relation_audit_with_coordination,
 };
 use amiss_wire::model::ArtifactId;
+use amiss_wire::relation::RelationSnapshot;
 
 fn store(root: &tempfile::TempDir, clock: Arc<dyn ControllerClock>) -> FileArtifactStore {
     FileArtifactStore::open_with_clock(
@@ -57,7 +58,10 @@ fn heads(fixture: &RelationAuditFixture) -> [RelationSubjectHead; 2] {
             .unwrap();
         RelationSubjectHead {
             subject: subject.clone(),
-            candidate_commit: frozen.commits.candidate.clone(),
+            candidate: RelationSnapshot {
+                commit: frozen.commits.candidate.clone(),
+                tree: frozen.trees.candidate.clone(),
+            },
         }
     })
 }

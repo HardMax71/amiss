@@ -14,7 +14,7 @@ use amiss_controller::{
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
-use amiss_wire::relation::RelationVerdict;
+use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
 use super::{GitHubRelationRest, RelationSubjectHead, relation_check_run};
 use crate::live::model::{
@@ -41,7 +41,10 @@ fn exact_subject_resolves_one_current_head() {
         client.resolve_relation_head(&subject),
         Ok(RelationSubjectHead {
             subject,
-            candidate_commit: oid(ObjectFormat::Sha1, '3'),
+            candidate: RelationSnapshot {
+                commit: oid(ObjectFormat::Sha1, '3'),
+                tree: oid(ObjectFormat::Sha1, '4'),
+            },
         })
     );
     assert_eq!(client.rest.calls.load(Ordering::Relaxed), 1);

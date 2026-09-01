@@ -1,6 +1,6 @@
 use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::{ArtifactId, Oid};
-use amiss_wire::relation::RelationVerdict;
+use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
 use crate::artifacts::checked_reference;
 use crate::{
@@ -13,7 +13,7 @@ use super::{PendingRelation, RelationSubject, relation_transition};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelationSubjectHead {
     pub subject: RelationSubject,
-    pub candidate_commit: Oid,
+    pub candidate: RelationSnapshot,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,7 +137,7 @@ pub fn relation_status_publication(
 /// # Errors
 ///
 /// The pending transition or finality facts are inconsistent, or either
-/// selected candidate commit is no longer current.
+/// selected candidate commit or tree is no longer current.
 pub fn relation_status_targets(
     pending: &PendingRelation,
     mut heads: [RelationSubjectHead; 2],
@@ -155,7 +155,8 @@ pub fn relation_status_targets(
         .zip(&transition.subjects)
         .any(|(head, frozen)| {
             head.subject.role != frozen.role
-                || head.candidate_commit.object_format() != head.subject.object_format
+                || head.candidate.commit.object_format() != head.subject.object_format
+                || head.candidate.tree.object_format() != head.subject.object_format
                 || plan
                     .subjects
                     .iter()
@@ -168,7 +169,10 @@ pub fn relation_status_targets(
     if heads
         .iter()
         .zip(&transition.subjects)
-        .any(|(head, frozen)| head.candidate_commit != frozen.commits.candidate)
+        .any(|(head, frozen)| {
+            head.candidate.commit != frozen.commits.candidate
+                || head.candidate.tree != frozen.trees.candidate
+        })
     {
         return Err(RelationStatusError::Superseded);
     }

@@ -22,6 +22,7 @@ use amiss_wire::controls::{
 };
 use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::relation::RelationSnapshot;
 
 fn artifact(raw: &str) -> ArtifactId {
     ArtifactId::new(raw.to_owned()).unwrap()
@@ -174,7 +175,10 @@ fn current_heads(transition: &RelationTransition) -> [RelationSubjectHead; 2] {
             .unwrap();
         RelationSubjectHead {
             subject: subject.clone(),
-            candidate_commit: frozen.commits.candidate.clone(),
+            candidate: RelationSnapshot {
+                commit: frozen.commits.candidate.clone(),
+                tree: frozen.trees.candidate.clone(),
+            },
         }
     })
 }
@@ -585,10 +589,28 @@ fn status_targets_fail_closed_on_moved_or_malformed_finality() {
         .iter_mut()
         .find(|head| head.subject.role.as_str() == "source")
         .unwrap();
-    source.candidate_commit = Oid::new(ObjectFormat::Sha1, "9".repeat(40)).unwrap();
+    source.candidate.commit = Oid::new(ObjectFormat::Sha1, "9".repeat(40)).unwrap();
     assert_eq!(
         relation_status_targets(&pending, moved).unwrap_err(),
         RelationStatusError::Superseded
+    );
+
+    let mut rewritten = heads.clone();
+    let source = rewritten
+        .iter_mut()
+        .find(|head| head.subject.role.as_str() == "source")
+        .unwrap();
+    source.candidate.tree = Oid::new(ObjectFormat::Sha1, "8".repeat(40)).unwrap();
+    assert_eq!(
+        relation_status_targets(&pending, rewritten).unwrap_err(),
+        RelationStatusError::Superseded
+    );
+
+    let mut wrong_format = heads.clone();
+    wrong_format[0].candidate.tree = Oid::new(ObjectFormat::Sha256, "7".repeat(64)).unwrap();
+    assert_eq!(
+        relation_status_targets(&pending, wrong_format).unwrap_err(),
+        RelationStatusError::InvalidHeads
     );
 
     let mut repeated = heads.clone();

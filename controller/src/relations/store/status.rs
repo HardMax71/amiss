@@ -1,6 +1,6 @@
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
-use amiss_wire::relation::parse_plan;
+use amiss_wire::relation::{RelationSnapshot, parse_plan};
 use serde::{Deserialize, Serialize};
 
 use super::RelationScheduleStoreError;
@@ -215,7 +215,10 @@ pub(super) fn reopen_status(
             .find(|subject| subject.role == frozen.role)
             .map(|subject| RelationSubjectHead {
                 subject: subject.clone(),
-                candidate_commit: frozen.commits.candidate.clone(),
+                candidate: RelationSnapshot {
+                    commit: frozen.commits.candidate.clone(),
+                    tree: frozen.trees.candidate.clone(),
+                },
             })
             .ok_or(RelationScheduleStoreError::Corrupt)
     });

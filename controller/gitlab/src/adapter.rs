@@ -7,6 +7,7 @@ use amiss_controller::{
     VerifiedDelivery, relation_status_publication,
 };
 use amiss_wire::model::ObjectFormat;
+use amiss_wire::relation::RelationSnapshot;
 
 use crate::identity::{
     branch_ref, exact_sha1, parse_change_id, parse_delivery_id, parse_run_id, repository_identity,
@@ -73,7 +74,10 @@ impl<A: GitLabApi> GitLabMergeTrainAdapter<A> {
         (current.state == ChangeState::Active)
             .then(|| RelationSubjectHead {
                 subject: subject.clone(),
-                candidate_commit: current.run.commits.candidate,
+                candidate: RelationSnapshot {
+                    commit: current.run.commits.candidate,
+                    tree: current.run.trees.candidate,
+                },
             })
             .ok_or(ProviderError::AuthorizationRevoked)
     }

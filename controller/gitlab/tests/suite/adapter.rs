@@ -21,7 +21,7 @@ use amiss_controller_gitlab::{
 use amiss_wire::controls::{ProjectionSource, RecordSetSelection};
 use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, RepositoryIdentity};
-use amiss_wire::relation::RelationVerdict;
+use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
 use crate::support::identity::{HOST, now_seconds};
 use crate::support::oidc::{accept, claims, oidc};
@@ -335,7 +335,10 @@ fn policy_job_resolves_only_its_ephemeral_relation_candidate() {
         adapter.resolve_relation_head(&delivery, &subject),
         Ok(amiss_controller::RelationSubjectHead {
             subject: subject.clone(),
-            candidate_commit: delivery.provider_run.candidate_commit.clone(),
+            candidate: RelationSnapshot {
+                commit: delivery.provider_run.candidate_commit.clone(),
+                tree: crate::support::identity::oid('e'),
+            },
         })
     );
     subject.target = BranchRef::new("refs/heads/other".to_owned()).unwrap();
