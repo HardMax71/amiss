@@ -50,6 +50,7 @@ pub fn validate_publication_audit(
     let report = accepted_report(bundle.report)?;
     let report_docs = DocsCandidate {
         repository: report.repository,
+        object_format: report.candidate.commit.object_format(),
         commit: report.candidate.commit,
         tree: report.candidate.tree,
         candidate_identity_digest: report.candidate_identity_digest,

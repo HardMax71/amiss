@@ -43,6 +43,7 @@ fn locale_plan() -> LocaleCoveragePlan {
         report_payload_digest: digest('1'),
         docs: DocsCandidate {
             repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
+            object_format: ObjectFormat::Sha1,
             commit: oid('a'),
             tree: oid('b'),
             candidate_identity_digest: digest('2'),

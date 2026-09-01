@@ -30,6 +30,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
             "group/subgroup".to_owned(),
             "widget".to_owned(),
         )?,
+        object_format: ObjectFormat::Sha1,
         commit: Oid::new(
             ObjectFormat::Sha1,
             "d1a175a1986230e4ba44b6f6ed67c8dbccb29aaf".to_owned(),
