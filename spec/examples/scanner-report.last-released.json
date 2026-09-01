@@ -3,7 +3,7 @@
     "compatibility": "1",
     "controls": {
       "base_repository_policy_digest": null,
-      "candidate_repository_policy_digest": null,
+      "candidate_repository_policy_digest": "sha256:bda3f4f2b06e62fc6f36c19d05805edc3fe785ae94401e226ab485da0a263e6d",
       "debt_snapshot": {
         "digest": null,
         "status": "none",
@@ -61,11 +61,11 @@
       {
         "base": {
           "adapter_id": "markdown",
-          "byte_count": 9,
+          "byte_count": 42,
           "content_availability": "available",
           "entry_kind": "blob",
-          "entry_oid": "dd159bb469b4a6327d0af92b107a5c6e9c06b9ab",
-          "extracted_references": 0,
+          "entry_oid": "5f4d429339877170d17c6c75be437bd98b281e99",
+          "extracted_references": 1,
           "frontmatter_bytes": 0,
           "frontmatter_regions": 0,
           "git_mode": "100644",
@@ -73,17 +73,17 @@
           "opaque_html_regions": 0,
           "opaque_mdx_bytes": 0,
           "opaque_mdx_regions": 0,
-          "raw_digest": "sha256:abfe85f9824d70a9377a2e2df5c2fa088524ea6aabe6c243fcf1615fe2591be1",
+          "raw_digest": "sha256:2a64a31eb2ac403c4675bf970c494fe3b467daaeacf225da4b6204bfe9731b12",
           "status": "scanned",
           "unsupported_reason": null
         },
         "candidate": {
           "adapter_id": "markdown",
-          "byte_count": 9,
+          "byte_count": 42,
           "content_availability": "available",
           "entry_kind": "blob",
-          "entry_oid": "dd159bb469b4a6327d0af92b107a5c6e9c06b9ab",
-          "extracted_references": 0,
+          "entry_oid": "5f4d429339877170d17c6c75be437bd98b281e99",
+          "extracted_references": 1,
           "frontmatter_bytes": 0,
           "frontmatter_regions": 0,
           "git_mode": "100644",
@@ -91,7 +91,7 @@
           "opaque_html_regions": 0,
           "opaque_mdx_bytes": 0,
           "opaque_mdx_regions": 0,
-          "raw_digest": "sha256:abfe85f9824d70a9377a2e2df5c2fa088524ea6aabe6c243fcf1615fe2591be1",
+          "raw_digest": "sha256:2a64a31eb2ac403c4675bf970c494fe3b467daaeacf225da4b6204bfe9731b12",
           "status": "scanned",
           "unsupported_reason": null
         },
@@ -102,10 +102,28 @@
       {
         "base": {
           "adapter_id": "markdown",
-          "byte_count": 94,
+          "byte_count": 48,
           "content_availability": "available",
           "entry_kind": "blob",
-          "entry_oid": "6502592e16f5cc75308e0159bbe9ce5674c14ff5",
+          "entry_oid": "001b837d662604e4765ee4b8dd30f550b8c67653",
+          "extracted_references": 0,
+          "frontmatter_bytes": 0,
+          "frontmatter_regions": 0,
+          "git_mode": "100644",
+          "opaque_html_bytes": 0,
+          "opaque_html_regions": 0,
+          "opaque_mdx_bytes": 0,
+          "opaque_mdx_regions": 0,
+          "raw_digest": "sha256:ef683e51fd120ca8adfff6df4072299f3dc2da292b7ad524cb306100ad7348a1",
+          "status": "scanned",
+          "unsupported_reason": null
+        },
+        "candidate": {
+          "adapter_id": "markdown",
+          "byte_count": 198,
+          "content_availability": "available",
+          "entry_kind": "blob",
+          "entry_oid": "59705d71cc5b8f794a2fd9010aaeb8b0641008d3",
           "extracted_references": 1,
           "frontmatter_bytes": 0,
           "frontmatter_regions": 0,
@@ -114,25 +132,7 @@
           "opaque_html_regions": 0,
           "opaque_mdx_bytes": 0,
           "opaque_mdx_regions": 0,
-          "raw_digest": "sha256:2040f4822974685af7719ff509bdbb168550892ed567d21377ecad1bd42e9883",
-          "status": "scanned",
-          "unsupported_reason": null
-        },
-        "candidate": {
-          "adapter_id": "markdown",
-          "byte_count": 155,
-          "content_availability": "available",
-          "entry_kind": "blob",
-          "entry_oid": "84400a603e98fd42812de90e994304e4cb369e7c",
-          "extracted_references": 3,
-          "frontmatter_bytes": 0,
-          "frontmatter_regions": 0,
-          "git_mode": "100644",
-          "opaque_html_bytes": 0,
-          "opaque_html_regions": 0,
-          "opaque_mdx_bytes": 0,
-          "opaque_mdx_regions": 0,
-          "raw_digest": "sha256:b1e763cb7f81fb231c846e1dc0a8d0e8075c360a96b02d769dee0a0b93cfeb37",
+          "raw_digest": "sha256:05754ad7db26965dc48e57a662591fd7474500834ed374eb7cef1ff17418452c",
           "status": "scanned",
           "unsupported_reason": null
         },
@@ -147,18 +147,32 @@
       },
       "adapters": [
         {
+          "adapter_id": "asciidoc",
+          "contract_descriptor": {
+            "adapter_id": "asciidoc",
+            "frontmatter_contract": "none",
+            "grammar_profile": "asciidoctor-2",
+            "parser_name": "amiss-asciidoc-adapter",
+            "parser_version": "0.26.0",
+            "schema": "amiss/scanner-adapter-contract",
+            "source_projection": "source-projection",
+            "structural_address": "asciidoc-block-path"
+          },
+          "contract_digest": "sha256:6a0b3e9fb52d8c13810502138c83e6ccd95103647b580f9f8d5483abbee8adbb"
+        },
+        {
           "adapter_id": "markdown",
           "contract_descriptor": {
             "adapter_id": "markdown",
             "frontmatter_contract": "frontmatter",
             "grammar_profile": "commonmark-gfm",
             "parser_name": "amiss-markdown-adapter",
-            "parser_version": "0.4.0",
+            "parser_version": "0.26.0",
             "schema": "amiss/scanner-adapter-contract",
             "source_projection": "source-projection",
             "structural_address": "markdown-ast-node-path"
           },
-          "contract_digest": "sha256:2000bb5d88d31e83e0e9a5f5cd80e02b3ef34fa3db7aa98e61720c99efd1e468"
+          "contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91"
         },
         {
           "adapter_id": "mdx",
@@ -167,12 +181,12 @@
             "frontmatter_contract": "frontmatter",
             "grammar_profile": "mdx-source",
             "parser_name": "amiss-mdx-adapter",
-            "parser_version": "0.4.0",
+            "parser_version": "0.26.0",
             "schema": "amiss/scanner-adapter-contract",
             "source_projection": "source-projection",
             "structural_address": "mdx-ast-node-path"
           },
-          "contract_digest": "sha256:9e7c4a116d6183cffe20a10438685c6a6faa7e3d1c83f1f443111b7b5824f66b"
+          "contract_digest": "sha256:870cb45b0ad9c2dbe2b5bf050cfaa941987a3806e0eeb6461776c59ce21dc22b"
         },
         {
           "adapter_id": "plain-advisory",
@@ -181,33 +195,48 @@
             "frontmatter_contract": "none",
             "grammar_profile": "plain-zero-lexer",
             "parser_name": "amiss-plain-advisory",
-            "parser_version": "0.4.0",
+            "parser_version": "0.26.0",
             "schema": "amiss/scanner-adapter-contract",
             "source_projection": "none",
             "structural_address": "none"
           },
-          "contract_digest": "sha256:4ef8b313d52c7f3b383d282be592936f847e0175c26b908e31266ac34bc02b65"
+          "contract_digest": "sha256:8df34ff4614c566a980c359c2d901c32258d71a8e334c368387f08f5e546e71a"
+        },
+        {
+          "adapter_id": "rst",
+          "contract_descriptor": {
+            "adapter_id": "rst",
+            "frontmatter_contract": "none",
+            "grammar_profile": "docutils-rst-sphinx-refs",
+            "parser_name": "amiss-rst-adapter",
+            "parser_version": "0.26.0",
+            "schema": "amiss/scanner-adapter-contract",
+            "source_projection": "source-projection",
+            "structural_address": "rst-block-path"
+          },
+          "contract_digest": "sha256:8a1e3a15670731a6d93d82b81519e5704a5796bc12e82c8f2c1fbfc14c7fdd97"
         }
       ],
       "built_in_policy": "scanner-policy-defaults",
       "engine_contract": "amiss/scanner",
-      "engine_digest": "sha256:f7a89b2b73c0d52d643e529fcc2a928a752dfb0acf089c073e7cd93d6035007e",
-      "engine_version": "0.4.0"
+      "engine_digest": "sha256:2d0c413b5f5c93e0b910ad7713325954d7a013265f80ee3585c7e27ab422aba8",
+      "engine_version": "0.26.0"
     },
     "errors": [],
     "evaluation": {
       "base": {
-        "commit_oid": "7ed2c702c3f70bf9ab0837b5b0941b31a1cdd027",
+        "commit_oid": "d6fcf3ba62c34c4aa77073a6892f39834ef6c5cc",
         "kind": "git-commit",
         "object_format": "sha1",
-        "tree_oid": "7ce22021ddd28e84799fe3133e5c6e52cd893e0a"
+        "tree_oid": "fa2b3687cb16834e7b0ea56d46a0edd775c03d17"
       },
       "candidate": {
-        "commit_oid": "e17ebaf2f75fbc0854cf389f4aa098854586cdc4",
+        "commit_oid": "d1a175a1986230e4ba44b6f6ed67c8dbccb29aaf",
         "kind": "git-commit",
         "object_format": "sha1",
-        "tree_oid": "bf414a1d28abffc17b8f2636aded1244f4173279"
+        "tree_oid": "7eed0bc378155f11543b2261997a1f363557e8cd"
       },
+      "candidate_ref": "refs/heads/main",
       "default_branch_ref": "refs/heads/main",
       "evaluation_instant": null,
       "event_kind": "explicit-commit-pair",
@@ -216,14 +245,13 @@
       "index_only_materialized_paths": 0,
       "materialization": "git-objects",
       "mode": "commit-pair",
-      "candidate_ref": "refs/heads/main",
-      "target_ref": null,
       "repository": {
         "host": "git.example.internal",
         "name": "widget",
         "owner": "group/subgroup"
       },
       "skip_worktree_paths": 0,
+      "target_ref": null,
       "trusted_time": false
     },
     "feedback": {
@@ -234,20 +262,30 @@
           "annotation": {
             "path": "docs/guide.md",
             "span": {
-              "end_byte": 116,
-              "end_column": 108,
-              "end_line": 3,
-              "start_byte": 98,
-              "start_column": 90,
-              "start_line": 3
+              "end_byte": 95,
+              "end_column": 4,
+              "end_line": 7,
+              "start_byte": 49,
+              "start_column": 1,
+              "start_line": 5
             }
           },
           "effective_disposition": "warn",
           "finding_kinds": [
-            "explicit-target-missing"
+            "projection-drift"
           ],
           "location_count": 1,
-          "target": "docs/missing.md"
+          "target": null
+        },
+        {
+          "action": "check",
+          "annotation": null,
+          "effective_disposition": "warn",
+          "finding_kinds": [
+            "dependency-changed-subject-unchanged"
+          ],
+          "location_count": 1,
+          "target": "docs/guide.md"
         }
       ],
       "status": "available"
@@ -260,95 +298,83 @@
           "representative_rule": "lowest-location-then-observation-id",
           "strategy": "one-per-finding-key"
         },
-        "attribution": "introduced",
+        "attribution": "not-applicable",
         "base_fact": null,
         "base_fact_digest": null,
         "candidate_fact": {
           "evidence": {
-            "kind": "reference",
-            "occurrence_multiplicity": 1,
-            "resolution": {
-              "kind": "missing",
-              "reason": "path-not-found",
-              "path": "docs/missing.md",
-              "near": null,
-              "same_object_at": null
-            }
+            "expected_bytes": 36,
+            "expected_digest": "sha256:52e19cafaec4e7e38eef431df7c658b18684ae211ddd895b6da9e58497584281",
+            "kind": "projection",
+            "name": "request-operation",
+            "observed": "content-differs",
+            "observed_bytes": 34,
+            "observed_digest": "sha256:3ace750a0a2f8d4d406d118ca01c4078094d64bd67fe0b459d862925b7b0d3b1",
+            "projection": "code-text-v1",
+            "sink": "previous-code",
+            "source": {
+              "end_marker": "// amiss:request:end",
+              "kind": "named-region",
+              "path": "src/request.rs",
+              "start_marker": "// amiss:request:start"
+            },
+            "sources": [
+              {
+                "digest": "sha256:532f6ff35bdb11a7b693f7d189b3263b15801ccaebc9043631d5cddc1f832d2d",
+                "multiplicity": 1
+              }
+            ]
           },
-          "finding_kind": "explicit-target-missing",
+          "finding_kind": "projection-drift",
           "key_input": {
-            "finding_kind": "explicit-target-missing",
+            "finding_kind": "projection-drift",
             "schema": "amiss/scanner-finding-key-input",
             "scope": {
-              "document": "docs/guide.md",
-              "kind": "reference",
-              "normalized_target_intent": {
-                "fragment_digest": null,
-                "kind": "repository-path",
-                "path": "docs/missing.md",
-                "query_digest": null,
-                "target_kind": "either"
-              },
-              "occurrence": {
-                "kind": "source-projection",
-                "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62"
-              },
-              "source_construct": "markdown-inline-link"
+              "control_path": "docs/guide.md",
+              "kind": "control",
+              "rule_id": "claim/projection/request-operation"
             }
           },
           "schema": "amiss/scanner-fact"
         },
-        "candidate_fact_digest": "sha256:9a825b87f2a94b43910d112d2c7111a8aacec8b73b6737ae2bf27da16f31375c",
+        "candidate_fact_digest": "sha256:fef6bd5c09ac80320a355edb1424a87946e1f8d3ebebc52962317adfb6e7c459",
         "configured_disposition": "warn",
-        "coverage_requirement": "none",
+        "coverage_requirement": "control-plane",
         "debt": null,
+        "description": "a policy-owned projection cannot prove that its visible code block equals its selected repository source; restore its unique sink and source or make their projected bytes agree",
         "effective_disposition": "warn",
         "evidence_class": "deterministic-structural",
-        "finding_key": "sha256:244f7d31256a965ff15458fa06ca44fa79b18f3b47080f4814c7356eb6a82a26",
+        "finding_key": "sha256:7e0dd0b81831baac07520c0754b7dcfc72eeab0f442fe748146efa63dca069fa",
         "fix": null,
         "invariant_class": "ratcheted",
         "key_input": {
-          "finding_kind": "explicit-target-missing",
+          "finding_kind": "projection-drift",
           "schema": "amiss/scanner-finding-key-input",
           "scope": {
-            "document": "docs/guide.md",
-            "kind": "reference",
-            "normalized_target_intent": {
-              "fragment_digest": null,
-              "kind": "repository-path",
-              "path": "docs/missing.md",
-              "query_digest": null,
-              "target_kind": "either"
-            },
-            "occurrence": {
-              "kind": "source-projection",
-              "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62"
-            },
-            "source_construct": "markdown-inline-link"
+            "control_path": "docs/guide.md",
+            "kind": "control",
+            "rule_id": "claim/projection/request-operation"
           }
         },
-        "kind": "explicit-target-missing",
-        "description": "a reference names a repository path, a line range inside one, or a heading anchor no known renderer publishes; restore the target or correct the link",
+        "kind": "projection-drift",
         "location": {
           "path": "docs/guide.md",
           "side": "candidate",
           "span": {
-            "end_byte": 116,
-            "end_column": 108,
-            "end_line": 3,
-            "start_byte": 98,
-            "start_column": 90,
-            "start_line": 3
+            "end_byte": 95,
+            "end_column": 4,
+            "end_line": 7,
+            "start_byte": 49,
+            "start_column": 1,
+            "start_line": 5
           }
         },
-        "observation_ids": [
-          "sha256:81ceed4f82d95d9686f282d5b07d5a1713831d510d97177f7a63b729bf046aa8"
-        ],
+        "observation_ids": [],
         "policy_trace": [
           {
             "after": "warn",
             "before": "record",
-            "rule_id": "scanner-policy-defaults/explicit-target-missing/observe",
+            "rule_id": "scanner-policy-defaults/projection-drift/observe",
             "source": "built-in"
           }
         ],
@@ -374,40 +400,40 @@
               "base": {
                 "adapter_id": "markdown",
                 "block_kind": "paragraph",
-                "document": "docs/guide.md",
+                "document": "README.md",
                 "intent": {
                   "external_scheme": null,
                   "fragment_digest": null,
-                  "kind": "same-repository-gitlab",
+                  "kind": "repository-path",
                   "query_digest": null,
-                  "raw_destination_digest": "sha256:11a89dcd2d80584d7759ee64717162f12a95575b4cd2ca23573c73eecbb37530",
+                  "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
                   "repository_path": "docs/guide.md",
-                  "target_kind": "blob"
+                  "target_kind": "either"
                 },
-                "observation_id": "sha256:89d0b2ff7b616c169938b5751addb7536a469f7eb1b680a56450acfa2e76c1ab",
+                "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
                 "observation_id_input": {
-                  "adapter_contract_digest": "sha256:2000bb5d88d31e83e0e9a5f5cd80e02b3ef34fa3db7aa98e61720c99efd1e468",
+                  "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
                   "adapter_id": "markdown",
-                  "document": "docs/guide.md",
+                  "document": "README.md",
                   "extracted_intent": {
                     "external_scheme": null,
                     "fragment_digest": null,
-                    "kind": "same-repository-gitlab",
+                    "kind": "repository-path",
                     "query_digest": null,
-                    "raw_destination_digest": "sha256:11a89dcd2d80584d7759ee64717162f12a95575b4cd2ca23573c73eecbb37530",
+                    "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
                     "repository_path": "docs/guide.md",
-                    "target_kind": "blob"
+                    "target_kind": "either"
                   },
                   "schema": "amiss/scanner-observation-id-input",
                   "source_construct": "markdown-inline-link",
-                  "source_projection_digest": "sha256:b3ba6f952078d7d09f00dd355e173ea72c5d7c2b86181cd240e5ad7a03eda01e",
+                  "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
                   "structural_address": {
                     "address_kind": "markdown-ast-node-path",
                     "construct_index": 0,
                     "duplicate_index": 0,
                     "node_path": [
                       1,
-                      0
+                      1
                     ],
                     "schema": "amiss/scanner-structural-address"
                   }
@@ -417,8 +443,8 @@
                   "target": {
                     "content": {
                       "kind": "available",
-                      "projection_digest": "sha256:a610eac450cdaf93ee35f8c8e7ba461e8e16c958b55ab1a0040d30e5e1acdb46",
-                      "raw_digest": "sha256:2040f4822974685af7719ff509bdbb168550892ed567d21377ecad1bd42e9883"
+                      "projection_digest": "sha256:6556b1015ad36159054dc7673b971b92483780f1189ed2df7b3c6ad04106952f",
+                      "raw_digest": "sha256:ef683e51fd120ca8adfff6df4072299f3dc2da292b7ad524cb306100ad7348a1"
                     },
                     "kind": "blob",
                     "mode": "100644",
@@ -426,53 +452,53 @@
                   }
                 },
                 "source_construct": "markdown-inline-link",
-                "source_projection_digest": "sha256:b3ba6f952078d7d09f00dd355e173ea72c5d7c2b86181cd240e5ad7a03eda01e",
+                "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
                 "source_span": {
-                  "end_byte": 93,
-                  "end_column": 85,
+                  "end_byte": 40,
+                  "end_column": 31,
                   "end_line": 3,
-                  "start_byte": 9,
-                  "start_column": 1,
+                  "start_byte": 18,
+                  "start_column": 9,
                   "start_line": 3
                 }
               },
               "candidate": {
                 "adapter_id": "markdown",
                 "block_kind": "paragraph",
-                "document": "docs/guide.md",
+                "document": "README.md",
                 "intent": {
                   "external_scheme": null,
                   "fragment_digest": null,
-                  "kind": "same-repository-gitlab",
+                  "kind": "repository-path",
                   "query_digest": null,
-                  "raw_destination_digest": "sha256:11a89dcd2d80584d7759ee64717162f12a95575b4cd2ca23573c73eecbb37530",
+                  "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
                   "repository_path": "docs/guide.md",
-                  "target_kind": "blob"
+                  "target_kind": "either"
                 },
-                "observation_id": "sha256:f29f5b0831b0bf8fddca3df732ffd4ff8a42d27c958d6754d78211c517819721",
+                "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
                 "observation_id_input": {
-                  "adapter_contract_digest": "sha256:2000bb5d88d31e83e0e9a5f5cd80e02b3ef34fa3db7aa98e61720c99efd1e468",
+                  "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
                   "adapter_id": "markdown",
-                  "document": "docs/guide.md",
+                  "document": "README.md",
                   "extracted_intent": {
                     "external_scheme": null,
                     "fragment_digest": null,
-                    "kind": "same-repository-gitlab",
+                    "kind": "repository-path",
                     "query_digest": null,
-                    "raw_destination_digest": "sha256:11a89dcd2d80584d7759ee64717162f12a95575b4cd2ca23573c73eecbb37530",
+                    "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
                     "repository_path": "docs/guide.md",
-                    "target_kind": "blob"
+                    "target_kind": "either"
                   },
                   "schema": "amiss/scanner-observation-id-input",
                   "source_construct": "markdown-inline-link",
-                  "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
+                  "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
                   "structural_address": {
                     "address_kind": "markdown-ast-node-path",
                     "construct_index": 0,
                     "duplicate_index": 0,
                     "node_path": [
                       1,
-                      0
+                      1
                     ],
                     "schema": "amiss/scanner-structural-address"
                   }
@@ -482,8 +508,8 @@
                   "target": {
                     "content": {
                       "kind": "available",
-                      "projection_digest": "sha256:924564a69b11bbb8bf507014527ff8a79352ab4b88681aa48847b34e6e8fdf49",
-                      "raw_digest": "sha256:b1e763cb7f81fb231c846e1dc0a8d0e8075c360a96b02d769dee0a0b93cfeb37"
+                      "projection_digest": "sha256:2cd361f4d556c37b93c4c07b3a12c85d64f1ce2d84b5c1f4d066e0debbe097ca",
+                      "raw_digest": "sha256:05754ad7db26965dc48e57a662591fd7474500834ed374eb7cef1ff17418452c"
                     },
                     "kind": "blob",
                     "mode": "100644",
@@ -491,74 +517,74 @@
                   }
                 },
                 "source_construct": "markdown-inline-link",
-                "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
+                "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
                 "source_span": {
-                  "end_byte": 93,
-                  "end_column": 85,
+                  "end_byte": 40,
+                  "end_column": 31,
                   "end_line": 3,
-                  "start_byte": 9,
-                  "start_column": 1,
+                  "start_byte": 18,
+                  "start_column": 9,
                   "start_line": 3
                 }
               },
-              "correlation": "candidate",
-              "correlation_reason": "same-intent-source-changed",
-              "impact": "dependency-and-subject-cochanged",
-              "source_change": "changed",
+              "correlation": "exact",
+              "correlation_reason": "same-extraction-key-and-projection",
+              "impact": "dependency-changed-subject-unchanged",
+              "source_change": "equal",
               "target_change": "changed"
             },
             "kind": "observation"
           },
-          "finding_kind": "dependency-and-subject-cochanged",
+          "finding_kind": "dependency-changed-subject-unchanged",
           "key_input": {
-            "finding_kind": "dependency-and-subject-cochanged",
+            "finding_kind": "dependency-changed-subject-unchanged",
             "schema": "amiss/scanner-finding-key-input",
             "scope": {
               "kind": "observation",
-              "observation_id": "sha256:f29f5b0831b0bf8fddca3df732ffd4ff8a42d27c958d6754d78211c517819721"
+              "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b"
             }
           },
           "schema": "amiss/scanner-fact"
         },
-        "candidate_fact_digest": "sha256:2865ca4c842e389fac4993995beaba569c3d5285260c4da4e537267d1a0e2223",
-        "configured_disposition": "record",
+        "candidate_fact_digest": "sha256:d21919f4405e7cdc485d0e99a29b4b4379d1a6e9a506f0ac77ca578912ea8ad4",
+        "configured_disposition": "warn",
         "coverage_requirement": "none",
         "debt": null,
-        "effective_disposition": "record",
+        "description": "the referenced content changed and the block citing it did not; a reason for a person to reread the prose, never a machine verdict that it is wrong",
+        "effective_disposition": "warn",
         "evidence_class": "impact-observation",
-        "finding_key": "sha256:f5a429c59415b176fbd1019dfbe29828674e9b52a9ed8376ef7b9fa94ae1e393",
+        "finding_key": "sha256:eefbf31345729c1be7cf41233c016bce3794a778f5345b97dc4d1359cc0df2e0",
         "fix": null,
         "invariant_class": "advisory",
         "key_input": {
-          "finding_kind": "dependency-and-subject-cochanged",
+          "finding_kind": "dependency-changed-subject-unchanged",
           "schema": "amiss/scanner-finding-key-input",
           "scope": {
             "kind": "observation",
-            "observation_id": "sha256:f29f5b0831b0bf8fddca3df732ffd4ff8a42d27c958d6754d78211c517819721"
+            "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b"
           }
         },
-        "kind": "dependency-and-subject-cochanged",
-        "description": "the referenced content and the block citing it changed together, the shape of a maintained page; recorded with nothing to act on",
+        "kind": "dependency-changed-subject-unchanged",
         "location": {
-          "path": "docs/guide.md",
+          "path": "README.md",
           "side": "candidate",
           "span": {
-            "end_byte": 93,
-            "end_column": 85,
+            "end_byte": 40,
+            "end_column": 31,
             "end_line": 3,
-            "start_byte": 9,
-            "start_column": 1,
+            "start_byte": 18,
+            "start_column": 9,
             "start_line": 3
           }
         },
         "observation_ids": [
-          "sha256:f29f5b0831b0bf8fddca3df732ffd4ff8a42d27c958d6754d78211c517819721"
+          "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b"
         ],
         "policy_trace": [
           {
-            "after": "record",
+            "after": "warn",
             "before": "record",
-            "rule_id": "scanner-policy-defaults/dependency-and-subject-cochanged/observe",
+            "rule_id": "scanner-policy-defaults/dependency-changed-subject-unchanged/observe",
             "source": "built-in"
           }
         ],
@@ -571,23 +597,165 @@
           "base": [],
           "candidate": []
         },
+        "base": {
+          "adapter_id": "markdown",
+          "block_kind": "paragraph",
+          "document": "README.md",
+          "intent": {
+            "external_scheme": null,
+            "fragment_digest": null,
+            "kind": "repository-path",
+            "query_digest": null,
+            "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
+            "repository_path": "docs/guide.md",
+            "target_kind": "either"
+          },
+          "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
+          "observation_id_input": {
+            "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
+            "adapter_id": "markdown",
+            "document": "README.md",
+            "extracted_intent": {
+              "external_scheme": null,
+              "fragment_digest": null,
+              "kind": "repository-path",
+              "query_digest": null,
+              "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
+              "repository_path": "docs/guide.md",
+              "target_kind": "either"
+            },
+            "schema": "amiss/scanner-observation-id-input",
+            "source_construct": "markdown-inline-link",
+            "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
+            "structural_address": {
+              "address_kind": "markdown-ast-node-path",
+              "construct_index": 0,
+              "duplicate_index": 0,
+              "node_path": [
+                1,
+                1
+              ],
+              "schema": "amiss/scanner-structural-address"
+            }
+          },
+          "resolution": {
+            "kind": "resolved",
+            "target": {
+              "content": {
+                "kind": "available",
+                "projection_digest": "sha256:6556b1015ad36159054dc7673b971b92483780f1189ed2df7b3c6ad04106952f",
+                "raw_digest": "sha256:ef683e51fd120ca8adfff6df4072299f3dc2da292b7ad524cb306100ad7348a1"
+              },
+              "kind": "blob",
+              "mode": "100644",
+              "path": "docs/guide.md"
+            }
+          },
+          "source_construct": "markdown-inline-link",
+          "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
+          "source_span": {
+            "end_byte": 40,
+            "end_column": 31,
+            "end_line": 3,
+            "start_byte": 18,
+            "start_column": 9,
+            "start_line": 3
+          }
+        },
+        "candidate": {
+          "adapter_id": "markdown",
+          "block_kind": "paragraph",
+          "document": "README.md",
+          "intent": {
+            "external_scheme": null,
+            "fragment_digest": null,
+            "kind": "repository-path",
+            "query_digest": null,
+            "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
+            "repository_path": "docs/guide.md",
+            "target_kind": "either"
+          },
+          "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
+          "observation_id_input": {
+            "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
+            "adapter_id": "markdown",
+            "document": "README.md",
+            "extracted_intent": {
+              "external_scheme": null,
+              "fragment_digest": null,
+              "kind": "repository-path",
+              "query_digest": null,
+              "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
+              "repository_path": "docs/guide.md",
+              "target_kind": "either"
+            },
+            "schema": "amiss/scanner-observation-id-input",
+            "source_construct": "markdown-inline-link",
+            "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
+            "structural_address": {
+              "address_kind": "markdown-ast-node-path",
+              "construct_index": 0,
+              "duplicate_index": 0,
+              "node_path": [
+                1,
+                1
+              ],
+              "schema": "amiss/scanner-structural-address"
+            }
+          },
+          "resolution": {
+            "kind": "resolved",
+            "target": {
+              "content": {
+                "kind": "available",
+                "projection_digest": "sha256:2cd361f4d556c37b93c4c07b3a12c85d64f1ce2d84b5c1f4d066e0debbe097ca",
+                "raw_digest": "sha256:05754ad7db26965dc48e57a662591fd7474500834ed374eb7cef1ff17418452c"
+              },
+              "kind": "blob",
+              "mode": "100644",
+              "path": "docs/guide.md"
+            }
+          },
+          "source_construct": "markdown-inline-link",
+          "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
+          "source_span": {
+            "end_byte": 40,
+            "end_column": 31,
+            "end_line": 3,
+            "start_byte": 18,
+            "start_column": 9,
+            "start_line": 3
+          }
+        },
+        "correlation": "exact",
+        "correlation_reason": "same-extraction-key-and-projection",
+        "impact": "dependency-changed-subject-unchanged",
+        "source_change": "equal",
+        "target_change": "changed"
+      },
+      {
+        "alternatives": {
+          "base": [],
+          "candidate": []
+        },
         "base": null,
         "candidate": {
           "adapter_id": "markdown",
           "block_kind": "paragraph",
           "document": "docs/guide.md",
+          "external_destination": "https://example.com/manual",
           "intent": {
             "external_scheme": "https",
             "fragment_digest": null,
             "kind": "external-url",
             "query_digest": null,
-            "raw_destination_digest": "sha256:43ce639ea5ca9cd4bb08c098490c4708f9bb669bed4652e5f411aa8b35e5ad81",
+            "raw_destination_digest": "sha256:8bfbb43ac5266c06804835200178543c62f66716e0381fca322e0da912725393",
             "repository_path": null,
             "target_kind": null
           },
-          "observation_id": "sha256:733e57373c529d239dacf5148e60b49c6a450d6e04f85a527b34c9d05f1e88d8",
+          "observation_id": "sha256:b221d9b11578c61424fdee6270d2698b04225958d15525d6f34af7cc3631aa55",
           "observation_id_input": {
-            "adapter_contract_digest": "sha256:2000bb5d88d31e83e0e9a5f5cd80e02b3ef34fa3db7aa98e61720c99efd1e468",
+            "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
             "adapter_id": "markdown",
             "document": "docs/guide.md",
             "extracted_intent": {
@@ -595,20 +763,20 @@
               "fragment_digest": null,
               "kind": "external-url",
               "query_digest": null,
-              "raw_destination_digest": "sha256:43ce639ea5ca9cd4bb08c098490c4708f9bb669bed4652e5f411aa8b35e5ad81",
+              "raw_destination_digest": "sha256:8bfbb43ac5266c06804835200178543c62f66716e0381fca322e0da912725393",
               "repository_path": null,
               "target_kind": null
             },
             "schema": "amiss/scanner-observation-id-input",
             "source_construct": "markdown-inline-link",
-            "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
+            "source_projection_digest": "sha256:2dc8f86f12ded921b8b79a58c0dbd620229838ba2f7d4584a931d0393d44762b",
             "structural_address": {
               "address_kind": "markdown-ast-node-path",
               "construct_index": 0,
               "duplicate_index": 0,
               "node_path": [
-                1,
-                4
+                4,
+                1
               ],
               "schema": "amiss/scanner-structural-address"
             }
@@ -618,86 +786,14 @@
             "reason": "url"
           },
           "source_construct": "markdown-inline-link",
-          "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
+          "source_projection_digest": "sha256:2dc8f86f12ded921b8b79a58c0dbd620229838ba2f7d4584a931d0393d44762b",
           "source_span": {
-            "end_byte": 154,
-            "end_column": 146,
-            "end_line": 3,
-            "start_byte": 121,
-            "start_column": 113,
-            "start_line": 3
-          },
-          "external_destination": "https://example.com/manual"
-        },
-        "correlation": "none",
-        "correlation_reason": "new-observation",
-        "impact": "new-observation",
-        "source_change": "added",
-        "target_change": "not-comparable"
-      },
-      {
-        "alternatives": {
-          "base": [],
-          "candidate": []
-        },
-        "base": null,
-        "candidate": {
-          "adapter_id": "markdown",
-          "block_kind": "paragraph",
-          "document": "docs/guide.md",
-          "intent": {
-            "external_scheme": null,
-            "fragment_digest": null,
-            "kind": "repository-path",
-            "query_digest": null,
-            "raw_destination_digest": "sha256:35734440ba64886318be0def27a1effb7f8cae900b39ddc1d84a1cd9e229b70c",
-            "repository_path": "docs/missing.md",
-            "target_kind": "either"
-          },
-          "observation_id": "sha256:81ceed4f82d95d9686f282d5b07d5a1713831d510d97177f7a63b729bf046aa8",
-          "observation_id_input": {
-            "adapter_contract_digest": "sha256:2000bb5d88d31e83e0e9a5f5cd80e02b3ef34fa3db7aa98e61720c99efd1e468",
-            "adapter_id": "markdown",
-            "document": "docs/guide.md",
-            "extracted_intent": {
-              "external_scheme": null,
-              "fragment_digest": null,
-              "kind": "repository-path",
-              "query_digest": null,
-              "raw_destination_digest": "sha256:35734440ba64886318be0def27a1effb7f8cae900b39ddc1d84a1cd9e229b70c",
-              "repository_path": "docs/missing.md",
-              "target_kind": "either"
-            },
-            "schema": "amiss/scanner-observation-id-input",
-            "source_construct": "markdown-inline-link",
-            "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
-            "structural_address": {
-              "address_kind": "markdown-ast-node-path",
-              "construct_index": 0,
-              "duplicate_index": 0,
-              "node_path": [
-                1,
-                2
-              ],
-              "schema": "amiss/scanner-structural-address"
-            }
-          },
-          "resolution": {
-            "kind": "missing",
-            "reason": "path-not-found",
-            "path": "docs/missing.md",
-            "near": null,
-            "same_object_at": null
-          },
-          "source_construct": "markdown-inline-link",
-          "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
-          "source_span": {
-            "end_byte": 116,
-            "end_column": 108,
-            "end_line": 3,
-            "start_byte": 98,
-            "start_column": 90,
-            "start_line": 3
+            "end_byte": 196,
+            "end_column": 54,
+            "end_line": 10,
+            "start_byte": 151,
+            "start_column": 9,
+            "start_line": 10
           }
         },
         "correlation": "none",
@@ -705,147 +801,6 @@
         "impact": "new-observation",
         "source_change": "added",
         "target_change": "not-comparable"
-      },
-      {
-        "alternatives": {
-          "base": [],
-          "candidate": []
-        },
-        "base": {
-          "adapter_id": "markdown",
-          "block_kind": "paragraph",
-          "document": "docs/guide.md",
-          "intent": {
-            "external_scheme": null,
-            "fragment_digest": null,
-            "kind": "same-repository-gitlab",
-            "query_digest": null,
-            "raw_destination_digest": "sha256:11a89dcd2d80584d7759ee64717162f12a95575b4cd2ca23573c73eecbb37530",
-            "repository_path": "docs/guide.md",
-            "target_kind": "blob"
-          },
-          "observation_id": "sha256:89d0b2ff7b616c169938b5751addb7536a469f7eb1b680a56450acfa2e76c1ab",
-          "observation_id_input": {
-            "adapter_contract_digest": "sha256:2000bb5d88d31e83e0e9a5f5cd80e02b3ef34fa3db7aa98e61720c99efd1e468",
-            "adapter_id": "markdown",
-            "document": "docs/guide.md",
-            "extracted_intent": {
-              "external_scheme": null,
-              "fragment_digest": null,
-              "kind": "same-repository-gitlab",
-              "query_digest": null,
-              "raw_destination_digest": "sha256:11a89dcd2d80584d7759ee64717162f12a95575b4cd2ca23573c73eecbb37530",
-              "repository_path": "docs/guide.md",
-              "target_kind": "blob"
-            },
-            "schema": "amiss/scanner-observation-id-input",
-            "source_construct": "markdown-inline-link",
-            "source_projection_digest": "sha256:b3ba6f952078d7d09f00dd355e173ea72c5d7c2b86181cd240e5ad7a03eda01e",
-            "structural_address": {
-              "address_kind": "markdown-ast-node-path",
-              "construct_index": 0,
-              "duplicate_index": 0,
-              "node_path": [
-                1,
-                0
-              ],
-              "schema": "amiss/scanner-structural-address"
-            }
-          },
-          "resolution": {
-            "kind": "resolved",
-            "target": {
-              "content": {
-                "kind": "available",
-                "projection_digest": "sha256:a610eac450cdaf93ee35f8c8e7ba461e8e16c958b55ab1a0040d30e5e1acdb46",
-                "raw_digest": "sha256:2040f4822974685af7719ff509bdbb168550892ed567d21377ecad1bd42e9883"
-              },
-              "kind": "blob",
-              "mode": "100644",
-              "path": "docs/guide.md"
-            }
-          },
-          "source_construct": "markdown-inline-link",
-          "source_projection_digest": "sha256:b3ba6f952078d7d09f00dd355e173ea72c5d7c2b86181cd240e5ad7a03eda01e",
-          "source_span": {
-            "end_byte": 93,
-            "end_column": 85,
-            "end_line": 3,
-            "start_byte": 9,
-            "start_column": 1,
-            "start_line": 3
-          }
-        },
-        "candidate": {
-          "adapter_id": "markdown",
-          "block_kind": "paragraph",
-          "document": "docs/guide.md",
-          "intent": {
-            "external_scheme": null,
-            "fragment_digest": null,
-            "kind": "same-repository-gitlab",
-            "query_digest": null,
-            "raw_destination_digest": "sha256:11a89dcd2d80584d7759ee64717162f12a95575b4cd2ca23573c73eecbb37530",
-            "repository_path": "docs/guide.md",
-            "target_kind": "blob"
-          },
-          "observation_id": "sha256:f29f5b0831b0bf8fddca3df732ffd4ff8a42d27c958d6754d78211c517819721",
-          "observation_id_input": {
-            "adapter_contract_digest": "sha256:2000bb5d88d31e83e0e9a5f5cd80e02b3ef34fa3db7aa98e61720c99efd1e468",
-            "adapter_id": "markdown",
-            "document": "docs/guide.md",
-            "extracted_intent": {
-              "external_scheme": null,
-              "fragment_digest": null,
-              "kind": "same-repository-gitlab",
-              "query_digest": null,
-              "raw_destination_digest": "sha256:11a89dcd2d80584d7759ee64717162f12a95575b4cd2ca23573c73eecbb37530",
-              "repository_path": "docs/guide.md",
-              "target_kind": "blob"
-            },
-            "schema": "amiss/scanner-observation-id-input",
-            "source_construct": "markdown-inline-link",
-            "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
-            "structural_address": {
-              "address_kind": "markdown-ast-node-path",
-              "construct_index": 0,
-              "duplicate_index": 0,
-              "node_path": [
-                1,
-                0
-              ],
-              "schema": "amiss/scanner-structural-address"
-            }
-          },
-          "resolution": {
-            "kind": "resolved",
-            "target": {
-              "content": {
-                "kind": "available",
-                "projection_digest": "sha256:924564a69b11bbb8bf507014527ff8a79352ab4b88681aa48847b34e6e8fdf49",
-                "raw_digest": "sha256:b1e763cb7f81fb231c846e1dc0a8d0e8075c360a96b02d769dee0a0b93cfeb37"
-              },
-              "kind": "blob",
-              "mode": "100644",
-              "path": "docs/guide.md"
-            }
-          },
-          "source_construct": "markdown-inline-link",
-          "source_projection_digest": "sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62",
-          "source_span": {
-            "end_byte": 93,
-            "end_column": 85,
-            "end_line": 3,
-            "start_byte": 9,
-            "start_column": 1,
-            "start_line": 3
-          }
-        },
-        "correlation": "candidate",
-        "correlation_reason": "same-intent-source-changed",
-        "impact": "dependency-and-subject-cochanged",
-        "source_change": "changed",
-        "target_change": "changed"
       }
     ],
     "result": {
@@ -879,30 +834,30 @@
         "analysis_errors": 0,
         "debt_tolerated": 0,
         "fail": 0,
-        "introduced": 1,
-        "not_applicable": 1,
+        "introduced": 0,
+        "not_applicable": 2,
         "pre_existing": 0,
-        "record": 1,
+        "record": 0,
         "resolved": 0,
         "total": 2,
         "unknown": 0,
         "unsupported_capabilities": 0,
         "waived": 0,
-        "warn": 1
+        "warn": 2
       },
       "governed_claims": 0,
       "references": {
         "explicit_local": 1,
         "external_out_of_scope": 1,
-        "extracted": 3,
-        "missing": 1,
+        "extracted": 2,
+        "missing": 0,
         "resolved": 1,
-        "same_repository": 1,
+        "same_repository": 0,
         "unsupported": 0
       },
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:31b3c038a1b15e8a223f8629f8fbbbc4841a7ebb9aac2273f64d6120f5b9fa00",
+  "payload_digest": "sha256:eef6601b8c71041e64e95ab983ee3fe72853bf4a161a31c450e7a4a27071fd18",
   "schema": "amiss/scanner-report-envelope"
 }
