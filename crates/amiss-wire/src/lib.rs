@@ -1,6 +1,7 @@
 pub mod action;
 pub mod assessment;
 mod bounded_envelope;
+pub mod codec;
 pub mod controls;
 pub mod de;
 pub mod digest;

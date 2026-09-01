@@ -6,13 +6,14 @@ use amiss_controller::{
     RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_audit_plan,
     relation_transition,
 };
+use amiss_wire::codec::{self, Schema};
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
 use amiss_wire::digest::{hj, sha256};
 use amiss_wire::json::{self, Value};
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationProjectedValue, assess, evidence,
-    parse_evidence, parse_plan,
+    RelationEvidence, RelationEvidenceEnvelope, RelationEvidenceSubject, RelationProjectedValue,
+    assess, parse_plan,
 };
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
@@ -46,7 +47,11 @@ pub fn relation_audit_with_coordination(
     } else {
         None
     };
-    let parsed_evidence = evidence.as_deref().map(parse_evidence).transpose().ok()?;
+    let parsed_evidence = evidence
+        .as_deref()
+        .map(RelationEvidenceEnvelope::parse)
+        .transpose()
+        .ok()?;
     let assessment = assess(
         &parsed_plan,
         parsed_evidence.as_ref(),
@@ -220,7 +225,8 @@ fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Optio
         value_digest: sha256(b"timeout: u128"),
         value_bytes: 13,
     };
-    evidence(&RelationEvidence {
+    let sealed = RelationEvidenceEnvelope::seal(RelationEvidence {
+        schema: Schema::default(),
         plan_payload_digest: plan.payload_digest,
         subjects: [
             RelationEvidenceSubject {
@@ -235,6 +241,6 @@ fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Optio
             },
         ],
     })
-    .ok()
-    .map(|value| json::canonical(&value))
+    .ok()?;
+    codec::canonical(&sealed).ok()
 }

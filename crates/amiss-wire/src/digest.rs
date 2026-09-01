@@ -78,6 +78,21 @@ impl fmt::Debug for Digest {
     }
 }
 
+impl serde::Serialize for Digest {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Digest {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let raw = String::deserialize(deserializer)?;
+        Self::from_wire(&raw).ok_or_else(|| {
+            serde::de::Error::invalid_value(serde::de::Unexpected::Str(&raw), &"a sha256 digest")
+        })
+    }
+}
+
 /// The plain SHA-256 of exact bytes, with no domain separation: the
 /// manifest's file and binary checksums are ordinary content digests, not
 /// domain-separated identities.

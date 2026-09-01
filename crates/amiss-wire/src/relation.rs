@@ -18,7 +18,7 @@ pub use assessment::{
 
 pub use evidence::{
     EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, RelationEvidence, RelationEvidenceEnvelope,
-    RelationEvidenceSubject, RelationProjectedValue, evidence, parse_evidence,
+    RelationEvidenceSubject, RelationProjectedValue,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/relation-plan-envelope";

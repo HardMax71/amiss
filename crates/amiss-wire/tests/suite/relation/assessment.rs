@@ -8,7 +8,7 @@ use amiss_wire::json;
 use amiss_wire::relation::{
     ASSESSMENT_PAYLOAD_SCHEMA, RelationAssessmentEnvelope, RelationEvidence,
     RelationEvidenceEnvelope, RelationPlanEnvelope, RelationReason, RelationVerdict, assess,
-    evidence, parse_assessment, parse_evidence, parse_plan, plan,
+    parse_assessment, parse_plan, plan,
 };
 
 fn plan_envelope() -> RelationPlanEnvelope {
@@ -16,7 +16,7 @@ fn plan_envelope() -> RelationPlanEnvelope {
 }
 
 fn evidence_envelope(input: &RelationEvidence) -> RelationEvidenceEnvelope {
-    parse_evidence(&json::canonical(&evidence(input).unwrap())).unwrap()
+    RelationEvidenceEnvelope::seal(input.clone()).unwrap()
 }
 
 fn assessed(
@@ -151,8 +151,10 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
 fn the_published_assessment_replays_from_its_plan_and_evidence() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let plan = parse_plan(&fs::read(examples.join("relation-plan.json")).unwrap()).unwrap();
-    let evidence =
-        parse_evidence(&fs::read(examples.join("relation-evidence.json")).unwrap()).unwrap();
+    let evidence = RelationEvidenceEnvelope::parse(
+        &fs::read(examples.join("relation-evidence.json")).unwrap(),
+    )
+    .unwrap();
     let published_bytes = fs::read(examples.join("relation-assessment.json")).unwrap();
     let published = parse_assessment(&published_bytes).unwrap();
     let replayed = assess(

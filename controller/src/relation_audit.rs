@@ -1,8 +1,8 @@
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::json;
 use amiss_wire::relation::{
-    self, RELATION_DOCUMENT_BYTES, RelationVerdict, assess, parse_assessment, parse_evidence,
-    parse_plan,
+    self, RELATION_DOCUMENT_BYTES, RelationEvidenceEnvelope, RelationVerdict, assess,
+    parse_assessment, parse_plan,
 };
 
 use crate::audit_report::accepted_report;
@@ -69,7 +69,7 @@ pub fn validate_relation_audit(
         .ok_or(ArtifactError::Corrupt)?;
     let evidence = bundle
         .evidence
-        .map(parse_evidence)
+        .map(RelationEvidenceEnvelope::parse)
         .transpose()
         .map_err(|_defect| ArtifactError::Corrupt)?;
     let assessment =

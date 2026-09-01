@@ -6,9 +6,9 @@ use amiss_controller::{
 };
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::{RepositoryProjectionLimits, RepositoryProjectionRequest, project_repository};
-use amiss_wire::json::Value;
+use amiss_wire::codec::Schema;
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationPlanEnvelope, evidence,
+    RelationEvidence, RelationEvidenceEnvelope, RelationEvidenceSubject, RelationPlanEnvelope,
 };
 
 #[derive(Clone, Copy)]
@@ -36,7 +36,7 @@ pub enum RelationProjectionError {
 /// document cannot reproduce the checked result.
 pub fn project_relation_evidence(
     request: RelationProjectionRequest<'_>,
-) -> Result<Value, RelationProjectionError> {
+) -> Result<RelationEvidenceEnvelope, RelationProjectionError> {
     let transition = relation_transition(
         request.transition.relation.clone(),
         request.transition.coordination.clone(),
@@ -107,7 +107,8 @@ pub fn project_relation_evidence(
         });
     }
 
-    evidence(&RelationEvidence {
+    RelationEvidenceEnvelope::seal(RelationEvidence {
+        schema: Schema::default(),
         plan_payload_digest: request.plan.payload_digest,
         subjects: subjects
             .try_into()

@@ -5,10 +5,11 @@ use crate::digest::Digest;
 use crate::json::{self, Value};
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("{kind} at {path}")]
+#[error("{message} at {path}")]
 pub struct Error {
     pub path: String,
     pub kind: ErrorKind,
+    pub message: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -41,6 +42,16 @@ impl Error {
         Self {
             path: path.to_owned(),
             kind,
+            message: kind.to_string(),
+        }
+    }
+
+    #[must_use]
+    pub fn described(path: String, kind: ErrorKind, message: String) -> Self {
+        Self {
+            path,
+            kind,
+            message,
         }
     }
 }
@@ -118,10 +129,10 @@ impl Obj {
         let Some((name, _)) = self.members.into_iter().next() else {
             return Ok(());
         };
-        Err(Error {
-            kind: ErrorKind::UnknownField,
-            path: format!("{}.{name}", self.path),
-        })
+        Err(Error::new(
+            &format!("{}.{name}", self.path),
+            ErrorKind::UnknownField,
+        ))
     }
 
     fn decode_member<T>(

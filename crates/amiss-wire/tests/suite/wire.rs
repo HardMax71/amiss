@@ -204,10 +204,7 @@ fn required_object_members_decode_through_their_exact_paths() {
     let mut missing = Obj::new("$.outer", Value::object(Vec::new())).unwrap();
     assert_eq!(
         missing.required("required", de::string).unwrap_err(),
-        DecodeError {
-            path: "$.outer.required".to_owned(),
-            kind: DecodeErrorKind::MissingField,
-        }
+        DecodeError::new("$.outer.required", DecodeErrorKind::MissingField)
     );
 
     let mut invalid = Obj::new(
@@ -217,10 +214,7 @@ fn required_object_members_decode_through_their_exact_paths() {
     .unwrap();
     assert_eq!(
         invalid.required("required", de::integer).unwrap_err(),
-        DecodeError {
-            path: "$.outer.required".to_owned(),
-            kind: DecodeErrorKind::WrongType,
-        }
+        DecodeError::new("$.outer.required", DecodeErrorKind::WrongType)
     );
     assert_eq!(invalid.field("next"), "$.outer.next");
 }

@@ -16,7 +16,7 @@ use amiss_wire::model::{
 };
 use amiss_wire::relation::{
     RelationIdentity, RelationPlanEnvelope, RelationSnapshot, RelationSubject as PlannedSubject,
-    RelationVerdict, assess, parse_evidence, parse_plan, plan,
+    RelationVerdict, assess, parse_plan, plan,
 };
 
 use super::{RelationProjectionError, RelationProjectionRequest, project_relation_evidence};
@@ -183,13 +183,12 @@ fn roots(fixture: &Fixture) -> [RelationAcquiredRoot<'_>; 2] {
 #[test]
 fn four_exact_repository_projections_produce_the_plan_bound_transition() {
     let fixture = fixture(4);
-    let value = project_relation_evidence(RelationProjectionRequest {
+    let evidence = project_relation_evidence(RelationProjectionRequest {
         transition: &fixture.transition,
         plan: &fixture.plan,
         roots: roots(&fixture),
     })
     .expect("complete projection evidence");
-    let evidence = parse_evidence(&json::canonical(&value)).expect("parsed evidence");
     let [documentation, source] = &evidence.payload.subjects;
 
     assert_eq!(documentation.base, documentation.candidate);

@@ -1,4 +1,9 @@
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("identity is invalid")]
+pub struct InvalidIdentity;
+
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(try_from = "String")]
 pub struct ArtifactId(String);
 
 impl ArtifactId {
@@ -10,6 +15,20 @@ impl ArtifactId {
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+}
+
+impl TryFrom<String> for ArtifactId {
+    type Error = InvalidIdentity;
+
+    fn try_from(raw: String) -> Result<Self, InvalidIdentity> {
+        Self::new(raw).ok_or(InvalidIdentity)
+    }
+}
+
+impl serde::Serialize for ArtifactId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
     }
 }
 

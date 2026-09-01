@@ -7,7 +7,7 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::Digest;
 use crate::json::Value;
 
-use super::evidence::{RelationEvidenceEnvelope, evidence as build_evidence};
+use super::evidence::{EVIDENCE_PAYLOAD_SCHEMA, RelationEvidenceEnvelope};
 use super::{RELATION_DOCUMENT_BYTES, RelationPlanEnvelope, plan as build_plan};
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/relation-assessment-envelope";
@@ -91,11 +91,11 @@ pub fn assess(
     if rebuilt_plan.text("payload_digest") != Some(&plan.payload_digest.to_string()) {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
-    if let Some(evidence) = evidence {
-        let rebuilt_evidence = build_evidence(&evidence.payload)?;
-        if rebuilt_evidence.text("payload_digest") != Some(&evidence.payload_digest.to_string()) {
-            return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
-        }
+    if let Some(evidence) = evidence
+        && crate::codec::digest(EVIDENCE_PAYLOAD_SCHEMA, &evidence.payload)?
+            != evidence.payload_digest
+    {
+        return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
     }
 
     let judgment = evidence

@@ -5,6 +5,7 @@
 
 use std::{fs, path::Path};
 
+use amiss_wire::codec::{self, Schema};
 use amiss_wire::controls::{
     BlobLineSelection, ProjectionKind, ProjectionSource, RecordSetSelection, TreePathSelection,
 };
@@ -16,8 +17,8 @@ use amiss_wire::model::{
 };
 use amiss_wire::relation::{
     EVIDENCE_PAYLOAD_SCHEMA, PLAN_PAYLOAD_SCHEMA, RELATION_DOCUMENT_BYTES, RelationEvidence,
-    RelationEvidenceSubject, RelationIdentity, RelationPlan, RelationProjectedValue,
-    RelationSnapshot, RelationSubject, evidence, parse_evidence, parse_plan, plan,
+    RelationEvidenceEnvelope, RelationEvidenceSubject, RelationIdentity, RelationPlan,
+    RelationProjectedValue, RelationSnapshot, RelationSubject, parse_plan, plan,
 };
 
 mod assessment;
@@ -99,6 +100,7 @@ fn projected(digit: char, value_bytes: u64) -> RelationProjectedValue {
 
 fn relation_evidence() -> RelationEvidence {
     RelationEvidence {
+        schema: Schema::default(),
         plan_payload_digest: digest('9'),
         subjects: [
             RelationEvidenceSubject {
@@ -217,28 +219,36 @@ fn relation_plan_reuses_code_and_inventory_projection_sources() {
     );
 }
 
+fn evidence_bytes(input: &RelationEvidence) -> Vec<u8> {
+    codec::canonical(&RelationEvidenceEnvelope::seal(input.clone()).unwrap()).unwrap()
+}
+
 #[test]
 fn relation_evidence_round_trips_four_independent_slots_and_example() {
     let expected = relation_evidence();
-    let value = evidence(&expected).unwrap();
-    let bytes = json::canonical(&value);
-    let parsed = parse_evidence(&bytes).unwrap();
+    let sealed = RelationEvidenceEnvelope::seal(expected.clone()).unwrap();
+    let bytes = codec::canonical(&sealed).unwrap();
+    let parsed = RelationEvidenceEnvelope::parse(&bytes).unwrap();
 
+    assert_eq!(parsed, sealed);
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        hj(EVIDENCE_PAYLOAD_SCHEMA, value.member("payload").unwrap())
+        hj(
+            EVIDENCE_PAYLOAD_SCHEMA,
+            json::parse(&bytes).unwrap().member("payload").unwrap()
+        )
     );
+    assert_eq!(json::canonical(&json::parse(&bytes).unwrap()), bytes);
 
     let example_bytes = fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/relation-evidence.json"),
     )
     .unwrap();
-    let example = parse_evidence(&example_bytes).unwrap();
-    assert_eq!(
-        json::canonical(&evidence(&example.payload).unwrap()),
-        json::canonical(&json::parse(&example_bytes).unwrap())
-    );
+    let example = RelationEvidenceEnvelope::parse(&example_bytes).unwrap();
+    let canonical_example = json::canonical(&json::parse(&example_bytes).unwrap());
+    assert_eq!(codec::canonical(&example).unwrap(), canonical_example);
+    assert_eq!(evidence_bytes(&example.payload), canonical_example);
 }
 
 #[test]
@@ -248,7 +258,7 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
     partial.subjects[1].candidate = None;
     partial.subjects[1].base = Some(projected('a', 0));
 
-    let parsed = parse_evidence(&json::canonical(&evidence(&partial).unwrap())).unwrap();
+    let parsed = RelationEvidenceEnvelope::parse(&evidence_bytes(&partial)).unwrap();
     assert_eq!(parsed.payload, partial);
 
     for subject in &mut partial.subjects {
@@ -256,7 +266,7 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
         subject.candidate = None;
     }
     assert_eq!(
-        parse_evidence(&json::canonical(&evidence(&partial).unwrap()))
+        RelationEvidenceEnvelope::parse(&evidence_bytes(&partial))
             .unwrap()
             .payload,
         partial
@@ -267,19 +277,19 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
 fn relation_evidence_refuses_role_and_value_shape_drift() {
     let mut unsorted = relation_evidence();
     unsorted.subjects.reverse();
-    let error = evidence(&unsorted).unwrap_err();
+    let error = RelationEvidenceEnvelope::seal(unsorted).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 
     let mut repeated = relation_evidence();
     repeated.subjects[1].role = repeated.subjects[0].role.clone();
-    let error = evidence(&repeated).unwrap_err();
+    let error = RelationEvidenceEnvelope::seal(repeated).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
     assert_eq!(error.kind, ErrorKind::DuplicateMember);
 
     let mut unsafe_bytes = relation_evidence();
     unsafe_bytes.subjects[0].base = Some(projected('a', u64::MAX));
-    let error = evidence(&unsafe_bytes).unwrap_err();
+    let error = RelationEvidenceEnvelope::seal(unsafe_bytes).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].base.value_bytes");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
@@ -301,10 +311,10 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
             parse: |bytes| parse_plan(bytes).map(|_envelope| ()),
         },
         Document {
-            value: evidence(&relation_evidence()).unwrap(),
+            value: json::parse(&evidence_bytes(&relation_evidence())).unwrap(),
             payload_schema: EVIDENCE_PAYLOAD_SCHEMA,
             first_payload_field: "plan_payload_digest",
-            parse: |bytes| parse_evidence(bytes).map(|_envelope| ()),
+            parse: |bytes| RelationEvidenceEnvelope::parse(bytes).map(|_envelope| ()),
         },
     ];
 
