@@ -57,7 +57,10 @@ pub use receiver::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, router,
     router_with_clock, serve,
 };
-pub use relation::{CoordinatedRelation, admit_relation_coordination};
+pub use relation::{
+    CoordinatedRelation, CoordinatedTransition, admit_relation_coordination,
+    freeze_relation_transition,
+};
 pub use shutdown::shutdown_signal;
 pub use supervision::{Supervision, SupervisionError, supervise};
 pub use worker::{
