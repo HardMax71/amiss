@@ -11,8 +11,8 @@ use amiss_wire::digest::{hj, sha256};
 use amiss_wire::json::{self, Value};
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationProjectedValue, assess, evidence,
-    parse_evidence, parse_plan,
+    RelationEvidence, RelationEvidenceSubject, RelationProjectedValue, RelationProjectionSlot,
+    assess, evidence, parse_evidence, parse_plan,
 };
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
@@ -225,13 +225,13 @@ fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Optio
         subjects: [
             RelationEvidenceSubject {
                 role: ArtifactId::new("documentation".to_owned())?,
-                base: Some(aligned),
-                candidate: Some(aligned),
+                base: RelationProjectionSlot::Projected(aligned),
+                candidate: RelationProjectionSlot::Projected(aligned),
             },
             RelationEvidenceSubject {
                 role: ArtifactId::new("source".to_owned())?,
-                base: Some(aligned),
-                candidate: Some(changed),
+                base: RelationProjectionSlot::Projected(aligned),
+                candidate: RelationProjectionSlot::Projected(changed),
             },
         ],
     })

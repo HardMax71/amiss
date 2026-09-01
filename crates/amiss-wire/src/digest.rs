@@ -1,5 +1,6 @@
-use core::fmt;
+use core::{fmt, str::FromStr};
 
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use sha2::{Digest as _, Sha256};
 
 use crate::json::{Callback, Sink, Value, stream};
@@ -8,7 +9,9 @@ use crate::json::{Callback, Sink, Value, stream};
 /// target's blob, or one build lockfile as the release manifest records it.
 pub const RAW_EVIDENCE_DOMAIN: &str = "amiss/raw-evidence";
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, SerializeDisplay, DeserializeFromStr,
+)]
 pub struct Digest([u8; 32]);
 
 impl Digest {
@@ -62,6 +65,14 @@ impl fmt::Display for Digest {
             return Err(fmt::Error);
         };
         f.write_str(text)
+    }
+}
+
+impl FromStr for Digest {
+    type Err = &'static str;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        Self::from_wire(raw).ok_or("invalid SHA-256 digest")
     }
 }
 

@@ -8,7 +8,8 @@ use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::{RepositoryProjectionLimits, RepositoryProjectionRequest, project_repository};
 use amiss_wire::json::Value;
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationPlanEnvelope, evidence,
+    RelationEvidence, RelationEvidenceSubject, RelationPlanEnvelope, RelationProjectionSlot,
+    evidence,
 };
 
 #[derive(Clone, Copy)]
@@ -102,8 +103,14 @@ pub fn project_relation_evidence(
             .map_err(|_values: Vec<_>| RelationProjectionError::Unproven)?;
         subjects.push(RelationEvidenceSubject {
             role: planned.role.clone(),
-            base,
-            candidate,
+            base: base.map_or(
+                RelationProjectionSlot::Unproven,
+                RelationProjectionSlot::Projected,
+            ),
+            candidate: candidate.map_or(
+                RelationProjectionSlot::Unproven,
+                RelationProjectionSlot::Projected,
+            ),
         });
     }
 

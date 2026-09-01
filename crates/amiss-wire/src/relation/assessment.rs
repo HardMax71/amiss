@@ -7,7 +7,9 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::Digest;
 use crate::json::Value;
 
-use super::evidence::{RelationEvidenceEnvelope, evidence as build_evidence};
+use super::evidence::{
+    RelationEvidenceEnvelope, RelationProjectionSlot, evidence as build_evidence,
+};
 use super::{RELATION_DOCUMENT_BYTES, RelationPlanEnvelope, plan as build_plan};
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/relation-assessment-envelope";
@@ -114,11 +116,15 @@ pub fn assess(
                 return Err(RelationReason::RoleMismatch);
             }
             let [left, right] = &evidence.payload.subjects;
-            let ((left_base, right_base), (left_candidate, right_candidate)) = left
-                .base
-                .zip(right.base)
-                .zip(left.candidate.zip(right.candidate))
-                .ok_or(RelationReason::ProjectionUnproven)?;
+            let [
+                RelationProjectionSlot::Projected(left_base),
+                RelationProjectionSlot::Projected(right_base),
+                RelationProjectionSlot::Projected(left_candidate),
+                RelationProjectionSlot::Projected(right_candidate),
+            ] = [left.base, right.base, left.candidate, right.candidate]
+            else {
+                return Err(RelationReason::ProjectionUnproven);
+            };
             Ok(
                 match (left_base == right_base, left_candidate == right_candidate) {
                     (true, true) => RelationVerdict::Aligned,

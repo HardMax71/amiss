@@ -1,9 +1,9 @@
-use crate::controls::value::{nonnegative_safe_integer, object, text};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::Digest;
-use crate::json::Value;
+use serde::{Deserialize, Serialize};
+
+use crate::de::{Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
+use crate::json::{self, Value};
 use crate::model::ArtifactId;
-use crate::publication::decode_identity;
 
 use super::RELATION_DOCUMENT_BYTES;
 
@@ -16,23 +16,47 @@ pub struct RelationEvidenceEnvelope {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationEvidence {
     pub plan_payload_digest: Digest,
     pub subjects: [RelationEvidenceSubject; 2],
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationEvidenceSubject {
     pub role: ArtifactId,
-    pub base: Option<RelationProjectedValue>,
-    pub candidate: Option<RelationProjectedValue>,
+    pub base: RelationProjectionSlot,
+    pub candidate: RelationProjectionSlot,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RelationProjectionSlot {
+    Projected(RelationProjectedValue),
+    Unproven,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationProjectedValue {
     pub value_digest: Digest,
     pub value_bytes: u64,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "schema", deny_unknown_fields)]
+enum EvidenceEnvelope<T> {
+    #[serde(rename = "amiss/relation-evidence-envelope")]
+    Current { payload: T, payload_digest: Digest },
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(tag = "schema", deny_unknown_fields)]
+enum EvidencePayload<T> {
+    #[serde(rename = "amiss/relation-evidence-payload")]
+    Current(T),
 }
 
 /// Parses one closed, digest-bound set of four relation projections.
@@ -43,13 +67,24 @@ pub struct RelationProjectedValue {
 /// identity or digest, reordered or repeated subject roles, an unsafe byte
 /// count, or a payload digest mismatch.
 pub fn parse_evidence(bytes: &[u8]) -> Result<RelationEvidenceEnvelope, Error> {
-    let (payload, payload_digest) = crate::bounded_envelope::parse(
-        bytes,
-        EVIDENCE_ENVELOPE_SCHEMA,
-        EVIDENCE_PAYLOAD_SCHEMA,
-        RELATION_DOCUMENT_BYTES,
-        decode_evidence,
-    )?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    let document: EvidenceEnvelope<EvidencePayload<RelationEvidence>> =
+        serde_json::from_slice(bytes)
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let EvidenceEnvelope::Current {
+        payload,
+        payload_digest,
+    } = document;
+    let EvidencePayload::Current(payload) = payload;
+    validate(&payload)?;
+    let canonical = serde_json_canonicalizer::to_vec(&EvidencePayload::Current(&payload))
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    if hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical) != payload_digest {
+        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    }
     Ok(RelationEvidenceEnvelope {
         payload,
         payload_digest,
@@ -64,122 +99,41 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<RelationEvidenceEnvelope, Error> {
 /// [`parse_evidence`] enforces or the encoded document exceeds its byte
 /// ceiling.
 pub fn evidence(input: &RelationEvidence) -> Result<Value, Error> {
-    let payload = evidence_value(input)?;
-    let _validated = decode_evidence("$.payload", payload.clone())?;
-    crate::bounded_envelope::build(
+    validate(input)?;
+    let payload = EvidencePayload::Current(input);
+    let canonical_payload = serde_json_canonicalizer::to_vec(&payload)
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    let document = EvidenceEnvelope::Current {
         payload,
-        EVIDENCE_ENVELOPE_SCHEMA,
-        EVIDENCE_PAYLOAD_SCHEMA,
-        RELATION_DOCUMENT_BYTES,
-    )
-}
-
-fn decode_evidence(path: &str, value: Value) -> Result<RelationEvidence, Error> {
-    let mut evidence = Obj::new(path, value)?;
-    evidence.required("schema", |path, value| {
-        de::const_str(path, value, EVIDENCE_PAYLOAD_SCHEMA)
-    })?;
-    let plan_payload_digest = evidence.required("plan_payload_digest", de::digest)?;
-    let subjects_path = evidence.field("subjects");
-    let subjects: [RelationEvidenceSubject; 2] =
-        de::array(&subjects_path, evidence.take("subjects")?)?
-            .into_iter()
-            .enumerate()
-            .map(|(index, value)| decode_subject(&format!("{subjects_path}[{index}]"), value))
-            .collect::<Result<Vec<_>, _>>()?
-            .try_into()
-            .map_err(|_subjects: Vec<RelationEvidenceSubject>| {
-                Error::new(&subjects_path, ErrorKind::InvalidValue)
-            })?;
-    evidence.finish()?;
-
-    let [left, right] = &subjects;
-    if left.role >= right.role {
-        return fail(
-            &subjects_path,
-            if left.role == right.role {
-                ErrorKind::DuplicateMember
-            } else {
-                ErrorKind::UnsortedSet
-            },
-        );
-    }
-    Ok(RelationEvidence {
-        plan_payload_digest,
-        subjects,
-    })
-}
-
-fn decode_subject(path: &str, value: Value) -> Result<RelationEvidenceSubject, Error> {
-    de::closed_object(path, value, |subject| {
-        let decode_projection = |path: &str, value: Value| {
-            de::decode_nullable(path, value, |path, value| {
-                de::closed_object(path, value, |projected| {
-                    let value_digest = projected.required("value_digest", de::digest)?;
-                    let bytes_path = projected.field("value_bytes");
-                    let value_bytes =
-                        u64::try_from(de::integer(&bytes_path, projected.take("value_bytes")?)?)
-                            .map_err(|_negative| {
-                                Error::new(&bytes_path, ErrorKind::InvalidValue)
-                            })?;
-                    Ok(RelationProjectedValue {
-                        value_digest,
-                        value_bytes,
-                    })
-                })
-            })
-        };
-        Ok(RelationEvidenceSubject {
-            role: subject.required("role", decode_identity)?,
-            base: subject.required("base", decode_projection)?,
-            candidate: subject.required("candidate", decode_projection)?,
-        })
-    })
-}
-
-fn evidence_value(evidence: &RelationEvidence) -> Result<Value, Error> {
-    let subjects = evidence
-        .subjects
-        .iter()
-        .enumerate()
-        .map(|(index, subject)| subject_value(index, subject))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(object(vec![
-        ("schema", text(EVIDENCE_PAYLOAD_SCHEMA)),
-        (
-            "plan_payload_digest",
-            text(&evidence.plan_payload_digest.to_string()),
-        ),
-        ("subjects", Value::array(subjects)),
-    ]))
-}
-
-fn subject_value(index: usize, subject: &RelationEvidenceSubject) -> Result<Value, Error> {
-    Ok(object(vec![
-        ("role", text(subject.role.as_str())),
-        (
-            "base",
-            projected_value(&format!("$.payload.subjects[{index}].base"), subject.base)?,
-        ),
-        (
-            "candidate",
-            projected_value(
-                &format!("$.payload.subjects[{index}].candidate"),
-                subject.candidate,
-            )?,
-        ),
-    ]))
-}
-
-fn projected_value(path: &str, projected: Option<RelationProjectedValue>) -> Result<Value, Error> {
-    let Some(projected) = projected else {
-        return Ok(Value::Null);
+        payload_digest: hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical_payload),
     };
-    Ok(object(vec![
-        ("value_digest", text(&projected.value_digest.to_string())),
-        (
-            "value_bytes",
-            nonnegative_safe_integer(&format!("{path}.value_bytes"), projected.value_bytes)?,
-        ),
-    ]))
+    let canonical = serde_json_canonicalizer::to_vec(&document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+}
+
+fn validate(evidence: &RelationEvidence) -> Result<(), Error> {
+    let [left, right] = &evidence.subjects;
+    if left.role == right.role {
+        return fail("$.payload.subjects", ErrorKind::DuplicateMember);
+    }
+    if left.role > right.role {
+        return fail("$.payload.subjects", ErrorKind::UnsortedSet);
+    }
+    for (index, subject) in evidence.subjects.iter().enumerate() {
+        for (field, slot) in [("base", subject.base), ("candidate", subject.candidate)] {
+            if let RelationProjectionSlot::Projected(projected) = slot
+                && projected.value_bytes > json::MAX_SAFE_INTEGER.unsigned_abs()
+            {
+                return fail(
+                    &format!("$.payload.subjects[{index}].{field}.value_bytes"),
+                    ErrorKind::InvalidValue,
+                );
+            }
+        }
+    }
+    Ok(())
 }
