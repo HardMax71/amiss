@@ -1,8 +1,13 @@
+use garde::Validate;
+use serde::{Deserialize, Serialize};
+
+use crate::codec::{self, MAX_SAFE_INTEGER};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::{Digest, hj};
 use crate::extraction::governed_name_valid;
 use crate::json::{self, Value};
 use crate::model::{Adapter, ArtifactId, RepoPathText};
+use crate::semantic::RECORD_KEY_BYTES;
 
 use super::{
     Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA,
@@ -20,7 +25,19 @@ pub const RECORD_VALUE_SOURCE: &str = "record-value";
 pub const RECORD_SET_SOURCE: &str = "record-set";
 pub const SOURCE_MARKER_BYTES: usize = 256;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::AsRefStr,
+    strum::EnumIter,
+    strum::EnumString,
+    Serialize,
+    Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
 pub enum ProjectionKind {
     #[strum(serialize = "code-text-v1")]
     CodeTextV1,
@@ -56,16 +73,41 @@ pub fn document_include_value(include: DocumentInclude) -> Value {
 
 fn exact_suffix(path: &str, value: Value) -> Result<String, Error> {
     let suffix = de::string(path, value)?;
-    let Some(tail) = suffix.strip_prefix('.') else {
-        return fail(path, ErrorKind::InvalidValue);
-    };
-    if tail.is_empty()
-        || suffix.len() > DOCUMENT_SUFFIX_BYTES
-        || tail.bytes().any(|byte| matches!(byte, b'/' | b'\\' | 0))
-    {
+    if suffix.len() > DOCUMENT_SUFFIX_BYTES || valid_suffix(&suffix, &()).is_err() {
         return fail(path, ErrorKind::InvalidValue);
     }
     Ok(suffix)
+}
+
+fn rule(valid: bool, message: &'static str) -> garde::Result {
+    if valid {
+        Ok(())
+    } else {
+        Err(garde::Error::new(message))
+    }
+}
+
+fn valid_suffix<C>(value: &str, _context: &C) -> garde::Result {
+    let named = value.strip_prefix('.').is_some_and(|tail| {
+        !tail.is_empty() && !tail.bytes().any(|byte| matches!(byte, b'/' | b'\\' | 0))
+    });
+    rule(named, "suffix must be one dot-led extension")
+}
+
+fn valid_marker<C>(value: &str, _context: &C) -> garde::Result {
+    let bytes = value.as_bytes();
+    let visible = bytes.iter().any(u8::is_ascii_graphic)
+        && bytes
+            .iter()
+            .all(|byte| byte.is_ascii_graphic() || *byte == b' ');
+    rule(visible, "marker must be visible ASCII")
+}
+
+fn valid_record_key<C>(value: &str, _context: &C) -> garde::Result {
+    rule(
+        !value.chars().any(char::is_control),
+        "record key holds a control character",
+    )
 }
 
 fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
@@ -99,45 +141,83 @@ pub struct FindingDisposition {
     pub disposition: Disposition,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
 pub struct BlobLineSelection {
     pub path: RepoPathText,
+    #[garde(range(min = 1, max = MAX_SAFE_INTEGER))]
     pub first_line: u64,
+    #[garde(range(min = 1, max = MAX_SAFE_INTEGER))]
     pub last_line: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
 pub struct NamedRegionSelection {
     pub path: RepoPathText,
+    #[garde(length(bytes, min = 1, max = SOURCE_MARKER_BYTES), custom(valid_marker))]
     pub start_marker: String,
+    #[garde(length(bytes, min = 1, max = SOURCE_MARKER_BYTES), custom(valid_marker))]
     pub end_marker: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
 pub struct TreePathSelection {
     pub root: RepoPathText,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[garde(inner(length(bytes, max = DOCUMENT_SUFFIX_BYTES), custom(valid_suffix)))]
     pub suffix: Option<String>,
+    #[garde(range(min = 1, max = MAX_SAFE_INTEGER))]
     pub maximum_depth: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
 pub struct RecordValueSelection {
     pub set: ArtifactId,
+    #[garde(length(bytes, min = 1, max = RECORD_KEY_BYTES), custom(valid_record_key))]
     pub key: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
 pub struct RecordSetSelection {
     pub set: ArtifactId,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+#[garde(allow_unvalidated)]
 pub enum ProjectionSource {
-    BlobLines(BlobLineSelection),
-    NamedRegion(NamedRegionSelection),
-    TreePaths(TreePathSelection),
-    RecordValue(RecordValueSelection),
-    RecordSet(RecordSetSelection),
+    BlobLines(#[garde(dive)] BlobLineSelection),
+    NamedRegion(#[garde(dive)] NamedRegionSelection),
+    TreePaths(#[garde(dive)] TreePathSelection),
+    RecordValue(#[garde(dive)] RecordValueSelection),
+    RecordSet(#[garde(dive)] RecordSetSelection),
+}
+
+impl ProjectionSource {
+    /// # Errors
+    ///
+    /// A blob range runs backwards or both region markers are one string.
+    pub fn check(&self, path: &str) -> Result<(), Error> {
+        let consistent = match self {
+            Self::BlobLines(selection) => selection.first_line <= selection.last_line,
+            Self::NamedRegion(selection) => selection.start_marker != selection.end_marker,
+            Self::TreePaths(_) | Self::RecordValue(_) | Self::RecordSet(_) => true,
+        };
+        if consistent {
+            Ok(())
+        } else {
+            fail(path, ErrorKind::Inconsistent)
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -148,96 +228,22 @@ pub struct ProjectionAssertion {
     pub source: ProjectionSource,
 }
 
-fn safe_line(path: &str, value: Value) -> Result<u64, Error> {
-    let line = de::integer(path, value)?;
-    if !(1..=json::MAX_SAFE_INTEGER).contains(&line) {
-        return fail(path, ErrorKind::InvalidValue);
-    }
-    u64::try_from(line).map_err(|_negative| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn source_marker(path: &str, value: Value) -> Result<String, Error> {
-    let marker = de::string(path, value)?;
-    let bytes = marker.as_bytes();
-    if bytes.is_empty()
-        || bytes.len() > SOURCE_MARKER_BYTES
-        || !bytes.iter().any(u8::is_ascii_graphic)
-        || !bytes
-            .iter()
-            .all(|byte| byte.is_ascii_graphic() || *byte == b' ')
-    {
-        return fail(path, ErrorKind::InvalidValue);
-    }
-    Ok(marker)
-}
-
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "uniform consuming decoder signature"
+)]
 fn decode_projection_source(path: &str, value: Value) -> Result<ProjectionSource, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let kind_path = obj.field("kind");
-    let kind = obj.required("kind", de::string)?;
-    let source = if kind == BLOB_LINES_SOURCE {
-        let selection = BlobLineSelection {
-            path: obj.required("path", decode_repo_path)?,
-            first_line: obj.required("first_line", safe_line)?,
-            last_line: obj.required("last_line", safe_line)?,
-        };
-        if selection.first_line > selection.last_line {
-            return fail(path, ErrorKind::Inconsistent);
-        }
-        ProjectionSource::BlobLines(selection)
-    } else if kind == NAMED_REGION_SOURCE {
-        let selection = NamedRegionSelection {
-            path: obj.required("path", decode_repo_path)?,
-            start_marker: obj.required("start_marker", source_marker)?,
-            end_marker: obj.required("end_marker", source_marker)?,
-        };
-        if selection.start_marker == selection.end_marker {
-            return fail(path, ErrorKind::Inconsistent);
-        }
-        ProjectionSource::NamedRegion(selection)
-    } else if kind == TREE_PATHS_SOURCE {
-        let suffix_path = obj.field("suffix");
-        ProjectionSource::TreePaths(TreePathSelection {
-            root: obj.required("root", decode_repo_path)?,
-            suffix: obj
-                .take_optional("suffix")
-                .map(|value| exact_suffix(&suffix_path, value))
-                .transpose()?,
-            maximum_depth: obj.required("maximum_depth", safe_line)?,
-        })
-    } else if kind == RECORD_VALUE_SOURCE {
-        ProjectionSource::RecordValue(RecordValueSelection {
-            set: obj.required("set", |path, value| {
-                ArtifactId::new(de::string(path, value)?)
-                    .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-            })?,
-            key: obj.required("key", |path, value| {
-                let key = de::string(path, value)?;
-                if key.is_empty()
-                    || key.len() > crate::semantic::RECORD_KEY_BYTES
-                    || key.chars().any(char::is_control)
-                {
-                    return fail(path, ErrorKind::InvalidValue);
-                }
-                Ok(key)
-            })?,
-        })
-    } else if kind == RECORD_SET_SOURCE {
-        ProjectionSource::RecordSet(RecordSetSelection {
-            set: obj.required("set", |path, value| {
-                ArtifactId::new(de::string(path, value)?)
-                    .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-            })?,
-        })
-    } else {
-        return fail(&kind_path, ErrorKind::InvalidValue);
-    };
-    obj.finish()?;
+    let source: ProjectionSource = codec::from_value(path, &value)?;
+    source.check(path)?;
     Ok(source)
 }
 
-fn projection_source_compatible(projection: ProjectionKind, source: &ProjectionSource) -> bool {
-    match source {
+fn compatible(
+    projection: ProjectionKind,
+    source: &ProjectionSource,
+    path: &str,
+) -> Result<(), Error> {
+    let compatible = match source {
         ProjectionSource::BlobLines(_)
         | ProjectionSource::NamedRegion(_)
         | ProjectionSource::RecordValue(_) => projection == ProjectionKind::CodeTextV1,
@@ -245,6 +251,11 @@ fn projection_source_compatible(projection: ProjectionKind, source: &ProjectionS
             projection,
             ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1
         ),
+    };
+    if compatible {
+        Ok(())
+    } else {
+        fail(path, ErrorKind::Inconsistent)
     }
 }
 
@@ -253,18 +264,15 @@ fn projection_source_compatible(projection: ProjectionKind, source: &ProjectionS
 ///
 /// # Errors
 ///
-/// The source cannot reproduce itself through the canonical wire shape or is
-/// incompatible with the selected projection.
+/// The source violates its field constraints or laws, or is incompatible
+/// with the selected projection.
 pub fn check_projection_source(
     projection: ProjectionKind,
     source: &ProjectionSource,
 ) -> Result<(), Error> {
-    let decoded =
-        decode_checked_projection_source("$", projection_source_value(source), projection)?;
-    if decoded != *source {
-        return fail("$", ErrorKind::InvalidValue);
-    }
-    Ok(())
+    codec::constrained(source, "$")?;
+    source.check("$")?;
+    compatible(projection, source, "$")
 }
 
 /// Parses one standalone projection source through the scanner-policy grammar.
@@ -277,7 +285,9 @@ pub fn parse_projection_source(
     bytes: &[u8],
     projection: ProjectionKind,
 ) -> Result<ProjectionSource, Error> {
-    decode_checked_projection_source("$", root(bytes)?, projection)
+    let source: ProjectionSource = codec::decode(bytes)?;
+    check_projection_source(projection, &source)?;
+    Ok(source)
 }
 
 pub(crate) fn decode_checked_projection_source(
@@ -286,9 +296,8 @@ pub(crate) fn decode_checked_projection_source(
     projection: ProjectionKind,
 ) -> Result<ProjectionSource, Error> {
     let source = decode_projection_source(path, value)?;
-    projection_source_compatible(projection, &source)
-        .then_some(source)
-        .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
+    compatible(projection, &source, path)?;
+    Ok(source)
 }
 
 fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAssertion, Error> {
@@ -303,9 +312,7 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
         de::const_str(path, value, PREVIOUS_CODE_SINK)
     })?;
     let source = obj.required("source", decode_projection_source)?;
-    if !projection_source_compatible(projection, &source) {
-        return fail(path, ErrorKind::Inconsistent);
-    }
+    compatible(projection, &source, path)?;
     obj.finish()?;
     Ok(ProjectionAssertion {
         document,
@@ -315,63 +322,10 @@ fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAss
     })
 }
 
+/// The hand-codec value of one source, until the last hand writer moves.
 #[must_use]
 pub fn projection_source_value(source: &ProjectionSource) -> Value {
-    match source {
-        ProjectionSource::BlobLines(selection) => Value::Object(Box::new([
-            ("kind".into(), Value::String(BLOB_LINES_SOURCE.into())),
-            ("path".into(), Value::String(selection.path.as_str().into())),
-            (
-                "first_line".into(),
-                Value::Integer(i64::try_from(selection.first_line).unwrap_or(i64::MAX)),
-            ),
-            (
-                "last_line".into(),
-                Value::Integer(i64::try_from(selection.last_line).unwrap_or(i64::MAX)),
-            ),
-        ])),
-        ProjectionSource::NamedRegion(selection) => Value::Object(Box::new([
-            ("kind".into(), Value::String(NAMED_REGION_SOURCE.into())),
-            ("path".into(), Value::String(selection.path.as_str().into())),
-            (
-                "start_marker".into(),
-                Value::String(selection.start_marker.clone().into()),
-            ),
-            (
-                "end_marker".into(),
-                Value::String(selection.end_marker.clone().into()),
-            ),
-        ])),
-        ProjectionSource::TreePaths(selection) => {
-            let mut fields = vec![
-                ("kind".into(), Value::String(TREE_PATHS_SOURCE.into())),
-                ("root".into(), Value::String(selection.root.as_str().into())),
-                (
-                    "maximum_depth".into(),
-                    Value::Integer(i64::try_from(selection.maximum_depth).unwrap_or(i64::MAX)),
-                ),
-            ];
-            if let Some(suffix) = &selection.suffix {
-                fields.push(("suffix".into(), Value::String(suffix.clone().into())));
-            }
-            Value::Object(fields.into_boxed_slice())
-        }
-        ProjectionSource::RecordValue(selection) => Value::Object(Box::new([
-            ("kind".into(), Value::String(RECORD_VALUE_SOURCE.into())),
-            (
-                "set".into(),
-                Value::String(selection.set.as_str().to_owned().into()),
-            ),
-            ("key".into(), Value::String(selection.key.clone().into())),
-        ])),
-        ProjectionSource::RecordSet(selection) => Value::Object(Box::new([
-            ("kind".into(), Value::String(RECORD_SET_SOURCE.into())),
-            (
-                "set".into(),
-                Value::String(selection.set.as_str().to_owned().into()),
-            ),
-        ])),
-    }
+    codec::to_value(source).unwrap_or(Value::Null)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

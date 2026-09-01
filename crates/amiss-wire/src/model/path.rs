@@ -1,9 +1,26 @@
 use crate::json::Value;
 
+use super::identity::Invalid;
+
 /// A repository path whose bytes are valid UTF-8, mirroring the schema's
 /// `RepoPathText`: the form every configuration surface is confined to.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(try_from = "String")]
 pub struct RepoPathText(String);
+
+impl TryFrom<String> for RepoPathText {
+    type Error = Invalid;
+
+    fn try_from(raw: String) -> Result<Self, Invalid> {
+        Self::new(raw).ok_or(Invalid("path"))
+    }
+}
+
+impl serde::Serialize for RepoPathText {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
 
 impl RepoPathText {
     #[must_use]

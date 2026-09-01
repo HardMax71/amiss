@@ -16,4 +16,5 @@ mod requests;
 mod resolution;
 mod semantic;
 mod uri;
+mod vocabulary;
 mod wire;

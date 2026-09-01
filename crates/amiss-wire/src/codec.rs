@@ -137,10 +137,52 @@ impl<T: Document + Serialize + DeserializeOwned + Validate<Context = ()>> Envelo
 }
 
 fn validate<T: Document + Validate<Context = ()>>(payload: &T, root: &str) -> Result<(), Error> {
-    payload
-        .validate()
-        .map_err(|report| constraint_error(root, &report))?;
+    constrained(payload, root)?;
     payload.check(root)
+}
+
+/// Checks every field constraint of one value, rooting paths at `root`.
+///
+/// # Errors
+///
+/// A field constraint is violated.
+pub fn constrained<T: Validate<Context = ()>>(value: &T, root: &str) -> Result<(), Error> {
+    value
+        .validate()
+        .map_err(|report| constraint_error(root, &report))
+}
+
+/// Reads one subtree of a hand-parsed value into its closed shape, rooting
+/// error paths at `path`.
+///
+/// # Errors
+///
+/// The subtree is not the closed shape or violates a field constraint.
+pub fn from_value<T: DeserializeOwned + Validate<Context = ()>>(
+    path: &str,
+    value: &json::Value,
+) -> Result<T, Error> {
+    let decoded: T = decode(&json::canonical(value)).map_err(|mut error| {
+        if let Some(rerooted) = error
+            .path
+            .strip_prefix('$')
+            .map(|rest| format!("{path}{rest}"))
+        {
+            error.path = rerooted;
+        }
+        error
+    })?;
+    constrained(&decoded, path)?;
+    Ok(decoded)
+}
+
+/// The hand-codec value of any wire value, for the writers not yet moved.
+///
+/// # Errors
+///
+/// The value cannot be canonicalized.
+pub fn to_value<T: Serialize + ?Sized>(value: &T) -> Result<json::Value, Error> {
+    json::parse(&canonical(value)?).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
 /// The RFC 8785 bytes of any wire value.

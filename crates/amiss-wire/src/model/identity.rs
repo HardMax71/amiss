@@ -1,6 +1,6 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
-#[error("identity is invalid")]
-pub struct InvalidIdentity;
+#[error("{0} is invalid")]
+pub struct Invalid(pub &'static str);
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
 #[serde(try_from = "String")]
@@ -19,10 +19,10 @@ impl ArtifactId {
 }
 
 impl TryFrom<String> for ArtifactId {
-    type Error = InvalidIdentity;
+    type Error = Invalid;
 
-    fn try_from(raw: String) -> Result<Self, InvalidIdentity> {
-        Self::new(raw).ok_or(InvalidIdentity)
+    fn try_from(raw: String) -> Result<Self, Invalid> {
+        Self::new(raw).ok_or(Invalid("identity"))
     }
 }
 
