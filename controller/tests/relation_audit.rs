@@ -171,8 +171,8 @@ fn with_null_report_target(
         &assess(
             &rebound,
             None,
-            &recorded.payload.engine_version,
-            recorded.payload.engine_digest,
+            &recorded.payload.engine.engine_version,
+            recorded.payload.engine.engine_digest,
         )
         .map_err(|_defect| ArtifactError::Corrupt)?,
     );

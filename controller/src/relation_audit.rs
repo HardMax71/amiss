@@ -77,8 +77,8 @@ pub fn validate_relation_audit(
     let replayed = assess(
         &plan,
         evidence.as_ref(),
-        &assessment.payload.engine_version,
-        assessment.payload.engine_digest,
+        &assessment.payload.engine.engine_version,
+        assessment.payload.engine.engine_digest,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
     if replayed.text("payload_digest") != Some(&assessment.payload_digest.to_string()) {

@@ -52,6 +52,47 @@ pub fn fail<T>(path: &str, kind: ErrorKind) -> Result<T, Error> {
     Err(Error::new(path, kind))
 }
 
+pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    serde_path_to_error::deserialize(&mut deserializer).map_err(|defect| {
+        let message = defect.inner().to_string();
+        let (kind, member) = if let Some(member) = message
+            .strip_prefix("missing field `")
+            .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
+        {
+            (ErrorKind::MissingField, Some(member))
+        } else if let Some(member) = message
+            .strip_prefix("unknown field `")
+            .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
+        {
+            (ErrorKind::UnknownField, Some(member))
+        } else if message.starts_with("invalid type:") {
+            (ErrorKind::WrongType, None)
+        } else {
+            (ErrorKind::InvalidValue, None)
+        };
+        let raw_path = defect.path().to_string();
+        let mut path = if raw_path == "." {
+            "$".to_owned()
+        } else {
+            format!("$.{raw_path}")
+        };
+        if let Some(member) = member
+            && defect
+                .path()
+                .iter()
+                .next_back()
+                .map(ToString::to_string)
+                .as_deref()
+                != Some(member)
+        {
+            path.push('.');
+            path.push_str(member);
+        }
+        Error { path, kind }
+    })
+}
+
 pub struct Obj {
     path: String,
     members: Vec<(String, Value)>,
