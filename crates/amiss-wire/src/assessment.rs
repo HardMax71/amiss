@@ -6,8 +6,9 @@ use crate::de::{self, Error, Obj};
 use crate::digest::Digest;
 use crate::json::Value;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, Serialize, Deserialize)]
 #[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum AssessmentVerdict {
     Matched,
     Refuted,

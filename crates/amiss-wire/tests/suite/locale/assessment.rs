@@ -8,6 +8,7 @@ use std::{fs, path::Path};
 
 use super::evidence::{fallback_page, locale_evidence, page_map, target_page};
 use super::{digest, locale_plan, oid, product_resource};
+use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json::{self, Value};
@@ -421,7 +422,7 @@ fn lineage_is_not_inferred_without_an_observed_current_source() {
 #[test]
 fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     let mut input_plan = locale_plan();
-    input_plan.product = Some(product_resource('c'));
+    input_plan.product = Nullable::Value(product_resource('c'));
     let value = plan(&input_plan).unwrap();
     let plan = parse_plan(&json::canonical(&value)).unwrap();
     let mut aligned = locale_evidence();

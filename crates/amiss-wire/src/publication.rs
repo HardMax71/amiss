@@ -12,12 +12,14 @@ mod evidence;
 
 pub use crate::assessment::AssessmentVerdict as PublicationVerdict;
 pub use assessment::{
-    ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, PublicationAssessment,
-    PublicationAssessmentEnvelope, PublicationReason, assess, parse_assessment,
+    ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, AssessmentEnvelopeSchema,
+    AssessmentPayloadSchema, PublicationAssessment, PublicationAssessmentEnvelope,
+    PublicationReason, assess, parse_assessment,
 };
 pub use evidence::{
-    EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, PublicationDeployment, PublicationEvidence,
-    PublicationEvidenceEnvelope, evidence, parse_evidence,
+    EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, EvidenceEnvelopeSchema,
+    EvidencePayloadSchema, PublicationDeployment, PublicationEvidence, PublicationEvidenceEnvelope,
+    PublicationOutcome, evidence, parse_evidence,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/publication-plan-envelope";
@@ -109,14 +111,6 @@ pub struct PublicationRelation {
     pub context_digest: Digest,
 }
 
-struct PublicationFacts {
-    producer: PublicationProducer,
-    docs: DocsCandidate,
-    target: PublicationTarget,
-    site: CompletedSite,
-    product: PublicationResource,
-}
-
 /// Parses one closed, digest-bound publication plan.
 ///
 /// # Errors
@@ -168,49 +162,6 @@ pub(super) fn plan_payload_digest(input: &PublicationPlan) -> Result<Digest, Err
     serde_json_canonicalizer::to_vec(input)
         .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
-}
-
-fn decode_facts(parent: &mut Obj) -> Result<PublicationFacts, Error> {
-    let docs = parent.required("docs", decode_docs)?;
-    let target = parent.required("target", |path, value| {
-        let mut target = Obj::new(path, value)?;
-        let provider = target.required("provider", decode_identity)?;
-        let instance = target.required("instance", decode_identity)?;
-        let environment = target.required("environment", decode_identity)?;
-        let channel = target.required("channel", decode_identity)?;
-        let canonical_url = target.required("canonical_url", |path, value| {
-            let raw = de::string(path, value)?;
-            validate_publication_uri(path, &raw, PublicationUriKind::CanonicalUrl)?;
-            Ok(raw)
-        })?;
-        target.finish()?;
-        Ok(PublicationTarget {
-            provider,
-            instance,
-            environment,
-            channel,
-            canonical_url,
-        })
-    })?;
-    let site = parent.required("site", |path, value| {
-        let mut site = Obj::new(path, value)?;
-        let artifact = site.required("artifact", decode_resource)?;
-        let input_digest = site.required("input_digest", de::digest)?;
-        site.finish()?;
-        Ok(CompletedSite {
-            artifact,
-            input_digest,
-        })
-    })?;
-    let product = parent.required("product", decode_resource)?;
-    let producer = parent.required("producer", decode_producer)?;
-    Ok(PublicationFacts {
-        producer,
-        docs,
-        target,
-        site,
-        product,
-    })
 }
 
 pub(crate) fn decode_docs(path: &str, value: Value) -> Result<DocsCandidate, Error> {
@@ -273,12 +224,16 @@ fn decode_resource_uri(path: &str, value: Value) -> Result<String, Error> {
 }
 
 #[derive(Clone, Copy)]
-enum PublicationUriKind {
+pub(crate) enum PublicationUriKind {
     CanonicalUrl,
     Resource,
 }
 
-fn validate_publication_uri(path: &str, raw: &str, kind: PublicationUriKind) -> Result<(), Error> {
+pub(crate) fn validate_publication_uri(
+    path: &str,
+    raw: &str,
+    kind: PublicationUriKind,
+) -> Result<(), Error> {
     let grammar_valid = match kind {
         PublicationUriKind::CanonicalUrl => {
             let authority = raw
@@ -336,21 +291,7 @@ fn validate_facts(
     product: &PublicationResource,
     producer: &PublicationProducer,
 ) -> Result<(), Error> {
-    if RepositoryIdentity::new(
-        docs.repository.host().to_owned(),
-        docs.repository.owner().to_owned(),
-        docs.repository.name().to_owned(),
-    )
-    .as_ref()
-        != Some(&docs.repository)
-    {
-        return fail(&format!("{path}.docs.repository"), ErrorKind::InvalidValue);
-    }
-    for (field, oid) in [("commit_oid", &docs.commit), ("tree_oid", &docs.tree)] {
-        if oid.object_format() != docs.object_format {
-            return fail(&format!("{path}.docs.{field}"), ErrorKind::InvalidValue);
-        }
-    }
+    validate_docs(&format!("{path}.docs"), docs)?;
     validate_publication_uri(
         &format!("{path}.target.canonical_url"),
         &target.canonical_url,
@@ -363,8 +304,31 @@ fn validate_facts(
             PublicationUriKind::Resource,
         )?;
     }
+    validate_producer(&format!("{path}.producer"), producer)
+}
+
+pub(crate) fn validate_docs(path: &str, docs: &DocsCandidate) -> Result<(), Error> {
+    if RepositoryIdentity::new(
+        docs.repository.host().to_owned(),
+        docs.repository.owner().to_owned(),
+        docs.repository.name().to_owned(),
+    )
+    .as_ref()
+        != Some(&docs.repository)
+    {
+        return fail(&format!("{path}.repository"), ErrorKind::InvalidValue);
+    }
+    for (field, oid) in [("commit_oid", &docs.commit), ("tree_oid", &docs.tree)] {
+        if oid.object_format() != docs.object_format {
+            return fail(&format!("{path}.{field}"), ErrorKind::InvalidValue);
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_producer(path: &str, producer: &PublicationProducer) -> Result<(), Error> {
     if !crate::semantic::producer_version_valid(&producer.version) {
-        return fail(&format!("{path}.producer.version"), ErrorKind::InvalidValue);
+        return fail(&format!("{path}.version"), ErrorKind::InvalidValue);
     }
     Ok(())
 }
@@ -379,23 +343,6 @@ pub(crate) fn docs_value(docs: &DocsCandidate) -> Value {
             "candidate_identity_digest",
             text(&docs.candidate_identity_digest.to_string()),
         ),
-    ])
-}
-
-fn target_value(target: &PublicationTarget) -> Value {
-    object(vec![
-        ("provider", text(target.provider.as_str())),
-        ("instance", text(target.instance.as_str())),
-        ("environment", text(target.environment.as_str())),
-        ("channel", text(target.channel.as_str())),
-        ("canonical_url", text(&target.canonical_url)),
-    ])
-}
-
-fn site_value(site: &CompletedSite) -> Value {
-    object(vec![
-        ("artifact", resource_value(&site.artifact)),
-        ("input_digest", text(&site.input_digest.to_string())),
     ])
 }
 

@@ -1,20 +1,25 @@
+use std::cmp::Ordering;
+
+use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumString};
 
-use crate::assessment::{AssessmentVerdict, bindings_value, decode_bindings};
-use crate::controls::decode_enum;
-use crate::controls::value::{object, text};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::Digest;
-use crate::json::Value;
+use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
+use crate::json::{self, Value};
+use crate::semantic::producer_version_valid;
 
-use super::evidence::{PublicationEvidenceEnvelope, evidence as build_evidence};
-use super::{PUBLICATION_DOCUMENT_BYTES, PublicationPlanEnvelope, plan as build_plan};
+use super::evidence::{PublicationEvidenceEnvelope, evidence_payload_digest};
+use super::{PUBLICATION_DOCUMENT_BYTES, PublicationPlanEnvelope, plan_payload_digest};
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/publication-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/publication-assessment-payload";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, Serialize, Deserialize,
+)]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum PublicationReason {
     EvidenceAbsent,
     EvidenceUnbound,
@@ -25,21 +30,34 @@ pub enum PublicationReason {
     ProductMismatch,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicationAssessmentEnvelope {
+    pub schema: AssessmentEnvelopeSchema,
     pub payload: PublicationAssessment,
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AssessmentEnvelopeSchema {
+    #[serde(rename = "amiss/publication-assessment-envelope")]
+    Current,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicationAssessment {
-    pub engine_version: String,
-    pub engine_digest: Digest,
-    pub report_payload_digest: Digest,
-    pub plan_payload_digest: Digest,
-    pub evidence_payload_digest: Option<Digest>,
+    pub schema: AssessmentPayloadSchema,
+    pub engine: AssessmentEngine,
+    pub subject: AssessmentSubject,
     pub verdict: AssessmentVerdict,
     pub reasons: Vec<PublicationReason>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AssessmentPayloadSchema {
+    #[serde(rename = "amiss/publication-assessment-payload")]
+    Current,
 }
 
 /// Parses one closed, digest-bound offline publication assessment.
@@ -50,17 +68,15 @@ pub struct PublicationAssessment {
 /// engine identity, unsorted reasons, an inconsistent verdict, or a payload
 /// digest mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<PublicationAssessmentEnvelope, Error> {
-    let (payload, payload_digest) = crate::bounded_envelope::parse(
-        bytes,
-        ASSESSMENT_ENVELOPE_SCHEMA,
-        ASSESSMENT_PAYLOAD_SCHEMA,
-        PUBLICATION_DOCUMENT_BYTES,
-        decode_assessment,
-    )?;
-    Ok(PublicationAssessmentEnvelope {
-        payload,
-        payload_digest,
-    })
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    let document: PublicationAssessmentEnvelope = de::deserialize_json(bytes)?;
+    if assessment_payload_digest(&document.payload)? != document.payload_digest {
+        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    }
+    Ok(document)
 }
 
 /// Judges one publication plan against optional provider-normalized evidence.
@@ -80,15 +96,13 @@ pub fn assess(
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Value, Error> {
-    let rebuilt_plan = build_plan(&plan.payload)?;
-    if rebuilt_plan.text("payload_digest") != Some(&plan.payload_digest.to_string()) {
+    if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
-    if let Some(evidence) = evidence {
-        let rebuilt_evidence = build_evidence(&evidence.payload)?;
-        if rebuilt_evidence.text("payload_digest") != Some(&evidence.payload_digest.to_string()) {
-            return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
-        }
+    if let Some(evidence) = evidence
+        && evidence_payload_digest(&evidence.payload)? != evidence.payload_digest
+    {
+        return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
     }
 
     let (verdict, reasons) = match evidence {
@@ -135,62 +149,83 @@ pub fn assess(
         }
     };
     let assessment = PublicationAssessment {
-        engine_version: engine_version.to_owned(),
-        engine_digest,
-        report_payload_digest: plan.payload.report_payload_digest,
-        plan_payload_digest: plan.payload_digest,
-        evidence_payload_digest: evidence.map(|evidence| evidence.payload_digest),
+        schema: AssessmentPayloadSchema::Current,
+        engine: AssessmentEngine {
+            engine_version: engine_version.to_owned(),
+            engine_digest,
+        },
+        subject: AssessmentSubject {
+            report_payload_digest: plan.payload.report_payload_digest,
+            plan_payload_digest: plan.payload_digest,
+            evidence_payload_digest: evidence.map_or(Nullable::Null, |evidence| {
+                Nullable::Value(evidence.payload_digest)
+            }),
+        },
         verdict,
         reasons,
     };
-    let payload = assessment_value(&assessment);
-    let _validated = decode_assessment("$.payload", payload.clone())?;
-    crate::bounded_envelope::build(
-        payload,
-        ASSESSMENT_ENVELOPE_SCHEMA,
-        ASSESSMENT_PAYLOAD_SCHEMA,
-        PUBLICATION_DOCUMENT_BYTES,
-    )
+    let payload_digest = assessment_payload_digest(&assessment)?;
+    let document = PublicationAssessmentEnvelope {
+        schema: AssessmentEnvelopeSchema::Current,
+        payload: assessment,
+        payload_digest,
+    };
+    let canonical = serde_json_canonicalizer::to_vec(&document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
-fn decode_assessment(path: &str, value: Value) -> Result<PublicationAssessment, Error> {
-    let mut assessment = Obj::new(path, value)?;
-    assessment.required("schema", |path, value| {
-        de::const_str(path, value, ASSESSMENT_PAYLOAD_SCHEMA)
-    })?;
-    let bindings = decode_bindings(&mut assessment)?;
-    let verdict = assessment.required("verdict", decode_enum)?;
-    let reasons_path = assessment.field("reasons");
-    let reasons = de::sorted_items(
-        &reasons_path,
-        assessment.take("reasons")?,
-        7,
-        decode_enum,
-        |reason| reason,
-    )?;
-    assessment.finish()?;
+fn assessment_payload_digest(assessment: &PublicationAssessment) -> Result<Digest, Error> {
+    validate_assessment(assessment)?;
+    serde_json_canonicalizer::to_vec(assessment)
+        .map(|canonical| hb(ASSESSMENT_PAYLOAD_SCHEMA, &canonical))
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+}
+
+fn validate_assessment(assessment: &PublicationAssessment) -> Result<(), Error> {
+    producer_version_valid(&assessment.engine.engine_version)
+        .then_some(())
+        .ok_or_else(|| Error::new("$.payload.engine.engine_version", ErrorKind::InvalidValue))?;
+    (assessment.reasons.len() <= 7)
+        .then_some(())
+        .ok_or_else(|| Error::new("$.payload.reasons", ErrorKind::LimitExceeded))?;
+    assessment
+        .reasons
+        .iter()
+        .zip(assessment.reasons.iter().skip(1))
+        .try_for_each(|(previous, current)| match previous.cmp(current) {
+            Ordering::Less => Ok(()),
+            Ordering::Equal => fail("$.payload.reasons", ErrorKind::DuplicateMember),
+            Ordering::Greater => fail("$.payload.reasons", ErrorKind::UnsortedSet),
+        })?;
     let fixed_shape = matches!(
         (
-            verdict,
-            bindings.evidence_payload_digest,
-            reasons.as_slice()
+            assessment.verdict,
+            assessment.subject.evidence_payload_digest,
+            assessment.reasons.as_slice()
         ),
-        (AssessmentVerdict::Matched, Some(_), [])
+        (AssessmentVerdict::Matched, Nullable::Value(_), [])
             | (
                 AssessmentVerdict::Unproven,
-                None,
+                Nullable::Null,
                 [PublicationReason::EvidenceAbsent]
             )
             | (
                 AssessmentVerdict::Unproven,
-                Some(_),
+                Nullable::Value(_),
                 [PublicationReason::EvidenceUnbound | PublicationReason::ProducerMismatch],
             )
     );
-    let refuted_shape = verdict == AssessmentVerdict::Refuted
-        && bindings.evidence_payload_digest.is_some()
-        && !reasons.is_empty()
-        && reasons.iter().all(|reason| {
+    let refuted_shape = assessment.verdict == AssessmentVerdict::Refuted
+        && matches!(
+            assessment.subject.evidence_payload_digest,
+            Nullable::Value(_)
+        )
+        && !assessment.reasons.is_empty()
+        && assessment.reasons.iter().all(|reason| {
             matches!(
                 reason,
                 PublicationReason::DocsMismatch
@@ -199,43 +234,7 @@ fn decode_assessment(path: &str, value: Value) -> Result<PublicationAssessment, 
                     | PublicationReason::ProductMismatch
             )
         });
-    let valid = fixed_shape || refuted_shape;
-    if !valid {
-        return fail(path, ErrorKind::Inconsistent);
-    }
-    Ok(PublicationAssessment {
-        engine_version: bindings.engine_version,
-        engine_digest: bindings.engine_digest,
-        report_payload_digest: bindings.report_payload_digest,
-        plan_payload_digest: bindings.plan_payload_digest,
-        evidence_payload_digest: bindings.evidence_payload_digest,
-        verdict,
-        reasons,
-    })
-}
-
-fn assessment_value(assessment: &PublicationAssessment) -> Value {
-    let (engine, subject) = bindings_value(
-        &assessment.engine_version,
-        assessment.engine_digest,
-        assessment.report_payload_digest,
-        assessment.plan_payload_digest,
-        assessment.evidence_payload_digest,
-    );
-    object(vec![
-        ("schema", text(ASSESSMENT_PAYLOAD_SCHEMA)),
-        ("engine", engine),
-        ("subject", subject),
-        ("verdict", text(assessment.verdict.as_ref())),
-        (
-            "reasons",
-            Value::array(
-                assessment
-                    .reasons
-                    .iter()
-                    .map(|reason| text(reason.as_ref()))
-                    .collect(),
-            ),
-        ),
-    ])
+    (fixed_shape || refuted_shape)
+        .then_some(())
+        .ok_or_else(|| Error::new("$.payload", ErrorKind::Inconsistent))
 }
