@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use amiss_controller::{BootstrapJobError, SemanticEvidenceTemplate, bind_semantic_evidence};
 use amiss_wire::digest::hb;
-use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
@@ -40,7 +39,9 @@ pub fn semantic_input_artifact() -> Result<SemanticInputArtifact, BootstrapJobEr
         .supplied
         .iter()
         .map(|supplied| {
-            amiss_wire::semantic::parse(&json::canonical(&supplied.value))
+            let bytes = serde_json::to_vec(&supplied.value)
+                .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+            amiss_wire::semantic::parse(&bytes)
                 .map(|envelope| envelope.payload_digest)
                 .map_err(|_defect| BootstrapJobError::SemanticEvidence)
         })

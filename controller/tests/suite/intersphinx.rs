@@ -10,7 +10,6 @@ use amiss_controller::{
     intersphinx_evidence,
 };
 use amiss_wire::digest::hb;
-use amiss_wire::json::canonical;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 
@@ -45,8 +44,10 @@ fn a_bounded_inventory_becomes_only_complete_label_evidence() {
     let evidence = evidence();
     let candidate = hb("amiss/test-candidate", b"candidate");
     let bound = bind_semantic_evidence(&evidence, &[], &[], candidate).unwrap();
-    let parsed =
-        amiss_wire::semantic::parse(&canonical(&bound.supplied.first().unwrap().value)).unwrap();
+    let parsed = amiss_wire::semantic::parse(
+        &serde_json::to_vec(&bound.supplied.first().unwrap().value).unwrap(),
+    )
+    .unwrap();
 
     assert_eq!(parsed.payload.subject.candidate_identity_digest, candidate);
     assert!(parsed.payload.complete);

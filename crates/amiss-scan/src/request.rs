@@ -4,7 +4,7 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::Digest;
-use amiss_wire::json::{ErrorKind as JsonErrorKind, canonical};
+use amiss_wire::json::ErrorKind as JsonErrorKind;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 use amiss_wire::requests::{ControlsRequest, RequestTrust, SuppliedControl};
 
@@ -34,7 +34,8 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .organization_floor
         .as_ref()
         .map(|supplied| {
-            let bytes = canonical(&supplied.value);
+            let bytes = serde_json::to_vec(&supplied.value)
+                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
             let floor = OrganizationFloor::parse(&bytes).map_err(floor_detail)?;
             if floor.digest() != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
@@ -73,7 +74,8 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .trusted_time
         .as_ref()
         .map(|supplied| {
-            let bytes = canonical(&supplied.value);
+            let bytes = serde_json::to_vec(&supplied.value)
+                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
             let statement = TrustedTimeStatement::parse(&bytes)
                 .map_err(|error| configuration_detail(&error))?;
             if statement.digest() != supplied.expected_digest {
@@ -138,7 +140,8 @@ fn typed<T>(
     parse: impl FnOnce(&[u8]) -> Result<T, Error>,
     digest: impl FnOnce(&T) -> Digest,
 ) -> Result<(T, RequestTrust), ErrorDetail> {
-    let bytes = canonical(&supplied.value);
+    let bytes = serde_json::to_vec(&supplied.value)
+        .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
     let value = parse(&bytes).map_err(|error| configuration_detail(&error))?;
     if digest(&value) != supplied.expected_digest {
         return Err(code(AnalysisErrorCode::DigestMismatch));

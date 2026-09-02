@@ -143,7 +143,8 @@ fn bind_input(
     Ok(BoundInput {
         payload_digest: envelope.payload_digest,
         supplied: SuppliedSemanticEvidence {
-            value,
+            value: serde_json::from_slice(&envelope_bytes)
+                .map_err(|_defect| BootstrapJobError::SemanticEvidence)?,
             expected_context_digest: template.producer.context_digest,
         },
         acquisition_identity,

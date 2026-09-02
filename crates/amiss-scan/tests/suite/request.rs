@@ -7,11 +7,11 @@ use amiss_fixtures::{SiteObservation, record_set, site_navigation, site_observat
 use amiss_scan::request::controls;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::parse;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::report::AnalysisErrorCode;
 use amiss_wire::requests::{
-    ControlsRequest, RequestTrust, SuppliedControl, SuppliedSemanticEvidence, SuppliedTime,
+    ControlsRequest, ControlsRequestSchema, RequestTrust, SuppliedControl,
+    SuppliedSemanticEvidence, SuppliedTime,
 };
 use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
 
@@ -59,6 +59,7 @@ const CONSTRAINT: &str = r#"{
 
 const fn empty() -> ControlsRequest {
     ControlsRequest {
+        schema: ControlsRequestSchema::Current,
         organization_floor: None,
         debt_snapshot: None,
         waiver_bundle: None,
@@ -70,7 +71,7 @@ const fn empty() -> ControlsRequest {
 
 fn supplied(doc: &str, expected: Digest) -> SuppliedControl {
     SuppliedControl {
-        value: parse(doc.as_bytes()).expect("the fixture is JSON"),
+        value: serde_json::from_str(doc).expect("the fixture is JSON"),
         expected_digest: expected,
         trust_source: RequestTrust::OrganizationPolicy,
     }
@@ -105,9 +106,11 @@ fn semantic_evidence(
 
 fn supplied_semantic(evidence: SemanticEvidence) -> SuppliedSemanticEvidence {
     let expected_context_digest = evidence.producer.context_digest;
+    let value = amiss_wire::semantic::envelope(evidence)
+        .expect("the generic envelope admits producer-defined semantics");
     SuppliedSemanticEvidence {
-        value: amiss_wire::semantic::envelope(evidence)
-            .expect("the generic envelope admits producer-defined semantics"),
+        value: serde_json::from_slice(&amiss_wire::json::canonical(&value))
+            .expect("the envelope is JSON"),
         expected_context_digest,
     }
 }
@@ -138,7 +141,7 @@ fn a_verified_time_statement_lands_with_its_run_context() {
         amiss_wire::controls::TrustedTimeStatement::parse(TIME.as_bytes()).expect("fixture parses");
     let mut request = empty();
     request.trusted_time = Some(SuppliedTime {
-        value: parse(TIME.as_bytes()).expect("the fixture is JSON"),
+        value: serde_json::from_str(TIME).expect("the fixture is JSON"),
         expected_digest: statement.digest(),
         provider: "gitlab-ci".to_owned(),
         provider_run_id: "pipeline/01J2Z9-7".to_owned(),
@@ -156,7 +159,7 @@ fn a_verified_time_statement_lands_with_its_run_context() {
 fn a_wrong_time_digest_is_refused() {
     let mut request = empty();
     request.trusted_time = Some(SuppliedTime {
-        value: parse(TIME.as_bytes()).expect("the fixture is JSON"),
+        value: serde_json::from_str(TIME).expect("the fixture is JSON"),
         expected_digest: hb("test/other", b"not the statement"),
         provider: "gitlab-ci".to_owned(),
         provider_run_id: "pipeline/01J2Z9-7".to_owned(),
@@ -310,7 +313,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
     right.producer.context_digest = hb("test/record-context", b"right");
     let mut supplied = vec![supplied_semantic(left), supplied_semantic(right)];
     supplied.sort_by_key(|item| {
-        amiss_wire::semantic::parse(&amiss_wire::json::canonical(&item.value))
+        amiss_wire::semantic::parse(&serde_json::to_vec(&item.value).expect("envelope JSON"))
             .expect("the generic envelopes are valid")
             .payload_digest
     });
@@ -330,8 +333,10 @@ fn semantic_evidence_must_match_the_independently_supplied_context() {
         Vec::new(),
     );
     let mut request = empty();
+    let value = amiss_wire::semantic::envelope(evidence).expect("the generic envelope is valid");
     request.semantic_evidence = vec![SuppliedSemanticEvidence {
-        value: amiss_wire::semantic::envelope(evidence).expect("the generic envelope is valid"),
+        value: serde_json::from_slice(&amiss_wire::json::canonical(&value))
+            .expect("the envelope is JSON"),
         expected_context_digest: hb("test/inventory", b"another inventory"),
     }];
 

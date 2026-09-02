@@ -2,11 +2,11 @@ use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 
-use crate::controls::value::{object, positive_safe_integer, text};
-use crate::controls::{decode_enum, decode_provider_id, decode_provider_run_id, root};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use crate::controls::{provider_run_id_valid, root};
+use crate::de::{self, Error, ErrorKind};
 use crate::digest::Digest;
 use crate::json::{Value, canonical};
+use crate::model::ArtifactId;
 
 mod candidate;
 mod evaluation;
@@ -140,17 +140,28 @@ fn validate_snapshot(request: &SnapshotRequest) -> Result<(), Error> {
 /// One supplied external control: the exact embedded JSON value, the
 /// independently acquired expected semantic digest, and the external trust
 /// source that authorized it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SuppliedControl {
-    pub value: Value,
+    pub value: serde_json::Value,
     pub expected_digest: Digest,
     pub trust_source: RequestTrust,
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum::AsRefStr,
+    strum::EnumString,
+    strum::IntoStaticStr,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RequestTrust {
     ExternalRequiredCheck,
     OrganizationPolicy,
@@ -158,9 +169,10 @@ pub enum RequestTrust {
 
 /// The supplied trusted-time statement with the provider-authenticated run
 /// context the statement must identify. Its trust source is fixed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SuppliedTime {
-    pub value: Value,
+    pub value: serde_json::Value,
     pub expected_digest: Digest,
     pub provider: String,
     pub provider_run_id: String,
@@ -169,20 +181,35 @@ pub struct SuppliedTime {
 
 /// One semantic envelope paired with the independently planned build or
 /// inventory context it must identify.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SuppliedSemanticEvidence {
-    pub value: Value,
+    pub value: serde_json::Value,
     pub expected_context_digest: Digest,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ControlsRequestSchema {
+    #[default]
+    #[serde(rename = "amiss/scanner-controls-request")]
+    Current,
 }
 
 /// The external-input request: five nullable supplied controls and the
 /// bounded semantic-evidence set the trusted caller acquired.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ControlsRequest {
+    pub schema: ControlsRequestSchema,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub organization_floor: Option<SuppliedControl>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub debt_snapshot: Option<SuppliedControl>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub waiver_bundle: Option<SuppliedControl>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub trusted_time: Option<SuppliedTime>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub execution_constraint: Option<SuppliedControl>,
     pub semantic_evidence: Vec<SuppliedSemanticEvidence>,
 }
@@ -194,26 +221,10 @@ impl ControlsRequest {
     /// grammar values. Embedded control values are shape-checked as objects
     /// only; their own schemas and digests are the consumer's verification.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, CONTROLS_REQUEST_SCHEMA)
-        })?;
-        let organization_floor = obj.required("organization_floor", decode_supplied)?;
-        let debt_snapshot = obj.required("debt_snapshot", decode_supplied)?;
-        let waiver_bundle = obj.required("waiver_bundle", decode_supplied)?;
-        let trusted_time = obj.required("trusted_time", decode_time)?;
-        let execution_constraint = obj.required("execution_constraint", decode_supplied)?;
-        let semantic_evidence = obj.required("semantic_evidence", decode_semantic_evidence)?;
-        obj.finish()?;
-        Ok(Self {
-            organization_floor,
-            debt_snapshot,
-            waiver_bundle,
-            trusted_time,
-            execution_constraint,
-            semantic_evidence,
-        })
+        root(bytes)?;
+        let request: Self = de::deserialize_json(bytes)?;
+        validate_controls(&request)?;
+        Ok(request)
     }
 
     /// Serializes one valid request to its unique canonical JSON bytes.
@@ -222,8 +233,68 @@ impl ControlsRequest {
     ///
     /// The constructed fields violate the same laws [`Self::parse`] enforces.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        checked_canonical(&controls_value(self)?, Self::parse)
+        validate_controls(self)?;
+        let bytes = serde_json_canonicalizer::to_vec(self)
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+        root(&bytes)?;
+        Ok(bytes)
     }
+}
+
+fn validate_controls(request: &ControlsRequest) -> Result<(), Error> {
+    [
+        ("$.organization_floor.value", &request.organization_floor),
+        ("$.debt_snapshot.value", &request.debt_snapshot),
+        ("$.waiver_bundle.value", &request.waiver_bundle),
+        (
+            "$.execution_constraint.value",
+            &request.execution_constraint,
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(path, supplied)| supplied.as_ref().map(|value| (path, &value.value)))
+    .try_for_each(|(path, value)| require_object(path, value))?;
+
+    if let Some(time) = &request.trusted_time {
+        require_object("$.trusted_time.value", &time.value)?;
+        ArtifactId::new(time.provider.clone())
+            .is_some()
+            .then_some(())
+            .ok_or_else(|| Error::new("$.trusted_time.provider", ErrorKind::InvalidValue))?;
+        provider_run_id_valid(&time.provider_run_id)
+            .then_some(())
+            .ok_or_else(|| Error::new("$.trusted_time.provider_run_id", ErrorKind::InvalidValue))?;
+        (1..=9_007_199_254_740_991)
+            .contains(&time.provider_run_attempt)
+            .then_some(())
+            .ok_or_else(|| {
+                Error::new(
+                    "$.trusted_time.provider_run_attempt",
+                    ErrorKind::InvalidValue,
+                )
+            })?;
+    }
+
+    if request.semantic_evidence.len() > SEMANTIC_EVIDENCE_REQUEST_LIMIT {
+        return Err(Error::new("$.semantic_evidence", ErrorKind::LimitExceeded));
+    }
+    request
+        .semantic_evidence
+        .iter()
+        .enumerate()
+        .try_for_each(|(index, evidence)| {
+            require_object(
+                &format!("$.semantic_evidence[{index}].value"),
+                &evidence.value,
+            )
+        })
+}
+
+fn require_object(path: &str, value: &serde_json::Value) -> Result<(), Error> {
+    value
+        .is_object()
+        .then_some(())
+        .ok_or_else(|| Error::new(path, ErrorKind::WrongType))
 }
 
 /// The three exact streams carried through the bootstrap-to-engine pipe.
@@ -308,157 +379,4 @@ fn checked_canonical<T>(
     let bytes = canonical(value);
     let _parsed = parse(&bytes)?;
     Ok(bytes)
-}
-
-fn supplied_value(control: &SuppliedControl) -> Value {
-    let mut rows = supplied_rows(&control.value, control.expected_digest);
-    rows.push(("trust_source", text(control.trust_source.as_ref())));
-    object(rows)
-}
-
-fn supplied_time_value(time: &SuppliedTime) -> Result<Value, Error> {
-    let mut rows = supplied_rows(&time.value, time.expected_digest);
-    rows.extend([
-        ("provider", text(&time.provider)),
-        ("provider_run_id", text(&time.provider_run_id)),
-        (
-            "provider_run_attempt",
-            positive_safe_integer(
-                "$.trusted_time.provider_run_attempt",
-                time.provider_run_attempt,
-            )?,
-        ),
-    ]);
-    Ok(object(rows))
-}
-
-fn supplied_rows(value: &Value, expected_digest: Digest) -> Vec<(&'static str, Value)> {
-    vec![
-        ("value", value.clone()),
-        ("expected_digest", text(&expected_digest.to_string())),
-    ]
-}
-
-fn controls_value(request: &ControlsRequest) -> Result<Value, Error> {
-    let mut rows = Vec::with_capacity(7);
-    for (name, control) in [
-        ("organization_floor", request.organization_floor.as_ref()),
-        ("debt_snapshot", request.debt_snapshot.as_ref()),
-        ("waiver_bundle", request.waiver_bundle.as_ref()),
-    ] {
-        rows.push((name, optional_supplied(control)));
-    }
-    let trusted_time = request
-        .trusted_time
-        .as_ref()
-        .map(supplied_time_value)
-        .transpose()?
-        .unwrap_or(Value::Null);
-    rows.push(("trusted_time", trusted_time));
-    rows.push((
-        "execution_constraint",
-        optional_supplied(request.execution_constraint.as_ref()),
-    ));
-    rows.push((
-        "semantic_evidence",
-        Value::array(
-            request
-                .semantic_evidence
-                .iter()
-                .map(|evidence| {
-                    object(vec![
-                        ("value", evidence.value.clone()),
-                        (
-                            "expected_context_digest",
-                            text(&evidence.expected_context_digest.to_string()),
-                        ),
-                    ])
-                })
-                .collect(),
-        ),
-    ));
-    rows.push(("schema", text(CONTROLS_REQUEST_SCHEMA)));
-    Ok(object(rows))
-}
-
-fn decode_semantic_evidence(
-    path: &str,
-    value: Value,
-) -> Result<Vec<SuppliedSemanticEvidence>, Error> {
-    let values = de::array(path, value)?;
-    if values.len() > SEMANTIC_EVIDENCE_REQUEST_LIMIT {
-        return fail(path, ErrorKind::LimitExceeded);
-    }
-    values
-        .into_iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let item_path = format!("{path}[{index}]");
-            let mut item = Obj::new(&item_path, value)?;
-            let value = item.required("value", embedded_value)?;
-            let expected_context_digest = item.required("expected_context_digest", de::digest)?;
-            item.finish()?;
-            Ok(SuppliedSemanticEvidence {
-                value,
-                expected_context_digest,
-            })
-        })
-        .collect()
-}
-
-fn optional_supplied(control: Option<&SuppliedControl>) -> Value {
-    control.map_or(Value::Null, supplied_value)
-}
-
-fn embedded_value(path: &str, value: Value) -> Result<Value, Error> {
-    match value {
-        Value::Object(_) => Ok(value),
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Array(_) => {
-            fail(path, ErrorKind::WrongType)
-        }
-    }
-}
-
-fn decode_supplied(path: &str, value: Value) -> Result<Option<SuppliedControl>, Error> {
-    let Some(value) = de::nullable(value) else {
-        return Ok(None);
-    };
-    let mut obj = Obj::new(path, value)?;
-    let embedded = obj.required("value", embedded_value)?;
-    let digest_path = obj.field("expected_digest");
-    let expected_digest = de::digest(&digest_path, obj.take("expected_digest")?)?;
-    let trust_source = obj.required("trust_source", decode_enum)?;
-    obj.finish()?;
-    Ok(Some(SuppliedControl {
-        value: embedded,
-        expected_digest,
-        trust_source,
-    }))
-}
-
-fn decode_time(path: &str, value: Value) -> Result<Option<SuppliedTime>, Error> {
-    let Some(value) = de::nullable(value) else {
-        return Ok(None);
-    };
-    let mut obj = Obj::new(path, value)?;
-    let embedded = obj.required("value", embedded_value)?;
-    let digest_path = obj.field("expected_digest");
-    let expected_digest = de::digest(&digest_path, obj.take("expected_digest")?)?;
-    let provider = obj.required("provider", decode_provider_id)?;
-    let run_id_path = obj.field("provider_run_id");
-    let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;
-    let attempt_path = obj.field("provider_run_attempt");
-    let attempt_raw = de::integer(&attempt_path, obj.take("provider_run_attempt")?)?;
-    let provider_run_attempt = u64::try_from(attempt_raw)
-        .ok()
-        .filter(|attempt| *attempt >= 1)
-        .ok_or_else(|| Error::new(&attempt_path, ErrorKind::InvalidValue))?;
-    obj.finish()?;
-    Ok(Some(SuppliedTime {
-        value: embedded,
-        expected_digest,
-        provider,
-        provider_run_id,
-        provider_run_attempt,
-    }))
 }

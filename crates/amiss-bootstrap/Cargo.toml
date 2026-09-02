@@ -10,6 +10,7 @@ exclude.workspace = true
 [dependencies]
 amiss-git = { path = "../amiss-git", version = "0.27.0" }
 amiss-wire = { path = "../amiss-wire", version = "0.27.0" }
+serde_json.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 

@@ -7,7 +7,6 @@ use amiss_bootstrap::supervise::{
 };
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
-use amiss_wire::json::canonical;
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestMode, RequestStreams,
     SnapshotMaterialization, SnapshotRequest,
@@ -71,9 +70,10 @@ pub(super) fn capture_requests(
         .execution_constraint
         .as_ref()
         .ok_or_else(|| tampered("execution-constraint-absent"))?;
-    let embedded_constraint =
-        ExecutionConstraintDescriptor::parse(&canonical(&supplied_constraint.value))
-            .map_err(|_defect| tampered("execution-constraint-invalid"))?;
+    let constraint_bytes = serde_json::to_vec(&supplied_constraint.value)
+        .map_err(|_defect| tampered("execution-constraint-invalid"))?;
+    let embedded_constraint = ExecutionConstraintDescriptor::parse(&constraint_bytes)
+        .map_err(|_defect| tampered("execution-constraint-invalid"))?;
     if embedded_constraint.digest() != supplied_constraint.expected_digest
         || embedded_constraint != *constraint
     {
@@ -83,7 +83,9 @@ pub(super) fn capture_requests(
         .trusted_time
         .as_ref()
         .ok_or_else(|| tampered("trusted-time-absent"))?;
-    let statement = TrustedTimeStatement::parse(&canonical(&supplied_time.value))
+    let time_bytes = serde_json::to_vec(&supplied_time.value)
+        .map_err(|_defect| tampered("trusted-time-invalid"))?;
+    let statement = TrustedTimeStatement::parse(&time_bytes)
         .map_err(|_defect| tampered("trusted-time-invalid"))?;
     if statement.digest() != supplied_time.expected_digest
         || statement.provider() != supplied_time.provider
@@ -137,7 +139,8 @@ fn semantic_expectations(
     values
         .iter()
         .map(|supplied| {
-            let bytes = canonical(&supplied.value);
+            let bytes = serde_json::to_vec(&supplied.value)
+                .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
             let envelope = amiss_wire::semantic::parse(&bytes)
                 .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
             if envelope.payload.producer.context_digest != supplied.expected_context_digest {

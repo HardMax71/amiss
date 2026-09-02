@@ -8,7 +8,6 @@ use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, TrustedTimeInput, TrustedTimeStatement,
 };
 use amiss_wire::digest::Digest;
-use amiss_wire::json::{self, Value};
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity, UtcInstant};
 use amiss_wire::requests::{
     EvaluationRequest, RequestStreams, RequestTrust, SnapshotRequest, SuppliedControl,
@@ -186,15 +185,15 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     let statement_bytes = statement
         .canonical_bytes()
         .map_err(|_defect| BootstrapJobError::TrustedTime)?;
-    let statement_value =
-        json::parse(&statement_bytes).map_err(|_defect| BootstrapJobError::TrustedTime)?;
+    let statement_value = serde_json::from_slice(&statement_bytes)
+        .map_err(|_defect| BootstrapJobError::TrustedTime)?;
 
     let constraint = checked_plan
         .execution
         .canonical_bytes()
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    let constraint_value =
-        json::parse(&constraint).map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    let constraint_value = serde_json::from_slice(&constraint)
+        .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
     let semantic_expectations = plan::semantic_acquisition_expectations(&checked_plan.policy);
     let semantic = bind_semantic_evidence(
         &checked_plan.policy.semantic_evidence,
@@ -229,7 +228,11 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     })
 }
 
-fn supplied_time(run: &RunRequest, statement: &TrustedTimeStatement, value: Value) -> SuppliedTime {
+fn supplied_time(
+    run: &RunRequest,
+    statement: &TrustedTimeStatement,
+    value: serde_json::Value,
+) -> SuppliedTime {
     SuppliedTime {
         value,
         expected_digest: statement.digest(),

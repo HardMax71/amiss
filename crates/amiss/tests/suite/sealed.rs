@@ -11,7 +11,7 @@ use amiss_fixtures::{SiteObservation, site_navigation, site_observation};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{OrganizationFloor, Profile};
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::{Value, parse};
+use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity,
 };
@@ -22,9 +22,9 @@ use amiss_wire::requests::{
 use amiss_wire::semantic::observation::{SphinxLabelKind, SphinxLabelObservation};
 use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
 
-fn supplied_semantic(value: Value, expected_context_digest: Digest) -> SuppliedSemanticEvidence {
+fn supplied_semantic(value: &Value, expected_context_digest: Digest) -> SuppliedSemanticEvidence {
     SuppliedSemanticEvidence {
-        value,
+        value: serde_json::from_slice(&canonical(value)).unwrap(),
         expected_context_digest,
     }
 }
@@ -211,7 +211,7 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
     let floor = OrganizationFloor::parse(floor_bytes).unwrap();
     let controls = ControlsRequest {
         organization_floor: Some(SuppliedControl {
-            value: parse(floor_bytes).unwrap(),
+            value: serde_json::from_slice(floor_bytes).unwrap(),
             expected_digest: floor.digest(),
             trust_source: RequestTrust::OrganizationPolicy,
         }),
@@ -314,7 +314,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     let expected_context_digest = semantic.producer.context_digest;
     let evidence = amiss_wire::semantic::envelope(semantic).unwrap();
     let controls = ControlsRequest {
-        semantic_evidence: vec![supplied_semantic(evidence, expected_context_digest)],
+        semantic_evidence: vec![supplied_semantic(&evidence, expected_context_digest)],
         ..ControlsRequest::default()
     };
     let streams = RequestStreams {
@@ -423,7 +423,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         evaluation: evaluation.canonical_bytes().unwrap(),
         snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
         controls: ControlsRequest {
-            semantic_evidence: vec![supplied_semantic(evidence, context_digest)],
+            semantic_evidence: vec![supplied_semantic(&evidence, context_digest)],
             ..ControlsRequest::default()
         }
         .canonical_bytes()
@@ -719,7 +719,7 @@ fn stale_intersphinx_evidence_refuses_the_run() {
         evaluation: evaluation.canonical_bytes().unwrap(),
         snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
         controls: ControlsRequest {
-            semantic_evidence: vec![supplied_semantic(stale, expected_context_digest)],
+            semantic_evidence: vec![supplied_semantic(&stale, expected_context_digest)],
             ..ControlsRequest::default()
         }
         .canonical_bytes()

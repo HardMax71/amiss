@@ -230,7 +230,7 @@ fn bind_statement(
     let parsed =
         TrustedTimeStatement::parse(&canonical(&statement)).expect("a valid statement fixture");
     time.expected_digest = parsed.digest();
-    time.value = statement.clone();
+    time.value = serde_json::from_slice(&canonical(&statement)).expect("a JSON statement");
     (statement, parsed.digest().to_string())
 }
 
@@ -353,7 +353,8 @@ fn patch_controls(
         .as_ref()
         .expect("a constraint");
     let constraint_source = supplied.trust_source.as_ref().to_owned();
-    let constraint_value = supplied.value.clone();
+    let constraint_value = parse(&serde_json::to_vec(&supplied.value).expect("constraint JSON"))
+        .expect("a constraint value");
     let constraint_digest = requests.constraint.digest().to_string();
 
     let controls = entry(payload, "controls");
@@ -586,12 +587,7 @@ fn symlinked_scratch(staged: &Release) {
 /// Grows the opaque organization-floor value until the canonical controls
 /// request is exactly `target` bytes long.
 fn inflate_controls(run: &mut Run, target: u64) {
-    let padded = |length: usize| {
-        Value::object(vec![(
-            "padding".to_owned(),
-            Value::string("x".repeat(length)),
-        )])
-    };
+    let padded = |length: usize| serde_json::json!({ "padding": "x".repeat(length) });
     let floor = run
         .requests
         .controls

@@ -73,16 +73,13 @@ fn semantic_inputs(
         complete,
         observations: vec![amiss_fixtures::record_set(set, records)],
     };
+    let value = amiss_wire::semantic::envelope(evidence).unwrap();
     let request = ControlsRequest {
-        organization_floor: None,
-        debt_snapshot: None,
-        waiver_bundle: None,
-        trusted_time: None,
-        execution_constraint: None,
         semantic_evidence: vec![SuppliedSemanticEvidence {
-            value: amiss_wire::semantic::envelope(evidence).unwrap(),
+            value: serde_json::from_slice(&amiss_wire::json::canonical(&value)).unwrap(),
             expected_context_digest: context_digest,
         }],
+        ..ControlsRequest::default()
     };
     controls(&request)
         .expect("the typed record set enters the scanner")
