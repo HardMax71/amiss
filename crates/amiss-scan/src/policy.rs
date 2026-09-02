@@ -101,6 +101,15 @@ const fn binding_mismatch_row() -> ErrorDetail {
     }
 }
 
+pub(crate) const fn trusted_time_invalid_row() -> ErrorDetail {
+    ErrorDetail {
+        code: AnalysisErrorCode::TrustedTimeInvalid,
+        path: None,
+        path_bytes: None,
+        resource: None,
+    }
+}
+
 fn identity_matches(
     control: &amiss_wire::model::RepositoryIdentity,
     control_ref: &amiss_wire::model::BranchRef,
@@ -127,9 +136,9 @@ fn verify_item_limit(
     }
 }
 
-/// The statement's evaluation bindings: repository, ref, candidate identity,
-/// and the provider run the wrapper authenticated. Shape and TTL were
-/// established at parse.
+/// Verifies the statement's shape, lifetime, repository, ref, candidate
+/// identity, and provider run, then returns the evaluation context carrying
+/// its canonical digest.
 ///
 /// # Errors
 ///
@@ -139,27 +148,27 @@ pub fn verify_time(
     repository: Option<&amiss_wire::model::RepositoryIdentity>,
     target_ref: Option<&str>,
     candidate_identity: &Digest,
-) -> Result<(), ErrorDetail> {
+) -> Result<TimeContext, ErrorDetail> {
     let statement = &input.statement;
     let bound = identity_matches(
-        statement.repository(),
-        statement.ref_name(),
+        &statement.repository,
+        &statement.ref_name,
         repository,
         target_ref,
-    ) && statement.candidate_identity_digest() == *candidate_identity
-        && statement.provider() == input.provider
-        && statement.provider_run_id() == input.provider_run_id
-        && statement.provider_run_attempt() == input.provider_run_attempt;
-    if bound {
-        Ok(())
-    } else {
-        Err(ErrorDetail {
-            code: AnalysisErrorCode::TrustedTimeInvalid,
-            path: None,
-            path_bytes: None,
-            resource: None,
-        })
+    ) && statement.candidate_identity_digest == *candidate_identity
+        && statement.provider == input.provider
+        && statement.provider_run_id == input.provider_run_id
+        && statement.provider_run_attempt == input.provider_run_attempt;
+    if !bound {
+        return Err(trusted_time_invalid_row());
     }
+    let digest = amiss_wire::controls::canonical_trusted_time(statement)
+        .map_err(|_defect| trusted_time_invalid_row())?
+        .1;
+    Ok(TimeContext {
+        statement: statement.clone(),
+        digest,
+    })
 }
 
 /// The snapshot-level debt binding: repository, ref, the verified floor's

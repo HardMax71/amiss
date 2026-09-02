@@ -1,4 +1,7 @@
-use amiss_wire::controls::{STATEMENT_TTL_MAX_SECONDS, TrustedTimeStatement};
+use amiss_wire::controls::{
+    STATEMENT_TTL_MAX_SECONDS, TrustedTimeController, TrustedTimeSchema, canonical_trusted_time,
+    parse_trusted_time,
+};
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json;
@@ -8,9 +11,8 @@ use crate::support::TIME_STATEMENT;
 
 #[test]
 fn a_run_id_answers_to_every_clause_that_bounds_it() {
-    let with_id = |id: &str| {
-        TrustedTimeStatement::parse(TIME_STATEMENT.replace("pipeline/01J2Z9-7", id).as_bytes())
-    };
+    let with_id =
+        |id: &str| parse_trusted_time(TIME_STATEMENT.replace("pipeline/01J2Z9-7", id).as_bytes());
     assert!(with_id(&"a".repeat(129)).is_err(), "over the length bound");
     assert!(with_id(&"a".repeat(128)).is_ok(), "at the length bound");
     assert!(with_id("").is_err(), "empty");
@@ -68,56 +70,63 @@ fn instants_round_trip_unix_seconds() {
 #[test]
 fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
     assert_eq!(STATEMENT_TTL_MAX_SECONDS, 600);
-    let statement = TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap();
-    assert_eq!(statement.schema(), "amiss/scanner-trusted-time-statement");
-    assert_eq!(statement.controller(), "external-required-check-clock");
-    assert_eq!(statement.provider(), "gitlab-ci");
+    let statement = parse_trusted_time(TIME_STATEMENT.as_bytes()).unwrap();
+    assert_eq!(statement.schema, TrustedTimeSchema::Current);
     assert_eq!(
-        statement.digest(),
+        statement.controller,
+        TrustedTimeController::ExternalRequiredCheckClock
+    );
+    assert_eq!(statement.provider, "gitlab-ci");
+    assert_eq!(
+        canonical_trusted_time(&statement).unwrap().1,
         hj(
             "amiss/scanner-trusted-time-statement",
             &json::parse(TIME_STATEMENT.as_bytes()).unwrap()
         )
     );
-    assert_eq!(statement.provider_run_id(), "pipeline/01J2Z9-7");
-    assert_eq!(statement.provider_run_attempt(), 2);
+    assert_eq!(statement.provider_run_id, "pipeline/01J2Z9-7");
+    assert_eq!(statement.provider_run_attempt, 2);
     assert_eq!(
-        statement.evaluation_instant().as_str(),
+        statement.evaluation_instant.as_str(),
         "2026-07-12T10:00:00Z"
     );
     assert_eq!(
-        statement.valid_until().epoch_seconds() - statement.evaluation_instant().epoch_seconds(),
+        statement.valid_until.epoch_seconds() - statement.evaluation_instant.epoch_seconds(),
         600
     );
 
     let too_long = TIME_STATEMENT.replace("10:10:00Z", "10:10:01Z");
     assert_eq!(
-        TrustedTimeStatement::parse(too_long.as_bytes())
-            .unwrap_err()
-            .kind,
+        parse_trusted_time(too_long.as_bytes()).unwrap_err().kind,
         ErrorKind::InvalidValue
     );
     let not_after = TIME_STATEMENT.replace("10:10:00Z", "10:00:00Z");
     assert_eq!(
-        TrustedTimeStatement::parse(not_after.as_bytes())
-            .unwrap_err()
-            .kind,
+        parse_trusted_time(not_after.as_bytes()).unwrap_err().kind,
         ErrorKind::InvalidValue
     );
     let trailing_separator = TIME_STATEMENT.replace("pipeline/01J2Z9-7", "pipeline/");
     assert_eq!(
-        TrustedTimeStatement::parse(trailing_separator.as_bytes())
+        parse_trusted_time(trailing_separator.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
     );
     let uppercase_provider = TIME_STATEMENT.replace("gitlab-ci", "GitLab-CI");
     assert_eq!(
-        TrustedTimeStatement::parse(uppercase_provider.as_bytes())
+        parse_trusted_time(uppercase_provider.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
     );
+    let impossible_day = TIME_STATEMENT.replace("2026-07-12T10:10:00Z", "2026-02-30T10:10:00Z");
+    let error = parse_trusted_time(impossible_day.as_bytes()).unwrap_err();
+    assert_eq!(error.path, "$.valid_until");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    let slash_host = TIME_STATEMENT.replace("gitlab.com", "gitlab.example/internal");
+    let error = parse_trusted_time(slash_host.as_bytes()).unwrap_err();
+    assert_eq!(error.path, "$.repository");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
     let numeric_run = TIME_STATEMENT.replace("pipeline/01J2Z9-7", "987654321");
-    assert!(TrustedTimeStatement::parse(numeric_run.as_bytes()).is_ok());
+    assert!(parse_trusted_time(numeric_run.as_bytes()).is_ok());
 }

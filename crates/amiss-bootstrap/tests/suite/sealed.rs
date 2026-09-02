@@ -13,7 +13,9 @@ use amiss_bootstrap::supervise::{
     AcceptanceDefect, Defect, Expectations, SealedControlExpectation, SealedExpectations,
     Supervised, accept, settle,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+};
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::RepositoryIdentity;
@@ -225,9 +227,11 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
     let identity = identity_digest(evaluation);
     let repository_value = entry(evaluation, "repository").clone();
     let statement = statement_value(&repository_value, &ties, &identity);
-    let statement_digest = TrustedTimeStatement::parse(&canonical(&statement))
-        .expect("a valid statement fixture")
-        .digest()
+    let parsed_statement =
+        parse_trusted_time(&canonical(&statement)).expect("a valid statement fixture");
+    let statement_digest = canonical_trusted_time(&parsed_statement)
+        .unwrap()
+        .1
         .to_string();
 
     let descriptor = example("scanner-execution-constraint.json");

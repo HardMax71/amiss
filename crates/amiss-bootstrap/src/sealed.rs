@@ -6,7 +6,9 @@ use amiss_bootstrap::supervise::{
     SealedControlExpectation, SealedExpectations, SealedSemanticExpectation,
 };
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+};
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestMode, RequestStreams,
     SnapshotMaterialization, SnapshotRequest,
@@ -85,12 +87,14 @@ pub(super) fn capture_requests(
         .ok_or_else(|| tampered("trusted-time-absent"))?;
     let time_bytes = serde_json::to_vec(&supplied_time.value)
         .map_err(|_defect| tampered("trusted-time-invalid"))?;
-    let statement = TrustedTimeStatement::parse(&time_bytes)
-        .map_err(|_defect| tampered("trusted-time-invalid"))?;
-    if statement.digest() != supplied_time.expected_digest
-        || statement.provider() != supplied_time.provider
-        || statement.provider_run_id() != supplied_time.provider_run_id
-        || statement.provider_run_attempt() != supplied_time.provider_run_attempt
+    let statement =
+        parse_trusted_time(&time_bytes).map_err(|_defect| tampered("trusted-time-invalid"))?;
+    let (_, statement_digest) =
+        canonical_trusted_time(&statement).map_err(|_defect| tampered("trusted-time-invalid"))?;
+    if statement_digest != supplied_time.expected_digest
+        || statement.provider != supplied_time.provider
+        || statement.provider_run_id != supplied_time.provider_run_id
+        || statement.provider_run_attempt != supplied_time.provider_run_attempt
     {
         return Err(tampered("trusted-time-mismatch"));
     }
@@ -113,7 +117,7 @@ pub(super) fn capture_requests(
         provider: supplied_time.provider.clone(),
         provider_run_id: supplied_time.provider_run_id.clone(),
         provider_run_attempt: supplied_time.provider_run_attempt,
-        candidate_identity_digest: statement.candidate_identity_digest().to_string(),
+        candidate_identity_digest: statement.candidate_identity_digest.to_string(),
         organization_floor: control_expectation(controls.organization_floor.as_ref()),
         debt_snapshot: control_expectation(controls.debt_snapshot.as_ref()),
         waiver_bundle: control_expectation(controls.waiver_bundle.as_ref()),
@@ -121,7 +125,7 @@ pub(super) fn capture_requests(
             digest: constraint.digest().to_string(),
             trust_source: supplied_constraint.trust_source.as_ref().to_owned(),
         },
-        trusted_time_digest: statement.digest().to_string(),
+        trusted_time_digest: statement_digest.to_string(),
         semantic_evidence: semantic_expectations(&controls.semantic_evidence)?,
     };
     let mut evaluation = evaluation;

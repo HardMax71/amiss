@@ -7,8 +7,9 @@ use std::fs;
 use std::path::Path;
 
 use amiss_wire::controls::{
-    ConstraintPlatform, ExecutionConstraintDescriptor, ExecutionConstraintInput, TrustedTimeInput,
-    TrustedTimeStatement, valid_required_status_name,
+    ConstraintPlatform, ExecutionConstraintDescriptor, ExecutionConstraintInput,
+    TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement, canonical_trusted_time,
+    parse_trusted_time, valid_required_status_name,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::Digest;
@@ -39,8 +40,10 @@ fn repository() -> RepositoryIdentity {
     .unwrap()
 }
 
-fn trusted_time_input() -> TrustedTimeInput {
-    TrustedTimeInput {
+fn trusted_time_statement() -> TrustedTimeStatement {
+    TrustedTimeStatement {
+        schema: TrustedTimeSchema::Current,
+        controller: TrustedTimeController::ExternalRequiredCheckClock,
         repository: repository(),
         ref_name: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
         candidate_identity_digest: Digest::from_wire(DIGEST_A).unwrap(),
@@ -76,20 +79,25 @@ fn execution_constraint_input() -> ExecutionConstraintInput {
 }
 
 #[test]
-fn trusted_time_constructor_and_writer_share_the_parser_contract() {
-    let statement = TrustedTimeStatement::new(trusted_time_input()).unwrap();
-    let bytes = statement.canonical_bytes().unwrap();
+fn trusted_time_model_and_writer_share_the_parser_contract() {
+    let statement = trusted_time_statement();
+    let (bytes, _) = canonical_trusted_time(&statement).unwrap();
 
-    assert_eq!(TrustedTimeStatement::parse(&bytes).unwrap(), statement);
+    assert_eq!(parse_trusted_time(&bytes).unwrap(), statement);
     assert_eq!(json::canonical(&json::parse(&bytes).unwrap()), bytes);
 
     for attempt in [0, 9_007_199_254_740_992, u64::MAX] {
-        let mut invalid = trusted_time_input();
+        let mut invalid = trusted_time_statement();
         invalid.provider_run_attempt = attempt;
-        let error = TrustedTimeStatement::new(invalid).unwrap_err();
+        let error = canonical_trusted_time(&invalid).unwrap_err();
         assert_eq!(error.path, "$.provider_run_attempt");
         assert_eq!(error.kind, ErrorKind::InvalidValue);
     }
+    let mut invalid = trusted_time_statement();
+    invalid.valid_until = invalid.evaluation_instant.clone();
+    let error = canonical_trusted_time(&invalid).unwrap_err();
+    assert_eq!(error.path, "$.valid_until");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
 #[test]
@@ -112,14 +120,10 @@ fn execution_constraint_constructor_and_writer_share_the_parser_contract() {
 
 #[test]
 fn producer_writers_preserve_the_validated_digests() {
-    let statement = TrustedTimeStatement::new(trusted_time_input()).unwrap();
-    let statement_bytes = statement.canonical_bytes().unwrap();
-    assert_eq!(
-        TrustedTimeStatement::parse(&statement_bytes)
-            .unwrap()
-            .digest(),
-        statement.digest()
-    );
+    let statement = trusted_time_statement();
+    let (statement_bytes, statement_digest) = canonical_trusted_time(&statement).unwrap();
+    let parsed = parse_trusted_time(&statement_bytes).unwrap();
+    assert_eq!(canonical_trusted_time(&parsed).unwrap().1, statement_digest);
 
     let descriptor = ExecutionConstraintDescriptor::new(execution_constraint_input()).unwrap();
     let descriptor_bytes = descriptor.canonical_bytes().unwrap();
@@ -149,9 +153,9 @@ fn required_status_names_share_one_public_grammar() {
 #[test]
 fn producer_writers_preserve_the_published_contract_examples() {
     let trusted_time = example("scanner-trusted-time-statement.json");
-    let statement = TrustedTimeStatement::parse(&trusted_time).unwrap();
+    let statement = parse_trusted_time(&trusted_time).unwrap();
     assert_eq!(
-        statement.canonical_bytes().unwrap(),
+        canonical_trusted_time(&statement).unwrap().0,
         json::canonical(&json::parse(&trusted_time).unwrap())
     );
 

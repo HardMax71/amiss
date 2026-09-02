@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use amiss_wire::{json, locale, publication, relation, requests, semantic};
+use amiss_wire::{controls, json, locale, publication, relation, requests, semantic};
 
 #[path = "../support/relation.rs"]
 mod relation_fixture;
@@ -136,6 +136,12 @@ fn sealed_request_examples_match_their_typed_sources() {
     assert_eq!(
         serde_json_canonicalizer::to_vec(&request).unwrap(),
         json::canonical(&json::parse(&bytes).unwrap())
+    );
+    let time_bytes = fs::read(examples.join("scanner-trusted-time-statement.json")).unwrap();
+    let statement = controls::parse_trusted_time(&time_bytes).unwrap();
+    assert_eq!(
+        controls::canonical_trusted_time(&statement).unwrap().0,
+        json::canonical(&json::parse(&time_bytes).unwrap())
     );
 }
 

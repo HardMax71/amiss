@@ -216,7 +216,7 @@ fn apply_exceptions(
     let Some(instant) = policy
         .time
         .as_ref()
-        .map(|time| time.statement.evaluation_instant().clone())
+        .map(|time| time.statement.evaluation_instant.clone())
     else {
         return (extra, Vec::new());
     };

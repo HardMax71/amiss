@@ -7,7 +7,7 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{DebtInput, FloorInput, TimeInput};
 use amiss_scan::report::{CandidateBlock, Setup, SnapshotIdentity, candidate_identity_digest};
-use amiss_wire::controls::{DebtSnapshot, OrganizationFloor, TrustedTimeStatement};
+use amiss_wire::controls::{DebtSnapshot, OrganizationFloor, parse_trusted_time};
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
@@ -199,6 +199,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
 }}"#,
         candidate_identity_digest(&time_setup)
     );
+    let statement = parse_trusted_time(statement.as_bytes()).unwrap();
     let shell = amiss_scan::pipeline::SetupShell {
         engine,
         profile: amiss_wire::controls::Profile::Enforce,
@@ -217,7 +218,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         }),
         waiver: None,
         time: Some(TimeInput {
-            statement: TrustedTimeStatement::parse(statement.as_bytes()).unwrap(),
+            statement,
             provider: "gitlab-ci".to_owned(),
             provider_run_id: "pipeline/987654321".to_owned(),
             provider_run_attempt: 2,

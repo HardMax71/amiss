@@ -16,7 +16,9 @@ use std::process::{Command, ExitCode, Output};
 use amiss_bootstrap::result::{BootstrapResult, parse_result};
 use amiss_fixtures::CommitChain;
 use amiss_fixtures::requests::SealedRequests;
-use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::Oid;
@@ -227,11 +229,11 @@ fn bind_statement(
     );
     set(&mut statement, "evaluation_instant", string(INSTANT));
     set(&mut statement, "valid_until", string(VALID_UNTIL));
-    let parsed =
-        TrustedTimeStatement::parse(&canonical(&statement)).expect("a valid statement fixture");
-    time.expected_digest = parsed.digest();
+    let parsed = parse_trusted_time(&canonical(&statement)).expect("a valid statement fixture");
+    let (_, digest) = canonical_trusted_time(&parsed).unwrap();
+    time.expected_digest = digest;
     time.value = serde_json::from_slice(&canonical(&statement)).expect("a JSON statement");
-    (statement, parsed.digest().to_string())
+    (statement, digest.to_string())
 }
 
 /// Builds the envelope the engine must print for the wrapper to accept it.

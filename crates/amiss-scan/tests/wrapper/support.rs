@@ -13,7 +13,7 @@ use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, WaiverInput};
 use amiss_scan::report::{CandidateBlock, candidate_identity_digest};
 use amiss_scan::{Effects, Setup, SetupShell, SnapshotIdentity, commit_pair};
 use amiss_wire::controls::{
-    DebtSnapshot, OrganizationFloor, Profile, TrustedTimeStatement, WaiverBundle,
+    DebtSnapshot, OrganizationFloor, Profile, WaiverBundle, parse_trusted_time,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
@@ -153,8 +153,9 @@ pub(crate) fn time_input(fx: &Fixture) -> TimeInput {
   "valid_until": "2026-07-12T10:09:00Z"
 }}"#
     );
+    let statement = parse_trusted_time(doc.as_bytes()).unwrap();
     TimeInput {
-        statement: TrustedTimeStatement::parse(doc.as_bytes()).unwrap(),
+        statement,
         provider: "gitlab-ci".to_owned(),
         provider_run_id: "pipeline/987654321".to_owned(),
         provider_run_attempt: 2,

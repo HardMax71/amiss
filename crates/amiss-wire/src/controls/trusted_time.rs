@@ -1,43 +1,41 @@
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::{Digest, hj};
-use crate::json::{Value, canonical};
-use crate::model::{BranchRef, RepositoryIdentity, UtcInstant};
+use serde::{Deserialize, Serialize};
 
-use super::value::{object, positive_safe_integer, repository, text};
-use super::{
-    decode_branch_ref, decode_instant, decode_provider_id, decode_provider_run_id,
-    decode_repository, root,
-};
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
+use crate::json::MAX_SAFE_INTEGER;
+use crate::model::{ArtifactId, BranchRef, RepositoryIdentity, UtcInstant};
 
-const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement";
-const TRUSTED_TIME_CONTROLLER: &str = "external-required-check-clock";
+use super::{provider_run_id_valid, root};
+
+pub const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement";
+pub const TRUSTED_TIME_CONTROLLER: &str = "external-required-check-clock";
 
 /// The controller's maximum statement lifetime: `evaluation_instant <
 /// valid_until <= evaluation_instant + 600` whole seconds.
 pub const STATEMENT_TTL_MAX_SECONDS: i64 = 600;
 
-/// A trusted-time statement issued by the required-check clock inside the
-/// externally controlled run. Parsing establishes shape and the TTL law; the
-/// evaluation-side bindings (repository, ref, candidate identity, run,
-/// attempt) are separate verification.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TrustedTimeStatement {
-    digest: Digest,
-    repository: RepositoryIdentity,
-    ref_name: BranchRef,
-    candidate_identity_digest: Digest,
-    provider: String,
-    provider_run_id: String,
-    provider_run_attempt: u64,
-    evaluation_instant: UtcInstant,
-    valid_until: UtcInstant,
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TrustedTimeSchema {
+    #[serde(rename = "amiss/scanner-trusted-time-statement")]
+    Current,
 }
 
-/// The controller-owned fields of a trusted-time statement. The schema,
-/// controller identity, and digest are fixed or derived by the wire type.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TrustedTimeInput {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TrustedTimeController {
+    #[serde(rename = "external-required-check-clock")]
+    ExternalRequiredCheckClock,
+}
+
+/// A trusted-time statement issued by the required-check clock inside the
+/// externally controlled run. Its evaluation-side bindings remain separate
+/// verification.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TrustedTimeStatement {
+    pub schema: TrustedTimeSchema,
+    pub controller: TrustedTimeController,
     pub repository: RepositoryIdentity,
+    #[serde(rename = "ref")]
     pub ref_name: BranchRef,
     pub candidate_identity_digest: Digest,
     pub provider: String,
@@ -47,182 +45,73 @@ pub struct TrustedTimeInput {
     pub valid_until: UtcInstant,
 }
 
-impl TrustedTimeStatement {
-    #[must_use]
-    pub const fn digest(&self) -> Digest {
-        self.digest
-    }
-
-    #[must_use]
-    pub fn repository(&self) -> &RepositoryIdentity {
-        &self.repository
-    }
-
-    #[must_use]
-    pub fn ref_name(&self) -> &BranchRef {
-        &self.ref_name
-    }
-
-    #[must_use]
-    pub const fn candidate_identity_digest(&self) -> Digest {
-        self.candidate_identity_digest
-    }
-
-    #[must_use]
-    pub fn provider(&self) -> &str {
-        &self.provider
-    }
-
-    #[must_use]
-    pub fn provider_run_id(&self) -> &str {
-        &self.provider_run_id
-    }
-
-    #[must_use]
-    pub const fn provider_run_attempt(&self) -> u64 {
-        self.provider_run_attempt
-    }
-
-    #[must_use]
-    pub fn evaluation_instant(&self) -> &UtcInstant {
-        &self.evaluation_instant
-    }
-
-    #[must_use]
-    pub fn valid_until(&self) -> &UtcInstant {
-        &self.valid_until
-    }
-
-    /// Builds a statement through the same grammar, lifetime, and digest
-    /// rules used for untrusted wire bytes. The lifetime check is internal to
-    /// the statement: the issuer must still source `evaluation_instant` from
-    /// controller-owned current time and bind the statement to the exact run.
-    ///
-    /// # Errors
-    ///
-    /// A field violates [`Self::parse`], including a non-positive or
-    /// unrepresentable run attempt or a lifetime outside the allowed window.
-    pub fn new(input: TrustedTimeInput) -> Result<Self, Error> {
-        Self::parse(&canonical(&trusted_time_value(input)?))
-    }
-
-    #[must_use]
-    pub const fn schema(&self) -> &'static str {
-        TRUSTED_TIME_STATEMENT_SCHEMA
-    }
-
-    #[must_use]
-    pub const fn controller(&self) -> &'static str {
-        TRUSTED_TIME_CONTROLLER
-    }
-
-    /// # Errors
-    ///
-    /// Fails on strict-JSON defects, schema-shape violations, invalid grammar
-    /// values, and a lifetime outside `0 < valid_until - evaluation_instant
-    /// <= 600` seconds.
-    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let digest = hj(TRUSTED_TIME_STATEMENT_SCHEMA, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, TRUSTED_TIME_STATEMENT_SCHEMA)
-        })?;
-        obj.required("controller", |path, value| {
-            de::const_str(path, value, TRUSTED_TIME_CONTROLLER)
-        })?;
-        let repository = obj.required("repository", decode_repository)?;
-        let ref_name = obj.required("ref", decode_branch_ref)?;
-        let candidate_identity_digest = obj.required("candidate_identity_digest", de::digest)?;
-        let provider = obj.required("provider", decode_provider_id)?;
-        let run_id_path = obj.field("provider_run_id");
-        let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;
-        let attempt_path = obj.field("provider_run_attempt");
-        let attempt_raw = de::integer(&attempt_path, obj.take("provider_run_attempt")?)?;
-        let provider_run_attempt = u64::try_from(attempt_raw)
-            .ok()
-            .filter(|attempt| *attempt >= 1)
-            .ok_or_else(|| Error::new(&attempt_path, ErrorKind::InvalidValue))?;
-        let evaluation_instant = obj.required("evaluation_instant", decode_instant)?;
-        let until_path = obj.field("valid_until");
-        let valid_until = decode_instant(&until_path, obj.take("valid_until")?)?;
-        obj.finish()?;
-        let lifetime = valid_until
-            .epoch_seconds()
-            .saturating_sub(evaluation_instant.epoch_seconds());
-        if lifetime <= 0 || lifetime > STATEMENT_TTL_MAX_SECONDS {
-            return fail(&until_path, ErrorKind::InvalidValue);
-        }
-        Ok(Self {
-            digest,
-            repository,
-            ref_name,
-            candidate_identity_digest,
-            provider,
-            provider_run_id,
-            provider_run_attempt,
-            evaluation_instant,
-            valid_until,
-        })
-    }
-
-    /// Serializes one valid statement to its unique canonical JSON bytes.
-    ///
-    /// # Errors
-    ///
-    /// The stored statement no longer round-trips through [`Self::parse`] or
-    /// its derived digest does not match the canonical value.
-    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        let bytes = canonical(&trusted_time_value(self.into())?);
-        let parsed = Self::parse(&bytes)?;
-        if parsed.digest != self.digest {
-            return fail("$.digest", ErrorKind::DigestMismatch);
-        }
-        Ok(bytes)
-    }
+/// Parses and validates one trusted-time statement.
+///
+/// # Errors
+///
+/// Fails on strict-JSON defects, schema-shape violations, invalid grammar
+/// values, or a lifetime outside `0 < valid_until - evaluation_instant <= 600`
+/// seconds.
+pub fn parse_trusted_time(bytes: &[u8]) -> Result<TrustedTimeStatement, Error> {
+    root(bytes)?;
+    let statement = de::deserialize_json(bytes)?;
+    validate_trusted_time(&statement)?;
+    Ok(statement)
 }
 
-impl From<&TrustedTimeStatement> for TrustedTimeInput {
-    fn from(statement: &TrustedTimeStatement) -> Self {
-        Self {
-            repository: statement.repository.clone(),
-            ref_name: statement.ref_name.clone(),
-            candidate_identity_digest: statement.candidate_identity_digest,
-            provider: statement.provider.clone(),
-            provider_run_id: statement.provider_run_id.clone(),
-            provider_run_attempt: statement.provider_run_attempt,
-            evaluation_instant: statement.evaluation_instant.clone(),
-            valid_until: statement.valid_until.clone(),
-        }
-    }
+/// Produces one valid statement's canonical bytes and their domain-separated
+/// digest together.
+///
+/// # Errors
+///
+/// A public field violates the same laws [`parse_trusted_time`] enforces, or
+/// the typed value cannot be serialized.
+pub fn canonical_trusted_time(
+    statement: &TrustedTimeStatement,
+) -> Result<(Vec<u8>, Digest), Error> {
+    validate_trusted_time(statement)?;
+    let bytes = serde_json_canonicalizer::to_vec(statement)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let digest = hb(TRUSTED_TIME_STATEMENT_SCHEMA, &bytes);
+    Ok((bytes, digest))
 }
 
-fn trusted_time_value(input: TrustedTimeInput) -> Result<Value, Error> {
-    let provider_run_attempt =
-        positive_safe_integer("$.provider_run_attempt", input.provider_run_attempt)?;
-    let TrustedTimeInput {
-        repository: repository_identity,
-        ref_name,
-        candidate_identity_digest,
-        provider,
-        provider_run_id,
-        provider_run_attempt: _,
-        evaluation_instant,
-        valid_until,
-    } = input;
-    Ok(object(vec![
-        ("schema", text(TRUSTED_TIME_STATEMENT_SCHEMA)),
-        ("controller", text(TRUSTED_TIME_CONTROLLER)),
-        ("repository", repository(&repository_identity)),
-        ("ref", text(ref_name.as_str())),
-        (
-            "candidate_identity_digest",
-            text(&candidate_identity_digest.to_string()),
-        ),
-        ("provider", Value::String(provider.into())),
-        ("provider_run_id", Value::String(provider_run_id.into())),
-        ("provider_run_attempt", provider_run_attempt),
-        ("evaluation_instant", text(evaluation_instant.as_str())),
-        ("valid_until", text(valid_until.as_str())),
-    ]))
+fn validate_trusted_time(statement: &TrustedTimeStatement) -> Result<(), Error> {
+    if RepositoryIdentity::new(
+        statement.repository.host().to_owned(),
+        statement.repository.owner().to_owned(),
+        statement.repository.name().to_owned(),
+    )
+    .as_ref()
+        != Some(&statement.repository)
+    {
+        return fail("$.repository", ErrorKind::InvalidValue);
+    }
+    ArtifactId::new(statement.provider.clone())
+        .is_some()
+        .then_some(())
+        .ok_or_else(|| Error::new("$.provider", ErrorKind::InvalidValue))?;
+    provider_run_id_valid(&statement.provider_run_id)
+        .then_some(())
+        .ok_or_else(|| Error::new("$.provider_run_id", ErrorKind::InvalidValue))?;
+    (1..=MAX_SAFE_INTEGER.unsigned_abs())
+        .contains(&statement.provider_run_attempt)
+        .then_some(())
+        .ok_or_else(|| Error::new("$.provider_run_attempt", ErrorKind::InvalidValue))?;
+    for (path, instant) in [
+        ("$.evaluation_instant", &statement.evaluation_instant),
+        ("$.valid_until", &statement.valid_until),
+    ] {
+        if UtcInstant::new(instant.as_str().to_owned()).as_ref() != Some(instant) {
+            return fail(path, ErrorKind::InvalidValue);
+        }
+    }
+    let lifetime = statement
+        .valid_until
+        .epoch_seconds()
+        .saturating_sub(statement.evaluation_instant.epoch_seconds());
+    (1..=STATEMENT_TTL_MAX_SECONDS)
+        .contains(&lifetime)
+        .then_some(())
+        .ok_or_else(|| Error::new("$.valid_until", ErrorKind::InvalidValue))
 }

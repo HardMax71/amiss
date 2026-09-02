@@ -37,15 +37,6 @@ impl ExternalVerified {
     }
 }
 
-const fn time_invalid_row() -> ErrorDetail {
-    ErrorDetail {
-        code: AnalysisErrorCode::TrustedTimeInvalid,
-        path: None,
-        path_bytes: None,
-        resource: None,
-    }
-}
-
 /// Verifies the wrapper-supplied external controls against the resolved run
 /// identity in the fatal order: trusted time, then debt, then waiver. An
 /// expiry-bearing control without a verified trusted instant is invalid, and
@@ -60,17 +51,14 @@ pub(super) fn external_gate(
     let repository = setup_shell.repository.as_ref();
     let target_ref = setup_shell.target_ref.as_deref();
     let identity = crate::report::candidate_identity_digest(provisional);
-    let time = match &setup_shell.time {
-        None => None,
-        Some(input) => {
+    let time = setup_shell
+        .time
+        .as_ref()
+        .map(|input| {
             crate::policy::verify_time(input, repository, target_ref, &identity)
-                .map_err(|row| ("invalid-external-control", row))?;
-            Some(crate::policy::TimeContext {
-                statement: input.statement.clone(),
-                digest: input.statement.digest(),
-            })
-        }
-    };
+                .map_err(|row| ("invalid-external-control", row))
+        })
+        .transpose()?;
     let constraint = setup_shell
         .constraint
         .as_ref()
@@ -100,7 +88,10 @@ pub(super) fn external_gate(
         });
     };
     if (setup_shell.debt.is_some() || setup_shell.waiver.is_some()) && time.is_none() {
-        return Err(("invalid-external-control", time_invalid_row()));
+        return Err((
+            "invalid-external-control",
+            crate::policy::trusted_time_invalid_row(),
+        ));
     }
     let debt = match (&setup_shell.debt, &time) {
         (None, _) | (Some(_), None) => None,
@@ -110,7 +101,7 @@ pub(super) fn external_gate(
                 repository,
                 target_ref,
                 verified_floor,
-                context.statement.evaluation_instant(),
+                &context.statement.evaluation_instant,
                 scan_limits.debt_items,
             )
             .map_err(|row| (external_reason(&row), row))?;
@@ -130,7 +121,7 @@ pub(super) fn external_gate(
                 repository,
                 target_ref,
                 verified_floor,
-                context.statement.evaluation_instant(),
+                &context.statement.evaluation_instant,
                 scan_limits.waiver_items,
             )
             .map_err(|row| (external_reason(&row), row))?;

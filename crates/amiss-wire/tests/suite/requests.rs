@@ -6,7 +6,9 @@
 use std::fs;
 use std::path::Path;
 
-use amiss_wire::controls::{OrganizationFloor, Profile, TrustedTimeStatement};
+use amiss_wire::controls::{
+    OrganizationFloor, Profile, canonical_trusted_time, parse_trusted_time,
+};
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json::Value;
@@ -95,11 +97,11 @@ fn the_request_examples_parse_to_what_they_say() {
     assert_eq!(time.provider, "gitlab");
     assert_eq!(time.provider_run_id, "pipeline/987654321:job-42");
     assert_eq!(time.provider_run_attempt, 2);
-    let parsed_time = TrustedTimeStatement::parse(&serde_json::to_vec(&time.value).unwrap())
+    let parsed_time = parse_trusted_time(&serde_json::to_vec(&time.value).unwrap())
         .expect("the embedded trusted-time statement is valid");
     assert_eq!(
         time.expected_digest,
-        parsed_time.digest(),
+        canonical_trusted_time(&parsed_time).unwrap().1,
         "the request carries the statement's independently reproducible semantic digest"
     );
     assert!(

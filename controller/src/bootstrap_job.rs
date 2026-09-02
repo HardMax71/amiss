@@ -5,7 +5,8 @@ mod semantic;
 use std::sync::Arc;
 
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, Profile, TrustedTimeInput, TrustedTimeStatement,
+    ExecutionConstraintDescriptor, Profile, TrustedTimeController, TrustedTimeSchema,
+    TrustedTimeStatement, canonical_trusted_time,
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity, UtcInstant};
@@ -171,7 +172,9 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         commit_candidate_identity_digest(&evaluation, &run.trees.base, &run.trees.candidate)
             .ok_or(BootstrapJobError::RunIdentity)?;
 
-    let statement = TrustedTimeStatement::new(TrustedTimeInput {
+    let statement = TrustedTimeStatement {
+        schema: TrustedTimeSchema::Current,
+        controller: TrustedTimeController::ExternalRequiredCheckClock,
         repository: run.change.repository.clone(),
         ref_name: run.refs.target.clone(),
         candidate_identity_digest: candidate_identity,
@@ -180,11 +183,9 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         provider_run_attempt: input.run.provider_run.attempt.get(),
         evaluation_instant: input.evaluation_instant,
         valid_until: input.valid_until,
-    })
-    .map_err(|_defect| BootstrapJobError::TrustedTime)?;
-    let statement_bytes = statement
-        .canonical_bytes()
-        .map_err(|_defect| BootstrapJobError::TrustedTime)?;
+    };
+    let (statement_bytes, statement_digest) =
+        canonical_trusted_time(&statement).map_err(|_defect| BootstrapJobError::TrustedTime)?;
     let statement_value = serde_json::from_slice(&statement_bytes)
         .map_err(|_defect| BootstrapJobError::TrustedTime)?;
 
@@ -204,7 +205,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     let controls = controls::request(
         &checked_plan.policy,
         run,
-        supplied_time(input.run, &statement, statement_value),
+        supplied_time(input.run, statement_digest, statement_value),
         SuppliedControl {
             value: constraint_value,
             expected_digest: checked_plan.execution.digest(),
@@ -230,12 +231,12 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
 
 fn supplied_time(
     run: &RunRequest,
-    statement: &TrustedTimeStatement,
+    expected_digest: Digest,
     value: serde_json::Value,
 ) -> SuppliedTime {
     SuppliedTime {
         value,
-        expected_digest: statement.digest(),
+        expected_digest,
         provider: run.delivery.provider.namespace.as_str().to_owned(),
         provider_run_id: run.provider_run.run_id.as_str().to_owned(),
         provider_run_attempt: run.provider_run.attempt.get(),

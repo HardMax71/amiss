@@ -47,7 +47,11 @@ pub use taxonomy::{
     ContentAvailability, Disposition, EligibleFindingKind, EntryKind, GitMode, IncludeKind,
     Profile, PromotableFindingKind, SourceConstruct, TargetKind,
 };
-pub use trusted_time::{STATEMENT_TTL_MAX_SECONDS, TrustedTimeInput, TrustedTimeStatement};
+pub use trusted_time::{
+    STATEMENT_TTL_MAX_SECONDS, TRUSTED_TIME_CONTROLLER, TRUSTED_TIME_STATEMENT_SCHEMA,
+    TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement, canonical_trusted_time,
+    parse_trusted_time,
+};
 pub use waiver::{WaiverBundle, WaiverItem};
 
 pub const SCANNER_POLICY_PATH: &str = ".amiss/scanner-policy.json";
@@ -193,13 +197,6 @@ pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryId
         .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
-pub(crate) fn decode_provider_run_id(path: &str, value: Value) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
-    provider_run_id_valid(&raw)
-        .then_some(raw)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
 pub(crate) fn provider_run_id_valid(raw: &str) -> bool {
     let bytes = raw.as_bytes();
     let allowed = |byte: &u8| {
@@ -210,15 +207,6 @@ pub(crate) fn provider_run_id_valid(raw: &str) -> bool {
         && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
         && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
         && bytes.iter().all(allowed)
-}
-
-pub(crate) fn decode_provider_id(path: &str, value: Value) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
-    if ArtifactId::new(raw.clone()).is_some() {
-        Ok(raw)
-    } else {
-        fail(path, ErrorKind::InvalidValue)
-    }
 }
 
 fn decode_tree(path: &str, value: Value) -> Result<TreeIdentity, Error> {

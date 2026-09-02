@@ -1,9 +1,12 @@
+use serde::{Deserialize, Serialize};
+
 const MIN_EPOCH_SECONDS: i64 = -62_167_219_200;
 const MAX_EPOCH_SECONDS: i64 = 253_402_300_799;
 
 /// Whole-second UTC instant; the fixed-width form makes lexicographic order
 /// chronological, so ordering derives from the raw string.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct UtcInstant(String);
 
 impl UtcInstant {

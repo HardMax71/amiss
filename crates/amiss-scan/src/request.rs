@@ -1,6 +1,6 @@
 use amiss_wire::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, FloorDefect, OrganizationFloor, ResourceName,
-    TrustedTimeStatement, WaiverBundle,
+    WaiverBundle, canonical_trusted_time, parse_trusted_time,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::Digest;
@@ -76,9 +76,11 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .map(|supplied| {
             let bytes = serde_json::to_vec(&supplied.value)
                 .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
-            let statement = TrustedTimeStatement::parse(&bytes)
-                .map_err(|error| configuration_detail(&error))?;
-            if statement.digest() != supplied.expected_digest {
+            let statement =
+                parse_trusted_time(&bytes).map_err(|error| configuration_detail(&error))?;
+            let (_, digest) =
+                canonical_trusted_time(&statement).map_err(|error| configuration_detail(&error))?;
+            if digest != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
             Ok(TimeInput {

@@ -138,18 +138,19 @@ fn a_wrong_floor_digest_is_refused() {
 #[test]
 fn a_verified_time_statement_lands_with_its_run_context() {
     let statement =
-        amiss_wire::controls::TrustedTimeStatement::parse(TIME.as_bytes()).expect("fixture parses");
+        amiss_wire::controls::parse_trusted_time(TIME.as_bytes()).expect("fixture parses");
+    let (_, digest) = amiss_wire::controls::canonical_trusted_time(&statement).unwrap();
     let mut request = empty();
     request.trusted_time = Some(SuppliedTime {
         value: serde_json::from_str(TIME).expect("the fixture is JSON"),
-        expected_digest: statement.digest(),
+        expected_digest: digest,
         provider: "gitlab-ci".to_owned(),
         provider_run_id: "pipeline/01J2Z9-7".to_owned(),
         provider_run_attempt: 2,
     });
     let inputs = controls(&request).expect("a matching digest passes the gate");
     let landed = inputs.time.expect("the statement lands typed");
-    assert_eq!(landed.statement.digest(), statement.digest());
+    assert_eq!(landed.statement, statement);
     assert_eq!(landed.provider, "gitlab-ci");
     assert_eq!(landed.provider_run_id, "pipeline/01J2Z9-7");
     assert_eq!(landed.provider_run_attempt, 2);
