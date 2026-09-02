@@ -17,7 +17,7 @@ use amiss_controller::{
     WorkflowArtifactExpectation, bootstrap_job, check_binding, check_plan,
 };
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile, TrustedTimeStatement,
+    ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile, parse_trusted_time,
 };
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{self, Value};
@@ -188,9 +188,9 @@ fn candidate_identity(run: &RunRequest) -> Digest {
     let job = bootstrap(run, &[]).unwrap();
     let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
     let supplied_time = controls.trusted_time.unwrap();
-    TrustedTimeStatement::parse(&serde_json::to_vec(&supplied_time.value).unwrap())
+    parse_trusted_time(&serde_json::to_vec(&supplied_time.value).unwrap())
         .unwrap()
-        .candidate_identity_digest()
+        .candidate_identity_digest
 }
 
 fn semantic_template(context_digest: Digest) -> Vec<u8> {
@@ -288,13 +288,12 @@ fn job_construction_binds_the_complete_authenticated_run() {
 
     let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
     let supplied_time = controls.trusted_time.as_ref().unwrap();
-    let statement =
-        TrustedTimeStatement::parse(&serde_json::to_vec(&supplied_time.value).unwrap()).unwrap();
-    assert_eq!(statement.provider(), "gitlab");
-    assert_eq!(statement.provider_run_id(), "pipeline/987654321:job-42");
-    assert_eq!(statement.provider_run_attempt(), 2);
+    let statement = parse_trusted_time(&serde_json::to_vec(&supplied_time.value).unwrap()).unwrap();
+    assert_eq!(statement.provider, "gitlab");
+    assert_eq!(statement.provider_run_id, "pipeline/987654321:job-42");
+    assert_eq!(statement.provider_run_attempt, 2);
     assert_eq!(
-        statement.candidate_identity_digest(),
+        statement.candidate_identity_digest,
         commit_candidate_identity_digest(&evaluation, &oid('2'), &oid('4')).unwrap()
     );
     assert_eq!(
@@ -310,7 +309,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
     .unwrap();
     assert_eq!(
         semantic.payload.subject.candidate_identity_digest,
-        statement.candidate_identity_digest()
+        statement.candidate_identity_digest
     );
     assert_eq!(job.constraint, execution().canonical_bytes().unwrap());
 }

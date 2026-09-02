@@ -125,7 +125,7 @@ pub(super) fn evaluation_value(setup: &Setup) -> Value {
             (
                 "evaluation_instant",
                 setup.policy.time.as_ref().map_or(Value::Null, |time| {
-                    string(time.statement.evaluation_instant().as_str())
+                    string(time.statement.evaluation_instant.as_str())
                 }),
             ),
             ("trusted_time", Value::Bool(setup.policy.time.is_some())),
@@ -328,27 +328,33 @@ fn constraint_descriptor_value(
 
 fn time_statement_value(statement: &amiss_wire::controls::TrustedTimeStatement) -> Value {
     let mut rows = vec![
-        ("schema", string(statement.schema())),
-        ("controller", string(statement.controller())),
-        ("repository", repository_value(statement.repository())),
-        ("ref", string(statement.ref_name().as_str())),
+        (
+            "schema",
+            string(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA),
+        ),
+        (
+            "controller",
+            string(amiss_wire::controls::TRUSTED_TIME_CONTROLLER),
+        ),
+        ("repository", repository_value(&statement.repository)),
+        ("ref", string(statement.ref_name.as_str())),
         (
             "candidate_identity_digest",
-            digest_value(statement.candidate_identity_digest()),
+            digest_value(statement.candidate_identity_digest),
         ),
     ];
-    rows.push(("provider", string(statement.provider())));
+    rows.push(("provider", string(&statement.provider)));
     rows.extend([
-        ("provider_run_id", string(statement.provider_run_id())),
+        ("provider_run_id", string(&statement.provider_run_id)),
         (
             "provider_run_attempt",
-            integer(statement.provider_run_attempt()),
+            integer(statement.provider_run_attempt),
         ),
         (
             "evaluation_instant",
-            string(statement.evaluation_instant().as_str()),
+            string(statement.evaluation_instant.as_str()),
         ),
-        ("valid_until", string(statement.valid_until().as_str())),
+        ("valid_until", string(statement.valid_until.as_str())),
     ]);
     object(rows)
 }

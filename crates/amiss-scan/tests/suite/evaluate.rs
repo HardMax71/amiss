@@ -684,23 +684,24 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         not_before: instant.clone(),
         expires_at: moment("2026-08-01T00:00:00Z"),
     };
-    let statement =
-        amiss_wire::controls::TrustedTimeStatement::new(amiss_wire::controls::TrustedTimeInput {
-            repository: amiss_wire::model::RepositoryIdentity::github(
-                "acme".to_owned(),
-                "widget".to_owned(),
-            )
-            .expect("identity"),
-            ref_name: amiss_wire::model::BranchRef::new("refs/heads/main".to_owned()).expect("ref"),
-            candidate_identity_digest: hb("amiss/raw-evidence", b"candidate"),
-            provider: "github-actions".to_owned(),
-            provider_run_id: "run/1".to_owned(),
-            provider_run_attempt: 1,
-            evaluation_instant: instant,
-            valid_until: moment("2026-07-02T00:10:00Z"),
-        })
-        .expect("trusted time");
-    let time_digest = statement.digest();
+    let statement = amiss_wire::controls::TrustedTimeStatement {
+        schema: amiss_wire::controls::TrustedTimeSchema::Current,
+        controller: amiss_wire::controls::TrustedTimeController::ExternalRequiredCheckClock,
+        repository: amiss_wire::model::RepositoryIdentity::github(
+            "acme".to_owned(),
+            "widget".to_owned(),
+        )
+        .expect("identity"),
+        ref_name: amiss_wire::model::BranchRef::new("refs/heads/main".to_owned()).expect("ref"),
+        candidate_identity_digest: hb("amiss/raw-evidence", b"candidate"),
+        provider: "github-actions".to_owned(),
+        provider_run_id: "run/1".to_owned(),
+        provider_run_attempt: 1,
+        evaluation_instant: instant,
+        valid_until: moment("2026-07-02T00:10:00Z"),
+    };
+    let (_, time_digest) =
+        amiss_wire::controls::canonical_trusted_time(&statement).expect("trusted time");
     let policy = Effects {
         waiver: Some(WaiverContext {
             digest: hb("amiss/raw-evidence", b"bundle"),

@@ -1,6 +1,6 @@
 use amiss_wire::controls::{
-    DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeStatement,
-    WaiverBundle,
+    DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeController,
+    TrustedTimeSchema, WaiverBundle, parse_trusted_time,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -44,12 +44,15 @@ fn controls_accept_open_forge_identities() {
     assert_eq!(waiver.repository().owner(), "platform/security");
     assert_eq!(waiver.digest(), hj("amiss/waiver-bundle", &waiver_value));
 
-    let time = TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap();
-    assert_eq!(time.schema(), "amiss/scanner-trusted-time-statement");
-    assert_eq!(time.controller(), "external-required-check-clock");
-    assert_eq!(time.repository().owner(), "platform/security");
-    assert_eq!(time.provider(), "gitlab-ci");
-    assert_eq!(time.provider_run_id(), "pipeline/01J2Z9-7");
+    let time = parse_trusted_time(TIME_STATEMENT.as_bytes()).unwrap();
+    assert_eq!(time.schema, TrustedTimeSchema::Current);
+    assert_eq!(
+        time.controller,
+        TrustedTimeController::ExternalRequiredCheckClock
+    );
+    assert_eq!(time.repository.owner(), "platform/security");
+    assert_eq!(time.provider, "gitlab-ci");
+    assert_eq!(time.provider_run_id, "pipeline/01J2Z9-7");
 }
 
 const CONSTRAINT: &str = r#"{

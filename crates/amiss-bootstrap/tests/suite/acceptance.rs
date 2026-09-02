@@ -14,7 +14,9 @@ use amiss_bootstrap::supervise::{
     AcceptanceDefect, Defect, Expectations, SealedControlExpectation, SealedExpectations,
     Supervised, accept, settle, supervise,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+};
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::RepositoryIdentity;
@@ -517,10 +519,8 @@ fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String
             Value::string("2026-07-12T10:09:00Z".to_owned()),
         ),
     ]);
-    let digest = TrustedTimeStatement::parse(&canonical(&statement))
-        .unwrap()
-        .digest()
-        .to_string();
+    let parsed = parse_trusted_time(&canonical(&statement)).unwrap();
+    let digest = canonical_trusted_time(&parsed).unwrap().1.to_string();
     (statement, digest)
 }
 

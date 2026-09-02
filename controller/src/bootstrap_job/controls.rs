@@ -1,6 +1,6 @@
 use amiss_wire::controls::{
-    DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeInput,
-    TrustedTimeStatement, WaiverBundle,
+    DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeController,
+    TrustedTimeSchema, TrustedTimeStatement, WaiverBundle, canonical_trusted_time,
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{BranchRef, RepositoryIdentity, UtcInstant};
@@ -191,7 +191,9 @@ fn maximal_trusted_time(
         .ok_or(BootstrapJobError::RequestEncoding)?;
     let valid_until = UtcInstant::new("9999-12-31T23:59:00Z".to_owned())
         .ok_or(BootstrapJobError::RequestEncoding)?;
-    let statement = TrustedTimeStatement::new(TrustedTimeInput {
+    let statement = TrustedTimeStatement {
+        schema: TrustedTimeSchema::Current,
+        controller: TrustedTimeController::ExternalRequiredCheckClock,
         repository,
         ref_name,
         candidate_identity_digest,
@@ -200,17 +202,14 @@ fn maximal_trusted_time(
         provider_run_attempt: 9_007_199_254_740_991,
         evaluation_instant,
         valid_until,
-    })
-    .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
-    let value = statement
-        .canonical_bytes()
-        .map_err(|_defect| BootstrapJobError::RequestEncoding)
-        .and_then(|bytes| {
-            serde_json::from_slice(&bytes).map_err(|_defect| BootstrapJobError::RequestEncoding)
-        })?;
+    };
+    let (bytes, expected_digest) =
+        canonical_trusted_time(&statement).map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    let value =
+        serde_json::from_slice(&bytes).map_err(|_defect| BootstrapJobError::RequestEncoding)?;
     Ok(SuppliedTime {
         value,
-        expected_digest: statement.digest(),
+        expected_digest,
         provider,
         provider_run_id,
         provider_run_attempt: 9_007_199_254_740_991,

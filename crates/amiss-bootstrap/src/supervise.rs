@@ -1,7 +1,9 @@
 use std::process::{Child, ExitStatus};
 use std::time::{Duration, Instant};
 
-use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+};
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::RepositoryIdentity;
@@ -238,19 +240,21 @@ fn accept_sealed(
     let trusted =
         member(controls, "trusted_time_source").ok_or(AcceptanceDefect::SealedControls)?;
     let statement = member(trusted, "statement").ok_or(AcceptanceDefect::SealedControls)?;
-    let statement = TrustedTimeStatement::parse(&canonical(statement))
+    let statement = parse_trusted_time(&canonical(statement))
         .map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    let (_, statement_digest) =
+        canonical_trusted_time(&statement).map_err(|_defect| AcceptanceDefect::SealedControls)?;
     if text(trusted, "status") != Some("verified")
         || text(trusted, "trust_source") != Some("external-required-check")
         || text(trusted, "statement_digest") != Some(expected.trusted_time_digest.as_str())
-        || statement.digest().to_string() != expected.trusted_time_digest
-        || statement.provider() != expected.provider
-        || statement.provider_run_id() != expected.provider_run_id
-        || statement.provider_run_attempt() != expected.provider_run_attempt
-        || statement.repository() != &expected.repository
-        || statement.ref_name().as_str() != expected.target_ref
-        || statement.candidate_identity_digest().to_string() != identity_digest
-        || text(evaluation, "evaluation_instant") != Some(statement.evaluation_instant().as_str())
+        || statement_digest.to_string() != expected.trusted_time_digest
+        || statement.provider != expected.provider
+        || statement.provider_run_id != expected.provider_run_id
+        || statement.provider_run_attempt != expected.provider_run_attempt
+        || statement.repository != expected.repository
+        || statement.ref_name.as_str() != expected.target_ref
+        || statement.candidate_identity_digest.to_string() != identity_digest
+        || text(evaluation, "evaluation_instant") != Some(statement.evaluation_instant.as_str())
     {
         return Err(AcceptanceDefect::SealedControls);
     }

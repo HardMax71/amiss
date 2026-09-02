@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use amiss_wire::controls::{
     DOCUMENT_SUFFIX_BYTES, DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor,
-    SOURCE_MARKER_BYTES, ScannerPolicy, TrustedTimeStatement, WaiverBundle,
+    SOURCE_MARKER_BYTES, ScannerPolicy, WaiverBundle, parse_trusted_time,
 };
 use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::model::BranchRef;
@@ -87,7 +87,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
         "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
         "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
-        "scanner-trusted-time-statement" => parse_defect(TrustedTimeStatement::parse(bytes)),
+        "scanner-trusted-time-statement" => parse_defect(parse_trusted_time(bytes)),
         "waiver-bundle" => parse_defect(WaiverBundle::parse(bytes)),
         _ => Some("no authoritative example reader is registered".to_owned()),
     }
