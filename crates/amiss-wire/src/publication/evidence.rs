@@ -1,25 +1,36 @@
-use crate::controls::value::{object, positive_safe_integer, text};
-use crate::de::{self, Error, ErrorKind, Obj};
-use crate::digest::Digest;
-use crate::json::Value;
+use serde::{Deserialize, Serialize};
+
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
+use crate::json::{self, Value};
 
 use super::{
     CompletedSite, DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationProducer,
-    PublicationResource, PublicationTarget, decode_facts, decode_resource, docs_value,
-    producer_value, resource_value, site_value, target_value,
+    PublicationResource, PublicationTarget, PublicationUriKind, validate_facts,
+    validate_publication_uri,
 };
 
 pub const EVIDENCE_ENVELOPE_SCHEMA: &str = "amiss/publication-evidence-envelope";
 pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/publication-evidence-payload";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicationEvidenceEnvelope {
+    pub schema: EvidenceEnvelopeSchema,
     pub payload: PublicationEvidence,
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EvidenceEnvelopeSchema {
+    #[serde(rename = "amiss/publication-evidence-envelope")]
+    Current,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicationEvidence {
+    pub schema: EvidencePayloadSchema,
     pub plan_payload_digest: Digest,
     pub producer: PublicationProducer,
     pub deployment: PublicationDeployment,
@@ -29,11 +40,25 @@ pub struct PublicationEvidence {
     pub product: PublicationResource,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EvidencePayloadSchema {
+    #[serde(rename = "amiss/publication-evidence-payload")]
+    Current,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PublicationDeployment {
+    pub outcome: PublicationOutcome,
     pub record: PublicationResource,
     pub workflow: PublicationResource,
     pub provider_run_attempt: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PublicationOutcome {
+    #[serde(rename = "succeeded")]
+    Succeeded,
 }
 
 /// Parses one closed, digest-bound successful-publication receipt.
@@ -44,17 +69,15 @@ pub struct PublicationDeployment {
 /// identity or resource, a non-success outcome, an unsafe run attempt, or a
 /// payload digest mismatch.
 pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error> {
-    let (payload, payload_digest) = crate::bounded_envelope::parse(
-        bytes,
-        EVIDENCE_ENVELOPE_SCHEMA,
-        EVIDENCE_PAYLOAD_SCHEMA,
-        PUBLICATION_DOCUMENT_BYTES,
-        decode_evidence,
-    )?;
-    Ok(PublicationEvidenceEnvelope {
-        payload,
-        payload_digest,
-    })
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    let document: PublicationEvidenceEnvelope = de::deserialize_json(bytes)?;
+    if evidence_payload_digest(&document.payload)? != document.payload_digest {
+        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    }
+    Ok(document)
 }
 
 /// Builds the unique digest-bound value for one successful-publication receipt.
@@ -64,83 +87,53 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error
 /// Fails when a public field violates the same closed grammar [`parse_evidence`]
 /// enforces or the encoded document exceeds its byte ceiling.
 pub fn evidence(input: &PublicationEvidence) -> Result<Value, Error> {
-    let payload = evidence_value(input)?;
-    let _validated = decode_evidence("$.payload", payload.clone())?;
-    crate::bounded_envelope::build(
-        payload,
-        EVIDENCE_ENVELOPE_SCHEMA,
-        EVIDENCE_PAYLOAD_SCHEMA,
-        PUBLICATION_DOCUMENT_BYTES,
-    )
+    let payload_digest = evidence_payload_digest(input)?;
+    let document = PublicationEvidenceEnvelope {
+        schema: EvidenceEnvelopeSchema::Current,
+        payload: input.clone(),
+        payload_digest,
+    };
+    let canonical = serde_json_canonicalizer::to_vec(&document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
-fn decode_evidence(path: &str, value: Value) -> Result<PublicationEvidence, Error> {
-    let mut evidence = Obj::new(path, value)?;
-    evidence.required("schema", |path, value| {
-        de::const_str(path, value, EVIDENCE_PAYLOAD_SCHEMA)
-    })?;
-    let plan_payload_digest = evidence.required("plan_payload_digest", de::digest)?;
-    let facts = decode_facts(&mut evidence)?;
-    let deployment = evidence.required("deployment", |path, value| {
-        let mut deployment = Obj::new(path, value)?;
-        deployment.required("outcome", |path, value| {
-            de::const_str(path, value, "succeeded")
-        })?;
-        let record = deployment.required("record", decode_resource)?;
-        let workflow = deployment.required("workflow", decode_resource)?;
-        let attempt_path = deployment.field("provider_run_attempt");
-        let provider_run_attempt = u64::try_from(de::integer(
-            &attempt_path,
-            deployment.take("provider_run_attempt")?,
-        )?)
-        .ok()
-        .filter(|attempt| *attempt >= 1)
-        .ok_or_else(|| Error::new(&attempt_path, ErrorKind::InvalidValue))?;
-        deployment.finish()?;
-        Ok(PublicationDeployment {
-            record,
-            workflow,
-            provider_run_attempt,
-        })
-    })?;
-    evidence.finish()?;
-    Ok(PublicationEvidence {
-        plan_payload_digest,
-        producer: facts.producer,
-        deployment,
-        docs: facts.docs,
-        target: facts.target,
-        site: facts.site,
-        product: facts.product,
-    })
+pub(super) fn evidence_payload_digest(input: &PublicationEvidence) -> Result<Digest, Error> {
+    validate_evidence(input)?;
+    serde_json_canonicalizer::to_vec(input)
+        .map(|canonical| hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical))
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
-fn evidence_value(evidence: &PublicationEvidence) -> Result<Value, Error> {
-    Ok(object(vec![
-        ("schema", text(EVIDENCE_PAYLOAD_SCHEMA)),
-        (
-            "plan_payload_digest",
-            text(&evidence.plan_payload_digest.to_string()),
-        ),
-        ("producer", producer_value(&evidence.producer)),
-        (
-            "deployment",
-            object(vec![
-                ("outcome", text("succeeded")),
-                ("record", resource_value(&evidence.deployment.record)),
-                ("workflow", resource_value(&evidence.deployment.workflow)),
-                (
-                    "provider_run_attempt",
-                    positive_safe_integer(
-                        "$.payload.deployment.provider_run_attempt",
-                        evidence.deployment.provider_run_attempt,
-                    )?,
-                ),
-            ]),
-        ),
-        ("docs", docs_value(&evidence.docs)),
-        ("target", target_value(&evidence.target)),
-        ("site", site_value(&evidence.site)),
-        ("product", resource_value(&evidence.product)),
-    ]))
+fn validate_evidence(evidence: &PublicationEvidence) -> Result<(), Error> {
+    validate_facts(
+        "$.payload",
+        &evidence.docs,
+        &evidence.target,
+        &evidence.site,
+        &evidence.product,
+        &evidence.producer,
+    )?;
+    for (field, resource) in [
+        ("record", &evidence.deployment.record),
+        ("workflow", &evidence.deployment.workflow),
+    ] {
+        validate_publication_uri(
+            &format!("$.payload.deployment.{field}.uri"),
+            &resource.uri,
+            PublicationUriKind::Resource,
+        )?;
+    }
+    if !(1..=json::MAX_SAFE_INTEGER.unsigned_abs())
+        .contains(&evidence.deployment.provider_run_attempt)
+    {
+        return fail(
+            "$.payload.deployment.provider_run_attempt",
+            ErrorKind::InvalidValue,
+        );
+    }
+    Ok(())
 }
