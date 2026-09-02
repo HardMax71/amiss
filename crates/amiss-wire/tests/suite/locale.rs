@@ -5,13 +5,14 @@
 
 use std::{fs, path::Path};
 
+use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json;
 use amiss_wire::locale::{
     LOCALE_DOCUMENT_BYTES, LocaleCoveragePlan, LocaleCoveragePolicy, LocaleCoverageScope,
-    LocaleFallbackRule, LocalePageRequirement, PAGE_KEY_BYTES, PLAN_PAYLOAD_SCHEMA, parse_plan,
-    plan,
+    LocaleFallbackRule, LocalePageRequirement, PAGE_KEY_BYTES, PLAN_PAYLOAD_SCHEMA,
+    PlanPayloadSchema, parse_plan, plan,
 };
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{DocsCandidate, PublicationProducer, PublicationResource};
@@ -40,6 +41,7 @@ fn product_resource(digit: char) -> PublicationResource {
 
 fn locale_plan() -> LocaleCoveragePlan {
     LocaleCoveragePlan {
+        schema: PlanPayloadSchema::Current,
         report_payload_digest: digest('1'),
         docs: DocsCandidate {
             repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
@@ -53,9 +55,9 @@ fn locale_plan() -> LocaleCoveragePlan {
             source_locale: "en".to_owned(),
             target_locale: "de-DE".to_owned(),
             channel: identity("stable"),
-            version: Some("1.2".to_owned()),
+            version: Nullable::Value("1.2".to_owned()),
         },
-        product: None,
+        product: Nullable::Null,
         producer: PublicationProducer {
             identity: identity("sphinx-locale-manifest"),
             version: "1.0.0".to_owned(),
@@ -64,13 +66,17 @@ fn locale_plan() -> LocaleCoveragePlan {
         policy: LocaleCoveragePolicy {
             identity: identity("product-docs-coverage"),
             context_digest: digest('4'),
-            required: LocalePageRequirement::Named(vec![
-                "guide/getting-started".to_owned(),
-                "reference/api".to_owned(),
-            ]),
+            required: LocalePageRequirement::Named {
+                keys: vec![
+                    "guide/getting-started".to_owned(),
+                    "reference/api".to_owned(),
+                ],
+            },
             fallbacks: vec![LocaleFallbackRule {
                 class: identity("source-copy"),
-                pages: LocalePageRequirement::Named(vec!["reference/api".to_owned()]),
+                pages: LocalePageRequirement::Named {
+                    keys: vec!["reference/api".to_owned()],
+                },
             }],
             require_target_lineage: false,
         },
@@ -115,7 +121,7 @@ fn locale_plan_round_trips_with_its_payload_digest_and_example() {
 #[test]
 fn locale_plan_keeps_all_source_and_named_policies_distinct() {
     let mut all_source = locale_plan();
-    all_source.scope.version = None;
+    all_source.scope.version = Nullable::Null;
     all_source.policy.required = LocalePageRequirement::AllSource;
     all_source.policy.require_target_lineage = true;
 
@@ -126,7 +132,7 @@ fn locale_plan_keeps_all_source_and_named_policies_distinct() {
 #[test]
 fn product_alignment_uses_the_existing_exact_publication_resource() {
     let mut aligned = locale_plan();
-    aligned.product = Some(product_resource('c'));
+    aligned.product = Nullable::Value(product_resource('c'));
 
     let parsed = parse_plan(&json::canonical(&plan(&aligned).unwrap())).unwrap();
     assert_eq!(parsed.payload, aligned);
@@ -173,7 +179,7 @@ fn locale_plan_refuses_ambiguous_scope_and_invalid_open_identities() {
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let mut invalid_scope_version = locale_plan();
-    invalid_scope_version.scope.version = Some(String::new());
+    invalid_scope_version.scope.version = Nullable::Value(String::new());
     let error = plan(&invalid_scope_version).unwrap_err();
     assert_eq!(error.path, "$.payload.scope.version");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
@@ -182,6 +188,15 @@ fn locale_plan_refuses_ambiguous_scope_and_invalid_open_identities() {
     invalid_producer_version.producer.version = "v 1".to_owned();
     let error = plan(&invalid_producer_version).unwrap_err();
     assert_eq!(error.path, "$.payload.producer.version");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
+
+    let mut invalid_product = locale_plan();
+    invalid_product.product = Nullable::Value(PublicationResource {
+        uri: "registry.example.com/widget:latest".to_owned(),
+        digest: digest('c'),
+    });
+    let error = plan(&invalid_product).unwrap_err();
+    assert_eq!(error.path, "$.payload.product.uri");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
@@ -215,14 +230,16 @@ fn locale_plan_requires_one_sorted_unique_bounded_named_set() {
         ),
     ] {
         let mut candidate = locale_plan();
-        candidate.policy.required = LocalePageRequirement::Named(keys);
+        candidate.policy.required = LocalePageRequirement::Named { keys };
         let error = plan(&candidate).unwrap_err();
         assert_eq!(error.path, path);
         assert_eq!(error.kind, kind);
     }
 
     let mut boundary = locale_plan();
-    boundary.policy.required = LocalePageRequirement::Named(vec!["x".repeat(PAGE_KEY_BYTES)]);
+    boundary.policy.required = LocalePageRequirement::Named {
+        keys: vec!["x".repeat(PAGE_KEY_BYTES)],
+    };
     assert!(plan(&boundary).is_ok());
 }
 
@@ -255,6 +272,23 @@ fn locale_plan_refuses_tampering_open_shapes_and_oversized_documents() {
     let error = parse_plan(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.unknown");
     assert_eq!(error.kind, ErrorKind::UnknownField);
+
+    let canonical = String::from_utf8(json::canonical(&plan(&locale_plan()).unwrap())).unwrap();
+    for (member, path) in [
+        ("\"product\":null,", "$.payload.product"),
+        (",\"version\":\"1.2\"", "$.payload.scope.version"),
+    ] {
+        let missing = canonical.replacen(member, "", 1);
+        assert_ne!(missing, canonical);
+        let error = parse_plan(missing.as_bytes()).unwrap_err();
+        assert_eq!(error.path, path);
+        assert_eq!(error.kind, ErrorKind::MissingField);
+    }
+
+    let unknown_mode = canonical.replacen("\"mode\":\"named\"", "\"mode\":\"unknown\"", 1);
+    let error = parse_plan(unknown_mode.as_bytes()).unwrap_err();
+    assert_eq!(error.path, "$.payload.policy.fallbacks[0].pages.mode");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let oversized = vec![b' '; usize::try_from(LOCALE_DOCUMENT_BYTES).unwrap() + 1];
     let error = parse_plan(&oversized).unwrap_err();

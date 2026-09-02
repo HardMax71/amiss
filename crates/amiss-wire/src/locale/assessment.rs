@@ -1,6 +1,6 @@
 use strum::{AsRefStr, EnumString};
 
-use crate::assessment::{AssessmentVerdict, bindings_value, decode_bindings};
+use crate::assessment::{AssessmentVerdict, Nullable, bindings_value, decode_bindings};
 use crate::controls::{decode_enum, value};
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::Digest;
@@ -14,7 +14,7 @@ use super::evidence::{
 };
 use super::{
     LocaleCoveragePlan, LocaleCoveragePlanEnvelope, LocalePageRequirement, PAGE_ITEMS_LIMIT,
-    PAGE_KEY_BYTES, plan as build_plan,
+    PAGE_KEY_BYTES, plan_payload_digest,
 };
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/locale-coverage-assessment-envelope";
@@ -158,8 +158,7 @@ pub fn assess(
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Value, Error> {
-    let rebuilt_plan = build_plan(&plan.payload)?;
-    if rebuilt_plan.text("payload_digest") != Some(&plan.payload_digest.to_string()) {
+    if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
     if let Some(evidence) = evidence {
@@ -250,12 +249,12 @@ fn compare_coverage(
     evidence: &LocaleCoverageEvidence,
 ) -> AssessmentOutcome {
     let source_missing = match &plan.policy.required {
-        LocalePageRequirement::Named(keys) if evidence.source.complete => keys
+        LocalePageRequirement::Named { keys } if evidence.source.complete => keys
             .iter()
             .filter(|key| !evidence.source.pages.contains_key(*key))
             .cloned()
             .collect(),
-        LocalePageRequirement::AllSource | LocalePageRequirement::Named(_) => Vec::new(),
+        LocalePageRequirement::AllSource | LocalePageRequirement::Named { .. } => Vec::new(),
     };
     let target_missing = if evidence.target.complete {
         match &plan.policy.required {
@@ -266,7 +265,7 @@ fn compare_coverage(
                 .filter(|key| !evidence.target.pages.contains_key(*key))
                 .cloned()
                 .collect(),
-            LocalePageRequirement::Named(keys) => keys
+            LocalePageRequirement::Named { keys } => keys
                 .iter()
                 .filter(|key| {
                     evidence.source.pages.contains_key(*key)
@@ -293,7 +292,7 @@ fn compare_coverage(
 
     let requirement_complete = match &plan.policy.required {
         LocalePageRequirement::AllSource => evidence.source.complete,
-        LocalePageRequirement::Named(keys) => {
+        LocalePageRequirement::Named { keys } => {
             evidence.source.complete
                 || keys
                     .iter()
@@ -325,17 +324,21 @@ fn compare_coverage(
         fallbacks,
         lineage,
     };
-    let product = plan.product.as_ref().map(|expected| {
-        let compare = |observed: Option<&crate::publication::PublicationResource>| match observed {
-            Some(actual) if actual == expected => AssessmentVerdict::Matched,
-            Some(_) => AssessmentVerdict::Refuted,
-            None => AssessmentVerdict::Unproven,
-        };
-        LocaleProductResult {
-            source: compare(evidence.source.product.as_ref()),
-            target: compare(evidence.target.product.as_ref()),
+    let product = match &plan.product {
+        Nullable::Value(expected) => {
+            let compare =
+                |observed: Option<&crate::publication::PublicationResource>| match observed {
+                    Some(actual) if actual == expected => AssessmentVerdict::Matched,
+                    Some(_) => AssessmentVerdict::Refuted,
+                    None => AssessmentVerdict::Unproven,
+                };
+            Some(LocaleProductResult {
+                source: compare(evidence.source.product.as_ref()),
+                target: compare(evidence.target.product.as_ref()),
+            })
         }
-    });
+        Nullable::Null => None,
+    };
     classify_coverage(
         coverage,
         product,
@@ -456,7 +459,9 @@ fn compare_target_relations(
                     rule.class == *class
                         && match &rule.pages {
                             LocalePageRequirement::AllSource => true,
-                            LocalePageRequirement::Named(keys) => keys.binary_search(key).is_ok(),
+                            LocalePageRequirement::Named { keys } => {
+                                keys.binary_search(key).is_ok()
+                            }
                         }
                 });
                 let status = if authorized {
