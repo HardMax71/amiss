@@ -224,12 +224,16 @@ fn decode_resource_uri(path: &str, value: Value) -> Result<String, Error> {
 }
 
 #[derive(Clone, Copy)]
-enum PublicationUriKind {
+pub(crate) enum PublicationUriKind {
     CanonicalUrl,
     Resource,
 }
 
-fn validate_publication_uri(path: &str, raw: &str, kind: PublicationUriKind) -> Result<(), Error> {
+pub(crate) fn validate_publication_uri(
+    path: &str,
+    raw: &str,
+    kind: PublicationUriKind,
+) -> Result<(), Error> {
     let grammar_valid = match kind {
         PublicationUriKind::CanonicalUrl => {
             let authority = raw
@@ -287,21 +291,7 @@ fn validate_facts(
     product: &PublicationResource,
     producer: &PublicationProducer,
 ) -> Result<(), Error> {
-    if RepositoryIdentity::new(
-        docs.repository.host().to_owned(),
-        docs.repository.owner().to_owned(),
-        docs.repository.name().to_owned(),
-    )
-    .as_ref()
-        != Some(&docs.repository)
-    {
-        return fail(&format!("{path}.docs.repository"), ErrorKind::InvalidValue);
-    }
-    for (field, oid) in [("commit_oid", &docs.commit), ("tree_oid", &docs.tree)] {
-        if oid.object_format() != docs.object_format {
-            return fail(&format!("{path}.docs.{field}"), ErrorKind::InvalidValue);
-        }
-    }
+    validate_docs(&format!("{path}.docs"), docs)?;
     validate_publication_uri(
         &format!("{path}.target.canonical_url"),
         &target.canonical_url,
@@ -314,8 +304,31 @@ fn validate_facts(
             PublicationUriKind::Resource,
         )?;
     }
+    validate_producer(&format!("{path}.producer"), producer)
+}
+
+pub(crate) fn validate_docs(path: &str, docs: &DocsCandidate) -> Result<(), Error> {
+    if RepositoryIdentity::new(
+        docs.repository.host().to_owned(),
+        docs.repository.owner().to_owned(),
+        docs.repository.name().to_owned(),
+    )
+    .as_ref()
+        != Some(&docs.repository)
+    {
+        return fail(&format!("{path}.repository"), ErrorKind::InvalidValue);
+    }
+    for (field, oid) in [("commit_oid", &docs.commit), ("tree_oid", &docs.tree)] {
+        if oid.object_format() != docs.object_format {
+            return fail(&format!("{path}.{field}"), ErrorKind::InvalidValue);
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_producer(path: &str, producer: &PublicationProducer) -> Result<(), Error> {
     if !crate::semantic::producer_version_valid(&producer.version) {
-        return fail(&format!("{path}.producer.version"), ErrorKind::InvalidValue);
+        return fail(&format!("{path}.version"), ErrorKind::InvalidValue);
     }
     Ok(())
 }
