@@ -70,6 +70,19 @@ fn row_order_duplicates_and_closed_metadata_are_refused() {
 }
 
 #[test]
+fn directly_constructed_inputs_reuse_the_reader_laws() {
+    let mut source = parse_input(&input(
+        r#"[{"key":"a","value":"A"},{"key":"z","value":"Z"}]"#,
+    ))
+    .unwrap();
+    source.records.reverse();
+
+    let error = template(source).unwrap_err();
+    assert_eq!(error.path, "$.records");
+    assert_eq!(error.kind, ErrorKind::UnsortedSet);
+}
+
+#[test]
 fn record_strings_use_the_scanner_consumer_bounds() {
     for records in [
         r#"[{"key":"","value":"value"}]"#,
