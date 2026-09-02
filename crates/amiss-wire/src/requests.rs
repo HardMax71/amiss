@@ -8,9 +8,15 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::Digest;
 use crate::json::{Value, canonical};
 
+mod candidate;
 mod evaluation;
 
-pub use evaluation::{EvaluationRequest, commit_candidate_identity_digest};
+pub use candidate::{
+    CandidateEventKind, CandidateFinality, CandidateIdentity, CandidateIdentitySchema,
+    CandidateSnapshot, GitSnapshotIdentity, GitSnapshotKind, IndexIdentityScope,
+    IndexSnapshotSchema, commit_candidate_identity_digest,
+};
+pub use evaluation::EvaluationRequest;
 
 pub const EVALUATION_REQUEST_SCHEMA: &str = "amiss/scanner-evaluation-request";
 pub const SNAPSHOT_REQUEST_SCHEMA: &str = "amiss/scanner-snapshot-request";
@@ -34,9 +40,19 @@ pub const SEMANTIC_EVIDENCE_REQUEST_LIMIT: usize = 64;
 pub const REPOSITORY_HANDLE_ORDINAL: i64 = 3;
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum::AsRefStr,
+    strum::EnumString,
+    strum::IntoStaticStr,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RequestMode {
     CommitPair,
     Index,
