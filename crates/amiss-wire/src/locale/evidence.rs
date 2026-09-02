@@ -1,30 +1,42 @@
-use std::collections::BTreeMap;
+use std::cmp::Ordering;
 
-use crate::controls::value::{object, text};
-use crate::de::{self, Error, ErrorKind, Obj};
-use crate::digest::Digest;
-use crate::json::Value;
+use serde::{Deserialize, Serialize};
+
+use crate::assessment::Nullable;
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
+use crate::json::{self, Value};
 use crate::model::ArtifactId;
 use crate::publication::{
-    DocsCandidate, PublicationProducer, PublicationResource, decode_identity, decode_resource,
-    docs_value, producer_value, resource_value,
+    DocsCandidate, PublicationProducer, PublicationResource, PublicationUriKind, validate_docs,
+    validate_producer, validate_publication_uri,
 };
 
-use super::{LocaleCoverageScope, PAGE_KEY_BYTES, decode_facts, scope_value};
+use super::{LocaleCoverageScope, PAGE_KEY_BYTES, validate_scope};
 
 pub const EVIDENCE_ENVELOPE_SCHEMA: &str = "amiss/locale-coverage-evidence-envelope";
 pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/locale-coverage-evidence-payload";
 pub const EVIDENCE_DOCUMENT_BYTES: u64 = crate::semantic::SEMANTIC_EVIDENCE_BYTES;
 pub const PAGE_ITEMS_LIMIT: usize = crate::semantic::SEMANTIC_OBSERVATIONS_LIMIT;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocaleCoverageEvidenceEnvelope {
+    pub schema: EvidenceEnvelopeSchema,
     pub payload: LocaleCoverageEvidence,
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EvidenceEnvelopeSchema {
+    #[serde(rename = "amiss/locale-coverage-evidence-envelope")]
+    Current,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocaleCoverageEvidence {
+    pub schema: EvidencePayloadSchema,
     pub plan_payload_digest: Digest,
     pub docs: DocsCandidate,
     pub scope: LocaleCoverageScope,
@@ -33,44 +45,55 @@ pub struct LocaleCoverageEvidence {
     pub target: LocaleTargetInventory,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EvidencePayloadSchema {
+    #[serde(rename = "amiss/locale-coverage-evidence-payload")]
+    Current,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocalePageInventory {
     pub input_digest: Digest,
-    pub product: Option<PublicationResource>,
+    pub product: Nullable<PublicationResource>,
     pub complete: bool,
-    pub pages: BTreeMap<String, Digest>,
+    pub pages: Vec<LocaleSourcePage>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct LocaleSourcePage {
+    pub key: String,
+    pub resource_digest: Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocaleTargetInventory {
     pub input_digest: Digest,
-    pub product: Option<PublicationResource>,
+    pub product: Nullable<PublicationResource>,
     pub complete: bool,
-    pub pages: BTreeMap<String, LocaleTargetPage>,
+    pub pages: Vec<LocaleTargetPage>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LocaleTargetPage {
+    pub key: String,
     pub resource_digest: Digest,
     pub origin: LocaleTargetOrigin,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum LocaleTargetOrigin {
     TargetResource {
-        based_on_source_digest: Option<Digest>,
+        based_on_source_digest: Nullable<Digest>,
     },
     Fallback {
         class: ArtifactId,
         source_resource_digest: Digest,
     },
-}
-
-struct Inventory<T> {
-    input_digest: Digest,
-    product: Option<PublicationResource>,
-    complete: bool,
-    pages: BTreeMap<String, T>,
 }
 
 /// Parses one closed, digest-bound pair of locale page inventories.
@@ -80,17 +103,15 @@ struct Inventory<T> {
 /// Fails on oversized or malformed strict JSON, unknown fields, invalid bindings, unsorted,
 /// repeated, or oversized page sets, invalid page keys, or a payload digest mismatch.
 pub fn parse_evidence(bytes: &[u8]) -> Result<LocaleCoverageEvidenceEnvelope, Error> {
-    let (payload, payload_digest) = crate::bounded_envelope::parse(
-        bytes,
-        EVIDENCE_ENVELOPE_SCHEMA,
-        EVIDENCE_PAYLOAD_SCHEMA,
-        EVIDENCE_DOCUMENT_BYTES,
-        decode_evidence,
-    )?;
-    Ok(LocaleCoverageEvidenceEnvelope {
-        payload,
-        payload_digest,
-    })
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EVIDENCE_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    let document: LocaleCoverageEvidenceEnvelope = de::deserialize_json(bytes)?;
+    if evidence_payload_digest(&document.payload)? != document.payload_digest {
+        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    }
+    Ok(document)
 }
 
 /// Builds the unique digest-bound value for one pair of locale page inventories.
@@ -100,212 +121,81 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<LocaleCoverageEvidenceEnvelope, Er
 /// Fails when a public field violates the same closed grammar [`parse_evidence`] enforces or the
 /// encoded document exceeds its byte ceiling.
 pub fn evidence(input: &LocaleCoverageEvidence) -> Result<Value, Error> {
-    let validated = decode_evidence("$.payload", evidence_value(input))?;
-    let payload = evidence_value(&validated);
-    crate::bounded_envelope::build(
-        payload,
-        EVIDENCE_ENVELOPE_SCHEMA,
-        EVIDENCE_PAYLOAD_SCHEMA,
-        EVIDENCE_DOCUMENT_BYTES,
-    )
+    let payload_digest = evidence_payload_digest(input)?;
+    let document = LocaleCoverageEvidenceEnvelope {
+        schema: EvidenceEnvelopeSchema::Current,
+        payload: input.clone(),
+        payload_digest,
+    };
+    let canonical = serde_json_canonicalizer::to_vec(&document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EVIDENCE_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
-fn decode_evidence(path: &str, value: Value) -> Result<LocaleCoverageEvidence, Error> {
-    let mut evidence = Obj::new(path, value)?;
-    evidence.required("schema", |path, value| {
-        de::const_str(path, value, EVIDENCE_PAYLOAD_SCHEMA)
-    })?;
-    let plan_payload_digest = evidence.required("plan_payload_digest", de::digest)?;
-    let facts = decode_facts(&mut evidence)?;
-    let source = evidence.required("source", |path, value| {
-        let inventory = decode_inventory(path, value, |page| {
-            page.required("resource_digest", de::digest)
-        })?;
-        Ok(LocalePageInventory {
-            input_digest: inventory.input_digest,
-            product: inventory.product,
-            complete: inventory.complete,
-            pages: inventory.pages,
-        })
-    })?;
-    let target = evidence.required("target", |path, value| {
-        let inventory = decode_inventory(path, value, |page| {
-            let resource_digest = page.required("resource_digest", de::digest)?;
-            let origin = page.required("origin", decode_origin)?;
-            Ok(LocaleTargetPage {
-                resource_digest,
-                origin,
-            })
-        })?;
-        Ok(LocaleTargetInventory {
-            input_digest: inventory.input_digest,
-            product: inventory.product,
-            complete: inventory.complete,
-            pages: inventory.pages,
-        })
-    })?;
-    evidence.finish()?;
-    source
+pub(super) fn evidence_payload_digest(input: &LocaleCoverageEvidence) -> Result<Digest, Error> {
+    validate_evidence(input)?;
+    serde_json_canonicalizer::to_vec(input)
+        .map(|canonical| hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical))
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+}
+
+fn validate_evidence(evidence: &LocaleCoverageEvidence) -> Result<(), Error> {
+    validate_docs("$.payload.docs", &evidence.docs)?;
+    validate_scope("$.payload.scope", &evidence.scope)?;
+    validate_producer("$.payload.producer", &evidence.producer)?;
+    for (field, product) in [
+        ("source", &evidence.source.product),
+        ("target", &evidence.target.product),
+    ] {
+        if let Nullable::Value(product) = product {
+            validate_publication_uri(
+                &format!("$.payload.{field}.product.uri"),
+                &product.uri,
+                PublicationUriKind::Resource,
+            )?;
+        }
+    }
+    validate_page_keys(
+        "$.payload.source.pages",
+        evidence.source.pages.iter().map(|page| page.key.as_str()),
+    )?;
+    validate_page_keys(
+        "$.payload.target.pages",
+        evidence.target.pages.iter().map(|page| page.key.as_str()),
+    )?;
+    evidence
+        .source
         .pages
         .len()
-        .checked_add(target.pages.len())
+        .checked_add(evidence.target.pages.len())
         .filter(|total| *total <= PAGE_ITEMS_LIMIT)
-        .ok_or_else(|| Error::new(&format!("{path}.target.pages"), ErrorKind::LimitExceeded))?;
-    Ok(LocaleCoverageEvidence {
-        plan_payload_digest,
-        docs: facts.docs,
-        scope: facts.scope,
-        producer: facts.producer,
-        source,
-        target,
-    })
+        .ok_or_else(|| Error::new("$.payload.target.pages", ErrorKind::LimitExceeded))?;
+    Ok(())
 }
 
-fn decode_inventory<T>(
+fn validate_page_keys<'a>(
     path: &str,
-    value: Value,
-    mut decode_page: impl FnMut(&mut Obj) -> Result<T, Error>,
-) -> Result<Inventory<T>, Error> {
-    let mut inventory = Obj::new(path, value)?;
-    let input_digest = inventory.required("input_digest", de::digest)?;
-    let product_path = inventory.field("product");
-    let product = de::decode_nullable(&product_path, inventory.take("product")?, decode_resource)?;
-    let complete = inventory.required("complete", de::boolean)?;
-    let pages = inventory.required("pages", |path, value| {
-        de::sorted_map(path, value, PAGE_ITEMS_LIMIT, |path, value| {
-            let mut page = Obj::new(path, value)?;
-            let key = page.required("key", |path, value| {
-                de::bounded_text(path, value, PAGE_KEY_BYTES)
-            })?;
-            let item = decode_page(&mut page)?;
-            page.finish()?;
-            Ok((key, item))
-        })
-    })?;
-    inventory.finish()?;
-    Ok(Inventory {
-        input_digest,
-        product,
-        complete,
-        pages,
-    })
-}
-
-fn decode_origin(path: &str, value: Value) -> Result<LocaleTargetOrigin, Error> {
-    let mut origin = Obj::new(path, value)?;
-    let kind_path = origin.field("kind");
-    let kind = de::string(&kind_path, origin.take("kind")?)?;
-    match kind.as_str() {
-        "target-resource" => {
-            let based_on_path = origin.field("based_on_source_digest");
-            let based_on_source_digest = de::decode_nullable(
-                &based_on_path,
-                origin.take("based_on_source_digest")?,
-                de::digest,
-            )?;
-            origin.finish()?;
-            Ok(LocaleTargetOrigin::TargetResource {
-                based_on_source_digest,
-            })
+    keys: impl ExactSizeIterator<Item = &'a str>,
+) -> Result<(), Error> {
+    (keys.len() <= PAGE_ITEMS_LIMIT)
+        .then_some(())
+        .ok_or_else(|| Error::new(path, ErrorKind::LimitExceeded))?;
+    let mut previous: Option<&str> = None;
+    for (index, key) in keys.enumerate() {
+        if key.is_empty() || key.len() > PAGE_KEY_BYTES || key.chars().any(char::is_control) {
+            return fail(&format!("{path}[{index}].key"), ErrorKind::InvalidValue);
         }
-        "fallback" => {
-            let class = origin.required("class", decode_identity)?;
-            let source_resource_digest = origin.required("source_resource_digest", de::digest)?;
-            origin.finish()?;
-            Ok(LocaleTargetOrigin::Fallback {
-                class,
-                source_resource_digest,
-            })
+        if let Some(previous) = previous {
+            match previous.cmp(key) {
+                Ordering::Less => {}
+                Ordering::Equal => return fail(path, ErrorKind::DuplicateMember),
+                Ordering::Greater => return fail(path, ErrorKind::UnsortedSet),
+            }
         }
-        _ => de::fail(&kind_path, ErrorKind::InvalidValue),
+        previous = Some(key);
     }
-}
-
-fn evidence_value(evidence: &LocaleCoverageEvidence) -> Value {
-    object(vec![
-        ("schema", text(EVIDENCE_PAYLOAD_SCHEMA)),
-        (
-            "plan_payload_digest",
-            text(&evidence.plan_payload_digest.to_string()),
-        ),
-        ("docs", docs_value(&evidence.docs)),
-        ("scope", scope_value(&evidence.scope)),
-        ("producer", producer_value(&evidence.producer)),
-        (
-            "source",
-            inventory_value(
-                evidence.source.input_digest,
-                evidence.source.product.as_ref(),
-                evidence.source.complete,
-                &evidence.source.pages,
-                |key, resource_digest| {
-                    object(vec![
-                        ("key", text(key)),
-                        ("resource_digest", text(&resource_digest.to_string())),
-                    ])
-                },
-            ),
-        ),
-        (
-            "target",
-            inventory_value(
-                evidence.target.input_digest,
-                evidence.target.product.as_ref(),
-                evidence.target.complete,
-                &evidence.target.pages,
-                |key, page| {
-                    object(vec![
-                        ("key", text(key)),
-                        ("resource_digest", text(&page.resource_digest.to_string())),
-                        (
-                            "origin",
-                            match &page.origin {
-                                LocaleTargetOrigin::TargetResource {
-                                    based_on_source_digest,
-                                } => object(vec![
-                                    ("kind", text("target-resource")),
-                                    (
-                                        "based_on_source_digest",
-                                        based_on_source_digest.map_or(Value::Null, |digest| {
-                                            text(&digest.to_string())
-                                        }),
-                                    ),
-                                ]),
-                                LocaleTargetOrigin::Fallback {
-                                    class,
-                                    source_resource_digest,
-                                } => object(vec![
-                                    ("kind", text("fallback")),
-                                    ("class", text(class.as_str())),
-                                    (
-                                        "source_resource_digest",
-                                        text(&source_resource_digest.to_string()),
-                                    ),
-                                ]),
-                            },
-                        ),
-                    ])
-                },
-            ),
-        ),
-    ])
-}
-
-fn inventory_value<T>(
-    input_digest: Digest,
-    product: Option<&PublicationResource>,
-    complete: bool,
-    pages: &BTreeMap<String, T>,
-    encode_page: impl Fn(&str, &T) -> Value,
-) -> Value {
-    let pages = pages
-        .iter()
-        .map(|(key, page)| encode_page(key, page))
-        .collect();
-    object(vec![
-        ("input_digest", text(&input_digest.to_string())),
-        ("product", product.map_or(Value::Null, resource_value)),
-        ("complete", Value::Bool(complete)),
-        ("pages", Value::array(pages)),
-    ])
+    Ok(())
 }
