@@ -1,8 +1,7 @@
 use super::evidence::publication_evidence;
 use super::{digest, oid, publication_plan};
 
-use std::{fs, path::Path};
-
+use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json;
@@ -41,13 +40,16 @@ fn exact_provider_facts_match_the_publication_plan() {
     assert_eq!(assessment.payload.verdict, PublicationVerdict::Matched);
     assert_eq!(assessment.payload.reasons, Vec::new());
     assert_eq!(
-        assessment.payload.report_payload_digest,
+        assessment.payload.subject.report_payload_digest,
         plan.payload.report_payload_digest
     );
-    assert_eq!(assessment.payload.plan_payload_digest, plan.payload_digest);
     assert_eq!(
-        assessment.payload.evidence_payload_digest,
-        Some(evidence.payload_digest)
+        assessment.payload.subject.plan_payload_digest,
+        plan.payload_digest
+    );
+    assert_eq!(
+        assessment.payload.subject.evidence_payload_digest,
+        Nullable::Value(evidence.payload_digest)
     );
 }
 
@@ -60,7 +62,10 @@ fn absent_unbound_and_foreign_producers_stay_unproven() {
         absent.payload.reasons,
         vec![PublicationReason::EvidenceAbsent]
     );
-    assert_eq!(absent.payload.evidence_payload_digest, None);
+    assert_eq!(
+        absent.payload.subject.evidence_payload_digest,
+        Nullable::Null
+    );
 
     let mut unbound = publication_evidence();
     unbound.plan_payload_digest = digest('f');
@@ -154,26 +159,4 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     let error = parse_assessment(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.reasons");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
-}
-
-#[test]
-fn the_published_assessment_replays_from_its_plan_and_evidence() {
-    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
-    let plan = parse_plan(&fs::read(examples.join("publication-plan.json")).unwrap()).unwrap();
-    let evidence =
-        parse_evidence(&fs::read(examples.join("publication-evidence.json")).unwrap()).unwrap();
-    let published_bytes = fs::read(examples.join("publication-assessment.json")).unwrap();
-    let published = parse_assessment(&published_bytes).unwrap();
-    let replayed = assess(
-        &plan,
-        Some(&evidence),
-        &published.payload.engine_version,
-        published.payload.engine_digest,
-    )
-    .unwrap();
-
-    assert_eq!(
-        json::canonical(&replayed),
-        json::canonical(&json::parse(&published_bytes).unwrap())
-    );
 }

@@ -12,8 +12,9 @@ mod evidence;
 
 pub use crate::assessment::AssessmentVerdict as PublicationVerdict;
 pub use assessment::{
-    ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, PublicationAssessment,
-    PublicationAssessmentEnvelope, PublicationReason, assess, parse_assessment,
+    ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, AssessmentEnvelopeSchema,
+    AssessmentPayloadSchema, PublicationAssessment, PublicationAssessmentEnvelope,
+    PublicationReason, assess, parse_assessment,
 };
 pub use evidence::{
     EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, EvidenceEnvelopeSchema,
