@@ -12,8 +12,8 @@ use amiss_wire::digest::hj;
 use amiss_wire::json::Value;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::requests::{
-    CANDIDATE_IDENTITY_DOMAIN, ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL,
-    REQUEST_STREAM_BYTES, RequestMode, RequestStreams, RequestTrust,
+    CANDIDATE_IDENTITY_DOMAIN, ControlsRequest, EvaluationRequest, EvaluationRequestSchema,
+    REPOSITORY_HANDLE_ORDINAL, REQUEST_STREAM_BYTES, RequestMode, RequestStreams, RequestTrust,
     SEMANTIC_EVIDENCE_REQUEST_LIMIT, SnapshotMaterialization, SnapshotRequest,
     SuppliedSemanticEvidence, commit_candidate_identity_digest,
 };
@@ -38,6 +38,7 @@ fn oid(value: char) -> Oid {
 fn the_request_examples_parse_to_what_they_say() {
     let evaluation =
         EvaluationRequest::parse(&request_example("scanner-evaluation-request.json")).unwrap();
+    assert_eq!(evaluation.schema, EvaluationRequestSchema::Current);
     assert_eq!(evaluation.profile, Profile::Enforce);
     assert_eq!(evaluation.mode, RequestMode::CommitPair);
     assert_eq!(evaluation.object_format, ObjectFormat::Sha1);
@@ -292,6 +293,26 @@ fn the_evaluation_request_binds_the_candidate_to_the_mode() {
         EvaluationRequest::parse(pair_without_candidate.as_bytes()).is_err(),
         "a commit pair with one commit is not a pair"
     );
+}
+
+#[test]
+fn nullable_evaluation_members_are_required() {
+    let example: serde_json::Value =
+        serde_json::from_slice(&request_example("scanner-evaluation-request.json")).unwrap();
+    for field in [
+        "repository",
+        "forge",
+        "candidate_ref",
+        "target_ref",
+        "default_branch_ref",
+        "candidate_commit_oid",
+    ] {
+        let mut missing = example.clone();
+        missing.as_object_mut().unwrap().remove(field);
+        let error = EvaluationRequest::parse(&serde_json::to_vec(&missing).unwrap()).unwrap_err();
+        assert_eq!(error.path, format!("$.{field}"));
+        assert_eq!(error.kind, ErrorKind::MissingField);
+    }
 }
 
 /// The snapshot request carries no discretion. The repository arrives as a fixed

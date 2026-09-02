@@ -1,25 +1,43 @@
-use crate::controls::value::{object, repository, text};
-use crate::controls::{Profile, decode_enum, decode_repository, root};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::json::Value;
+use serde::{Deserialize, Serialize};
+
+use crate::controls::{Profile, root};
+use crate::de::{self, Error, ErrorKind, fail};
 use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-use super::{EVALUATION_REQUEST_SCHEMA, RequestMode, checked_canonical};
+use super::RequestMode;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EvaluationRequestSchema {
+    #[serde(rename = "amiss/scanner-evaluation-request")]
+    Current,
+}
 
 /// The run-identity request: profile, mode, and the exact snapshot
 /// identities to evaluate. The candidate commit is null exactly when the
 /// mode is `index`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct EvaluationRequest {
+    pub schema: EvaluationRequestSchema,
     pub profile: Profile,
     pub mode: RequestMode,
     pub object_format: ObjectFormat,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub repository: Option<RepositoryIdentity>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub forge: Option<ForgeDialect>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_ref: Option<BranchRef>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub target_ref: Option<BranchRef>,
+    #[serde(deserialize_with = "Option::deserialize")]
     pub default_branch_ref: Option<BranchRef>,
+    #[serde(rename = "base_commit_oid")]
     pub base_commit: Oid,
+    #[serde(
+        rename = "candidate_commit_oid",
+        deserialize_with = "Option::deserialize"
+    )]
     pub candidate_commit: Option<Oid>,
 }
 
@@ -29,95 +47,10 @@ impl EvaluationRequest {
     /// Fails on strict-JSON defects, schema-shape violations, invalid
     /// grammar values, and a candidate commit inconsistent with the mode.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, EVALUATION_REQUEST_SCHEMA)
-        })?;
-        let profile = obj.required("profile", decode_enum)?;
-        let mode = obj.required("mode", decode_enum)?;
-        let object_format = obj.required("object_format", decode_enum)?;
-        let repository_path = obj.field("repository");
-        let repository = match de::nullable(obj.take("repository")?) {
-            None => None,
-            Some(value) => Some(decode_repository(&repository_path, value)?),
-        };
-        let forge_path = obj.field("forge");
-        let forge = de::nullable(obj.take("forge")?)
-            .map(|value| decode_enum(&forge_path, value))
-            .transpose()?;
-        let candidate_ref_path = obj.field("candidate_ref");
-        let candidate_ref = match de::nullable(obj.take("candidate_ref")?) {
-            None => None,
-            Some(value) => Some(decode_ref(&candidate_ref_path, value)?),
-        };
-        let target_ref_path = obj.field("target_ref");
-        let target_ref = match de::nullable(obj.take("target_ref")?) {
-            None => None,
-            Some(value) => Some(decode_ref(&target_ref_path, value)?),
-        };
-        let default_path = obj.field("default_branch_ref");
-        let default_branch_ref = match de::nullable(obj.take("default_branch_ref")?) {
-            None => None,
-            Some(value) => Some(decode_ref(&default_path, value)?),
-        };
-        let base_path = obj.field("base_commit_oid");
-        let base_commit = Oid::new(
-            object_format,
-            de::string(&base_path, obj.take("base_commit_oid")?)?,
-        )
-        .ok_or_else(|| Error::new(&base_path, ErrorKind::InvalidValue))?;
-        let candidate_path = obj.field("candidate_commit_oid");
-        let candidate_commit = match de::nullable(obj.take("candidate_commit_oid")?) {
-            None => None,
-            Some(value) => Some(
-                Oid::new(object_format, de::string(&candidate_path, value)?)
-                    .ok_or_else(|| Error::new(&candidate_path, ErrorKind::InvalidValue))?,
-            ),
-        };
-        obj.finish()?;
-        let consistent = match mode {
-            RequestMode::CommitPair => candidate_commit.is_some(),
-            RequestMode::Index => candidate_commit.is_none(),
-        };
-        if !consistent {
-            return fail(&candidate_path, ErrorKind::Inconsistent);
-        }
-        let identity_fields = [
-            repository.is_some(),
-            candidate_ref.is_some(),
-            target_ref.is_some(),
-            default_branch_ref.is_some(),
-        ];
-        if !identity_fields.iter().all(|present| *present)
-            && identity_fields.iter().any(|present| *present)
-            || forge.is_some() && repository.is_none()
-            || matches!(
-                forge,
-                Some(
-                    ForgeDialect::Github
-                        | ForgeDialect::Gitea
-                        | ForgeDialect::BitbucketCloud
-                        | ForgeDialect::BitbucketDataCenter,
-                )
-            ) && repository
-                .as_ref()
-                .is_some_and(|identity| identity.owner().contains('/'))
-        {
-            return fail(&forge_path, ErrorKind::Inconsistent);
-        }
-        Ok(Self {
-            profile,
-            mode,
-            object_format,
-            repository,
-            forge,
-            candidate_ref,
-            target_ref,
-            default_branch_ref,
-            base_commit,
-            candidate_commit,
-        })
+        root(bytes)?;
+        let request: Self = de::deserialize_json(bytes)?;
+        validate_evaluation(&request)?;
+        Ok(request)
     }
 
     /// Builds an explicit-commit evaluation with no forge identity. Callers
@@ -145,6 +78,7 @@ impl EvaluationRequest {
         candidate_commit: Option<Oid>,
     ) -> Self {
         Self {
+            schema: EvaluationRequestSchema::Current,
             profile,
             mode: if candidate_commit.is_some() {
                 RequestMode::CommitPair
@@ -168,51 +102,52 @@ impl EvaluationRequest {
     ///
     /// The constructed fields violate the same laws [`Self::parse`] enforces.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        checked_canonical(&evaluation_value(self), Self::parse)
+        validate_evaluation(self)?;
+        serde_json_canonicalizer::to_vec(self)
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))
     }
 }
 
-fn evaluation_value(request: &EvaluationRequest) -> Value {
-    object(vec![
-        ("schema", text(EVALUATION_REQUEST_SCHEMA)),
-        ("profile", text(request.profile.as_ref())),
-        ("mode", text(request.mode.as_ref())),
-        ("object_format", text(request.object_format.as_ref())),
-        (
-            "repository",
-            request.repository.as_ref().map_or(Value::Null, repository),
-        ),
-        (
-            "forge",
-            request
-                .forge
-                .map_or(Value::Null, |forge| text(forge.as_ref())),
-        ),
-        (
-            "candidate_ref",
-            optional_text(request.candidate_ref.as_ref().map(BranchRef::as_str)),
-        ),
-        (
-            "target_ref",
-            optional_text(request.target_ref.as_ref().map(BranchRef::as_str)),
-        ),
-        (
-            "default_branch_ref",
-            optional_text(request.default_branch_ref.as_ref().map(BranchRef::as_str)),
-        ),
-        ("base_commit_oid", text(request.base_commit.as_str())),
-        (
-            "candidate_commit_oid",
-            optional_text(request.candidate_commit.as_ref().map(Oid::as_str)),
-        ),
-    ])
-}
+fn validate_evaluation(request: &EvaluationRequest) -> Result<(), Error> {
+    if request.repository.as_ref().is_some_and(|repository| {
+        RepositoryIdentity::new(
+            repository.host().to_owned(),
+            repository.owner().to_owned(),
+            repository.name().to_owned(),
+        )
+        .as_ref()
+            != Some(repository)
+    }) {
+        return fail("$.repository", ErrorKind::InvalidValue);
+    }
+    for (path, oid) in [
+        ("$.base_commit_oid", Some(&request.base_commit)),
+        ("$.candidate_commit_oid", request.candidate_commit.as_ref()),
+    ] {
+        if oid.is_some_and(|value| value.object_format() != request.object_format) {
+            return fail(path, ErrorKind::InvalidValue);
+        }
+    }
+    ((request.mode == RequestMode::CommitPair) == request.candidate_commit.is_some())
+        .then_some(())
+        .ok_or_else(|| Error::new("$.candidate_commit_oid", ErrorKind::Inconsistent))?;
 
-fn optional_text(value: Option<&str>) -> Value {
-    value.map_or(Value::Null, text)
-}
-
-fn decode_ref(path: &str, value: Value) -> Result<BranchRef, Error> {
-    BranchRef::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+    let repository_present = request.repository.is_some();
+    let identity_is_complete = [
+        request.candidate_ref.is_some(),
+        request.target_ref.is_some(),
+        request.default_branch_ref.is_some(),
+    ]
+    .into_iter()
+    .all(|present| present == repository_present);
+    let forge_is_coherent = repository_present || request.forge.is_none();
+    let owner_is_coherent = request.forge.is_none()
+        || request.forge == Some(ForgeDialect::Gitlab)
+        || request
+            .repository
+            .as_ref()
+            .is_none_or(|repository| !repository.owner().contains('/'));
+    (identity_is_complete && forge_is_coherent && owner_is_coherent)
+        .then_some(())
+        .ok_or_else(|| Error::new("$.forge", ErrorKind::Inconsistent))
 }

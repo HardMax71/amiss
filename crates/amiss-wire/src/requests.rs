@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use crate::controls::{provider_run_id_valid, root};
 use crate::de::{self, Error, ErrorKind};
 use crate::digest::Digest;
-use crate::json::{Value, canonical};
 use crate::model::ArtifactId;
 
 mod candidate;
@@ -16,7 +15,7 @@ pub use candidate::{
     CandidateSnapshot, GitSnapshotIdentity, GitSnapshotKind, IndexIdentityScope,
     IndexSnapshotSchema, commit_candidate_identity_digest,
 };
-pub use evaluation::EvaluationRequest;
+pub use evaluation::{EvaluationRequest, EvaluationRequestSchema};
 
 pub const EVALUATION_REQUEST_SCHEMA: &str = "amiss/scanner-evaluation-request";
 pub const SNAPSHOT_REQUEST_SCHEMA: &str = "amiss/scanner-snapshot-request";
@@ -370,13 +369,4 @@ fn read_stream(reader: &mut impl Read) -> std::io::Result<Vec<u8>> {
 
 fn invalid_frame(message: &'static str) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::InvalidData, message)
-}
-
-fn checked_canonical<T>(
-    value: &Value,
-    parse: impl FnOnce(&[u8]) -> Result<T, Error>,
-) -> Result<Vec<u8>, Error> {
-    let bytes = canonical(value);
-    let _parsed = parse(&bytes)?;
-    Ok(bytes)
 }
