@@ -76,4 +76,19 @@ fn sidecar_examples_match_their_typed_sources() {
         json::canonical(&locale::evidence(&locale_evidence.payload).unwrap()),
         json::canonical(&json::parse(&locale_evidence_bytes).unwrap())
     );
+
+    let locale_assessment_bytes =
+        fs::read(examples.join("locale-coverage-assessment.json")).unwrap();
+    let locale_assessment = locale::parse_assessment(&locale_assessment_bytes).unwrap();
+    let replayed = locale::assess(
+        &locale_plan,
+        Some(&locale_evidence),
+        &locale_assessment.payload.engine.engine_version,
+        locale_assessment.payload.engine.engine_digest,
+    )
+    .unwrap();
+    assert_eq!(
+        json::canonical(&replayed),
+        json::canonical(&json::parse(&locale_assessment_bytes).unwrap())
+    );
 }

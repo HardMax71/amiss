@@ -67,13 +67,16 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
     );
     assert!(assessment.payload.coverage.source_missing.is_empty());
     assert_eq!(
-        assessment.payload.report_payload_digest,
+        assessment.payload.subject.report_payload_digest,
         plan.payload.report_payload_digest
     );
-    assert_eq!(assessment.payload.plan_payload_digest, plan.payload_digest);
     assert_eq!(
-        assessment.payload.evidence_payload_digest,
-        Some(evidence.payload_digest)
+        assessment.payload.subject.plan_payload_digest,
+        plan.payload_digest
+    );
+    assert_eq!(
+        assessment.payload.subject.evidence_payload_digest,
+        Nullable::Value(evidence.payload_digest)
     );
 }
 
@@ -451,7 +454,9 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     let evidence = evidence_envelope(&aligned);
     let assessment = assessed(&plan, Some(&evidence));
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
-    let product = assessment.payload.product.unwrap();
+    let Nullable::Value(product) = assessment.payload.product else {
+        panic!("selected product comparison was omitted");
+    };
     assert_eq!(product.source, LocaleCoverageVerdict::Matched);
     assert_eq!(product.target, LocaleCoverageVerdict::Matched);
 
@@ -476,10 +481,10 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
         assessment.payload.reasons,
         vec![LocaleCoverageReason::SourceProductMismatch]
     );
-    assert_eq!(
-        assessment.payload.product.unwrap().target,
-        LocaleCoverageVerdict::Unproven
-    );
+    assert!(matches!(
+        assessment.payload.product,
+        Nullable::Value(product) if product.target == LocaleCoverageVerdict::Unproven
+    ));
 
     mismatched.target.product = Nullable::Value(product_resource('e'));
     let evidence = evidence_envelope(&mismatched);
@@ -507,7 +512,7 @@ fn coverage_only_policy_ignores_unselected_product_receipts() {
     let assessment = assessed(&plan, Some(&evidence));
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
-    assert!(assessment.payload.product.is_none());
+    assert_eq!(assessment.payload.product, Nullable::Null);
 }
 
 #[test]
@@ -564,7 +569,10 @@ fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
         absent.payload.reasons,
         vec![LocaleCoverageReason::EvidenceAbsent]
     );
-    assert_eq!(absent.payload.evidence_payload_digest, None);
+    assert_eq!(
+        absent.payload.subject.evidence_payload_digest,
+        Nullable::Null
+    );
 
     let mut unbound = locale_evidence();
     unbound.plan_payload_digest = digest('f');
@@ -663,6 +671,39 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
 }
 
 #[test]
+fn nullable_assessment_fields_are_required() {
+    let value = assess(&plan_envelope(), None, "0.26.0", digest('a')).unwrap();
+    let bytes = json::canonical(&value);
+
+    let mut missing_product: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(
+        missing_product["payload"]
+            .as_object_mut()
+            .unwrap()
+            .remove("product")
+            .is_some()
+    );
+    let error =
+        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_product).unwrap()).unwrap_err();
+    assert_eq!(error.path, "$.payload.product");
+    assert_eq!(error.kind, ErrorKind::MissingField);
+
+    let mut missing_evidence_digest: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(
+        missing_evidence_digest["payload"]["subject"]
+            .as_object_mut()
+            .unwrap()
+            .remove("evidence_payload_digest")
+            .is_some()
+    );
+    let error =
+        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_evidence_digest).unwrap())
+            .unwrap_err();
+    assert_eq!(error.path, "$.payload.subject.evidence_payload_digest");
+    assert_eq!(error.kind, ErrorKind::MissingField);
+}
+
+#[test]
 fn the_published_assessment_replays_from_its_plan_and_evidence() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let plan = parse_plan(&fs::read(examples.join("locale-coverage-plan.json")).unwrap()).unwrap();
@@ -673,8 +714,8 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
     let replayed = assess(
         &plan,
         Some(&evidence),
-        &published.payload.engine_version,
-        published.payload.engine_digest,
+        &published.payload.engine.engine_version,
+        published.payload.engine.engine_digest,
     )
     .unwrap();
 

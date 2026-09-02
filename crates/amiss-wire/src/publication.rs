@@ -162,11 +162,6 @@ pub(super) fn plan_payload_digest(input: &PublicationPlan) -> Result<Digest, Err
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
-pub(crate) fn decode_identity(path: &str, value: Value) -> Result<ArtifactId, Error> {
-    let raw = de::string(path, value)?;
-    ArtifactId::new(raw).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
 #[derive(Clone, Copy)]
 pub(crate) enum PublicationUriKind {
     CanonicalUrl,

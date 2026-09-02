@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use serde::{Deserialize, Serialize};
 
 use crate::assessment::Nullable;
@@ -12,7 +10,7 @@ use crate::publication::{
     validate_producer, validate_publication_uri,
 };
 
-use super::{LocaleCoverageScope, PAGE_KEY_BYTES, validate_scope};
+use super::{LocaleCoverageScope, validate_page_keys, validate_scope};
 
 pub const EVIDENCE_ENVELOPE_SCHEMA: &str = "amiss/locale-coverage-evidence-envelope";
 pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/locale-coverage-evidence-payload";
@@ -161,10 +159,12 @@ fn validate_evidence(evidence: &LocaleCoverageEvidence) -> Result<(), Error> {
     validate_page_keys(
         "$.payload.source.pages",
         evidence.source.pages.iter().map(|page| page.key.as_str()),
+        ".key",
     )?;
     validate_page_keys(
         "$.payload.target.pages",
         evidence.target.pages.iter().map(|page| page.key.as_str()),
+        ".key",
     )?;
     evidence
         .source
@@ -173,29 +173,5 @@ fn validate_evidence(evidence: &LocaleCoverageEvidence) -> Result<(), Error> {
         .checked_add(evidence.target.pages.len())
         .filter(|total| *total <= PAGE_ITEMS_LIMIT)
         .ok_or_else(|| Error::new("$.payload.target.pages", ErrorKind::LimitExceeded))?;
-    Ok(())
-}
-
-fn validate_page_keys<'a>(
-    path: &str,
-    keys: impl ExactSizeIterator<Item = &'a str>,
-) -> Result<(), Error> {
-    (keys.len() <= PAGE_ITEMS_LIMIT)
-        .then_some(())
-        .ok_or_else(|| Error::new(path, ErrorKind::LimitExceeded))?;
-    let mut previous: Option<&str> = None;
-    for (index, key) in keys.enumerate() {
-        if key.is_empty() || key.len() > PAGE_KEY_BYTES || key.chars().any(char::is_control) {
-            return fail(&format!("{path}[{index}].key"), ErrorKind::InvalidValue);
-        }
-        if let Some(previous) = previous {
-            match previous.cmp(key) {
-                Ordering::Less => {}
-                Ordering::Equal => return fail(path, ErrorKind::DuplicateMember),
-                Ordering::Greater => return fail(path, ErrorKind::UnsortedSet),
-            }
-        }
-        previous = Some(key);
-    }
     Ok(())
 }
