@@ -366,13 +366,15 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
     let plan = parse_plan(&json::canonical(&value)).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
-    input.source.pages.insert(
-        1,
-        LocaleSourcePage {
-            key: "optional/overview".to_owned(),
-            resource_digest: digest('c'),
-        },
-    );
+    let source_page = LocaleSourcePage {
+        key: "optional/overview".to_owned(),
+        resource_digest: digest('c'),
+    };
+    let index = input
+        .source
+        .pages
+        .partition_point(|current| current.key < source_page.key);
+    input.source.pages.insert(index, source_page);
     set_target_page(
         &mut input.target.pages,
         fallback_page("reference/api", 'b', "source-copy", '7'),
