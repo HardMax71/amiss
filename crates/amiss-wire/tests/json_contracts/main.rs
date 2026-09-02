@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use amiss_wire::{json, publication, relation};
+use amiss_wire::{json, locale, publication, relation};
 
 #[path = "../support/relation.rs"]
 mod relation_fixture;
@@ -61,5 +61,12 @@ fn sidecar_examples_match_their_typed_sources() {
     assert_eq!(
         json::canonical(&replayed),
         json::canonical(&json::parse(&publication_assessment_bytes).unwrap())
+    );
+
+    let locale_plan_bytes = fs::read(examples.join("locale-coverage-plan.json")).unwrap();
+    let locale_plan = locale::parse_plan(&locale_plan_bytes).unwrap();
+    assert_eq!(
+        json::canonical(&locale::plan(&locale_plan.payload).unwrap()),
+        json::canonical(&json::parse(&locale_plan_bytes).unwrap())
     );
 }
