@@ -1,14 +1,15 @@
-use std::{cmp::Ordering, collections::BTreeMap};
+use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
 
-use crate::controls::value::{object, text};
-use crate::de::{self, Error, ErrorKind, Obj};
+use crate::de::{self, Error, ErrorKind};
 use crate::digest::Digest;
 use crate::json::{self, Value};
 use crate::model::ArtifactId;
 
-use super::{SEMANTIC_OBSERVATIONS_LIMIT, SemanticEvidenceTemplate};
+use super::{
+    SEMANTIC_OBSERVATIONS_LIMIT, SemanticEvidenceTemplate, SemanticProducer, TemplateSchema,
+};
 
 pub const INPUT_SCHEMA: &str = "amiss/record-set-input";
 pub const PRODUCER_KIND: &str = "record-set";
@@ -39,10 +40,18 @@ pub struct Record {
     pub value: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Observation {
+    pub kind: ObservationKind,
     pub name: ArtifactId,
-    pub records: BTreeMap<String, String>,
+    pub records: Vec<Record>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObservationKind {
+    #[serde(rename = "record-set")]
+    Current,
 }
 
 /// Parses one bounded normalized record-set input.
@@ -80,30 +89,21 @@ pub fn template(input: Input) -> Result<Value, Error> {
     } = input;
     let producer_kind = ArtifactId::new(PRODUCER_KIND.to_owned())
         .ok_or_else(|| Error::new("$.producer.kind", ErrorKind::InvalidValue))?;
-    let observation = object(vec![
-        ("kind", text(PRODUCER_KIND)),
-        ("name", text(name.as_str())),
-        (
-            "records",
-            Value::array(
-                records
-                    .into_iter()
-                    .map(|record| {
-                        object(vec![
-                            ("key", text(&record.key)),
-                            ("value", text(&record.value)),
-                        ])
-                    })
-                    .collect(),
-            ),
-        ),
-    ]);
+    let observation = serde_json::to_value(Observation {
+        kind: ObservationKind::Current,
+        name,
+        records,
+    })
+    .map_err(|_defect| Error::new("$.observations[0]", ErrorKind::InvalidValue))?;
     super::template(SemanticEvidenceTemplate {
-        producer_kind,
-        producer_identity,
-        producer_version: PRODUCER_VERSION.to_owned(),
-        context_digest,
-        input_digest,
+        schema: TemplateSchema::Current,
+        producer: SemanticProducer {
+            kind: producer_kind,
+            identity: producer_identity,
+            version: PRODUCER_VERSION.to_owned(),
+            context_digest,
+            input_digest,
+        },
         complete,
         observations: vec![observation].into(),
     })
@@ -114,37 +114,22 @@ pub fn template(input: Input) -> Result<Value, Error> {
 /// # Errors
 ///
 /// Fails on an incorrect kind, unknown fields, an invalid set name, or invalid record rows.
-pub fn decode_observation(path: &str, value: Value) -> Result<Observation, Error> {
-    let mut observation = Obj::new(path, value)?;
-    observation.required("kind", |path, value| {
-        de::const_str(path, value, PRODUCER_KIND)
-    })?;
-    let name = observation.required("name", super::decode_id)?;
-    let records = observation.required("records", decode_records)?;
-    observation.finish()?;
-    Ok(Observation { name, records })
-}
-
-fn decode_records(path: &str, value: Value) -> Result<BTreeMap<String, String>, Error> {
-    de::sorted_map(path, value, SEMANTIC_OBSERVATIONS_LIMIT, |path, value| {
-        let mut row = Obj::new(path, value)?;
-        let key = row.required("key", |path, value| {
-            de::bounded_text(path, value, super::RECORD_KEY_BYTES)
-        })?;
-        let value = row.required("value", |path, value| {
-            de::bounded_text(path, value, super::RECORD_VALUE_BYTES)
-        })?;
-        row.finish()?;
-        Ok((key, value))
-    })
+pub fn decode_observation(path: &str, value: serde_json::Value) -> Result<Observation, Error> {
+    let observation: Observation = de::deserialize_value(path, value)?;
+    validate_records(&format!("{path}.records"), &observation.records)?;
+    Ok(observation)
 }
 
 fn validate_input(input: &Input) -> Result<(), Error> {
-    (input.records.len() <= SEMANTIC_OBSERVATIONS_LIMIT)
+    validate_records("$.records", &input.records)
+}
+
+fn validate_records(path: &str, records: &[Record]) -> Result<(), Error> {
+    (records.len() <= SEMANTIC_OBSERVATIONS_LIMIT)
         .then_some(())
-        .ok_or_else(|| Error::new("$.records", ErrorKind::LimitExceeded))?;
+        .ok_or_else(|| Error::new(path, ErrorKind::LimitExceeded))?;
     let mut previous: Option<&str> = None;
-    for (index, record) in input.records.iter().enumerate() {
+    for (index, record) in records.iter().enumerate() {
         for (field, value, limit) in [
             ("key", record.key.as_str(), super::RECORD_KEY_BYTES),
             ("value", record.value.as_str(), super::RECORD_VALUE_BYTES),
@@ -152,17 +137,14 @@ fn validate_input(input: &Input) -> Result<(), Error> {
             (!value.is_empty() && value.len() <= limit && !value.chars().any(char::is_control))
                 .then_some(())
                 .ok_or_else(|| {
-                    Error::new(
-                        &format!("$.records[{index}].{field}"),
-                        ErrorKind::InvalidValue,
-                    )
+                    Error::new(&format!("{path}[{index}].{field}"), ErrorKind::InvalidValue)
                 })?;
         }
         if let Some(previous) = previous {
             match previous.cmp(&record.key) {
                 Ordering::Less => {}
-                Ordering::Equal => return de::fail("$.records", ErrorKind::DuplicateMember),
-                Ordering::Greater => return de::fail("$.records", ErrorKind::UnsortedSet),
+                Ordering::Equal => return de::fail(path, ErrorKind::DuplicateMember),
+                Ordering::Greater => return de::fail(path, ErrorKind::UnsortedSet),
             }
         }
         previous = Some(&record.key);

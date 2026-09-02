@@ -10,7 +10,7 @@ use amiss_controller::{
     mdbook_site_evidence, mdbook_site_expectation,
 };
 use amiss_wire::digest::hb;
-use amiss_wire::json::{Value, canonical};
+use amiss_wire::json::canonical;
 use amiss_wire::model::RepoPathText;
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -63,27 +63,20 @@ fn site(configuration: &str, route_prefix: &str) -> SiteBuildContext {
     }
 }
 
-fn observation<'a>(observations: &'a [Value], route: &str) -> &'a Value {
+fn observation<'a>(observations: &'a [serde_json::Value], route: &str) -> &'a serde_json::Value {
     observations
         .iter()
-        .find(|row| row.text("route") == Some(route))
+        .find(|row| row.get("route").and_then(serde_json::Value::as_str) == Some(route))
         .unwrap()
 }
 
-fn texts<'a>(observation: &'a Value, name: &str) -> Vec<&'a str> {
-    let Some(Value::Array(values)) = observation.member(name) else {
+fn texts<'a>(observation: &'a serde_json::Value, name: &str) -> Vec<&'a str> {
+    let Some(values) = observation.get(name).and_then(serde_json::Value::as_array) else {
         return Vec::new();
     };
     values
         .iter()
-        .filter_map(|value| match value {
-            Value::String(value) => Some(value.as_ref()),
-            Value::Null
-            | Value::Bool(_)
-            | Value::Integer(_)
-            | Value::Array(_)
-            | Value::Object(_) => None,
-        })
+        .filter_map(serde_json::Value::as_str)
         .collect()
 }
 
@@ -121,38 +114,38 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     let evidence = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
     let parsed = amiss_wire::semantic::parse(&canonical(&evidence)).unwrap();
 
-    assert_eq!(parsed.payload.candidate_identity_digest, candidate);
-    assert_eq!(parsed.payload.producer_kind.as_str(), "site-build");
-    assert_eq!(parsed.payload.producer_version, "0.5.1");
+    assert_eq!(parsed.payload.subject.candidate_identity_digest, candidate);
+    assert_eq!(parsed.payload.producer.kind.as_str(), "site-build");
+    assert_eq!(parsed.payload.producer.version, "0.5.1");
     assert_eq!(
-        parsed.payload.context_digest,
+        parsed.payload.producer.context_digest,
         mdbook_site_expectation(&site).unwrap().context_digest
     );
     assert!(parsed.payload.complete);
     assert_eq!(parsed.payload.observations.len(), 4);
     let intro = observation(&parsed.payload.observations, "/manual/intro.html");
-    assert_eq!(intro.text("source"), Some("docs/guide/README.md"));
+    assert_eq!(intro["source"], "docs/guide/README.md");
     assert_eq!(
         texts(intro, "anchors"),
         ["both", "entity&anchor", "intro", "legacy", "named"]
     );
     let index = observation(&parsed.payload.observations, "/manual/index.html");
-    assert_eq!(index.text("source"), Some("docs/guide/README.md"));
+    assert_eq!(index["source"], "docs/guide/README.md");
     assert_eq!(texts(index, "anchors"), ["home"]);
     let nested = observation(
         &parsed.payload.observations,
         "/manual/nested/%C3%BCber%20view.html",
     );
-    assert_eq!(nested.text("source"), Some("docs/guide/nested/chapter.md"));
+    assert_eq!(nested["source"], "docs/guide/nested/chapter.md");
     assert_eq!(texts(nested, "anchors"), ["über-view"]);
     let navigation = parsed
         .payload
         .observations
         .iter()
-        .find(|row| row.text("kind") == Some("site-navigation"))
+        .find(|row| row.get("kind").and_then(serde_json::Value::as_str) == Some("site-navigation"))
         .unwrap();
-    assert_eq!(navigation.text("root"), Some("docs/guide"));
-    assert_eq!(navigation.text("manifest"), Some("docs/guide/SUMMARY.md"));
+    assert_eq!(navigation["root"], "docs/guide");
+    assert_eq!(navigation["manifest"], "docs/guide/SUMMARY.md");
     assert_eq!(texts(navigation, "entrypoints"), ["/manual/index.html"]);
     assert_eq!(
         texts(navigation, "reachable"),
@@ -182,17 +175,19 @@ fn generated_chapters_need_no_repository_attribution() {
     )
     .unwrap();
     let parsed = amiss_wire::semantic::parse(&canonical(&evidence)).unwrap();
-    let routes: Vec<&Value> = parsed
+    let routes: Vec<&serde_json::Value> = parsed
         .payload
         .observations
         .iter()
-        .filter(|row| row.text("kind") == Some("site-generated-route"))
+        .filter(|row| {
+            row.get("kind").and_then(serde_json::Value::as_str) == Some("site-generated-route")
+        })
         .collect();
     assert_eq!(routes.len(), 2);
     assert!(
         routes
             .iter()
-            .all(|route| route.member("source") == Some(&Value::Null))
+            .all(|route| route.get("source").is_some_and(serde_json::Value::is_null))
     );
     let generated = observation(&parsed.payload.observations, "/manual/generated.html");
     assert_eq!(texts(generated, "anchors"), ["generated"]);
@@ -200,7 +195,7 @@ fn generated_chapters_need_no_repository_attribution() {
         .payload
         .observations
         .iter()
-        .find(|row| row.text("kind") == Some("site-navigation"))
+        .find(|row| row.get("kind").and_then(serde_json::Value::as_str) == Some("site-navigation"))
         .unwrap();
     assert_eq!(texts(navigation, "entrypoints"), ["/manual/index.html"]);
     assert!(texts(navigation, "reachable").is_empty());
@@ -248,7 +243,7 @@ fn completed_links_not_chapter_membership_define_navigation() {
         .payload
         .observations
         .iter()
-        .find(|row| row.text("kind") == Some("site-navigation"))
+        .find(|row| row.get("kind").and_then(serde_json::Value::as_str) == Some("site-navigation"))
         .unwrap();
     assert_eq!(
         texts(navigation, "reachable"),
@@ -317,8 +312,14 @@ fn resolved_renderer_configuration_is_part_of_the_input_identity() {
     let first = amiss_wire::semantic::parse(&canonical(&first)).unwrap();
     let second = amiss_wire::semantic::parse(&canonical(&second)).unwrap();
 
-    assert_eq!(first.payload.context_digest, second.payload.context_digest);
-    assert_ne!(first.payload.input_digest, second.payload.input_digest);
+    assert_eq!(
+        first.payload.producer.context_digest,
+        second.payload.producer.context_digest
+    );
+    assert_ne!(
+        first.payload.producer.input_digest,
+        second.payload.producer.input_digest
+    );
 }
 
 #[test]

@@ -1,9 +1,12 @@
 use std::collections::BTreeMap;
 
 use amiss_controller_files::read_bounded_at;
-use amiss_wire::digest::{Digest, hb, hj};
+use amiss_wire::assessment::Nullable;
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPathText;
+use amiss_wire::semantic::observation::SiteBuildObservation;
+use amiss_wire::semantic::{PayloadSchema, SemanticProducer, SemanticSubject};
 use cap_std::fs::Dir;
 
 mod context;
@@ -18,12 +21,35 @@ pub(super) const MDBOOK_VERSION: &str = "0.5.4";
 const INPUT_DOMAIN: &str = "amiss/controller-mdbook-site-input-v1";
 const HTML_DOMAIN: &str = "amiss/controller-mdbook-html-v1";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct SiteBuildContext {
     pub configuration: RepoPathText,
     pub route_prefix: String,
     pub locale: Option<String>,
     pub version: Option<String>,
+}
+
+#[derive(serde::Serialize)]
+struct SiteInput<'a> {
+    mdbook_version: &'static str,
+    context_digest: Digest,
+    config_digest: Digest,
+    navigation: &'a SiteBuildObservation,
+    pages: &'a [SiteInputPage],
+}
+
+#[derive(serde::Serialize)]
+struct SiteInputPage {
+    route: String,
+    source: Option<RepoPathText>,
+    html_digest: Digest,
+}
+
+struct CollectedPages {
+    observations: Vec<SiteBuildObservation>,
+    inputs: Vec<SiteInputPage>,
+    links: BTreeMap<String, Vec<String>>,
+    anchor_count: usize,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -86,13 +112,68 @@ pub fn mdbook_site_evidence(
     if build.rows.len() >= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT {
         return Err(MdBookEvidenceError::UnsupportedBuild);
     }
+    let CollectedPages {
+        mut observations,
+        inputs,
+        links,
+        anchor_count,
+    } = collect_pages(&build, html_output)?;
+    let reachable = reachable_sources(&build.entrypoint, &links, &build.rows)?;
+    if anchor_count
+        .checked_add(reachable.len())
+        .and_then(|count| count.checked_add(1))
+        .is_none_or(|count| count > amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT)
+    {
+        return Err(MdBookEvidenceError::Navigation);
+    }
+    let navigation = navigation_observation(&build, reachable)?;
+    observations.push(navigation.clone());
 
+    let input_digest = serde_json_canonicalizer::to_vec(&SiteInput {
+        mdbook_version: MDBOOK_VERSION,
+        context_digest: expectation.context_digest,
+        config_digest,
+        navigation: &navigation,
+        pages: &inputs,
+    })
+    .map(|canonical| hb(INPUT_DOMAIN, &canonical))
+    .map_err(|_defect| MdBookEvidenceError::Evidence)?;
+    let observations = observations
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_defect| MdBookEvidenceError::Evidence)?;
+    amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
+        schema: PayloadSchema::Current,
+        subject: SemanticSubject {
+            candidate_identity_digest,
+            source_report_payload_digest: Nullable::Null,
+        },
+        producer: SemanticProducer {
+            kind: expectation.producer_kind,
+            identity: expectation.producer_identity,
+            version: expectation.producer_version,
+            context_digest: expectation.context_digest,
+            input_digest,
+        },
+        complete: true,
+        observations,
+    })
+    .map_err(|_defect| MdBookEvidenceError::Evidence)
+}
+
+fn collect_pages(
+    build: &BuildPages,
+    html_output: &Dir,
+) -> Result<CollectedPages, MdBookEvidenceError> {
     let mut remaining = MDBOOK_HTML_BYTES;
-    let mut anchor_count = 0_usize;
     let mut href_count = 0_usize;
-    let mut links = BTreeMap::new();
-    let mut observations = Vec::with_capacity(build.rows.len().saturating_add(1));
-    let mut inputs = Vec::with_capacity(build.rows.len());
+    let mut collected = CollectedPages {
+        observations: Vec::with_capacity(build.rows.len().saturating_add(1)),
+        inputs: Vec::with_capacity(build.rows.len()),
+        links: BTreeMap::new(),
+        anchor_count: 0,
+    };
     for (route, page) in &build.rows {
         let html = read_bounded_at(html_output, &page.output, remaining)
             .map_err(MdBookEvidenceError::Output)?;
@@ -105,72 +186,34 @@ pub fn mdbook_site_evidence(
             &html,
             route,
             &build.rows,
-            &mut anchor_count,
+            &mut collected.anchor_count,
             &mut href_count,
         )?;
-        links.insert(route.clone(), destinations);
-        let html_digest = Value::string(hb(HTML_DOMAIN, &html).to_string());
-        let (kind, source) = page.source.as_ref().map_or_else(
-            || ("site-generated-route", Value::Null),
-            |source| ("site-route", Value::string(source.clone())),
-        );
-        inputs.push(Value::object(vec![
-            ("route".to_owned(), Value::string(route.clone())),
-            ("source".to_owned(), source.clone()),
-            ("html_digest".to_owned(), html_digest),
-        ]));
-        observations.push(Value::object(vec![
-            ("kind".to_owned(), Value::string(kind.to_owned())),
-            ("route".to_owned(), Value::string(route.clone())),
-            ("source".to_owned(), source),
-            (
-                "anchors".to_owned(),
-                Value::array(anchors.into_iter().map(Value::string).collect()),
-            ),
-        ]));
+        collected.links.insert(route.clone(), destinations);
+        let source = page
+            .source
+            .as_ref()
+            .map(|source| RepoPathText::new(source.clone()).ok_or(MdBookEvidenceError::Path))
+            .transpose()?;
+        collected.inputs.push(SiteInputPage {
+            route: route.clone(),
+            source: source.clone(),
+            html_digest: hb(HTML_DOMAIN, &html),
+        });
+        collected.observations.push(match source {
+            None => SiteBuildObservation::GeneratedRoute {
+                route: route.clone(),
+                source: Nullable::Null,
+                anchors,
+            },
+            Some(source) => SiteBuildObservation::Route {
+                route: route.clone(),
+                source,
+                anchors,
+            },
+        });
     }
-    let reachable = reachable_sources(&build.entrypoint, &links, &build.rows)?;
-    if anchor_count
-        .checked_add(reachable.len())
-        .and_then(|count| count.checked_add(1))
-        .is_none_or(|count| count > amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT)
-    {
-        return Err(MdBookEvidenceError::Navigation);
-    }
-    let navigation = navigation_observation(&build, reachable);
-    observations.push(navigation.clone());
-
-    let input_digest = hj(
-        INPUT_DOMAIN,
-        &Value::object(vec![
-            (
-                "mdbook_version".to_owned(),
-                Value::string(MDBOOK_VERSION.to_owned()),
-            ),
-            (
-                "context_digest".to_owned(),
-                Value::string(expectation.context_digest.to_string()),
-            ),
-            (
-                "config_digest".to_owned(),
-                Value::string(config_digest.to_string()),
-            ),
-            ("navigation".to_owned(), navigation),
-            ("pages".to_owned(), Value::array(inputs)),
-        ]),
-    );
-    amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
-        candidate_identity_digest,
-        source_report_payload_digest: None,
-        producer_kind: expectation.producer_kind,
-        producer_identity: expectation.producer_identity,
-        producer_version: expectation.producer_version,
-        context_digest: expectation.context_digest,
-        input_digest,
-        complete: true,
-        observations,
-    })
-    .map_err(|_defect| MdBookEvidenceError::Evidence)
+    Ok(collected)
 }
 
 /// Freezes the operator-owned site identity that acquired evidence must match.
@@ -185,27 +228,25 @@ pub fn mdbook_site_expectation(
     site_build_context(site).map(|(expectation, _base, _root)| expectation)
 }
 
-fn navigation_observation(build: &BuildPages, reachable: Vec<String>) -> Value {
-    Value::object(vec![
-        (
-            "entrypoints".to_owned(),
-            Value::array(vec![Value::string(build.entrypoint.clone())]),
-        ),
-        (
-            "kind".to_owned(),
-            Value::string("site-navigation".to_owned()),
-        ),
-        ("manifest".to_owned(), Value::string(build.manifest.clone())),
-        (
-            "reachable".to_owned(),
-            Value::array(reachable.into_iter().map(Value::string).collect()),
-        ),
-        (
-            "root".to_owned(),
-            build
-                .source_root
-                .as_ref()
-                .map_or(Value::Null, |root| Value::string(root.clone())),
-        ),
-    ])
+fn navigation_observation(
+    build: &BuildPages,
+    reachable: Vec<String>,
+) -> Result<SiteBuildObservation, MdBookEvidenceError> {
+    let root = build
+        .source_root
+        .as_ref()
+        .map(|root| RepoPathText::new(root.clone()).ok_or(MdBookEvidenceError::Path))
+        .transpose()?
+        .map_or(Nullable::Null, Nullable::Value);
+    let manifest = RepoPathText::new(build.manifest.clone()).ok_or(MdBookEvidenceError::Path)?;
+    let reachable = reachable
+        .into_iter()
+        .map(|source| RepoPathText::new(source).ok_or(MdBookEvidenceError::Path))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(SiteBuildObservation::Navigation {
+        root,
+        manifest,
+        entrypoints: vec![build.entrypoint.clone()],
+        reachable,
+    })
 }

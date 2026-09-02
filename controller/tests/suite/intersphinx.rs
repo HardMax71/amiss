@@ -48,17 +48,17 @@ fn a_bounded_inventory_becomes_only_complete_label_evidence() {
     let parsed =
         amiss_wire::semantic::parse(&canonical(&bound.supplied.first().unwrap().value)).unwrap();
 
-    assert_eq!(parsed.payload.candidate_identity_digest, candidate);
+    assert_eq!(parsed.payload.subject.candidate_identity_digest, candidate);
     assert!(parsed.payload.complete);
     assert_eq!(parsed.payload.observations.len(), 2);
     assert!(parsed.payload.observations.iter().any(|row| {
-        row.text("name") == Some("except_star")
-            && row.text("destination")
+        row.get("name").and_then(serde_json::Value::as_str) == Some("except_star")
+            && row.get("destination").and_then(serde_json::Value::as_str)
                 == Some("https://docs.python.org/3/reference/compound_stmts.html#except-star")
     }));
     assert!(parsed.payload.observations.iter().any(|row| {
-        row.text("name") == Some("testcase-objects")
-            && row.text("destination")
+        row.get("name").and_then(serde_json::Value::as_str) == Some("testcase-objects")
+            && row.get("destination").and_then(serde_json::Value::as_str)
                 == Some("https://docs.python.org/3/library/unittest.html#testcase-objects")
     }));
 }

@@ -1,6 +1,3 @@
-use std::cmp::Ordering;
-use std::collections::BTreeMap;
-
 use crate::digest::Digest;
 use crate::json::{self, Value};
 
@@ -54,43 +51,61 @@ pub fn fail<T>(path: &str, kind: ErrorKind) -> Result<T, Error> {
 
 pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    serde_path_to_error::deserialize(&mut deserializer).map_err(|defect| {
-        let message = defect.inner().to_string();
-        let (kind, member) = if let Some(member) = message
-            .strip_prefix("missing field `")
-            .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
-        {
-            (ErrorKind::MissingField, Some(member))
-        } else if let Some(member) = message
-            .strip_prefix("unknown field `")
-            .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
-        {
-            (ErrorKind::UnknownField, Some(member))
-        } else if message.starts_with("invalid type:") {
-            (ErrorKind::WrongType, None)
-        } else {
-            (ErrorKind::InvalidValue, None)
-        };
-        let raw_path = defect.path().to_string();
-        let mut path = if raw_path == "." {
-            "$".to_owned()
-        } else {
-            format!("$.{raw_path}")
-        };
-        if let Some(member) = member
-            && defect
-                .path()
-                .iter()
-                .next_back()
-                .map(ToString::to_string)
-                .as_deref()
-                != Some(member)
-        {
-            path.push('.');
-            path.push_str(member);
-        }
-        Error { path, kind }
-    })
+    serde_path_to_error::deserialize(&mut deserializer)
+        .map_err(|defect| deserialize_error("$", &defect))
+}
+
+/// Deserializes one already strict JSON value while retaining the caller's document path.
+///
+/// # Errors
+///
+/// Fails with the structural error and its exact nested path.
+pub fn deserialize_value<T: serde::de::DeserializeOwned>(
+    path: &str,
+    value: serde_json::Value,
+) -> Result<T, Error> {
+    serde_path_to_error::deserialize(value).map_err(|defect| deserialize_error(path, &defect))
+}
+
+fn deserialize_error<E: std::fmt::Display>(
+    base: &str,
+    defect: &serde_path_to_error::Error<E>,
+) -> Error {
+    let message = defect.inner().to_string();
+    let (kind, member) = if let Some(member) = message
+        .strip_prefix("missing field `")
+        .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
+    {
+        (ErrorKind::MissingField, Some(member))
+    } else if let Some(member) = message
+        .strip_prefix("unknown field `")
+        .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
+    {
+        (ErrorKind::UnknownField, Some(member))
+    } else if message.starts_with("invalid type:") {
+        (ErrorKind::WrongType, None)
+    } else {
+        (ErrorKind::InvalidValue, None)
+    };
+    let raw_path = defect.path().to_string();
+    let mut path = if raw_path == "." {
+        base.to_owned()
+    } else {
+        format!("{base}.{raw_path}")
+    };
+    if let Some(member) = member
+        && defect
+            .path()
+            .iter()
+            .next_back()
+            .map(ToString::to_string)
+            .as_deref()
+            != Some(member)
+    {
+        path.push('.');
+        path.push_str(member);
+    }
+    Error { path, kind }
 }
 
 pub struct Obj {
@@ -202,61 +217,6 @@ pub fn boolean(path: &str, value: Value) -> Result<bool, Error> {
         return fail(path, ErrorKind::WrongType);
     };
     Ok(boolean)
-}
-
-/// Decodes one nonempty bounded string without control characters.
-///
-/// # Errors
-///
-/// Fails with `InvalidValue` when the text is empty, exceeds `limit` bytes, or contains a control
-/// character, and with `WrongType` when the value is not a string.
-pub(crate) fn bounded_text(path: &str, value: Value, limit: usize) -> Result<String, Error> {
-    let value = string(path, value)?;
-    if !value.is_empty() && value.len() <= limit && !value.chars().any(char::is_control) {
-        Ok(value)
-    } else {
-        fail(path, ErrorKind::InvalidValue)
-    }
-}
-
-pub(crate) fn sorted_map<T>(
-    path: &str,
-    value: Value,
-    limit: usize,
-    mut decode: impl FnMut(&str, Value) -> Result<(String, T), Error>,
-) -> Result<BTreeMap<String, T>, Error> {
-    Ok(sorted_items(
-        path,
-        value,
-        limit,
-        |path, value| decode(path, value),
-        |row| &row.0,
-    )?
-    .into_iter()
-    .collect())
-}
-
-pub(crate) fn sorted_items<T, K: Ord + ?Sized>(
-    path: &str,
-    value: Value,
-    limit: usize,
-    mut decode: impl FnMut(&str, Value) -> Result<T, Error>,
-    key: impl Fn(&T) -> &K,
-) -> Result<Vec<T>, Error> {
-    let values = array(path, value)?;
-    if values.len() > limit {
-        return fail(path, ErrorKind::LimitExceeded);
-    }
-    let mut items: Vec<T> = Vec::with_capacity(values.len());
-    for (index, value) in values.into_iter().enumerate() {
-        let item = decode(&format!("{path}[{index}]"), value)?;
-        match items.last().map(|previous| key(previous).cmp(key(&item))) {
-            Some(Ordering::Equal) => return fail(path, ErrorKind::DuplicateMember),
-            Some(Ordering::Greater) => return fail(path, ErrorKind::UnsortedSet),
-            None | Some(Ordering::Less) => items.push(item),
-        }
-    }
-    Ok(items)
 }
 
 /// # Errors

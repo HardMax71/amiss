@@ -4,6 +4,7 @@ use amiss_controller::{BootstrapJobError, SemanticEvidenceTemplate, bind_semanti
 use amiss_wire::digest::hb;
 use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
+use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
 pub struct SemanticInputArtifact {
     pub report: Vec<u8>,
@@ -18,13 +19,16 @@ pub struct SemanticInputArtifact {
 pub fn semantic_input_artifact() -> Result<SemanticInputArtifact, BootstrapJobError> {
     let bound = bind_semantic_evidence(
         &[SemanticEvidenceTemplate {
-            producer_kind: ArtifactId::new("record-set".to_owned())
-                .ok_or(BootstrapJobError::SemanticEvidence)?,
-            producer_identity: ArtifactId::new("test-records".to_owned())
-                .ok_or(BootstrapJobError::SemanticEvidence)?,
-            producer_version: "1".to_owned(),
-            context_digest: hb("amiss/test-context", b"context"),
-            input_digest: hb("amiss/test-input", b"input"),
+            schema: TemplateSchema::Current,
+            producer: SemanticProducer {
+                kind: ArtifactId::new("record-set".to_owned())
+                    .ok_or(BootstrapJobError::SemanticEvidence)?,
+                identity: ArtifactId::new("test-records".to_owned())
+                    .ok_or(BootstrapJobError::SemanticEvidence)?,
+                version: "1".to_owned(),
+                context_digest: hb("amiss/test-context", b"context"),
+                input_digest: hb("amiss/test-input", b"input"),
+            },
             complete: true,
             observations: Arc::from([]),
         }],

@@ -2,6 +2,7 @@ mod tests;
 
 use std::collections::BTreeSet;
 
+use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::json::{self, Value};
 use amiss_wire::model::ArtifactId;
@@ -80,9 +81,9 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
             .map_err(|_defect| ArtifactError::Corrupt)?;
         let envelope = amiss_wire::semantic::parse(&envelope_bytes)
             .map_err(|_defect| ArtifactError::Corrupt)?;
-        let candidate = envelope.payload.candidate_identity_digest;
+        let candidate = envelope.payload.subject.candidate_identity_digest;
         if envelope.payload_digest != payload_digest
-            || envelope.payload.source_report_payload_digest.is_some()
+            || envelope.payload.subject.source_report_payload_digest != Nullable::Null
             || candidate_identity.is_some_and(|expected| expected != candidate)
         {
             return Err(ArtifactError::Corrupt);

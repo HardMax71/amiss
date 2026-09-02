@@ -98,10 +98,10 @@ pub fn decode_workflow_artifact(
         .map_err(|_defect| GitHubArtifactError::Semantic)?;
     let actual = SemanticEvidenceExpectation {
         acquisition_identity: expectation.semantic.acquisition_identity.clone(),
-        producer_kind: template.producer_kind,
-        producer_identity: template.producer_identity,
-        producer_version: template.producer_version,
-        context_digest: template.context_digest,
+        producer_kind: template.producer.kind,
+        producer_identity: template.producer.identity,
+        producer_version: template.producer.version,
+        context_digest: template.producer.context_digest,
     };
     if actual != expectation.semantic {
         return Err(GitHubArtifactError::Semantic);

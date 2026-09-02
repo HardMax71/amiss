@@ -1,78 +1,94 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use amiss_wire::de::{self, Error, ErrorKind, fail};
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::assessment::Nullable;
+use amiss_wire::de::{Error, ErrorKind, fail};
+use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::Value;
-
-use super::decode::{
-    DESTINATION_BYTES, LABEL_BYTES, bounded_text, observation_row, repo_path, sorted_set,
+use amiss_wire::model::RepoPath;
+use amiss_wire::semantic::observation::{
+    SITE_GENERATED_ROUTE, SITE_NAVIGATION, SITE_REDIRECT, SITE_ROUTE, SiteBuildObservation,
 };
+
 use super::{
     SiteClaim, SiteDefect, SiteEvaluation, SiteNavigation, SitePageBacking, SiteRoute, SiteTarget,
 };
 
-const SITE_ROUTE: &str = "site-route";
-const SITE_GENERATED_ROUTE: &str = "site-generated-route";
-const SITE_REDIRECT: &str = "site-redirect";
-const SITE_NAVIGATION: &str = "site-navigation";
+const LABEL_BYTES: usize = 4_096;
+const DESTINATION_BYTES: usize = 16_384;
 const SITE_CLAIM_DOMAIN: &str = "amiss/scanner-site-claim";
 const SITE_DEFECT_DOMAIN: &str = "amiss/scanner-site-defect";
 
 pub(super) fn site_build_inputs(
     routes: &mut Arc<BTreeMap<String, SiteRoute>>,
     path: &str,
-    observations: Vec<Value>,
+    observations: Vec<serde_json::Value>,
     item_count: &mut usize,
 ) -> Result<SiteEvaluation, Error> {
     let mut navigation = None;
     for (index, observation) in observations.into_iter().enumerate() {
         let observation_path = format!("{path}.payload.observations[{index}]");
-        if observation.text("kind") == Some(SITE_NAVIGATION) {
-            if navigation.is_some() {
-                return fail(&observation_path, ErrorKind::Inconsistent);
+        let kind = observation.get("kind").and_then(serde_json::Value::as_str);
+        if !matches!(
+            kind,
+            Some(SITE_ROUTE | SITE_GENERATED_ROUTE | SITE_REDIRECT | SITE_NAVIGATION)
+        ) {
+            continue;
+        }
+        let digest = serde_json_canonicalizer::to_vec(&observation)
+            .map(|canonical| hb(SITE_CLAIM_DOMAIN, &canonical))
+            .map_err(|_defect| Error::new(&observation_path, ErrorKind::InvalidValue))?;
+        match amiss_wire::de::deserialize_value(&observation_path, observation)? {
+            SiteBuildObservation::Navigation {
+                root,
+                manifest,
+                entrypoints,
+                reachable,
+            } => {
+                if navigation.is_some() {
+                    return fail(&observation_path, ErrorKind::Inconsistent);
+                }
+                validate_routes(
+                    &format!("{observation_path}.entrypoints"),
+                    &entrypoints,
+                    item_count,
+                )?;
+                validate_sorted(
+                    &format!("{observation_path}.reachable"),
+                    &reachable,
+                    item_count,
+                )?;
+                let root = match root {
+                    Nullable::Value(root) => Some(RepoPath::from(&root)),
+                    Nullable::Null => None,
+                };
+                let manifest = RepoPath::from(&manifest);
+                let reachable = reachable.iter().map(RepoPath::from).collect::<Vec<_>>();
+                if entrypoints.is_empty()
+                    || !navigation_contains(root.as_ref(), &manifest)
+                    || reachable
+                        .iter()
+                        .any(|source| !navigation_contains(root.as_ref(), source))
+                    || reachable.binary_search(&manifest).is_ok()
+                {
+                    return fail(&observation_path, ErrorKind::Inconsistent);
+                }
+                navigation = Some((
+                    observation_path,
+                    SiteNavigation {
+                        root,
+                        manifest,
+                        entrypoints,
+                        reachable,
+                    },
+                ));
             }
-            let mut row = observation_row(&observation_path, observation, SITE_NAVIGATION)?;
-            let root = row.required("root", |path, value| match de::nullable(value) {
-                None => Ok(None),
-                Some(value) => repo_path(path, value).map(Some),
-            })?;
-            let manifest = row.required("manifest", repo_path)?;
-            let entrypoints = row.required("entrypoints", |path, value| {
-                sorted_set(path, value, item_count, |path, value| {
-                    bounded_text(
-                        path,
-                        value,
-                        DESTINATION_BYTES,
-                        amiss_wire::uri::site_route_valid,
-                    )
-                })
-            })?;
-            let reachable = row.required("reachable", |path, value| {
-                sorted_set(path, value, item_count, repo_path)
-            })?;
-            row.finish()?;
-            if entrypoints.is_empty()
-                || !navigation_contains(root.as_ref(), &manifest)
-                || reachable
-                    .iter()
-                    .any(|source| !navigation_contains(root.as_ref(), source))
-                || reachable.binary_search(&manifest).is_ok()
-            {
-                return fail(&observation_path, ErrorKind::Inconsistent);
+            claim @ (SiteBuildObservation::Route { .. }
+            | SiteBuildObservation::GeneratedRoute { .. }
+            | SiteBuildObservation::Redirect { .. }) => {
+                let (route, claim) = site_claim(&observation_path, digest, claim, item_count)?;
+                merge_site_claim(Arc::make_mut(routes), route, claim);
             }
-            navigation = Some((
-                observation_path,
-                SiteNavigation {
-                    root,
-                    manifest,
-                    entrypoints,
-                    reachable,
-                },
-            ));
-        } else if let Some((route, claim)) = site_claim(&observation_path, observation, item_count)?
-        {
-            merge_site_claim(Arc::make_mut(routes), route, claim);
         }
     }
     let Some((navigation_path, navigation)) = navigation else {
@@ -90,47 +106,54 @@ pub(super) fn site_build_inputs(
 
 fn site_claim(
     path: &str,
-    observation: Value,
+    digest: Digest,
+    observation: SiteBuildObservation,
     anchor_count: &mut usize,
-) -> Result<Option<(String, SiteClaim)>, Error> {
-    let (kind, backing) = match observation.text("kind") {
-        Some(SITE_ROUTE) => (SITE_ROUTE, Some(SitePageBacking::Repository)),
-        Some(SITE_GENERATED_ROUTE) => (SITE_GENERATED_ROUTE, Some(SitePageBacking::Generated)),
-        Some(SITE_REDIRECT) => (SITE_REDIRECT, None),
-        Some(_) | None => return Ok(None),
-    };
-    let digest = hj(SITE_CLAIM_DOMAIN, &observation);
-    let mut row = observation_row(path, observation, kind)?;
-    let route = row.required("route", |path, value| {
-        bounded_text(
-            path,
-            value,
-            DESTINATION_BYTES,
-            amiss_wire::uri::site_route_valid,
-        )
-    })?;
-    let source = row.required("source", |path, value| match backing {
-        Some(SitePageBacking::Generated) => de::nullable(value)
-            .map(|value| repo_path(path, value))
-            .transpose(),
-        Some(SitePageBacking::Repository) | None => repo_path(path, value).map(Some),
-    })?;
-    let target = if let Some(backing) = backing {
-        SiteTarget::Page {
-            backing,
-            anchors: row.required("anchors", |path, value| {
-                sorted_set(path, value, anchor_count, |path, value| {
-                    bounded_text(path, value, LABEL_BYTES, |value| {
-                        !value.is_empty() && value.chars().all(|character| !character.is_control())
-                    })
-                })
-            })?,
+) -> Result<(String, SiteClaim), Error> {
+    let (route, source, target) = match observation {
+        SiteBuildObservation::Route {
+            route,
+            source,
+            anchors,
+        } => {
+            validate_route(&format!("{path}.route"), &route)?;
+            validate_anchors(&format!("{path}.anchors"), &anchors, anchor_count)?;
+            (
+                route,
+                Some(RepoPath::from(&source)),
+                SiteTarget::Page {
+                    backing: SitePageBacking::Repository,
+                    anchors,
+                },
+            )
         }
-    } else {
-        let (destination, fragment) = row.required("destination", |path, value| {
-            let mut destination = de::string(path, value)?;
+        SiteBuildObservation::GeneratedRoute {
+            route,
+            source,
+            anchors,
+        } => {
+            validate_route(&format!("{path}.route"), &route)?;
+            validate_anchors(&format!("{path}.anchors"), &anchors, anchor_count)?;
+            (
+                route,
+                match source {
+                    Nullable::Value(source) => Some(RepoPath::from(&source)),
+                    Nullable::Null => None,
+                },
+                SiteTarget::Page {
+                    backing: SitePageBacking::Generated,
+                    anchors,
+                },
+            )
+        }
+        SiteBuildObservation::Redirect {
+            route,
+            source,
+            mut destination,
+        } => {
+            validate_route(&format!("{path}.route"), &route)?;
             if destination.len() > DESTINATION_BYTES {
-                return fail(path, ErrorKind::InvalidValue);
+                return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
             }
             let fragment = destination.find('#').and_then(|separator| {
                 let fragment = destination.get(separator.saturating_add(1)..)?.to_owned();
@@ -141,28 +164,68 @@ fn site_claim(
                 || fragment
                     .as_deref()
                     .is_some_and(|value| value.chars().any(char::is_control))
+                || route == destination
             {
-                return fail(path, ErrorKind::InvalidValue);
+                return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
             }
-            Ok((destination, fragment))
-        })?;
-        if route == destination {
-            return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
+            (
+                route,
+                Some(RepoPath::from(&source)),
+                SiteTarget::Redirect {
+                    destination,
+                    fragment,
+                },
+            )
         }
-        SiteTarget::Redirect {
-            destination,
-            fragment,
+        SiteBuildObservation::Navigation { .. } => {
+            return fail(path, ErrorKind::Inconsistent);
         }
     };
-    row.finish()?;
-    Ok(Some((
+    Ok((
         route,
         SiteClaim {
             source,
             digest,
             target,
         },
-    )))
+    ))
+}
+
+fn validate_route(path: &str, route: &str) -> Result<(), Error> {
+    (route.len() <= DESTINATION_BYTES && amiss_wire::uri::site_route_valid(route))
+        .then_some(())
+        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+}
+
+fn validate_routes(path: &str, routes: &[String], item_count: &mut usize) -> Result<(), Error> {
+    validate_sorted(path, routes, item_count)?;
+    for (index, route) in routes.iter().enumerate() {
+        validate_route(&format!("{path}[{index}]"), route)?;
+    }
+    Ok(())
+}
+
+fn validate_anchors(path: &str, anchors: &[String], item_count: &mut usize) -> Result<(), Error> {
+    validate_sorted(path, anchors, item_count)?;
+    for (index, anchor) in anchors.iter().enumerate() {
+        if anchor.is_empty() || anchor.len() > LABEL_BYTES || anchor.chars().any(char::is_control) {
+            return fail(&format!("{path}[{index}]"), ErrorKind::InvalidValue);
+        }
+    }
+    Ok(())
+}
+
+fn validate_sorted<T: Ord>(path: &str, values: &[T], item_count: &mut usize) -> Result<(), Error> {
+    *item_count = item_count
+        .checked_add(values.len())
+        .filter(|count| *count <= amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT)
+        .ok_or_else(|| Error::new(path, ErrorKind::LimitExceeded))?;
+    values.windows(2).try_for_each(|pair| match pair {
+        [left, right] if left < right => Ok(()),
+        [left, right] if left == right => fail(path, ErrorKind::DuplicateMember),
+        [_left, _right] => fail(path, ErrorKind::UnsortedSet),
+        _ => Ok(()),
+    })
 }
 
 fn merge_site_claim(routes: &mut BTreeMap<String, SiteRoute>, route: String, claim: SiteClaim) {
@@ -215,11 +278,7 @@ fn site_defects(routes: &BTreeMap<String, SiteRoute>) -> Vec<SiteDefect> {
         .collect()
 }
 
-fn duplicate_route_defect(
-    route: &str,
-    sources: &[amiss_wire::model::RepoPath],
-    claims: &[Digest],
-) -> SiteDefect {
+fn duplicate_route_defect(route: &str, sources: &[RepoPath], claims: &[Digest]) -> SiteDefect {
     let evidence = Value::object(vec![
         (
             "claim_digests".to_owned(),
@@ -237,12 +296,7 @@ fn duplicate_route_defect(
         ("route".to_owned(), Value::string(route.to_owned())),
         (
             "sources".to_owned(),
-            Value::array(
-                sources
-                    .iter()
-                    .map(amiss_wire::model::RepoPath::to_value)
-                    .collect(),
-            ),
+            Value::array(sources.iter().map(RepoPath::to_value).collect()),
         ),
     ]);
     SiteDefect {
@@ -344,7 +398,7 @@ fn validate_navigation(
     path: &str,
     navigation: &SiteNavigation,
 ) -> Result<(), Error> {
-    let page_sources: BTreeSet<&amiss_wire::model::RepoPath> = routes
+    let page_sources: BTreeSet<&RepoPath> = routes
         .values()
         .filter_map(|route| match route {
             SiteRoute::Unique(SiteClaim {
@@ -396,10 +450,7 @@ fn validate_navigation(
     Ok(())
 }
 
-pub(crate) fn navigation_contains(
-    root: Option<&amiss_wire::model::RepoPath>,
-    path: &amiss_wire::model::RepoPath,
-) -> bool {
+pub(crate) fn navigation_contains(root: Option<&RepoPath>, path: &RepoPath) -> bool {
     root.is_none_or(|root| {
         path.as_bytes()
             .strip_prefix(root.as_bytes())

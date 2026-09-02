@@ -1,14 +1,14 @@
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::{ArtifactId, RepoPathText};
+use amiss_wire::semantic::observation::{SITE_BUILD_PRODUCER, SITE_BUILD_VERSION};
 use url::Url;
 
 use super::{MDBOOK_VERSION, MdBookEvidenceError, SiteBuildContext};
 
-const SITE_BUILD_VERSION: &str = "0.5.1";
 const ROUTE_BYTES: usize = 16_384;
 const CONTEXT_DOMAIN: &str = "amiss/controller-mdbook-site-context-v1";
 const CONFIG_DOMAIN: &str = "amiss/controller-mdbook-config-v1";
@@ -47,33 +47,11 @@ pub(super) fn site_build_context(
         return Err(MdBookEvidenceError::ContextIdentity);
     }
     let base = route_base(&site.route_prefix)?;
-    let context_digest = hj(
-        CONTEXT_DOMAIN,
-        &Value::object(vec![
-            (
-                "configuration".to_owned(),
-                Value::string(configuration.to_owned()),
-            ),
-            (
-                "locale".to_owned(),
-                site.locale
-                    .as_ref()
-                    .map_or(Value::Null, |locale| Value::string(locale.clone())),
-            ),
-            (
-                "route_prefix".to_owned(),
-                Value::string(site.route_prefix.clone()),
-            ),
-            (
-                "version".to_owned(),
-                site.version
-                    .as_ref()
-                    .map_or(Value::Null, |version| Value::string(version.clone())),
-            ),
-        ]),
-    );
+    let context_digest = serde_json_canonicalizer::to_vec(site)
+        .map(|canonical| hb(CONTEXT_DOMAIN, &canonical))
+        .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
     let producer_kind =
-        ArtifactId::new("site-build".to_owned()).ok_or(MdBookEvidenceError::Evidence)?;
+        ArtifactId::new(SITE_BUILD_PRODUCER.to_owned()).ok_or(MdBookEvidenceError::Evidence)?;
     let producer_identity = ArtifactId::new("amiss-controller-mdbook-html".to_owned())
         .ok_or(MdBookEvidenceError::Evidence)?;
     Ok((

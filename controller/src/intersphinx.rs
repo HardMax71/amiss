@@ -1,9 +1,12 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use amiss_wire::digest::{hb, hj};
-use amiss_wire::json::Value;
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
+use amiss_wire::semantic::observation::{
+    SPHINX_INVENTORY_PRODUCER, SPHINX_INVENTORY_VERSION, SphinxLabelKind, SphinxLabelObservation,
+};
+use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 use flate2::{Decompress, FlushDecompress, Status};
 use sphinx_inv::{SphinxInventoryReader, SphinxType, StdRole};
 use url::Url;
@@ -23,6 +26,13 @@ pub struct IntersphinxInventory {
     pub identity: String,
     pub base_url: String,
     pub bytes: Vec<u8>,
+}
+
+#[derive(serde::Serialize)]
+struct InventoryInput {
+    inventory: ArtifactId,
+    base_url: String,
+    source_digest: Digest,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -96,31 +106,32 @@ pub fn intersphinx_evidence(
         if observations.len() > amiss_wire::semantic::SEMANTIC_OBSERVATIONS_LIMIT {
             return Err(IntersphinxError::Evidence);
         }
-        inputs.push(Value::object(vec![
-            (
-                "inventory".to_owned(),
-                Value::string(identity.as_str().to_owned()),
-            ),
-            (
-                "base_url".to_owned(),
-                Value::string(base_url.as_str().to_owned()),
-            ),
-            (
-                "source_digest".to_owned(),
-                Value::string(hb(SOURCE_DOMAIN, &inventory.bytes).to_string()),
-            ),
-        ]));
+        inputs.push(InventoryInput {
+            inventory: identity,
+            base_url: base_url.as_str().to_owned(),
+            source_digest: hb(SOURCE_DOMAIN, &inventory.bytes),
+        });
     }
 
-    let input_digest = hj(INPUT_DOMAIN, &Value::array(inputs));
+    let input_digest = serde_json_canonicalizer::to_vec(&inputs)
+        .map(|canonical| hb(INPUT_DOMAIN, &canonical))
+        .map_err(|_defect| IntersphinxError::Evidence)?;
+    let observations = observations
+        .into_iter()
+        .map(serde_json::to_value)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_defect| IntersphinxError::Evidence)?;
     let evidence = vec![SemanticEvidenceTemplate {
-        producer_kind: ArtifactId::new("sphinx-inventory-set".to_owned())
-            .ok_or(IntersphinxError::Identity)?,
-        producer_identity: ArtifactId::new("amiss-controller-intersphinx".to_owned())
-            .ok_or(IntersphinxError::Identity)?,
-        producer_version: "1".to_owned(),
-        context_digest: input_digest,
-        input_digest,
+        schema: TemplateSchema::Current,
+        producer: SemanticProducer {
+            kind: ArtifactId::new(SPHINX_INVENTORY_PRODUCER.to_owned())
+                .ok_or(IntersphinxError::Identity)?,
+            identity: ArtifactId::new("amiss-controller-intersphinx".to_owned())
+                .ok_or(IntersphinxError::Identity)?,
+            version: SPHINX_INVENTORY_VERSION.to_owned(),
+            context_digest: input_digest,
+            input_digest,
+        },
         complete: true,
         observations: Arc::from(observations),
     }];
@@ -153,7 +164,7 @@ fn labels(
     base_url: &Url,
     bytes: &[u8],
     decoded_limit: u64,
-) -> Result<(Vec<Value>, u64), IntersphinxError> {
+) -> Result<(Vec<SphinxLabelObservation>, u64), IntersphinxError> {
     let (plain, decoded_bytes) = bounded_plain_inventory(bytes, decoded_limit)?;
     let reader =
         SphinxInventoryReader::from_reader(Cursor::new(plain)).map_err(IntersphinxError::Parse)?;
@@ -173,7 +184,7 @@ fn label(
     identity: &ArtifactId,
     base_url: &Url,
     reference: sphinx_inv::SphinxReference,
-) -> Result<Value, IntersphinxError> {
+) -> Result<SphinxLabelObservation, IntersphinxError> {
     let location = reference.expanded_location();
     let name = reference.name;
     if name.len() > LABEL_BYTES
@@ -192,18 +203,12 @@ fn label(
     {
         return Err(IntersphinxError::Destination);
     }
-    Ok(Value::object(vec![
-        ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
-        (
-            "inventory".to_owned(),
-            Value::string(identity.as_str().to_owned()),
-        ),
-        ("name".to_owned(), Value::string(name)),
-        (
-            "destination".to_owned(),
-            Value::string(destination.to_owned()),
-        ),
-    ]))
+    Ok(SphinxLabelObservation {
+        kind: SphinxLabelKind::Current,
+        inventory: identity.clone(),
+        name,
+        destination: destination.to_owned(),
+    })
 }
 
 fn bounded_plain_inventory(

@@ -5,14 +5,15 @@
 
 use amiss_fixtures::{SiteObservation, record_set, site_navigation, site_observation};
 use amiss_scan::request::controls;
+use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::{Value, parse};
+use amiss_wire::json::parse;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::report::AnalysisErrorCode;
 use amiss_wire::requests::{
     ControlsRequest, RequestTrust, SuppliedControl, SuppliedSemanticEvidence, SuppliedTime,
 };
-use amiss_wire::semantic::SemanticEvidence;
+use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
 
 const FLOOR: &str = r#"{
   "schema": "amiss/organization-floor",
@@ -80,25 +81,30 @@ fn semantic_evidence(
     producer_version: &str,
     input_digest: Digest,
     source_report_payload_digest: Option<Digest>,
-    observations: Vec<Value>,
+    observations: Vec<serde_json::Value>,
 ) -> SemanticEvidence {
     SemanticEvidence {
-        candidate_identity_digest: hb("test/candidate", b"candidate"),
-        source_report_payload_digest,
-        producer_kind: ArtifactId::new(producer_kind.to_owned())
-            .expect("the producer kind is valid"),
-        producer_identity: ArtifactId::new("amiss-test".to_owned())
-            .expect("the producer identity is valid"),
-        producer_version: producer_version.to_owned(),
-        context_digest: input_digest,
-        input_digest,
+        schema: PayloadSchema::Current,
+        subject: SemanticSubject {
+            candidate_identity_digest: hb("test/candidate", b"candidate"),
+            source_report_payload_digest: source_report_payload_digest
+                .map_or(Nullable::Null, Nullable::Value),
+        },
+        producer: SemanticProducer {
+            kind: ArtifactId::new(producer_kind.to_owned()).expect("the producer kind is valid"),
+            identity: ArtifactId::new("amiss-test".to_owned())
+                .expect("the producer identity is valid"),
+            version: producer_version.to_owned(),
+            context_digest: input_digest,
+            input_digest,
+        },
         complete: true,
         observations,
     }
 }
 
 fn supplied_semantic(evidence: SemanticEvidence) -> SuppliedSemanticEvidence {
-    let expected_context_digest = evidence.context_digest;
+    let expected_context_digest = evidence.producer.context_digest;
     SuppliedSemanticEvidence {
         value: amiss_wire::semantic::envelope(evidence)
             .expect("the generic envelope admits producer-defined semantics"),
@@ -187,30 +193,24 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
         "1",
         hb("test/inventory", b"inventory"),
         None,
-        vec![Value::object(vec![
-            ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
-            ("inventory".to_owned(), Value::string("python".to_owned())),
-            ("name".to_owned(), Value::string("except_star".to_owned())),
-            (
-                "destination".to_owned(),
-                Value::string("https://docs.python.org/3/reference/".to_owned()),
-            ),
-        ])],
+        vec![serde_json::json!({
+            "kind": "sphinx-label",
+            "inventory": "python",
+            "name": "except_star",
+            "destination": "https://docs.python.org/3/reference/",
+        })],
     );
     let mut incomplete = valid.clone();
     incomplete.complete = false;
     let mut unsupported = valid.clone();
-    unsupported.producer_version = "2".to_owned();
+    unsupported.producer.version = "2".to_owned();
     let mut malformed = valid;
-    malformed.observations[0] = Value::object(vec![
-        ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
-        ("inventory".to_owned(), Value::string("python".to_owned())),
-        ("name".to_owned(), Value::string("except_star".to_owned())),
-        (
-            "destination".to_owned(),
-            Value::string("https:///missing-authority".to_owned()),
-        ),
-    ]);
+    malformed.observations[0] = serde_json::json!({
+        "kind": "sphinx-label",
+        "inventory": "python",
+        "name": "except_star",
+        "destination": "https:///missing-authority",
+    });
 
     for evidence in [incomplete, unsupported, malformed] {
         let mut request = empty();
@@ -254,9 +254,10 @@ fn malformed_record_sets_fail_closed() {
         )],
     );
     let mut wrong_version = valid.clone();
-    wrong_version.producer_version = "2".to_owned();
+    wrong_version.producer.version = "2".to_owned();
     let mut report_derived = valid.clone();
-    report_derived.source_report_payload_digest = Some(hb("test/report", b"report"));
+    report_derived.subject.source_report_payload_digest =
+        Nullable::Value(hb("test/report", b"report"));
     let mut multiple_sets = valid.clone();
     multiple_sets
         .observations
@@ -298,7 +299,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
         None,
         vec![record_set("rust/public-api", &[("a", "A")])],
     );
-    left.context_digest = hb("test/record-context", b"left");
+    left.producer.context_digest = hb("test/record-context", b"left");
     let mut right = semantic_evidence(
         "record-set",
         "1",
@@ -306,7 +307,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
         None,
         vec![record_set("rust/public-api", &[("b", "B")])],
     );
-    right.context_digest = hb("test/record-context", b"right");
+    right.producer.context_digest = hb("test/record-context", b"right");
     let mut supplied = vec![supplied_semantic(left), supplied_semantic(right)];
     supplied.sort_by_key(|item| {
         amiss_wire::semantic::parse(&amiss_wire::json::canonical(&item.value))
@@ -361,7 +362,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let mut incomplete = valid.clone();
     incomplete.complete = false;
     let mut unsupported = valid.clone();
-    unsupported.producer_version = "0.2.0".to_owned();
+    unsupported.producer.version = "0.2.0".to_owned();
     let mut invalid_route = valid.clone();
     invalid_route.observations = vec![site_observation(
         "//other.example/guide",
@@ -432,37 +433,28 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
 #[test]
 fn site_claims_require_explicit_source_attribution() {
     for observation in [
-        Value::object(vec![
-            (
-                "destination".to_owned(),
-                Value::string("/guide/".to_owned()),
-            ),
-            ("kind".to_owned(), Value::string("site-redirect".to_owned())),
-            ("route".to_owned(), Value::string("/legacy/".to_owned())),
-        ]),
-        Value::object(vec![
-            ("anchors".to_owned(), Value::array(Vec::new())),
-            ("kind".to_owned(), Value::string("site-route".to_owned())),
-            ("route".to_owned(), Value::string("/guide/".to_owned())),
-            ("source".to_owned(), Value::Null),
-        ]),
-        Value::object(vec![
-            (
-                "destination".to_owned(),
-                Value::string("/guide/".to_owned()),
-            ),
-            ("kind".to_owned(), Value::string("site-redirect".to_owned())),
-            ("route".to_owned(), Value::string("/legacy/".to_owned())),
-            ("source".to_owned(), Value::Null),
-        ]),
-        Value::object(vec![
-            ("anchors".to_owned(), Value::array(Vec::new())),
-            (
-                "kind".to_owned(),
-                Value::string("site-generated-route".to_owned()),
-            ),
-            ("route".to_owned(), Value::string("/generated/".to_owned())),
-        ]),
+        serde_json::json!({
+            "kind": "site-redirect",
+            "route": "/legacy/",
+            "destination": "/guide/",
+        }),
+        serde_json::json!({
+            "kind": "site-route",
+            "route": "/guide/",
+            "source": null,
+            "anchors": [],
+        }),
+        serde_json::json!({
+            "kind": "site-redirect",
+            "route": "/legacy/",
+            "source": null,
+            "destination": "/guide/",
+        }),
+        serde_json::json!({
+            "kind": "site-generated-route",
+            "route": "/generated/",
+            "anchors": [],
+        }),
     ] {
         let evidence = semantic_evidence(
             "site-build",

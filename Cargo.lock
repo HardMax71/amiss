@@ -139,6 +139,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "serde_json_canonicalizer",
  "sha2",
  "sphinx_inv",
  "strum",
@@ -400,6 +401,7 @@ version = "0.27.0"
 dependencies = [
  "amiss-wire",
  "flate2",
+ "serde_json",
  "sha1-checked",
  "tempfile",
 ]
@@ -465,6 +467,7 @@ dependencies = [
  "memchr",
  "percent-encoding",
  "serde_json",
+ "serde_json_canonicalizer",
  "stats_alloc",
  "strum",
  "tempfile",

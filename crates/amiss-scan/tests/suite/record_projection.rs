@@ -10,12 +10,13 @@ use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity};
 use amiss_scan::request::controls;
 use amiss_scan::{Effects, semantic};
+use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::{ControlsRequest, SuppliedSemanticEvidence};
-use amiss_wire::semantic::SemanticEvidence;
+use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
 
 fn engine() -> EngineProvenance {
     EngineProvenance {
@@ -57,13 +58,18 @@ fn semantic_inputs(
 ) -> semantic::Inputs {
     let context_digest = hb("test/record-set-context", b"rust public api");
     let evidence = SemanticEvidence {
-        candidate_identity_digest,
-        source_report_payload_digest: None,
-        producer_kind: ArtifactId::new("record-set".to_owned()).unwrap(),
-        producer_identity: ArtifactId::new("test-rust-public-api".to_owned()).unwrap(),
-        producer_version: "1".to_owned(),
-        context_digest,
-        input_digest: hb("test/record-set-input", b"rust public api output"),
+        schema: PayloadSchema::Current,
+        subject: SemanticSubject {
+            candidate_identity_digest,
+            source_report_payload_digest: Nullable::Null,
+        },
+        producer: SemanticProducer {
+            kind: ArtifactId::new("record-set".to_owned()).unwrap(),
+            identity: ArtifactId::new("test-rust-public-api".to_owned()).unwrap(),
+            version: "1".to_owned(),
+            context_digest,
+            input_digest: hb("test/record-set-input", b"rust public api output"),
+        },
         complete,
         observations: vec![amiss_fixtures::record_set(set, records)],
     };

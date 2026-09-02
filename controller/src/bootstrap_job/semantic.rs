@@ -3,6 +3,7 @@ mod tests;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
@@ -87,10 +88,10 @@ pub fn bind_semantic_evidence(
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
         let actual = SemanticEvidenceExpectation {
             acquisition_identity: source.acquisition_identity.clone(),
-            producer_kind: template.producer_kind.clone(),
-            producer_identity: template.producer_identity.clone(),
-            producer_version: template.producer_version.clone(),
-            context_digest: template.context_digest,
+            producer_kind: template.producer.kind.clone(),
+            producer_identity: template.producer.identity.clone(),
+            producer_version: template.producer.version.clone(),
+            context_digest: template.producer.context_digest,
         };
         if expected.remove(&source.acquisition_identity).as_ref() != Some(&actual) {
             return Err(BootstrapJobError::SemanticEvidence);
@@ -133,9 +134,9 @@ fn bind_input(
     let envelope_bytes = json::canonical(&value);
     let envelope = amiss_wire::semantic::parse(&envelope_bytes)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    if envelope.payload.candidate_identity_digest != candidate_identity_digest
-        || envelope.payload.source_report_payload_digest.is_some()
-        || envelope.payload.context_digest != template.context_digest
+    if envelope.payload.subject.candidate_identity_digest != candidate_identity_digest
+        || envelope.payload.subject.source_report_payload_digest != Nullable::Null
+        || envelope.payload.producer.context_digest != template.producer.context_digest
     {
         return Err(BootstrapJobError::SemanticEvidence);
     }
@@ -143,7 +144,7 @@ fn bind_input(
         payload_digest: envelope.payload_digest,
         supplied: SuppliedSemanticEvidence {
             value,
-            expected_context_digest: template.context_digest,
+            expected_context_digest: template.producer.context_digest,
         },
         acquisition_identity,
         template_digest: sha256(&template_bytes),

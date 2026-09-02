@@ -5,6 +5,7 @@ use std::sync::Arc;
 use amiss_wire::digest::{hb, sha256};
 use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
+use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 use base64::Engine as _;
 
 use super::{INPUT_ARTIFACT_SCHEMA, InputArtifact, InputArtifactRow, validate};
@@ -14,12 +15,14 @@ use crate::{ArtifactError, SemanticEvidenceTemplate};
 fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), ArtifactError> {
     let candidate = hb("amiss/test-candidate", b"candidate");
     let template = SemanticEvidenceTemplate {
-        producer_kind: ArtifactId::new("record-set".to_owned()).ok_or(ArtifactError::Corrupt)?,
-        producer_identity: ArtifactId::new("test-records".to_owned())
-            .ok_or(ArtifactError::Corrupt)?,
-        producer_version: "1".to_owned(),
-        context_digest: hb("amiss/test-context", b"context"),
-        input_digest: hb("amiss/test-input", b"input"),
+        schema: TemplateSchema::Current,
+        producer: SemanticProducer {
+            kind: ArtifactId::new("record-set".to_owned()).ok_or(ArtifactError::Corrupt)?,
+            identity: ArtifactId::new("test-records".to_owned()).ok_or(ArtifactError::Corrupt)?,
+            version: "1".to_owned(),
+            context_digest: hb("amiss/test-context", b"context"),
+            input_digest: hb("amiss/test-input", b"input"),
+        },
         complete: true,
         observations: Arc::from([]),
     };
