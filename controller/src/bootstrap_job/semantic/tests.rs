@@ -5,6 +5,7 @@ use std::sync::Arc;
 use amiss_wire::digest::hb;
 use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
+use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
 use super::{bind_input, input_artifact};
 use crate::{BootstrapJobError, SemanticEvidenceTemplate};
@@ -13,13 +14,16 @@ use crate::{BootstrapJobError, SemanticEvidenceTemplate};
 fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
 -> Result<(), BootstrapJobError> {
     let template = SemanticEvidenceTemplate {
-        producer_kind: ArtifactId::new("record-set".to_owned())
-            .ok_or(BootstrapJobError::SemanticEvidence)?,
-        producer_identity: ArtifactId::new("test-records".to_owned())
-            .ok_or(BootstrapJobError::SemanticEvidence)?,
-        producer_version: "1".to_owned(),
-        context_digest: hb("amiss/test-context", b"context"),
-        input_digest: hb("amiss/test-input", b"input"),
+        schema: TemplateSchema::Current,
+        producer: SemanticProducer {
+            kind: ArtifactId::new("record-set".to_owned())
+                .ok_or(BootstrapJobError::SemanticEvidence)?,
+            identity: ArtifactId::new("test-records".to_owned())
+                .ok_or(BootstrapJobError::SemanticEvidence)?,
+            version: "1".to_owned(),
+            context_digest: hb("amiss/test-context", b"context"),
+            input_digest: hb("amiss/test-input", b"input"),
+        },
         complete: true,
         observations: Arc::from([]),
     };

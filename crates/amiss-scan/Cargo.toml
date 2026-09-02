@@ -18,6 +18,8 @@ amiss-rst = { path = "../amiss-rst", version = "0.27.0" }
 amiss-wire = { path = "../amiss-wire", version = "0.27.0" }
 memchr.workspace = true
 percent-encoding.workspace = true
+serde_json.workspace = true
+serde_json_canonicalizer.workspace = true
 strum.workspace = true
 unicode-general-category.workspace = true
 unicode-normalization.workspace = true
@@ -27,7 +29,6 @@ amiss-fixtures = { path = "../amiss-fixtures" }
 divan.workspace = true
 dhat = "0.3"
 jsonschema.workspace = true
-serde_json.workspace = true
 stats_alloc = "0.1.10"
 tempfile.workspace = true
 

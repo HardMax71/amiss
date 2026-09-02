@@ -98,4 +98,20 @@ fn sidecar_examples_match_their_typed_sources() {
         serde_json_canonicalizer::to_vec(&record_input).unwrap(),
         json::canonical(&json::parse(&record_input_bytes).unwrap())
     );
+
+    let semantic_evidence_bytes =
+        fs::read(examples.join("scanner-semantic-evidence.json")).unwrap();
+    let semantic_evidence = semantic::parse(&semantic_evidence_bytes).unwrap();
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&semantic_evidence).unwrap(),
+        json::canonical(&json::parse(&semantic_evidence_bytes).unwrap())
+    );
+
+    let semantic_template_bytes =
+        fs::read(examples.join("scanner-semantic-template.json")).unwrap();
+    let semantic_template = semantic::parse_template(&semantic_template_bytes).unwrap();
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&semantic_template).unwrap(),
+        json::canonical(&json::parse(&semantic_template_bytes).unwrap())
+    );
 }

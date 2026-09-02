@@ -134,15 +134,15 @@ fn semantic_expectations(
             let bytes = canonical(&supplied.value);
             let envelope = amiss_wire::semantic::parse(&bytes)
                 .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
-            if envelope.payload.context_digest != supplied.expected_context_digest {
+            if envelope.payload.producer.context_digest != supplied.expected_context_digest {
                 return Err(tampered("semantic-evidence-invalid"));
             }
             Ok(SealedSemanticExpectation {
                 payload_digest: envelope.payload_digest.to_string(),
-                producer_kind: envelope.payload.producer_kind.as_str().to_owned(),
-                producer_identity: envelope.payload.producer_identity.as_str().to_owned(),
-                producer_version: envelope.payload.producer_version,
-                input_digest: envelope.payload.input_digest.to_string(),
+                producer_kind: envelope.payload.producer.kind.as_str().to_owned(),
+                producer_identity: envelope.payload.producer.identity.as_str().to_owned(),
+                producer_version: envelope.payload.producer.version,
+                input_digest: envelope.payload.producer.input_digest.to_string(),
             })
         })
         .collect()

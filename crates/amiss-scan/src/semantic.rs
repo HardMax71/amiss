@@ -1,4 +1,3 @@
-mod decode;
 mod parse;
 mod record;
 mod site;
@@ -134,7 +133,7 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
                 .map_err(|error| crate::request::configuration_detail(&error))?;
             let supplied = [amiss_wire::requests::SuppliedSemanticEvidence {
                 value,
-                expected_context_digest: template.context_digest,
+                expected_context_digest: template.producer.context_digest,
             }];
             parsed =
                 parse(&supplied).map_err(|error| crate::request::configuration_detail(&error))?;

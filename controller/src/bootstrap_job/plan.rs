@@ -134,23 +134,23 @@ fn plan_value(
                         Value::object(vec![
                             (
                                 "producer_kind".to_owned(),
-                                Value::string(template.producer_kind.as_str().to_owned()),
+                                Value::string(template.producer.kind.as_str().to_owned()),
                             ),
                             (
                                 "producer_identity".to_owned(),
-                                Value::string(template.producer_identity.as_str().to_owned()),
+                                Value::string(template.producer.identity.as_str().to_owned()),
                             ),
                             (
                                 "producer_version".to_owned(),
-                                Value::string(template.producer_version.clone()),
+                                Value::string(template.producer.version.clone()),
                             ),
                             (
                                 "context_digest".to_owned(),
-                                Value::string(template.context_digest.to_string()),
+                                Value::string(template.producer.context_digest.to_string()),
                             ),
                             (
                                 "input_digest".to_owned(),
-                                Value::string(template.input_digest.to_string()),
+                                Value::string(template.producer.input_digest.to_string()),
                             ),
                             ("complete".to_owned(), Value::Bool(template.complete)),
                         ])

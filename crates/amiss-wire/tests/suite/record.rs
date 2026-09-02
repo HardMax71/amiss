@@ -28,9 +28,9 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
     .unwrap();
     let value = template(source).unwrap();
     let parsed = amiss_wire::semantic::parse_template(&canonical(&value)).unwrap();
-    assert_eq!(parsed.producer_kind.as_str(), "record-set");
-    assert_eq!(parsed.producer_identity.as_str(), "test-public-api");
-    assert_eq!(parsed.producer_version, "1");
+    assert_eq!(parsed.producer.kind.as_str(), "record-set");
+    assert_eq!(parsed.producer.identity.as_str(), "test-public-api");
+    assert_eq!(parsed.producer.version, "1");
     assert!(parsed.complete);
     let [observation] = parsed.observations.as_ref() else {
         panic!("one normalized set becomes one observation")
@@ -38,7 +38,8 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
     let decoded = decode_observation("$.observations[0]", observation.clone()).unwrap();
     assert_eq!(decoded.name.as_str(), "rust/public-api");
     assert_eq!(decoded.records.len(), 2);
-    assert_eq!(decoded.records["amiss::run"], "pub fn run()");
+    assert_eq!(decoded.records[1].key, "amiss::run");
+    assert_eq!(decoded.records[1].value, "pub fn run()");
 }
 
 #[test]

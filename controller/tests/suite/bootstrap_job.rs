@@ -195,11 +195,14 @@ fn candidate_identity(run: &RunRequest) -> Digest {
 
 fn semantic_template(context_digest: Digest) -> Vec<u8> {
     let template = amiss_wire::semantic::template(SemanticEvidenceTemplate {
-        producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
-        producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
-        producer_version: "0.5.1".to_owned(),
-        context_digest,
-        input_digest: hb("amiss/test-site-build", b"output"),
+        schema: amiss_wire::semantic::TemplateSchema::Current,
+        producer: amiss_wire::semantic::SemanticProducer {
+            kind: ArtifactId::new("site-build".to_owned()).unwrap(),
+            identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
+            version: "0.5.1".to_owned(),
+            context_digest,
+            input_digest: hb("amiss/test-site-build", b"output"),
+        },
         complete: true,
         observations: Arc::from([]),
     })
@@ -305,7 +308,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
     ))
     .unwrap();
     assert_eq!(
-        semantic.payload.candidate_identity_digest,
+        semantic.payload.subject.candidate_identity_digest,
         statement.candidate_identity_digest()
     );
     assert_eq!(job.constraint, execution().canonical_bytes().unwrap());

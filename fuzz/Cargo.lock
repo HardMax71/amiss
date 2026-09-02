@@ -75,6 +75,8 @@ dependencies = [
  "amiss-wire",
  "memchr",
  "percent-encoding",
+ "serde_json",
+ "serde_json_canonicalizer",
  "strum",
  "unicode-general-category",
  "unicode-normalization",

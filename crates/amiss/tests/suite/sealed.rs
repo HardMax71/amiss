@@ -8,6 +8,7 @@ use std::io::Write as _;
 use std::process::{Command, Stdio};
 
 use amiss_fixtures::{SiteObservation, site_navigation, site_observation};
+use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{OrganizationFloor, Profile};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{Value, parse};
@@ -18,7 +19,8 @@ use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,
     SnapshotRequest, SuppliedControl, SuppliedSemanticEvidence, commit_candidate_identity_digest,
 };
-use amiss_wire::semantic::SemanticEvidence;
+use amiss_wire::semantic::observation::{SphinxLabelKind, SphinxLabelObservation};
+use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
 
 fn supplied_semantic(value: Value, expected_context_digest: Digest) -> SuppliedSemanticEvidence {
     SuppliedSemanticEvidence {
@@ -242,16 +244,14 @@ fn id(value: &str) -> ArtifactId {
     ArtifactId::new(value.to_owned()).unwrap()
 }
 
-fn sphinx_label(inventory: &str, name: &str, destination: &str) -> Value {
-    Value::object(vec![
-        ("kind".to_owned(), Value::string("sphinx-label".to_owned())),
-        ("inventory".to_owned(), Value::string(inventory.to_owned())),
-        ("name".to_owned(), Value::string(name.to_owned())),
-        (
-            "destination".to_owned(),
-            Value::string(destination.to_owned()),
-        ),
-    ])
+fn sphinx_label(inventory: &str, name: &str, destination: &str) -> serde_json::Value {
+    serde_json::to_value(SphinxLabelObservation {
+        kind: SphinxLabelKind::Current,
+        inventory: id(inventory),
+        name: name.to_owned(),
+        destination: destination.to_owned(),
+    })
+    .unwrap()
 }
 
 fn intersphinx_case() -> (
@@ -282,13 +282,18 @@ fn intersphinx_case() -> (
     .unwrap();
     let context_digest = hb("amiss-test/inventory", b"python and another");
     let semantic = SemanticEvidence {
-        candidate_identity_digest: identity,
-        source_report_payload_digest: None,
-        producer_kind: id("sphinx-inventory-set"),
-        producer_identity: id("amiss-test"),
-        producer_version: "1".to_owned(),
-        context_digest,
-        input_digest: context_digest,
+        schema: PayloadSchema::Current,
+        subject: SemanticSubject {
+            candidate_identity_digest: identity,
+            source_report_payload_digest: Nullable::Null,
+        },
+        producer: SemanticProducer {
+            kind: id("sphinx-inventory-set"),
+            identity: id("amiss-test"),
+            version: "1".to_owned(),
+            context_digest,
+            input_digest: context_digest,
+        },
         complete: true,
         observations: vec![
             sphinx_label(
@@ -306,7 +311,7 @@ fn intersphinx_case() -> (
 #[test]
 fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     let (fixture, evaluation, semantic) = intersphinx_case();
-    let expected_context_digest = semantic.context_digest;
+    let expected_context_digest = semantic.producer.context_digest;
     let evidence = amiss_wire::semantic::envelope(semantic).unwrap();
     let controls = ControlsRequest {
         semantic_evidence: vec![supplied_semantic(evidence, expected_context_digest)],
@@ -395,13 +400,21 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
     .unwrap();
     let context_digest = hb("amiss-test/site-context", b"default/current");
     let evidence = amiss_wire::semantic::envelope(SemanticEvidence {
-        candidate_identity_digest: identity,
-        source_report_payload_digest: Some(hb("amiss-test/report", b"source report")),
-        producer_kind: id("site-build"),
-        producer_identity: id("amiss-test"),
-        producer_version: "0.5.1".to_owned(),
-        context_digest,
-        input_digest: hb("amiss-test/site-output", b"site output"),
+        schema: PayloadSchema::Current,
+        subject: SemanticSubject {
+            candidate_identity_digest: identity,
+            source_report_payload_digest: Nullable::Value(hb(
+                "amiss-test/report",
+                b"source report",
+            )),
+        },
+        producer: SemanticProducer {
+            kind: id("site-build"),
+            identity: id("amiss-test"),
+            version: "0.5.1".to_owned(),
+            context_digest,
+            input_digest: hb("amiss-test/site-output", b"site output"),
+        },
         complete: true,
         observations: site_build_observations(),
     })
@@ -581,8 +594,8 @@ fn assert_site_defects(envelope: &serde_json::Value) {
     }
 }
 
-fn site_build_observations() -> Vec<Value> {
-    vec![
+fn site_build_observations() -> Vec<serde_json::Value> {
+    let pages = [
         site_observation(
             "/guide/",
             SiteObservation::Page(
@@ -593,6 +606,9 @@ fn site_build_observations() -> Vec<Value> {
         site_observation("/stale/", SiteObservation::Page("docs/removed.md", &[])),
         site_observation("/duplicate/", SiteObservation::Page("docs/guide.md", &[])),
         site_observation("/duplicate/", SiteObservation::Page("docs/index.md", &[])),
+        site_observation("/collision/", SiteObservation::Page("docs/guide.md", &[])),
+    ];
+    let redirects = [
         site_observation(
             "/legacy/",
             SiteObservation::Redirect("docs/redirects.toml", "/guide/"),
@@ -625,7 +641,6 @@ fn site_build_observations() -> Vec<Value> {
             "/broken/",
             SiteObservation::Redirect("docs/redirects.toml", "/missing/"),
         ),
-        site_observation("/collision/", SiteObservation::Page("docs/guide.md", &[])),
         site_observation(
             "/collision/",
             SiteObservation::Redirect("docs/redirects.toml", "/guide/"),
@@ -638,6 +653,12 @@ fn site_build_observations() -> Vec<Value> {
             "/redirect-to-redirect/",
             SiteObservation::Redirect("docs/redirects.toml", "/legacy/"),
         ),
+        site_observation(
+            "/generated-legacy/",
+            SiteObservation::Redirect("docs/redirects.toml", "/generated/"),
+        ),
+    ];
+    let generated = [
         site_observation("/generated/", SiteObservation::Generated(None, &["api"])),
         site_observation(
             "/generated-duplicate/",
@@ -651,17 +672,20 @@ fn site_build_observations() -> Vec<Value> {
             "/generated-stale/",
             SiteObservation::Generated(Some("missing.config.js"), &[]),
         ),
-        site_observation(
-            "/generated-legacy/",
-            SiteObservation::Redirect("docs/redirects.toml", "/generated/"),
-        ),
-        site_navigation(
-            Some("docs"),
-            "docs/SUMMARY.md",
-            &["/generated/"],
-            &["docs/guide.md"],
-        ),
-    ]
+    ];
+    let navigation = [site_navigation(
+        Some("docs"),
+        "docs/SUMMARY.md",
+        &["/generated/"],
+        &["docs/guide.md"],
+    )];
+
+    pages
+        .into_iter()
+        .chain(redirects)
+        .chain(generated)
+        .chain(navigation)
+        .collect()
 }
 
 fn assert_unlinked(envelope: &serde_json::Value, expected: &[&str]) {
@@ -682,9 +706,12 @@ fn assert_unlinked(envelope: &serde_json::Value, expected: &[&str]) {
 #[test]
 fn stale_intersphinx_evidence_refuses_the_run() {
     let (fixture, evaluation, semantic) = intersphinx_case();
-    let expected_context_digest = semantic.context_digest;
+    let expected_context_digest = semantic.producer.context_digest;
     let stale = amiss_wire::semantic::envelope(SemanticEvidence {
-        candidate_identity_digest: hb("amiss-test/stale", b"another candidate"),
+        subject: SemanticSubject {
+            candidate_identity_digest: hb("amiss-test/stale", b"another candidate"),
+            source_report_payload_digest: Nullable::Null,
+        },
         ..semantic
     })
     .unwrap();
