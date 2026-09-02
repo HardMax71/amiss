@@ -14,8 +14,8 @@ use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::requests::{
     CANDIDATE_IDENTITY_DOMAIN, ControlsRequest, EvaluationRequest, REPOSITORY_HANDLE_ORDINAL,
     REQUEST_STREAM_BYTES, RequestMode, RequestStreams, RequestTrust,
-    SEMANTIC_EVIDENCE_REQUEST_LIMIT, SnapshotRequest, SuppliedSemanticEvidence,
-    commit_candidate_identity_digest,
+    SEMANTIC_EVIDENCE_REQUEST_LIMIT, SnapshotMaterialization, SnapshotRequest,
+    SuppliedSemanticEvidence, commit_candidate_identity_digest,
 };
 
 fn request_example(name: &str) -> Vec<u8> {
@@ -68,7 +68,10 @@ fn the_request_examples_parse_to_what_they_say() {
 
     let snapshot =
         SnapshotRequest::parse(&request_example("scanner-snapshot-request.json")).unwrap();
-    assert_eq!(snapshot.materialization, RequestMode::CommitPair);
+    assert_eq!(
+        snapshot.materialization,
+        SnapshotMaterialization::GitObjects
+    );
 
     let controls =
         ControlsRequest::parse(&request_example("scanner-controls-request.json")).unwrap();
@@ -309,6 +312,27 @@ fn the_snapshot_request_pins_the_handle_and_the_pre_acquisition() {
         "an engine that acquires its own repository is an engine with the network"
     );
 
+    for (request, path) in [
+        (
+            SnapshotRequest {
+                repository_handle: 4,
+                ..SnapshotRequest::git_objects()
+            },
+            "$.repository_handle",
+        ),
+        (
+            SnapshotRequest {
+                pre_acquired: false,
+                ..SnapshotRequest::git_objects()
+            },
+            "$.pre_acquired",
+        ),
+    ] {
+        let error = request.canonical_bytes().unwrap_err();
+        assert_eq!(error.path, path);
+        assert_eq!(error.kind, ErrorKind::InvalidValue);
+    }
+
     let index = example.replace(
         r#""materialization": "git-objects""#,
         r#""materialization": "index""#,
@@ -317,7 +341,7 @@ fn the_snapshot_request_pins_the_handle_and_the_pre_acquisition() {
         SnapshotRequest::parse(index.as_bytes())
             .unwrap()
             .materialization,
-        RequestMode::Index,
+        SnapshotMaterialization::Index,
         "the other lawful materialization"
     );
 }

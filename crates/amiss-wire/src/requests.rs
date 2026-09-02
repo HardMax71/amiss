@@ -1,5 +1,7 @@
 use std::io::{Read, Write};
 
+use serde::{Deserialize, Serialize};
+
 use crate::controls::value::{object, positive_safe_integer, text};
 use crate::controls::{decode_enum, decode_provider_id, decode_provider_run_id, root};
 use crate::de::{self, Error, ErrorKind, Obj, fail};
@@ -40,26 +42,49 @@ pub enum RequestMode {
     Index,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SnapshotSchema {
+    #[serde(rename = "amiss/scanner-snapshot-request")]
+    Current,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SnapshotMaterialization {
+    GitObjects,
+    Index,
+}
+
 /// The materialization request. `git-objects` pairs with mode `commit-pair`
 /// and `index` with mode `index`; the pairing law is checked against the
 /// evaluation request by the consumer, since each request parses alone.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SnapshotRequest {
-    pub materialization: RequestMode,
+    pub schema: SnapshotSchema,
+    pub materialization: SnapshotMaterialization,
+    pub repository_handle: i64,
+    pub pre_acquired: bool,
 }
 
 impl SnapshotRequest {
     #[must_use]
     pub const fn git_objects() -> Self {
         Self {
-            materialization: RequestMode::CommitPair,
+            schema: SnapshotSchema::Current,
+            materialization: SnapshotMaterialization::GitObjects,
+            repository_handle: REPOSITORY_HANDLE_ORDINAL,
+            pre_acquired: true,
         }
     }
 
     #[must_use]
     pub const fn index() -> Self {
         Self {
-            materialization: RequestMode::Index,
+            schema: SnapshotSchema::Current,
+            materialization: SnapshotMaterialization::Index,
+            repository_handle: REPOSITORY_HANDLE_ORDINAL,
+            pre_acquired: true,
         }
     }
 
@@ -68,28 +93,10 @@ impl SnapshotRequest {
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
     /// grammar values.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, SNAPSHOT_REQUEST_SCHEMA)
-        })?;
-        let materialization_path = obj.field("materialization");
-        let materialization =
-            match de::string(&materialization_path, obj.take("materialization")?)?.as_str() {
-                "git-objects" => RequestMode::CommitPair,
-                "index" => RequestMode::Index,
-                _ => return fail(&materialization_path, ErrorKind::InvalidValue),
-            };
-        let handle_path = obj.field("repository_handle");
-        if de::integer(&handle_path, obj.take("repository_handle")?)? != REPOSITORY_HANDLE_ORDINAL {
-            return fail(&handle_path, ErrorKind::InvalidValue);
-        }
-        let acquired_path = obj.field("pre_acquired");
-        if obj.take("pre_acquired")? != Value::Bool(true) {
-            return fail(&acquired_path, ErrorKind::InvalidValue);
-        }
-        obj.finish()?;
-        Ok(Self { materialization })
+        root(bytes)?;
+        let request: Self = de::deserialize_json(bytes)?;
+        validate_snapshot(&request)?;
+        Ok(request)
     }
 
     /// Serializes one valid request to its unique canonical JSON bytes.
@@ -98,8 +105,20 @@ impl SnapshotRequest {
     ///
     /// The constructed fields violate the same laws [`Self::parse`] enforces.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        checked_canonical(&snapshot_value(*self), Self::parse)
+        validate_snapshot(self)?;
+        serde_json_canonicalizer::to_vec(self)
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))
     }
+}
+
+fn validate_snapshot(request: &SnapshotRequest) -> Result<(), Error> {
+    (request.repository_handle == REPOSITORY_HANDLE_ORDINAL)
+        .then_some(())
+        .ok_or_else(|| Error::new("$.repository_handle", ErrorKind::InvalidValue))?;
+    request
+        .pre_acquired
+        .then_some(())
+        .ok_or_else(|| Error::new("$.pre_acquired", ErrorKind::InvalidValue))
 }
 
 /// One supplied external control: the exact embedded JSON value, the
@@ -273,24 +292,6 @@ fn checked_canonical<T>(
     let bytes = canonical(value);
     let _parsed = parse(&bytes)?;
     Ok(bytes)
-}
-
-fn snapshot_value(request: SnapshotRequest) -> Value {
-    object(vec![
-        ("schema", text(SNAPSHOT_REQUEST_SCHEMA)),
-        (
-            "materialization",
-            text(match request.materialization {
-                RequestMode::CommitPair => "git-objects",
-                RequestMode::Index => "index",
-            }),
-        ),
-        (
-            "repository_handle",
-            Value::Integer(REPOSITORY_HANDLE_ORDINAL),
-        ),
-        ("pre_acquired", Value::Bool(true)),
-    ])
 }
 
 fn supplied_value(control: &SuppliedControl) -> Value {
