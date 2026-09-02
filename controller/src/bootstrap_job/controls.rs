@@ -3,10 +3,10 @@ use amiss_wire::controls::{
     TrustedTimeStatement, WaiverBundle,
 };
 use amiss_wire::digest::Digest;
-use amiss_wire::json;
 use amiss_wire::model::{BranchRef, RepositoryIdentity, UtcInstant};
 use amiss_wire::requests::{
-    ControlsRequest, REQUEST_STREAM_BYTES, RequestTrust, SuppliedControl, SuppliedTime,
+    ControlsRequest, ControlsRequestSchema, REQUEST_STREAM_BYTES, RequestTrust, SuppliedControl,
+    SuppliedTime,
 };
 
 use crate::RunIdentity;
@@ -121,6 +121,7 @@ pub(super) fn validate_request_size(
     execution_bytes: &[u8],
 ) -> Result<(), BootstrapJobError> {
     let request = ControlsRequest {
+        schema: ControlsRequestSchema::Current,
         organization_floor: plan_control(
             policy.organization_floor.as_ref(),
             identity.organization_floor,
@@ -138,7 +139,7 @@ pub(super) fn validate_request_size(
         )?,
         trusted_time: Some(maximal_trusted_time(execution.digest())?),
         execution_constraint: Some(SuppliedControl {
-            value: json::parse(execution_bytes)
+            value: serde_json::from_slice(execution_bytes)
                 .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?,
             expected_digest: execution.digest(),
             trust_source: RequestTrust::ExternalRequiredCheck,
@@ -163,7 +164,7 @@ fn plan_control(
         .then_some(control.zip(identity))
         .ok_or(error)?
         .map(|(control, identity)| {
-            json::parse(&control.bytes).map(|value| SuppliedControl {
+            serde_json::from_slice(&control.bytes).map(|value| SuppliedControl {
                 value,
                 expected_digest: identity.digest,
                 trust_source: identity.trust_source,
@@ -205,7 +206,7 @@ fn maximal_trusted_time(
         .canonical_bytes()
         .map_err(|_defect| BootstrapJobError::RequestEncoding)
         .and_then(|bytes| {
-            json::parse(&bytes).map_err(|_defect| BootstrapJobError::RequestEncoding)
+            serde_json::from_slice(&bytes).map_err(|_defect| BootstrapJobError::RequestEncoding)
         })?;
     Ok(SuppliedTime {
         value,
@@ -300,6 +301,7 @@ pub(super) fn request(
         })
         .transpose()?;
     Ok(ControlsRequest {
+        schema: ControlsRequestSchema::Current,
         organization_floor,
         debt_snapshot,
         waiver_bundle,
@@ -337,7 +339,7 @@ fn bound_control<E>(
         && binding.organization_floor_digest == organization_floor_digest)
         .then_some(())
         .ok_or(BootstrapJobError::ControlBinding)?;
-    let value = json::parse(&control.bytes).map_err(|_defect| error)?;
+    let value = serde_json::from_slice(&control.bytes).map_err(|_defect| error)?;
     Ok(SuppliedControl {
         value,
         expected_digest: binding.digest,

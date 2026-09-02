@@ -195,19 +195,21 @@ pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryId
 
 pub(crate) fn decode_provider_run_id(path: &str, value: Value) -> Result<String, Error> {
     let raw = de::string(path, value)?;
+    provider_run_id_valid(&raw)
+        .then_some(raw)
+        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+}
+
+pub(crate) fn provider_run_id_valid(raw: &str) -> bool {
     let bytes = raw.as_bytes();
     let allowed = |byte: &u8| {
         byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'-')
     };
-    if bytes.is_empty()
-        || bytes.len() > 128
-        || !bytes.first().is_some_and(u8::is_ascii_alphanumeric)
-        || !bytes.last().is_some_and(u8::is_ascii_alphanumeric)
-        || !bytes.iter().all(allowed)
-    {
-        return fail(path, ErrorKind::InvalidValue);
-    }
-    Ok(raw)
+    !bytes.is_empty()
+        && bytes.len() <= 128
+        && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes.iter().all(allowed)
 }
 
 pub(crate) fn decode_provider_id(path: &str, value: Value) -> Result<String, Error> {

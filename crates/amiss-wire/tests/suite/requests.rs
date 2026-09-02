@@ -77,20 +77,24 @@ fn the_request_examples_parse_to_what_they_say() {
         ControlsRequest::parse(&request_example("scanner-controls-request.json")).unwrap();
     let floor = controls
         .organization_floor
+        .as_ref()
         .expect("the example supplies one");
     assert_eq!(floor.trust_source, RequestTrust::OrganizationPolicy);
-    let parsed_floor = OrganizationFloor::parse(&amiss_wire::json::canonical(&floor.value))
+    let parsed_floor = OrganizationFloor::parse(&serde_json::to_vec(&floor.value).unwrap())
         .expect("the embedded organization floor is valid");
     assert_eq!(
         floor.expected_digest,
         parsed_floor.digest(),
         "the request carries the floor's independently reproducible semantic digest"
     );
-    let time = controls.trusted_time.expect("and a trusted instant");
+    let time = controls
+        .trusted_time
+        .as_ref()
+        .expect("the example supplies a trusted instant");
     assert_eq!(time.provider, "gitlab");
     assert_eq!(time.provider_run_id, "pipeline/987654321:job-42");
     assert_eq!(time.provider_run_attempt, 2);
-    let parsed_time = TrustedTimeStatement::parse(&amiss_wire::json::canonical(&time.value))
+    let parsed_time = TrustedTimeStatement::parse(&serde_json::to_vec(&time.value).unwrap())
         .expect("the embedded trusted-time statement is valid");
     assert_eq!(
         time.expected_digest,
@@ -377,6 +381,19 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
         ControlsRequest::default(),
         "supplying no controls is lawful"
     );
+    for field in [
+        "organization_floor",
+        "debt_snapshot",
+        "waiver_bundle",
+        "trusted_time",
+        "execution_constraint",
+    ] {
+        let mut value: serde_json::Value = serde_json::from_slice(empty).unwrap();
+        value.as_object_mut().unwrap().remove(field);
+        let error = ControlsRequest::parse(&serde_json::to_vec(&value).unwrap()).unwrap_err();
+        assert_eq!(error.path, format!("$.{field}"));
+        assert_eq!(error.kind, ErrorKind::MissingField);
+    }
 }
 
 #[test]
@@ -386,14 +403,16 @@ fn semantic_evidence_is_a_bounded_set_of_envelopes() {
         expected_context_digest: hj("amiss/test-context", &Value::Null),
     };
     let mut wrong_shape = ControlsRequest::default();
-    wrong_shape.semantic_evidence.push(supplied(Value::Null));
+    wrong_shape
+        .semantic_evidence
+        .push(supplied(serde_json::Value::Null));
     let error = wrong_shape.canonical_bytes().unwrap_err();
     assert_eq!(error.path, "$.semantic_evidence[0].value");
     assert_eq!(error.kind, ErrorKind::WrongType);
 
     let oversized = ControlsRequest {
         semantic_evidence: vec![
-            supplied(Value::object(Vec::new()));
+            supplied(serde_json::json!({}));
             SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)
         ],
         ..ControlsRequest::default()

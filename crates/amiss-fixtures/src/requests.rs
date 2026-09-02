@@ -7,7 +7,6 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use amiss_wire::controls::ExecutionConstraintDescriptor;
-use amiss_wire::json;
 use amiss_wire::model::Oid;
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestTrust, SnapshotRequest, SuppliedControl,
@@ -54,7 +53,7 @@ impl SealedRequests {
         let mut controls = ControlsRequest::parse(&example("scanner-controls-request.json"))
             .expect("the published controls request parses");
         controls.execution_constraint = Some(SuppliedControl {
-            value: json::parse(
+            value: serde_json::from_slice(
                 &constraint
                     .canonical_bytes()
                     .expect("the constraint serializes"),

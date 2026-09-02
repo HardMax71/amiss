@@ -188,7 +188,7 @@ fn candidate_identity(run: &RunRequest) -> Digest {
     let job = bootstrap(run, &[]).unwrap();
     let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
     let supplied_time = controls.trusted_time.unwrap();
-    TrustedTimeStatement::parse(&json::canonical(&supplied_time.value))
+    TrustedTimeStatement::parse(&serde_json::to_vec(&supplied_time.value).unwrap())
         .unwrap()
         .candidate_identity_digest()
 }
@@ -287,8 +287,9 @@ fn job_construction_binds_the_complete_authenticated_run() {
     );
 
     let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
-    let supplied_time = controls.trusted_time.unwrap();
-    let statement = TrustedTimeStatement::parse(&json::canonical(&supplied_time.value)).unwrap();
+    let supplied_time = controls.trusted_time.as_ref().unwrap();
+    let statement =
+        TrustedTimeStatement::parse(&serde_json::to_vec(&supplied_time.value).unwrap()).unwrap();
     assert_eq!(statement.provider(), "gitlab");
     assert_eq!(statement.provider_run_id(), "pipeline/987654321:job-42");
     assert_eq!(statement.provider_run_attempt(), 2);
@@ -303,9 +304,9 @@ fn job_construction_binds_the_complete_authenticated_run() {
     assert!(controls.organization_floor.is_some());
     assert!(controls.debt_snapshot.is_some());
     assert!(controls.waiver_bundle.is_some());
-    let semantic = amiss_wire::semantic::parse(&json::canonical(
-        &controls.semantic_evidence.first().unwrap().value,
-    ))
+    let semantic = amiss_wire::semantic::parse(
+        &serde_json::to_vec(&controls.semantic_evidence.first().unwrap().value).unwrap(),
+    )
     .unwrap();
     assert_eq!(
         semantic.payload.subject.candidate_identity_digest,
@@ -336,7 +337,7 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
         .semantic_evidence
         .iter()
         .map(|supplied| {
-            amiss_wire::semantic::parse(&json::canonical(&supplied.value))
+            amiss_wire::semantic::parse(&serde_json::to_vec(&supplied.value).unwrap())
                 .unwrap()
                 .payload_digest
         })

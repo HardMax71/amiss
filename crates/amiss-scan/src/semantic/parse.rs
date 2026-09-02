@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::digest::Digest;
-use amiss_wire::json::canonical;
 use amiss_wire::requests::SuppliedSemanticEvidence;
 use amiss_wire::semantic::SemanticEvidenceEnvelope;
 use amiss_wire::semantic::observation::{
@@ -123,7 +122,9 @@ fn validated_envelope(
     path: &str,
     previous: &mut Option<Digest>,
 ) -> Result<SemanticEvidenceEnvelope, Error> {
-    let envelope = amiss_wire::semantic::parse(&canonical(&supplied.value))?;
+    let bytes = serde_json::to_vec(&supplied.value)
+        .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
+    let envelope = amiss_wire::semantic::parse(&bytes)?;
     if envelope.payload.producer.context_digest != supplied.expected_context_digest {
         return fail(
             &format!("{path}.expected_context_digest"),
