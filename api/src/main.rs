@@ -6,7 +6,7 @@ use std::process::ExitCode;
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::ArtifactId;
-use amiss_wire::semantic::record::{Input, Observation};
+use amiss_wire::semantic::record::{Input, InputSchema, Record};
 
 mod context;
 mod normalize;
@@ -125,14 +125,17 @@ fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Value, Failure>
     let producer_identity =
         ArtifactId::new(PRODUCER_IDENTITY.to_owned()).ok_or(Failure::ProducerIdentity)?;
     amiss_wire::semantic::record::template(Input {
+        schema: InputSchema::Current,
         producer_identity,
         context_digest: context.digest,
         input_digest,
         complete: normalized.complete,
-        set: Observation {
-            name: context.name,
-            records: normalized.records,
-        },
+        name: context.name,
+        records: normalized
+            .records
+            .into_iter()
+            .map(|(key, value)| Record { key, value })
+            .collect(),
     })
     .map_err(Failure::Template)
 }

@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use amiss_wire::{json, locale, publication, relation};
+use amiss_wire::{json, locale, publication, relation, semantic};
 
 #[path = "../support/relation.rs"]
 mod relation_fixture;
@@ -90,5 +90,12 @@ fn sidecar_examples_match_their_typed_sources() {
     assert_eq!(
         json::canonical(&replayed),
         json::canonical(&json::parse(&locale_assessment_bytes).unwrap())
+    );
+
+    let record_input_bytes = fs::read(examples.join("scanner-record-set-input.json")).unwrap();
+    let record_input = semantic::record::parse_input(&record_input_bytes).unwrap();
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&record_input).unwrap(),
+        json::canonical(&json::parse(&record_input_bytes).unwrap())
     );
 }
