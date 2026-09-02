@@ -119,6 +119,12 @@ fn sidecar_examples_match_their_typed_sources() {
 #[test]
 fn sealed_request_examples_match_their_typed_sources() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
+    let evaluation_bytes = fs::read(examples.join("scanner-evaluation-request.json")).unwrap();
+    let evaluation = requests::EvaluationRequest::parse(&evaluation_bytes).unwrap();
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
+        json::canonical(&json::parse(&evaluation_bytes).unwrap())
+    );
     let snapshot_bytes = fs::read(examples.join("scanner-snapshot-request.json")).unwrap();
     let snapshot = requests::SnapshotRequest::parse(&snapshot_bytes).unwrap();
     assert_eq!(

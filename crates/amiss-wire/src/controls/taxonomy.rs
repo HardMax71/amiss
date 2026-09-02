@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 
 #[derive(
@@ -19,9 +20,21 @@ pub enum Disposition {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumString,
+    IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum Profile {
     Observe,
     EnforceIntroduced,
