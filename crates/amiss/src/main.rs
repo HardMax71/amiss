@@ -27,7 +27,8 @@ use amiss_wire::model::Oid;
 use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer};
 use amiss_wire::requests::{
     CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
-    RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA, SnapshotRequest,
+    RequestMode, RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA,
+    SnapshotMaterialization, SnapshotRequest,
 };
 use invocation::{CandidateSelector, Code, Invocation, Outcome, OutputFormat, Verb};
 
@@ -191,7 +192,12 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
     let canonical = evaluation.canonical_bytes().ok().as_deref() == Some(&streams.evaluation)
         && snapshot.canonical_bytes().ok().as_deref() == Some(&streams.snapshot)
         && controls.canonical_bytes().ok().as_deref() == Some(&streams.controls);
-    if !canonical || evaluation.mode != snapshot.materialization {
+    let modes_match = matches!(
+        (evaluation.mode, snapshot.materialization),
+        (RequestMode::CommitPair, SnapshotMaterialization::GitObjects)
+            | (RequestMode::Index, SnapshotMaterialization::Index)
+    );
+    if !canonical || !modes_match {
         eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_ref());
         return failure;
     }

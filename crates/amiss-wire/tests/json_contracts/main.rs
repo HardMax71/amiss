@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use amiss_wire::{json, locale, publication, relation, semantic};
+use amiss_wire::{json, locale, publication, relation, requests, semantic};
 
 #[path = "../support/relation.rs"]
 mod relation_fixture;
@@ -113,5 +113,16 @@ fn sidecar_examples_match_their_typed_sources() {
     assert_eq!(
         serde_json_canonicalizer::to_vec(&semantic_template).unwrap(),
         json::canonical(&json::parse(&semantic_template_bytes).unwrap())
+    );
+}
+
+#[test]
+fn snapshot_request_example_matches_its_typed_source() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
+    let snapshot_bytes = fs::read(examples.join("scanner-snapshot-request.json")).unwrap();
+    let snapshot = requests::SnapshotRequest::parse(&snapshot_bytes).unwrap();
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&snapshot).unwrap(),
+        json::canonical(&json::parse(&snapshot_bytes).unwrap())
     );
 }

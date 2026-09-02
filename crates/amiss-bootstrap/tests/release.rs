@@ -19,7 +19,7 @@ use amiss_wire::digest::{Digest, hb, sha256};
 use amiss_wire::json::{Value, canonical, parse as parse_json};
 use amiss_wire::manifest::{ReleaseManifest, RuntimeRole};
 use amiss_wire::model::ObjectFormat;
-use amiss_wire::requests::RequestMode;
+use amiss_wire::requests::SnapshotMaterialization;
 use tempfile::TempDir;
 
 mod support;
@@ -503,7 +503,7 @@ fn an_evaluation_and_snapshot_that_disagree_on_mode_are_refused() {
     let staged = release(|_root| {});
 
     let mut wrong_mode = SealedRequests::new(binary_constraint(&staged));
-    wrong_mode.snapshot.materialization = RequestMode::Index;
+    wrong_mode.snapshot.materialization = SnapshotMaterialization::Index;
 
     assert!(refused(&staged, &wrong_mode));
 }

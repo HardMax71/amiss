@@ -10,7 +10,7 @@ use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
 use amiss_wire::json::canonical;
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestMode, RequestStreams,
-    SnapshotRequest,
+    SnapshotMaterialization, SnapshotRequest,
 };
 
 use super::{Args, Execution, Failure, SealedRun, tampered, unavailable};
@@ -50,13 +50,19 @@ pub(super) fn capture_requests(
     if !canonical_requests {
         return Err(tampered("request-noncanonical"));
     }
-    let candidate = match (evaluation.mode, evaluation.candidate_commit.as_ref()) {
-        (RequestMode::CommitPair, Some(candidate))
-            if snapshot.materialization == RequestMode::CommitPair =>
-        {
+    let candidate = match (
+        evaluation.mode,
+        evaluation.candidate_commit.as_ref(),
+        snapshot.materialization,
+    ) {
+        (RequestMode::CommitPair, Some(candidate), SnapshotMaterialization::GitObjects) => {
             candidate.clone()
         }
-        (RequestMode::CommitPair | RequestMode::Index, None | Some(_)) => {
+        (
+            RequestMode::CommitPair | RequestMode::Index,
+            None | Some(_),
+            SnapshotMaterialization::GitObjects | SnapshotMaterialization::Index,
+        ) => {
             return Err(tampered("request-mode-mismatch"));
         }
     };
