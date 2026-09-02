@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::controls::value::{object, repository, text};
-use crate::controls::{decode_enum, decode_repository};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
 use crate::json::{self, Value};
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
@@ -164,63 +162,9 @@ pub(super) fn plan_payload_digest(input: &PublicationPlan) -> Result<Digest, Err
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
-pub(crate) fn decode_docs(path: &str, value: Value) -> Result<DocsCandidate, Error> {
-    let mut docs = Obj::new(path, value)?;
-    let repository = docs.required("repository", decode_repository)?;
-    let object_format = docs.required("object_format", decode_enum)?;
-    let commit_path = docs.field("commit_oid");
-    let commit = Oid::new(
-        object_format,
-        de::string(&commit_path, docs.take("commit_oid")?)?,
-    )
-    .ok_or_else(|| Error::new(&commit_path, ErrorKind::InvalidValue))?;
-    let tree_path = docs.field("tree_oid");
-    let tree = Oid::new(
-        object_format,
-        de::string(&tree_path, docs.take("tree_oid")?)?,
-    )
-    .ok_or_else(|| Error::new(&tree_path, ErrorKind::InvalidValue))?;
-    let candidate_identity_digest = docs.required("candidate_identity_digest", de::digest)?;
-    docs.finish()?;
-    Ok(DocsCandidate {
-        repository,
-        object_format,
-        commit,
-        tree,
-        candidate_identity_digest,
-    })
-}
-
-pub(crate) fn decode_resource(path: &str, value: Value) -> Result<PublicationResource, Error> {
-    let mut resource = Obj::new(path, value)?;
-    let uri = resource.required("uri", decode_resource_uri)?;
-    let digest = resource.required("digest", de::digest)?;
-    resource.finish()?;
-    Ok(PublicationResource { uri, digest })
-}
-
 pub(crate) fn decode_identity(path: &str, value: Value) -> Result<ArtifactId, Error> {
     let raw = de::string(path, value)?;
     ArtifactId::new(raw).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-pub(crate) fn decode_producer(path: &str, value: Value) -> Result<PublicationProducer, Error> {
-    let mut producer = Obj::new(path, value)?;
-    let identity = producer.required("identity", decode_identity)?;
-    let version = producer.required("version", crate::semantic::decode_open_identity)?;
-    let context_digest = producer.required("context_digest", de::digest)?;
-    producer.finish()?;
-    Ok(PublicationProducer {
-        identity,
-        version,
-        context_digest,
-    })
-}
-
-fn decode_resource_uri(path: &str, value: Value) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
-    validate_publication_uri(path, &raw, PublicationUriKind::Resource)?;
-    Ok(raw)
 }
 
 #[derive(Clone, Copy)]
@@ -331,32 +275,4 @@ pub(crate) fn validate_producer(path: &str, producer: &PublicationProducer) -> R
         return fail(&format!("{path}.version"), ErrorKind::InvalidValue);
     }
     Ok(())
-}
-
-pub(crate) fn docs_value(docs: &DocsCandidate) -> Value {
-    object(vec![
-        ("repository", repository(&docs.repository)),
-        ("object_format", text(docs.object_format.as_ref())),
-        ("commit_oid", text(docs.commit.as_str())),
-        ("tree_oid", text(docs.tree.as_str())),
-        (
-            "candidate_identity_digest",
-            text(&docs.candidate_identity_digest.to_string()),
-        ),
-    ])
-}
-
-pub(crate) fn resource_value(resource: &PublicationResource) -> Value {
-    object(vec![
-        ("uri", text(&resource.uri)),
-        ("digest", text(&resource.digest.to_string())),
-    ])
-}
-
-pub(crate) fn producer_value(producer: &PublicationProducer) -> Value {
-    object(vec![
-        ("identity", text(producer.identity.as_str())),
-        ("version", text(&producer.version)),
-        ("context_digest", text(&producer.context_digest.to_string())),
-    ])
 }

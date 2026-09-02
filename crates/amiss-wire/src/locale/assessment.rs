@@ -10,7 +10,7 @@ use crate::publication::decode_identity;
 
 use super::evidence::{
     EVIDENCE_DOCUMENT_BYTES, LocaleCoverageEvidence, LocaleCoverageEvidenceEnvelope,
-    LocaleTargetOrigin, evidence as build_evidence,
+    LocaleTargetOrigin, evidence_payload_digest,
 };
 use super::{
     LocaleCoveragePlan, LocaleCoveragePlanEnvelope, LocalePageRequirement, PAGE_ITEMS_LIMIT,
@@ -161,11 +161,10 @@ pub fn assess(
     if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
-    if let Some(evidence) = evidence {
-        let rebuilt_evidence = build_evidence(&evidence.payload)?;
-        if rebuilt_evidence.text("payload_digest") != Some(&evidence.payload_digest.to_string()) {
-            return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
-        }
+    if let Some(evidence) = evidence
+        && evidence_payload_digest(&evidence.payload)? != evidence.payload_digest
+    {
+        return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
     }
 
     let unavailable = || LocaleCoverageResult {
@@ -248,29 +247,36 @@ fn compare_coverage(
     plan: &LocaleCoveragePlan,
     evidence: &LocaleCoverageEvidence,
 ) -> AssessmentOutcome {
+    let source_pages = &evidence.source.pages;
+    let target_pages = &evidence.target.pages;
+    let source_has = |key: &str| {
+        source_pages
+            .binary_search_by(|page| page.key.as_str().cmp(key))
+            .is_ok()
+    };
+    let target_has = |key: &str| {
+        target_pages
+            .binary_search_by(|page| page.key.as_str().cmp(key))
+            .is_ok()
+    };
     let source_missing = match &plan.policy.required {
         LocalePageRequirement::Named { keys } if evidence.source.complete => keys
             .iter()
-            .filter(|key| !evidence.source.pages.contains_key(*key))
+            .filter(|key| !source_has(key))
             .cloned()
             .collect(),
         LocalePageRequirement::AllSource | LocalePageRequirement::Named { .. } => Vec::new(),
     };
     let target_missing = if evidence.target.complete {
         match &plan.policy.required {
-            LocalePageRequirement::AllSource => evidence
-                .source
-                .pages
-                .keys()
-                .filter(|key| !evidence.target.pages.contains_key(*key))
-                .cloned()
+            LocalePageRequirement::AllSource => source_pages
+                .iter()
+                .filter(|page| !target_has(&page.key))
+                .map(|page| page.key.clone())
                 .collect(),
             LocalePageRequirement::Named { keys } => keys
                 .iter()
-                .filter(|key| {
-                    evidence.source.pages.contains_key(*key)
-                        && !evidence.target.pages.contains_key(*key)
-                })
+                .filter(|key| source_has(key) && !target_has(key))
                 .cloned()
                 .collect(),
         }
@@ -278,12 +284,10 @@ fn compare_coverage(
         Vec::new()
     };
     let target_orphaned = if evidence.source.complete {
-        evidence
-            .target
-            .pages
-            .keys()
-            .filter(|key| !evidence.source.pages.contains_key(*key))
-            .cloned()
+        target_pages
+            .iter()
+            .filter(|page| !source_has(&page.key))
+            .map(|page| page.key.clone())
             .collect()
     } else {
         Vec::new()
@@ -293,18 +297,11 @@ fn compare_coverage(
     let requirement_complete = match &plan.policy.required {
         LocalePageRequirement::AllSource => evidence.source.complete,
         LocalePageRequirement::Named { keys } => {
-            evidence.source.complete
-                || keys
-                    .iter()
-                    .all(|key| evidence.source.pages.contains_key(key))
+            evidence.source.complete || keys.iter().all(|key| source_has(key))
         }
     };
-    let source_resolution_complete = evidence.source.complete
-        || evidence
-            .target
-            .pages
-            .keys()
-            .all(|key| evidence.source.pages.contains_key(key));
+    let source_resolution_complete =
+        evidence.source.complete || target_pages.iter().all(|page| source_has(&page.key));
     let fallback_complete = fallbacks
         .iter()
         .all(|fallback| fallback.status != LocaleFallbackStatus::SourceUnproven);
@@ -327,14 +324,14 @@ fn compare_coverage(
     let product = match &plan.product {
         Nullable::Value(expected) => {
             let compare =
-                |observed: Option<&crate::publication::PublicationResource>| match observed {
-                    Some(actual) if actual == expected => AssessmentVerdict::Matched,
-                    Some(_) => AssessmentVerdict::Refuted,
-                    None => AssessmentVerdict::Unproven,
+                |observed: &Nullable<crate::publication::PublicationResource>| match observed {
+                    Nullable::Value(actual) if actual == expected => AssessmentVerdict::Matched,
+                    Nullable::Value(_) => AssessmentVerdict::Refuted,
+                    Nullable::Null => AssessmentVerdict::Unproven,
                 };
             Some(LocaleProductResult {
-                source: compare(evidence.source.product.as_ref()),
-                target: compare(evidence.target.product.as_ref()),
+                source: compare(&evidence.source.product),
+                target: compare(&evidence.target.product),
             })
         }
         Nullable::Null => None,
@@ -449,7 +446,16 @@ fn compare_target_relations(
 ) -> TargetRelations {
     let mut fallbacks = Vec::new();
     let mut lineage = Vec::new();
-    for (key, page) in &evidence.target.pages {
+    let source_page = |key: &String| {
+        evidence
+            .source
+            .pages
+            .binary_search_by(|page| page.key.cmp(key))
+            .ok()
+            .and_then(|index| evidence.source.pages.get(index))
+    };
+    for page in &evidence.target.pages {
+        let key = &page.key;
         match &page.origin {
             LocaleTargetOrigin::Fallback {
                 class,
@@ -465,8 +471,8 @@ fn compare_target_relations(
                         }
                 });
                 let status = if authorized {
-                    match evidence.source.pages.get(key) {
-                        Some(current) if current == source_resource_digest => {
+                    match source_page(key) {
+                        Some(current) if current.resource_digest == *source_resource_digest => {
                             LocaleFallbackStatus::Allowed
                         }
                         Some(_) => LocaleFallbackStatus::SourceMismatch,
@@ -485,13 +491,15 @@ fn compare_target_relations(
             LocaleTargetOrigin::TargetResource {
                 based_on_source_digest,
             } if plan.policy.require_target_lineage => {
-                if let Some(current_source) = evidence.source.pages.get(key) {
+                if let Some(current_source) = source_page(key) {
                     let status = match based_on_source_digest {
-                        Some(based_on) if based_on == current_source => {
+                        Nullable::Value(based_on)
+                            if *based_on == current_source.resource_digest =>
+                        {
                             LocaleLineageStatus::Current
                         }
-                        Some(_) => LocaleLineageStatus::Stale,
-                        None => LocaleLineageStatus::Unproven,
+                        Nullable::Value(_) => LocaleLineageStatus::Stale,
+                        Nullable::Null => LocaleLineageStatus::Unproven,
                     };
                     lineage.push(LocaleLineageResult {
                         key: key.clone(),

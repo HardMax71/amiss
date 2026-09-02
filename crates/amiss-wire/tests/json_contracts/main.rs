@@ -69,4 +69,11 @@ fn sidecar_examples_match_their_typed_sources() {
         json::canonical(&locale::plan(&locale_plan.payload).unwrap()),
         json::canonical(&json::parse(&locale_plan_bytes).unwrap())
     );
+
+    let locale_evidence_bytes = fs::read(examples.join("locale-coverage-evidence.json")).unwrap();
+    let locale_evidence = locale::parse_evidence(&locale_evidence_bytes).unwrap();
+    assert_eq!(
+        json::canonical(&locale::evidence(&locale_evidence.payload).unwrap()),
+        json::canonical(&json::parse(&locale_evidence_bytes).unwrap())
+    );
 }

@@ -3,14 +3,13 @@ use std::cmp::Ordering;
 use serde::{Deserialize, Serialize};
 
 use crate::assessment::Nullable;
-use crate::controls::value::{object, text};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
 use crate::json::{self, Value};
 use crate::model::ArtifactId;
 use crate::publication::{
-    DocsCandidate, PublicationProducer, PublicationResource, PublicationUriKind, decode_docs,
-    decode_identity, decode_producer, validate_docs, validate_producer, validate_publication_uri,
+    DocsCandidate, PublicationProducer, PublicationResource, PublicationUriKind, validate_docs,
+    validate_producer, validate_publication_uri,
 };
 use crate::semantic::producer_version_valid;
 
@@ -26,9 +25,9 @@ pub use assessment::{
 };
 pub use evidence::{
     EVIDENCE_DOCUMENT_BYTES, EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA,
-    LocaleCoverageEvidence, LocaleCoverageEvidenceEnvelope, LocalePageInventory,
-    LocaleTargetInventory, LocaleTargetOrigin, LocaleTargetPage, PAGE_ITEMS_LIMIT, evidence,
-    parse_evidence,
+    EvidenceEnvelopeSchema, EvidencePayloadSchema, LocaleCoverageEvidence,
+    LocaleCoverageEvidenceEnvelope, LocalePageInventory, LocaleSourcePage, LocaleTargetInventory,
+    LocaleTargetOrigin, LocaleTargetPage, PAGE_ITEMS_LIMIT, evidence, parse_evidence,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/locale-coverage-plan-envelope";
@@ -100,12 +99,6 @@ pub struct LocaleFallbackRule {
 pub enum LocalePageRequirement {
     AllSource,
     Named { keys: Vec<String> },
-}
-
-struct LocaleCoverageFacts {
-    docs: DocsCandidate,
-    scope: LocaleCoverageScope,
-    producer: PublicationProducer,
 }
 
 /// Parses one closed, report-bound locale coverage plan.
@@ -233,54 +226,4 @@ fn validate_requirement(path: &str, requirement: &LocalePageRequirement) -> Resu
             Ordering::Equal => fail(&format!("{path}.keys"), ErrorKind::DuplicateMember),
             Ordering::Greater => fail(&format!("{path}.keys"), ErrorKind::UnsortedSet),
         })
-}
-
-fn decode_facts(parent: &mut Obj) -> Result<LocaleCoverageFacts, Error> {
-    Ok(LocaleCoverageFacts {
-        docs: parent.required("docs", decode_docs)?,
-        scope: parent.required("scope", |path, value| {
-            let mut scope = Obj::new(path, value)?;
-            let site = scope.required("site", decode_identity)?;
-            let source_locale =
-                scope.required("source_locale", crate::semantic::decode_open_identity)?;
-            let target_locale =
-                scope.required("target_locale", crate::semantic::decode_open_identity)?;
-            let channel = scope.required("channel", decode_identity)?;
-            let version_path = scope.field("version");
-            let version = de::decode_nullable(
-                &version_path,
-                scope.take("version")?,
-                crate::semantic::decode_open_identity,
-            )?
-            .map_or(Nullable::Null, Nullable::Value);
-            scope.finish()?;
-            if source_locale == target_locale {
-                return fail(path, ErrorKind::Inconsistent);
-            }
-            Ok(LocaleCoverageScope {
-                site,
-                source_locale,
-                target_locale,
-                channel,
-                version,
-            })
-        })?,
-        producer: parent.required("producer", decode_producer)?,
-    })
-}
-
-fn scope_value(scope: &LocaleCoverageScope) -> Value {
-    object(vec![
-        ("site", text(scope.site.as_str())),
-        ("source_locale", text(&scope.source_locale)),
-        ("target_locale", text(&scope.target_locale)),
-        ("channel", text(scope.channel.as_str())),
-        (
-            "version",
-            match &scope.version {
-                Nullable::Value(version) => text(version),
-                Nullable::Null => Value::Null,
-            },
-        ),
-    ])
 }
