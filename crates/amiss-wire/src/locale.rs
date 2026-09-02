@@ -19,9 +19,10 @@ mod evidence;
 pub use crate::assessment::AssessmentVerdict as LocaleCoverageVerdict;
 pub use assessment::{
     ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAGE_ITEMS_LIMIT,
-    ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessment, LocaleCoverageAssessmentEnvelope,
-    LocaleCoverageReason, LocaleCoverageResult, LocaleFallbackResult, LocaleFallbackStatus,
-    LocaleLineageResult, LocaleLineageStatus, LocaleProductResult, assess, parse_assessment,
+    ASSESSMENT_PAYLOAD_SCHEMA, AssessmentEnvelopeSchema, AssessmentPayloadSchema,
+    LocaleCoverageAssessment, LocaleCoverageAssessmentEnvelope, LocaleCoverageReason,
+    LocaleCoverageResult, LocaleFallbackResult, LocaleFallbackStatus, LocaleLineageResult,
+    LocaleLineageStatus, LocaleProductResult, assess, parse_assessment,
 };
 pub use evidence::{
     EVIDENCE_DOCUMENT_BYTES, EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA,
@@ -208,22 +209,37 @@ fn validate_requirement(path: &str, requirement: &LocalePageRequirement) -> Resu
     let LocalePageRequirement::Named { keys } = requirement else {
         return Ok(());
     };
+    let keys_path = format!("{path}.keys");
     (!keys.is_empty())
         .then_some(())
-        .ok_or_else(|| Error::new(&format!("{path}.keys"), ErrorKind::InvalidValue))?;
+        .ok_or_else(|| Error::new(&keys_path, ErrorKind::InvalidValue))?;
+    validate_page_keys(&keys_path, keys.iter().map(String::as_str), "")
+}
+
+fn validate_page_keys<'a>(
+    path: &str,
+    keys: impl ExactSizeIterator<Item = &'a str>,
+    key_suffix: &str,
+) -> Result<(), Error> {
     (keys.len() <= PAGE_ITEMS_LIMIT)
         .then_some(())
-        .ok_or_else(|| Error::new(&format!("{path}.keys"), ErrorKind::LimitExceeded))?;
-    keys.iter().enumerate().try_for_each(|(index, key)| {
-        (!key.is_empty() && key.len() <= PAGE_KEY_BYTES && !key.chars().any(char::is_control))
-            .then_some(())
-            .ok_or_else(|| Error::new(&format!("{path}.keys[{index}]"), ErrorKind::InvalidValue))
-    })?;
-    keys.iter()
-        .zip(keys.iter().skip(1))
-        .try_for_each(|(previous, current)| match previous.cmp(current) {
-            Ordering::Less => Ok(()),
-            Ordering::Equal => fail(&format!("{path}.keys"), ErrorKind::DuplicateMember),
-            Ordering::Greater => fail(&format!("{path}.keys"), ErrorKind::UnsortedSet),
-        })
+        .ok_or_else(|| Error::new(path, ErrorKind::LimitExceeded))?;
+    let mut previous: Option<&str> = None;
+    for (index, key) in keys.enumerate() {
+        if key.is_empty() || key.len() > PAGE_KEY_BYTES || key.chars().any(char::is_control) {
+            return fail(
+                &format!("{path}[{index}]{key_suffix}"),
+                ErrorKind::InvalidValue,
+            );
+        }
+        if let Some(previous) = previous {
+            match previous.cmp(key) {
+                Ordering::Less => {}
+                Ordering::Equal => return fail(path, ErrorKind::DuplicateMember),
+                Ordering::Greater => return fail(path, ErrorKind::UnsortedSet),
+            }
+        }
+        previous = Some(key);
+    }
+    Ok(())
 }
