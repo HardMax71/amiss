@@ -3,22 +3,23 @@ use super::{digest, publication_plan};
 use std::{fs, path::Path};
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{self, MAX_SAFE_INTEGER};
 use amiss_wire::publication::{
-    EVIDENCE_PAYLOAD_SCHEMA, PublicationDeployment, PublicationEvidence, PublicationResource,
-    evidence, parse_evidence, parse_plan, plan,
+    EVIDENCE_PAYLOAD_SCHEMA, EvidencePayloadSchema, PublicationDeployment, PublicationEvidence,
+    PublicationOutcome, PublicationResource, evidence, parse_evidence, parse_plan, plan,
 };
 
 pub(super) fn publication_evidence() -> PublicationEvidence {
     let planned = publication_plan();
     let planned_value = plan(&planned).unwrap();
-    let plan_payload_digest =
-        Digest::from_wire(planned_value.text("payload_digest").unwrap()).unwrap();
+    let planned = parse_plan(&json::canonical(&planned_value)).unwrap();
     PublicationEvidence {
-        plan_payload_digest,
-        producer: planned.producer,
+        schema: EvidencePayloadSchema::Current,
+        plan_payload_digest: planned.payload_digest,
+        producer: planned.payload.producer,
         deployment: PublicationDeployment {
+            outcome: PublicationOutcome::Succeeded,
             record: PublicationResource {
                 uri: "https://api.github.com/repos/acme/widget/pages/deployments/987".to_owned(),
                 digest: digest('8'),
@@ -29,10 +30,10 @@ pub(super) fn publication_evidence() -> PublicationEvidence {
             },
             provider_run_attempt: 2,
         },
-        docs: planned.docs,
-        target: planned.target,
-        site: planned.site,
-        product: planned.product,
+        docs: planned.payload.docs,
+        target: planned.payload.target,
+        site: planned.payload.site,
+        product: planned.payload.product,
     }
 }
 
@@ -46,7 +47,10 @@ fn publication_evidence_round_trips_with_its_plan_and_payload_digests() {
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        hj(EVIDENCE_PAYLOAD_SCHEMA, value.member("payload").unwrap())
+        hb(
+            EVIDENCE_PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(&expected).unwrap()
+        )
     );
 
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");

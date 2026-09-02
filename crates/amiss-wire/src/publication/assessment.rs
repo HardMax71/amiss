@@ -7,8 +7,8 @@ use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::digest::Digest;
 use crate::json::Value;
 
-use super::evidence::{PublicationEvidenceEnvelope, evidence as build_evidence};
-use super::{PUBLICATION_DOCUMENT_BYTES, PublicationPlanEnvelope, plan as build_plan};
+use super::evidence::{PublicationEvidenceEnvelope, evidence_payload_digest};
+use super::{PUBLICATION_DOCUMENT_BYTES, PublicationPlanEnvelope, plan_payload_digest};
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/publication-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/publication-assessment-payload";
@@ -80,15 +80,13 @@ pub fn assess(
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Value, Error> {
-    let rebuilt_plan = build_plan(&plan.payload)?;
-    if rebuilt_plan.text("payload_digest") != Some(&plan.payload_digest.to_string()) {
+    if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
-    if let Some(evidence) = evidence {
-        let rebuilt_evidence = build_evidence(&evidence.payload)?;
-        if rebuilt_evidence.text("payload_digest") != Some(&evidence.payload_digest.to_string()) {
-            return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
-        }
+    if let Some(evidence) = evidence
+        && evidence_payload_digest(&evidence.payload)? != evidence.payload_digest
+    {
+        return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
     }
 
     let (verdict, reasons) = match evidence {

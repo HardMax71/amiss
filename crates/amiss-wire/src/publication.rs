@@ -16,8 +16,9 @@ pub use assessment::{
     PublicationAssessmentEnvelope, PublicationReason, assess, parse_assessment,
 };
 pub use evidence::{
-    EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, PublicationDeployment, PublicationEvidence,
-    PublicationEvidenceEnvelope, evidence, parse_evidence,
+    EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, EvidenceEnvelopeSchema,
+    EvidencePayloadSchema, PublicationDeployment, PublicationEvidence, PublicationEvidenceEnvelope,
+    PublicationOutcome, evidence, parse_evidence,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/publication-plan-envelope";
@@ -109,14 +110,6 @@ pub struct PublicationRelation {
     pub context_digest: Digest,
 }
 
-struct PublicationFacts {
-    producer: PublicationProducer,
-    docs: DocsCandidate,
-    target: PublicationTarget,
-    site: CompletedSite,
-    product: PublicationResource,
-}
-
 /// Parses one closed, digest-bound publication plan.
 ///
 /// # Errors
@@ -168,49 +161,6 @@ pub(super) fn plan_payload_digest(input: &PublicationPlan) -> Result<Digest, Err
     serde_json_canonicalizer::to_vec(input)
         .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
-}
-
-fn decode_facts(parent: &mut Obj) -> Result<PublicationFacts, Error> {
-    let docs = parent.required("docs", decode_docs)?;
-    let target = parent.required("target", |path, value| {
-        let mut target = Obj::new(path, value)?;
-        let provider = target.required("provider", decode_identity)?;
-        let instance = target.required("instance", decode_identity)?;
-        let environment = target.required("environment", decode_identity)?;
-        let channel = target.required("channel", decode_identity)?;
-        let canonical_url = target.required("canonical_url", |path, value| {
-            let raw = de::string(path, value)?;
-            validate_publication_uri(path, &raw, PublicationUriKind::CanonicalUrl)?;
-            Ok(raw)
-        })?;
-        target.finish()?;
-        Ok(PublicationTarget {
-            provider,
-            instance,
-            environment,
-            channel,
-            canonical_url,
-        })
-    })?;
-    let site = parent.required("site", |path, value| {
-        let mut site = Obj::new(path, value)?;
-        let artifact = site.required("artifact", decode_resource)?;
-        let input_digest = site.required("input_digest", de::digest)?;
-        site.finish()?;
-        Ok(CompletedSite {
-            artifact,
-            input_digest,
-        })
-    })?;
-    let product = parent.required("product", decode_resource)?;
-    let producer = parent.required("producer", decode_producer)?;
-    Ok(PublicationFacts {
-        producer,
-        docs,
-        target,
-        site,
-        product,
-    })
 }
 
 pub(crate) fn decode_docs(path: &str, value: Value) -> Result<DocsCandidate, Error> {
@@ -379,23 +329,6 @@ pub(crate) fn docs_value(docs: &DocsCandidate) -> Value {
             "candidate_identity_digest",
             text(&docs.candidate_identity_digest.to_string()),
         ),
-    ])
-}
-
-fn target_value(target: &PublicationTarget) -> Value {
-    object(vec![
-        ("provider", text(target.provider.as_str())),
-        ("instance", text(target.instance.as_str())),
-        ("environment", text(target.environment.as_str())),
-        ("channel", text(target.channel.as_str())),
-        ("canonical_url", text(&target.canonical_url)),
-    ])
-}
-
-fn site_value(site: &CompletedSite) -> Value {
-    object(vec![
-        ("artifact", resource_value(&site.artifact)),
-        ("input_digest", text(&site.input_digest.to_string())),
     ])
 }
 
