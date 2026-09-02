@@ -6,8 +6,21 @@ use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 
 /// The same-repository URL dialect a run applies: named in the report's
 /// evaluation and selecting the recognition grammar in the resolver.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumIter, EnumString, IntoStaticStr)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    AsRefStr,
+    EnumIter,
+    EnumString,
+    IntoStaticStr,
+    Serialize,
+    Deserialize,
+)]
 #[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 pub enum ForgeDialect {
     Github,
     Gitlab,

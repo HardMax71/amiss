@@ -126,3 +126,16 @@ fn snapshot_request_example_matches_its_typed_source() {
         json::canonical(&json::parse(&snapshot_bytes).unwrap())
     );
 }
+
+#[test]
+fn candidate_identity_examples_match_their_typed_source() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
+    for name in ["candidate-identity.json", "candidate-identity-index.json"] {
+        let bytes = fs::read(examples.join(name)).unwrap();
+        let identity: requests::CandidateIdentity = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&identity).unwrap(),
+            json::canonical(&json::parse(&bytes).unwrap())
+        );
+    }
+}
