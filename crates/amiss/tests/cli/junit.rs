@@ -37,29 +37,29 @@ fn summary(xml: &[u8]) -> Result<Summary, String> {
             continue;
         };
         match start.name().as_ref() {
-            b"testsuite" => {
+            "testsuite" => {
                 for attribute in start.attributes() {
                     let attribute = attribute.map_err(|defect| defect.to_string())?;
                     let count = || {
-                        std::str::from_utf8(attribute.value.as_ref())
-                            .map_err(|defect| defect.to_string())?
+                        attribute
+                            .value
                             .parse::<usize>()
                             .map_err(|defect| defect.to_string())
                     };
                     match attribute.key.as_ref() {
-                        b"tests" => parsed.tests = count()?,
-                        b"failures" => parsed.failures = count()?,
-                        b"errors" => parsed.errors = count()?,
-                        b"name" | b"time" | b"skipped" => {}
+                        "tests" => parsed.tests = count()?,
+                        "failures" => parsed.failures = count()?,
+                        "errors" => parsed.errors = count()?,
+                        "name" | "time" | "skipped" => {}
                         _ => return Err("unexpected suite attribute".to_owned()),
                     }
                 }
             }
-            b"testcase" => parsed.cases = parsed.cases.saturating_add(1),
-            b"failure" => parsed.failure_rows = parsed.failure_rows.saturating_add(1),
-            b"error" => parsed.error_rows = parsed.error_rows.saturating_add(1),
-            b"system-out" => parsed.notes = parsed.notes.saturating_add(1),
-            b"testsuites" => {}
+            "testcase" => parsed.cases = parsed.cases.saturating_add(1),
+            "failure" => parsed.failure_rows = parsed.failure_rows.saturating_add(1),
+            "error" => parsed.error_rows = parsed.error_rows.saturating_add(1),
+            "system-out" => parsed.notes = parsed.notes.saturating_add(1),
+            "testsuites" => {}
             _ => return Err("unexpected JUnit element".to_owned()),
         }
     }
