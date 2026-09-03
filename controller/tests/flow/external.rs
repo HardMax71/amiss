@@ -46,7 +46,7 @@ fn scripted_evidence(visibility: &str, resolution: Option<&str>) -> Value {
     let plan = amiss_wire::external::plan(
         &parsed,
         engine.text("engine_version").unwrap(),
-        engine.text("engine_digest").unwrap(),
+        amiss_wire::digest::Digest::from_wire(engine.text("engine_digest").unwrap()).unwrap(),
     )
     .unwrap();
     let row = forge_evidence_row(DESTINATION, visibility, resolution, "t0");

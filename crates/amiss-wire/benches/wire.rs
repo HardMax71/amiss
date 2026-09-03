@@ -108,7 +108,8 @@ fn decode_organization_floor(bencher: Bencher<'_, '_>) {
 #[divan::bench(sample_count = 3, sample_size = 1)]
 fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     let (plan, evidence) = assessment_fixture(16_384);
-    let validation = assess(&plan, &evidence, "0.0.0", SAMPLE_DIGEST)
+    let engine_digest = hj("amiss/benchmark-engine", &Value::Null);
+    let validation = assess(&plan, &evidence, "0.0.0", engine_digest)
         .unwrap_or_else(|defect| panic!("dense assessment fixture: {defect:?}"));
     let verdict_count = validation
         .member("payload")
@@ -129,7 +130,7 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
             black_box(&plan),
             black_box(&evidence),
             black_box("0.0.0"),
-            black_box(SAMPLE_DIGEST),
+            black_box(engine_digest),
         )
     });
 }

@@ -1,6 +1,7 @@
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
+use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
 use amiss_wire::report::FatalSerializer;
 
@@ -41,7 +42,7 @@ fn run_pure<T, E: std::fmt::Display>(
     format: OutputFormat,
     reserve: &mut FatalSerializer,
     load: impl FnOnce() -> Result<T, String>,
-    derive: impl FnOnce(T, &str, &str) -> Result<Value, E>,
+    derive: impl FnOnce(T, &str, Digest) -> Result<Value, E>,
     human: fn(&Value),
 ) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
@@ -55,7 +56,7 @@ fn run_pure<T, E: std::fmt::Display>(
     let Some(engine) = crate::engine_provenance() else {
         return internal_error();
     };
-    match derive(input, &engine.version, &engine.digest.to_string()) {
+    match derive(input, &engine.version, engine.digest) {
         Ok(envelope) => project(command, &envelope, format, reserve, human),
         Err(defect) => {
             eprintln!("amiss {command}: {defect}");

@@ -501,6 +501,19 @@ fn the_first_frozen_example_binds_the_major() {
     );
 }
 
+fn external_engine(example: &serde_json::Value) -> (&str, amiss_wire::digest::Digest) {
+    let version = example
+        .pointer("/payload/engine/engine_version")
+        .and_then(serde_json::Value::as_str)
+        .expect("the external example names an engine version");
+    let digest = example
+        .pointer("/payload/engine/engine_digest")
+        .and_then(serde_json::Value::as_str)
+        .and_then(amiss_wire::digest::Digest::from_wire)
+        .expect("the external example names an engine digest");
+    (version, digest)
+}
+
 /// The plan example is not authored, it is derived: feeding the report
 /// example through the real derivation, with the engine values the plan
 /// example itself carries, must reproduce it byte-equal at the value level.
@@ -516,14 +529,7 @@ fn the_external_plan_example_derives_from_the_report_example() {
     let plan = amiss_wire::json::parse(&plan_bytes).expect("the plan example is strict JSON");
     let example: serde_json::Value =
         serde_json::from_slice(&plan_bytes).expect("the plan example is JSON");
-    let version = example
-        .pointer("/payload/engine/engine_version")
-        .and_then(serde_json::Value::as_str)
-        .expect("the plan example names an engine version");
-    let digest = example
-        .pointer("/payload/engine/engine_digest")
-        .and_then(serde_json::Value::as_str)
-        .expect("the plan example names an engine digest");
+    let (version, digest) = external_engine(&example);
     let derived = amiss_wire::external::plan(&report, version, digest)
         .expect("the report example yields a plan");
     assert_eq!(
@@ -551,14 +557,7 @@ fn the_assessment_example_derives_from_the_plan_and_evidence_examples() {
         amiss_wire::json::parse(&assessment_bytes).expect("the assessment example is strict JSON");
     let example: serde_json::Value =
         serde_json::from_slice(&assessment_bytes).expect("the assessment example is JSON");
-    let version = example
-        .pointer("/payload/engine/engine_version")
-        .and_then(serde_json::Value::as_str)
-        .expect("the assessment example names an engine version");
-    let digest = example
-        .pointer("/payload/engine/engine_digest")
-        .and_then(serde_json::Value::as_str)
-        .expect("the assessment example names an engine digest");
+    let (version, digest) = external_engine(&example);
     let derived = amiss_wire::external::assess(&plan, &evidence, version, digest)
         .expect("the plan and evidence examples yield an assessment");
     assert_eq!(

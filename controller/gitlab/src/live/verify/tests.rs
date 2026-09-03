@@ -338,13 +338,8 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
     };
     let evidence =
         verify_external(&rest, &plan, "gitlab.com", "0.0.0", "t0").expect("evidence is produced");
-    let assessment = assess(
-        &plan,
-        &evidence,
-        "0.0.0",
-        &hj("t", &Value::Null).to_string(),
-    )
-    .expect("the engine judges the evidence");
+    let assessment = assess(&plan, &evidence, "0.0.0", hj("t", &Value::Null))
+        .expect("the engine judges the evidence");
     let Some(Value::Array(verdicts)) = assessment
         .member("payload")
         .and_then(|payload| payload.member("verdicts"))

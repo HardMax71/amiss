@@ -35,7 +35,7 @@ pub fn external_plan(destinations: &[&str]) -> Option<Value> {
     amiss_wire::external::plan(
         &parsed,
         engine.text("engine_version")?,
-        engine.text("engine_digest")?,
+        amiss_wire::digest::Digest::from_wire(engine.text("engine_digest")?)?,
     )
     .ok()
 }

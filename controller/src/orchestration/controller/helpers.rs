@@ -353,7 +353,13 @@ fn prepare_external(
             ..PreparedExternal::default()
         };
     };
-    let Ok(plan) = amiss_wire::external::plan(&parsed, version, digest) else {
+    let Some(engine_digest) = amiss_wire::digest::Digest::from_wire(digest) else {
+        return PreparedExternal {
+            incomplete: true,
+            ..PreparedExternal::default()
+        };
+    };
+    let Ok(plan) = amiss_wire::external::plan(&parsed, version, engine_digest) else {
         return PreparedExternal {
             incomplete: true,
             ..PreparedExternal::default()
@@ -369,7 +375,7 @@ fn prepare_external(
     };
     match adapter.verify_external(&plan, &now.to_string()) {
         Ok(Some(evidence)) => {
-            match amiss_wire::external::assess(&plan, &evidence, version, digest) {
+            match amiss_wire::external::assess(&plan, &evidence, version, engine_digest) {
                 Ok(assessment) => PreparedExternal {
                     plan: Some(plan_bytes),
                     evidence: Some(amiss_wire::json::canonical(&evidence)),

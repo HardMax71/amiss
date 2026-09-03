@@ -3,8 +3,12 @@
     reason = "test assertions over constructed values"
 )]
 
-use amiss_wire::digest::hj;
-use amiss_wire::external::{PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, plan};
+use amiss_wire::de::ErrorKind;
+use amiss_wire::digest::{Digest, hb, hj};
+use amiss_wire::external::{
+    AssessDefect, EVIDENCE_SCHEMA, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, assess,
+    parse_plan, plan, probe_evidence_row,
+};
 use amiss_wire::json::Value;
 use amiss_wire::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
 
@@ -110,11 +114,25 @@ fn report(observations: Vec<Value>) -> Value {
 }
 
 fn planned(observations: Vec<Value>) -> Value {
-    plan(&report(observations), "0.0.0", &sample_digest()).expect("the report yields a plan")
+    plan(&report(observations), "0.0.0", sample_digest()).expect("the report yields a plan")
 }
 
-fn sample_digest() -> String {
-    hj(PAYLOAD_SCHEMA, &Value::Null).to_string()
+fn sample_digest() -> Digest {
+    hj(PAYLOAD_SCHEMA, &Value::Null)
+}
+
+fn refresh_plan_digest(document: &mut serde_json::Value) -> Vec<u8> {
+    let payload = document
+        .get("payload")
+        .expect("the plan document holds its payload");
+    let canonical = serde_json_canonicalizer::to_vec(payload)
+        .expect("the plan payload is canonically serializable");
+    let digest = hb(PLAN_PAYLOAD_SCHEMA, &canonical).to_string();
+    let recorded = document
+        .get_mut("payload_digest")
+        .expect("the plan document holds its digest");
+    *recorded = serde_json::Value::String(digest);
+    serde_json_canonicalizer::to_vec(document).expect("the plan document is serializable")
 }
 
 fn destinations(planned: &Value, side: &str) -> Vec<(String, Vec<String>)> {
@@ -277,7 +295,7 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
     historical.retain(|(name, _)| name != "external_destination");
     let source = report(vec![row(Value::Null, Value::object(historical))]);
     assert_eq!(
-        plan(&source, "0.0.0", &sample_digest()),
+        plan(&source, "0.0.0", sample_digest()),
         Err(PlanDefect::MalformedExternal)
     );
 }
@@ -285,7 +303,7 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
 #[test]
 fn the_envelope_binds_the_source_digest_and_its_own() {
     let source = report(Vec::new());
-    let derived = plan(&source, "0.0.0", &sample_digest()).expect("an empty report yields a plan");
+    let derived = plan(&source, "0.0.0", sample_digest()).expect("an empty report yields a plan");
     assert_eq!(field(&derived, "schema"), &string(PLAN_ENVELOPE_SCHEMA));
     let payload = field(&derived, "payload");
     let recomputed = hj(PLAN_PAYLOAD_SCHEMA, payload).to_string();
@@ -299,6 +317,65 @@ fn the_envelope_binds_the_source_digest_and_its_own() {
         field(&source, "payload_digest"),
         "the plan binds the digest of the report it read"
     );
+}
+
+#[test]
+fn the_plan_model_reads_the_checked_writer() {
+    let written = planned(introduced("https://github.com/acme/widgets"));
+    let bytes = amiss_wire::json::canonical(&written);
+    let parsed = parse_plan(&bytes).expect("the written plan clears the typed reader");
+    assert_eq!(parsed.payload.introduced.len(), 1);
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&parsed).expect("the model is serializable"),
+        bytes,
+    );
+}
+
+#[test]
+fn additive_plan_fields_are_digest_bound_but_inert() {
+    let written = planned(Vec::new());
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&amiss_wire::json::canonical(&written))
+            .expect("the written plan is JSON");
+    document
+        .get_mut("payload")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("the plan payload is an object")
+        .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
+    let parsed = parse_plan(&refresh_plan_digest(&mut document))
+        .expect("an additive field remains compatible");
+    assert!(parsed.payload.introduced.is_empty());
+}
+
+#[test]
+fn known_optional_plan_fields_do_not_accept_null() {
+    let written = planned(introduced("https://github.com/acme/widgets/blob/main/a.md"));
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&amiss_wire::json::canonical(&written))
+            .expect("the written plan is JSON");
+    let repository = document
+        .pointer_mut("/payload/introduced/0/repository")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("the introduced destination has a repository shape");
+    repository.insert("form".to_owned(), serde_json::Value::Null);
+    let error = parse_plan(&refresh_plan_digest(&mut document)).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::WrongType);
+    assert_eq!(error.path, "$.payload.introduced[0].repository.form");
+}
+
+#[test]
+fn malformed_known_plan_fields_are_refused_after_binding() {
+    let written = planned(introduced("https://example.com/manual"));
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&amiss_wire::json::canonical(&written))
+            .expect("the written plan is JSON");
+    let destination = document
+        .pointer_mut("/payload/introduced/0/destination")
+        .expect("the introduced row holds a destination");
+    *destination = serde_json::Value::String(String::new());
+    let error = parse_plan(&refresh_plan_digest(&mut document)).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert_eq!(error.path, "$.payload.introduced[0].destination");
 }
 
 #[test]
@@ -317,7 +394,7 @@ fn a_tampered_payload_is_refused() {
         }
     }
     assert_eq!(
-        plan(&Value::object(envelope), "0.0.0", &sample_digest()),
+        plan(&Value::object(envelope), "0.0.0", sample_digest()),
         Err(PlanDefect::DigestMismatch)
     );
 }
@@ -344,7 +421,7 @@ fn an_incomplete_report_is_refused() {
         ("payload_digest", string(&digest.to_string())),
     ]);
     assert_eq!(
-        plan(&envelope, "0.0.0", &sample_digest()),
+        plan(&envelope, "0.0.0", sample_digest()),
         Err(PlanDefect::Incomplete)
     );
 }
@@ -352,14 +429,14 @@ fn an_incomplete_report_is_refused() {
 #[test]
 fn a_foreign_value_is_not_a_report() {
     assert_eq!(
-        plan(&Value::Null, "0.0.0", &sample_digest()),
+        plan(&Value::Null, "0.0.0", sample_digest()),
         Err(PlanDefect::NotAReport)
     );
     assert_eq!(
         plan(
             &object(vec![("schema", string("amiss/something-else"))]),
             "0.0.0",
-            &sample_digest()
+            sample_digest()
         ),
         Err(PlanDefect::NotAReport)
     );
@@ -522,7 +599,7 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
             ("payload", payload),
             ("payload_digest", string(&digest.to_string())),
         ]);
-        let derived = plan(&envelope, "0.0.0", &sample_digest())
+        let derived = plan(&envelope, "0.0.0", sample_digest())
             .expect("the declared-host report yields a plan");
         let repository = repository_of(&derived, destination).expect("the declared host is shaped");
         assert_eq!(
@@ -532,8 +609,6 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
         );
     }
 }
-
-use amiss_wire::external::{AssessDefect, EVIDENCE_SCHEMA, assess, probe_evidence_row};
 
 fn evidence(plan: &Value, rows: Vec<Value>) -> Value {
     object(vec![
@@ -633,7 +708,7 @@ fn the_judgment_policy_is_conservative() {
         destinations.iter().map(|(_, row)| row.clone()).collect(),
     );
     let assessment =
-        assess(&plan, &evidence, "0.0.0", &sample_digest()).expect("the pair yields an assessment");
+        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
     assert_eq!(
         verdicts_of(&assessment),
         vec![
@@ -703,7 +778,7 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
         ],
     );
     let assessment =
-        assess(&plan, &observed, "0.0.0", &sample_digest()).expect("the redirects are evidence");
+        assess(&plan, &observed, "0.0.0", sample_digest()).expect("the redirects are evidence");
     let verdicts = array(field(field(&assessment, "payload"), "verdicts"));
     let verdict = |destination: &str| {
         verdicts
@@ -738,7 +813,7 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
                 &plan,
                 &evidence(&plan, vec![malformed]),
                 "0.0.0",
-                &sample_digest()
+                sample_digest()
             ),
             Err(AssessDefect::MalformedEvidence)
         );
@@ -762,7 +837,7 @@ fn forge_facts_refute_only_after_visibility_and_resolution() {
         ],
     );
     let assessment =
-        assess(&plan, &evidence, "0.0.0", &sample_digest()).expect("the pair yields an assessment");
+        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
     assert_eq!(
         verdicts_of(&assessment),
         vec![
@@ -785,7 +860,7 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
         vec![forge_row("https://a.example/x", "readable", None)],
     ] {
         assert_eq!(
-            assess(&plan, &evidence(&plan, rows), "0.0.0", &sample_digest()),
+            assess(&plan, &evidence(&plan, rows), "0.0.0", sample_digest(),),
             Err(AssessDefect::UnboundEvidence)
         );
     }
@@ -794,11 +869,14 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
     };
     let mut members = members.into_vec();
     members.retain(|(key, _)| key != "plan_payload_digest");
-    members.push(("plan_payload_digest".to_owned(), string(&sample_digest())));
+    members.push((
+        "plan_payload_digest".to_owned(),
+        string(&sample_digest().to_string()),
+    ));
     members.sort_by(|left, right| left.0.cmp(&right.0));
     let foreign = Value::object(members);
     assert_eq!(
-        assess(&plan, &foreign, "0.0.0", &sample_digest()),
+        assess(&plan, &foreign, "0.0.0", sample_digest()),
         Err(AssessDefect::UnboundEvidence)
     );
 }
@@ -824,12 +902,7 @@ fn malformed_evidence_rows_are_refused() {
     let above = probe("https://a.example/x", "get", 1000);
     for bad in [both, neither, below, above] {
         assert_eq!(
-            assess(
-                &plan,
-                &evidence(&plan, vec![bad]),
-                "0.0.0",
-                &sample_digest()
-            ),
+            assess(&plan, &evidence(&plan, vec![bad]), "0.0.0", sample_digest()),
             Err(AssessDefect::MalformedEvidence)
         );
     }
@@ -851,7 +924,7 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         }
     }
     assert_eq!(
-        assess(&plan, &Value::object(unnamed), "0.0.0", &sample_digest()),
+        assess(&plan, &Value::object(unnamed), "0.0.0", sample_digest(),),
         Err(AssessDefect::NotEvidence)
     );
 
@@ -863,7 +936,10 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         ("schema", string(PLAN_PAYLOAD_SCHEMA)),
         (
             "report",
-            object(vec![("payload_digest", string(&sample_digest()))]),
+            object(vec![(
+                "payload_digest",
+                string(&sample_digest().to_string()),
+            )]),
         ),
         ("introduced", Value::array(vec![broken_row])),
         ("removed", Value::array(Vec::new())),
@@ -877,7 +953,7 @@ fn the_judge_is_no_laxer_than_its_contracts() {
     ]);
     let empty = evidence(&handcrafted, Vec::new());
     assert_eq!(
-        assess(&handcrafted, &empty, "0.0.0", &sample_digest()),
+        assess(&handcrafted, &empty, "0.0.0", sample_digest(),),
         Err(AssessDefect::NotAPlan),
         "a digest-valid plan with rows the contract rejects is not a plan"
     );
@@ -894,7 +970,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
             &plan,
             &evidence(&plan, vec![forge_row(bare, "readable", Some("resolved"))]),
             "0.0.0",
-            &sample_digest()
+            sample_digest()
         ),
         Err(AssessDefect::UnboundEvidence)
     );
@@ -902,7 +978,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
         &plan,
         &evidence(&plan, vec![forge_row(bare, "readable", None)]),
         "0.0.0",
-        &sample_digest(),
+        sample_digest(),
     )
     .expect("visibility-only evidence judges a bare shape");
     assert_eq!(
@@ -917,7 +993,7 @@ fn the_assessment_binds_the_whole_chain() {
     let rows = vec![probe("https://a.example/x", "get", 200)];
     let evidence = evidence(&plan, rows);
     let assessment =
-        assess(&plan, &evidence, "0.0.0", &sample_digest()).expect("the pair yields an assessment");
+        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
     let subject = field(field(&assessment, "payload"), "subject");
     assert_eq!(
         field(subject, "plan_payload_digest"),
@@ -943,7 +1019,7 @@ fn an_external_occurrence_missing_its_promise_is_refused() {
     occurrence.retain(|(name, _)| name != "external_destination");
     let source = report(vec![row(Value::Null, Value::object(occurrence))]);
     assert_eq!(
-        plan(&source, "0.0.0", &sample_digest()),
+        plan(&source, "0.0.0", sample_digest()),
         Err(PlanDefect::MalformedExternal)
     );
 }
