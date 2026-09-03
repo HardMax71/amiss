@@ -46,8 +46,9 @@ pub fn derive_execution_constraint(
         RepoPathText::new(RELEASE_MANIFEST_PATH.to_owned()).ok_or(ConstraintError {
             reason: "execution-constraint-invalid",
         })?;
-    let manifest = load_release_manifest(action, resources, &tree, &manifest_path)
-        .map_err(constraint_error)?;
+    let (manifest, manifest_digest) =
+        load_release_manifest(action, resources, &tree, &manifest_path)
+            .map_err(constraint_error)?;
     let marker_path =
         RepoPathText::new(RELEASE_MANIFEST_DIGEST_PATH.to_owned()).ok_or(ConstraintError {
             reason: "execution-constraint-invalid",
@@ -61,7 +62,7 @@ pub fn derive_execution_constraint(
     let marked_digest = parse_marker(&marker).ok_or(ConstraintError {
         reason: "manifest-digest-mismatch",
     })?;
-    if marked_digest != manifest.digest {
+    if marked_digest != manifest_digest {
         return Err(ConstraintError {
             reason: "manifest-digest-mismatch",
         });
@@ -73,7 +74,7 @@ pub fn derive_execution_constraint(
         action_commit_oid: action_commit_oid.clone(),
         action_tree_oid: tree.clone(),
         manifest_path,
-        release_manifest_digest: manifest.digest,
+        release_manifest_digest: manifest_digest,
         selected_platform: platform,
         required_status_name: required_status_name.to_owned(),
         bootstrap_contract: ActionBootstrapContract::Current,

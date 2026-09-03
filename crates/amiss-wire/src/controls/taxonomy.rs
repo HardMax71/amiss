@@ -251,16 +251,34 @@ pub enum EntryKind {
     Gitlink,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumIter, IntoStaticStr)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumIter,
+    IntoStaticStr,
+    Serialize,
+    Deserialize,
+)]
 pub enum GitMode {
+    #[serde(rename = "100644")]
     #[strum(serialize = "100644")]
     RegularFile,
+    #[serde(rename = "100755")]
     #[strum(serialize = "100755")]
     ExecutableFile,
+    #[serde(rename = "040000")]
     #[strum(serialize = "040000")]
     Tree,
+    #[serde(rename = "120000")]
     #[strum(serialize = "120000")]
     Symlink,
+    #[serde(rename = "160000")]
     #[strum(serialize = "160000")]
     Gitlink,
 }

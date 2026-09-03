@@ -19,7 +19,7 @@ use amiss_wire::controls::{
 };
 use amiss_wire::digest::{Digest, hb, sha256};
 use amiss_wire::json::{Value, canonical, parse as parse_json};
-use amiss_wire::manifest::{ReleaseManifest, RuntimeRole};
+use amiss_wire::manifest::{RuntimeRole, canonical_release_manifest, parse_release_manifest};
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::requests::SnapshotMaterialization;
 use tempfile::TempDir;
@@ -111,8 +111,11 @@ fn the_generated_manifest_reparses_to_its_pinned_digest() {
     let release = release(|_root| {});
     let bytes = fs::read(release.dir.path().join("release-manifest.json")).unwrap();
     assert_eq!(bytes.last(), Some(&b'\n'), "the manifest blob ends in LF");
-    let parsed = ReleaseManifest::parse(&bytes).expect("the generated manifest parses");
-    assert_eq!(parsed.digest, release.manifest_digest);
+    let parsed = parse_release_manifest(&bytes).expect("the generated manifest parses");
+    assert_eq!(
+        canonical_release_manifest(&parsed).unwrap().1,
+        release.manifest_digest
+    );
     assert_eq!(
         canonical(&amiss_wire::json::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap()),
         bytes.strip_suffix(b"\n").unwrap(),

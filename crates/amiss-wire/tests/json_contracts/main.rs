@@ -1,9 +1,24 @@
 use std::{fs, path::Path};
 
-use amiss_wire::{controls, json, locale, publication, relation, requests, semantic};
+use amiss_wire::{controls, json, locale, manifest, publication, relation, requests, semantic};
 
 #[path = "../support/relation.rs"]
 mod relation_fixture;
+
+#[test]
+fn the_release_manifest_example_matches_its_typed_source() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../spec/examples/scanner-release-manifest.json");
+    let committed = fs::read(path).unwrap();
+    let parsed_json = json::parse(&committed).unwrap();
+    let release_manifest = manifest::parse_release_manifest(&committed).unwrap();
+    let (generated, digest) = manifest::canonical_release_manifest(&release_manifest).unwrap();
+    assert_eq!(generated, json::canonical(&parsed_json));
+    assert_eq!(
+        digest,
+        amiss_wire::digest::hj(manifest::MANIFEST_DOMAIN, &parsed_json)
+    );
+}
 
 #[test]
 fn sidecar_examples_match_their_typed_sources() {

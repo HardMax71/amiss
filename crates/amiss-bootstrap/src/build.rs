@@ -1,10 +1,11 @@
-use amiss_wire::controls::ConstraintPlatform;
-use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, hj, sha256};
-use amiss_wire::json::{Value, canonical};
+use amiss_wire::controls::{ConstraintPlatform, GitMode};
+use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, sha256};
 use amiss_wire::manifest::{
-    DEPENDENCY_LOCK_DOMAIN, DEPENDENCY_LOCK_SCHEMA, ENVIRONMENT_CONTRACT, MANIFEST_DOMAIN,
-    MANIFEST_SCHEMA, RUNTIME_CONTRACT, RuntimeRole,
+    BuildSource, DependencyLockFile, DependencyLockInput, DependencyLockSchema,
+    EnvironmentContract, ReleaseArtifact, ReleaseManifest, ReleaseManifestSchema, RuntimeContract,
+    RuntimeFile, RuntimeRole, canonical_dependency_lock, canonical_release_manifest,
 };
+use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
 use crate::ENGINE_DOMAIN;
 
@@ -41,81 +42,72 @@ pub struct StagedBuild<'bytes> {
 }
 
 /// Builds the strict release manifest from the staged action tree: every
-/// digest is computed from the exact staged bytes, artifacts sort by
-/// platform, runtime files and lockfiles sort by path, and the lock-set
-/// digest is `HJ` over the complete lock object. Returns the manifest bytes
-/// (`JCS || LF`, the blob the action tree carries) and the semantic digest
-/// the execution constraint pins.
+/// digest is computed from the exact staged bytes, and every set is sorted
+/// before the typed wire model validates and serializes it.
 ///
 /// # Errors
 ///
-/// A staged artifact without exactly one executable row, which is a
-/// malformed release rather than a runtime condition.
+/// The staged release cannot form a valid release-manifest contract.
 pub fn build_manifest(
     build: &StagedBuild<'_>,
     artifacts: &mut [StagedArtifact<'_>],
 ) -> Result<(Vec<u8>, Digest), &'static str> {
-    let mut locks: Vec<(String, Digest)> = build
+    let mut files = build
         .locks
         .iter()
-        .map(|(path, bytes)| (path.clone(), hb(RAW_EVIDENCE_DOMAIN, bytes)))
-        .collect();
-    locks.sort_by(|a, b| a.0.cmp(&b.0));
-    let lock_value = object(vec![
-        ("schema", string(DEPENDENCY_LOCK_SCHEMA)),
-        (
-            "files",
-            Value::array(
-                locks
-                    .iter()
-                    .map(|(path, digest)| {
-                        object(vec![
-                            ("path", string(path)),
-                            ("raw_digest", string(&digest.to_string())),
-                        ])
-                    })
-                    .collect(),
-            ),
-        ),
-    ]);
-    let lock_digest = hj(DEPENDENCY_LOCK_DOMAIN, &lock_value);
+        .map(|(path, bytes)| {
+            Ok(DependencyLockFile {
+                path: RepoPathText::new(path.clone()).ok_or("invalid dependency lock path")?,
+                raw_digest: hb(RAW_EVIDENCE_DOMAIN, bytes),
+            })
+        })
+        .collect::<Result<Vec<_>, &'static str>>()?;
+    files.sort_by(|left, right| left.path.as_str().cmp(right.path.as_str()));
+    let dependency_lock = DependencyLockInput {
+        schema: DependencyLockSchema::Current,
+        files,
+    };
+    let dependency_lock_digest = canonical_dependency_lock(&dependency_lock)
+        .map_err(|_defect| "invalid dependency lock")?
+        .1;
 
     artifacts.sort_by(|left, right| left.platform.as_ref().cmp(right.platform.as_ref()));
-    let mut rows: Vec<Value> = Vec::with_capacity(artifacts.len());
-    for artifact in artifacts.iter_mut() {
-        rows.push(artifact_value(artifact)?);
-    }
-
-    let manifest = object(vec![
-        ("schema", string(MANIFEST_SCHEMA)),
-        ("engine_version", string(&build.engine_version)),
-        (
-            "build_source",
-            object(vec![
-                (
-                    "repository",
-                    object(vec![
-                        ("host", string(&build.host)),
-                        ("owner", string(&build.owner)),
-                        ("name", string(&build.repository)),
-                    ]),
-                ),
-                ("object_format", string(build.object_format)),
-                ("commit_oid", string(&build.commit_oid)),
-            ]),
-        ),
-        ("dependency_lock", lock_value),
-        ("dependency_lock_digest", string(&lock_digest.to_string())),
-        ("artifacts", Value::array(rows)),
-    ]);
-    let digest = hj(MANIFEST_DOMAIN, &manifest);
-    let mut bytes = canonical(&manifest);
+    let artifacts = artifacts
+        .iter_mut()
+        .map(build_artifact)
+        .collect::<Result<Vec<_>, _>>()?;
+    let object_format = build
+        .object_format
+        .parse::<ObjectFormat>()
+        .map_err(|_defect| "invalid build object format")?;
+    let manifest = ReleaseManifest {
+        schema: ReleaseManifestSchema::Current,
+        engine_version: build.engine_version.clone(),
+        build_source: BuildSource {
+            repository: RepositoryIdentity::new(
+                build.host.clone(),
+                build.owner.clone(),
+                build.repository.clone(),
+            )
+            .ok_or("invalid build repository")?,
+            object_format,
+            commit_oid: Oid::new(object_format, build.commit_oid.clone())
+                .ok_or("invalid build commit")?,
+        },
+        dependency_lock,
+        dependency_lock_digest,
+        artifacts,
+    };
+    let (mut bytes, digest) =
+        canonical_release_manifest(&manifest).map_err(|_defect| "invalid release manifest")?;
     bytes.push(b'\n');
     Ok((bytes, digest))
 }
 
-fn artifact_value(artifact: &mut StagedArtifact<'_>) -> Result<Value, &'static str> {
-    artifact.files.sort_by(|a, b| a.path.cmp(&b.path));
+fn build_artifact(artifact: &mut StagedArtifact<'_>) -> Result<ReleaseArtifact, &'static str> {
+    artifact
+        .files
+        .sort_by(|left, right| left.path.cmp(&right.path));
     let mut executables = artifact
         .files
         .iter()
@@ -128,50 +120,31 @@ fn artifact_value(artifact: &mut StagedArtifact<'_>) -> Result<Value, &'static s
         return Err("the executable row is not mode 100755");
     }
     let binary_sha256 = sha256(engine.bytes);
-    let engine_digest = hb(ENGINE_DOMAIN, engine.bytes);
-    let tree_path = engine.path.clone();
-
-    let files: Vec<Value> = artifact
+    let runtime_files = artifact
         .files
         .iter()
         .map(|file| {
-            object(vec![
-                ("path", string(&file.path)),
-                ("role", string(file.role.as_ref())),
-                (
-                    "git_mode",
-                    string(if file.executable { "100755" } else { "100644" }),
-                ),
-                ("file_sha256", string(&sha256(file.bytes).to_string())),
-            ])
+            Ok(RuntimeFile {
+                path: RepoPathText::new(file.path.clone()).ok_or("invalid runtime path")?,
+                role: file.role,
+                git_mode: if file.executable {
+                    GitMode::ExecutableFile
+                } else {
+                    GitMode::RegularFile
+                },
+                file_sha256: sha256(file.bytes),
+            })
         })
-        .collect();
-
-    Ok(object(vec![
-        ("platform", string(artifact.platform.as_ref())),
-        ("artifact_name", string(&artifact.artifact_name)),
-        ("tree_path", string(&tree_path)),
-        ("binary_sha256", string(&binary_sha256.to_string())),
-        ("engine_digest", string(&engine_digest.to_string())),
-        ("runtime_contract", string(RUNTIME_CONTRACT)),
-        ("environment_contract", string(ENVIRONMENT_CONTRACT)),
-        ("runtime_files", Value::array(files)),
-    ]))
-}
-
-/// The action tree's root `action.yml`: JCS JSON plus LF, exactly `name`,
-/// `description`, and `runs`. The declared launcher is manifest-listed and
-/// exists for experimental convenience; the required path never executes it.
-#[must_use]
-fn string(text: &str) -> Value {
-    Value::string(text.to_owned())
-}
-
-fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::object(
-        members
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-    )
+        .collect::<Result<Vec<_>, &'static str>>()?;
+    Ok(ReleaseArtifact {
+        platform: artifact.platform,
+        artifact_name: ArtifactId::new(artifact.artifact_name.clone())
+            .ok_or("invalid artifact name")?,
+        tree_path: RepoPathText::new(engine.path.clone()).ok_or("invalid executable path")?,
+        binary_sha256,
+        engine_digest: hb(ENGINE_DOMAIN, engine.bytes),
+        runtime_contract: RuntimeContract::Current,
+        environment_contract: EnvironmentContract::Current,
+        runtime_files,
+    })
 }

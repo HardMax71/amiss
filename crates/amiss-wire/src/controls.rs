@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
-use std::str::FromStr;
 
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use crate::de::{Error, ErrorKind, fail};
 use crate::json::{self, Value};
 use crate::model::{OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
 
@@ -71,12 +70,6 @@ const WAIVER_BUNDLE_SCHEMA: &str = "amiss/waiver-bundle";
 pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key";
 pub const FACT_DOMAIN: &str = "amiss/scanner-fact";
 
-pub(crate) fn decode_enum<T: FromStr>(path: &str, value: Value) -> Result<T, Error> {
-    let raw = de::string(path, value)?;
-    raw.parse()
-        .map_err(|_unknown| Error::new(path, ErrorKind::InvalidValue))
-}
-
 /// The one restricted-JSON root every control document parses through.
 ///
 /// # Errors
@@ -86,7 +79,7 @@ pub fn root(bytes: &[u8]) -> Result<Value, Error> {
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
-fn sorted_set<T>(
+pub(crate) fn sorted_set<T>(
     path: &str,
     items: &[T],
     compare: impl Fn(&T, &T) -> Ordering,
@@ -101,16 +94,6 @@ fn sorted_set<T>(
         }
     }
     Ok(())
-}
-
-pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let host = obj.required("host", de::string)?;
-    let owner = obj.required("owner", de::string)?;
-    let name = obj.required("name", de::string)?;
-    obj.finish()?;
-    RepositoryIdentity::new(host, owner, name)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
 pub(crate) fn provider_run_id_valid(raw: &str) -> bool {

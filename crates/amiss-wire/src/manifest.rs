@@ -1,21 +1,41 @@
-use std::cmp::Ordering;
+use serde::{Deserialize, Serialize};
 
-use crate::controls::{ConstraintPlatform, GitMode, decode_enum, root};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::{Digest, hj};
-use crate::json::Value;
+use crate::controls::{ConstraintPlatform, GitMode, root, sorted_set, validate_repository};
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
-pub const MANIFEST_SCHEMA: &str = "amiss/scanner-release-manifest";
-pub const DEPENDENCY_LOCK_SCHEMA: &str = "amiss/scanner-dependency-lock-input";
 pub const MANIFEST_DOMAIN: &str = "amiss/scanner-release-manifest";
 pub const DEPENDENCY_LOCK_DOMAIN: &str = "amiss/scanner-dependency-lock";
-pub const RUNTIME_CONTRACT: &str = "manifest-closed";
-pub const ENVIRONMENT_CONTRACT: &str = "scanner-process-env";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReleaseManifestSchema {
+    #[serde(rename = "amiss/scanner-release-manifest")]
+    Current,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DependencyLockSchema {
+    #[serde(rename = "amiss/scanner-dependency-lock-input")]
+    Current,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RuntimeContract {
+    #[serde(rename = "manifest-closed")]
+    Current,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EnvironmentContract {
+    #[serde(rename = "scanner-process-env")]
+    Current,
+}
 
 /// One runtime file of the reviewed action closure: a regular blob in the
 /// pinned action tree with its exact mode and plain SHA-256.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeFile {
     pub path: RepoPathText,
     pub role: RuntimeRole,
@@ -24,9 +44,19 @@ pub struct RuntimeFile {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::AsRefStr,
+    strum::EnumString,
+    strum::IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RuntimeRole {
     Executable,
     DynamicLibrary,
@@ -34,37 +64,51 @@ pub enum RuntimeRole {
 }
 
 /// One published platform artifact and its complete runtime closure.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReleaseArtifact {
     pub platform: ConstraintPlatform,
     pub artifact_name: ArtifactId,
     pub tree_path: RepoPathText,
     pub binary_sha256: Digest,
     pub engine_digest: Digest,
+    pub runtime_contract: RuntimeContract,
+    pub environment_contract: EnvironmentContract,
     pub runtime_files: Vec<RuntimeFile>,
 }
 
 /// The build namespace: the repository and exact commit the release was
 /// built from.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BuildSource {
     pub repository: RepositoryIdentity,
     pub object_format: ObjectFormat,
     pub commit_oid: Oid,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DependencyLockFile {
+    pub path: RepoPathText,
+    pub raw_digest: Digest,
+}
+
 /// Every build lockfile by canonical path and raw-evidence digest.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DependencyLockInput {
-    pub files: Vec<(RepoPathText, Digest)>,
+    pub schema: DependencyLockSchema,
+    pub files: Vec<DependencyLockFile>,
 }
 
 /// The strict release manifest: the reviewed release label, its build
 /// namespace, the complete dependency-lock set, and one to six artifacts
 /// sorted by platform.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReleaseManifest {
-    pub digest: Digest,
+    pub schema: ReleaseManifestSchema,
     pub engine_version: String,
     pub build_source: BuildSource,
     pub dependency_lock: DependencyLockInput,
@@ -72,111 +116,139 @@ pub struct ReleaseManifest {
     pub artifacts: Vec<ReleaseArtifact>,
 }
 
-impl ReleaseManifest {
-    /// Parses the manifest blob under the strict JSON rules, verifying the
-    /// closed shape, the sorted-unique orders, and the lock-set digest.
-    ///
-    /// # Errors
-    ///
-    /// The first typed defect: shape, unknown field, invalid value, a
-    /// noncanonical array order, a limit crossing, or a digest mismatch.
-    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        Self::decode(root(bytes)?)
-    }
+/// Parses and validates one release manifest.
+///
+/// # Errors
+///
+/// Fails on strict-JSON defects, schema-shape violations, invalid grammar
+/// values, inconsistent digests or closure rows, and unsorted or duplicate
+/// set members.
+pub fn parse_release_manifest(bytes: &[u8]) -> Result<ReleaseManifest, Error> {
+    root(bytes)?;
+    let manifest = de::deserialize_json(bytes)?;
+    validate_release_manifest(&manifest)?;
+    Ok(manifest)
+}
 
-    /// Decodes an already-parsed value, which is how the wrapper checks the
-    /// embedded manifest against the blob it parsed.
-    ///
-    /// # Errors
-    ///
-    /// As [`ReleaseManifest::parse`].
-    pub fn decode(value: Value) -> Result<Self, Error> {
-        let digest = hj(MANIFEST_DOMAIN, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, MANIFEST_SCHEMA)
-        })?;
-        let engine_version = obj.required("engine_version", decode_version)?;
-        let build_source = obj.required("build_source", decode_build_source)?;
-        let lock_path = obj.field("dependency_lock");
-        let lock_value = obj.take("dependency_lock")?;
-        let computed_lock = hj(DEPENDENCY_LOCK_DOMAIN, &lock_value);
-        let dependency_lock = decode_lock(&lock_path, lock_value)?;
-        let dependency_lock_digest = de::digest(
-            &obj.field("dependency_lock_digest"),
-            obj.take("dependency_lock_digest")?,
-        )?;
-        if dependency_lock_digest != computed_lock {
+/// Produces one valid release manifest's canonical bytes and digest.
+///
+/// # Errors
+///
+/// A public field violates the same laws [`parse_release_manifest`] enforces,
+/// or the typed value cannot be serialized.
+pub fn canonical_release_manifest(manifest: &ReleaseManifest) -> Result<(Vec<u8>, Digest), Error> {
+    validate_release_manifest(manifest)?;
+    let bytes = serde_json_canonicalizer::to_vec(manifest)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let digest = hb(MANIFEST_DOMAIN, &bytes);
+    Ok((bytes, digest))
+}
+
+/// Produces one valid dependency-lock input's canonical bytes and digest.
+///
+/// # Errors
+///
+/// The lock set is empty, oversized, unsorted, duplicated, or cannot be
+/// serialized.
+pub fn canonical_dependency_lock(
+    dependency_lock: &DependencyLockInput,
+) -> Result<(Vec<u8>, Digest), Error> {
+    validate_dependency_lock("$", dependency_lock)?;
+    let bytes = serde_json_canonicalizer::to_vec(dependency_lock)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let digest = hb(DEPENDENCY_LOCK_DOMAIN, &bytes);
+    Ok((bytes, digest))
+}
+
+fn validate_release_manifest(manifest: &ReleaseManifest) -> Result<(), Error> {
+    if !valid_version(&manifest.engine_version) {
+        return fail("$.engine_version", ErrorKind::InvalidValue);
+    }
+    validate_repository(
+        "$.build_source.repository",
+        &manifest.build_source.repository,
+    )?;
+    if manifest.build_source.commit_oid.object_format() != manifest.build_source.object_format {
+        return fail("$.build_source.commit_oid", ErrorKind::InvalidValue);
+    }
+    validate_dependency_lock("$.dependency_lock", &manifest.dependency_lock)?;
+    let lock_bytes = serde_json_canonicalizer::to_vec(&manifest.dependency_lock)
+        .map_err(|_defect| Error::new("$.dependency_lock", ErrorKind::InvalidValue))?;
+    if hb(DEPENDENCY_LOCK_DOMAIN, &lock_bytes) != manifest.dependency_lock_digest {
+        return fail("$.dependency_lock_digest", ErrorKind::DigestMismatch);
+    }
+    if manifest.artifacts.is_empty() || manifest.artifacts.len() > 6 {
+        return fail("$.artifacts", ErrorKind::LimitExceeded);
+    }
+    for (index, artifact) in manifest.artifacts.iter().enumerate() {
+        validate_release_artifact(&format!("$.artifacts[{index}]"), artifact)?;
+    }
+    sorted_set("$.artifacts", &manifest.artifacts, |left, right| {
+        left.platform.as_ref().cmp(right.platform.as_ref())
+    })
+}
+
+fn validate_dependency_lock(
+    path: &str,
+    dependency_lock: &DependencyLockInput,
+) -> Result<(), Error> {
+    let files_path = format!("{path}.files");
+    if dependency_lock.files.is_empty() || dependency_lock.files.len() > 32 {
+        return fail(&files_path, ErrorKind::LimitExceeded);
+    }
+    sorted_set(&files_path, &dependency_lock.files, |left, right| {
+        left.path.as_str().cmp(right.path.as_str())
+    })
+}
+
+fn validate_release_artifact(path: &str, artifact: &ReleaseArtifact) -> Result<(), Error> {
+    let files_path = format!("{path}.runtime_files");
+    if artifact.runtime_files.is_empty() || artifact.runtime_files.len() > 256 {
+        return fail(&files_path, ErrorKind::LimitExceeded);
+    }
+    for (index, file) in artifact.runtime_files.iter().enumerate() {
+        if !matches!(
+            file.git_mode,
+            GitMode::RegularFile | GitMode::ExecutableFile
+        ) {
             return fail(
-                &obj.field("dependency_lock_digest"),
+                &format!("{files_path}[{index}].git_mode"),
                 ErrorKind::InvalidValue,
             );
         }
-        let artifacts_path = obj.field("artifacts");
-        let artifacts = decode_nonempty_set(
-            &artifacts_path,
-            obj.take("artifacts")?,
-            6,
-            decode_artifact,
-            |a, b| a.platform.as_ref().cmp(b.platform.as_ref()),
-        )?;
-        obj.finish()?;
-        Ok(Self {
-            digest,
-            engine_version,
-            build_source,
-            dependency_lock,
-            dependency_lock_digest,
-            artifacts,
+    }
+    sorted_set(&files_path, &artifact.runtime_files, |left, right| {
+        left.path.as_str().cmp(right.path.as_str())
+    })?;
+    let mut executable = artifact
+        .runtime_files
+        .iter()
+        .filter(|file| file.role == RuntimeRole::Executable);
+    let row = executable.next();
+    if executable.next().is_some()
+        || row.is_none_or(|file| {
+            file.path != artifact.tree_path
+                || file.git_mode != GitMode::ExecutableFile
+                || file.file_sha256 != artifact.binary_sha256
         })
+    {
+        return fail(&files_path, ErrorKind::Inconsistent);
     }
-
-    /// The one artifact matching both the selected platform and name, per
-    /// the manifest's no-repeated-platform law.
-    #[must_use]
-    pub fn select(
-        &self,
-        platform: ConstraintPlatform,
-        name: &ArtifactId,
-    ) -> Option<&ReleaseArtifact> {
-        self.artifacts
-            .iter()
-            .find(|artifact| artifact.platform == platform && &artifact.artifact_name == name)
-    }
+    Ok(())
 }
 
-impl ReleaseArtifact {
-    /// The single `executable` row, which the closure law requires to name
-    /// `tree_path` with mode `100755` and the artifact's own checksum.
-    #[must_use]
-    pub fn executable(&self) -> Option<&RuntimeFile> {
-        let mut rows = self
-            .runtime_files
-            .iter()
-            .filter(|file| file.role == RuntimeRole::Executable);
-        let row = rows.next()?;
-        if rows.next().is_some()
-            || row.path != self.tree_path
-            || row.git_mode != GitMode::ExecutableFile
-            || row.file_sha256 != self.binary_sha256
-        {
-            return None;
-        }
-        Some(row)
-    }
-}
-
-fn decode_version(path: &str, value: Value) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
+fn valid_version(raw: &str) -> bool {
     let (core, pre) = raw
         .split_once('-')
-        .map_or((raw.as_str(), None), |(core, pre)| (core, Some(pre)));
-    let numeric: Vec<&str> = core.split('.').collect();
-    let shaped = raw.len() <= 64
-        && numeric.len() == 3
-        && numeric
-            .iter()
-            .all(|part| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit()))
+        .map_or((raw, None), |(core, pre)| (core, Some(pre)));
+    let mut numeric = core.split('.');
+    raw.len() <= 64
+        && (0..3).all(|_| {
+            numeric.next().is_some_and(|part| {
+                !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit())
+            })
+        })
+        && numeric.next().is_none()
         && pre.is_none_or(|text| {
             !text.is_empty()
                 && text.bytes().all(|byte| {
@@ -185,154 +257,5 @@ fn decode_version(path: &str, value: Value) -> Result<String, Error> {
                         || byte == b'.'
                         || byte == b'-'
                 })
-        });
-    if shaped {
-        Ok(raw)
-    } else {
-        fail(path, ErrorKind::InvalidValue)
-    }
-}
-
-fn decode_build_source(path: &str, value: Value) -> Result<BuildSource, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let repository = obj.required("repository", crate::controls::decode_repository)?;
-    let format_path = obj.field("object_format");
-    let object_format = decode_enum(&format_path, obj.take("object_format")?)?;
-    let commit_path = obj.field("commit_oid");
-    let commit_oid = Oid::new(
-        object_format,
-        de::string(&commit_path, obj.take("commit_oid")?)?,
-    )
-    .ok_or_else(|| Error::new(&commit_path, ErrorKind::InvalidValue))?;
-    obj.finish()?;
-    Ok(BuildSource {
-        repository,
-        object_format,
-        commit_oid,
-    })
-}
-
-fn decode_lock(path: &str, value: Value) -> Result<DependencyLockInput, Error> {
-    let mut obj = Obj::new(path, value)?;
-    obj.required("schema", |path, value| {
-        de::const_str(path, value, DEPENDENCY_LOCK_SCHEMA)
-    })?;
-    let files_path = obj.field("files");
-    let rows = de::array(&files_path, obj.take("files")?)?;
-    obj.finish()?;
-    if rows.is_empty() || rows.len() > 32 {
-        return fail(&files_path, ErrorKind::LimitExceeded);
-    }
-    let mut files: Vec<(RepoPathText, Digest)> = Vec::with_capacity(rows.len());
-    for (index, row) in rows.into_iter().enumerate() {
-        let row_path = format!("{files_path}[{index}]");
-        let mut file = Obj::new(&row_path, row)?;
-        let member = file.required("path", decode_repo_path)?;
-        let raw_digest = file.required("raw_digest", de::digest)?;
-        file.finish()?;
-        files.push((member, raw_digest));
-    }
-    sorted_unique(&files_path, &files, |a, b| a.0.as_str().cmp(b.0.as_str()))?;
-    Ok(DependencyLockInput { files })
-}
-
-fn decode_artifact(path: &str, value: Value) -> Result<ReleaseArtifact, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let platform = obj.required("platform", decode_enum)?;
-    let artifact_name = obj.required("artifact_name", decode_artifact_id)?;
-    let tree_path = obj.required("tree_path", decode_repo_path)?;
-    let binary_sha256 = obj.required("binary_sha256", de::digest)?;
-    let engine_digest = obj.required("engine_digest", de::digest)?;
-    obj.required("runtime_contract", |path, value| {
-        de::const_str(path, value, RUNTIME_CONTRACT)
-    })?;
-    obj.required("environment_contract", |path, value| {
-        de::const_str(path, value, ENVIRONMENT_CONTRACT)
-    })?;
-    let files_path = obj.field("runtime_files");
-    let runtime_files = decode_nonempty_set(
-        &files_path,
-        obj.take("runtime_files")?,
-        256,
-        decode_runtime_file,
-        |a, b| a.path.as_str().cmp(b.path.as_str()),
-    )?;
-    obj.finish()?;
-    let artifact = ReleaseArtifact {
-        platform,
-        artifact_name,
-        tree_path,
-        binary_sha256,
-        engine_digest,
-        runtime_files,
-    };
-    if artifact.executable().is_none() {
-        return fail(&files_path, ErrorKind::Inconsistent);
-    }
-    Ok(artifact)
-}
-
-fn decode_runtime_file(path: &str, value: Value) -> Result<RuntimeFile, Error> {
-    let mut file = Obj::new(path, value)?;
-    let member = file.required("path", decode_repo_path)?;
-    let role = file.required("role", decode_enum)?;
-    let mode_path = file.field("git_mode");
-    let git_mode = match de::string(&mode_path, file.take("git_mode")?)?.as_str() {
-        "100644" => GitMode::RegularFile,
-        "100755" => GitMode::ExecutableFile,
-        _ => return fail(&mode_path, ErrorKind::InvalidValue),
-    };
-    let file_sha256 = file.required("file_sha256", de::digest)?;
-    file.finish()?;
-    Ok(RuntimeFile {
-        path: member,
-        role,
-        git_mode,
-        file_sha256,
-    })
-}
-
-fn decode_nonempty_set<T>(
-    path: &str,
-    value: Value,
-    maximum: usize,
-    decode: impl Fn(&str, Value) -> Result<T, Error>,
-    compare: impl Fn(&T, &T) -> Ordering,
-) -> Result<Vec<T>, Error> {
-    let rows = de::array(path, value)?;
-    if rows.is_empty() || rows.len() > maximum {
-        return fail(path, ErrorKind::LimitExceeded);
-    }
-    let items = rows
-        .into_iter()
-        .enumerate()
-        .map(|(index, row)| decode(&format!("{path}[{index}]"), row))
-        .collect::<Result<Vec<_>, _>>()?;
-    sorted_unique(path, &items, compare)?;
-    Ok(items)
-}
-
-fn sorted_unique<T>(
-    path: &str,
-    items: &[T],
-    compare: impl Fn(&T, &T) -> Ordering,
-) -> Result<(), Error> {
-    for pair in items.windows(2) {
-        if let [left, right] = pair
-            && compare(left, right) != Ordering::Less
-        {
-            return fail(path, ErrorKind::UnsortedSet);
-        }
-    }
-    Ok(())
-}
-
-fn decode_repo_path(path: &str, value: Value) -> Result<RepoPathText, Error> {
-    RepoPathText::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn decode_artifact_id(path: &str, value: Value) -> Result<ArtifactId, Error> {
-    ArtifactId::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+        })
 }
