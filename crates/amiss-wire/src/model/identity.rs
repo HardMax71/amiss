@@ -124,8 +124,8 @@ impl FromStr for BranchRef {
 #[serde(deny_unknown_fields)]
 pub struct RepositoryIdentity {
     host: String,
-    owner: String,
     name: String,
+    owner: String,
 }
 
 impl RepositoryIdentity {
@@ -139,7 +139,7 @@ impl RepositoryIdentity {
                 .as_bytes()
                 .split(|&byte| byte == b'/')
                 .all(identity_segment);
-        (host_valid(&host) && owner_ok && name_valid(&name)).then_some(Self { host, owner, name })
+        (host_valid(&host) && owner_ok && name_valid(&name)).then_some(Self { host, name, owner })
     }
 
     /// Convenience constructor for GitHub's fixed host and single-segment
@@ -148,8 +148,8 @@ impl RepositoryIdentity {
     pub fn github(owner: String, name: String) -> Option<Self> {
         (identity_segment(owner.as_bytes()) && name_valid(&name)).then_some(Self {
             host: "github.com".to_owned(),
-            owner,
             name,
+            owner,
         })
     }
 

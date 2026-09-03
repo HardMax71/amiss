@@ -301,13 +301,15 @@ fn collect<'report>(
         let external = matches!(
             &occurrence.resolution,
             Resolution::External {
-                reason: ExternalResolutionReason::Url | ExternalResolutionReason::ForeignRepository
+                reason: ExternalResolutionReason::Url | ExternalResolutionReason::ForeignRepository,
+                ..
             }
         );
         let historical = matches!(
             &occurrence.resolution,
             Resolution::UnsupportedVersion {
-                scope: VersionScope::KnownCommit { .. }
+                scope: VersionScope::KnownCommit { .. },
+                ..
             }
         );
         if (!external && !historical)
@@ -315,7 +317,8 @@ fn collect<'report>(
                 &occurrence.resolution,
                 Resolution::External {
                     reason: ExternalResolutionReason::IntersphinxInventory
-                        | ExternalResolutionReason::SiteBuild
+                        | ExternalResolutionReason::SiteBuild,
+                    ..
                 }
             )
         {
