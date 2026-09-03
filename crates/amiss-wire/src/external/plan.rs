@@ -7,6 +7,10 @@ use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb, hj};
 use crate::json::{self, Value};
 use crate::model::ForgeDialect;
+use crate::report::model::{
+    Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath, Resolution,
+    VersionScope,
+};
 use crate::report::validate_envelope;
 
 use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
@@ -112,44 +116,30 @@ pub fn plan(
     engine_digest: Digest,
 ) -> Result<Value, PlanDefect> {
     let (payload, recorded, _verdict) = validate_envelope(envelope)?;
-    let complete = payload
-        .member("result")
-        .and_then(|result| result.member("complete"));
-    if complete != Some(&Value::Bool(true)) {
+    if !payload.result.complete {
         return Err(PlanDefect::Incomplete);
     }
-    let Some(Value::Array(observations)) = payload.member("observations") else {
+    let Evaluation::Resolved(evaluation) = &payload.evaluation else {
         return Err(PlanDefect::NotAReport);
     };
-    let Some(evaluation) = payload.member("evaluation") else {
-        return Err(PlanDefect::NotAReport);
-    };
-    let (Some(base_identity), Some(candidate_identity), Some(mode)) = (
-        evaluation.member("base"),
-        evaluation.member("candidate"),
-        evaluation.text("mode").filter(|mode| !mode.is_empty()),
-    ) else {
-        return Err(PlanDefect::NotAReport);
-    };
-    let (Ok(base_identity), Ok(candidate_identity), Some(report_payload_digest)) = (
-        serde_json::from_slice(&json::canonical(base_identity)),
-        serde_json::from_slice(&json::canonical(candidate_identity)),
-        Digest::from_wire(recorded),
-    ) else {
-        return Err(PlanDefect::NotAReport);
-    };
+    let base_identity =
+        serde_json::to_value(&evaluation.base).map_err(|_defect| PlanDefect::MalformedExternal)?;
+    let candidate_identity = serde_json::to_value(&evaluation.candidate)
+        .map_err(|_defect| PlanDefect::MalformedExternal)?;
 
-    let base = collect(observations, "base")?;
-    let candidate = collect(observations, "candidate")?;
+    let base = collect(&payload.observations, |comparison| comparison.base.as_ref())?;
+    let candidate = collect(&payload.observations, |comparison| {
+        comparison.candidate.as_ref()
+    })?;
     let retained = candidate
         .keys()
         .filter(|destination| base.contains_key(*destination))
         .count();
     let declared = evaluation
-        .member("repository")
-        .and_then(|repository| repository.text("host"))
-        .zip(evaluation.text("forge"))
-        .and_then(|(host, dialect)| dialect.parse().ok().map(|dialect| (host, dialect)));
+        .repository
+        .as_ref()
+        .zip(evaluation.forge)
+        .map(|(repository, dialect)| (repository.host(), dialect));
     let payload = ExternalPlan {
         schema: ExternalPlanPayloadSchema::Current,
         engine: ExternalEngine {
@@ -157,10 +147,10 @@ pub fn plan(
             engine_digest,
         },
         report: ExternalPlanReport {
-            payload_digest: report_payload_digest,
+            payload_digest: recorded,
             base: base_identity,
             candidate: candidate_identity,
-            mode: mode.to_owned(),
+            mode: evaluation.mode.as_ref().to_owned(),
         },
         introduced: rows(&candidate, &base, declared),
         removed: rows(&base, &candidate, declared),
@@ -299,40 +289,53 @@ fn validate_repository(path: &str, repository: &ExternalRepository) -> Result<()
 }
 
 /// One side's destinations delegated to another evidence layer.
-fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>, PlanDefect> {
+fn collect<'report>(
+    observations: &'report [ObservationComparison],
+    side: impl Fn(&'report ObservationComparison) -> Option<&'report Occurrence>,
+) -> Result<BTreeMap<String, Entry>, PlanDefect> {
     let mut entries: BTreeMap<String, Entry> = BTreeMap::new();
     for row in observations {
-        let Some(occurrence) = row.member(side) else {
+        let Some(occurrence) = side(row) else {
             continue;
         };
-        let resolution = occurrence.member("resolution");
-        let external = resolution.and_then(|value| value.text("kind")) == Some("external");
-        let historical = resolution.and_then(|value| value.text("kind"))
-            == Some("unsupported-version")
-            && resolution
-                .and_then(|value| value.member("scope"))
-                .and_then(|scope| scope.text("kind"))
-                == Some("known-commit");
+        let external = matches!(
+            &occurrence.resolution,
+            Resolution::External {
+                reason: ExternalResolutionReason::Url | ExternalResolutionReason::ForeignRepository
+            }
+        );
+        let historical = matches!(
+            &occurrence.resolution,
+            Resolution::UnsupportedVersion {
+                scope: VersionScope::KnownCommit { .. }
+            }
+        );
         if (!external && !historical)
             || matches!(
-                resolution.and_then(|value| value.text("reason")),
-                Some("intersphinx-inventory" | "site-build")
+                &occurrence.resolution,
+                Resolution::External {
+                    reason: ExternalResolutionReason::IntersphinxInventory
+                        | ExternalResolutionReason::SiteBuild
+                }
             )
         {
             continue;
         }
         let destination = occurrence
-            .text("external_destination")
+            .external_destination
+            .as_deref()
             .filter(|value| !value.is_empty());
-        let document = occurrence
-            .text("document")
-            .filter(|value| !value.is_empty());
+        let document = match &occurrence.document {
+            RepoPath::Text(path) => Some(path.as_str()),
+            RepoPath::Bytes(_) => None,
+        };
         let scheme = if historical {
             Some("https")
         } else {
             occurrence
-                .member("intent")
-                .and_then(|intent| intent.text("external_scheme"))
+                .intent
+                .external_scheme
+                .as_deref()
                 .filter(|value| !value.is_empty())
         };
         let (Some(destination), Some(document), Some(scheme)) = (destination, document, scheme)

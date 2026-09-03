@@ -12,7 +12,9 @@ use amiss_wire::external::{
     parse_evidence, parse_plan, plan,
 };
 use amiss_wire::json::Value;
-use amiss_wire::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
+use amiss_wire::report::PAYLOAD_SCHEMA;
+
+const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
 fn object(members: Vec<(&str, Value)>) -> Value {
     let mut members: Vec<(String, Value)> = members
@@ -83,36 +85,111 @@ fn row(base: Value, candidate: Value) -> Value {
     object(vec![("base", base), ("candidate", candidate)])
 }
 
-/// A minimal report holding only what the derivation reads, with a true
-/// digest, so every test exercises the same trust path the command does.
 fn report(observations: Vec<Value>) -> Value {
-    let payload = object(vec![
-        ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string(amiss_wire::report::COMPATIBILITY)),
-        (
-            "result",
-            object(vec![
-                ("complete", Value::Bool(true)),
-                ("status", string("pass")),
-                ("exit_code", Value::Integer(0)),
-            ]),
-        ),
-        (
-            "evaluation",
-            object(vec![
-                ("base", object(vec![("commit_oid", string("a"))])),
-                ("candidate", object(vec![("commit_oid", string("b"))])),
-                ("mode", string("commit-pair")),
-            ]),
-        ),
-        ("observations", Value::array(observations)),
-    ]);
-    let digest = hj(PAYLOAD_SCHEMA, &payload);
-    object(vec![
-        ("schema", string(ENVELOPE_SCHEMA)),
-        ("payload", payload),
-        ("payload_digest", string(&digest.to_string())),
-    ])
+    let mut document: serde_json::Value =
+        serde_json::from_slice(REPORT).expect("the report example is valid JSON");
+    let examples = document
+        .pointer("/payload/observations")
+        .and_then(serde_json::Value::as_array)
+        .expect("the report example has observations");
+    let resolved = examples
+        .first()
+        .and_then(|row| row.get("candidate"))
+        .expect("the report example has a resolved occurrence")
+        .clone();
+    let external = examples
+        .get(1)
+        .expect("the report example has an external comparison")
+        .clone();
+    let external_occurrence = external
+        .get("candidate")
+        .expect("the external comparison has a candidate")
+        .clone();
+    let rows = observations
+        .into_iter()
+        .map(|row| {
+            let supplied: serde_json::Value =
+                serde_json::from_slice(&amiss_wire::json::canonical(&row))
+                    .expect("the test comparison is JSON");
+            let mut comparison = external.clone();
+            for side in ["base", "candidate"] {
+                let expanded = expand_occurrence(
+                    supplied.get(side).expect("the comparison has both sides"),
+                    &resolved,
+                    &external_occurrence,
+                );
+                *comparison
+                    .get_mut(side)
+                    .expect("the example comparison has both sides") = expanded;
+            }
+            comparison
+        })
+        .collect();
+    *document
+        .pointer_mut("/payload/observations")
+        .expect("the report example has observations") = serde_json::Value::Array(rows);
+    let bytes = refresh_payload_digest(&mut document, PAYLOAD_SCHEMA);
+    amiss_wire::json::parse(&bytes).expect("the completed test report is strict JSON")
+}
+
+fn expand_occurrence(
+    supplied: &serde_json::Value,
+    resolved: &serde_json::Value,
+    external: &serde_json::Value,
+) -> serde_json::Value {
+    if supplied.is_null() {
+        return serde_json::Value::Null;
+    }
+    let is_resolved = supplied
+        .pointer("/resolution/kind")
+        .and_then(|kind| kind.as_str())
+        == Some("resolved");
+    let mut occurrence = if is_resolved {
+        resolved.clone()
+    } else {
+        external.clone()
+    };
+    let supplied = supplied
+        .as_object()
+        .expect("the supplied occurrence is an object");
+    let occurrence_object = occurrence
+        .as_object_mut()
+        .expect("the example occurrence is an object");
+    occurrence_object.insert(
+        "document".to_owned(),
+        supplied
+            .get("document")
+            .expect("the supplied occurrence has a document")
+            .clone(),
+    );
+    match supplied.get("external_destination") {
+        Some(destination) => {
+            occurrence_object.insert("external_destination".to_owned(), destination.clone());
+        }
+        None => {
+            occurrence_object.remove("external_destination");
+        }
+    }
+    if let Some(intent) = supplied
+        .get("intent")
+        .and_then(serde_json::Value::as_object)
+    {
+        let target = occurrence_object
+            .get_mut("intent")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("the example occurrence has an intent");
+        target.extend(intent.clone());
+    }
+    if !is_resolved {
+        occurrence_object.insert(
+            "resolution".to_owned(),
+            supplied
+                .get("resolution")
+                .expect("the supplied occurrence has a resolution")
+                .clone(),
+        );
+    }
+    occurrence
 }
 
 fn planned(observations: Vec<Value>) -> Value {
@@ -405,25 +482,14 @@ fn a_tampered_payload_is_refused() {
 
 #[test]
 fn an_incomplete_report_is_refused() {
-    let payload = object(vec![
-        ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string(amiss_wire::report::COMPATIBILITY)),
-        (
-            "result",
-            object(vec![
-                ("complete", Value::Bool(false)),
-                ("status", string("incomplete")),
-                ("exit_code", Value::Integer(2)),
-            ]),
-        ),
-        ("observations", Value::array(Vec::new())),
-    ]);
-    let digest = hj(PAYLOAD_SCHEMA, &payload);
-    let envelope = object(vec![
-        ("schema", string(ENVELOPE_SCHEMA)),
-        ("payload", payload),
-        ("payload_digest", string(&digest.to_string())),
-    ]);
+    let mut document: serde_json::Value =
+        serde_json::from_slice(&amiss_wire::json::canonical(&report(Vec::new())))
+            .expect("the complete report is JSON");
+    document["payload"]["result"]["complete"] = serde_json::Value::Bool(false);
+    document["payload"]["result"]["status"] = serde_json::Value::String("incomplete".to_owned());
+    document["payload"]["result"]["exit_code"] = serde_json::Value::Number(2.into());
+    let envelope = amiss_wire::json::parse(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
+        .expect("the incomplete report is strict JSON");
     assert_eq!(
         plan(&envelope, "0.0.0", sample_digest()),
         Err(PlanDefect::Incomplete)
@@ -574,35 +640,16 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
         ),
     ];
     for (host, dialect, destination, expected) in cases {
-        let payload = object(vec![
-            ("schema", string(PAYLOAD_SCHEMA)),
-            ("compatibility", string(amiss_wire::report::COMPATIBILITY)),
-            (
-                "result",
-                object(vec![
-                    ("complete", Value::Bool(true)),
-                    ("status", string("pass")),
-                    ("exit_code", Value::Integer(0)),
-                ]),
-            ),
-            (
-                "evaluation",
-                object(vec![
-                    ("base", object(vec![("commit_oid", string("a"))])),
-                    ("candidate", object(vec![("commit_oid", string("b"))])),
-                    ("mode", string("commit-pair")),
-                    ("forge", string(dialect)),
-                    ("repository", object(vec![("host", string(host))])),
-                ]),
-            ),
-            ("observations", Value::array(introduced(destination))),
-        ]);
-        let digest = hj(PAYLOAD_SCHEMA, &payload);
-        let envelope = object(vec![
-            ("schema", string(ENVELOPE_SCHEMA)),
-            ("payload", payload),
-            ("payload_digest", string(&digest.to_string())),
-        ]);
+        let mut document: serde_json::Value = serde_json::from_slice(&amiss_wire::json::canonical(
+            &report(introduced(destination)),
+        ))
+        .expect("the complete report is JSON");
+        document["payload"]["evaluation"]["forge"] = serde_json::Value::String(dialect.to_owned());
+        document["payload"]["evaluation"]["repository"]["host"] =
+            serde_json::Value::String(host.to_owned());
+        let envelope =
+            amiss_wire::json::parse(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
+                .expect("the declared-host report is strict JSON");
         let derived = plan(&envelope, "0.0.0", sample_digest())
             .expect("the declared-host report yields a plan");
         let repository = repository_of(&derived, destination).expect("the declared host is shaped");

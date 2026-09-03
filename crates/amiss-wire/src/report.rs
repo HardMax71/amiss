@@ -140,7 +140,14 @@ pub enum ReportDefect {
 /// compatibility, payload digest, or result tuple do not hold.
 pub fn validate_envelope(
     envelope: &Value,
-) -> Result<(&Value, &str, crate::ExitClass), ReportDefect> {
+) -> Result<
+    (
+        model::ReportPayload,
+        crate::digest::Digest,
+        crate::ExitClass,
+    ),
+    ReportDefect,
+> {
     if envelope.text("schema") != Some(ENVELOPE_SCHEMA) {
         return Err(ReportDefect::NotAReport);
     }
@@ -180,7 +187,10 @@ pub fn validate_envelope(
         }
         (_, _, _) => return Err(ReportDefect::InvalidResult),
     };
-    Ok((payload, recorded, verdict))
+    let typed: model::ReportPayload = serde_json::from_slice(&crate::json::canonical(payload))
+        .map_err(|_defect| ReportDefect::NotAReport)?;
+    let recorded = crate::digest::Digest::from_wire(recorded).ok_or(ReportDefect::NotAReport)?;
+    Ok((typed, recorded, verdict))
 }
 
 fn object(members: Vec<(&str, Value)>) -> Value {

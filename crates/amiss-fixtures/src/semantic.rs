@@ -1,55 +1,39 @@
-use amiss_wire::json::Value as WireValue;
+use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::ArtifactId;
+use amiss_wire::report::{
+    PAYLOAD_SCHEMA,
+    model::{Controls, ReportEnvelope, SemanticEvidenceProducer, SemanticEvidenceProvenance},
+};
+
+const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.canonical.json");
 
 /// Builds a digest-true passing report over the supplied semantic payloads.
 #[must_use]
-pub fn semantic_report(payload_digests: &[amiss_wire::digest::Digest]) -> Vec<u8> {
-    let semantic_evidence = payload_digests
-        .iter()
-        .map(|digest| {
-            WireValue::object(vec![(
-                "payload_digest".to_owned(),
-                WireValue::string(digest.to_string()),
-            )])
-        })
-        .collect();
-    let payload = WireValue::object(vec![
-        (
-            "compatibility".to_owned(),
-            WireValue::string(amiss_wire::report::COMPATIBILITY.to_owned()),
-        ),
-        (
-            "controls".to_owned(),
-            WireValue::object(vec![(
-                "semantic_evidence".to_owned(),
-                WireValue::array(semantic_evidence),
-            )]),
-        ),
-        (
-            "result".to_owned(),
-            WireValue::object(vec![
-                ("complete".to_owned(), WireValue::Bool(true)),
-                ("exit_code".to_owned(), WireValue::Integer(0)),
-                ("status".to_owned(), WireValue::string("pass".to_owned())),
-            ]),
-        ),
-        (
-            "schema".to_owned(),
-            WireValue::string(amiss_wire::report::PAYLOAD_SCHEMA.to_owned()),
-        ),
-    ]);
-    amiss_wire::json::canonical(&WireValue::object(vec![
-        ("payload".to_owned(), payload.clone()),
-        (
-            "payload_digest".to_owned(),
-            WireValue::string(
-                amiss_wire::digest::hj(amiss_wire::report::PAYLOAD_SCHEMA, &payload).to_string(),
-            ),
-        ),
-        (
-            "schema".to_owned(),
-            WireValue::string(amiss_wire::report::ENVELOPE_SCHEMA.to_owned()),
-        ),
-    ]))
+pub fn semantic_report(payload_digests: &[Digest]) -> Option<Vec<u8>> {
+    let mut report: ReportEnvelope = serde_json::from_slice(REPORT).ok()?;
+    let Controls::Resolved(controls) = &mut report.payload.controls else {
+        return None;
+    };
+    let kind = ArtifactId::new("record-set".to_owned())?;
+    let identity = ArtifactId::new("fixture".to_owned())?;
+    controls.semantic_evidence = Some(
+        payload_digests
+            .iter()
+            .copied()
+            .map(|payload_digest| SemanticEvidenceProvenance {
+                payload_digest,
+                producer: SemanticEvidenceProducer {
+                    identity: identity.clone(),
+                    input_digest: payload_digest,
+                    kind: kind.clone(),
+                    version: "1".to_owned(),
+                },
+            })
+            .collect(),
+    );
+    let payload = serde_json_canonicalizer::to_vec(&report.payload).ok()?;
+    report.payload_digest = hb(PAYLOAD_SCHEMA, &payload);
+    serde_json_canonicalizer::to_vec(&report).ok()
 }
 
 /// Builds one record-set semantic observation.

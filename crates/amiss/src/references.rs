@@ -50,8 +50,11 @@ fn matching_occurrences<'report>(
     envelope: &'report Value,
     target: &RepoPath,
 ) -> Result<Vec<&'report Value>, String> {
-    let (payload, _digest, _verdict) =
+    let (_payload, _digest, _verdict) =
         validate_envelope(envelope).map_err(|error| error.to_string())?;
+    let payload = envelope
+        .member("payload")
+        .ok_or_else(|| ReportDefect::NotAReport.to_string())?;
     if payload
         .member("result")
         .and_then(|result| result.member("complete"))

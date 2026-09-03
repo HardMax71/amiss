@@ -29,7 +29,6 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
     if verdict == amiss_wire::ExitClass::Failure {
         return Err(ArtifactError::Corrupt);
     }
-    let payload_digest = Digest::from_wire(payload_digest).ok_or(ArtifactError::Corrupt)?;
     let Value::Object(envelope) = report else {
         return Err(ArtifactError::Corrupt);
     };

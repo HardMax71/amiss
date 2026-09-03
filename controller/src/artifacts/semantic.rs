@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::json::{self, Value};
+use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
 use base64::Engine as _;
 use serde::Deserialize;
@@ -110,20 +110,13 @@ fn report_digests(report: &[u8]) -> Result<Vec<Digest>, ArtifactError> {
     let envelope = json::parse(report).map_err(|_defect| ArtifactError::Corrupt)?;
     let (payload, _digest, _verdict) = amiss_wire::report::validate_envelope(&envelope)
         .map_err(|_defect| ArtifactError::Corrupt)?;
-    let evidence = payload
-        .member("controls")
-        .and_then(|controls| controls.member("semantic_evidence"));
-    let Some(evidence) = evidence else {
+    let amiss_wire::report::model::Controls::Resolved(controls) = payload.controls else {
         return Ok(Vec::new());
     };
-    let Value::Array(rows) = evidence else {
-        return Err(ArtifactError::Corrupt);
-    };
-    rows.iter()
-        .map(|row| {
-            row.text("payload_digest")
-                .and_then(Digest::from_wire)
-                .ok_or(ArtifactError::Corrupt)
-        })
-        .collect()
+    Ok(controls
+        .semantic_evidence
+        .unwrap_or_default()
+        .into_iter()
+        .map(|evidence| evidence.payload_digest)
+        .collect())
 }

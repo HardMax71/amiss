@@ -1,6 +1,7 @@
 mod controls;
 mod document;
 mod engine;
+mod envelope;
 mod error;
 mod evaluation;
 mod feedback;
@@ -12,6 +13,7 @@ mod summary;
 pub use controls::*;
 pub use document::*;
 pub use engine::*;
+pub use envelope::*;
 pub use error::*;
 pub use evaluation::*;
 pub use feedback::*;
