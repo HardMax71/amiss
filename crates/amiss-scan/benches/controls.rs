@@ -10,7 +10,9 @@ use amiss_scan::evaluate::claim_groups;
 use amiss_scan::policy::{InventoryState, effects};
 use amiss_scan::scan::SpanDisplay;
 use amiss_scan::{Includes, PolicySide};
-use amiss_wire::controls::{DocumentInclude, IncludeKind, ScannerPolicy};
+use amiss_wire::controls::{
+    DocumentInclude, IncludeKind, ScannerPolicy, ScannerPolicySchema, canonical_scanner_policy,
+};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use divan::{Bencher, black_box};
@@ -93,7 +95,7 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
     } else {
         Box::new(0..count)
     };
-    let document_includes = indexes
+    let mut document_includes = indexes
         .map(|index| DocumentInclude {
             path: RepoPathText::new(format!("roots/{index:06}"))
                 .expect("valid benchmark include path"),
@@ -101,11 +103,22 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
             suffix: None,
             adapter: None,
         })
-        .collect();
-    let policy = ScannerPolicy::new(document_includes, Vec::new(), Vec::new(), Vec::new())
-        .expect("benchmark policy is valid");
+        .collect::<Vec<_>>();
+    document_includes.sort_by(|left, right| {
+        (left.path.as_str(), left.kind).cmp(&(right.path.as_str(), right.kind))
+    });
+    let policy = ScannerPolicy {
+        schema: ScannerPolicySchema::Current,
+        document_includes,
+        projection_assertions: Some(Vec::new()),
+        protected_inventory: Vec::new(),
+        finding_dispositions: Vec::new(),
+    };
+    let digest = canonical_scanner_policy(&policy)
+        .expect("benchmark policy is valid")
+        .1;
     PolicySide {
-        digest: Some(policy.digest()),
+        digest: Some(digest),
         policy: Some(policy),
     }
 }

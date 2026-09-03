@@ -1,11 +1,9 @@
 use std::io::Write as _;
 
-use amiss_wire::json::{self, Value};
-
-pub(crate) fn write_json(value: &Value) -> std::io::Result<()> {
+pub(crate) fn write_json(bytes: &[u8]) -> std::io::Result<()> {
     let stdout = std::io::stdout();
     let mut output = std::io::BufWriter::new(stdout.lock());
-    output.write_all(&json::canonical(value))?;
+    output.write_all(bytes)?;
     output.write_all(b"\n")?;
     output.flush()
 }

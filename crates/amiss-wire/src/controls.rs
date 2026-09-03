@@ -42,10 +42,11 @@ pub use floor::{
 pub use policy::{
     BLOB_LINES_SOURCE, BlobLineSelection, DOCUMENT_SUFFIX_BYTES, DocumentInclude,
     FindingDisposition, NAMED_REGION_SOURCE, NamedRegionSelection, PREVIOUS_CODE_SINK,
-    ProjectionAssertion, ProjectionKind, ProjectionSource, RECORD_SET_SOURCE, RECORD_VALUE_SOURCE,
-    RecordSetSelection, RecordValueSelection, SOURCE_MARKER_BYTES, ScannerPolicy,
-    TREE_PATHS_SOURCE, TreePathSelection, check_projection_source, document_include_value,
-    parse_projection_source, projection_source_value,
+    ProjectionAssertion, ProjectionKind, ProjectionSink, ProjectionSource, RECORD_SET_SOURCE,
+    RECORD_VALUE_SOURCE, RecordSetSelection, RecordValueSelection, SOURCE_MARKER_BYTES,
+    ScannerPolicy, ScannerPolicySchema, TREE_PATHS_SOURCE, TreePathSelection,
+    canonical_scanner_policy, check_projection_source, parse_projection_source,
+    parse_scanner_policy, projection_source_value,
 };
 pub use resources::{ResourceName, ResourceNameIter};
 pub use taxonomy::{
@@ -153,10 +154,6 @@ fn in_bounds(resource: ResourceName, maximum: i64) -> bool {
     } else {
         maximum >= 0
     }
-}
-
-fn decode_path_set(path: &str, value: Value) -> Result<Vec<RepoPathText>, Error> {
-    decode_path_items(path, de::array(path, value)?)
 }
 
 fn decode_path_items(path: &str, raw: Vec<Value>) -> Result<Vec<RepoPathText>, Error> {

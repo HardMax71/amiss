@@ -46,8 +46,8 @@ pub fn json(bytes: &[u8]) {
 /// Panics when a control parser is nondeterministic.
 pub fn controls(bytes: &[u8]) {
     assert_eq!(
-        amiss_wire::controls::ScannerPolicy::parse(bytes),
-        amiss_wire::controls::ScannerPolicy::parse(bytes),
+        amiss_wire::controls::parse_scanner_policy(bytes),
+        amiss_wire::controls::parse_scanner_policy(bytes),
     );
     assert_eq!(
         amiss_wire::controls::OrganizationFloor::parse(bytes),

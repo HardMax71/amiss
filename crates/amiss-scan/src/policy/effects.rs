@@ -45,7 +45,7 @@ pub(super) fn disposition_rows(rows: &[FindingDisposition]) -> Vec<(FindingKind,
 
 fn raised(policy: Option<&ScannerPolicy>) -> Vec<(FindingKind, Disposition)> {
     policy.map_or_else(Vec::new, |policy| {
-        disposition_rows(policy.finding_dispositions())
+        disposition_rows(&policy.finding_dispositions)
     })
 }
 
@@ -189,21 +189,27 @@ pub fn effects(
     let mut controls: Vec<ControlSeed> = Vec::new();
     let base_policy = base.policy.as_ref();
     let candidate_policy = candidate.policy.as_ref();
-    let base_includes = base_policy.map_or(&[][..], ScannerPolicy::document_includes);
-    let base_inventory = base_policy.map_or(&[][..], ScannerPolicy::protected_inventory);
-    let base_assertions = base_policy.map_or(&[][..], ScannerPolicy::projection_assertions);
+    let base_includes = base_policy.map_or(&[][..], |policy| policy.document_includes.as_slice());
+    let base_inventory =
+        base_policy.map_or(&[][..], |policy| policy.protected_inventory.as_slice());
+    let base_assertions = base_policy
+        .and_then(|policy| policy.projection_assertions.as_ref())
+        .map(Vec::as_slice)
+        .unwrap_or_default();
     let candidate_includes: BTreeMap<(&str, IncludeKind), &DocumentInclude> = candidate_policy
-        .map_or(&[][..], ScannerPolicy::document_includes)
+        .map_or(&[][..], |policy| policy.document_includes.as_slice())
         .iter()
         .map(|row| ((row.path.as_str(), row.kind), row))
         .collect();
     let candidate_inventory: BTreeSet<&str> = candidate_policy
-        .map_or(&[][..], ScannerPolicy::protected_inventory)
+        .map_or(&[][..], |policy| policy.protected_inventory.as_slice())
         .iter()
         .map(RepoPathText::as_str)
         .collect();
-    let candidate_assertions =
-        candidate_policy.map_or(&[][..], ScannerPolicy::projection_assertions);
+    let candidate_assertions = candidate_policy
+        .and_then(|policy| policy.projection_assertions.as_ref())
+        .map(Vec::as_slice)
+        .unwrap_or_default();
 
     for include in base_includes {
         let candidate = candidate_includes

@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap, parse_tree};
 use amiss_wire::controls::{
     DOCUMENT_SUFFIX_BYTES, GitMode, IncludeKind, ResourceName, SCANNER_POLICY_PATH, ScannerPolicy,
+    canonical_scanner_policy, parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::Digest;
@@ -43,7 +44,7 @@ impl Includes {
             let Some(policy) = &side.policy else {
                 continue;
             };
-            for include in policy.document_includes() {
+            for include in &policy.document_includes {
                 let path = RepoPath::from(&include.path);
                 if let Some(suffix) = &include.suffix {
                     merged
@@ -64,7 +65,7 @@ impl Includes {
             }
         }
         if let Some(policy) = candidate.policy.as_ref().or(base.policy.as_ref()) {
-            for include in policy.document_includes() {
+            for include in &policy.document_includes {
                 let Some(adapter) = include.adapter else {
                     continue;
                 };
@@ -292,13 +293,15 @@ pub fn acquire_entry(
     if lfs::is_pointer(&object.body) {
         return Err(invalid(Vec::new()));
     }
-    match ScannerPolicy::parse(&object.body) {
-        Ok(policy) => {
+    match parse_scanner_policy(&object.body)
+        .and_then(|policy| canonical_scanner_policy(&policy).map(|(_, digest)| (policy, digest)))
+    {
+        Ok((policy, digest)) => {
             let entries = [
-                policy.document_includes().len(),
-                policy.projection_assertions().len(),
-                policy.protected_inventory().len(),
-                policy.finding_dispositions().len(),
+                policy.document_includes.len(),
+                policy.projection_assertions.as_ref().map_or(0, Vec::len),
+                policy.protected_inventory.len(),
+                policy.finding_dispositions.len(),
             ]
             .iter()
             .map(|&len| u64::try_from(len).unwrap_or(u64::MAX))
@@ -317,7 +320,7 @@ pub fn acquire_entry(
                 }]);
             }
             Ok(PolicySide {
-                digest: Some(policy.digest()),
+                digest: Some(digest),
                 policy: Some(policy),
             })
         }

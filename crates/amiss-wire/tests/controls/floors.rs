@@ -1,6 +1,6 @@
 use amiss_wire::controls::{
     EligibleFindingKind, FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor,
-    ResourceName, ScannerPolicy,
+    ResourceName, canonical_scanner_policy, parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -55,7 +55,9 @@ fn parses_the_floor_fixture() {
     assert_eq!(expected, "explicit-target-missing");
     assert_ne!(
         floor.digest(),
-        ScannerPolicy::parse(POLICY).unwrap().digest()
+        canonical_scanner_policy(&parse_scanner_policy(POLICY).unwrap())
+            .unwrap()
+            .1
     );
 }
 

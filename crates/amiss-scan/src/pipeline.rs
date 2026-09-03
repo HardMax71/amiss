@@ -192,10 +192,10 @@ fn evaluate_projections(
         record_sets,
         outcomes,
     } = candidate;
-    let assertions = policy.map_or(
-        &[][..],
-        amiss_wire::controls::ScannerPolicy::projection_assertions,
-    );
+    let assertions = policy
+        .and_then(|policy| policy.projection_assertions.as_ref())
+        .map(Vec::as_slice)
+        .unwrap_or_default();
     for assertion in assertions {
         let document = RepoPath::from(&assertion.document);
         let outcome = crate::projection::evaluate(resolver, discovery, record_sets, assertion)

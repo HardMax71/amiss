@@ -7,8 +7,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use amiss_wire::controls::{
-    DOCUMENT_SUFFIX_BYTES, OrganizationFloor, SOURCE_MARKER_BYTES, ScannerPolicy,
-    parse_debt_snapshot, parse_execution_constraint, parse_trusted_time, parse_waiver_bundle,
+    DOCUMENT_SUFFIX_BYTES, OrganizationFloor, SOURCE_MARKER_BYTES, parse_debt_snapshot,
+    parse_execution_constraint, parse_trusted_time, parse_waiver_bundle,
 };
 use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::model::BranchRef;
@@ -84,7 +84,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         }
         "scanner-semantic-evidence" => parse_defect(amiss_wire::semantic::parse(bytes)),
         "scanner-semantic-template" => parse_defect(amiss_wire::semantic::parse_template(bytes)),
-        "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
+        "scanner-policy" => parse_defect(amiss_wire::controls::parse_scanner_policy(bytes)),
         "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
         "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
         "scanner-trusted-time-statement" => parse_defect(parse_trusted_time(bytes)),

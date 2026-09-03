@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use amiss_wire::controls::{DocumentInclude, IncludeKind, ScannerPolicy};
+use amiss_wire::controls::{
+    DocumentInclude, IncludeKind, ScannerPolicy, ScannerPolicySchema, canonical_scanner_policy,
+};
 use amiss_wire::model::{Adapter, RepoPath, RepoPathText};
 
 use super::super::arguments::Gathered;
@@ -129,18 +131,23 @@ pub(super) fn classify_policy_include(
         .unique_value()
         .and_then(|value| value.parse::<Adapter>().ok());
     let policy = match (path, suffix, adapter) {
-        (Some(path), Some(suffix), Some(adapter)) => ScannerPolicy::new(
-            vec![DocumentInclude {
-                path,
-                kind: IncludeKind::Tree,
-                suffix: Some(suffix),
-                adapter: Some(adapter),
-            }],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        )
-        .ok(),
+        (Some(path), Some(suffix), Some(adapter)) => {
+            let policy = ScannerPolicy {
+                schema: ScannerPolicySchema::Current,
+                document_includes: vec![DocumentInclude {
+                    path,
+                    kind: IncludeKind::Tree,
+                    suffix: Some(suffix),
+                    adapter: Some(adapter),
+                }],
+                projection_assertions: Some(Vec::new()),
+                protected_inventory: Vec::new(),
+                finding_dispositions: Vec::new(),
+            };
+            canonical_scanner_policy(&policy)
+                .map(|(_, digest)| (policy, digest))
+                .ok()
+        }
         (None, _, _) | (_, None, _) | (_, _, None) => None,
     };
     if policy.is_none() {
@@ -169,8 +176,12 @@ pub(super) fn classify_policy_include(
     }
 
     match (policy, preview) {
-        (Some(policy), Some(preview)) if codes.is_empty() => {
-            Ok(PolicyIncludeInvocation { policy, preview })
+        (Some((policy, policy_digest)), Some(preview)) if codes.is_empty() => {
+            Ok(PolicyIncludeInvocation {
+                policy,
+                policy_digest,
+                preview,
+            })
         }
         (_, _) => {
             codes.insert(Code::InvalidInvocation);
