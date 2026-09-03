@@ -284,6 +284,12 @@ still expose no such source. The controller neither starts mdBook nor treats rep
 cache state as authority. The acquisition boundary keeps candidate output out of a startup plan
 and keeps the scanner from searching the repository for evidence.
 
+Site evidence may be complete while its route graph is internally defective. Those defects become
+ordinary `site-build-defect` findings: a broken redirect records its source, route, destination,
+claim digest, and reason, while duplicate ownership records the route plus the sorted distinct
+claim digests and repository sources. Generated routes have no repository source, so a duplicate
+route's source list may be empty even when its claim list is not.
+
 The bound-envelope schema and checked example are
 [`scanner-semantic-evidence.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-semantic-evidence.schema.json)
 and

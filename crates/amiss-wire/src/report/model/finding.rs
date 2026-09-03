@@ -28,6 +28,19 @@ pub enum RepositoryIntentKind {
     RepositoryPath,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum EmptyRepositoryPath {
+    #[serde(rename = "")]
+    Empty,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum RepositoryIntentPath {
+    Empty(EmptyRepositoryPath),
+    Path(RepoPath),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RepositoryTargetIntent {
     #[serde(
@@ -39,7 +52,7 @@ pub struct RepositoryTargetIntent {
     #[serde(deserialize_with = "Option::deserialize")]
     pub fragment_digest: Option<Digest>,
     pub kind: RepositoryIntentKind,
-    pub path: RepoPath,
+    pub path: RepositoryIntentPath,
     #[serde(deserialize_with = "Option::deserialize")]
     pub query_digest: Option<Digest>,
     pub target_kind: TargetKind,
@@ -120,6 +133,15 @@ pub enum ClaimObserved {
     TargetAbsent,
     TargetLfsPointer,
     TargetNotABlob,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum BrokenRedirectReason {
+    AmbiguousRoute,
+    MissingAnchor,
+    MissingRoute,
+    NonterminalRedirect,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -238,6 +260,13 @@ pub enum ExceptionDiagnostic {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum FindingFactEvidence {
+    BrokenRedirect {
+        claim_digest: Digest,
+        destination: String,
+        reason: BrokenRedirectReason,
+        route: String,
+        source: RepoPath,
+    },
     Claim {
         claim_kind: ClaimKind,
         expected_digest: Digest,
@@ -266,6 +295,11 @@ pub enum FindingFactEvidence {
     },
     Document {
         document_result: DocumentResult,
+    },
+    DuplicateRoute {
+        claim_digests: Vec<Digest>,
+        route: String,
+        sources: Vec<RepoPath>,
     },
     Observation {
         comparison: Box<ObservationComparison>,

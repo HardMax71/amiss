@@ -15,6 +15,7 @@ use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity,
 };
+use amiss_wire::report::validate_envelope;
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,
     SnapshotRequest, SuppliedControl, SuppliedSemanticEvidence, commit_candidate_identity_digest,
@@ -47,6 +48,21 @@ fn run(repo: Option<&str>, input: &[u8]) -> std::process::Output {
         .write_all(input)
         .expect("write request frame");
     child.wait_with_output().expect("collect sealed engine")
+}
+
+fn contract_report(bytes: &[u8]) -> serde_json::Value {
+    let strict = amiss_wire::json::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap();
+    validate_envelope(&strict).unwrap();
+    let envelope: serde_json::Value = serde_json::from_slice(bytes).unwrap();
+    let schema: serde_json::Value =
+        serde_json::from_str(include_str!("../../../../spec/scanner-report.schema.json")).unwrap();
+    let validator = jsonschema::validator_for(&schema).unwrap();
+    let defects: Vec<String> = validator
+        .iter_errors(&envelope)
+        .map(|error| format!("{}: {error}", error.instance_path()))
+        .collect();
+    assert!(defects.is_empty(), "{defects:?}");
+    envelope
 }
 
 fn example_streams() -> RequestStreams {
@@ -324,7 +340,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
-    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let envelope = contract_report(&output.stdout);
     let labels: Vec<&serde_json::Value> = envelope["payload"]["observations"]
         .as_array()
         .unwrap()
@@ -431,7 +447,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
-    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let envelope = contract_report(&output.stdout);
     assert_site_routes(&envelope);
     assert_unlinked(&envelope, &["docs/index.md"]);
     assert_site_defects(&envelope);
