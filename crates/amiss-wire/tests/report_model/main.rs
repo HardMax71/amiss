@@ -1,7 +1,8 @@
 use amiss_wire::report::model::{
-    AnalysisError, Controls, DocumentResult, Engine, Evaluation, Feedback, Finding,
-    MissingResolution, ObservationComparison, ReportEnvelope, Resolution, ResolutionTarget,
-    Summary, VersionScope,
+    AnalysisError, Controls, DocumentResult, Engine, Evaluation, ExceptionDiagnostic, Feedback,
+    Finding, FindingFactEvidence, FindingKeyScope, MissingResolution, ObservationComparison,
+    ProjectionDifference, ProjectionSource, ReportEnvelope, Resolution, ResolutionTarget, Summary,
+    VersionScope,
 };
 
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
@@ -26,18 +27,16 @@ fn published_provenance_blocks_match_the_models() {
 }
 
 #[test]
-fn report_without_finding_rows_streams_in_canonical_order() {
-    let mut envelope: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
-    envelope.payload.findings.clear();
+fn entire_report_streams_in_canonical_order() {
+    let envelope: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
     assert_eq!(
         serde_json::to_vec(&envelope).unwrap(),
-        serde_json_canonicalizer::to_vec(&envelope).unwrap(),
+        REPORT.strip_suffix(b"\n").unwrap_or(REPORT),
     );
 }
 
 #[test]
-fn every_observation_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::error::Error>>
-{
+fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::error::Error>> {
     const DIGEST: &str = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     const OID: &str = "0000000000000000000000000000000000000000";
 
@@ -74,6 +73,48 @@ fn every_observation_variant_streams_in_canonical_order() -> Result<(), Box<dyn 
         r#"{"kind":"unsupported-version","scope":{"kind":"unknown-path"}}"#,
     ] {
         assert_canonical::<Resolution>(wire)?;
+    }
+    for template in [
+        r#"{"control_path":null,"kind":"control","rule_id":"rule"}"#,
+        r#"{"document":"a.md","kind":"document"}"#,
+        r#"{"kind":"observation","observation_id":"$digest"}"#,
+        r#"{"document":"a.md","kind":"reference","normalized_target_intent":{"fragment_digest":null,"kind":"repository-path","path":"a.md","query_digest":null,"target_kind":"blob"},"occurrence":{"kind":"source-projection","source_projection_digest":"$digest"},"source_construct":"markdown-inline-link"}"#,
+    ] {
+        assert_canonical::<FindingKeyScope>(&template.replace("$digest", DIGEST))?;
+    }
+    for wire in [
+        r#"{"first_line":1,"kind":"blob-lines","last_line":2,"path":"a.md"}"#,
+        r#"{"end_marker":"end","kind":"named-region","path":"a.md","start_marker":"start"}"#,
+        r#"{"kind":"record-set","set":"records"}"#,
+        r#"{"key":"name","kind":"record-value","set":"records"}"#,
+        r#"{"kind":"tree-paths","maximum_depth":1,"root":"docs"}"#,
+    ] {
+        assert_canonical::<ProjectionSource>(wire)?;
+    }
+    for wire in [
+        r#"{"expected_count":1,"kind":"count","observed_count":null}"#,
+        r#"{"expected_records":1,"extra_omitted":0,"extra_preview":[],"extra_records":0,"kind":"rows","missing_omitted":0,"missing_preview":[],"missing_records":0,"observed_records":1,"ordering_only":false}"#,
+    ] {
+        assert_canonical::<ProjectionDifference>(wire)?;
+    }
+    for template in [
+        r#"{"accepted_fact_digest":"$digest","adoption_tree":{"object_format":"sha1","tree_oid":"$oid"},"created_at":"2026-01-01T00:00:00Z","current_fact_digest":"$digest","debt_id":"debt","debt_snapshot_digest":"$digest","expires_at":"2026-01-02T00:00:00Z","kind":"debt","owner":"team:docs","reason":"reason"}"#,
+        r#"{"authorized_fact_digest":"$digest","candidate_tree":{"object_format":"sha1","tree_oid":"$oid"},"created_at":"2026-01-01T00:00:00Z","current_fact_digest":null,"expires_at":"2026-01-02T00:00:00Z","finding_key":"$digest","issuer":"service:amiss","kind":"waiver","not_before":"2026-01-01T00:00:00Z","owner":"team:docs","reason":"reason","residual_disposition":"warn","waiver_bundle_digest":"$digest","waiver_id":"waiver"}"#,
+    ] {
+        let wire = template.replace("$digest", DIGEST).replace("$oid", OID);
+        assert_canonical::<ExceptionDiagnostic>(&wire)?;
+    }
+    for template in [
+        r#"{"claim_digest":"$digest","destination":"/new","kind":"broken-redirect","reason":"missing-route","route":"/old","source":"a.md"}"#,
+        r#"{"claim_kind":"value","expected_digest":"$digest","kind":"claim","line":1,"name":"version","observed":"line-differs","observed_digest":null,"sources":[],"target_path":"a.md"}"#,
+        r#"{"base_control_digest":null,"base_control_state":null,"candidate_control_digest":null,"candidate_control_state":null,"control_path":null,"exception":null,"kind":"control","rule_id":"rule"}"#,
+        r#"{"document_result":{"base":null,"candidate":null,"change":"unchanged","classification":"structured-markdown","path":"a.md"},"kind":"document"}"#,
+        r#"{"claim_digests":["$digest"],"kind":"duplicate-route","route":"/docs","sources":["a.md"]}"#,
+        r#"{"comparison":{"alternatives":{"base":[],"candidate":[]},"base":null,"candidate":null,"correlation":"none","correlation_reason":"new-observation","impact":"not-applicable","source_change":"unknown","target_change":"not-comparable"},"kind":"observation"}"#,
+        r#"{"expected_bytes":null,"expected_digest":null,"kind":"projection","name":"names","observed":"sink-absent","observed_bytes":null,"observed_digest":null,"projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"record-set","set":"records"},"sources":[]}"#,
+        r#"{"kind":"reference","occurrence_multiplicity":1,"resolution":{"kind":"external","reason":"url"}}"#,
+    ] {
+        assert_canonical::<FindingFactEvidence>(&template.replace("$digest", DIGEST))?;
     }
     Ok(())
 }

@@ -58,22 +58,50 @@ pub struct RepositoryTargetIntent {
     pub target_kind: TargetKind,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ControlFindingKeyScopeKind {
+    #[serde(rename = "control")]
+    Control,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DocumentFindingKeyScopeKind {
+    #[serde(rename = "document")]
+    Document,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObservationFindingKeyScopeKind {
+    #[serde(rename = "observation")]
+    Observation,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReferenceFindingKeyScopeKind {
+    #[serde(rename = "reference")]
+    Reference,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(untagged)]
 pub enum FindingKeyScope {
     Control {
         #[serde(deserialize_with = "Option::deserialize")]
         control_path: Option<RepoPath>,
+        kind: ControlFindingKeyScopeKind,
         rule_id: String,
     },
     Document {
         document: RepoPath,
+        kind: DocumentFindingKeyScopeKind,
     },
     Observation {
+        kind: ObservationFindingKeyScopeKind,
         observation_id: Digest,
     },
     Reference {
         document: RepoPath,
+        kind: ReferenceFindingKeyScopeKind,
         normalized_target_intent: RepositoryTargetIntent,
         occurrence: ReferenceOccurrence,
         source_construct: SourceConstruct,
@@ -144,27 +172,62 @@ pub enum BrokenRedirectReason {
     NonterminalRedirect,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BlobLinesProjectionSourceKind {
+    #[serde(rename = "blob-lines")]
+    BlobLines,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NamedRegionProjectionSourceKind {
+    #[serde(rename = "named-region")]
+    NamedRegion,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RecordSetProjectionSourceKind {
+    #[serde(rename = "record-set")]
+    RecordSet,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RecordValueProjectionSourceKind {
+    #[serde(rename = "record-value")]
+    RecordValue,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TreePathsProjectionSourceKind {
+    #[serde(rename = "tree-paths")]
+    TreePaths,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(untagged)]
 pub enum ProjectionSource {
     BlobLines {
         first_line: u64,
+        kind: BlobLinesProjectionSourceKind,
         last_line: u64,
         path: RepoPathText,
     },
     NamedRegion {
         end_marker: String,
+        kind: NamedRegionProjectionSourceKind,
         path: RepoPathText,
         start_marker: String,
     },
     RecordSet {
+        kind: RecordSetProjectionSourceKind,
         set: ArtifactId,
     },
     RecordValue {
         key: String,
+        kind: RecordValueProjectionSourceKind,
         set: ArtifactId,
     },
     TreePaths {
+        kind: TreePathsProjectionSourceKind,
         maximum_depth: u64,
         root: RepoPathText,
         #[serde(
@@ -204,11 +267,24 @@ pub enum ProjectionObserved {
     SourceTreeRootNotATree,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum CountProjectionDifferenceKind {
+    #[serde(rename = "count")]
+    Count,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RowsProjectionDifferenceKind {
+    #[serde(rename = "rows")]
+    Rows,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(untagged)]
 pub enum ProjectionDifference {
     Count {
         expected_count: u64,
+        kind: CountProjectionDifferenceKind,
         #[serde(deserialize_with = "Option::deserialize")]
         observed_count: Option<u64>,
     },
@@ -217,6 +293,7 @@ pub enum ProjectionDifference {
         extra_omitted: u64,
         extra_preview: Vec<String>,
         extra_records: u64,
+        kind: RowsProjectionDifferenceKind,
         missing_omitted: u64,
         missing_preview: Vec<String>,
         missing_records: u64,
@@ -225,8 +302,20 @@ pub enum ProjectionDifference {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DebtExceptionDiagnosticKind {
+    #[serde(rename = "debt")]
+    Debt,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WaiverExceptionDiagnosticKind {
+    #[serde(rename = "waiver")]
+    Waiver,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(untagged)]
 pub enum ExceptionDiagnostic {
     Debt {
         accepted_fact_digest: Digest,
@@ -236,6 +325,7 @@ pub enum ExceptionDiagnostic {
         debt_id: ArtifactId,
         debt_snapshot_digest: Digest,
         expires_at: UtcInstant,
+        kind: DebtExceptionDiagnosticKind,
         owner: OwnerId,
         reason: String,
     },
@@ -248,6 +338,7 @@ pub enum ExceptionDiagnostic {
         expires_at: UtcInstant,
         finding_key: Digest,
         issuer: OwnerId,
+        kind: WaiverExceptionDiagnosticKind,
         not_before: UtcInstant,
         owner: OwnerId,
         reason: String,
@@ -257,12 +348,61 @@ pub enum ExceptionDiagnostic {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BrokenRedirectFactEvidenceKind {
+    #[serde(rename = "broken-redirect")]
+    BrokenRedirect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ClaimFactEvidenceKind {
+    #[serde(rename = "claim")]
+    Claim,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ControlFactEvidenceKind {
+    #[serde(rename = "control")]
+    Control,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DocumentFactEvidenceKind {
+    #[serde(rename = "document")]
+    Document,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DuplicateRouteFactEvidenceKind {
+    #[serde(rename = "duplicate-route")]
+    DuplicateRoute,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ObservationFactEvidenceKind {
+    #[serde(rename = "observation")]
+    Observation,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProjectionFactEvidenceKind {
+    #[serde(rename = "projection")]
+    Projection,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ReferenceFactEvidenceKind {
+    #[serde(rename = "reference")]
+    Reference,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(untagged)]
 pub enum FindingFactEvidence {
     BrokenRedirect {
         claim_digest: Digest,
         destination: String,
+        kind: BrokenRedirectFactEvidenceKind,
         reason: BrokenRedirectReason,
         route: String,
         source: RepoPath,
@@ -270,6 +410,7 @@ pub enum FindingFactEvidence {
     Claim {
         claim_kind: ClaimKind,
         expected_digest: Digest,
+        kind: ClaimFactEvidenceKind,
         line: u64,
         name: String,
         observed: ClaimObserved,
@@ -291,18 +432,22 @@ pub enum FindingFactEvidence {
         control_path: Option<RepoPath>,
         #[serde(deserialize_with = "Option::deserialize")]
         exception: Option<Box<ExceptionDiagnostic>>,
+        kind: ControlFactEvidenceKind,
         rule_id: String,
     },
     Document {
         document_result: DocumentResult,
+        kind: DocumentFactEvidenceKind,
     },
     DuplicateRoute {
         claim_digests: Vec<Digest>,
+        kind: DuplicateRouteFactEvidenceKind,
         route: String,
         sources: Vec<RepoPath>,
     },
     Observation {
         comparison: Box<ObservationComparison>,
+        kind: ObservationFactEvidenceKind,
     },
     Projection {
         #[serde(
@@ -315,6 +460,7 @@ pub enum FindingFactEvidence {
         expected_bytes: Option<u64>,
         #[serde(deserialize_with = "Option::deserialize")]
         expected_digest: Option<Digest>,
+        kind: ProjectionFactEvidenceKind,
         name: String,
         observed: ProjectionObserved,
         #[serde(deserialize_with = "Option::deserialize")]
@@ -327,6 +473,7 @@ pub enum FindingFactEvidence {
         sources: Vec<ControlStateSource>,
     },
     Reference {
+        kind: ReferenceFactEvidenceKind,
         occurrence_multiplicity: u64,
         resolution: Resolution,
     },
