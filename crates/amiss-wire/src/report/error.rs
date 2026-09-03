@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumIter, IntoEnumIterator, IntoStaticStr};
 
 use crate::json::Value;
@@ -57,8 +58,9 @@ const INTERNAL: AnalysisRoute = AnalysisRoute {
 
 declare_taxonomy! {
     /// The closed analysis-error codes in schema declaration order.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumIter, IntoStaticStr)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumIter, IntoStaticStr, Serialize, Deserialize)]
     #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
+    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
     pub enum AnalysisErrorCode {
         InvalidInvocation => {
             meaning: "the command line does not match the closed grammar; each documented option appears at most once and nothing else is accepted",

@@ -283,8 +283,11 @@ pub enum GitMode {
     Gitlink,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumIter, IntoStaticStr)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumIter, IntoStaticStr, Serialize, Deserialize,
+)]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum ContentAvailability {
     Available,
     NotRead,
