@@ -43,17 +43,18 @@ travel as a plain string; anything else travels as `{"bytes_hex": "..."}` naming
 bytes as lowercase hex. A writer never uses the object form for bytes that decode as
 text, so every derived digest stays whole.
 
-`external_destination` holds a URL only when its resolution delegates evidence to another layer:
-an external URL or a same-repository exact commit whose required local objects are unavailable.
-The occurrence keeps the URL after the format's own decoding so that
+`external_destination` holds the URL retained by an external or unavailable historical resolution.
+Most such URLs delegate evidence to another layer: an external URL or a same-repository exact
+commit whose required local objects are unavailable. The occurrence keeps the URL after the
+format's own decoding so that
 `https://example.com/x?a=1&amp;b=2` is recorded as the address a fetcher would request rather
 than as the bytes the source spells. A locally resolved or disproved historical target has no
 delegated destination. An ordinary external URL raises no finding and the summary counts it under
 `external_out_of_scope`, because the engine never fetched it and so decided nothing. A Sphinx
-label resolved through candidate-bound inventory evidence instead carries
-`reason: "intersphinx-inventory"` and counts as resolved. A generated route proved by complete
-site-build evidence similarly carries `reason: "site-build"`, counts as resolved, and has no
-`external_destination` because it delegates no network request.
+label resolved through candidate-bound inventory evidence carries both the selected destination
+and `reason: "intersphinx-inventory"`, but counts as resolved and is not delegated again. A
+generated route proved by complete site-build evidence similarly carries `reason: "site-build"`,
+counts as resolved, and has no `external_destination` because it names no external target.
 [The external plan](external-plan.md) derives the introduced and removed destinations from
 a written report, and [Amiss and link checkers](comparison.md) shows the pipe that hands
 them to the tool that does fetch.
@@ -116,7 +117,9 @@ And one finding row from a real failing run, abridged to its skeleton:
 
 Findings are sorted by finding key, a domain-separated hash of kind plus scope. Every
 immutable commit identity is part of that scope, so equal paths in two commits remain different
-targets for correlation, findings, debt, and waivers. Every
+targets for correlation, findings, debt, and waivers. A reference kind with no repository-path
+component retains the empty-string sentinel in `normalized_target_intent.path`; a repository path
+uses the ordinary text-or-byte path form. Every
 finding and error row carries a `description`: the fixed engine-owned sentence for its
 kind or code, stating what the row means and what to do about it, so no consumer needs a
 second source to act on a report. Beside it sits `fix`, a machine-applicable rewrite or

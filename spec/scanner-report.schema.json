@@ -3085,7 +3085,7 @@
           "const": "repository-path"
         },
         "path": {
-          "$ref": "#/$defs/RepoPath"
+          "$ref": "#/$defs/RepositoryIntentPath"
         },
         "target_kind": {
           "enum": [
@@ -3104,6 +3104,17 @@
           "$ref": "#/$defs/GitOid"
         }
       }
+    },
+    "RepositoryIntentPath": {
+      "oneOf": [
+        {
+          "const": ""
+        },
+        {
+          "$ref": "#/$defs/RepoPath"
+        }
+      ],
+      "description": "The normalized repository path, or the empty sentinel when the reference kind has no repository-path component."
     },
     "StructuralAddress": {
       "type": "object",
@@ -3298,7 +3309,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 16384,
-          "description": "The destination the parser publishes after the format's own decoding, which is what an evidence producer would request. Present exactly when the resolution is external or is an unavailable exact historical commit, so another layer can read the list without the tree."
+          "description": "The destination the parser publishes after the format's own decoding, which is what an evidence producer would request. Present for URL, foreign-repository, and inventory resolutions and for an unavailable exact historical commit; site-build evidence already resolved the generated target and carries no destination."
         }
       },
       "allOf": [
@@ -3311,10 +3322,18 @@
                     "properties": {
                       "kind": {
                         "const": "external"
+                      },
+                      "reason": {
+                        "enum": [
+                          "url",
+                          "foreign-repository",
+                          "intersphinx-inventory"
+                        ]
                       }
                     },
                     "required": [
-                      "kind"
+                      "kind",
+                      "reason"
                     ]
                   }
                 },
@@ -3890,6 +3909,84 @@
         },
         "document_result": {
           "$ref": "#/$defs/DocumentResult"
+        }
+      }
+    },
+    "BrokenRedirectFactEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "claim_digest",
+        "destination",
+        "reason",
+        "route",
+        "source"
+      ],
+      "properties": {
+        "kind": {
+          "const": "broken-redirect"
+        },
+        "claim_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "destination": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20481
+        },
+        "reason": {
+          "enum": [
+            "ambiguous-route",
+            "missing-anchor",
+            "missing-route",
+            "nonterminal-redirect"
+          ]
+        },
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "source": {
+          "$ref": "#/$defs/RepoPath"
+        }
+      }
+    },
+    "DuplicateRouteFactEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "claim_digests",
+        "route",
+        "sources"
+      ],
+      "properties": {
+        "kind": {
+          "const": "duplicate-route"
+        },
+        "claim_digests": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Digest"
+          }
+        },
+        "route": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 16384
+        },
+        "sources": {
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/RepoPath"
+          }
         }
       }
     },
@@ -4721,6 +4818,12 @@
             },
             {
               "$ref": "#/$defs/ProjectionFactEvidence"
+            },
+            {
+              "$ref": "#/$defs/BrokenRedirectFactEvidence"
+            },
+            {
+              "$ref": "#/$defs/DuplicateRouteFactEvidence"
             }
           ]
         }
