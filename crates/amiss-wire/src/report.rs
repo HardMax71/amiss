@@ -70,6 +70,7 @@ mod error;
 mod failure;
 mod fatal;
 mod finding;
+pub mod model;
 mod sandbox;
 
 use crate::digest::hj;
