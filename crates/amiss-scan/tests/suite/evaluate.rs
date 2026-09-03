@@ -630,8 +630,10 @@ fn owner(raw: &str) -> amiss_wire::model::OwnerId {
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn tree() -> amiss_wire::model::TreeIdentity {
-    amiss_wire::model::TreeIdentity::new(ObjectFormat::Sha1, "a".repeat(40))
-        .expect("a tree identity")
+    amiss_wire::model::TreeIdentity {
+        object_format: ObjectFormat::Sha1,
+        tree_oid: Oid::new(ObjectFormat::Sha1, "a".repeat(40)).expect("a tree identity"),
+    }
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
@@ -641,30 +643,44 @@ fn moment(raw: &str) -> amiss_wire::model::UtcInstant {
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn waived_fact() -> amiss_wire::controls::Fact {
-    let scope = amiss_wire::controls::FindingScope {
-        document: amiss_wire::model::RepoPathText::new("d.md".to_owned()).expect("path"),
-        source_construct: SourceConstruct::InlineLink,
-        normalized_target_intent: amiss_wire::controls::TargetIntent {
-            commit_oid: None,
-            path: amiss_wire::model::RepoPathText::new("absent.md".to_owned()).expect("path"),
-            target_kind: TargetKind::Either,
-            query_digest: None,
-            fragment_digest: None,
-        },
-        source_projection_digest: hb("amiss/scanner-source-projection", b"block"),
-    };
-    amiss_wire::controls::Fact::new(
-        amiss_wire::controls::FindingKeyInput {
+    amiss_wire::controls::Fact {
+        schema: amiss_wire::controls::FactSchema::Current,
+        finding_kind: amiss_wire::controls::EligibleFindingKind::ExplicitTargetMissing,
+        key_input: amiss_wire::controls::FindingKeyInput {
+            schema: amiss_wire::controls::FindingKeyInputSchema::Current,
             finding_kind: amiss_wire::controls::EligibleFindingKind::ExplicitTargetMissing,
-            scope,
+            scope: amiss_wire::controls::FindingScope {
+                kind: amiss_wire::controls::ReferenceScopeKind::Reference,
+                document: amiss_wire::model::RepoPathText::new("d.md".to_owned()).expect("path"),
+                source_construct: SourceConstruct::InlineLink,
+                normalized_target_intent: amiss_wire::controls::TargetIntent {
+                    kind: amiss_wire::controls::TargetIntentKind::RepositoryPath,
+                    commit_oid: None,
+                    path: amiss_wire::model::RepoPathText::new("absent.md".to_owned())
+                        .expect("path"),
+                    target_kind: TargetKind::Either,
+                    query_digest: None,
+                    fragment_digest: None,
+                },
+                occurrence: amiss_wire::controls::FindingOccurrence {
+                    kind: amiss_wire::controls::OccurrenceKind::SourceProjection,
+                    source_projection_digest: hb("amiss/scanner-source-projection", b"block"),
+                },
+            },
         },
-        amiss_wire::resolution::Resolution::Missing(Missing::PathNotFound {
-            path: amiss_wire::model::RepoPathText::new("absent.md".to_owned()).expect("path"),
-            near: None,
-            same_object_at: None,
-        }),
-    )
-    .expect("a structural fact")
+        evidence: amiss_wire::controls::FactEvidence {
+            kind: amiss_wire::controls::FactEvidenceKind::Reference,
+            resolution: amiss_wire::controls::StructuralResolution::Missing(
+                amiss_wire::controls::MissingResolution::PathNotFound {
+                    path: amiss_wire::model::RepoPathText::new("absent.md".to_owned())
+                        .expect("path"),
+                    near: None,
+                    same_object_at: None,
+                },
+            ),
+            occurrence_multiplicity: 1,
+        },
+    }
 }
 
 /// A waiver is live from its activation instant, not one tick after it.
@@ -683,6 +699,7 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         created_at: moment("2026-07-01T00:00:00Z"),
         not_before: instant.clone(),
         expires_at: moment("2026-08-01T00:00:00Z"),
+        residual_disposition: amiss_wire::controls::WaiverResidualDisposition::Warn,
     };
     let statement = amiss_wire::controls::TrustedTimeStatement {
         schema: amiss_wire::controls::TrustedTimeSchema::Current,

@@ -2,8 +2,12 @@ use std::fs;
 use std::process::ExitCode;
 
 use amiss_scan::report::Built;
-use amiss_wire::controls::DebtSnapshot;
+use amiss_wire::controls::{
+    DebtItem, DebtSnapshot, DebtSnapshotSchema, canonical_debt_snapshot, parse_fact,
+};
+use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
+use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, OwnerId, TreeIdentity, UtcInstant};
 
 use crate::invocation::{Adoption, Invocation, ProviderIdentity};
 use crate::payload::{member, text};
@@ -28,19 +32,19 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         println!("amiss adopt: the output path already exists; nothing recorded");
         return ExitCode::FAILURE;
     }
-    let (items, ineligible, factless) = items(&built.envelope, adoption);
+    let Ok((items, ineligible, factless)) = items(&built.envelope, adoption) else {
+        println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
+        return ExitCode::from(2);
+    };
     let recorded = items.len();
     let Some(snapshot) = snapshot(&built.envelope, identity, adoption, built, items) else {
         println!("amiss adopt: the report carries no candidate tree; nothing recorded");
         return ExitCode::from(2);
     };
-    let bytes = amiss_wire::json::canonical(&snapshot);
-    // The engine's own reader is the gate: a file it would refuse is never
-    // written.
-    if DebtSnapshot::parse(&bytes).is_err() {
+    let Ok((bytes, _digest)) = canonical_debt_snapshot(&snapshot) else {
         println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
         return ExitCode::from(2);
-    }
+    };
     // Exclusive creation closes the race the early existence check leaves.
     let written = fs::OpenOptions::new()
         .write(true)
@@ -64,7 +68,10 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
 /// Every blocking, debt-eligible finding becomes one item carrying the fact
 /// the adoption accepts; blocking rows outside the eligible kinds are
 /// counted and left to be fixed instead.
-fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize, usize) {
+fn items(envelope: &Value, adoption: &Adoption) -> Result<(Vec<DebtItem>, usize, usize), ()> {
+    let owner = OwnerId::new(adoption.owner.clone()).ok_or(())?;
+    let created_at = UtcInstant::new(adoption.created_at.clone()).ok_or(())?;
+    let expires_at = UtcInstant::new(adoption.expires_at.clone()).ok_or(())?;
     let mut rows = Vec::new();
     let mut ineligible = 0_usize;
     let mut factless = 0_usize;
@@ -96,27 +103,18 @@ fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize, usize) {
             continue;
         };
         let full = key.strip_prefix("sha256:").unwrap_or(key);
-        rows.push(Value::object(vec![
-            ("debt_id".to_owned(), Value::string(format!("debt/{full}"))),
-            ("finding_key".to_owned(), Value::string(key.to_owned())),
-            ("accepted_fact".to_owned(), fact.clone()),
-            (
-                "accepted_fact_digest".to_owned(),
-                Value::string(fact_digest.to_owned()),
-            ),
-            ("owner".to_owned(), Value::string(adoption.owner.clone())),
-            ("reason".to_owned(), Value::string(adoption.reason.clone())),
-            (
-                "created_at".to_owned(),
-                Value::string(adoption.created_at.clone()),
-            ),
-            (
-                "expires_at".to_owned(),
-                Value::string(adoption.expires_at.clone()),
-            ),
-        ]));
+        rows.push(DebtItem {
+            debt_id: ArtifactId::new(format!("debt/{full}")).ok_or(())?,
+            finding_key: Digest::from_wire(key).ok_or(())?,
+            accepted_fact: parse_fact(&amiss_wire::json::canonical(fact)).map_err(|_defect| ())?,
+            accepted_fact_digest: Digest::from_wire(fact_digest).ok_or(())?,
+            owner: owner.clone(),
+            reason: adoption.reason.clone(),
+            created_at: created_at.clone(),
+            expires_at: expires_at.clone(),
+        });
     }
-    (rows, ineligible, factless)
+    Ok((rows, ineligible, factless))
 }
 
 fn snapshot(
@@ -124,61 +122,30 @@ fn snapshot(
     identity: &ProviderIdentity,
     adoption: &Adoption,
     built: &Built,
-    items: Vec<Value>,
-) -> Option<Value> {
+    items: Vec<DebtItem>,
+) -> Option<DebtSnapshot> {
     let candidate = member(envelope, "payload")
         .and_then(|payload| member(payload, "evaluation"))
         .and_then(|evaluation| member(evaluation, "candidate"))?;
-    let tree = member(candidate, "tree_oid").and_then(text)?;
-    let object_format = member(candidate, "object_format").and_then(text)?;
-    Some(Value::object(vec![
-        (
-            "schema".to_owned(),
-            Value::string("amiss/debt-snapshot".to_owned()),
-        ),
-        (
-            "repository".to_owned(),
-            Value::object(vec![
-                (
-                    "host".to_owned(),
-                    Value::string(identity.repository.host().to_owned()),
-                ),
-                (
-                    "owner".to_owned(),
-                    Value::string(identity.repository.owner().to_owned()),
-                ),
-                (
-                    "name".to_owned(),
-                    Value::string(identity.repository.name().to_owned()),
-                ),
-            ]),
-        ),
-        (
-            "ref".to_owned(),
-            Value::string(identity.ref_name.as_str().to_owned()),
-        ),
-        (
-            "organization_floor_digest".to_owned(),
-            Value::string(adoption.floor_digest.clone()),
-        ),
-        (
-            "adoption_tree".to_owned(),
-            Value::object(vec![
-                (
-                    "object_format".to_owned(),
-                    Value::string(object_format.to_owned()),
-                ),
-                ("tree_oid".to_owned(), Value::string(tree.to_owned())),
-            ]),
-        ),
-        (
-            "adoption_report_payload_digest".to_owned(),
-            Value::string(built.payload_digest.to_string()),
-        ),
-        (
-            "created_at".to_owned(),
-            Value::string(adoption.created_at.clone()),
-        ),
-        ("items".to_owned(), Value::array(items)),
-    ]))
+    let object_format = member(candidate, "object_format")
+        .and_then(text)?
+        .parse::<ObjectFormat>()
+        .ok()?;
+    let tree_oid = Oid::new(
+        object_format,
+        member(candidate, "tree_oid").and_then(text)?.to_owned(),
+    )?;
+    Some(DebtSnapshot {
+        schema: DebtSnapshotSchema::Current,
+        repository: identity.repository.clone(),
+        ref_name: identity.ref_name.clone(),
+        organization_floor_digest: Digest::from_wire(&adoption.floor_digest)?,
+        adoption_tree: TreeIdentity {
+            object_format,
+            tree_oid,
+        },
+        adoption_report_payload_digest: built.payload_digest,
+        created_at: UtcInstant::new(adoption.created_at.clone())?,
+        items,
+    })
 }

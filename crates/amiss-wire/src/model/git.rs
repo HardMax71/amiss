@@ -66,31 +66,11 @@ pub enum ObjectFormat {
     Sha256,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct TreeIdentity {
-    oid: Oid,
-}
-
-impl TreeIdentity {
-    #[must_use]
-    pub fn new(object_format: ObjectFormat, tree_oid: String) -> Option<Self> {
-        Oid::new(object_format, tree_oid).map(|oid| Self { oid })
-    }
-
-    #[must_use]
-    pub const fn object_format(&self) -> ObjectFormat {
-        self.oid.object_format()
-    }
-
-    #[must_use]
-    pub fn tree_oid(&self) -> &str {
-        self.oid.as_str()
-    }
-
-    #[must_use]
-    pub const fn oid(&self) -> &Oid {
-        &self.oid
-    }
+    pub object_format: ObjectFormat,
+    pub tree_oid: Oid,
 }
 
 /// Full lowercase object ID for one declared object format.

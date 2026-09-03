@@ -7,7 +7,9 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{DebtInput, FloorInput, TimeInput};
 use amiss_scan::report::{CandidateBlock, Setup, SnapshotIdentity, candidate_identity_digest};
-use amiss_wire::controls::{DebtSnapshot, OrganizationFloor, parse_trusted_time};
+use amiss_wire::controls::{
+    OrganizationFloor, canonical_debt_snapshot, parse_debt_snapshot, parse_trusted_time,
+};
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
@@ -119,8 +121,8 @@ fn a_minted_snapshot_clears_its_own_reader_and_schema() {
     let (code, stdout, _stderr) = amiss(&shown);
     assert_eq!(code, 0, "{}", String::from_utf8(stdout).unwrap());
     let bytes = fs::read(&path).unwrap();
-    let snapshot = DebtSnapshot::parse(&bytes).unwrap();
-    assert_eq!(snapshot.items().len(), 1);
+    let snapshot = parse_debt_snapshot(&bytes).unwrap();
+    assert_eq!(snapshot.items.len(), 1);
     let schema: serde_json::Value = serde_json::from_slice(
         &fs::read(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -148,7 +150,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
     let shown: Vec<&str> = args.iter().map(String::as_str).collect();
     let (code, _stdout, _stderr) = amiss(&shown);
     assert_eq!(code, 0);
-    let snapshot = DebtSnapshot::parse(&fs::read(&path).unwrap()).unwrap();
+    let snapshot = parse_debt_snapshot(&fs::read(&path).unwrap()).unwrap();
 
     let repo = Repository::open(minted.chain.root(), ObjectFormat::Sha1).unwrap();
     let base = Oid::new(ObjectFormat::Sha1, minted.base.clone()).unwrap();
@@ -200,6 +202,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         candidate_identity_digest(&time_setup)
     );
     let statement = parse_trusted_time(statement.as_bytes()).unwrap();
+    let debt_digest = canonical_debt_snapshot(&snapshot).unwrap().1;
     let shell = amiss_scan::pipeline::SetupShell {
         engine,
         profile: amiss_wire::controls::Profile::Enforce,
@@ -214,6 +217,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         }),
         debt: Some(DebtInput {
             snapshot,
+            digest: debt_digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         }),
         waiver: None,
@@ -284,8 +288,8 @@ fn an_ineligible_blocking_finding_is_counted_not_recorded() {
         "{shown}"
     );
     assert!(shown.contains("0 eligible rows skipped"), "{shown}");
-    let snapshot = DebtSnapshot::parse(&fs::read(&path).unwrap()).unwrap();
-    assert!(snapshot.items().is_empty());
+    let snapshot = parse_debt_snapshot(&fs::read(&path).unwrap()).unwrap();
+    assert!(snapshot.items.is_empty());
 }
 
 /// An existing output path refuses the mint and keeps its bytes.

@@ -9,8 +9,10 @@ use amiss_scan::policy::{DebtContext, Effects, TimeContext};
 use amiss_scan::resolve::Intent;
 use amiss_scan::scan::SpanDisplay;
 use amiss_wire::controls::{
-    DebtItem, EligibleFindingKind, Fact, FindingKeyInput, FindingScope, SourceConstruct,
-    TargetIntent, TargetKind, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
+    DebtItem, EligibleFindingKind, Fact, FactEvidence, FactEvidenceKind, FactSchema,
+    FindingKeyInput, FindingKeyInputSchema, FindingOccurrence, FindingScope, MissingResolution,
+    OccurrenceKind, ReferenceScopeKind, SourceConstruct, StructuralResolution, TargetIntent,
+    TargetIntentKind, TargetKind, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
     canonical_trusted_time,
 };
 use amiss_wire::digest::hb;
@@ -109,30 +111,40 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
     let document = repo_path(document_text.clone());
     let target = repo_path(target_text.clone());
     let projection_digest = hb("amiss/scanner-source-projection", b"reference");
-    let key_input = FindingKeyInput {
+    let fact = Fact {
+        schema: FactSchema::Current,
         finding_kind: EligibleFindingKind::ExplicitTargetMissing,
-        scope: FindingScope {
-            document: repo_path_text(document_text),
-            source_construct: SourceConstruct::InlineLink,
-            normalized_target_intent: TargetIntent {
-                commit_oid: None,
-                path: repo_path_text(target_text.clone()),
-                target_kind: TargetKind::Either,
-                query_digest: None,
-                fragment_digest: None,
+        key_input: FindingKeyInput {
+            schema: FindingKeyInputSchema::Current,
+            finding_kind: EligibleFindingKind::ExplicitTargetMissing,
+            scope: FindingScope {
+                kind: ReferenceScopeKind::Reference,
+                document: repo_path_text(document_text),
+                source_construct: SourceConstruct::InlineLink,
+                normalized_target_intent: TargetIntent {
+                    kind: TargetIntentKind::RepositoryPath,
+                    commit_oid: None,
+                    path: repo_path_text(target_text.clone()),
+                    target_kind: TargetKind::Either,
+                    query_digest: None,
+                    fragment_digest: None,
+                },
+                occurrence: FindingOccurrence {
+                    kind: OccurrenceKind::SourceProjection,
+                    source_projection_digest: projection_digest,
+                },
             },
-            source_projection_digest: projection_digest,
+        },
+        evidence: FactEvidence {
+            kind: FactEvidenceKind::Reference,
+            resolution: StructuralResolution::Missing(MissingResolution::PathNotFound {
+                path: repo_path_text(target_text.clone()),
+                near: None,
+                same_object_at: None,
+            }),
+            occurrence_multiplicity: 1,
         },
     };
-    let fact = Fact::new(
-        key_input,
-        Resolution::<RepoPathText>::Missing(Missing::PathNotFound {
-            path: repo_path_text(target_text.clone()),
-            near: None,
-            same_object_at: None,
-        }),
-    )
-    .unwrap_or_else(|| panic!("benchmark structural fact"));
     let observation = Observation {
         id: hb("amiss/bench-exception-observation", token.as_bytes()),
         adapter_contract_digest: hb("amiss/bench-adapter-contract", b"markdown"),
@@ -193,6 +205,9 @@ fn instant(raw: &str) -> UtcInstant {
 }
 
 fn tree(fill: &str) -> TreeIdentity {
-    TreeIdentity::new(ObjectFormat::Sha1, fill.repeat(40))
-        .unwrap_or_else(|| panic!("benchmark tree"))
+    TreeIdentity {
+        object_format: ObjectFormat::Sha1,
+        tree_oid: amiss_wire::model::Oid::new(ObjectFormat::Sha1, fill.repeat(40))
+            .unwrap_or_else(|| panic!("benchmark tree")),
+    }
 }

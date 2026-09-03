@@ -7,8 +7,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use amiss_wire::controls::{
-    DOCUMENT_SUFFIX_BYTES, DebtSnapshot, OrganizationFloor, SOURCE_MARKER_BYTES, ScannerPolicy,
-    WaiverBundle, parse_execution_constraint, parse_trusted_time,
+    DOCUMENT_SUFFIX_BYTES, OrganizationFloor, SOURCE_MARKER_BYTES, ScannerPolicy,
+    parse_debt_snapshot, parse_execution_constraint, parse_trusted_time, parse_waiver_bundle,
 };
 use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::model::BranchRef;
@@ -61,7 +61,7 @@ fn parse_defect<T, E: std::fmt::Debug>(result: Result<T, E>) -> Option<String> {
 
 fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
     match contract_name {
-        "debt-snapshot" => parse_defect(DebtSnapshot::parse(bytes)),
+        "debt-snapshot" => parse_defect(parse_debt_snapshot(bytes)),
         "locale-coverage-assessment" => parse_defect(amiss_wire::locale::parse_assessment(bytes)),
         "locale-coverage-evidence" => parse_defect(amiss_wire::locale::parse_evidence(bytes)),
         "locale-coverage-plan" => parse_defect(amiss_wire::locale::parse_plan(bytes)),
@@ -88,7 +88,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
         "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
         "scanner-trusted-time-statement" => parse_defect(parse_trusted_time(bytes)),
-        "waiver-bundle" => parse_defect(WaiverBundle::parse(bytes)),
+        "waiver-bundle" => parse_defect(parse_waiver_bundle(bytes)),
         _ => Some("no authoritative example reader is registered".to_owned()),
     }
 }

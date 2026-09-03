@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{self, Error, ErrorKind};
 use crate::digest::{Digest, hb};
 use crate::json::MAX_SAFE_INTEGER;
 use crate::model::{ArtifactId, BranchRef, RepositoryIdentity, UtcInstant};
 
-use super::{provider_run_id_valid, root};
+use super::{provider_run_id_valid, root, validate_instant, validate_repository};
 
 pub const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement";
 pub const TRUSTED_TIME_CONTROLLER: &str = "external-required-check-clock";
@@ -77,16 +77,7 @@ pub fn canonical_trusted_time(
 }
 
 fn validate_trusted_time(statement: &TrustedTimeStatement) -> Result<(), Error> {
-    if RepositoryIdentity::new(
-        statement.repository.host().to_owned(),
-        statement.repository.owner().to_owned(),
-        statement.repository.name().to_owned(),
-    )
-    .as_ref()
-        != Some(&statement.repository)
-    {
-        return fail("$.repository", ErrorKind::InvalidValue);
-    }
+    validate_repository("$.repository", &statement.repository)?;
     ArtifactId::new(statement.provider.clone())
         .is_some()
         .then_some(())
@@ -98,14 +89,8 @@ fn validate_trusted_time(statement: &TrustedTimeStatement) -> Result<(), Error> 
         .contains(&statement.provider_run_attempt)
         .then_some(())
         .ok_or_else(|| Error::new("$.provider_run_attempt", ErrorKind::InvalidValue))?;
-    for (path, instant) in [
-        ("$.evaluation_instant", &statement.evaluation_instant),
-        ("$.valid_until", &statement.valid_until),
-    ] {
-        if UtcInstant::new(instant.as_str().to_owned()).as_ref() != Some(instant) {
-            return fail(path, ErrorKind::InvalidValue);
-        }
-    }
+    validate_instant("$.evaluation_instant", &statement.evaluation_instant)?;
+    validate_instant("$.valid_until", &statement.valid_until)?;
     let lifetime = statement
         .valid_until
         .epoch_seconds()

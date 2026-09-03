@@ -260,8 +260,8 @@ pub(super) fn feedback_value(
 
 fn tree_identity_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
     object(vec![
-        ("object_format", string(tree.object_format().as_ref())),
-        ("tree_oid", string(tree.tree_oid())),
+        ("object_format", string(tree.object_format.as_ref())),
+        ("tree_oid", string(tree.tree_oid.as_str())),
     ])
 }
 

@@ -1,8 +1,11 @@
-use amiss_wire::controls::{DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, Fact};
+use amiss_wire::controls::{
+    DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, MissingResolution, StructuralResolution,
+    canonical_fact, parse_debt_snapshot,
+};
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::hj;
 use amiss_wire::json;
-use amiss_wire::resolution::{BlobContent, BlobMode, Missing, Resolution, Target};
+use amiss_wire::resolution::{BlobContent, BlobMode, Target};
 
 use crate::support::{
     PROJECTION_DIGEST, RAW_DIGEST, debt_item_json, debt_snapshot, fact_json_for, key_input_json,
@@ -41,7 +44,7 @@ fn parse_debt_fact(
         ("2026-07-01T00:00:00Z", "2026-08-01T00:00:00Z"),
     );
     let document = debt_snapshot("2026-07-02T00:00:00Z", &[item]);
-    DebtSnapshot::parse(document.as_bytes())
+    parse_debt_snapshot(document.as_bytes())
 }
 
 #[test]
@@ -61,13 +64,14 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         )
         .unwrap();
         assert_eq!(
-            parsed.items()[0]
+            parsed.items[0]
                 .accepted_fact
-                .key_input()
+                .key_input
                 .scope
                 .normalized_target_intent
                 .commit_oid
                 .as_ref()
+                .and_then(Option::as_ref)
                 .map(amiss_wire::model::Oid::as_str),
             Some(commit_oid.as_str())
         );
@@ -77,6 +81,23 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
     let defect = parse_debt_fact(
         "explicit-target-missing",
         &invalid,
+        r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
+    )
+    .unwrap_err();
+    assert_eq!(defect.kind, ErrorKind::InvalidValue);
+    assert!(
+        defect
+            .path
+            .ends_with(".normalized_target_intent.commit_oid")
+    );
+
+    let null = key_input_json("explicit-target-missing").replace(
+        "\"kind\": \"repository-path\",",
+        "\"kind\": \"repository-path\",\n      \"commit_oid\": null,",
+    );
+    let defect = parse_debt_fact(
+        "explicit-target-missing",
+        &null,
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
     )
     .unwrap_err();
@@ -103,12 +124,32 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
     )
     .unwrap();
     assert!(matches!(
-        path_missing.items()[0].accepted_fact.resolution(),
-        Resolution::Missing(Missing::PathNotFound {
+        &path_missing.items[0].accepted_fact.evidence.resolution,
+        StructuralResolution::Missing(MissingResolution::PathNotFound {
             path,
-            same_object_at: Some(moved),
+            same_object_at: Some(Some(moved)),
             ..
         }) if path.as_str() == "docs/missing.md" && moved.as_str() == "docs/moved.md"
+    ));
+
+    let explicit_null = parse_debt_fact_case(
+        "explicit-target-missing",
+        "explicit-target-missing",
+        r#"{
+          "kind": "missing",
+          "reason": "path-not-found",
+          "path": "docs/missing.md",
+          "near": null,
+          "same_object_at": null
+        }"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        &explicit_null.items[0].accepted_fact.evidence.resolution,
+        StructuralResolution::Missing(MissingResolution::PathNotFound {
+            same_object_at: Some(None),
+            ..
+        })
     ));
 
     let line_missing = parse_debt_fact_case(
@@ -122,8 +163,8 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
     )
     .unwrap();
     assert!(matches!(
-        line_missing.items()[0].accepted_fact.resolution(),
-        Resolution::Missing(Missing::LineFragmentOutOfRange { path })
+        &line_missing.items[0].accepted_fact.evidence.resolution,
+        StructuralResolution::Missing(MissingResolution::LineFragmentOutOfRange { path })
             if path.as_str() == "src/lib.rs"
     ));
 }
@@ -143,8 +184,9 @@ fn structural_resolution_facts_accept_typed_mismatch_targets() {
     )
     .unwrap();
     assert!(matches!(
-        tree_mismatch.items()[0].accepted_fact.resolution(),
-        Resolution::TypeMismatch(Target::Tree { path }) if path.as_str() == "docs"
+        &tree_mismatch.items[0].accepted_fact.evidence.resolution,
+        StructuralResolution::TypeMismatch { target: Target::Tree { path } }
+            if path.as_str() == "docs"
     ));
 
     let available_blob = parse_debt_fact_case(
@@ -168,8 +210,8 @@ fn structural_resolution_facts_accept_typed_mismatch_targets() {
     )
     .unwrap();
     assert!(matches!(
-        available_blob.items()[0].accepted_fact.resolution(),
-        Resolution::TypeMismatch(Target::Blob(blob))
+        &available_blob.items[0].accepted_fact.evidence.resolution,
+        StructuralResolution::TypeMismatch { target: Target::Blob(blob) }
             if blob.path.as_str() == "docs/guide.md"
                 && blob.mode == BlobMode::Regular
                 && matches!(blob.content, BlobContent::Available { raw_digest, projection_digest }
@@ -197,8 +239,8 @@ fn structural_resolution_facts_accept_typed_mismatch_targets() {
     )
     .unwrap();
     assert!(matches!(
-        lfs_blob.items()[0].accepted_fact.resolution(),
-        Resolution::TypeMismatch(Target::Blob(blob))
+        &lfs_blob.items[0].accepted_fact.evidence.resolution,
+        StructuralResolution::TypeMismatch { target: Target::Blob(blob) }
             if blob.path.as_str() == "assets/model.bin"
                 && blob.mode == BlobMode::Executable
                 && matches!(blob.content, BlobContent::LfsPointer { raw_digest }
@@ -354,24 +396,35 @@ fn structural_resolution_facts_reject_finding_kind_mismatches() {
 }
 
 #[test]
-fn structural_fact_constructor_rejects_invalid_programmatic_states() {
+fn structural_fact_validation_rejects_invalid_programmatic_states() {
     let parsed = parse_debt_fact_case(
         "explicit-target-missing",
         "explicit-target-missing",
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null}"#,
     )
     .unwrap();
-    let accepted = &parsed.items()[0].accepted_fact;
-    let key_input = accepted.key_input().clone();
-    let path = key_input.scope.normalized_target_intent.path.clone();
+    let accepted = &parsed.items[0].accepted_fact;
+    assert!(canonical_fact(accepted).is_ok());
 
-    assert!(Fact::new(key_input.clone(), accepted.resolution().clone()).is_some());
-    assert!(
-        Fact::new(
-            key_input.clone(),
-            Resolution::TypeMismatch(Target::Tree { path: path.clone() }),
-        )
-        .is_none()
+    let mut mismatched = accepted.clone();
+    mismatched.evidence.resolution = StructuralResolution::TypeMismatch {
+        target: Target::Tree {
+            path: mismatched
+                .key_input
+                .scope
+                .normalized_target_intent
+                .path
+                .clone(),
+        },
+    };
+    assert_eq!(
+        canonical_fact(&mismatched).unwrap_err().kind,
+        ErrorKind::Inconsistent
     );
-    assert!(Fact::new(key_input, Resolution::Resolved(Target::Tree { path })).is_none());
+
+    mismatched.finding_kind = amiss_wire::controls::EligibleFindingKind::ExplicitTargetTypeMismatch;
+    assert_eq!(
+        canonical_fact(&mismatched).unwrap_err().kind,
+        ErrorKind::Inconsistent
+    );
 }

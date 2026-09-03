@@ -4,7 +4,7 @@ use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
-use super::root;
+use super::{root, validate_repository};
 
 pub const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint";
 pub const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap";
@@ -123,16 +123,7 @@ pub fn canonical_execution_constraint(
 }
 
 fn validate_execution_constraint(descriptor: &ExecutionConstraintDescriptor) -> Result<(), Error> {
-    if RepositoryIdentity::new(
-        descriptor.action_repository.host().to_owned(),
-        descriptor.action_repository.owner().to_owned(),
-        descriptor.action_repository.name().to_owned(),
-    )
-    .as_ref()
-        != Some(&descriptor.action_repository)
-    {
-        return fail("$.action_repository", ErrorKind::InvalidValue);
-    }
+    validate_repository("$.action_repository", &descriptor.action_repository)?;
     for (path, oid) in [
         ("$.action_commit_oid", &descriptor.action_commit_oid),
         ("$.action_tree_oid", &descriptor.action_tree_oid),

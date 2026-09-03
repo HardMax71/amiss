@@ -1,7 +1,7 @@
 use amiss_wire::controls::{
-    DebtSnapshot, FloorDefect, OrganizationFloor, ResourceName, WaiverBundle,
-    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
-    parse_trusted_time,
+    FloorDefect, OrganizationFloor, ResourceName, canonical_debt_snapshot,
+    canonical_execution_constraint, canonical_trusted_time, canonical_waiver_bundle,
+    parse_debt_snapshot, parse_execution_constraint, parse_trusted_time, parse_waiver_bundle,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::Digest;
@@ -51,9 +51,10 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .debt_snapshot
         .as_ref()
         .map(|supplied| {
-            typed(supplied, DebtSnapshot::parse, DebtSnapshot::digest).map(
-                |(snapshot, trust_source)| DebtInput {
+            typed(supplied, parse_debt_snapshot, canonical_debt_snapshot).map(
+                |(snapshot, digest, trust_source)| DebtInput {
                     snapshot,
+                    digest,
                     trust_source,
                 },
             )
@@ -63,9 +64,10 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .waiver_bundle
         .as_ref()
         .map(|supplied| {
-            typed(supplied, WaiverBundle::parse, WaiverBundle::digest).map(
-                |(bundle, trust_source)| WaiverInput {
+            typed(supplied, parse_waiver_bundle, canonical_waiver_bundle).map(
+                |(bundle, digest, trust_source)| WaiverInput {
                     bundle,
+                    digest,
                     trust_source,
                 },
             )
@@ -145,15 +147,18 @@ fn floor_detail(error: FloorDefect) -> ErrorDetail {
 fn typed<T>(
     supplied: &SuppliedControl,
     parse: impl FnOnce(&[u8]) -> Result<T, Error>,
-    digest: impl FnOnce(&T) -> Digest,
-) -> Result<(T, RequestTrust), ErrorDetail> {
+    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), Error>,
+) -> Result<(T, Digest, RequestTrust), ErrorDetail> {
     let bytes = serde_json::to_vec(&supplied.value)
         .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
     let value = parse(&bytes).map_err(|error| configuration_detail(&error))?;
-    if digest(&value) != supplied.expected_digest {
+    let digest = canonical(&value)
+        .map_err(|error| configuration_detail(&error))?
+        .1;
+    if digest != supplied.expected_digest {
         return Err(code(AnalysisErrorCode::DigestMismatch));
     }
-    Ok((value, supplied.trust_source))
+    Ok((value, digest, supplied.trust_source))
 }
 
 /// Maps one strict external-input defect into the scanner's public analysis taxonomy.

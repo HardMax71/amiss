@@ -1,6 +1,6 @@
 use amiss_wire::controls::{
     EntryKind, FACT_DOMAIN, FINDING_KEY_DOMAIN, FindingScope, IncludeKind, PromotableFindingKind,
-    SourceConstruct, TargetKind, WaiverBundle,
+    SourceConstruct, TargetKind, WaiverBundleSchema, parse_waiver_bundle,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -31,14 +31,14 @@ fn roundtrip_scope(context: &str, edit: &dyn Fn(String) -> String) -> FindingSco
         &fact,
         "team:release-engineering",
     ));
-    let bundle = WaiverBundle::parse(waiver_bundle(&[item]).as_bytes())
+    let bundle = parse_waiver_bundle(waiver_bundle(&[item]).as_bytes())
         .unwrap_or_else(|error| panic!("{context} is a scope the bundle accepts: {error:?}"));
     bundle
-        .items()
+        .items
         .first()
         .unwrap()
         .authorized_fact
-        .key_input()
+        .key_input
         .scope
         .clone()
 }
@@ -76,22 +76,22 @@ fn waiver_instants_bind_at_their_exact_boundaries() {
     };
 
     let at_activation = waiver_bundle(&[item("2026-07-02T00:00:00Z", "2026-07-02T00:00:00Z")]);
-    WaiverBundle::parse(at_activation.as_bytes())
+    parse_waiver_bundle(at_activation.as_bytes())
         .expect("a waiver active from its creation instant is consistent");
 
     let at_bundle_instant = waiver_bundle(&[item("2026-07-03T00:00:00Z", "2026-07-03T00:00:00Z")]);
-    WaiverBundle::parse(at_bundle_instant.as_bytes())
+    parse_waiver_bundle(at_bundle_instant.as_bytes())
         .expect("an item created at the bundle instant is not from the future");
 
     let backdated = waiver_bundle(&[item("2026-07-02T00:00:01Z", "2026-07-02T00:00:00Z")]);
     assert_eq!(
-        WaiverBundle::parse(backdated.as_bytes()).unwrap_err().kind,
+        parse_waiver_bundle(backdated.as_bytes()).unwrap_err().kind,
         ErrorKind::Inconsistent
     );
 
     let from_the_future = waiver_bundle(&[item("2026-07-04T00:00:00Z", "2026-07-05T00:00:00Z")]);
     assert_eq!(
-        WaiverBundle::parse(from_the_future.as_bytes())
+        parse_waiver_bundle(from_the_future.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::Inconsistent
@@ -129,7 +129,7 @@ fn a_waiver_answers_for_every_spelling_its_scope_may_carry() {
             &fact,
             "team:release-engineering",
         ));
-        WaiverBundle::parse(waiver_bundle(&[item]).as_bytes())
+        parse_waiver_bundle(waiver_bundle(&[item]).as_bytes())
     };
 
     for (spelling, expected) in [("blob", TargetKind::Blob), ("tree", TargetKind::Tree)] {
@@ -140,9 +140,9 @@ fn a_waiver_answers_for_every_spelling_its_scope_may_carry() {
             )
         };
         let bundle = bundle_for(&edit).unwrap_or_else(|e| panic!("{spelling}: {e:?}"));
-        let kind = bundle.items().first().map(|item| {
+        let kind = bundle.items.first().map(|item| {
             item.authorized_fact
-                .key_input()
+                .key_input
                 .scope
                 .normalized_target_intent
                 .target_kind
@@ -170,9 +170,9 @@ fn a_waiver_answers_for_every_spelling_its_scope_may_carry() {
         )
     };
     let bundle = bundle_for(&carried).expect("a query digest is carried");
-    let got = bundle.items().first().and_then(|item| {
+    let got = bundle.items.first().and_then(|item| {
         item.authorized_fact
-            .key_input()
+            .key_input
             .scope
             .normalized_target_intent
             .query_digest
@@ -204,14 +204,14 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
 
     let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
     let doc = waiver_bundle(&[item]);
-    let bundle = WaiverBundle::parse(doc.as_bytes()).unwrap();
-    assert_eq!(bundle.schema(), "amiss/waiver-bundle");
-    assert_eq!(bundle.items().len(), 1);
+    let bundle = parse_waiver_bundle(doc.as_bytes()).unwrap();
+    assert_eq!(bundle.schema, WaiverBundleSchema::Current);
+    assert_eq!(bundle.items.len(), 1);
 
     let same_owner = waiver_item("waiver/one", &key, &fact, "team:docs-platform");
     let doc = waiver_bundle(&[same_owner]);
     assert!(
-        WaiverBundle::parse(doc.as_bytes()).is_ok(),
+        parse_waiver_bundle(doc.as_bytes()).is_ok(),
         "owner==issuer is a selected-item defect, not a parse defect"
     );
 
@@ -219,7 +219,7 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
     let second = waiver_item("waiver/two", &key, &fact, "team:release-engineering");
     let doc = waiver_bundle(&[first, second]);
     assert_eq!(
-        WaiverBundle::parse(doc.as_bytes()).unwrap_err().kind,
+        parse_waiver_bundle(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::DuplicateMember,
         "duplicate (candidate_tree, finding_key) pair"
     );
@@ -230,7 +230,7 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
     );
     let doc = waiver_bundle(&[bad_window]);
     assert_eq!(
-        WaiverBundle::parse(doc.as_bytes()).unwrap_err().kind,
+        parse_waiver_bundle(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::Inconsistent
     );
 
@@ -240,7 +240,7 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
     );
     let doc = waiver_bundle(&[bad_residual]);
     assert_eq!(
-        WaiverBundle::parse(doc.as_bytes()).unwrap_err().kind,
+        parse_waiver_bundle(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::InvalidValue
     );
 }

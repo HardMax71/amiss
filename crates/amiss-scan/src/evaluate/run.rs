@@ -174,11 +174,11 @@ pub(super) fn tree_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
     Value::object(vec![
         (
             "object_format".to_owned(),
-            Value::string(tree.object_format().as_ref().to_owned()),
+            Value::string(tree.object_format.as_ref().to_owned()),
         ),
         (
             "tree_oid".to_owned(),
-            Value::string(tree.tree_oid().to_owned()),
+            Value::string(tree.tree_oid.as_str().to_owned()),
         ),
     ])
 }

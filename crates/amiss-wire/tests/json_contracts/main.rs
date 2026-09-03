@@ -154,6 +154,24 @@ fn sealed_request_examples_match_their_typed_sources() {
 }
 
 #[test]
+fn exception_control_examples_match_their_typed_sources() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
+    let debt_bytes = fs::read(examples.join("debt-snapshot.json")).unwrap();
+    let debt = controls::parse_debt_snapshot(&debt_bytes).unwrap();
+    assert_eq!(
+        controls::canonical_debt_snapshot(&debt).unwrap().0,
+        json::canonical(&json::parse(&debt_bytes).unwrap())
+    );
+
+    let waiver_bytes = fs::read(examples.join("waiver-bundle.json")).unwrap();
+    let waiver = controls::parse_waiver_bundle(&waiver_bytes).unwrap();
+    assert_eq!(
+        controls::canonical_waiver_bundle(&waiver).unwrap().0,
+        json::canonical(&json::parse(&waiver_bytes).unwrap())
+    );
+}
+
+#[test]
 fn candidate_identity_examples_match_their_typed_source() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     for name in ["candidate-identity.json", "candidate-identity-index.json"] {

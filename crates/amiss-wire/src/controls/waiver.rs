@@ -1,18 +1,31 @@
 use std::collections::BTreeSet;
 
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::{Digest, hj};
-use crate::model::{
-    ArtifactId, BranchRef, ObjectFormat, OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant,
-};
+use serde::{Deserialize, Serialize};
 
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
+use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
+
+use super::fact::fact_digests;
 use super::{
-    Fact, WAIVER_BUNDLE_SCHEMA, decode_artifact_id, decode_branch_ref, decode_instant,
-    decode_items, decode_owner, decode_repository, decode_tree, item::decode_item_core, root,
-    sorted_set,
+    Fact, WAIVER_BUNDLE_SCHEMA, root, sorted_set, valid_reason, validate_instant, validate_owner,
+    validate_repository, validate_tree,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WaiverBundleSchema {
+    #[serde(rename = "amiss/waiver-bundle")]
+    Current,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WaiverResidualDisposition {
+    #[serde(rename = "warn")]
+    Warn,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WaiverItem {
     pub waiver_id: ArtifactId,
     pub finding_key: Digest,
@@ -25,140 +38,115 @@ pub struct WaiverItem {
     pub created_at: UtcInstant,
     pub not_before: UtcInstant,
     pub expires_at: UtcInstant,
+    pub residual_disposition: WaiverResidualDisposition,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WaiverBundle {
-    digest: Digest,
-    repository: RepositoryIdentity,
-    ref_name: BranchRef,
-    organization_floor_digest: Digest,
-    created_at: UtcInstant,
-    items: Vec<WaiverItem>,
+    pub schema: WaiverBundleSchema,
+    pub repository: RepositoryIdentity,
+    #[serde(rename = "ref")]
+    pub ref_name: BranchRef,
+    pub organization_floor_digest: Digest,
+    pub created_at: UtcInstant,
+    pub items: Vec<WaiverItem>,
 }
 
-impl WaiverBundle {
-    #[must_use]
-    pub const fn digest(&self) -> Digest {
-        self.digest
-    }
-
-    #[must_use]
-    pub fn repository(&self) -> &RepositoryIdentity {
-        &self.repository
-    }
-
-    #[must_use]
-    pub fn ref_name(&self) -> &BranchRef {
-        &self.ref_name
-    }
-
-    #[must_use]
-    pub const fn organization_floor_digest(&self) -> Digest {
-        self.organization_floor_digest
-    }
-
-    #[must_use]
-    pub fn created_at(&self) -> &UtcInstant {
-        &self.created_at
-    }
-
-    #[must_use]
-    pub fn items(&self) -> &[WaiverItem] {
-        &self.items
-    }
-
-    #[must_use]
-    pub const fn schema(&self) -> &'static str {
-        WAIVER_BUNDLE_SCHEMA
-    }
-
-    /// # Errors
-    ///
-    /// Fails on strict-JSON defects, schema-shape violations, embedded key or
-    /// fact digests that do not recompute, fact-kind/resolution inconsistencies,
-    /// causal time-order violations, duplicate waiver IDs, and duplicate
-    /// `(candidate_tree, finding_key)` pairs.
-    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let digest = hj(WAIVER_BUNDLE_SCHEMA, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, WAIVER_BUNDLE_SCHEMA)
-        })?;
-
-        let repository = obj.required("repository", decode_repository)?;
-        let ref_name = obj.required("ref", decode_branch_ref)?;
-        let organization_floor_digest = obj.required("organization_floor_digest", de::digest)?;
-        let created_at = obj.required("created_at", decode_instant)?;
-
-        let items_path = obj.field("items");
-        let raw = de::array(&items_path, obj.take("items")?)?;
-        let items = decode_items(&items_path, raw, 100_000, |path, value| {
-            let mut item = Obj::new(path, value)?;
-            let waiver_id = item.required("waiver_id", decode_artifact_id)?;
-            let core = decode_item_core(&mut item, "authorized_fact")?;
-            let candidate_tree = item.required("candidate_tree", decode_tree)?;
-            let issuer = item.required("issuer", decode_owner)?;
-            let not_before = item.required("not_before", decode_instant)?;
-            item.required("residual_disposition", |path, value| {
-                de::const_str(path, value, "warn")
-            })?;
-            item.finish()?;
-            (core.created_at <= not_before && not_before < core.expires_at)
-                .then_some(WaiverItem {
-                    waiver_id,
-                    finding_key: core.finding_key,
-                    authorized_fact: core.fact,
-                    authorized_fact_digest: core.fact_digest,
-                    candidate_tree,
-                    owner: core.owner,
-                    issuer,
-                    reason: core.reason,
-                    created_at: core.created_at,
-                    not_before,
-                    expires_at: core.expires_at,
-                })
-                .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
-        })?;
-        sorted_set(&items_path, &items, |a, b| {
-            waiver_sort_key(a).cmp(&waiver_sort_key(b))
-        })?;
-        for pair in items.windows(2) {
-            if let [left, right] = pair
-                && left.candidate_tree == right.candidate_tree
-                && left.finding_key == right.finding_key
-            {
-                return fail(&items_path, ErrorKind::DuplicateMember);
-            }
-        }
-        let mut ids: BTreeSet<&str> = BTreeSet::new();
-        for item in &items {
-            if !ids.insert(item.waiver_id.as_str()) {
-                return fail(&items_path, ErrorKind::DuplicateMember);
-            }
-            if item.created_at > created_at {
-                return fail(&items_path, ErrorKind::Inconsistent);
-            }
-        }
-
-        obj.finish()?;
-        Ok(Self {
-            digest,
-            repository,
-            ref_name,
-            organization_floor_digest,
-            created_at,
-            items,
-        })
-    }
+/// Parses and validates one waiver bundle.
+///
+/// # Errors
+///
+/// Fails on strict-JSON defects, schema-shape violations, embedded key or
+/// fact digests that do not recompute, fact-kind/resolution inconsistencies,
+/// causal time-order violations, duplicate waiver IDs, and duplicate
+/// `(candidate_tree, finding_key)` pairs.
+pub fn parse_waiver_bundle(bytes: &[u8]) -> Result<WaiverBundle, Error> {
+    root(bytes)?;
+    let bundle = de::deserialize_json(bytes)?;
+    validate_waiver_bundle(&bundle)?;
+    Ok(bundle)
 }
 
-fn waiver_sort_key(item: &WaiverItem) -> (ObjectFormat, &str, Digest, &str) {
-    (
-        item.candidate_tree.object_format(),
-        item.candidate_tree.tree_oid(),
-        item.finding_key,
-        item.waiver_id.as_str(),
-    )
+/// Produces one valid waiver bundle's canonical bytes and digest.
+///
+/// # Errors
+///
+/// A public field violates the same laws [`parse_waiver_bundle`] enforces, or
+/// the typed value cannot be serialized.
+pub fn canonical_waiver_bundle(bundle: &WaiverBundle) -> Result<(Vec<u8>, Digest), Error> {
+    validate_waiver_bundle(bundle)?;
+    let bytes = serde_json_canonicalizer::to_vec(bundle)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let digest = hb(WAIVER_BUNDLE_SCHEMA, &bytes);
+    Ok((bytes, digest))
+}
+
+fn validate_waiver_bundle(bundle: &WaiverBundle) -> Result<(), Error> {
+    validate_repository("$.repository", &bundle.repository)?;
+    validate_instant("$.created_at", &bundle.created_at)?;
+    if bundle.items.len() > 100_000 {
+        return fail("$.items", ErrorKind::LimitExceeded);
+    }
+    for (index, item) in bundle.items.iter().enumerate() {
+        validate_waiver_item(&format!("$.items[{index}]"), item)?;
+    }
+    sorted_set("$.items", &bundle.items, |left, right| {
+        (
+            left.candidate_tree.object_format,
+            left.candidate_tree.tree_oid.as_str(),
+            left.finding_key,
+            left.waiver_id.as_str(),
+        )
+            .cmp(&(
+                right.candidate_tree.object_format,
+                right.candidate_tree.tree_oid.as_str(),
+                right.finding_key,
+                right.waiver_id.as_str(),
+            ))
+    })?;
+    for pair in bundle.items.windows(2) {
+        if let [left, right] = pair
+            && left.candidate_tree == right.candidate_tree
+            && left.finding_key == right.finding_key
+        {
+            return fail("$.items", ErrorKind::DuplicateMember);
+        }
+    }
+    let mut ids = BTreeSet::new();
+    for item in &bundle.items {
+        if !ids.insert(item.waiver_id.as_str()) {
+            return fail("$.items", ErrorKind::DuplicateMember);
+        }
+        if item.created_at > bundle.created_at {
+            return fail("$.items", ErrorKind::Inconsistent);
+        }
+    }
+    Ok(())
+}
+
+fn validate_waiver_item(path: &str, item: &WaiverItem) -> Result<(), Error> {
+    let (finding_key, fact_digest) =
+        fact_digests(&format!("{path}.authorized_fact"), &item.authorized_fact)?;
+    if item.finding_key != finding_key {
+        return fail(&format!("{path}.finding_key"), ErrorKind::DigestMismatch);
+    }
+    if item.authorized_fact_digest != fact_digest {
+        return fail(
+            &format!("{path}.authorized_fact_digest"),
+            ErrorKind::DigestMismatch,
+        );
+    }
+    validate_tree(&format!("{path}.candidate_tree"), &item.candidate_tree)?;
+    validate_owner(&format!("{path}.owner"), &item.owner)?;
+    validate_owner(&format!("{path}.issuer"), &item.issuer)?;
+    if !valid_reason(&item.reason) {
+        return fail(&format!("{path}.reason"), ErrorKind::InvalidValue);
+    }
+    validate_instant(&format!("{path}.created_at"), &item.created_at)?;
+    validate_instant(&format!("{path}.not_before"), &item.not_before)?;
+    validate_instant(&format!("{path}.expires_at"), &item.expires_at)?;
+    (item.created_at <= item.not_before && item.not_before < item.expires_at)
+        .then_some(())
+        .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
 }
