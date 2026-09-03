@@ -1,6 +1,8 @@
 use std::{fs, path::Path};
 
-use amiss_wire::{controls, json, locale, manifest, publication, relation, requests, semantic};
+use amiss_wire::{
+    controls, external, json, locale, manifest, publication, relation, requests, semantic,
+};
 
 #[path = "../support/relation.rs"]
 mod relation_fixture;
@@ -17,6 +19,17 @@ fn the_release_manifest_example_matches_its_typed_source() {
     assert_eq!(
         digest,
         amiss_wire::digest::hj(manifest::MANIFEST_DOMAIN, &parsed_json)
+    );
+}
+
+#[test]
+fn the_external_plan_example_matches_its_typed_source() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
+    let external_plan_bytes = fs::read(examples.join("scanner-external-plan.json")).unwrap();
+    let external_plan = external::parse_plan(&external_plan_bytes).unwrap();
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&external_plan).unwrap(),
+        json::canonical(&json::parse(&external_plan_bytes).unwrap())
     );
 }
 

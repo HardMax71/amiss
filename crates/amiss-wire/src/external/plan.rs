@@ -1,12 +1,79 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::digest::hj;
-use crate::json::Value;
+use serde::{Deserialize, Serialize};
+
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::{Digest, hb, hj};
+use crate::json::{self, Value};
 use crate::model::ForgeDialect;
 use crate::report::validate_envelope;
 
-use super::{PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, object, string};
+use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalPlanEnvelope {
+    pub schema: ExternalPlanEnvelopeSchema,
+    pub payload: ExternalPlan,
+    pub payload_digest: Digest,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExternalPlanEnvelopeSchema {
+    #[serde(rename = "amiss/external-plan-envelope")]
+    Current,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalPlan {
+    pub schema: ExternalPlanPayloadSchema,
+    pub engine: ExternalEngine,
+    pub report: ExternalPlanReport,
+    pub introduced: Vec<ExternalDestination>,
+    pub removed: Vec<ExternalDestination>,
+    pub retained_count: u64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExternalPlanPayloadSchema {
+    #[serde(rename = "amiss/external-plan-payload")]
+    Current,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalEngine {
+    pub engine_version: String,
+    pub engine_digest: Digest,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalPlanReport {
+    pub payload_digest: Digest,
+    pub base: serde_json::Value,
+    pub candidate: serde_json::Value,
+    pub mode: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalDestination {
+    pub destination: String,
+    pub scheme: String,
+    pub documents: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repository: Option<ExternalRepository>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalRepository {
+    pub host: String,
+    pub dialect: ForgeDialect,
+    pub owner: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub form: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tail: Option<String>,
+}
 
 /// One side's view of a destination: its scheme and every document naming it.
 struct Entry {
@@ -29,7 +96,7 @@ struct Entry {
 pub fn plan(
     envelope: &Value,
     engine_version: &str,
-    engine_digest: &str,
+    engine_digest: Digest,
 ) -> Result<Value, PlanDefect> {
     let (payload, recorded, _verdict) = validate_envelope(envelope)?;
     let complete = payload
@@ -47,7 +114,14 @@ pub fn plan(
     let (Some(base_identity), Some(candidate_identity), Some(mode)) = (
         evaluation.member("base"),
         evaluation.member("candidate"),
-        evaluation.member("mode"),
+        evaluation.text("mode").filter(|mode| !mode.is_empty()),
+    ) else {
+        return Err(PlanDefect::NotAReport);
+    };
+    let (Ok(base_identity), Ok(candidate_identity), Some(report_payload_digest)) = (
+        serde_json::from_slice(&json::canonical(base_identity)),
+        serde_json::from_slice(&json::canonical(candidate_identity)),
+        Digest::from_wire(recorded),
     ) else {
         return Err(PlanDefect::NotAReport);
     };
@@ -58,44 +132,189 @@ pub fn plan(
         .keys()
         .filter(|destination| base.contains_key(*destination))
         .count();
-    let recognition = Recognition {
-        declared: evaluation
-            .member("repository")
-            .and_then(|repository| repository.text("host"))
-            .zip(evaluation.text("forge")),
+    let declared = evaluation
+        .member("repository")
+        .and_then(|repository| repository.text("host"))
+        .zip(evaluation.text("forge"))
+        .and_then(|(host, dialect)| dialect.parse().ok().map(|dialect| (host, dialect)));
+    let payload = ExternalPlan {
+        schema: ExternalPlanPayloadSchema::Current,
+        engine: ExternalEngine {
+            engine_version: engine_version.to_owned(),
+            engine_digest,
+        },
+        report: ExternalPlanReport {
+            payload_digest: report_payload_digest,
+            base: base_identity,
+            candidate: candidate_identity,
+            mode: mode.to_owned(),
+        },
+        introduced: rows(&candidate, &base, declared),
+        removed: rows(&base, &candidate, declared),
+        retained_count: u64::try_from(retained).unwrap_or(u64::MAX),
     };
+    let payload_digest =
+        plan_payload_digest(&payload).map_err(|_defect| PlanDefect::MalformedExternal)?;
+    let document = ExternalPlanEnvelope {
+        schema: ExternalPlanEnvelopeSchema::Current,
+        payload,
+        payload_digest,
+    };
+    let canonical = serde_json_canonicalizer::to_vec(&document)
+        .map_err(|_defect| PlanDefect::MalformedExternal)?;
+    json::parse(&canonical).map_err(|_defect| PlanDefect::MalformedExternal)
+}
 
-    let plan_payload = object(vec![
-        ("schema", string(PLAN_PAYLOAD_SCHEMA)),
-        (
-            "engine",
-            object(vec![
-                ("engine_version", string(engine_version)),
-                ("engine_digest", string(engine_digest)),
-            ]),
-        ),
-        (
-            "report",
-            object(vec![
-                ("payload_digest", string(recorded)),
-                ("base", base_identity.clone()),
-                ("candidate", candidate_identity.clone()),
-                ("mode", mode.clone()),
-            ]),
-        ),
-        ("introduced", rows(&candidate, &base, &recognition)),
-        ("removed", rows(&base, &candidate, &recognition)),
-        (
-            "retained_count",
-            Value::Integer(i64::try_from(retained).unwrap_or(i64::MAX)),
-        ),
-    ]);
-    let digest = hj(PLAN_PAYLOAD_SCHEMA, &plan_payload);
-    Ok(object(vec![
-        ("schema", string(PLAN_ENVELOPE_SCHEMA)),
-        ("payload", plan_payload),
-        ("payload_digest", string(&digest.to_string())),
-    ]))
+/// Parses one strict, digest-bound external plan while ignoring additive fields.
+///
+/// # Errors
+///
+/// Fails on oversized or malformed strict JSON, a malformed known field, a
+/// violated plan law, or a payload digest mismatch.
+pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    let payload_digest = {
+        let strict =
+            json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+        reject_null_optionals(&strict)?;
+        let Some(payload) = strict.member("payload") else {
+            return fail("$.payload", ErrorKind::MissingField);
+        };
+        hj(PLAN_PAYLOAD_SCHEMA, payload)
+    };
+    let document: ExternalPlanEnvelope = de::deserialize_json(bytes)?;
+    if payload_digest != document.payload_digest {
+        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    }
+    validate_plan(&document.payload)?;
+    Ok(document)
+}
+
+fn plan_payload_digest(plan: &ExternalPlan) -> Result<Digest, Error> {
+    validate_plan(plan)?;
+    serde_json_canonicalizer::to_vec(plan)
+        .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
+        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+}
+
+fn reject_null_optionals(plan: &Value) -> Result<(), Error> {
+    let Some(payload) = plan.member("payload") else {
+        return Ok(());
+    };
+    for side in ["introduced", "removed"] {
+        let Some(Value::Array(rows)) = payload.member(side) else {
+            continue;
+        };
+        for (index, row) in rows.iter().enumerate() {
+            if matches!(row.member("repository"), Some(Value::Null)) {
+                return fail(
+                    &format!("$.payload.{side}[{index}].repository"),
+                    ErrorKind::WrongType,
+                );
+            }
+            let Some(repository) = row.member("repository") else {
+                continue;
+            };
+            for field in ["form", "tail"] {
+                if matches!(repository.member(field), Some(Value::Null)) {
+                    return fail(
+                        &format!("$.payload.{side}[{index}].repository.{field}"),
+                        ErrorKind::WrongType,
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_plan(plan: &ExternalPlan) -> Result<(), Error> {
+    if plan.engine.engine_version.is_empty() {
+        return fail("$.payload.engine.engine_version", ErrorKind::InvalidValue);
+    }
+    if !plan.report.base.is_object() {
+        return fail("$.payload.report.base", ErrorKind::WrongType);
+    }
+    if !plan.report.candidate.is_object() {
+        return fail("$.payload.report.candidate", ErrorKind::WrongType);
+    }
+    if plan.report.mode.is_empty() {
+        return fail("$.payload.report.mode", ErrorKind::InvalidValue);
+    }
+    if plan.retained_count > json::MAX_SAFE_INTEGER.unsigned_abs() {
+        return fail("$.payload.retained_count", ErrorKind::LimitExceeded);
+    }
+    validate_rows("$.payload.introduced", &plan.introduced)?;
+    validate_rows("$.payload.removed", &plan.removed)?;
+    let introduced: BTreeSet<&str> = plan
+        .introduced
+        .iter()
+        .map(|row| row.destination.as_str())
+        .collect();
+    if plan
+        .removed
+        .iter()
+        .any(|row| introduced.contains(row.destination.as_str()))
+    {
+        return fail("$.payload", ErrorKind::Inconsistent);
+    }
+    Ok(())
+}
+
+fn validate_rows(path: &str, rows: &[ExternalDestination]) -> Result<(), Error> {
+    let mut destinations = BTreeSet::new();
+    for (index, row) in rows.iter().enumerate() {
+        let row_path = format!("{path}[{index}]");
+        let destination_length = row.destination.chars().count();
+        if !(1..=16_384).contains(&destination_length) {
+            return fail(&format!("{row_path}.destination"), ErrorKind::InvalidValue);
+        }
+        if !destinations.insert(row.destination.as_str()) {
+            return fail(path, ErrorKind::DuplicateMember);
+        }
+        let mut scheme = row.scheme.bytes();
+        if !scheme.next().is_some_and(|byte| byte.is_ascii_lowercase())
+            || !scheme.all(|byte| {
+                byte.is_ascii_lowercase()
+                    || byte.is_ascii_digit()
+                    || matches!(byte, b'+' | b'.' | b'-')
+            })
+        {
+            return fail(&format!("{row_path}.scheme"), ErrorKind::InvalidValue);
+        }
+        if row.documents.is_empty() || row.documents.iter().any(String::is_empty) {
+            return fail(&format!("{row_path}.documents"), ErrorKind::InvalidValue);
+        }
+        crate::controls::sorted_set(&format!("{row_path}.documents"), &row.documents, Ord::cmp)?;
+        if let Some(repository) = &row.repository {
+            validate_repository(&format!("{row_path}.repository"), repository)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_repository(path: &str, repository: &ExternalRepository) -> Result<(), Error> {
+    for (field, value) in [
+        ("host", repository.host.as_str()),
+        ("owner", repository.owner.as_str()),
+        ("name", repository.name.as_str()),
+    ] {
+        if value.is_empty() {
+            return fail(&format!("{path}.{field}"), ErrorKind::InvalidValue);
+        }
+    }
+    if repository.form.as_ref().is_some_and(String::is_empty) {
+        return fail(&format!("{path}.form"), ErrorKind::InvalidValue);
+    }
+    if repository.tail.as_ref().is_some_and(String::is_empty) {
+        return fail(&format!("{path}.tail"), ErrorKind::InvalidValue);
+    }
+    if repository.tail.is_some() && repository.form.is_none() {
+        return fail(path, ErrorKind::Inconsistent);
+    }
+    Ok(())
 }
 
 /// One side's destinations delegated to another evidence layer.
@@ -158,55 +377,34 @@ fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>
 fn rows(
     entries: &BTreeMap<String, Entry>,
     other: &BTreeMap<String, Entry>,
-    recognition: &Recognition<'_>,
-) -> Value {
-    Value::Array(
-        entries
-            .iter()
-            .filter(|(destination, _)| !other.contains_key(*destination))
-            .map(|(destination, entry)| {
-                let mut members = vec![
-                    ("destination", string(destination)),
-                    ("scheme", string(&entry.scheme)),
-                    (
-                        "documents",
-                        Value::Array(entry.documents.iter().map(|path| string(path)).collect()),
-                    ),
-                ];
-                if let Some(repository) = repository_value(destination, recognition) {
-                    members.push(("repository", repository));
-                }
-                object(members)
-            })
-            .collect(),
-    )
-}
-
-/// The forge hosts this run can name: the built-in table plus the report's
-/// own declared identity, whose dialect the evaluation already carries.
-struct Recognition<'a> {
-    declared: Option<(&'a str, &'a str)>,
-}
-
-impl Recognition<'_> {
-    fn dialect(&self, host: &str) -> Option<&str> {
-        if let Some((declared, dialect)) = self.declared
-            && declared == host
-        {
-            return Some(dialect);
-        }
-        ForgeDialect::default_for_host(host).map(<&'static str>::from)
-    }
+    declared: Option<(&str, ForgeDialect)>,
+) -> Vec<ExternalDestination> {
+    entries
+        .iter()
+        .filter(|(destination, _)| !other.contains_key(*destination))
+        .map(|(destination, entry)| ExternalDestination {
+            destination: destination.clone(),
+            scheme: entry.scheme.clone(),
+            documents: entry.documents.iter().cloned().collect(),
+            repository: repository(destination, declared),
+        })
+        .collect()
 }
 
 /// The forge shape of one destination, structure only: owner and name split
 /// by the dialect's grammar, the segment after them verbatim as the form,
 /// and everything later as one opaque tail, since splitting revision from
 /// path needs the other repository's refs, which branch slashes hide.
-fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<Value> {
+fn repository(
+    destination: &str,
+    declared: Option<(&str, ForgeDialect)>,
+) -> Option<ExternalRepository> {
     let rest = destination.strip_prefix("https://")?;
     let (host, path) = rest.split_at(rest.find(['/', '?', '#']).unwrap_or(rest.len()));
-    let dialect = recognition.dialect(host)?;
+    let dialect = declared
+        .filter(|(declared_host, _dialect)| *declared_host == host)
+        .map(|(_declared_host, dialect)| dialect)
+        .or_else(|| ForgeDialect::default_for_host(host))?;
     let path = path.strip_prefix('/')?.split(['?', '#']).next()?;
     let directory = path.ends_with('/');
     let mut segments: Vec<&str> = path.split('/').collect();
@@ -216,7 +414,7 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
     if segments.len() < 2 || segments.iter().any(|segment| segment.is_empty()) {
         return None;
     }
-    let (owner, name, form, tail) = if dialect == "bitbucket-data-center" {
+    let (owner, name, form, tail) = if dialect == ForgeDialect::BitbucketDataCenter {
         let marker = segments
             .iter()
             .position(|segment| matches!(*segment, "projects" | "users"))?;
@@ -233,7 +431,7 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
             .map_or((None, [].as_slice()), |(form, tail)| (Some(*form), tail));
         (Cow::Borrowed(owner), *name, form, tail)
     } else {
-        let (project, form, tail) = if dialect == "gitlab" {
+        let (project, form, tail) = if dialect == ForgeDialect::Gitlab {
             // Without the separator a legacy file URL and a nested project page
             // are indistinguishable, so only the two-segment form is a shape.
             match segments.iter().position(|segment| *segment == "-") {
@@ -257,21 +455,19 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
         let (name, owner) = project.split_last()?;
         (Cow::Owned(owner.join("/")), *name, form, tail)
     };
-    let mut members = vec![
-        ("dialect", string(dialect)),
-        ("host", string(host)),
-        ("name", string(name)),
-        ("owner", string(&owner)),
-    ];
-    if let Some(form) = form {
-        members.push(("form", string(form)));
-        if !tail.is_empty() {
-            let mut tail = tail.join("/");
-            if directory {
-                tail.push('/');
-            }
-            members.push(("tail", string(&tail)));
+    let tail = (!tail.is_empty()).then(|| {
+        let mut tail = tail.join("/");
+        if directory {
+            tail.push('/');
         }
-    }
-    Some(object(members))
+        tail
+    });
+    Some(ExternalRepository {
+        host: host.to_owned(),
+        dialect,
+        owner: owner.into_owned(),
+        name: name.to_owned(),
+        form: form.map(str::to_owned),
+        tail,
+    })
 }

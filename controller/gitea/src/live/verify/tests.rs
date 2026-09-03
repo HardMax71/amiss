@@ -252,7 +252,7 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
         &plan,
         &evidence,
         "0.0.0",
-        &amiss_wire::digest::hj("t", &Value::Null).to_string(),
+        amiss_wire::digest::hj("t", &Value::Null),
     )
     .expect("the engine judges the evidence");
     let Some(Value::Array(verdicts)) = assessment

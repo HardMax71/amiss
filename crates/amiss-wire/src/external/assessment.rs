@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::digest::hj;
+use crate::digest::{Digest, hj};
 use crate::json::Value;
 
 use super::{
@@ -67,7 +67,7 @@ pub fn assess(
     plan: &Value,
     evidence: &Value,
     engine_version: &str,
-    engine_digest: &str,
+    engine_digest: Digest,
 ) -> Result<Value, AssessDefect> {
     let (Some(payload), Some(recorded)) = (plan.member("payload"), plan.text("payload_digest"))
     else {
@@ -138,7 +138,7 @@ pub fn assess(
             "engine",
             object(vec![
                 ("engine_version", string(engine_version)),
-                ("engine_digest", string(engine_digest)),
+                ("engine_digest", string(&engine_digest.to_string())),
             ]),
         ),
         (
