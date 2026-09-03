@@ -90,7 +90,7 @@ pub fn floor_inventory(
     candidate_documents: &dyn Fn(&str) -> InventoryState,
 ) -> Vec<ControlSeed> {
     let mut controls = Vec::new();
-    for path in input.floor.protected_inventory() {
+    for path in &input.floor.protected_inventory {
         let rule = match candidate_documents(path.as_str()) {
             InventoryState::Scanned => continue,
             InventoryState::Missing => "coverage/floor-inventory-missing",
@@ -125,7 +125,7 @@ pub(crate) fn protected_control(
 /// steps in the policy trace.
 #[must_use]
 pub fn floor_raises(input: &FloorInput) -> Vec<(FindingKind, Disposition)> {
-    disposition_rows(input.floor.minimum_dispositions())
+    disposition_rows(&input.floor.minimum_dispositions)
 }
 
 /// A floor may only tighten built-in limits, never raise them; unmapped
@@ -138,7 +138,7 @@ pub fn tightened_limits(
 ) -> (crate::resources::ScanLimits, amiss_git::GitLimits) {
     let mut scan = scan;
     let mut git = git;
-    for row in floor.resource_limits() {
+    for row in &floor.resource_limits {
         let maximum = u64::try_from(row.maximum).unwrap_or(u64::MAX);
         let slot: Option<&mut u64> = match row.resource {
             ResourceName::DocumentsPerSnapshot => Some(&mut scan.documents_per_snapshot),

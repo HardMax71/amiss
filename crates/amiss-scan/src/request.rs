@@ -1,7 +1,8 @@
 use amiss_wire::controls::{
-    FloorDefect, OrganizationFloor, ResourceName, canonical_debt_snapshot,
-    canonical_execution_constraint, canonical_trusted_time, canonical_waiver_bundle,
-    parse_debt_snapshot, parse_execution_constraint, parse_trusted_time, parse_waiver_bundle,
+    FloorDefect, ResourceName, canonical_debt_snapshot, canonical_execution_constraint,
+    canonical_organization_floor, canonical_trusted_time, canonical_waiver_bundle,
+    parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_trusted_time,
+    parse_waiver_bundle,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::Digest;
@@ -37,12 +38,16 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .map(|supplied| {
             let bytes = serde_json::to_vec(&supplied.value)
                 .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
-            let floor = OrganizationFloor::parse(&bytes).map_err(floor_detail)?;
-            if floor.digest() != supplied.expected_digest {
+            let floor = parse_organization_floor(&bytes).map_err(floor_detail)?;
+            let digest = canonical_organization_floor(&floor)
+                .map_err(floor_detail)?
+                .1;
+            if digest != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
             Ok(FloorInput {
                 floor,
+                digest,
                 trust_source: supplied.trust_source,
             })
         })

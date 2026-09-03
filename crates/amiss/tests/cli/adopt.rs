@@ -8,7 +8,8 @@ use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{DebtInput, FloorInput, TimeInput};
 use amiss_scan::report::{CandidateBlock, Setup, SnapshotIdentity, candidate_identity_digest};
 use amiss_wire::controls::{
-    OrganizationFloor, canonical_debt_snapshot, parse_debt_snapshot, parse_trusted_time,
+    canonical_debt_snapshot, canonical_organization_floor, parse_debt_snapshot,
+    parse_organization_floor, parse_trusted_time,
 };
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
@@ -40,10 +41,8 @@ struct Minted {
 }
 
 fn floor_digest() -> String {
-    OrganizationFloor::parse(FLOOR.as_bytes())
-        .unwrap()
-        .digest()
-        .to_string()
+    let floor = parse_organization_floor(FLOOR.as_bytes()).unwrap();
+    canonical_organization_floor(&floor).unwrap().1.to_string()
 }
 
 fn adopt_args(minted: &Minted, output: &str) -> Vec<String> {
@@ -211,9 +210,14 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         candidate_ref: Some("refs/heads/main".to_owned()),
         target_ref: Some("refs/heads/main".to_owned()),
         default_branch_ref: None,
-        floor: Some(FloorInput {
-            floor: OrganizationFloor::parse(FLOOR.as_bytes()).unwrap(),
-            trust_source: RequestTrust::OrganizationPolicy,
+        floor: Some({
+            let floor = parse_organization_floor(FLOOR.as_bytes()).unwrap();
+            let digest = canonical_organization_floor(&floor).unwrap().1;
+            FloorInput {
+                floor,
+                digest,
+                trust_source: RequestTrust::OrganizationPolicy,
+            }
         }),
         debt: Some(DebtInput {
             snapshot,

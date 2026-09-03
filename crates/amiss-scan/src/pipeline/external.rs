@@ -154,8 +154,8 @@ fn waiver_authority(
     Vec<amiss_wire::controls::EligibleFindingKind>,
 ) {
     (
-        floor.floor.authorized_waiver_issuers().to_vec(),
-        floor.floor.waivable_finding_kinds().to_vec(),
+        floor.floor.authorized_waiver_issuers.clone(),
+        floor.floor.waivable_finding_kinds.clone(),
     )
 }
 

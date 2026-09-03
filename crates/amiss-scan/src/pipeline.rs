@@ -482,7 +482,7 @@ fn apply_floor(
     let Some(floor) = floor else {
         return Ok(());
     };
-    effects.floor = Some((floor.floor.digest(), floor.trust_source));
+    effects.floor = Some((floor.digest, floor.trust_source));
     effects.floor_raised = crate::policy::floor_raises(floor);
     effects.controls.extend(crate::policy::floor_inventory(
         floor,
@@ -493,9 +493,10 @@ fn apply_floor(
     }
     let (base_discovery, base_scan) = base;
     let (candidate_discovery, candidate_scan) = candidate;
-    let controls = floor.floor.protected_control_paths().iter().try_fold(
-        Vec::new(),
-        |mut controls, path| {
+    let protected_paths = &floor.floor.protected_control_paths;
+    let controls = protected_paths
+        .iter()
+        .try_fold(Vec::new(), |mut controls, path| {
             let states = crate::policy::protected_state(
                 repo,
                 git_resources,
@@ -516,8 +517,7 @@ fn apply_floor(
             .map_err(|defect| control_read_detail(&defect, path.as_str()))?;
             controls.extend(crate::policy::protected_control(path, states));
             Ok::<_, ErrorDetail>(controls)
-        },
-    )?;
+        })?;
     effects.controls.extend(controls);
     Ok(())
 }

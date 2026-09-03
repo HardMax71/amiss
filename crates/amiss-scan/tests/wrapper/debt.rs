@@ -1,6 +1,8 @@
 use amiss_git::Repository;
 use amiss_scan::policy::ConstraintInput;
-use amiss_wire::controls::{OrganizationFloor, Profile, parse_execution_constraint};
+use amiss_wire::controls::{
+    Profile, canonical_organization_floor, parse_execution_constraint, parse_organization_floor,
+};
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
 
@@ -13,7 +15,7 @@ use crate::support::{
 fn valid_active_debt_is_tolerated_with_full_provenance() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest().to_string();
+    let floor_digest = floor_input().digest.to_string();
     let mut setup = shell(Profile::Enforce);
     setup.time = Some(time_input(&fx));
     setup.debt = Some(debt_input(&debt_json(
@@ -102,7 +104,7 @@ fn valid_active_debt_is_tolerated_with_full_provenance() {
 fn an_expired_debt_item_fails_without_application() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest().to_string();
+    let floor_digest = floor_input().digest.to_string();
     let mut setup = shell(Profile::Enforce);
     setup.time = Some(time_input(&fx));
     setup.debt = Some(debt_input(&debt_json(
@@ -168,7 +170,7 @@ fn a_changed_fact_is_debt_worsened() {
     let base_only = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&base_only);
     drop(base_only);
-    let floor_digest = floor_input().floor.digest().to_string();
+    let floor_digest = floor_input().digest.to_string();
     let mut setup = shell(Profile::Enforce);
     setup.time = Some(time_input(&fx));
     setup.debt = Some(debt_input(&debt_json(
@@ -215,7 +217,7 @@ fn a_nonreproducing_adoption_binding_is_fatal() {
         _pair: chain,
     };
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest().to_string();
+    let floor_digest = floor_input().digest.to_string();
     let mut setup = shell(Profile::Enforce);
     setup.time = Some(time_input(&fx));
     setup.debt = Some(debt_input(&debt_json(
@@ -256,7 +258,7 @@ fn a_nonreproducing_adoption_binding_is_fatal() {
 fn a_debt_snapshot_bound_to_anything_else_verifies_nothing_and_tolerates_nothing() {
     let fx = fixture("see [gone](missing.md)\n");
     let (finding_key, fact, fact_digest) = structural_evidence(&fx);
-    let floor_digest = floor_input().floor.digest().to_string();
+    let floor_digest = floor_input().digest.to_string();
     let valid = debt_json(
         &floor_digest,
         &fx.base_tree,
@@ -376,11 +378,13 @@ fn a_debt_snapshot_over_the_tightened_ceiling_is_not_parsed() {
   "authorized_waiver_issuers": [],
   "resource_limits": [ { "resource": "debt-items", "maximum": 0 } ]
 }"#;
-    let floor = OrganizationFloor::parse(doc.as_bytes()).unwrap();
-    let floor_digest = floor.digest().to_string();
+    let floor = parse_organization_floor(doc.as_bytes()).unwrap();
+    let digest = canonical_organization_floor(&floor).unwrap().1;
+    let floor_digest = digest.to_string();
     let mut setup = shell(Profile::Enforce);
     setup.floor = Some(amiss_scan::policy::FloorInput {
         floor,
+        digest,
         trust_source: RequestTrust::OrganizationPolicy,
     });
     setup.time = Some(time_input(&fx));

@@ -163,6 +163,13 @@ fn control_examples_match_their_typed_sources() {
         json::canonical(&json::parse(&policy_bytes).unwrap())
     );
 
+    let floor_bytes = fs::read(examples.join("organization-floor.json")).unwrap();
+    let floor = controls::parse_organization_floor(&floor_bytes).unwrap();
+    assert_eq!(
+        controls::canonical_organization_floor(&floor).unwrap().0,
+        json::canonical(&json::parse(&floor_bytes).unwrap())
+    );
+
     let debt_bytes = fs::read(examples.join("debt-snapshot.json")).unwrap();
     let debt = controls::parse_debt_snapshot(&debt_bytes).unwrap();
     assert_eq!(

@@ -7,7 +7,8 @@ use std::fs;
 use std::path::Path;
 
 use amiss_wire::controls::{
-    OrganizationFloor, Profile, canonical_trusted_time, parse_trusted_time,
+    Profile, canonical_organization_floor, canonical_trusted_time, parse_organization_floor,
+    parse_trusted_time,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -83,11 +84,11 @@ fn the_request_examples_parse_to_what_they_say() {
         .as_ref()
         .expect("the example supplies one");
     assert_eq!(floor.trust_source, RequestTrust::OrganizationPolicy);
-    let parsed_floor = OrganizationFloor::parse(&serde_json::to_vec(&floor.value).unwrap())
+    let parsed_floor = parse_organization_floor(&serde_json::to_vec(&floor.value).unwrap())
         .expect("the embedded organization floor is valid");
     assert_eq!(
         floor.expected_digest,
-        parsed_floor.digest(),
+        canonical_organization_floor(&parsed_floor).unwrap().1,
         "the request carries the floor's independently reproducible semantic digest"
     );
     let time = controls

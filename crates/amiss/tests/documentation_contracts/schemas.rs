@@ -7,8 +7,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use amiss_wire::controls::{
-    DOCUMENT_SUFFIX_BYTES, OrganizationFloor, SOURCE_MARKER_BYTES, parse_debt_snapshot,
-    parse_execution_constraint, parse_trusted_time, parse_waiver_bundle,
+    DOCUMENT_SUFFIX_BYTES, SOURCE_MARKER_BYTES, parse_debt_snapshot, parse_execution_constraint,
+    parse_organization_floor, parse_trusted_time, parse_waiver_bundle,
 };
 use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::model::BranchRef;
@@ -65,7 +65,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "locale-coverage-assessment" => parse_defect(amiss_wire::locale::parse_assessment(bytes)),
         "locale-coverage-evidence" => parse_defect(amiss_wire::locale::parse_evidence(bytes)),
         "locale-coverage-plan" => parse_defect(amiss_wire::locale::parse_plan(bytes)),
-        "organization-floor" => parse_defect(OrganizationFloor::parse(bytes)),
+        "organization-floor" => parse_defect(parse_organization_floor(bytes)),
         "publication-assessment" => parse_defect(amiss_wire::publication::parse_assessment(bytes)),
         "publication-evidence" => parse_defect(amiss_wire::publication::parse_evidence(bytes)),
         "publication-plan" => parse_defect(amiss_wire::publication::parse_plan(bytes)),

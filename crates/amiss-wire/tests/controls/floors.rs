@@ -1,6 +1,7 @@
 use amiss_wire::controls::{
-    EligibleFindingKind, FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor,
-    ResourceName, canonical_scanner_policy, parse_scanner_policy,
+    EligibleFindingKind, FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloorSchema,
+    ResourceName, canonical_organization_floor, canonical_scanner_policy, parse_organization_floor,
+    parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -15,38 +16,40 @@ fn a_floor_may_require_warn_where_the_fixture_requires_fail() {
         .unwrap()
         .replace(r#""disposition": "fail""#, r#""disposition": "warn""#);
     let floor =
-        OrganizationFloor::parse(doc.as_bytes()).expect("warn is a disposition a floor may set");
+        parse_organization_floor(doc.as_bytes()).expect("warn is a disposition a floor may set");
     assert_ne!(
-        floor.digest(),
-        OrganizationFloor::parse(FLOOR).unwrap().digest()
+        canonical_organization_floor(&floor).unwrap().1,
+        canonical_organization_floor(&parse_organization_floor(FLOOR).unwrap())
+            .unwrap()
+            .1
     );
 }
 
 #[test]
 fn parses_the_floor_fixture() {
-    let floor = OrganizationFloor::parse(FLOOR).unwrap();
-    assert_eq!(floor.schema(), "amiss/organization-floor");
+    let floor = parse_organization_floor(FLOOR).unwrap();
+    assert_eq!(floor.schema, OrganizationFloorSchema::Current);
     assert_eq!(
-        floor.digest(),
+        canonical_organization_floor(&floor).unwrap().1,
         hj("amiss/organization-floor", &json::parse(FLOOR).unwrap())
     );
-    assert_eq!(floor.floor_id().as_str(), "platform/scanner-floor-2026-07");
-    assert_eq!(floor.ref_name().as_str(), "refs/heads/main");
-    assert_eq!(floor.resource_limits().len(), 2);
+    assert_eq!(floor.floor_id.as_str(), "platform/scanner-floor-2026-07");
+    assert_eq!(floor.ref_name.as_str(), "refs/heads/main");
+    assert_eq!(floor.resource_limits.len(), 2);
     let owners: Vec<&str> = floor
-        .authorized_debt_owners()
+        .authorized_debt_owners
         .iter()
         .map(amiss_wire::model::OwnerId::as_str)
         .collect();
     assert_eq!(owners, ["team:docs-platform"]);
     let issuers: Vec<&str> = floor
-        .authorized_waiver_issuers()
+        .authorized_waiver_issuers
         .iter()
         .map(amiss_wire::model::OwnerId::as_str)
         .collect();
     assert_eq!(issuers, ["team:release-engineering"]);
     let waivable: Vec<&str> = floor
-        .waivable_finding_kinds()
+        .waivable_finding_kinds
         .iter()
         .map(AsRef::as_ref)
         .collect();
@@ -54,7 +57,7 @@ fn parses_the_floor_fixture() {
     assert_eq!(waivable, [expected]);
     assert_eq!(expected, "explicit-target-missing");
     assert_ne!(
-        floor.digest(),
+        canonical_organization_floor(&floor).unwrap().1,
         canonical_scanner_policy(&parse_scanner_policy(POLICY).unwrap())
             .unwrap()
             .1
@@ -99,8 +102,8 @@ fn parses_a_floor_declaring_every_resource() {
 }}"#,
         rows = rows.join(",")
     );
-    let floor = OrganizationFloor::parse(doc.as_bytes()).unwrap();
-    assert_eq!(floor.resource_limits().len(), ResourceName::all().len());
+    let floor = parse_organization_floor(doc.as_bytes()).unwrap();
+    assert_eq!(floor.resource_limits.len(), ResourceName::all().len());
 }
 
 #[expect(clippy::panic, reason = "test helper narrowing the defect family")]
@@ -116,13 +119,13 @@ fn rejects_floor_bound_defects() {
     let doc = String::from_utf8(FLOOR.to_vec()).unwrap();
     let wrong_ceiling = doc.replace("268435456", "268435455");
     assert_eq!(
-        floor_schema_kind(OrganizationFloor::parse(wrong_ceiling.as_bytes()).unwrap_err()),
+        floor_schema_kind(parse_organization_floor(wrong_ceiling.as_bytes()).unwrap_err()),
         ErrorKind::InvalidValue
     );
 
     let wrong_errors = doc.replace("\"maximum\": 64", "\"maximum\": 65");
     assert_eq!(
-        floor_schema_kind(OrganizationFloor::parse(wrong_errors.as_bytes()).unwrap_err()),
+        floor_schema_kind(parse_organization_floor(wrong_errors.as_bytes()).unwrap_err()),
         ErrorKind::InvalidValue
     );
 
@@ -131,8 +134,25 @@ fn rejects_floor_bound_defects() {
         "{ \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 },\n    { \"resource\": \"machine-json-bytes\", \"maximum\": 268435456 }",
     );
     assert_eq!(
-        floor_schema_kind(OrganizationFloor::parse(unsorted_limits.as_bytes()).unwrap_err()),
+        floor_schema_kind(parse_organization_floor(unsorted_limits.as_bytes()).unwrap_err()),
         ErrorKind::UnsortedSet
+    );
+}
+
+#[test]
+fn canonical_floor_rechecks_mutable_public_fields() {
+    let mut floor = parse_organization_floor(FLOOR).unwrap();
+    floor
+        .resource_limits
+        .first_mut()
+        .expect("the fixture has resource limits")
+        .maximum = -1;
+    assert_eq!(
+        canonical_organization_floor(&floor).unwrap_err(),
+        FloorDefect::Schema(amiss_wire::de::Error::new(
+            "$.resource_limits[0].maximum",
+            ErrorKind::InvalidValue,
+        ))
     );
 }
 
@@ -163,7 +183,7 @@ fn rejects_floors_over_the_combined_entry_limit() {
         controls = paths(45_000, "ops/b"),
     );
     assert_eq!(
-        OrganizationFloor::parse(doc.as_bytes()).unwrap_err(),
+        parse_organization_floor(doc.as_bytes()).unwrap_err(),
         FloorDefect::Entries {
             configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
             observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT + 1,
@@ -197,10 +217,10 @@ fn accepts_a_floor_at_exactly_the_combined_entry_limit() {
         inventory = paths(60_000, "docs/a"),
         controls = paths(40_000, "ops/b"),
     );
-    let floor = OrganizationFloor::parse(doc.as_bytes())
+    let floor = parse_organization_floor(doc.as_bytes())
         .expect("a floor whose entries sum to the limit exactly is within it");
     assert_eq!(
-        u64::try_from(floor.protected_inventory().len() + floor.protected_control_paths().len())
+        u64::try_from(floor.protected_inventory.len() + floor.protected_control_paths.len())
             .expect("entry counts fit"),
         ORGANIZATION_POLICY_ENTRIES_LIMIT
     );
@@ -224,9 +244,9 @@ fn accepts_a_floor_meeting_its_own_declared_entry_limit_exactly() {
     { "resource": "organization-policy-entries", "maximum": 4 }
   ]
 }"#;
-    let floor = OrganizationFloor::parse(doc)
+    let floor = parse_organization_floor(doc)
         .expect("three paths and one limit row meet a declared maximum of four exactly");
-    assert_eq!(floor.protected_inventory().len(), 3);
+    assert_eq!(floor.protected_inventory.len(), 3);
 }
 
 #[test]
@@ -248,7 +268,7 @@ fn rejects_floors_inconsistent_with_their_own_declared_entry_limit() {
   ]
 }"#;
     assert_eq!(
-        OrganizationFloor::parse(doc).unwrap_err(),
+        parse_organization_floor(doc).unwrap_err(),
         FloorDefect::Entries {
             configured_limit: 3,
             observed_lower_bound: 4,

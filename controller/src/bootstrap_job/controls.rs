@@ -1,7 +1,7 @@
 use amiss_wire::controls::{
-    OrganizationFloor, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
-    canonical_debt_snapshot, canonical_trusted_time, canonical_waiver_bundle, parse_debt_snapshot,
-    parse_waiver_bundle,
+    TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement, canonical_debt_snapshot,
+    canonical_organization_floor, canonical_trusted_time, canonical_waiver_bundle,
+    parse_debt_snapshot, parse_organization_floor, parse_waiver_bundle,
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{BranchRef, RepositoryIdentity, UtcInstant};
@@ -78,9 +78,10 @@ fn identity_inputs(policy: &PolicyControls) -> [IdentityInput<'_>; 3] {
         (
             policy.organization_floor.as_ref(),
             |bytes| {
-                OrganizationFloor::parse(bytes)
+                parse_organization_floor(bytes)
                     .ok()
-                    .map(|floor| floor.digest())
+                    .and_then(|floor| canonical_organization_floor(&floor).ok())
+                    .map(|(_bytes, digest)| digest)
             },
             BootstrapJobError::OrganizationFloor,
         ),
@@ -248,11 +249,14 @@ pub(super) fn request(
                 run,
                 None,
                 |bytes| {
-                    OrganizationFloor::parse(bytes).map(|floor| ControlBinding {
-                        digest: floor.digest(),
-                        repository: floor.repository().clone(),
-                        ref_name: floor.ref_name().clone(),
-                        organization_floor_digest: None,
+                    parse_organization_floor(bytes).and_then(|floor| {
+                        let digest = canonical_organization_floor(&floor)?.1;
+                        Ok(ControlBinding {
+                            digest,
+                            repository: floor.repository,
+                            ref_name: floor.ref_name,
+                            organization_floor_digest: None,
+                        })
                     })
                 },
                 BootstrapJobError::OrganizationFloor,
