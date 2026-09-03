@@ -89,6 +89,6 @@ fn verification_routes_encode_foreign_spellings() {
         query_route("/repos/a/b/contents/docs/a.md", &query).unwrap(),
         "/repos/a/b/contents/docs/a.md?ref=feature%2Fx"
     );
-    assert_eq!(RefFamily::Heads.as_str(), "heads");
-    assert_eq!(RefFamily::Tags.as_str(), "tags");
+    assert_eq!(RefFamily::Heads.as_ref(), "heads");
+    assert_eq!(RefFamily::Tags.as_ref(), "tags");
 }

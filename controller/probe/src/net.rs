@@ -7,19 +7,21 @@ use reqwest::blocking::Client;
 use reqwest::redirect::Policy;
 use url::Url;
 
+use amiss_wire::external::{ProbeFailure, ProbeMethod};
+
 const CONNECT: Duration = Duration::from_secs(5);
 const OPERATION: Duration = Duration::from_secs(10);
 const MAX_HOPS: usize = 5;
 
 pub(crate) enum Observation {
     Answered {
-        method: &'static str,
-        status: i64,
+        method: ProbeMethod,
+        status: u16,
         redirect: Option<Redirect>,
     },
     Failed {
-        method: &'static str,
-        failure: &'static str,
+        method: ProbeMethod,
+        failure: ProbeFailure,
     },
     Refused,
 }
@@ -31,10 +33,10 @@ pub(crate) struct Redirect {
 
 enum Attempted {
     Answered {
-        status: i64,
+        status: u16,
         redirect: Option<Redirect>,
     },
-    Failed(&'static str),
+    Failed(ProbeFailure),
     Refused,
 }
 
@@ -50,26 +52,26 @@ pub(crate) fn probe(destination: &str, deadline: Instant) -> Observation {
         Attempted::Answered { status, redirect } if get_retries(status) => {
             match attempt(&url, true, deadline) {
                 Attempted::Answered { status, redirect } => Observation::Answered {
-                    method: "get",
+                    method: ProbeMethod::Get,
                     status,
                     redirect,
                 },
                 // A failed retry does not erase the HEAD answer; the judge
                 // treats an unconfirmed absence as unproven anyway.
                 Attempted::Failed(_) | Attempted::Refused => Observation::Answered {
-                    method: "head",
+                    method: ProbeMethod::Head,
                     status,
                     redirect,
                 },
             }
         }
         Attempted::Answered { status, redirect } => Observation::Answered {
-            method: "head",
+            method: ProbeMethod::Head,
             status,
             redirect,
         },
         Attempted::Failed(failure) => Observation::Failed {
-            method: "head",
+            method: ProbeMethod::Head,
             failure,
         },
         Attempted::Refused => Observation::Refused,
@@ -78,13 +80,13 @@ pub(crate) fn probe(destination: &str, deadline: Instant) -> Observation {
 
 /// The statuses whose HEAD answer is not evidence: absence needs the GET
 /// confirmation, and 405 or 501 mean HEAD itself was the problem.
-const fn get_retries(status: i64) -> bool {
+const fn get_retries(status: u16) -> bool {
     matches!(status, 404 | 405 | 410 | 501)
 }
 
 fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
     let mut url = start.clone();
-    let mut standing_redirect: Option<(i64, bool)> = None;
+    let mut standing_redirect: Option<(u16, bool)> = None;
     for _hop in 0..=MAX_HOPS {
         // The ceiling binds before the resolver and again before the send,
         // so only one lookup or one in-flight request can overhang it.
@@ -104,7 +106,7 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
                     }),
                 };
             }
-            (Err(Resolution::NoRecords), None) => return Attempted::Failed("dns"),
+            (Err(Resolution::NoRecords), None) => return Attempted::Failed(ProbeFailure::Dns),
             (Err(Resolution::NothingGlobal), None) => return Attempted::Refused,
         };
         let Ok(client) = pinned(&url, address) else {
@@ -121,13 +123,15 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
         .timeout(OPERATION.min(left));
         let response = match request.send() {
             Ok(response) => response,
-            Err(error) if error.is_timeout() => return Attempted::Failed("timeout"),
+            Err(error) if error.is_timeout() => {
+                return Attempted::Failed(ProbeFailure::Timeout);
+            }
             // Connect and protocol failures are indistinguishable from a
             // refused socket without sniffing error text; the judge treats
             // every transport failure alike, so one honest word suffices.
-            Err(_error) => return Attempted::Failed("refused"),
+            Err(_error) => return Attempted::Failed(ProbeFailure::Refused),
         };
-        let status = i64::from(response.status().as_u16());
+        let status = response.status().as_u16();
         if !response.status().is_redirection() {
             return Attempted::Answered {
                 status,
@@ -170,7 +174,7 @@ fn attempt(start: &Url, get: bool, deadline: Instant) -> Attempted {
             status,
             redirect: moved(start, &url, permanent),
         },
-        None => Attempted::Failed("refused"),
+        None => Attempted::Failed(ProbeFailure::Refused),
     }
 }
 
@@ -181,7 +185,7 @@ fn remaining(deadline: Instant) -> Option<Duration> {
 
 /// The budget ran out mid-walk: the standing redirect is still the record
 /// when one was observed, and plain exhaustion otherwise.
-fn spent(standing_redirect: Option<(i64, bool)>, url: &Url) -> Attempted {
+fn spent(standing_redirect: Option<(u16, bool)>, url: &Url) -> Attempted {
     match standing_redirect {
         Some((status, permanent)) => Attempted::Answered {
             status,
@@ -190,7 +194,7 @@ fn spent(standing_redirect: Option<(i64, bool)>, url: &Url) -> Attempted {
                 permanent,
             }),
         },
-        None => Attempted::Failed("timeout"),
+        None => Attempted::Failed(ProbeFailure::Timeout),
     }
 }
 
@@ -201,7 +205,7 @@ fn moved(start: &Url, current: &Url, permanent: bool) -> Option<Redirect> {
     })
 }
 
-fn advance_redirect(standing: Option<(i64, bool)>, status: i64) -> (i64, bool) {
+fn advance_redirect(standing: Option<(u16, bool)>, status: u16) -> (u16, bool) {
     let permanent = matches!(status, 301 | 308)
         && standing.is_none_or(|(_previous_status, permanent)| permanent);
     (status, permanent)

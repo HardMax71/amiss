@@ -445,10 +445,10 @@ impl GitHubVerification for HttpRest {
             "/repos/{}/{}/git/matching-refs/{}/{}",
             path_segment(owner),
             path_segment(name),
-            family.as_str(),
+            family.as_ref(),
             path_segment(prefix),
         );
-        let qualifier = format!("refs/{}/", family.as_str());
+        let qualifier = format!("refs/{}/", family.as_ref());
         let mut names = Vec::new();
         for page in 1..=MAX_PAGES {
             let paged = query_route(

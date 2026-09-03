@@ -6,6 +6,7 @@ use amiss_controller::{
     forge_evidence, forge_repository_evidence, ref_span, spelled_segments,
 };
 use amiss_wire::json::Value;
+use amiss_wire::model::ForgeDialect;
 use serde::Deserialize;
 
 use super::GitLabClient;
@@ -75,19 +76,19 @@ pub(super) fn verify_external<R: GitLabVerification>(
     forge_evidence(
         plan,
         ForgeProducer {
-            dialect: "gitlab",
+            dialect: ForgeDialect::Gitlab,
             host,
             name: PRODUCER_NAME,
             version: producer_version,
             checked_at,
         },
         || rest.budget(),
-        |budget, target| {
-            let project = format!("{}/{}", target.owner, target.name);
+        |budget, repository| {
+            let project = format!("{}/{}", repository.owner, repository.name);
             let (visibility, spent) = rest.project_visibility(&project, *budget)?;
             *budget = spent;
             forge_repository_evidence(visibility, || {
-                resolve_tail(rest, target.repository, &project, budget)
+                resolve_tail(rest, repository, &project, budget)
             })
         },
     )
@@ -102,17 +103,18 @@ pub(super) fn verify_external<R: GitLabVerification>(
 /// established, never that one failed.
 fn resolve_tail<R: GitLabVerification>(
     rest: &R,
-    repository: &Value,
+    repository: &amiss_wire::external::ExternalRepository,
     project: &str,
     budget: &mut Budget,
 ) -> Result<Option<ForgeTail>, ProviderError> {
     let Some(form) = repository
-        .text("form")
+        .form
+        .as_deref()
         .filter(|form| matches!(*form, "blob" | "tree" | "raw"))
     else {
         return Ok(None);
     };
-    let Some(tail) = repository.text("tail") else {
+    let Some(tail) = repository.tail.as_deref() else {
         return Ok(None);
     };
     let Some(segments) = spelled_segments(tail) else {

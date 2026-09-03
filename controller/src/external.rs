@@ -1,17 +1,15 @@
 mod tests;
 
-use amiss_wire::external::{bound_plan, evidence_file, forge_evidence_row};
-use amiss_wire::json::Value;
+use amiss_wire::external::{
+    ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
+    ExternalRepository, evidence, parse_plan,
+};
+pub use amiss_wire::external::{ForgeRepository as ForgeVisibility, ForgeTail};
+use amiss_wire::json::{Value, canonical};
+use amiss_wire::model::ForgeDialect;
+use strum::AsRefStr;
 
 use crate::ProviderError;
-
-/// What a forge API established about a foreign repository.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ForgeVisibility {
-    Readable,
-    Missing,
-    Denied,
-}
 
 /// Whether a forge route established that its subject exists.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,42 +20,17 @@ pub enum ForgePresence {
 }
 
 /// The two namespaces in which a forge stores named refs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr)]
+#[strum(serialize_all = "lowercase")]
 pub enum ForgeRefFamily {
     Heads,
     Tags,
 }
 
-impl ForgeRefFamily {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Heads => "heads",
-            Self::Tags => "tags",
-        }
-    }
-}
-
-/// A tail fact an evidence producer can state after reading a repository.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ForgeTail {
-    Resolved,
-    RevisionMissing,
-    PathMissing,
-}
-
-/// One introduced destination whose repository shape belongs to a producer.
-#[derive(Clone, Copy)]
-pub struct ForgeTarget<'a> {
-    pub repository: &'a Value,
-    pub owner: &'a str,
-    pub name: &'a str,
-}
-
 /// The fixed identity and clock value attached to one evidence file.
 #[derive(Clone, Copy)]
 pub struct ForgeProducer<'a> {
-    pub dialect: &'a str,
+    pub dialect: ForgeDialect,
     pub host: &'a str,
     pub name: &'a str,
     pub version: &'a str,
@@ -107,65 +80,47 @@ pub fn forge_evidence<S>(
     plan: &Value,
     producer: ForgeProducer<'_>,
     prepare: impl FnOnce() -> Result<S, ProviderError>,
-    mut inspect: impl FnMut(&mut S, ForgeTarget<'_>) -> Result<ForgeEvidence, ProviderError>,
+    mut inspect: impl FnMut(&mut S, &ExternalRepository) -> Result<ForgeEvidence, ProviderError>,
 ) -> Result<Value, ProviderError> {
-    let introduced = plan
-        .member("payload")
-        .and_then(|payload| payload.member("introduced"));
-    let (Some(Value::Array(introduced)), true) = (introduced, bound_plan(plan)) else {
-        return Err(ProviderError::InvalidResponse);
-    };
+    let plan = parse_plan(&canonical(plan)).map_err(|_defect| ProviderError::InvalidResponse)?;
     let mut state = prepare()?;
     let mut rows = Vec::new();
-    for row in introduced {
-        let (Some(destination), Some(repository)) =
-            (row.text("destination"), row.member("repository"))
-        else {
+    for row in &plan.payload.introduced {
+        let Some(repository) = row.repository.as_ref() else {
             continue;
         };
-        if repository.text("dialect") != Some(producer.dialect)
-            || repository.text("host") != Some(producer.host)
-        {
+        if repository.dialect != producer.dialect || repository.host != producer.host {
             continue;
         }
-        let (Some(owner), Some(name)) = (repository.text("owner"), repository.text("name")) else {
-            continue;
-        };
-        let evidence = match inspect(
-            &mut state,
-            ForgeTarget {
-                repository,
-                owner,
-                name,
-            },
-        ) {
+        let evidence = match inspect(&mut state, repository) {
             Ok(evidence) => evidence,
             Err(ProviderError::Unavailable) => break,
             Err(defect) => return Err(defect),
         };
-        let (repository_fact, tail, stop) = match evidence {
-            ForgeEvidence::Missing => ("missing", None, false),
-            ForgeEvidence::Denied => ("denied", None, false),
-            ForgeEvidence::Readable(tail) => ("readable", tail.map(forge_tail_name), false),
-            ForgeEvidence::ReadableThenUnavailable => ("readable", None, true),
+        let (repository, tail, stop) = match evidence {
+            ForgeEvidence::Missing => (ForgeVisibility::Missing, None, false),
+            ForgeEvidence::Denied => (ForgeVisibility::Denied, None, false),
+            ForgeEvidence::Readable(tail) => (ForgeVisibility::Readable, tail, false),
+            ForgeEvidence::ReadableThenUnavailable => (ForgeVisibility::Readable, None, true),
         };
-        rows.push(forge_evidence_row(
-            destination,
-            repository_fact,
+        rows.push(ExternalEvidenceRow::ForgeApi {
+            destination: row.destination.clone(),
+            repository,
             tail,
-            producer.checked_at,
-        ));
+            checked_at: producer.checked_at.to_owned(),
+        });
         if stop {
             break;
         }
     }
-    evidence_file(plan, producer.name, producer.version, rows).ok_or(ProviderError::InvalidResponse)
-}
-
-const fn forge_tail_name(tail: ForgeTail) -> &'static str {
-    match tail {
-        ForgeTail::Resolved => "resolved",
-        ForgeTail::RevisionMissing => "revision-missing",
-        ForgeTail::PathMissing => "path-missing",
-    }
+    evidence(&ExternalEvidence {
+        schema: ExternalEvidenceSchema::Current,
+        plan_payload_digest: plan.payload_digest,
+        producer: ExternalEvidenceProducer {
+            name: producer.name.to_owned(),
+            version: producer.version.to_owned(),
+        },
+        rows,
+    })
+    .map_err(|_defect| ProviderError::InvalidResponse)
 }

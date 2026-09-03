@@ -6,8 +6,9 @@
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::external::{
-    AssessDefect, EVIDENCE_SCHEMA, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, assess,
-    parse_plan, plan, probe_evidence_row,
+    AssessDefect, EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
+    ExternalEvidenceSchema, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod,
+    assess, parse_evidence, parse_plan, plan,
 };
 use amiss_wire::json::Value;
 use amiss_wire::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
@@ -648,6 +649,56 @@ fn forge_row(destination: &str, repository: &str, tail: Option<&str>) -> Value {
     object(members)
 }
 
+#[test]
+fn additive_evidence_fields_are_inert_but_known_nulls_are_refused() {
+    let bytes = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../spec/examples/scanner-external-evidence.json"
+    ))
+    .expect("the evidence example is readable");
+    let mut document: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+    document
+        .as_object_mut()
+        .expect("the evidence is an object")
+        .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
+    assert!(
+        parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
+            .is_ok()
+    );
+    document
+        .pointer_mut("/rows/0")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("the evidence has one row")
+        .insert("failure".to_owned(), serde_json::Value::Null);
+    assert!(
+        parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
+            .is_err()
+    );
+}
+
+#[test]
+fn derived_validation_rejects_invalid_evidence_shapes() {
+    let row = ExternalEvidenceRow::HttpProbe {
+        destination: "https://example.com/a".to_owned(),
+        method: ProbeMethod::Get,
+        status: Some(42),
+        failure: Some(amiss_wire::external::ProbeFailure::Tls),
+        final_destination: None,
+        redirect_chain_permanent: Some(false),
+        checked_at: String::new(),
+    };
+    let document = ExternalEvidence {
+        schema: ExternalEvidenceSchema::Current,
+        plan_payload_digest: sample_digest(),
+        producer: ExternalEvidenceProducer {
+            name: String::new(),
+            version: String::new(),
+        },
+        rows: vec![row.clone(), row],
+    };
+    assert!(amiss_wire::external::evidence(&document).is_err());
+}
+
 fn verdicts_of(assessment: &Value) -> Vec<(String, String, String)> {
     array(field(field(assessment, "payload"), "verdicts"))
         .iter()
@@ -759,22 +810,23 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
     let observed = evidence(
         &plan,
         vec![
-            probe_evidence_row(
-                permanent,
-                "head",
-                Some(200),
-                None,
-                Some((permanent_target, true)),
-                "t0",
-            ),
-            probe_evidence_row(
-                temporary,
-                "head",
-                Some(200),
-                None,
-                Some((temporary_target, false)),
-                "t0",
-            ),
+            object(vec![
+                ("checked_at", string("t0")),
+                ("destination", string(permanent)),
+                ("final_destination", string(permanent_target)),
+                ("kind", string("http-probe")),
+                ("method", string("head")),
+                ("redirect_chain_permanent", Value::Bool(true)),
+                ("status", Value::Integer(200)),
+            ]),
+            object(vec![
+                ("checked_at", string("t0")),
+                ("destination", string(temporary)),
+                ("final_destination", string(temporary_target)),
+                ("kind", string("http-probe")),
+                ("method", string("head")),
+                ("status", Value::Integer(200)),
+            ]),
         ],
     );
     let assessment =

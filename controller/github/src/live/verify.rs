@@ -5,6 +5,7 @@ use amiss_controller::{
     spelled_segments,
 };
 use amiss_wire::json::Value;
+use amiss_wire::model::ForgeDialect;
 
 use super::rest::{GitHubVerification, Presence, RefFamily};
 
@@ -26,24 +27,17 @@ pub(super) fn verify_external<R: GitHubVerification>(
     forge_evidence(
         plan,
         ForgeProducer {
-            dialect: "github",
+            dialect: ForgeDialect::Github,
             host,
             name: PRODUCER_NAME,
             version: producer_version,
             checked_at,
         },
         || rest.deadline(),
-        |deadline, target| {
-            let visibility = rest.repository_visibility(target.owner, target.name, *deadline)?;
-            forge_repository_evidence(visibility, || {
-                resolve_tail(
-                    rest,
-                    target.repository,
-                    target.owner,
-                    target.name,
-                    *deadline,
-                )
-            })
+        |deadline, repository| {
+            let visibility =
+                rest.repository_visibility(&repository.owner, &repository.name, *deadline)?;
+            forge_repository_evidence(visibility, || resolve_tail(rest, repository, *deadline))
         },
     )
 }
@@ -57,15 +51,13 @@ pub(super) fn verify_external<R: GitHubVerification>(
 /// established, never that one failed.
 fn resolve_tail<R: GitHubVerification>(
     rest: &R,
-    repository: &Value,
-    owner: &str,
-    name: &str,
+    repository: &amiss_wire::external::ExternalRepository,
     deadline: super::rest::OperationDeadline,
 ) -> Result<Option<ForgeTail>, ProviderError> {
-    if !matches!(repository.text("form"), Some("blob" | "tree" | "raw")) {
+    if !matches!(repository.form.as_deref(), Some("blob" | "tree" | "raw")) {
         return Ok(None);
     }
-    let Some(tail) = repository.text("tail") else {
+    let Some(tail) = repository.tail.as_deref() else {
         return Ok(None);
     };
     let Some(segments) = spelled_segments(tail) else {
@@ -81,7 +73,9 @@ fn resolve_tail<R: GitHubVerification>(
     let rewritten = segments.iter().any(|segment| segment.contains('/'));
     let mut matches = Vec::new();
     for family in [RefFamily::Heads, RefFamily::Tags] {
-        let Some(names) = rest.matching_refs(owner, name, family, first, deadline)? else {
+        let Some(names) =
+            rest.matching_refs(&repository.owner, &repository.name, family, first, deadline)?
+        else {
             return Ok(None);
         };
         // Within one family a second whole-segment match cannot exist, since
@@ -105,7 +99,7 @@ fn resolve_tail<R: GitHubVerification>(
     // since a false refutation is the worst answer this producer can give.
     let (reference, span) = match resolved {
         Some(resolved) => resolved,
-        None => match rest.commit_presence(owner, name, first, deadline)? {
+        None => match rest.commit_presence(&repository.owner, &repository.name, first, deadline)? {
             Presence::Present => (first.to_owned(), 1),
             Presence::Absent if rewritten => return Ok(None),
             Presence::Absent => return Ok(Some(ForgeTail::RevisionMissing)),
@@ -117,7 +111,13 @@ fn resolve_tail<R: GitHubVerification>(
         return Ok(Some(ForgeTail::Resolved));
     }
     Ok(
-        match rest.content_presence(owner, name, &reference, path, deadline)? {
+        match rest.content_presence(
+            &repository.owner,
+            &repository.name,
+            &reference,
+            path,
+            deadline,
+        )? {
             Presence::Present => Some(ForgeTail::Resolved),
             Presence::Absent if rewritten => None,
             Presence::Absent => Some(ForgeTail::PathMissing),

@@ -7,7 +7,10 @@ use amiss_controller::{
     ExternalTally, FileArtifactStore, FileLedger, FileLedgerConfig, HandleOutcome, ProviderError,
     ReplayWindow, RunnerOutcome, SystemClock, check_plan,
 };
-use amiss_wire::external::{evidence_file, forge_evidence_row};
+use amiss_wire::external::{
+    ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
+    ForgeRepository, ForgeTail, evidence,
+};
 use amiss_wire::json::Value;
 
 use crate::support::{
@@ -36,7 +39,7 @@ fn external_outcome(run: &amiss_controller::RunIdentity) -> RunnerOutcome {
     }
 }
 
-fn scripted_evidence(visibility: &str, resolution: Option<&str>) -> Value {
+fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Value {
     let report = amiss_fixtures::external_report(&[DESTINATION]);
     let parsed = amiss_wire::json::parse(&report).unwrap();
     let engine = parsed
@@ -49,8 +52,24 @@ fn scripted_evidence(visibility: &str, resolution: Option<&str>) -> Value {
         amiss_wire::digest::Digest::from_wire(engine.text("engine_digest").unwrap()).unwrap(),
     )
     .unwrap();
-    let row = forge_evidence_row(DESTINATION, visibility, resolution, "t0");
-    evidence_file(&plan, "scripted", "0", vec![row]).unwrap()
+    evidence(&ExternalEvidence {
+        schema: ExternalEvidenceSchema::Current,
+        plan_payload_digest: amiss_wire::digest::Digest::from_wire(
+            plan.text("payload_digest").unwrap(),
+        )
+        .unwrap(),
+        producer: ExternalEvidenceProducer {
+            name: "scripted".to_owned(),
+            version: "0".to_owned(),
+        },
+        rows: vec![ExternalEvidenceRow::ForgeApi {
+            destination: DESTINATION.to_owned(),
+            repository,
+            tail,
+            checked_at: "t0".to_owned(),
+        }],
+    })
+    .unwrap()
 }
 
 fn set_external_policy<L, R>(controller: &mut Controller<L, R>, external_policy: ExternalPolicy) {
@@ -101,8 +120,8 @@ fn a_published_delivery_is_advisorily_assessed() {
     let (adapter, outcome) = published_with(
         ExternalPolicy::Advisory,
         [Ok(Some(scripted_evidence(
-            "readable",
-            Some("path-missing"),
+            ForgeRepository::Readable,
+            Some(ForgeTail::PathMissing),
         )))],
         Some(&sink),
     );
@@ -152,8 +171,8 @@ fn an_off_policy_skips_verification() {
     let (adapter, outcome) = published_with(
         ExternalPolicy::Off,
         [Ok(Some(scripted_evidence(
-            "readable",
-            Some("path-missing"),
+            ForgeRepository::Readable,
+            Some(ForgeTail::PathMissing),
         )))],
         Some(&sink),
     );
@@ -174,8 +193,8 @@ fn only_a_confirmed_refutation_blocks() {
     let (refuted, refuted_outcome) = published_with(
         ExternalPolicy::BlockConfirmedRefutations,
         [Ok(Some(scripted_evidence(
-            "readable",
-            Some("path-missing"),
+            ForgeRepository::Readable,
+            Some(ForgeTail::PathMissing),
         )))],
         None,
     );
@@ -190,7 +209,7 @@ fn only_a_confirmed_refutation_blocks() {
 
     let (unproven, unproven_outcome) = published_with(
         ExternalPolicy::BlockConfirmedRefutations,
-        [Ok(Some(scripted_evidence("missing", None)))],
+        [Ok(Some(scripted_evidence(ForgeRepository::Missing, None)))],
         None,
     );
     assert!(matches!(
@@ -214,7 +233,10 @@ fn the_final_refresh_supersedes_a_retained_external_decision() {
     moved_gate.gate_commit = oid('e');
     let adapter = Arc::new(
         FakeAdapter::new(authenticated, [Ok(initial), Ok(moved_gate)]).with_verify_results([Ok(
-            Some(scripted_evidence("readable", Some("path-missing"))),
+            Some(scripted_evidence(
+                ForgeRepository::Readable,
+                Some(ForgeTail::PathMissing),
+            )),
         )]),
     );
     let mut controller = controller(Arc::clone(&adapter), external_outcome(&run));
@@ -250,8 +272,8 @@ fn a_lost_reply_and_service_restart_reuse_the_frozen_artifact() {
             ],
         )
         .with_verify_results([Ok(Some(scripted_evidence(
-            "readable",
-            Some("path-missing"),
+            ForgeRepository::Readable,
+            Some(ForgeTail::PathMissing),
         )))])
         .with_publish_results([Err(ProviderError::Unavailable)]),
     );
