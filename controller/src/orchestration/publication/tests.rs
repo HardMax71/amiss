@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
+use amiss_wire::controls::{Profile, parse_execution_constraint};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
@@ -60,15 +60,13 @@ fn run_identity(candidate: char) -> RunIdentity {
 }
 
 fn request() -> super::super::model::RunRequest {
-    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
+    let mut constraint = parse_execution_constraint(include_bytes!(
         "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .expect("the published constraint");
-    let mut input = ExecutionConstraintInput::from(&template);
-    input.action_object_format = ObjectFormat::Sha1;
-    input.action_commit_oid = oid('e');
-    input.action_tree_oid = oid('f');
-    let constraint = ExecutionConstraintDescriptor::new(input).expect("a constraint");
+    constraint.action_object_format = ObjectFormat::Sha1;
+    constraint.action_commit_oid = oid('e');
+    constraint.action_tree_oid = oid('f');
     let plan = Arc::new(
         check_plan(Profile::Enforce, PolicyControls::default(), constraint).expect("a plan"),
     );

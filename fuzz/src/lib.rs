@@ -66,8 +66,8 @@ pub fn controls(bytes: &[u8]) {
         amiss_wire::controls::parse_trusted_time(bytes),
     );
     assert_eq!(
-        amiss_wire::controls::ExecutionConstraintDescriptor::parse(bytes),
-        amiss_wire::controls::ExecutionConstraintDescriptor::parse(bytes),
+        amiss_wire::controls::parse_execution_constraint(bytes),
+        amiss_wire::controls::parse_execution_constraint(bytes),
     );
 }
 

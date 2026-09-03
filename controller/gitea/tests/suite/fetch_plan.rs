@@ -12,7 +12,7 @@ use amiss_controller::{
     check_binding, check_plan,
 };
 use amiss_controller_gitea::{GiteaPlanError, gitea_fetch_plan};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, parse_execution_constraint};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -149,16 +149,15 @@ fn request(namespace: &str) -> RunRequest {
 }
 
 fn execution() -> ExecutionConstraintDescriptor {
-    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
+    let mut descriptor = parse_execution_constraint(include_bytes!(
         "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
-    let mut input = ExecutionConstraintInput::from(&template);
-    input.action_repository = repository("controller", "amiss");
-    input.action_object_format = ObjectFormat::Sha1;
-    input.action_commit_oid = oid('e');
-    input.action_tree_oid = oid('f');
-    ExecutionConstraintDescriptor::new(input).unwrap()
+    descriptor.action_repository = repository("controller", "amiss");
+    descriptor.action_object_format = ObjectFormat::Sha1;
+    descriptor.action_commit_oid = oid('e');
+    descriptor.action_tree_oid = oid('f');
+    descriptor
 }
 
 fn provider_run(
@@ -218,10 +217,7 @@ fn rebound(mut request: RunRequest) -> RunRequest {
 }
 
 fn replace_action_repository(request: &mut RunRequest, repository: RepositoryIdentity) {
-    let plan = Arc::make_mut(&mut request.plan);
-    let mut input = ExecutionConstraintInput::from(&plan.execution);
-    input.action_repository = repository;
-    plan.execution = ExecutionConstraintDescriptor::new(input).unwrap();
+    Arc::make_mut(&mut request.plan).execution.action_repository = repository;
 }
 
 /// The repository identity has three separate demands, and a request that

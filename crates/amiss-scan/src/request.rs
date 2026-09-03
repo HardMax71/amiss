@@ -1,6 +1,7 @@
 use amiss_wire::controls::{
-    DebtSnapshot, ExecutionConstraintDescriptor, FloorDefect, OrganizationFloor, ResourceName,
-    WaiverBundle, canonical_trusted_time, parse_trusted_time,
+    DebtSnapshot, FloorDefect, OrganizationFloor, ResourceName, WaiverBundle,
+    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
+    parse_trusted_time,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::Digest;
@@ -95,14 +96,18 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .execution_constraint
         .as_ref()
         .map(|supplied| {
-            typed(
-                supplied,
-                ExecutionConstraintDescriptor::parse,
-                ExecutionConstraintDescriptor::digest,
-            )
-            .map(|(descriptor, trust_source)| ConstraintInput {
+            let bytes = serde_json::to_vec(&supplied.value)
+                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
+            let descriptor =
+                parse_execution_constraint(&bytes).map_err(|error| configuration_detail(&error))?;
+            let (_, digest) = canonical_execution_constraint(&descriptor)
+                .map_err(|error| configuration_detail(&error))?;
+            if digest != supplied.expected_digest {
+                return Err(code(AnalysisErrorCode::DigestMismatch));
+            }
+            Ok(ConstraintInput {
                 descriptor,
-                trust_source,
+                trust_source: supplied.trust_source,
             })
         })
         .transpose()?;

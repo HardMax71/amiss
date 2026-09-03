@@ -1,6 +1,7 @@
 use amiss_wire::controls::{
-    DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeController,
-    TrustedTimeSchema, WaiverBundle, parse_trusted_time,
+    ActionBootstrapContract, DebtSnapshot, ExecutionConstraintSchema, OrganizationFloor,
+    TrustedTimeController, TrustedTimeSchema, WaiverBundle, canonical_execution_constraint,
+    parse_execution_constraint, parse_trusted_time,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -71,27 +72,36 @@ const CONSTRAINT: &str = r#"{
 
 #[test]
 fn parses_an_execution_constraint_descriptor() {
-    let descriptor = ExecutionConstraintDescriptor::parse(CONSTRAINT.as_bytes()).unwrap();
-    assert_eq!(descriptor.selected_platform().as_ref(), "linux-x86_64");
+    let descriptor = parse_execution_constraint(CONSTRAINT.as_bytes()).unwrap();
+    assert_eq!(descriptor.schema, ExecutionConstraintSchema::Current);
     assert_eq!(
-        descriptor.required_status_name(),
+        descriptor.bootstrap_contract,
+        ActionBootstrapContract::Current
+    );
+    assert_eq!(descriptor.selected_platform.as_ref(), "linux-x86_64");
+    assert_eq!(
+        descriptor.required_status_name,
         "amiss / documentation assurance"
+    );
+    assert_eq!(
+        canonical_execution_constraint(&descriptor).unwrap().1,
+        hj(
+            "amiss/scanner-execution-constraint",
+            &json::parse(CONSTRAINT.as_bytes()).unwrap()
+        )
     );
 
     let open_repository = CONSTRAINT.replace(
         "\"host\": \"github.com\", \"owner\": \"acme\"",
         "\"host\": \"git.example.internal\", \"owner\": \"platform/security\"",
     );
-    let descriptor = ExecutionConstraintDescriptor::parse(open_repository.as_bytes()).unwrap();
-    assert_eq!(
-        descriptor.action_repository().host(),
-        "git.example.internal"
-    );
-    assert_eq!(descriptor.action_repository().owner(), "platform/security");
+    let descriptor = parse_execution_constraint(open_repository.as_bytes()).unwrap();
+    assert_eq!(descriptor.action_repository.host(), "git.example.internal");
+    assert_eq!(descriptor.action_repository.owner(), "platform/security");
 
     let slash_host = CONSTRAINT.replace("github.com", "git.example/internal");
     assert_eq!(
-        ExecutionConstraintDescriptor::parse(slash_host.as_bytes())
+        parse_execution_constraint(slash_host.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
@@ -99,7 +109,7 @@ fn parses_an_execution_constraint_descriptor() {
     let malformed_owner =
         CONSTRAINT.replace("\"owner\": \"acme\"", "\"owner\": \"platform//security\"");
     assert_eq!(
-        ExecutionConstraintDescriptor::parse(malformed_owner.as_bytes())
+        parse_execution_constraint(malformed_owner.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
@@ -107,7 +117,7 @@ fn parses_an_execution_constraint_descriptor() {
 
     let trailing_space = CONSTRAINT.replace("assurance\"", "assurance \"");
     assert_eq!(
-        ExecutionConstraintDescriptor::parse(trailing_space.as_bytes())
+        parse_execution_constraint(trailing_space.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
@@ -117,7 +127,7 @@ fn parses_an_execution_constraint_descriptor() {
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     );
     assert_eq!(
-        ExecutionConstraintDescriptor::parse(short_oid.as_bytes())
+        parse_execution_constraint(short_oid.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue

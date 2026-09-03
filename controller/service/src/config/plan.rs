@@ -5,7 +5,7 @@ use amiss_controller::{
     OpaqueId, PolicyControls, ProviderIdentity, SemanticEvidenceExpectation,
     WorkflowArtifactExpectation, check_plan, intersphinx_evidence,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+use amiss_wire::controls::{Profile, parse_execution_constraint};
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
 use amiss_wire::requests::{REQUEST_STREAM_BYTES, RequestTrust};
@@ -75,7 +75,7 @@ pub fn load_plan(
         _ => return Err(ConfigError::invalid("profile must be observe or enforce")),
     };
     let execution_bytes = read_regular(&raw.execution_constraint_file, REQUEST_STREAM_BYTES)?;
-    let execution = ExecutionConstraintDescriptor::parse(&execution_bytes)
+    let execution = parse_execution_constraint(&execution_bytes)
         .map_err(|defect| ConfigError::caused_by("execution constraint is invalid", defect))?;
     let semantic_evidence = intersphinx_evidence(load_intersphinx(&raw.intersphinx_inventories)?)
         .map_err(|defect| {

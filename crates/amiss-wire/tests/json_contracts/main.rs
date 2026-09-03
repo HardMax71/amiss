@@ -143,6 +143,14 @@ fn sealed_request_examples_match_their_typed_sources() {
         controls::canonical_trusted_time(&statement).unwrap().0,
         json::canonical(&json::parse(&time_bytes).unwrap())
     );
+    let constraint_bytes = fs::read(examples.join("scanner-execution-constraint.json")).unwrap();
+    let constraint = controls::parse_execution_constraint(&constraint_bytes).unwrap();
+    assert_eq!(
+        controls::canonical_execution_constraint(&constraint)
+            .unwrap()
+            .0,
+        json::canonical(&json::parse(&constraint_bytes).unwrap())
+    );
 }
 
 #[test]

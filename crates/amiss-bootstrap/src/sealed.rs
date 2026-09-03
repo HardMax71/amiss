@@ -7,7 +7,8 @@ use amiss_bootstrap::supervise::{
 };
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository};
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+    ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_trusted_time,
+    parse_execution_constraint, parse_trusted_time,
 };
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestMode, RequestStreams,
@@ -44,6 +45,8 @@ pub(super) fn capture_requests(
         .map_err(|_defect| tampered("snapshot-request-invalid"))?;
     let controls = ControlsRequest::parse(&streams.controls)
         .map_err(|_defect| tampered("controls-request-invalid"))?;
+    let (_, constraint_digest) = canonical_execution_constraint(constraint)
+        .map_err(|_defect| tampered("execution-constraint-invalid"))?;
     let canonical_requests = evaluation.canonical_bytes().ok().as_deref()
         == Some(streams.evaluation.as_slice())
         && snapshot.canonical_bytes().ok().as_deref() == Some(streams.snapshot.as_slice())
@@ -74,9 +77,9 @@ pub(super) fn capture_requests(
         .ok_or_else(|| tampered("execution-constraint-absent"))?;
     let constraint_bytes = serde_json::to_vec(&supplied_constraint.value)
         .map_err(|_defect| tampered("execution-constraint-invalid"))?;
-    let embedded_constraint = ExecutionConstraintDescriptor::parse(&constraint_bytes)
+    let embedded_constraint = parse_execution_constraint(&constraint_bytes)
         .map_err(|_defect| tampered("execution-constraint-invalid"))?;
-    if embedded_constraint.digest() != supplied_constraint.expected_digest
+    if constraint_digest != supplied_constraint.expected_digest
         || embedded_constraint != *constraint
     {
         return Err(tampered("execution-constraint-mismatch"));
@@ -122,7 +125,7 @@ pub(super) fn capture_requests(
         debt_snapshot: control_expectation(controls.debt_snapshot.as_ref()),
         waiver_bundle: control_expectation(controls.waiver_bundle.as_ref()),
         execution_constraint: SealedControlExpectation {
-            digest: constraint.digest().to_string(),
+            digest: constraint_digest.to_string(),
             trust_source: supplied_constraint.trust_source.as_ref().to_owned(),
         },
         trusted_time_digest: statement_digest.to_string(),

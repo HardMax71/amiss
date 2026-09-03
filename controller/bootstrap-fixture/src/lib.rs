@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use amiss_bootstrap::result::{BootstrapResult, result_bytes, result_exit_code};
-use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::parse_execution_constraint;
 
 /// Answers one lane's bootstrap invocation, choosing its behaviour from the
 /// constraint's required status name.
@@ -14,8 +14,8 @@ pub fn run(report: &[u8]) -> ExitCode {
     };
     let Some(mode) = std::fs::read(&output.constraint)
         .ok()
-        .and_then(|bytes| ExecutionConstraintDescriptor::parse(&bytes).ok())
-        .map(|constraint| constraint.required_status_name().to_owned())
+        .and_then(|bytes| parse_execution_constraint(&bytes).ok())
+        .map(|constraint| constraint.required_status_name)
     else {
         return ExitCode::from(2);
     };

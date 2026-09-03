@@ -74,9 +74,9 @@ fn roots_are_separate_in_both_directions() {
 
 fn plan_over(constraint: &[u8]) -> amiss_controller::CheckPlan {
     use amiss_controller::{PolicyControls, check_plan};
-    use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+    use amiss_wire::controls::{Profile, parse_execution_constraint};
 
-    let descriptor = ExecutionConstraintDescriptor::parse(constraint).expect("a constraint");
+    let descriptor = parse_execution_constraint(constraint).expect("a constraint");
     check_plan(Profile::Enforce, PolicyControls::default(), descriptor).expect("a check plan")
 }
 

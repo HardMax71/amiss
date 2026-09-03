@@ -1,6 +1,6 @@
 use amiss_wire::controls::{
-    DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeController,
-    TrustedTimeSchema, TrustedTimeStatement, WaiverBundle, canonical_trusted_time,
+    DebtSnapshot, OrganizationFloor, TrustedTimeController, TrustedTimeSchema,
+    TrustedTimeStatement, WaiverBundle, canonical_trusted_time,
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{BranchRef, RepositoryIdentity, UtcInstant};
@@ -117,7 +117,7 @@ fn make_policy_identity(
 pub(super) fn validate_request_size(
     policy: &PolicyControls,
     identity: &PolicyIdentity,
-    execution: &ExecutionConstraintDescriptor,
+    execution_digest: Digest,
     execution_bytes: &[u8],
 ) -> Result<(), BootstrapJobError> {
     let request = ControlsRequest {
@@ -137,18 +137,18 @@ pub(super) fn validate_request_size(
             identity.waiver_bundle,
             BootstrapJobError::WaiverBundle,
         )?,
-        trusted_time: Some(maximal_trusted_time(execution.digest())?),
+        trusted_time: Some(maximal_trusted_time(execution_digest)?),
         execution_constraint: Some(SuppliedControl {
             value: serde_json::from_slice(execution_bytes)
                 .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?,
-            expected_digest: execution.digest(),
+            expected_digest: execution_digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         }),
         semantic_evidence: super::bind_semantic_evidence(
             &policy.semantic_evidence,
             &[],
             &[],
-            execution.digest(),
+            execution_digest,
         )?
         .supplied,
     };

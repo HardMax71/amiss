@@ -219,17 +219,7 @@ pub(super) fn controls_value(setup: &Setup) -> Value {
         ),
         (
             "execution_constraint",
-            setup.policy.constraint.as_ref().map_or_else(
-                || object(vec![("status", string("none"))]),
-                |(descriptor, trust)| {
-                    object(vec![
-                        ("status", string("verified")),
-                        ("descriptor", constraint_descriptor_value(descriptor)),
-                        ("descriptor_digest", digest_value(descriptor.digest())),
-                        ("trust_source", string(trust.as_ref())),
-                    ])
-                },
-            ),
+            constraint_value(setup.policy.constraint.as_ref()),
         ),
         (
             "semantic_evidence",
@@ -269,6 +259,23 @@ pub(super) fn controls_value(setup: &Setup) -> Value {
     ])
 }
 
+fn constraint_value(constraint: Option<&crate::policy::ConstraintContext>) -> Value {
+    constraint.map_or_else(
+        || object(vec![("status", string("none"))]),
+        |constraint| {
+            object(vec![
+                ("status", string("verified")),
+                (
+                    "descriptor",
+                    constraint_descriptor_value(&constraint.descriptor),
+                ),
+                ("descriptor_digest", digest_value(constraint.digest)),
+                ("trust_source", string(constraint.trust_source.as_ref())),
+            ])
+        },
+    )
+}
+
 fn semantic_evidence_value(evidence: &crate::semantic::Provenance) -> Value {
     object(vec![
         ("payload_digest", digest_value(evidence.payload_digest)),
@@ -288,40 +295,46 @@ fn constraint_descriptor_value(
     descriptor: &amiss_wire::controls::ExecutionConstraintDescriptor,
 ) -> Value {
     object(vec![
-        ("schema", string("amiss/scanner-execution-constraint")),
+        (
+            "schema",
+            string(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA),
+        ),
         (
             "action_repository",
-            repository_value(descriptor.action_repository()),
+            repository_value(&descriptor.action_repository),
         ),
         (
             "action_object_format",
-            string(descriptor.action_object_format().as_ref()),
+            string(descriptor.action_object_format.as_ref()),
         ),
         (
             "action_commit_oid",
-            string(descriptor.action_commit_oid().as_str()),
+            string(descriptor.action_commit_oid.as_str()),
         ),
         (
             "action_tree_oid",
-            string(descriptor.action_tree_oid().as_str()),
+            string(descriptor.action_tree_oid.as_str()),
         ),
-        ("manifest_path", string(descriptor.manifest_path().as_str())),
+        ("manifest_path", string(descriptor.manifest_path.as_str())),
         (
             "release_manifest_digest",
-            digest_value(descriptor.release_manifest_digest()),
+            digest_value(descriptor.release_manifest_digest),
         ),
         (
             "selected_platform",
-            string(descriptor.selected_platform().as_ref()),
+            string(descriptor.selected_platform.as_ref()),
         ),
         (
             "required_status_name",
-            string(descriptor.required_status_name()),
+            string(&descriptor.required_status_name),
         ),
-        ("bootstrap_contract", string("amiss-action-bootstrap")),
+        (
+            "bootstrap_contract",
+            string(amiss_wire::controls::ACTION_BOOTSTRAP_CONTRACT),
+        ),
         (
             "bootstrap_digest",
-            digest_value(descriptor.bootstrap_digest()),
+            digest_value(descriptor.bootstrap_digest),
         ),
     ])
 }

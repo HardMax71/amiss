@@ -7,7 +7,9 @@
 use amiss_bootstrap::constraint::{ConstraintError, derive_execution_constraint};
 use amiss_bootstrap::{BOOTSTRAP_DOMAIN, validate};
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, canonical_execution_constraint, parse_execution_constraint,
+};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -48,30 +50,26 @@ fn derivation_pins_and_validates_the_exact_release() {
     let release = release(|_root| {});
     let bootstrap = engine_bytes(release.platform);
     let descriptor = derive(&release, &bootstrap).unwrap();
-    assert_eq!(descriptor.action_repository(), &identity());
-    assert_eq!(descriptor.action_object_format(), ObjectFormat::Sha1);
-    assert_eq!(descriptor.action_commit_oid().as_str(), release.commit);
-    assert_eq!(descriptor.action_tree_oid().as_str(), release.tree);
-    assert_eq!(descriptor.manifest_path().as_str(), "release-manifest.json");
+    assert_eq!(descriptor.action_repository, identity());
+    assert_eq!(descriptor.action_object_format, ObjectFormat::Sha1);
+    assert_eq!(descriptor.action_commit_oid.as_str(), release.commit);
+    assert_eq!(descriptor.action_tree_oid.as_str(), release.tree);
+    assert_eq!(descriptor.manifest_path.as_str(), "release-manifest.json");
+    assert_eq!(descriptor.release_manifest_digest, release.manifest_digest);
+    assert_eq!(descriptor.selected_platform, release.platform);
+    assert_eq!(descriptor.required_status_name, "amiss / assure");
     assert_eq!(
-        descriptor.release_manifest_digest(),
-        release.manifest_digest
-    );
-    assert_eq!(descriptor.selected_platform(), release.platform);
-    assert_eq!(descriptor.required_status_name(), "amiss / assure");
-    assert_eq!(
-        descriptor.bootstrap_digest(),
+        descriptor.bootstrap_digest,
         hb(BOOTSTRAP_DOMAIN, &bootstrap)
     );
 
-    let canonical = descriptor.canonical_bytes().unwrap();
+    let canonical = canonical_execution_constraint(&descriptor).unwrap().0;
+    assert_eq!(parse_execution_constraint(&canonical).unwrap(), descriptor);
     assert_eq!(
-        ExecutionConstraintDescriptor::parse(&canonical).unwrap(),
-        descriptor
-    );
-    assert_eq!(
-        derive(&release, &bootstrap).unwrap().canonical_bytes(),
-        Ok(canonical)
+        canonical_execution_constraint(&derive(&release, &bootstrap).unwrap())
+            .unwrap()
+            .0,
+        canonical
     );
 
     let repository = Repository::open(release.dir.path(), ObjectFormat::Sha1).unwrap();
@@ -84,10 +82,9 @@ fn derivation_pins_and_validates_the_exact_release() {
 fn derivation_reads_the_commit_not_the_worktree() {
     let release = release(|_root| {});
     let bootstrap = engine_bytes(release.platform);
-    let expected = derive(&release, &bootstrap)
+    let expected = canonical_execution_constraint(&derive(&release, &bootstrap).unwrap())
         .unwrap()
-        .canonical_bytes()
-        .unwrap();
+        .0;
     std::fs::write(
         release.dir.path().join("release-manifest.json"),
         b"changed worktree",
@@ -98,10 +95,9 @@ fn derivation_reads_the_commit_not_the_worktree() {
         b"changed worktree",
     )
     .unwrap();
-    let actual = derive(&release, &bootstrap)
+    let actual = canonical_execution_constraint(&derive(&release, &bootstrap).unwrap())
         .unwrap()
-        .canonical_bytes()
-        .unwrap();
+        .0;
     assert_eq!(actual, expected);
 }
 

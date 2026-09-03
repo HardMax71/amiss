@@ -152,7 +152,7 @@ impl RawConfig {
             integration: reviewer_integration(reviewer.id)?,
             repository,
         };
-        let review_name = plan.execution.required_status_name().to_owned();
+        let review_name = plan.execution.required_status_name.clone();
         let worker = AcquiringWorkerSettings {
             bootstrap: paths.bootstrap,
             scratch: paths.scratch,
@@ -303,9 +303,9 @@ fn load_token(path: &Path) -> Result<SecretString, ConfigError> {
 }
 
 fn validate_action(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), ConfigError> {
-    (plan.execution.action_repository().host() == provider.instance.as_str()
-        && !plan.execution.action_repository().owner().contains('/')
-        && plan.execution.action_object_format() == ObjectFormat::Sha1)
+    (plan.execution.action_repository.host() == provider.instance.as_str()
+        && !plan.execution.action_repository.owner().contains('/')
+        && plan.execution.action_object_format == ObjectFormat::Sha1)
         .then_some(())
         .ok_or(ConfigError::invalid(
             "action repository must use this SHA-1 provider instance",
@@ -326,7 +326,7 @@ fn validate_client(
         reviewer.clone(),
         token.expose_secret().to_owned(),
         api_base,
-        plan.execution.required_status_name().to_owned(),
+        plan.execution.required_status_name.clone(),
         timeouts,
         objects,
     )

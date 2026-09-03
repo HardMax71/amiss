@@ -14,7 +14,7 @@ use amiss_controller::{
     ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
     ProviderRunIdentity, check_binding, check_plan, register_plan, resolve_plan,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+use amiss_wire::controls::{Profile, parse_execution_constraint};
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 fn plan() -> CheckPlan {
@@ -26,7 +26,7 @@ fn plan() -> CheckPlan {
     check_plan(
         Profile::Enforce,
         PolicyControls::default(),
-        ExecutionConstraintDescriptor::parse(&bytes).unwrap(),
+        parse_execution_constraint(&bytes).unwrap(),
     )
     .unwrap()
 }

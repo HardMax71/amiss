@@ -19,7 +19,7 @@ use amiss_controller_service::{
     DeliveryWorker, DeliveryWorkerInput, Inbox, InboxLimits, IncomingDelivery, IncomingHeader,
     Operations,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+use amiss_wire::controls::{Profile, parse_execution_constraint};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha256;
@@ -462,7 +462,7 @@ fn oid(byte: char) -> Oid {
 }
 
 fn plan() -> amiss_controller::CheckPlan {
-    let execution = ExecutionConstraintDescriptor::parse(include_bytes!(
+    let execution = parse_execution_constraint(include_bytes!(
         "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();

@@ -7,8 +7,9 @@ use std::fs;
 use std::path::Path;
 
 use amiss_wire::controls::{
-    ConstraintPlatform, ExecutionConstraintDescriptor, ExecutionConstraintInput,
-    TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement, canonical_trusted_time,
+    ActionBootstrapContract, ConstraintPlatform, ExecutionConstraintDescriptor,
+    ExecutionConstraintSchema, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
+    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
     parse_trusted_time, valid_required_status_name,
 };
 use amiss_wire::de::ErrorKind;
@@ -55,8 +56,9 @@ fn trusted_time_statement() -> TrustedTimeStatement {
     }
 }
 
-fn execution_constraint_input() -> ExecutionConstraintInput {
-    ExecutionConstraintInput {
+fn execution_constraint() -> ExecutionConstraintDescriptor {
+    ExecutionConstraintDescriptor {
+        schema: ExecutionConstraintSchema::Current,
         action_repository: RepositoryIdentity::github("acme".to_owned(), "amiss-action".to_owned())
             .unwrap(),
         action_object_format: ObjectFormat::Sha1,
@@ -74,6 +76,7 @@ fn execution_constraint_input() -> ExecutionConstraintInput {
         release_manifest_digest: Digest::from_wire(DIGEST_B).unwrap(),
         selected_platform: ConstraintPlatform::LinuxX8664,
         required_status_name: "amiss / documentation assurance".to_owned(),
+        bootstrap_contract: ActionBootstrapContract::Current,
         bootstrap_digest: Digest::from_wire(DIGEST_C).unwrap(),
     }
 }
@@ -101,20 +104,22 @@ fn trusted_time_model_and_writer_share_the_parser_contract() {
 }
 
 #[test]
-fn execution_constraint_constructor_and_writer_share_the_parser_contract() {
-    let descriptor = ExecutionConstraintDescriptor::new(execution_constraint_input()).unwrap();
-    let bytes = descriptor.canonical_bytes().unwrap();
+fn execution_constraint_model_and_writer_share_the_parser_contract() {
+    let descriptor = execution_constraint();
+    let (bytes, _) = canonical_execution_constraint(&descriptor).unwrap();
 
-    assert_eq!(
-        ExecutionConstraintDescriptor::parse(&bytes).unwrap(),
-        descriptor
-    );
+    assert_eq!(parse_execution_constraint(&bytes).unwrap(), descriptor);
     assert_eq!(json::canonical(&json::parse(&bytes).unwrap()), bytes);
 
-    let mut invalid = execution_constraint_input();
+    let mut invalid = execution_constraint();
     invalid.action_object_format = ObjectFormat::Sha256;
-    let error = ExecutionConstraintDescriptor::new(invalid).unwrap_err();
+    let error = canonical_execution_constraint(&invalid).unwrap_err();
     assert_eq!(error.path, "$.action_commit_oid");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    let mut invalid = execution_constraint();
+    invalid.required_status_name = " trailing ".to_owned();
+    let error = canonical_execution_constraint(&invalid).unwrap_err();
+    assert_eq!(error.path, "$.required_status_name");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
@@ -125,13 +130,13 @@ fn producer_writers_preserve_the_validated_digests() {
     let parsed = parse_trusted_time(&statement_bytes).unwrap();
     assert_eq!(canonical_trusted_time(&parsed).unwrap().1, statement_digest);
 
-    let descriptor = ExecutionConstraintDescriptor::new(execution_constraint_input()).unwrap();
-    let descriptor_bytes = descriptor.canonical_bytes().unwrap();
+    let descriptor = execution_constraint();
+    let (descriptor_bytes, descriptor_digest) =
+        canonical_execution_constraint(&descriptor).unwrap();
+    let parsed = parse_execution_constraint(&descriptor_bytes).unwrap();
     assert_eq!(
-        ExecutionConstraintDescriptor::parse(&descriptor_bytes)
-            .unwrap()
-            .digest(),
-        descriptor.digest()
+        canonical_execution_constraint(&parsed).unwrap().1,
+        descriptor_digest
     );
 }
 
@@ -160,9 +165,9 @@ fn producer_writers_preserve_the_published_contract_examples() {
     );
 
     let execution_constraint = example("scanner-execution-constraint.json");
-    let descriptor = ExecutionConstraintDescriptor::parse(&execution_constraint).unwrap();
+    let descriptor = parse_execution_constraint(&execution_constraint).unwrap();
     assert_eq!(
-        descriptor.canonical_bytes().unwrap(),
+        canonical_execution_constraint(&descriptor).unwrap().0,
         json::canonical(&json::parse(&execution_constraint).unwrap())
     );
 }

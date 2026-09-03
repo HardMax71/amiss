@@ -7,8 +7,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use amiss_wire::controls::{
-    DOCUMENT_SUFFIX_BYTES, DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor,
-    SOURCE_MARKER_BYTES, ScannerPolicy, WaiverBundle, parse_trusted_time,
+    DOCUMENT_SUFFIX_BYTES, DebtSnapshot, OrganizationFloor, SOURCE_MARKER_BYTES, ScannerPolicy,
+    WaiverBundle, parse_execution_constraint, parse_trusted_time,
 };
 use amiss_wire::manifest::ReleaseManifest;
 use amiss_wire::model::BranchRef;
@@ -74,7 +74,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "relation-plan" => parse_defect(amiss_wire::relation::parse_plan(bytes)),
         "scanner-controls-request" => parse_defect(ControlsRequest::parse(bytes)),
         "scanner-evaluation-request" => parse_defect(EvaluationRequest::parse(bytes)),
-        "scanner-execution-constraint" => parse_defect(ExecutionConstraintDescriptor::parse(bytes)),
+        "scanner-execution-constraint" => parse_defect(parse_execution_constraint(bytes)),
         "scanner-external-assessment"
         | "scanner-external-evidence"
         | "scanner-external-plan"

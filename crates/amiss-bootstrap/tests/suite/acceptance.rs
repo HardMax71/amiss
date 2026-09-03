@@ -15,7 +15,8 @@ use amiss_bootstrap::supervise::{
     Supervised, accept, settle, supervise,
 };
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
+    parse_trusted_time,
 };
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
@@ -408,9 +409,10 @@ const FLOOR_DIGEST: &str =
 fn sealed_report() -> (Vec<u8>, Expectations) {
     let (wire, mut expectations) = accepted_report();
     let descriptor = parse(&dossier_example("scanner-execution-constraint.json")).unwrap();
-    let constraint_digest = ExecutionConstraintDescriptor::parse(&canonical(&descriptor))
+    let constraint = parse_execution_constraint(&canonical(&descriptor)).unwrap();
+    let constraint_digest = canonical_execution_constraint(&constraint)
         .unwrap()
-        .digest()
+        .1
         .to_string();
     let mut envelope = parse(&wire).unwrap();
     let payload = member_mut(&mut envelope, "payload");

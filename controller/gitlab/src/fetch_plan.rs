@@ -34,7 +34,7 @@ pub fn gitlab_fetch_plan(request: &RunRequest) -> Result<GitLabFetchPlan, GitLab
     let run = &request.run;
     let provider = &request.delivery.provider;
     let repository = &run.change.repository;
-    let action = request.plan.execution.action_repository();
+    let action = &request.plan.execution.action_repository;
     let (project_id, _merge_request_iid) =
         parse_change_id(run.change.change.as_str()).ok_or(GitLabPlanError)?;
     let (pipeline_id, job_id) =
@@ -50,7 +50,7 @@ pub fn gitlab_fetch_plan(request: &RunRequest) -> Result<GitLabFetchPlan, GitLab
     let format_valid = run.refs.forge == ForgeDialect::Gitlab
         && run.object_format == ObjectFormat::Sha1
         && request.provider_run.object_format == ObjectFormat::Sha1
-        && request.plan.execution.action_object_format() == ObjectFormat::Sha1;
+        && request.plan.execution.action_object_format == ObjectFormat::Sha1;
     let binding_valid = request.provider_run.attempt.get() == 1
         && request.provider_run.candidate_commit == run.commits.candidate
         && exact_oids(run, request);
@@ -73,7 +73,7 @@ pub fn gitlab_fetch_plan(request: &RunRequest) -> Result<GitLabFetchPlan, GitLab
         repository_url: repository_url(repository.host(), &project_path).ok_or(GitLabPlanError)?,
         repository_oids: [run.commits.base.clone(), run.commits.candidate.clone()],
         action_url: repository_url(action.host(), &action_path).ok_or(GitLabPlanError)?,
-        action_oid: request.plan.execution.action_commit_oid().clone(),
+        action_oid: request.plan.execution.action_commit_oid.clone(),
     })
 }
 
@@ -83,8 +83,8 @@ fn exact_oids(run: &RunIdentity, request: &RunRequest) -> bool {
         &run.commits.candidate,
         &run.trees.base,
         &run.trees.candidate,
-        request.plan.execution.action_commit_oid(),
-        request.plan.execution.action_tree_oid(),
+        &request.plan.execution.action_commit_oid,
+        &request.plan.execution.action_tree_oid,
     ]
     .into_iter()
     .all(|oid| exact_sha1(oid.as_str()).as_ref() == Some(oid))

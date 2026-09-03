@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::{ExecutionConstraintDescriptor, canonical_execution_constraint};
 use amiss_wire::model::Oid;
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestTrust, SnapshotRequest, SuppliedControl,
@@ -52,14 +52,11 @@ impl SealedRequests {
         );
         let mut controls = ControlsRequest::parse(&example("scanner-controls-request.json"))
             .expect("the published controls request parses");
+        let (constraint_bytes, constraint_digest) =
+            canonical_execution_constraint(&constraint).expect("the constraint serializes");
         controls.execution_constraint = Some(SuppliedControl {
-            value: serde_json::from_slice(
-                &constraint
-                    .canonical_bytes()
-                    .expect("the constraint serializes"),
-            )
-            .expect("canonical bytes parse"),
-            expected_digest: constraint.digest(),
+            value: serde_json::from_slice(&constraint_bytes).expect("canonical bytes parse"),
+            expected_digest: constraint_digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         });
         Self {
@@ -106,10 +103,9 @@ impl SealedRequests {
         );
         put(
             &paths.constraint,
-            &self
-                .constraint
-                .canonical_bytes()
-                .expect("constraint serializes"),
+            &canonical_execution_constraint(&self.constraint)
+                .expect("constraint serializes")
+                .0,
         );
         paths
     }

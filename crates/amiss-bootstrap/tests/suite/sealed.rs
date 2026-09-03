@@ -14,7 +14,8 @@ use amiss_bootstrap::supervise::{
     Supervised, accept, settle,
 };
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
+    parse_trusted_time,
 };
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
@@ -235,9 +236,11 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
         .to_string();
 
     let descriptor = example("scanner-execution-constraint.json");
-    let constraint_digest = ExecutionConstraintDescriptor::parse(&canonical(&descriptor))
-        .expect("a valid constraint fixture")
-        .digest()
+    let constraint =
+        parse_execution_constraint(&canonical(&descriptor)).expect("a valid constraint fixture");
+    let constraint_digest = canonical_execution_constraint(&constraint)
+        .unwrap()
+        .1
         .to_string();
 
     seal_controls(

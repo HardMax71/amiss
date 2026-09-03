@@ -30,7 +30,7 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
     let run = &request.run;
     let provider = &request.delivery.provider;
     let repository = &run.change.repository;
-    let action = request.plan.execution.action_repository();
+    let action = &request.plan.execution.action_repository;
     let integration_id = request
         .delivery
         .integration
@@ -58,7 +58,7 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
     let format_valid = run.refs.forge == ForgeDialect::Gitea
         && run.object_format == ObjectFormat::Sha1
         && request.provider_run.object_format == ObjectFormat::Sha1
-        && request.plan.execution.action_object_format() == ObjectFormat::Sha1;
+        && request.plan.execution.action_object_format == ObjectFormat::Sha1;
     let binding_valid = request.provider_run == expected_run
         && request.provider_run.candidate_commit == run.commits.candidate
         && exact_oids(run, request);
@@ -78,7 +78,7 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
         repository_url: repository_url(repository),
         repository_oids: [run.commits.base.clone(), run.commits.candidate.clone()],
         action_url: repository_url(action),
-        action_oid: request.plan.execution.action_commit_oid().clone(),
+        action_oid: request.plan.execution.action_commit_oid.clone(),
     })
 }
 
@@ -88,8 +88,8 @@ fn exact_oids(run: &RunIdentity, request: &RunRequest) -> bool {
         &run.commits.candidate,
         &run.trees.base,
         &run.trees.candidate,
-        request.plan.execution.action_commit_oid(),
-        request.plan.execution.action_tree_oid(),
+        &request.plan.execution.action_commit_oid,
+        &request.plan.execution.action_tree_oid,
     ]
     .into_iter()
     .all(exact_sha1)

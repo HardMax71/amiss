@@ -1,6 +1,9 @@
 use amiss_git::{GitResources, Repository};
 use amiss_wire::action::executable_platform;
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, GitMode};
+use amiss_wire::controls::{
+    ActionBootstrapContract, ExecutionConstraintDescriptor, ExecutionConstraintSchema, GitMode,
+    canonical_execution_constraint,
+};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{Oid, RepoPathText, RepositoryIdentity};
 
@@ -63,7 +66,8 @@ pub fn derive_execution_constraint(
             reason: "manifest-digest-mismatch",
         });
     }
-    let descriptor = ExecutionConstraintDescriptor::new(ExecutionConstraintInput {
+    let descriptor = ExecutionConstraintDescriptor {
+        schema: ExecutionConstraintSchema::Current,
         action_repository: action_repository.clone(),
         action_object_format: action.object_format(),
         action_commit_oid: action_commit_oid.clone(),
@@ -72,9 +76,10 @@ pub fn derive_execution_constraint(
         release_manifest_digest: manifest.digest,
         selected_platform: platform,
         required_status_name: required_status_name.to_owned(),
+        bootstrap_contract: ActionBootstrapContract::Current,
         bootstrap_digest: hb(BOOTSTRAP_DOMAIN, bootstrap_bytes),
-    })
-    .map_err(|_defect| ConstraintError {
+    };
+    canonical_execution_constraint(&descriptor).map_err(|_defect| ConstraintError {
         reason: "execution-constraint-invalid",
     })?;
     validate_release(action, resources, &tree, manifest, platform).map_err(constraint_error)?;

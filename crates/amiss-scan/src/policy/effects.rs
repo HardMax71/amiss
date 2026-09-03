@@ -124,6 +124,15 @@ pub struct TimeContext {
     pub digest: Digest,
 }
 
+/// A validated execution constraint and the trust source that supplied its
+/// independently reproduced digest.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ConstraintContext {
+    pub descriptor: amiss_wire::controls::ExecutionConstraintDescriptor,
+    pub digest: Digest,
+    pub trust_source: RequestTrust,
+}
+
 /// The complete policy effects on one run: the candidate's raise-only
 /// dispositions, the weakening and inventory-coverage control findings
 /// derived from the base and candidate semantic sets, and the verified
@@ -139,10 +148,7 @@ pub struct Effects {
     pub debt: Option<DebtContext>,
     pub waiver: Option<WaiverContext>,
     pub time: Option<TimeContext>,
-    pub constraint: Option<(
-        amiss_wire::controls::ExecutionConstraintDescriptor,
-        RequestTrust,
-    )>,
+    pub constraint: Option<ConstraintContext>,
     pub semantic_evidence: Vec<crate::semantic::Provenance>,
     /// The effective typed-analysis-errors-retained ceiling `E`:
     /// `min(64, verified floor limit)`, the built-in 64 without a floor.

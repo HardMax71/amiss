@@ -53,10 +53,10 @@ pub fn verify_acquired(request: &RunRequest, roots: AcquiredRoots<'_>) -> Result
     )?;
     verify_commits(
         roots.action,
-        request.plan.execution.action_object_format(),
+        request.plan.execution.action_object_format,
         [(
-            request.plan.execution.action_commit_oid(),
-            request.plan.execution.action_tree_oid(),
+            &request.plan.execution.action_commit_oid,
+            &request.plan.execution.action_tree_oid,
         )],
         AcquireError::ActionObjects,
         AcquireError::ActionTree,
