@@ -10,7 +10,7 @@ use std::process::{Command, Output};
 use amiss_bootstrap::BOOTSTRAP_EXECUTABLE_BYTES;
 use amiss_bootstrap::validate;
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::{canonical_execution_constraint, parse_execution_constraint};
 use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -63,10 +63,11 @@ fn writes_one_canonical_constraint_without_clobbering() {
     assert!(output.stderr.is_empty());
 
     let bytes = std::fs::read(&first).unwrap();
-    let descriptor = ExecutionConstraintDescriptor::parse(&bytes).unwrap();
-    assert_eq!(descriptor.canonical_bytes().unwrap(), bytes);
+    let descriptor = parse_execution_constraint(&bytes).unwrap();
+    let (canonical, digest) = canonical_execution_constraint(&descriptor).unwrap();
+    assert_eq!(canonical, bytes);
     assert_eq!(
-        descriptor.action_repository(),
+        &descriptor.action_repository,
         &RepositoryIdentity::new(
             "git.example.internal".to_owned(),
             "platform/security".to_owned(),
@@ -74,11 +75,11 @@ fn writes_one_canonical_constraint_without_clobbering() {
         )
         .unwrap()
     );
-    assert_eq!(descriptor.action_commit_oid().as_str(), release.commit);
-    assert_eq!(descriptor.action_tree_oid().as_str(), release.tree);
+    assert_eq!(descriptor.action_commit_oid.as_str(), release.commit);
+    assert_eq!(descriptor.action_tree_oid.as_str(), release.tree);
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
-        format!("{}\n", descriptor.digest())
+        format!("{digest}\n")
     );
 
     let bootstrap = std::fs::read(BINARY).unwrap();

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, TrustedTimeController, TrustedTimeSchema,
-    TrustedTimeStatement, canonical_trusted_time,
+    TrustedTimeStatement, canonical_execution_constraint, canonical_trusted_time,
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity, UtcInstant};
@@ -114,6 +114,7 @@ pub struct CheckPlan {
     pub profile: Profile,
     pub policy: PolicyControls,
     pub execution: ExecutionConstraintDescriptor,
+    pub execution_digest: Digest,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -189,10 +190,9 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     let statement_value = serde_json::from_slice(&statement_bytes)
         .map_err(|_defect| BootstrapJobError::TrustedTime)?;
 
-    let constraint = checked_plan
-        .execution
-        .canonical_bytes()
-        .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    let (constraint, constraint_digest) =
+        canonical_execution_constraint(&checked_plan.execution)
+            .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
     let constraint_value = serde_json::from_slice(&constraint)
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
     let semantic_expectations = plan::semantic_acquisition_expectations(&checked_plan.policy);
@@ -208,7 +208,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         supplied_time(input.run, statement_digest, statement_value),
         SuppliedControl {
             value: constraint_value,
-            expected_digest: checked_plan.execution.digest(),
+            expected_digest: constraint_digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         },
         semantic.supplied,

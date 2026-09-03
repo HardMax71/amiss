@@ -1,6 +1,6 @@
 use amiss_git::Repository;
 use amiss_scan::policy::ConstraintInput;
-use amiss_wire::controls::{ExecutionConstraintDescriptor, OrganizationFloor, Profile};
+use amiss_wire::controls::{OrganizationFloor, Profile, parse_execution_constraint};
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
 
@@ -26,7 +26,7 @@ fn valid_active_debt_is_tolerated_with_full_provenance() {
         "2026-08-01T00:00:00Z",
     )));
     setup.constraint = Some(ConstraintInput {
-        descriptor: ExecutionConstraintDescriptor::parse(
+        descriptor: parse_execution_constraint(
             br#"{
   "schema": "amiss/scanner-execution-constraint",
   "action_repository": { "host": "git.example.internal", "owner": "platform/security", "name": "amiss-action" },

@@ -17,7 +17,8 @@ use amiss_controller::{
     WorkflowArtifactExpectation, bootstrap_job, check_binding, check_plan,
 };
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile, parse_trusted_time,
+    ExecutionConstraintDescriptor, Profile, canonical_execution_constraint,
+    parse_execution_constraint, parse_trusted_time,
 };
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{self, Value};
@@ -145,7 +146,7 @@ fn run_request(policy: PolicyControls) -> RunRequest {
 }
 
 fn execution() -> ExecutionConstraintDescriptor {
-    ExecutionConstraintDescriptor::parse(&example("scanner-execution-constraint.json")).unwrap()
+    parse_execution_constraint(&example("scanner-execution-constraint.json")).unwrap()
 }
 
 fn instant(value: &str) -> UtcInstant {
@@ -311,7 +312,10 @@ fn job_construction_binds_the_complete_authenticated_run() {
         semantic.payload.subject.candidate_identity_digest,
         statement.candidate_identity_digest
     );
-    assert_eq!(job.constraint, execution().canonical_bytes().unwrap());
+    assert_eq!(
+        job.constraint,
+        canonical_execution_constraint(&execution()).unwrap().0
+    );
 }
 
 #[test]
@@ -636,10 +640,12 @@ fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
 #[test]
 fn a_changed_constraint_gets_a_new_semantic_digest() {
     let original = execution();
-    let mut input = ExecutionConstraintInput::from(&original);
-    input.required_status_name = "amiss / another check".to_owned();
-    let changed = ExecutionConstraintDescriptor::new(input).unwrap();
-    assert_ne!(changed.digest(), original.digest());
+    let mut changed = original.clone();
+    changed.required_status_name = "amiss / another check".to_owned();
+    assert_ne!(
+        canonical_execution_constraint(&changed).unwrap().1,
+        canonical_execution_constraint(&original).unwrap().1
+    );
     assert!(check_plan(Profile::Enforce, PolicyControls::default(), changed,).is_ok());
 }
 

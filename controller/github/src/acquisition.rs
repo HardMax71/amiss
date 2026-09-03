@@ -84,7 +84,7 @@ pub fn github_fetch_plan(request: &RunRequest) -> Result<GitHubFetchPlan, GitHub
     let run = &request.run;
     let provider = &request.delivery.provider;
     let repository = &run.change.repository;
-    let action = request.plan.execution.action_repository();
+    let action = &request.plan.execution.action_repository;
     let installation_id = request
         .delivery
         .integration
@@ -113,7 +113,7 @@ pub fn github_fetch_plan(request: &RunRequest) -> Result<GitHubFetchPlan, GitHub
     let format_valid = run.refs.forge == ForgeDialect::Github
         && run.object_format == ObjectFormat::Sha1
         && request.provider_run.object_format == ObjectFormat::Sha1
-        && request.plan.execution.action_object_format() == ObjectFormat::Sha1;
+        && request.plan.execution.action_object_format == ObjectFormat::Sha1;
     let binding_valid = request.provider_run == expected_run
         && request.provider_run.candidate_commit == run.commits.candidate
         && [
@@ -121,8 +121,8 @@ pub fn github_fetch_plan(request: &RunRequest) -> Result<GitHubFetchPlan, GitHub
             &run.commits.candidate,
             &run.trees.base,
             &run.trees.candidate,
-            request.plan.execution.action_commit_oid(),
-            request.plan.execution.action_tree_oid(),
+            &request.plan.execution.action_commit_oid,
+            &request.plan.execution.action_tree_oid,
         ]
         .into_iter()
         .all(exact_sha1);
@@ -155,7 +155,7 @@ pub fn github_fetch_plan(request: &RunRequest) -> Result<GitHubFetchPlan, GitHub
         repository_url: repository_clone_url,
         repository_oids: [run.commits.base.clone(), run.commits.candidate.clone()],
         action_url,
-        action_oid: request.plan.execution.action_commit_oid().clone(),
+        action_oid: request.plan.execution.action_commit_oid.clone(),
     })
 }
 

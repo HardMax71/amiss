@@ -12,10 +12,7 @@ pub(super) struct ExternalVerified {
     debt: Option<crate::policy::DebtContext>,
     waiver: Option<crate::policy::WaiverContext>,
     time: Option<crate::policy::TimeContext>,
-    constraint: Option<(
-        amiss_wire::controls::ExecutionConstraintDescriptor,
-        amiss_wire::requests::RequestTrust,
-    )>,
+    constraint: Option<crate::policy::ConstraintContext>,
     pub(super) semantic: crate::semantic::Context,
 }
 
@@ -54,15 +51,15 @@ pub(super) fn external_gate(
     let time = setup_shell
         .time
         .as_ref()
-        .map(|input| {
-            crate::policy::verify_time(input, repository, target_ref, &identity)
-                .map_err(|row| ("invalid-external-control", row))
-        })
-        .transpose()?;
+        .map(|input| crate::policy::verify_time(input, repository, target_ref, &identity))
+        .transpose()
+        .map_err(|row| ("invalid-external-control", row))?;
     let constraint = setup_shell
         .constraint
         .as_ref()
-        .map(|input| (input.descriptor.clone(), input.trust_source));
+        .map(crate::policy::verify_constraint)
+        .transpose()
+        .map_err(|row| ("invalid-external-control", row))?;
     let semantic = crate::semantic::bind(&setup_shell.semantic, identity)
         .map_err(|row| (external_reason(&row), row))?;
     let Some(tree) = candidate_tree else {

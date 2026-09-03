@@ -17,7 +17,8 @@ use amiss_bootstrap::result::{BootstrapResult, parse_result};
 use amiss_fixtures::CommitChain;
 use amiss_fixtures::requests::SealedRequests;
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+    ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_trusted_time,
+    parse_execution_constraint, parse_trusted_time,
 };
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::{Value, canonical, parse};
@@ -108,7 +109,7 @@ fn wrapper_constraint(staged: &Release) -> ExecutionConstraintDescriptor {
         platform = staged.platform.as_ref(),
         bootstrap = hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
     );
-    ExecutionConstraintDescriptor::parse(raw.as_bytes()).unwrap()
+    parse_execution_constraint(raw.as_bytes()).unwrap()
 }
 
 fn entry<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
@@ -357,7 +358,10 @@ fn patch_controls(
     let constraint_source = supplied.trust_source.as_ref().to_owned();
     let constraint_value = parse(&serde_json::to_vec(&supplied.value).expect("constraint JSON"))
         .expect("a constraint value");
-    let constraint_digest = requests.constraint.digest().to_string();
+    let constraint_digest = canonical_execution_constraint(&requests.constraint)
+        .unwrap()
+        .1
+        .to_string();
 
     let controls = entry(payload, "controls");
     set(controls, "profile", string("enforce"));

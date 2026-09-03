@@ -17,7 +17,7 @@ use amiss_controller::{
     run_bootstrap,
 };
 use amiss_fixtures::{CommitPair, commit_pair, git};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, parse_execution_constraint};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{
     BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
@@ -200,16 +200,15 @@ fn execution(
     status: &str,
     bootstrap_digest: Digest,
 ) -> ExecutionConstraintDescriptor {
-    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
+    let mut constraint = parse_execution_constraint(include_bytes!(
         "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
-    let mut input = ExecutionConstraintInput::from(&template);
-    input.action_commit_oid = oid(&action.candidate);
-    input.action_tree_oid = tree(action, &action.candidate);
-    status.clone_into(&mut input.required_status_name);
-    input.bootstrap_digest = bootstrap_digest;
-    ExecutionConstraintDescriptor::new(input).unwrap()
+    constraint.action_commit_oid = oid(&action.candidate);
+    constraint.action_tree_oid = tree(action, &action.candidate);
+    status.clone_into(&mut constraint.required_status_name);
+    constraint.bootstrap_digest = bootstrap_digest;
+    constraint
 }
 
 fn request(

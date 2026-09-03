@@ -12,7 +12,7 @@ use amiss_controller::{
     RunRefs, RunRequest, check_binding, check_plan, verify_acquired,
 };
 use amiss_fixtures::{CommitPair, commit_pair, git};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, parse_execution_constraint};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 fn oid(value: &str) -> Oid {
@@ -34,14 +34,13 @@ fn repository() -> RepositoryIdentity {
 }
 
 fn action_execution(action: &CommitPair, action_tree: Oid) -> ExecutionConstraintDescriptor {
-    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
+    let mut descriptor = parse_execution_constraint(include_bytes!(
         "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
-    let mut input = ExecutionConstraintInput::from(&template);
-    input.action_commit_oid = oid(&action.candidate);
-    input.action_tree_oid = action_tree;
-    ExecutionConstraintDescriptor::new(input).unwrap()
+    descriptor.action_commit_oid = oid(&action.candidate);
+    descriptor.action_tree_oid = action_tree;
+    descriptor
 }
 
 fn request(repository_pair: &CommitPair, action: &CommitPair) -> RunRequest {

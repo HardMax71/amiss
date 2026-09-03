@@ -125,7 +125,7 @@ impl RawConfig {
             positive(self.github.installation_id)?,
             read_regular(&self.github.private_key_file, PRIVATE_KEY_BYTES)?,
             &self.github.api_base,
-            plan.execution.required_status_name().to_owned(),
+            plan.execution.required_status_name.clone(),
             api_timeouts,
         )
         .map_err(|defect| ConfigError::caused_by("GitHub App configuration is invalid", defect))?;
@@ -249,9 +249,9 @@ fn github_branch(branch: &str) -> Result<BranchRef, ConfigError> {
 }
 
 fn validate_github_plan(provider: &ProviderIdentity, plan: &CheckPlan) -> Result<(), ConfigError> {
-    (plan.execution.action_repository().host() == provider.instance.as_str()
-        && !plan.execution.action_repository().owner().contains('/')
-        && plan.execution.action_object_format() == ObjectFormat::Sha1)
+    (plan.execution.action_repository.host() == provider.instance.as_str()
+        && !plan.execution.action_repository.owner().contains('/')
+        && plan.execution.action_object_format == ObjectFormat::Sha1)
         .then_some(())
         .ok_or(ConfigError::invalid(
             "action repository must use this SHA-1 GitHub instance",

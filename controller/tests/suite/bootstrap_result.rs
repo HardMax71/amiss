@@ -13,7 +13,7 @@ use amiss_controller::{
     RunIdentity, RunRefs, RunRequest, RunnerOutcome, check_binding, check_plan,
     classify_bootstrap_result,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+use amiss_wire::controls::{Profile, parse_execution_constraint};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
@@ -29,7 +29,7 @@ fn provider() -> ProviderIdentity {
 }
 
 fn plan() -> Arc<CheckPlan> {
-    let execution = ExecutionConstraintDescriptor::parse(include_bytes!(
+    let execution = parse_execution_constraint(include_bytes!(
         "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();

@@ -9,7 +9,8 @@ use amiss_wire::requests::RequestTrust;
 
 pub use acquire::{Includes, PolicySide, acquire, acquire_entry};
 pub use effects::{
-    ControlSeed, DebtContext, Effects, InventoryState, TimeContext, WaiverContext, effects,
+    ConstraintContext, ControlSeed, DebtContext, Effects, InventoryState, TimeContext,
+    WaiverContext, effects,
 };
 pub(crate) use floor::protected_control;
 pub use floor::{
@@ -168,6 +169,28 @@ pub fn verify_time(
     Ok(TimeContext {
         statement: statement.clone(),
         digest,
+    })
+}
+
+/// Revalidates a public execution descriptor and packages its canonical
+/// digest with the trust source that supplied it.
+///
+/// # Errors
+///
+/// One `CONFIGURATION_INVALID` detail.
+pub(crate) fn verify_constraint(input: &ConstraintInput) -> Result<ConstraintContext, ErrorDetail> {
+    let digest = amiss_wire::controls::canonical_execution_constraint(&input.descriptor)
+        .map_err(|_defect| ErrorDetail {
+            code: AnalysisErrorCode::ConfigurationInvalid,
+            path: None,
+            path_bytes: None,
+            resource: None,
+        })?
+        .1;
+    Ok(ConstraintContext {
+        descriptor: input.descriptor.clone(),
+        digest,
+        trust_source: input.trust_source,
     })
 }
 

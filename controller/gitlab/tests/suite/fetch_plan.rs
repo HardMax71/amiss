@@ -7,7 +7,6 @@ use std::sync::Arc;
 
 use amiss_controller::{ChangeId, DeliveryId, ProviderInstance, ProviderRunAttempt, ProviderRunId};
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, GitLabPlanError, gitlab_fetch_plan};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::support::identity::now_seconds;
@@ -54,7 +53,7 @@ fn exact_fetch_plan_contains_no_credential_or_moving_ref() {
         plan.repository_oids,
         [snapshot.run.commits.base, snapshot.run.commits.candidate]
     );
-    assert_eq!(&plan.action_oid, request.plan.execution.action_commit_oid());
+    assert_eq!(&plan.action_oid, &request.plan.execution.action_commit_oid);
 }
 
 #[test]
@@ -111,10 +110,7 @@ fn replace_action_repository(
     request: &mut amiss_controller::RunRequest,
     repository: RepositoryIdentity,
 ) {
-    let plan = Arc::make_mut(&mut request.plan);
-    let mut input = ExecutionConstraintInput::from(&plan.execution);
-    input.action_repository = repository;
-    plan.execution = ExecutionConstraintDescriptor::new(input).unwrap();
+    Arc::make_mut(&mut request.plan).execution.action_repository = repository;
 }
 
 /// The binding is three clauses over the same run: a first attempt, a

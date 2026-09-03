@@ -7,7 +7,9 @@ use amiss_controller::{
     AcquiredSemanticTemplate, Acquisition, AcquisitionTarget, OidPair, RunRequest,
 };
 use amiss_fixtures::{CommitPair, commit_pair};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput};
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, canonical_execution_constraint, parse_execution_constraint,
+};
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -71,22 +73,18 @@ pub fn execution_constraint(
     required_status_name: &str,
     bootstrap_digest: Digest,
 ) -> io::Result<ExecutionConstraintDescriptor> {
-    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
+    let mut descriptor = parse_execution_constraint(include_bytes!(
         "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .map_err(io::Error::other)?;
-    ExecutionConstraintDescriptor::new(ExecutionConstraintInput {
-        action_repository,
-        action_object_format: ObjectFormat::Sha1,
-        action_commit_oid: repositories.action_commit.clone(),
-        action_tree_oid: repositories.action_tree.clone(),
-        manifest_path: template.manifest_path().clone(),
-        release_manifest_digest: template.release_manifest_digest(),
-        selected_platform: template.selected_platform(),
-        required_status_name: required_status_name.to_owned(),
-        bootstrap_digest,
-    })
-    .map_err(io::Error::other)
+    descriptor.action_repository = action_repository;
+    descriptor.action_object_format = ObjectFormat::Sha1;
+    descriptor.action_commit_oid = repositories.action_commit.clone();
+    descriptor.action_tree_oid = repositories.action_tree.clone();
+    required_status_name.clone_into(&mut descriptor.required_status_name);
+    descriptor.bootstrap_digest = bootstrap_digest;
+    canonical_execution_constraint(&descriptor).map_err(io::Error::other)?;
+    Ok(descriptor)
 }
 
 /// Places both fixture trees by copy, so a lane runs without a network.

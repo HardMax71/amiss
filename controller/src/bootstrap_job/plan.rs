@@ -1,11 +1,13 @@
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, Profile, canonical_execution_constraint,
+};
 use amiss_wire::digest::hj;
 use amiss_wire::json::Value;
 
 use super::controls;
 use super::{
-    BootstrapJobError, CheckBinding, CheckPlan, ExternalPolicy, PolicyControls,
-    SemanticEvidenceExpectation, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
+    BootstrapJobError, CheckBinding, CheckPlan, PolicyControls, SemanticEvidenceExpectation,
+    WorkflowArtifactExpectation,
 };
 
 const CHECK_PLAN_DOMAIN: &str = "amiss/controller-required-check-plan-v6";
@@ -35,19 +37,16 @@ pub fn check_plan(
         return Err(BootstrapJobError::SemanticEvidence);
     }
     let policy_identity = controls::identity(&policy)?;
-    let constraint = execution
-        .canonical_bytes()
+    let (constraint, execution_digest) = canonical_execution_constraint(&execution)
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    controls::validate_request_size(&policy, &policy_identity, &execution, &constraint)?;
+    controls::validate_request_size(&policy, &policy_identity, execution_digest, &constraint)?;
     let digest = hj(
         CHECK_PLAN_DOMAIN,
         &plan_value(
             profile,
-            policy.external_policy,
+            &policy,
             &policy_identity,
-            &policy.semantic_evidence,
-            &policy.semantic_acquisitions,
-            &policy.workflow_artifacts,
+            execution_digest,
             &execution,
         ),
     );
@@ -56,6 +55,7 @@ pub fn check_plan(
         profile,
         policy,
         execution,
+        execution_digest,
     })
 }
 
@@ -71,8 +71,8 @@ pub fn check_binding(plan: &CheckPlan) -> Result<CheckBinding, BootstrapJobError
 pub(super) fn binding(plan: &CheckPlan) -> CheckBinding {
     CheckBinding {
         plan_digest: plan.digest,
-        required_status_name: plan.execution.required_status_name().to_owned(),
-        execution_constraint_digest: plan.execution.digest(),
+        required_status_name: plan.execution.required_status_name.clone(),
+        execution_constraint_digest: plan.execution_digest,
     }
 }
 
@@ -85,11 +85,9 @@ pub(super) fn validated_plan(plan: &CheckPlan) -> Result<CheckPlan, BootstrapJob
 
 fn plan_value(
     profile: Profile,
-    external_policy: ExternalPolicy,
-    policy: &controls::PolicyIdentity,
-    semantic_evidence: &[SemanticEvidenceTemplate],
-    semantic_acquisitions: &[SemanticEvidenceExpectation],
-    workflow_artifacts: &[WorkflowArtifactExpectation],
+    policy: &PolicyControls,
+    identity: &controls::PolicyIdentity,
+    execution_digest: amiss_wire::digest::Digest,
     execution: &ExecutionConstraintDescriptor,
 ) -> Value {
     Value::object(vec![
@@ -103,32 +101,33 @@ fn plan_value(
         ),
         (
             "external_policy".to_owned(),
-            Value::string(external_policy.as_ref().to_owned()),
+            Value::string(policy.external_policy.as_ref().to_owned()),
         ),
         (
             "organization_floor".to_owned(),
-            control_identity_value(policy.organization_floor),
+            control_identity_value(identity.organization_floor),
         ),
         (
             "debt_snapshot".to_owned(),
-            control_identity_value(policy.debt_snapshot),
+            control_identity_value(identity.debt_snapshot),
         ),
         (
             "waiver_bundle".to_owned(),
-            control_identity_value(policy.waiver_bundle),
+            control_identity_value(identity.waiver_bundle),
         ),
         (
             "execution_constraint_digest".to_owned(),
-            Value::string(execution.digest().to_string()),
+            Value::string(execution_digest.to_string()),
         ),
         (
             "required_status_name".to_owned(),
-            Value::string(execution.required_status_name().to_owned()),
+            Value::string(execution.required_status_name.clone()),
         ),
         (
             "semantic_evidence".to_owned(),
             Value::array(
-                semantic_evidence
+                policy
+                    .semantic_evidence
                     .iter()
                     .map(|template| {
                         Value::object(vec![
@@ -161,7 +160,8 @@ fn plan_value(
         (
             "semantic_acquisitions".to_owned(),
             Value::array(
-                semantic_acquisitions
+                policy
+                    .semantic_acquisitions
                     .iter()
                     .map(expectation_value)
                     .collect(),
@@ -170,7 +170,8 @@ fn plan_value(
         (
             "workflow_artifacts".to_owned(),
             Value::array(
-                workflow_artifacts
+                policy
+                    .workflow_artifacts
                     .iter()
                     .map(workflow_artifact_value)
                     .collect(),

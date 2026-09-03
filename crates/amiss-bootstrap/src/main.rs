@@ -13,7 +13,7 @@ use amiss_bootstrap::result::{BootstrapResult, result_bytes};
 use amiss_bootstrap::supervise::{Defect, SealedExpectations};
 use amiss_bootstrap::{Refusal, validate};
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::parse_execution_constraint;
 use amiss_wire::requests::{EvaluationRequest, RequestStreams};
 
 /// The trusted bootstrap, which is also the trusted wrapper the security
@@ -109,11 +109,11 @@ fn execute(args: &Args) -> Execution<Accepted> {
         "constraint-unreadable",
         "constraint-invalid",
     )?;
-    let constraint = ExecutionConstraintDescriptor::parse(&constraint_bytes)
+    let constraint = parse_execution_constraint(&constraint_bytes)
         .map_err(|_defect| tampered("constraint-invalid"))?;
     let own_path = env::current_exe().map_err(|_defect| unavailable("self-unreadable"))?;
     let own_bytes = std::fs::read(own_path).map_err(|_defect| unavailable("self-unreadable"))?;
-    let action = Repository::open(&args.action_repository, constraint.action_object_format())
+    let action = Repository::open(&args.action_repository, constraint.action_object_format)
         .map_err(|_defect| unavailable("action-tree-unavailable"))?;
     let mut resources = GitResources::new(GitLimits::CONTRACT);
     let validated =

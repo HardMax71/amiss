@@ -2,7 +2,8 @@ use std::process::{Child, ExitStatus};
 use std::time::{Duration, Instant};
 
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_trusted_time, parse_trusted_time,
+    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
+    parse_trusted_time,
 };
 use amiss_wire::digest::hj;
 use amiss_wire::json::{Value, canonical, parse};
@@ -226,14 +227,16 @@ fn accept_sealed(
     let constraint =
         member(controls, "execution_constraint").ok_or(AcceptanceDefect::SealedControls)?;
     let descriptor = member(constraint, "descriptor").ok_or(AcceptanceDefect::SealedControls)?;
-    let descriptor = ExecutionConstraintDescriptor::parse(&canonical(descriptor))
+    let descriptor = parse_execution_constraint(&canonical(descriptor))
+        .map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    let (_, descriptor_digest) = canonical_execution_constraint(&descriptor)
         .map_err(|_defect| AcceptanceDefect::SealedControls)?;
     if text(constraint, "status") != Some("verified")
         || text(constraint, "descriptor_digest")
             != Some(expected.execution_constraint.digest.as_str())
         || text(constraint, "trust_source")
             != Some(expected.execution_constraint.trust_source.as_str())
-        || descriptor.digest().to_string() != expected.execution_constraint.digest
+        || descriptor_digest.to_string() != expected.execution_constraint.digest
     {
         return Err(AcceptanceDefect::SealedControls);
     }

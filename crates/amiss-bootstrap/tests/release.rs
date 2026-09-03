@@ -14,7 +14,9 @@ use amiss_bootstrap::{Refusal, validate};
 use amiss_fixtures::requests::{RequestPaths, SealedRequests, indent};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_wire::action::host_platform;
-use amiss_wire::controls::{ConstraintPlatform, ExecutionConstraintDescriptor};
+use amiss_wire::controls::{
+    ConstraintPlatform, ExecutionConstraintDescriptor, parse_execution_constraint,
+};
 use amiss_wire::digest::{Digest, hb, sha256};
 use amiss_wire::json::{Value, canonical, parse as parse_json};
 use amiss_wire::manifest::{ReleaseManifest, RuntimeRole};
@@ -57,7 +59,7 @@ fn constraint(release: &Release) -> ExecutionConstraintDescriptor {
             string(&hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, BOOTSTRAP).to_string()),
         ),
     ]);
-    ExecutionConstraintDescriptor::parse(&canonical(&value)).expect("the constraint parses")
+    parse_execution_constraint(&canonical(&value)).expect("the constraint parses")
 }
 
 fn attempt(release: &Release, bootstrap: &[u8]) -> Result<amiss_bootstrap::Validated, Refusal> {
@@ -427,7 +429,7 @@ fn named_constraint(staged: &Release, status: &str) -> ExecutionConstraintDescri
         .as_bytes(),
     )
     .unwrap();
-    ExecutionConstraintDescriptor::parse(&canonical(&value)).unwrap()
+    parse_execution_constraint(&canonical(&value)).unwrap()
 }
 
 /// Runs the wrapper over one request triple and reports what it settled to.

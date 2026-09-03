@@ -19,7 +19,7 @@ use amiss_controller_github::{
     GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubAcquisitionSource,
     github_fetch_plan,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, ExecutionConstraintInput, Profile};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, parse_execution_constraint};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
@@ -308,24 +308,20 @@ fn request() -> RunRequest {
 }
 
 fn execution() -> ExecutionConstraintDescriptor {
-    let template = ExecutionConstraintDescriptor::parse(include_bytes!(
+    let mut descriptor = parse_execution_constraint(include_bytes!(
         "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
-    let mut input = ExecutionConstraintInput::from(&template);
-    input.action_repository =
+    descriptor.action_repository =
         RepositoryIdentity::github("hardmax71".to_owned(), "amiss".to_owned()).unwrap();
-    input.action_object_format = ObjectFormat::Sha1;
-    input.action_commit_oid = oid('e');
-    input.action_tree_oid = oid('f');
-    ExecutionConstraintDescriptor::new(input).unwrap()
+    descriptor.action_object_format = ObjectFormat::Sha1;
+    descriptor.action_commit_oid = oid('e');
+    descriptor.action_tree_oid = oid('f');
+    descriptor
 }
 
 fn replace_action_repository(request: &mut RunRequest, repository: RepositoryIdentity) {
-    let plan = Arc::make_mut(&mut request.plan);
-    let mut input = ExecutionConstraintInput::from(&plan.execution);
-    input.action_repository = repository;
-    plan.execution = ExecutionConstraintDescriptor::new(input).unwrap();
+    Arc::make_mut(&mut request.plan).execution.action_repository = repository;
 }
 
 fn provider_run(

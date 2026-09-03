@@ -172,14 +172,14 @@ fn a_wrong_time_digest_is_refused() {
 
 #[test]
 fn a_verified_constraint_lands_through_the_shared_gate() {
-    let descriptor =
-        amiss_wire::controls::ExecutionConstraintDescriptor::parse(CONSTRAINT.as_bytes())
-            .expect("fixture parses");
+    let descriptor = amiss_wire::controls::parse_execution_constraint(CONSTRAINT.as_bytes())
+        .expect("fixture parses");
+    let (_, digest) = amiss_wire::controls::canonical_execution_constraint(&descriptor).unwrap();
     let mut request = empty();
-    request.execution_constraint = Some(supplied(CONSTRAINT, descriptor.digest()));
+    request.execution_constraint = Some(supplied(CONSTRAINT, digest));
     let inputs = controls(&request).expect("a matching digest passes the gate");
     let landed = inputs.constraint.expect("the descriptor lands typed");
-    assert_eq!(landed.descriptor.digest(), descriptor.digest());
+    assert_eq!(landed.descriptor, descriptor);
 }
 
 #[test]
