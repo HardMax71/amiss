@@ -6,9 +6,10 @@
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::external::{
-    AssessDefect, EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
-    ExternalEvidenceSchema, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod,
-    assess, parse_evidence, parse_plan, plan,
+    ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, AssessmentDefect, EVIDENCE_SCHEMA, ExternalEvidence,
+    ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema, ExternalVerdict,
+    PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod, assess, parse_assessment,
+    parse_evidence, parse_plan, plan,
 };
 use amiss_wire::json::Value;
 use amiss_wire::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
@@ -122,13 +123,13 @@ fn sample_digest() -> Digest {
     hj(PAYLOAD_SCHEMA, &Value::Null)
 }
 
-fn refresh_plan_digest(document: &mut serde_json::Value) -> Vec<u8> {
+fn refresh_payload_digest(document: &mut serde_json::Value, domain: &str) -> Vec<u8> {
     let payload = document
         .get("payload")
         .expect("the plan document holds its payload");
     let canonical = serde_json_canonicalizer::to_vec(payload)
         .expect("the plan payload is canonically serializable");
-    let digest = hb(PLAN_PAYLOAD_SCHEMA, &canonical).to_string();
+    let digest = hb(domain, &canonical).to_string();
     let recorded = document
         .get_mut("payload_digest")
         .expect("the plan document holds its digest");
@@ -343,7 +344,7 @@ fn additive_plan_fields_are_digest_bound_but_inert() {
         .and_then(serde_json::Value::as_object_mut)
         .expect("the plan payload is an object")
         .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
-    let parsed = parse_plan(&refresh_plan_digest(&mut document))
+    let parsed = parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA))
         .expect("an additive field remains compatible");
     assert!(parsed.payload.introduced.is_empty());
 }
@@ -359,7 +360,8 @@ fn known_optional_plan_fields_do_not_accept_null() {
         .and_then(serde_json::Value::as_object_mut)
         .expect("the introduced destination has a repository shape");
     repository.insert("form".to_owned(), serde_json::Value::Null);
-    let error = parse_plan(&refresh_plan_digest(&mut document)).unwrap_err();
+    let error =
+        parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA)).unwrap_err();
     assert_eq!(error.kind, ErrorKind::WrongType);
     assert_eq!(error.path, "$.payload.introduced[0].repository.form");
 }
@@ -374,7 +376,8 @@ fn malformed_known_plan_fields_are_refused_after_binding() {
         .pointer_mut("/payload/introduced/0/destination")
         .expect("the introduced row holds a destination");
     *destination = serde_json::Value::String(String::new());
-    let error = parse_plan(&refresh_plan_digest(&mut document)).unwrap_err();
+    let error =
+        parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA)).unwrap_err();
     assert_eq!(error.kind, ErrorKind::InvalidValue);
     assert_eq!(error.path, "$.payload.introduced[0].destination");
 }
@@ -699,6 +702,85 @@ fn derived_validation_rejects_invalid_evidence_shapes() {
     assert!(amiss_wire::external::evidence(&document).is_err());
 }
 
+#[test]
+fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
+    let bytes = std::fs::read(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../spec/examples/scanner-external-assessment.json"
+    ))
+    .expect("the assessment example is readable");
+    let document: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+
+    let mut extended = document.clone();
+    extended
+        .get_mut("payload")
+        .and_then(serde_json::Value::as_object_mut)
+        .expect("the assessment payload is an object")
+        .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
+    let extended_bytes = refresh_payload_digest(&mut extended, ASSESSMENT_PAYLOAD_SCHEMA);
+    let parsed = parse_assessment(&extended_bytes).expect("an additive field remains compatible");
+    assert_eq!(
+        parsed.payload.verdicts.first().map(|row| row.verdict),
+        Some(ExternalVerdict::Refuted)
+    );
+
+    extended
+        .pointer_mut("/payload/future_fact")
+        .map(|value| *value = serde_json::Value::Bool(false))
+        .expect("the additive field is present");
+    let tampered = serde_json_canonicalizer::to_vec(&extended).expect("canonical JSON");
+    let Err(AssessmentDefect::Wire(error)) = parse_assessment(&tampered) else {
+        panic!("changing an additive field must break its digest");
+    };
+    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+
+    for field in ["reason", "retarget"] {
+        let mut null = document.clone();
+        null.pointer_mut("/payload/verdicts/0")
+            .and_then(serde_json::Value::as_object_mut)
+            .expect("the assessment has one verdict")
+            .insert(field.to_owned(), serde_json::Value::Null);
+        let bytes = refresh_payload_digest(&mut null, ASSESSMENT_PAYLOAD_SCHEMA);
+        let defect = parse_assessment(&bytes);
+        assert!(
+            matches!(defect, Err(AssessmentDefect::Wire(_))),
+            "{defect:?}"
+        );
+    }
+
+    let mut inconsistent = document.clone();
+    *inconsistent
+        .pointer_mut("/payload/verdicts/0/verdict")
+        .expect("the assessment has one verdict") =
+        serde_json::Value::String("reachable".to_owned());
+    assert!(matches!(
+        parse_assessment(&refresh_payload_digest(
+            &mut inconsistent,
+            ASSESSMENT_PAYLOAD_SCHEMA
+        )),
+        Err(AssessmentDefect::Contract(_))
+    ));
+
+    let mut repeated = document;
+    let verdicts = repeated
+        .pointer_mut("/payload/verdicts")
+        .and_then(serde_json::Value::as_array_mut)
+        .expect("the assessment verdicts are an array");
+    let mut other = verdicts.first().cloned().expect("one verdict");
+    *other
+        .pointer_mut("/documents/0")
+        .expect("the verdict has one document") =
+        serde_json::Value::String("docs/other.md".to_owned());
+    verdicts.push(other);
+    assert!(matches!(
+        parse_assessment(&refresh_payload_digest(
+            &mut repeated,
+            ASSESSMENT_PAYLOAD_SCHEMA
+        )),
+        Err(AssessmentDefect::Contract(_))
+    ));
+}
+
 fn verdicts_of(assessment: &Value) -> Vec<(String, String, String)> {
     array(field(field(assessment, "payload"), "verdicts"))
         .iter()
@@ -860,15 +942,15 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
             ("status", Value::Integer(200)),
         ]),
     ] {
-        assert_eq!(
+        assert!(matches!(
             assess(
                 &plan,
                 &evidence(&plan, vec![malformed]),
                 "0.0.0",
                 sample_digest()
             ),
-            Err(AssessDefect::MalformedEvidence)
-        );
+            Err(AssessDefect::Evidence(_))
+        ));
     }
 }
 
@@ -911,10 +993,10 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
         ],
         vec![forge_row("https://a.example/x", "readable", None)],
     ] {
-        assert_eq!(
+        assert!(matches!(
             assess(&plan, &evidence(&plan, rows), "0.0.0", sample_digest(),),
             Err(AssessDefect::UnboundEvidence)
-        );
+        ));
     }
     let Value::Object(members) = evidence(&plan, Vec::new()) else {
         panic!("the evidence is an object");
@@ -927,10 +1009,10 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
     ));
     members.sort_by(|left, right| left.0.cmp(&right.0));
     let foreign = Value::object(members);
-    assert_eq!(
+    assert!(matches!(
         assess(&plan, &foreign, "0.0.0", sample_digest()),
         Err(AssessDefect::UnboundEvidence)
-    );
+    ));
 }
 
 #[test]
@@ -953,10 +1035,10 @@ fn malformed_evidence_rows_are_refused() {
     let below = probe("https://a.example/x", "get", 42);
     let above = probe("https://a.example/x", "get", 1000);
     for bad in [both, neither, below, above] {
-        assert_eq!(
+        assert!(matches!(
             assess(&plan, &evidence(&plan, vec![bad]), "0.0.0", sample_digest()),
-            Err(AssessDefect::MalformedEvidence)
-        );
+            Err(AssessDefect::Evidence(_))
+        ));
     }
 }
 
@@ -975,10 +1057,10 @@ fn the_judge_is_no_laxer_than_its_contracts() {
             *value = object(vec![("name", string("p")), ("version", string(""))]);
         }
     }
-    assert_eq!(
+    assert!(matches!(
         assess(&plan, &Value::object(unnamed), "0.0.0", sample_digest(),),
-        Err(AssessDefect::NotEvidence)
-    );
+        Err(AssessDefect::Evidence(_))
+    ));
 
     let broken_row = object(vec![
         ("destination", string("https://a.example/x")),
@@ -1004,11 +1086,10 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         ("payload_digest", string(&digest.to_string())),
     ]);
     let empty = evidence(&handcrafted, Vec::new());
-    assert_eq!(
+    assert!(matches!(
         assess(&handcrafted, &empty, "0.0.0", sample_digest(),),
-        Err(AssessDefect::NotAPlan),
-        "a digest-valid plan with rows the contract rejects is not a plan"
-    );
+        Err(AssessDefect::Plan(_))
+    ));
 }
 
 /// A tail resolution for a bare repository shape is evidence about nothing
@@ -1017,7 +1098,7 @@ fn the_judge_is_no_laxer_than_its_contracts() {
 fn a_tail_resolution_needs_a_tail_in_the_shape() {
     let bare = "https://github.com/acme/widgets";
     let plan = planned(introduced(bare));
-    assert_eq!(
+    assert!(matches!(
         assess(
             &plan,
             &evidence(&plan, vec![forge_row(bare, "readable", Some("resolved"))]),
@@ -1025,7 +1106,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
             sample_digest()
         ),
         Err(AssessDefect::UnboundEvidence)
-    );
+    ));
     let visibility_only = assess(
         &plan,
         &evidence(&plan, vec![forge_row(bare, "readable", None)]),

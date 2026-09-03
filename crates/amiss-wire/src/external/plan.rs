@@ -40,8 +40,9 @@ pub enum ExternalPlanPayloadSchema {
     Current,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, wary::Wary)]
 pub struct ExternalEngine {
+    #[validate(length(chars, 1..))]
     pub engine_version: String,
     pub engine_digest: Digest,
 }

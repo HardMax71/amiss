@@ -38,6 +38,13 @@ fn the_external_examples_match_their_typed_sources() {
         serde_json_canonicalizer::to_vec(&external_evidence).unwrap(),
         json::canonical(&json::parse(&external_evidence_bytes).unwrap())
     );
+    let external_assessment_bytes =
+        fs::read(examples.join("scanner-external-assessment.json")).unwrap();
+    let external_assessment = external::parse_assessment(&external_assessment_bytes).unwrap();
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&external_assessment).unwrap(),
+        json::canonical(&json::parse(&external_assessment_bytes).unwrap())
+    );
 }
 
 #[test]
