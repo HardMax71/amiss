@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use amiss_wire::model::Oid;
+use amiss_wire::{external::ExternalVerdict, model::Oid};
 
 use crate::{
     AcceptedDelivery, ArtifactBundle, ArtifactError, ArtifactReference, AuthenticatedDelivery,
@@ -376,13 +376,39 @@ fn prepare_external(
     match adapter.verify_external(&plan, &now.to_string()) {
         Ok(Some(evidence)) => {
             match amiss_wire::external::assess(&plan, &evidence, version, engine_digest) {
-                Ok(assessment) => PreparedExternal {
-                    plan: Some(plan_bytes),
-                    evidence: Some(amiss_wire::json::canonical(&evidence)),
-                    assessment: Some(amiss_wire::json::canonical(&assessment)),
-                    tally: Some(tally(&assessment)),
-                    incomplete: false,
-                },
+                Ok(assessment) => {
+                    let evidence = amiss_wire::json::canonical(&evidence);
+                    let assessment = amiss_wire::json::canonical(&assessment);
+                    let Ok(parsed) = amiss_wire::external::parse_assessment(&assessment) else {
+                        return PreparedExternal {
+                            plan: Some(plan_bytes),
+                            evidence: Some(evidence),
+                            incomplete: true,
+                            ..PreparedExternal::default()
+                        };
+                    };
+                    let mut tally = super::ExternalTally::default();
+                    for row in parsed.payload.verdicts {
+                        match row.verdict {
+                            ExternalVerdict::Refuted => {
+                                tally.refuted = tally.refuted.saturating_add(1);
+                            }
+                            ExternalVerdict::Unproven => {
+                                tally.unproven = tally.unproven.saturating_add(1);
+                            }
+                            ExternalVerdict::Reachable => {
+                                tally.reachable = tally.reachable.saturating_add(1);
+                            }
+                        }
+                    }
+                    PreparedExternal {
+                        plan: Some(plan_bytes),
+                        evidence: Some(evidence),
+                        assessment: Some(assessment),
+                        tally: Some(tally),
+                        incomplete: false,
+                    }
+                }
                 Err(_defect) => PreparedExternal {
                     plan: Some(plan_bytes),
                     evidence: Some(amiss_wire::json::canonical(&evidence)),
@@ -412,22 +438,4 @@ pub(super) fn observe_external(sink: Option<&dyn super::ExternalSink>, publicati
     } else if let Some(tally) = &reference.external_tally {
         sink.assessed(tally);
     }
-}
-
-fn tally(assessment: &amiss_wire::json::Value) -> super::ExternalTally {
-    let mut counted = super::ExternalTally::default();
-    let verdicts = assessment
-        .member("payload")
-        .and_then(|payload| payload.member("verdicts"));
-    if let Some(amiss_wire::json::Value::Array(verdicts)) = verdicts {
-        for row in verdicts {
-            match row.text("verdict") {
-                Some("refuted") => counted.refuted = counted.refuted.saturating_add(1),
-                Some("unproven") => counted.unproven = counted.unproven.saturating_add(1),
-                Some("reachable") => counted.reachable = counted.reachable.saturating_add(1),
-                Some(_) | None => {}
-            }
-        }
-    }
-    counted
 }
