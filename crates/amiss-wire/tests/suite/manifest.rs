@@ -3,7 +3,10 @@ use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json;
 use amiss_wire::manifest::{
-    DEPENDENCY_LOCK_DOMAIN, ReleaseArtifact, ReleaseManifest, RuntimeFile, RuntimeRole,
+    BuildSource, DEPENDENCY_LOCK_DOMAIN, DependencyLockFile, DependencyLockInput,
+    DependencyLockSchema, EnvironmentContract, ReleaseArtifact, ReleaseManifest,
+    ReleaseManifestSchema, RuntimeContract, RuntimeFile, RuntimeRole, canonical_dependency_lock,
+    canonical_release_manifest, parse_release_manifest,
 };
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
@@ -35,7 +38,40 @@ fn artifact(
         tree_path: RepoPathText::new("dist/amiss".to_owned()).expect("a repo path"),
         binary_sha256: digest('1'),
         engine_digest: digest('2'),
+        runtime_contract: RuntimeContract::Current,
+        environment_contract: EnvironmentContract::Current,
         runtime_files,
+    }
+}
+
+#[expect(clippy::expect_used, reason = "test fixture helper")]
+fn manifest(artifact: ReleaseArtifact) -> ReleaseManifest {
+    let dependency_lock = DependencyLockInput {
+        schema: DependencyLockSchema::Current,
+        files: vec![DependencyLockFile {
+            path: RepoPathText::new("Cargo.lock".to_owned()).expect("a repo path"),
+            raw_digest: digest('4'),
+        }],
+    };
+    let dependency_lock_digest = canonical_dependency_lock(&dependency_lock)
+        .expect("a valid dependency lock")
+        .1;
+    ReleaseManifest {
+        schema: ReleaseManifestSchema::Current,
+        engine_version: "0.5.1".to_owned(),
+        build_source: BuildSource {
+            repository: RepositoryIdentity::new(
+                "github.com".to_owned(),
+                "hardmax71".to_owned(),
+                "amiss".to_owned(),
+            )
+            .expect("a repository identity"),
+            object_format: ObjectFormat::Sha1,
+            commit_oid: Oid::new(ObjectFormat::Sha1, "a".repeat(40)).expect("an oid"),
+        },
+        dependency_lock,
+        dependency_lock_digest,
+        artifacts: vec![artifact],
     }
 }
 
@@ -55,7 +91,7 @@ fn the_executable_row_holds_every_clause_of_the_closure_law() {
         "amiss-linux-x86_64",
         closed(),
     );
-    assert!(sound.executable().is_some());
+    assert!(canonical_release_manifest(&manifest(sound)).is_ok());
 
     let mut doubled = closed();
     doubled.push(row(
@@ -105,76 +141,69 @@ fn the_executable_row_holds_every_clause_of_the_closure_law() {
     ];
     for (files, reason) in cases {
         let broken = artifact(ConstraintPlatform::LinuxX8664, "amiss-linux-x86_64", files);
-        assert!(broken.executable().is_none(), "{reason}");
+        let defect = canonical_release_manifest(&manifest(broken)).expect_err(reason);
+        assert_eq!(defect.kind, ErrorKind::Inconsistent, "{reason}");
     }
 }
 
 #[test]
-fn selection_matches_platform_and_name_together() {
-    let linux = artifact(
+fn canonical_generation_revalidates_directly_constructed_models() {
+    let mut wrong_oid_format = manifest(artifact(
         ConstraintPlatform::LinuxX8664,
         "amiss-linux-x86_64",
         closed(),
-    );
-    let mac = artifact(
-        ConstraintPlatform::MacosAarch64,
-        "amiss-macos-aarch64",
+    ));
+    wrong_oid_format.build_source.object_format = ObjectFormat::Sha256;
+    let defect = canonical_release_manifest(&wrong_oid_format).expect_err("mismatched OID format");
+    assert_eq!(defect.path, "$.build_source.commit_oid");
+
+    let mut wrong_lock_digest = manifest(artifact(
+        ConstraintPlatform::LinuxX8664,
+        "amiss-linux-x86_64",
         closed(),
-    );
-    let manifest = ReleaseManifest {
-        digest: digest('a'),
-        engine_version: "0.5.1".to_owned(),
-        build_source: amiss_wire::manifest::BuildSource {
-            repository: RepositoryIdentity::new(
-                "github.com".to_owned(),
-                "hardmax71".to_owned(),
-                "amiss".to_owned(),
-            )
-            .expect("a repository identity"),
-            object_format: ObjectFormat::Sha1,
-            commit_oid: Oid::new(ObjectFormat::Sha1, "a".repeat(40)).expect("an oid"),
-        },
-        dependency_lock: amiss_wire::manifest::DependencyLockInput { files: Vec::new() },
-        dependency_lock_digest: digest('b'),
-        artifacts: vec![linux.clone(), mac],
-    };
-    let linux_name = ArtifactId::new("amiss-linux-x86_64".to_owned()).expect("an artifact id");
-    let mac_name = ArtifactId::new("amiss-macos-aarch64".to_owned()).expect("an artifact id");
-    assert_eq!(
-        manifest.select(ConstraintPlatform::LinuxX8664, &linux_name),
-        Some(&linux)
-    );
-    assert!(
-        manifest
-            .select(ConstraintPlatform::MacosAarch64, &linux_name)
-            .is_none(),
-        "a name selects only on its own platform"
-    );
-    assert!(
-        manifest
-            .select(ConstraintPlatform::LinuxX8664, &mac_name)
-            .is_none(),
-        "a platform selects only its own name"
-    );
-    assert!(
-        manifest
-            .select(ConstraintPlatform::WindowsX8664, &linux_name)
-            .is_none(),
-        "an unlisted platform selects nothing"
-    );
+    ));
+    wrong_lock_digest.dependency_lock_digest = digest('9');
+    let defect =
+        canonical_release_manifest(&wrong_lock_digest).expect_err("mismatched lock digest");
+    assert_eq!(defect.kind, ErrorKind::DigestMismatch);
+
+    let mut invalid_mode = manifest(artifact(
+        ConstraintPlatform::LinuxX8664,
+        "amiss-linux-x86_64",
+        closed(),
+    ));
+    invalid_mode.artifacts[0].runtime_files[0].git_mode = GitMode::Tree;
+    let defect =
+        canonical_release_manifest(&invalid_mode).expect_err("a tree is not a runtime file");
+    assert_eq!(defect.path, "$.artifacts[0].runtime_files[0].git_mode");
+}
+
+#[test]
+fn typed_parsing_revalidates_embedded_repository_fields() {
+    let raw = manifest_raw("sha1", &"a".repeat(40), LOCK, &one_artifact())
+        .replace(r#""owner":"hardmax71""#, r#""owner":"HardMax71""#);
+    let defect = parse_release_manifest(raw.as_bytes()).expect_err("an invalid repository owner");
+    assert_eq!(defect.path, "$.build_source.repository");
 }
 
 /// Every runtime role in one parsed manifest, so every decoder arm is load-bearing.
 #[test]
 fn a_complete_manifest_parses_with_every_runtime_role() {
-    let manifest = ReleaseManifest::parse(
+    let manifest = parse_release_manifest(
         manifest_raw("sha1", &"a".repeat(40), LOCK, &one_artifact()).as_bytes(),
     )
     .expect("the closed manifest parses");
     assert_eq!(manifest.engine_version, "0.5.1");
     let artifact = manifest.artifacts.first().expect("one artifact");
     assert_eq!(artifact.runtime_files.len(), 3);
-    assert!(artifact.executable().is_some());
+    assert_eq!(
+        artifact
+            .runtime_files
+            .iter()
+            .filter(|file| file.role == RuntimeRole::Executable)
+            .count(),
+        1
+    );
 }
 
 const LOCK: &str = r#"{"schema":"amiss/scanner-dependency-lock-input","files":[{"path":"Cargo.lock","raw_digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444"}]}"#;
@@ -240,7 +269,7 @@ fn one_artifact() -> String {
 
 #[test]
 fn a_sha256_build_source_parses() {
-    let manifest = ReleaseManifest::parse(
+    let manifest = parse_release_manifest(
         manifest_raw("sha256", &"a".repeat(64), LOCK, &one_artifact()).as_bytes(),
     )
     .expect("a sha256 build source parses");
@@ -264,14 +293,14 @@ fn lock_with(count: usize) -> String {
 
 #[test]
 fn the_lock_holds_one_to_thirty_two_sorted_files() {
-    let full = ReleaseManifest::parse(
+    let full = parse_release_manifest(
         manifest_raw("sha1", &"a".repeat(40), &lock_with(32), &one_artifact()).as_bytes(),
     )
     .expect("thirty-two lock files are within the ceiling");
     assert_eq!(full.dependency_lock.files.len(), 32);
 
     for (reason, count) in [("an empty lock", 0), ("a lock past the ceiling", 33)] {
-        let defect = ReleaseManifest::parse(
+        let defect = parse_release_manifest(
             manifest_raw("sha1", &"a".repeat(40), &lock_with(count), &one_artifact()).as_bytes(),
         )
         .expect_err(reason);
@@ -279,7 +308,7 @@ fn the_lock_holds_one_to_thirty_two_sorted_files() {
     }
 
     let misordered = lock_with(2).replace("deps/f00", "deps/f09");
-    let defect = ReleaseManifest::parse(
+    let defect = parse_release_manifest(
         manifest_raw("sha1", &"a".repeat(40), &misordered, &one_artifact()).as_bytes(),
     )
     .expect_err("descending lock files");
@@ -300,7 +329,7 @@ fn artifacts_cover_at_most_the_closed_platform_set() {
         .iter()
         .map(|platform| artifact_json(platform, "amiss", &executable_row()))
         .collect();
-    let manifest = ReleaseManifest::parse(
+    let manifest = parse_release_manifest(
         manifest_raw("sha1", &"a".repeat(40), LOCK, &six.join(",")).as_bytes(),
     )
     .expect("every platform may ship");
@@ -308,11 +337,11 @@ fn artifacts_cover_at_most_the_closed_platform_set() {
 
     let seven = format!("{},{}", six.join(","), six[0]);
     let defect =
-        ReleaseManifest::parse(manifest_raw("sha1", &"a".repeat(40), LOCK, &seven).as_bytes())
+        parse_release_manifest(manifest_raw("sha1", &"a".repeat(40), LOCK, &seven).as_bytes())
             .expect_err("a seventh artifact");
     assert_eq!(defect.kind, ErrorKind::LimitExceeded);
 
-    let defect = ReleaseManifest::parse(manifest_raw("sha1", &"a".repeat(40), LOCK, "").as_bytes())
+    let defect = parse_release_manifest(manifest_raw("sha1", &"a".repeat(40), LOCK, "").as_bytes())
         .expect_err("no artifacts");
     assert_eq!(defect.kind, ErrorKind::LimitExceeded);
 }
@@ -329,7 +358,7 @@ fn runtime_files_hold_one_to_two_hundred_fifty_six_rows() {
         }));
         rows.join(",")
     };
-    let full = ReleaseManifest::parse(
+    let full = parse_release_manifest(
         manifest_raw(
             "sha1",
             &"a".repeat(40),
@@ -352,7 +381,7 @@ fn runtime_files_hold_one_to_two_hundred_fifty_six_rows() {
         ("no runtime files", String::new()),
         ("rows past the ceiling", files_with(257)),
     ] {
-        let defect = ReleaseManifest::parse(
+        let defect = parse_release_manifest(
             manifest_raw(
                 "sha1",
                 &"a".repeat(40),
@@ -378,20 +407,16 @@ fn runtime_roles_project_distinct_nonempty_spellings() {
     assert_eq!(unique.len(), spellings.len());
 }
 
-#[expect(clippy::expect_used, reason = "test fixture helper")]
-fn version_error_path(version: &str) -> String {
-    let raw =
-        format!(r#"{{"schema":"amiss/scanner-release-manifest","engine_version":"{version}"}}"#);
-    ReleaseManifest::parse(raw.as_bytes())
-        .expect_err("a two-field manifest never completes")
-        .path
-}
-
-/// An accepted shape moves the failure past the version field; a rejected one stops on it.
 #[test]
 fn version_strings_hold_the_release_shape() {
     let long_valid = format!("1.2.3-{}", "a".repeat(58));
     let long_invalid = format!("1.2.3-{}", "a".repeat(59));
+    let encoded = |version: &str| {
+        manifest_raw("sha1", &"a".repeat(40), LOCK, &one_artifact()).replace(
+            r#""engine_version":"0.5.1""#,
+            &format!(r#""engine_version":"{version}""#),
+        )
+    };
     for good in [
         "0.0.0",
         "1.2.3",
@@ -400,7 +425,7 @@ fn version_strings_hold_the_release_shape() {
         "0.5.2-a-b.7",
         long_valid.as_str(),
     ] {
-        assert_ne!(version_error_path(good), "$.engine_version", "{good}");
+        parse_release_manifest(encoded(good).as_bytes()).expect("a valid version");
     }
     for bad in [
         "1.2",
@@ -413,6 +438,7 @@ fn version_strings_hold_the_release_shape() {
         "1.2.3-RC",
         long_invalid.as_str(),
     ] {
-        assert_eq!(version_error_path(bad), "$.engine_version", "{bad}");
+        let defect = parse_release_manifest(encoded(bad).as_bytes()).expect_err("invalid version");
+        assert_eq!(defect.path, "$.engine_version", "{bad}");
     }
 }

@@ -10,7 +10,7 @@ use amiss_wire::controls::{
     DOCUMENT_SUFFIX_BYTES, SOURCE_MARKER_BYTES, parse_debt_snapshot, parse_execution_constraint,
     parse_organization_floor, parse_trusted_time, parse_waiver_bundle,
 };
-use amiss_wire::manifest::ReleaseManifest;
+use amiss_wire::manifest::parse_release_manifest;
 use amiss_wire::model::BranchRef;
 use amiss_wire::report::{AnalysisErrorCode, ENVELOPE_SCHEMA, FindingKind, PAYLOAD_SCHEMA};
 use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
@@ -85,7 +85,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "scanner-semantic-evidence" => parse_defect(amiss_wire::semantic::parse(bytes)),
         "scanner-semantic-template" => parse_defect(amiss_wire::semantic::parse_template(bytes)),
         "scanner-policy" => parse_defect(amiss_wire::controls::parse_scanner_policy(bytes)),
-        "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
+        "scanner-release-manifest" => parse_defect(parse_release_manifest(bytes)),
         "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
         "scanner-trusted-time-statement" => parse_defect(parse_trusted_time(bytes)),
         "waiver-bundle" => parse_defect(parse_waiver_bundle(bytes)),

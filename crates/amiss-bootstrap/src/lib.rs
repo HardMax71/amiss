@@ -7,7 +7,10 @@ use amiss_git::{GitResources, ObjectKind, Repository};
 use amiss_wire::action::{executable_platform, host_platform};
 use amiss_wire::controls::{ConstraintPlatform, ExecutionConstraintDescriptor, GitMode};
 use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, sha256};
-use amiss_wire::manifest::{ReleaseArtifact, ReleaseManifest, RuntimeRole};
+use amiss_wire::manifest::{
+    ReleaseArtifact, ReleaseManifest, RuntimeRole, canonical_release_manifest,
+    parse_release_manifest,
+};
 use amiss_wire::model::{Oid, RepoPathText};
 
 /// The engine names itself with this domain over its own bytes, and the
@@ -78,8 +81,9 @@ pub fn validate(
     if tree != constraint.action_tree_oid {
         return Err(tampered("action-tree-mismatch"));
     }
-    let manifest = load_release_manifest(action, resources, &tree, &constraint.manifest_path)?;
-    if manifest.digest != constraint.release_manifest_digest {
+    let (manifest, manifest_digest) =
+        load_release_manifest(action, resources, &tree, &constraint.manifest_path)?;
+    if manifest_digest != constraint.release_manifest_digest {
         return Err(tampered("manifest-digest-mismatch"));
     }
     validate_release(action, resources, &tree, manifest, platform)
@@ -97,12 +101,12 @@ pub(crate) fn validate_release(
     // lockfile re-resolved as a regular blob and re-hashed under the same
     // domain the release builder used. Without this, the one file that says
     // which dependencies built the engine is the one file nothing checks.
-    for (lock_path, lock_digest) in &manifest.dependency_lock.files {
-        let (lock_bytes, lock_mode) = blob(action, resources, tree, lock_path)?;
+    for lock in &manifest.dependency_lock.files {
+        let (lock_bytes, lock_mode) = blob(action, resources, tree, &lock.path)?;
         if lock_mode != GitMode::RegularFile {
             return Err(tampered("path-not-regular-blob"));
         }
-        if hb(RAW_EVIDENCE_DOMAIN, &lock_bytes) != *lock_digest {
+        if hb(RAW_EVIDENCE_DOMAIN, &lock_bytes) != lock.raw_digest {
             return Err(tampered("dependency-lock-mismatch"));
         }
     }
@@ -175,12 +179,17 @@ pub(crate) fn load_release_manifest(
     resources: &mut GitResources,
     tree: &Oid,
     path: &RepoPathText,
-) -> Result<ReleaseManifest, Refusal> {
+) -> Result<(ReleaseManifest, Digest), Refusal> {
     let (bytes, mode) = blob(action, resources, tree, path)?;
     if mode != GitMode::RegularFile {
         return Err(tampered("path-not-regular-blob"));
     }
-    ReleaseManifest::parse(&bytes).map_err(|_defect| tampered("manifest-unreadable"))
+    let manifest =
+        parse_release_manifest(&bytes).map_err(|_defect| tampered("manifest-unreadable"))?;
+    let digest = canonical_release_manifest(&manifest)
+        .map_err(|_defect| tampered("manifest-unreadable"))?
+        .1;
+    Ok((manifest, digest))
 }
 
 /// Resolves one path in the pinned tree as a regular non-symlink blob,

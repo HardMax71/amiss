@@ -69,6 +69,10 @@ pub fn controls(bytes: &[u8]) {
         amiss_wire::controls::parse_execution_constraint(bytes),
         amiss_wire::controls::parse_execution_constraint(bytes),
     );
+    assert_eq!(
+        amiss_wire::manifest::parse_release_manifest(bytes),
+        amiss_wire::manifest::parse_release_manifest(bytes),
+    );
 }
 
 /// The three request parsers: no panic escapes, and parsing is
