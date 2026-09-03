@@ -56,8 +56,19 @@ impl From<Fault> for AnalyzeError {
 /// nearest ancestor list item if any, otherwise the nearest table cell,
 /// otherwise the nearest paragraph, otherwise the document root. Raw HTML can
 /// never own an extracted construct.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::IntoStaticStr)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::AsRefStr,
+    strum::IntoStaticStr,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum BlockKind {
     Paragraph,
     ListItem,
