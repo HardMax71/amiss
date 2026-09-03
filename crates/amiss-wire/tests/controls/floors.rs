@@ -157,6 +157,31 @@ fn canonical_floor_rechecks_mutable_public_fields() {
 }
 
 #[test]
+fn canonical_floor_keeps_resource_limits_inside_safe_integers() {
+    let mut floor = parse_organization_floor(FLOOR).unwrap();
+    let limit = floor
+        .resource_limits
+        .first_mut()
+        .expect("the fixture has resource limits");
+    limit.resource = ResourceName::DocumentsPerSnapshot;
+    limit.maximum = json::MAX_SAFE_INTEGER;
+    assert!(canonical_organization_floor(&floor).is_ok());
+
+    floor
+        .resource_limits
+        .first_mut()
+        .expect("the fixture has resource limits")
+        .maximum = json::MAX_SAFE_INTEGER + 1;
+    assert_eq!(
+        canonical_organization_floor(&floor).unwrap_err(),
+        FloorDefect::Schema(amiss_wire::de::Error::new(
+            "$.resource_limits[0].maximum",
+            ErrorKind::InvalidValue,
+        ))
+    );
+}
+
+#[test]
 fn rejects_floors_over_the_combined_entry_limit() {
     let paths = |count: usize, prefix: &str| {
         let items: Vec<String> = (0..count)
