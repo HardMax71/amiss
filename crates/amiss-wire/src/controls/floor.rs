@@ -193,6 +193,6 @@ fn resource_maximum_valid(resource: ResourceName, maximum: i64) -> bool {
     } else if resource == ResourceName::MachineJsonBytes {
         u64::try_from(maximum).is_ok_and(|value| value == crate::report::MACHINE_JSON_BYTES)
     } else {
-        maximum >= 0
+        (0..=crate::json::MAX_SAFE_INTEGER).contains(&maximum)
     }
 }
