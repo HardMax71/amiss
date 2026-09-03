@@ -1,36 +1,76 @@
 use amiss_wire::json::Value;
+use amiss_wire::report::{
+    PAYLOAD_SCHEMA,
+    model::{ObservationComparison, ReportEnvelope},
+};
+
+const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.canonical.json");
 
 /// A minimal complete scanner report whose candidate side introduces the
 /// given external destinations, digest-true, for producer and lane tests.
 #[must_use]
-pub fn external_report(destinations: &[&str]) -> Vec<u8> {
-    let rows: Vec<String> = destinations
+pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
+    let mut report: ReportEnvelope = serde_json::from_slice(REPORT).ok()?;
+    let local = report
+        .payload
+        .observations
         .iter()
-        .map(|destination| {
-            let scheme = destination.split(':').next().unwrap_or("https");
-            format!(
-                r#"{{"base":null,"candidate":{{"document":"docs/a.md","external_destination":"{destination}","intent":{{"external_scheme":"{scheme}"}},"resolution":{{"kind":"external","reason":"url"}}}}}}"#
-            )
+        .find(|row| {
+            row.candidate
+                .as_ref()
+                .is_some_and(|candidate| candidate.external_destination.is_none())
+        })?
+        .clone();
+    let external = report
+        .payload
+        .observations
+        .iter()
+        .find(|row| {
+            row.candidate
+                .as_ref()
+                .is_some_and(|candidate| candidate.external_destination.is_some())
+        })?
+        .clone();
+    let rows = destinations
+        .iter()
+        .enumerate()
+        .map(|(index, destination)| {
+            let (scheme, _tail) = destination.split_once(':')?;
+            if scheme.is_empty() {
+                return None;
+            }
+            let mut row: ObservationComparison = external.clone();
+            let candidate = row.candidate.as_mut()?;
+            candidate.external_destination = Some((*destination).to_owned());
+            candidate.intent.external_scheme = Some(scheme.to_owned());
+            candidate.intent.raw_destination_digest =
+                amiss_wire::digest::hb("amiss/fixture-destination", destination.as_bytes());
+            candidate.observation_id_input.extracted_intent = candidate.intent.clone();
+            candidate
+                .observation_id_input
+                .structural_address
+                .construct_index = u64::try_from(index).ok()?.saturating_add(1);
+            candidate.observation_id =
+                amiss_wire::digest::hb("amiss/fixture-observation", destination.as_bytes());
+            Some(row)
         })
-        .collect();
-    let payload = format!(
-        r#"{{"compatibility":"1","engine":{{"engine_digest":"{digest}","engine_version":"0.0.0"}},"evaluation":{{"base":{{"commit_oid":"a"}},"candidate":{{"commit_oid":"b"}},"mode":"commit-pair"}},"observations":[{rows}],"result":{{"complete":true,"exit_code":0,"status":"pass"}},"schema":"amiss/scanner-report-payload"}}"#,
-        digest = amiss_wire::digest::hb("amiss/fixture-engine", b"fixture"),
-        rows = rows.join(","),
-    );
-    // The spelling above is already canonical, so the byte hash is the
-    // payload digest.
-    let payload_digest = amiss_wire::digest::hb("amiss/scanner-report-payload", payload.as_bytes());
-    format!(
-        r#"{{"payload":{payload},"payload_digest":"{payload_digest}","schema":"amiss/scanner-report-envelope"}}"#
-    )
-    .into_bytes()
+        .collect::<Option<Vec<_>>>()?;
+    let count = u64::try_from(rows.len()).ok()?;
+    report.payload.observations = std::iter::once(local).chain(rows).collect();
+    report.payload.summary.references.explicit_local = 1;
+    report.payload.summary.references.external_out_of_scope = count;
+    report.payload.summary.references.extracted = count.saturating_add(1);
+    report.payload.summary.references.resolved = 1;
+    let payload = serde_json_canonicalizer::to_vec(&report.payload).ok()?;
+    report.payload_digest = amiss_wire::digest::hb(PAYLOAD_SCHEMA, &payload);
+    serde_json_canonicalizer::to_vec(&report).ok()
 }
 
 /// Derives the external plan from the shared digest-true report fixture.
 #[must_use]
 pub fn external_plan(destinations: &[&str]) -> Option<Value> {
-    let parsed = amiss_wire::json::parse(&external_report(destinations)).ok()?;
+    let report = external_report(destinations)?;
+    let parsed = amiss_wire::json::parse(&report).ok()?;
     let engine = parsed.member("payload")?.member("engine")?;
     amiss_wire::external::plan(
         &parsed,

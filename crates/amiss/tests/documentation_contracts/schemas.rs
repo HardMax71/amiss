@@ -80,7 +80,10 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         }
         "scanner-external-evidence" => parse_defect(amiss_wire::external::parse_evidence(bytes)),
         "scanner-external-plan" => parse_defect(amiss_wire::external::parse_plan(bytes)),
-        "scanner-report" => parse_defect(amiss_wire::json::parse(bytes)),
+        "scanner-report" => match amiss_wire::json::parse(bytes) {
+            Ok(value) => parse_defect(amiss_wire::report::validate_envelope(&value)),
+            Err(error) => Some(format!("{error:?}")),
+        },
         "scanner-record-set-input" => {
             parse_defect(amiss_wire::semantic::record::parse_input(bytes))
         }

@@ -23,7 +23,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
     let parsed = json::parse(&report).ok()?;
     let (_, report_payload_digest, _) = amiss_wire::report::validate_envelope(&parsed).ok()?;
     let mut plan_envelope = parse_plan(PLAN).ok()?;
-    plan_envelope.payload.report_payload_digest = Digest::from_wire(report_payload_digest)?;
+    plan_envelope.payload.report_payload_digest = report_payload_digest;
     plan_envelope.payload.docs = DocsCandidate {
         repository: RepositoryIdentity::new(
             "git.example.internal".to_owned(),

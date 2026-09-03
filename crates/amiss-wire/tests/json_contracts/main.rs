@@ -1,11 +1,75 @@
 use std::{fs, path::Path};
 
 use amiss_wire::{
-    controls, external, json, locale, manifest, publication, relation, requests, semantic,
+    controls, external, json, locale, manifest, publication, relation, report, requests, semantic,
 };
 
 #[path = "../support/relation.rs"]
 mod relation_fixture;
+
+#[test]
+fn report_examples_match_their_typed_source() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
+    for name in ["scanner-report.canonical.json", "scanner-report.json"] {
+        let bytes = fs::read(examples.join(name)).unwrap();
+        let _: report::model::ReportEnvelope =
+            serde_json::from_slice(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
+        let value = json::parse(&bytes).unwrap();
+        let (payload, payload_digest, _verdict) =
+            report::validate_envelope(&value).unwrap_or_else(|error| panic!("{name}: {error}"));
+        let envelope = report::model::ReportEnvelope {
+            payload,
+            payload_digest,
+            schema: report::model::ReportEnvelopeSchema::Current,
+        };
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&envelope).unwrap(),
+            json::canonical(&value),
+            "{name}",
+        );
+    }
+
+    for name in [
+        "scanner-report.frozen-1.json",
+        "scanner-report.last-released.json",
+    ] {
+        let bytes = fs::read(examples.join(name)).unwrap();
+        let value = json::parse(&bytes).unwrap();
+        report::validate_envelope(&value).unwrap_or_else(|error| panic!("{name}: {error}"));
+    }
+}
+
+#[test]
+fn optional_report_members_have_one_rust_state() {
+    let omitted: report::model::MissingResolution =
+        serde_json::from_str(r#"{"reason":"path-not-found","near":null,"path":"docs/missing.md"}"#)
+            .unwrap();
+    let explicit_null: report::model::MissingResolution = serde_json::from_str(
+        r#"{"reason":"path-not-found","near":null,"path":"docs/missing.md","same_object_at":null}"#,
+    )
+    .unwrap();
+    assert_eq!(omitted, explicit_null);
+    assert_eq!(
+        serde_json::to_value(omitted).unwrap().get("same_object_at"),
+        None,
+    );
+}
+
+#[test]
+fn additive_report_fields_are_digest_bound_but_inert() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../spec/examples/scanner-report.canonical.json");
+    let mut document: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    document["payload"]["engine"]["future_provenance"] = serde_json::Value::Bool(true);
+    let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
+    document["payload_digest"] = serde_json::Value::String(
+        amiss_wire::digest::hb(report::PAYLOAD_SCHEMA, &payload).to_string(),
+    );
+    let bytes = serde_json_canonicalizer::to_vec(&document).unwrap();
+    let strict = json::parse(&bytes).unwrap();
+    let (payload, _digest, _verdict) = report::validate_envelope(&strict).unwrap();
+    assert!(!payload.engine.engine_version.is_empty());
+}
 
 #[test]
 fn the_release_manifest_example_matches_its_typed_source() {

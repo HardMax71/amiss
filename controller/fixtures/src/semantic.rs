@@ -47,7 +47,8 @@ pub fn semantic_input_artifact() -> Result<SemanticInputArtifact, BootstrapJobEr
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(SemanticInputArtifact {
-        report: amiss_fixtures::semantic_report(&payload_digests),
+        report: amiss_fixtures::semantic_report(&payload_digests)
+            .ok_or(BootstrapJobError::SemanticEvidence)?,
         artifact: bound.artifact.ok_or(BootstrapJobError::SemanticEvidence)?,
     })
 }

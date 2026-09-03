@@ -50,12 +50,14 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
         schema: INPUT_ARTIFACT_SCHEMA.to_owned(),
     })
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    let report = amiss_fixtures::semantic_report(&[payload_digest]);
+    let report =
+        amiss_fixtures::semantic_report(&[payload_digest]).ok_or(ArtifactError::Corrupt)?;
 
     validate(&report, &artifact)?;
     assert!(matches!(
         validate(
-            &amiss_fixtures::semantic_report(&[hb("amiss/test-other", b"other")]),
+            &amiss_fixtures::semantic_report(&[hb("amiss/test-other", b"other")])
+                .ok_or(ArtifactError::Corrupt)?,
             &artifact
         ),
         Err(ArtifactError::Corrupt)

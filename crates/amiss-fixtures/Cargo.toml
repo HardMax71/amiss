@@ -11,6 +11,7 @@ publish = false
 amiss-wire = { path = "../amiss-wire", version = "0.27.0" }
 flate2.workspace = true
 serde_json.workspace = true
+serde_json_canonicalizer.workspace = true
 sha1-checked.workspace = true
 tempfile.workspace = true
 

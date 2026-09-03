@@ -34,13 +34,13 @@ fn external_outcome(run: &amiss_controller::RunIdentity) -> RunnerOutcome {
     RunnerOutcome::Complete {
         identity: Box::new(run.clone()),
         evaluation: Evaluation::Pass,
-        report: amiss_fixtures::external_report(&[DESTINATION]),
+        report: amiss_fixtures::external_report(&[DESTINATION]).unwrap(),
         semantic_artifact: None,
     }
 }
 
 fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Value {
-    let report = amiss_fixtures::external_report(&[DESTINATION]);
+    let report = amiss_fixtures::external_report(&[DESTINATION]).unwrap();
     let parsed = amiss_wire::json::parse(&report).unwrap();
     let engine = parsed
         .member("payload")

@@ -13,7 +13,8 @@ fn only_unshaped_https_destinations_are_selected_up_to_the_cap() {
         "https://c.example/three",
         "https://github.com/acme/widgets",
         "http://plain.example/insecure",
-    ]);
+    ])
+    .unwrap();
     let parsed = parse(&report).unwrap();
     let engine = parsed
         .member("payload")
