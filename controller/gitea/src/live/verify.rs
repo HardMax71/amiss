@@ -5,6 +5,7 @@ use amiss_controller::{
     spelled_segments,
 };
 use amiss_wire::json::Value;
+use amiss_wire::model::ForgeDialect;
 
 use super::rest::{GiteaVerification, Presence, RefFamily};
 
@@ -25,24 +26,17 @@ pub(super) fn verify_external<R: GiteaVerification>(
     forge_evidence(
         plan,
         ForgeProducer {
-            dialect: "gitea",
+            dialect: ForgeDialect::Gitea,
             host,
             name: PRODUCER_NAME,
             version: producer_version,
             checked_at,
         },
         || rest.deadline(),
-        |deadline, target| {
-            let visibility = rest.repository_visibility(target.owner, target.name, *deadline)?;
-            forge_repository_evidence(visibility, || {
-                resolve_tail(
-                    rest,
-                    target.repository,
-                    target.owner,
-                    target.name,
-                    *deadline,
-                )
-            })
+        |deadline, repository| {
+            let visibility =
+                rest.repository_visibility(&repository.owner, &repository.name, *deadline)?;
+            forge_repository_evidence(visibility, || resolve_tail(rest, repository, *deadline))
         },
     )
 }
@@ -56,15 +50,13 @@ pub(super) fn verify_external<R: GiteaVerification>(
 /// means no resolution was established, never that one failed.
 fn resolve_tail<R: GiteaVerification>(
     rest: &R,
-    repository: &Value,
-    owner: &str,
-    name: &str,
+    repository: &amiss_wire::external::ExternalRepository,
     deadline: super::rest::OperationDeadline,
 ) -> Result<Option<ForgeTail>, ProviderError> {
-    if !matches!(repository.text("form"), Some("src" | "raw" | "media")) {
+    if !matches!(repository.form.as_deref(), Some("src" | "raw" | "media")) {
         return Ok(None);
     }
-    let Some(tail) = repository.text("tail") else {
+    let Some(tail) = repository.tail.as_deref() else {
         return Ok(None);
     };
     let Some(segments) = spelled_segments(tail) else {
@@ -78,7 +70,7 @@ fn resolve_tail<R: GiteaVerification>(
         "branch" => RefFamily::Heads,
         "tag" => RefFamily::Tags,
         "commit" => {
-            return commit_resolution(rest, owner, name, remainder, rewritten, deadline);
+            return commit_resolution(rest, repository, remainder, rewritten, deadline);
         }
         // Untyped legacy selectors are outside the grammar: no fact.
         _ => return Ok(None),
@@ -90,7 +82,9 @@ fn resolve_tail<R: GiteaVerification>(
     else {
         return Ok(None);
     };
-    let Some(names) = rest.matching_refs(owner, name, family, first, deadline)? else {
+    let Some(names) =
+        rest.matching_refs(&repository.owner, &repository.name, family, first, deadline)?
+    else {
         return Ok(None);
     };
     let resolved = names
@@ -106,13 +100,12 @@ fn resolve_tail<R: GiteaVerification>(
         });
     };
     let path = remainder.get(span..).unwrap_or_default();
-    finish(rest, owner, name, &reference, path, rewritten, deadline)
+    finish(rest, repository, &reference, path, rewritten, deadline)
 }
 
 fn commit_resolution<R: GiteaVerification>(
     rest: &R,
-    owner: &str,
-    name: &str,
+    repository: &amiss_wire::external::ExternalRepository,
     remainder: &[String],
     rewritten: bool,
     deadline: super::rest::OperationDeadline,
@@ -125,8 +118,8 @@ fn commit_resolution<R: GiteaVerification>(
         return Ok(None);
     };
     let path = remainder.get(1..).unwrap_or_default();
-    match rest.commit_presence(owner, name, revision, deadline)? {
-        Presence::Present => finish(rest, owner, name, revision, path, rewritten, deadline),
+    match rest.commit_presence(&repository.owner, &repository.name, revision, deadline)? {
+        Presence::Present => finish(rest, repository, revision, path, rewritten, deadline),
         Presence::Absent if rewritten => Ok(None),
         Presence::Absent => Ok(Some(ForgeTail::RevisionMissing)),
         Presence::Unknown => Ok(None),
@@ -135,8 +128,7 @@ fn commit_resolution<R: GiteaVerification>(
 
 fn finish<R: GiteaVerification>(
     rest: &R,
-    owner: &str,
-    name: &str,
+    repository: &amiss_wire::external::ExternalRepository,
     reference: &str,
     path: &[String],
     rewritten: bool,
@@ -146,7 +138,13 @@ fn finish<R: GiteaVerification>(
         return Ok(Some(ForgeTail::Resolved));
     }
     Ok(
-        match rest.content_presence(owner, name, reference, path, deadline)? {
+        match rest.content_presence(
+            &repository.owner,
+            &repository.name,
+            reference,
+            path,
+            deadline,
+        )? {
             Presence::Present => Some(ForgeTail::Resolved),
             Presence::Absent if rewritten => None,
             Presence::Absent => Some(ForgeTail::PathMissing),

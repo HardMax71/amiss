@@ -59,7 +59,11 @@ pub struct ExternalDestination {
     pub destination: String,
     pub scheme: String,
     pub documents: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "json_serde::deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub repository: Option<ExternalRepository>,
 }
 
@@ -69,9 +73,17 @@ pub struct ExternalRepository {
     pub dialect: ForgeDialect,
     pub owner: String,
     pub name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "json_serde::deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub form: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "json_serde::deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub tail: Option<String>,
 }
 
@@ -178,7 +190,6 @@ pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
     let payload_digest = {
         let strict =
             json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-        reject_null_optionals(&strict)?;
         let Some(payload) = strict.member("payload") else {
             return fail("$.payload", ErrorKind::MissingField);
         };
@@ -197,37 +208,6 @@ fn plan_payload_digest(plan: &ExternalPlan) -> Result<Digest, Error> {
     serde_json_canonicalizer::to_vec(plan)
         .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
-}
-
-fn reject_null_optionals(plan: &Value) -> Result<(), Error> {
-    let Some(payload) = plan.member("payload") else {
-        return Ok(());
-    };
-    for side in ["introduced", "removed"] {
-        let Some(Value::Array(rows)) = payload.member(side) else {
-            continue;
-        };
-        for (index, row) in rows.iter().enumerate() {
-            if matches!(row.member("repository"), Some(Value::Null)) {
-                return fail(
-                    &format!("$.payload.{side}[{index}].repository"),
-                    ErrorKind::WrongType,
-                );
-            }
-            let Some(repository) = row.member("repository") else {
-                continue;
-            };
-            for field in ["form", "tail"] {
-                if matches!(repository.member(field), Some(Value::Null)) {
-                    return fail(
-                        &format!("$.payload.{side}[{index}].repository.{field}"),
-                        ErrorKind::WrongType,
-                    );
-                }
-            }
-        }
-    }
-    Ok(())
 }
 
 fn validate_plan(plan: &ExternalPlan) -> Result<(), Error> {

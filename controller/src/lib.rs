@@ -48,8 +48,8 @@ pub use bootstrap_runner::{BootstrapRun, run_bootstrap};
 pub use bounded_json::decode_bounded_json;
 pub use clock::{ControllerClock, SystemClock};
 pub use external::{
-    ForgeEvidence, ForgePresence, ForgeProducer, ForgeRefFamily, ForgeTail, ForgeTarget,
-    ForgeVisibility, forge_evidence, forge_repository_evidence,
+    ForgeEvidence, ForgePresence, ForgeProducer, ForgeRefFamily, ForgeTail, ForgeVisibility,
+    forge_evidence, forge_repository_evidence,
 };
 pub use file_ledger::{
     FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError, FileLedgerRoot,

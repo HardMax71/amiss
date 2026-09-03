@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use amiss_wire::json::Value;
+use amiss_wire::model::ForgeDialect;
 
 use super::{ForgeEvidence, ForgeProducer, forge_evidence};
 use crate::ProviderError;
@@ -11,7 +12,7 @@ fn an_invalid_plan_spends_no_provider_budget() {
     let result = forge_evidence(
         &Value::Null,
         ForgeProducer {
-            dialect: "github",
+            dialect: ForgeDialect::Github,
             host: "github.com",
             name: "producer",
             version: "0.0.0",

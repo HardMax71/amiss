@@ -7,8 +7,11 @@ use std::io::Read as _;
 use std::process::ExitCode;
 use std::time::{Duration, Instant, SystemTime};
 
-use amiss_wire::external::{evidence_file, probe_evidence_row};
-use amiss_wire::json::{self, Value};
+use amiss_wire::external::{
+    ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
+    ExternalPlanEnvelope, evidence, parse_plan,
+};
+use amiss_wire::json;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use crate::net::{Observation, probe, shown};
@@ -72,19 +75,28 @@ fn main() -> ExitCode {
                 method,
                 status,
                 redirect,
-            } => probe_evidence_row(
-                destination,
+            } => ExternalEvidenceRow::HttpProbe {
+                destination: (*destination).to_owned(),
                 method,
-                Some(status),
-                None,
-                redirect
+                status: Some(status),
+                failure: None,
+                final_destination: redirect
                     .as_ref()
-                    .map(|redirect| (redirect.destination.as_str(), redirect.permanent)),
-                &checked_at,
-            ),
-            Observation::Failed { method, failure } => {
-                probe_evidence_row(destination, method, None, Some(failure), None, &checked_at)
-            }
+                    .map(|redirect| redirect.destination.clone()),
+                redirect_chain_permanent: redirect
+                    .as_ref()
+                    .and_then(|redirect| redirect.permanent.then_some(true)),
+                checked_at: checked_at.clone(),
+            },
+            Observation::Failed { method, failure } => ExternalEvidenceRow::HttpProbe {
+                destination: (*destination).to_owned(),
+                method,
+                status: None,
+                failure: Some(failure),
+                final_destination: None,
+                redirect_chain_permanent: None,
+                checked_at: checked_at.clone(),
+            },
             // Policy refusals state no observation, but they do get named.
             Observation::Refused => {
                 eprintln!(
@@ -99,9 +111,17 @@ fn main() -> ExitCode {
     if skipped > 0 {
         eprintln!("amiss-probe: {skipped} destinations past the run cap or budget stay unproven");
     }
-    let Some(evidence) = evidence_file(&plan, "amiss-probe", env!("CARGO_PKG_VERSION"), rows)
-    else {
-        eprintln!("amiss-probe: the plan names no payload digest");
+    let document = ExternalEvidence {
+        schema: ExternalEvidenceSchema::Current,
+        plan_payload_digest: plan.payload_digest,
+        producer: ExternalEvidenceProducer {
+            name: "amiss-probe".to_owned(),
+            version: env!("CARGO_PKG_VERSION").to_owned(),
+        },
+        rows,
+    };
+    let Ok(evidence) = evidence(&document) else {
+        eprintln!("amiss-probe: the evidence could not be encoded");
         return ExitCode::from(2);
     };
     let mut out = String::new();
@@ -112,7 +132,7 @@ fn main() -> ExitCode {
 
 /// One bounded read and strict parse of a digest-whole plan.
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
-fn strict_plan(path: &str) -> Option<Value> {
+fn strict_plan(path: &str) -> Option<ExternalPlanEnvelope> {
     let Ok(file) = fs::File::open(path) else {
         eprintln!("amiss-probe: {path} is unreadable");
         return None;
@@ -125,13 +145,9 @@ fn strict_plan(path: &str) -> Option<Value> {
         eprintln!("amiss-probe: {path} is unreadable or larger than a plan can be");
         return None;
     }
-    let Ok(plan) = json::parse(&bytes) else {
-        eprintln!("amiss-probe: {path} is not the scanner's strict JSON");
-        return None;
-    };
-    if !amiss_wire::external::bound_plan(&plan) {
+    let Ok(plan) = parse_plan(&bytes) else {
         eprintln!("amiss-probe: {path} is not a digest-whole external plan");
         return None;
-    }
+    };
     Some(plan)
 }

@@ -23,13 +23,20 @@ fn the_release_manifest_example_matches_its_typed_source() {
 }
 
 #[test]
-fn the_external_plan_example_matches_its_typed_source() {
+fn the_external_examples_match_their_typed_sources() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let external_plan_bytes = fs::read(examples.join("scanner-external-plan.json")).unwrap();
     let external_plan = external::parse_plan(&external_plan_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&external_plan).unwrap(),
         json::canonical(&json::parse(&external_plan_bytes).unwrap())
+    );
+    let external_evidence_bytes =
+        fs::read(examples.join("scanner-external-evidence.json")).unwrap();
+    let external_evidence = external::parse_evidence(&external_evidence_bytes).unwrap();
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&external_evidence).unwrap(),
+        json::canonical(&json::parse(&external_evidence_bytes).unwrap())
     );
 }
 

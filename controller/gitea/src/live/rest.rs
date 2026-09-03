@@ -357,7 +357,7 @@ impl GiteaVerification for HttpRest {
             "/repos/{}/{}/git/refs/{}/{}",
             path_segment(owner),
             path_segment(name),
-            family.as_str(),
+            family.as_ref(),
             path_segment(prefix),
         );
         Ok(ref_listing(
@@ -419,7 +419,7 @@ impl GiteaVerification for HttpRest {
 /// downstream: no fact. Only a 2xx listing within the ceiling is one, and
 /// its empty array is the empty match set.
 fn ref_listing(fact: ForgeFact<Vec<RefRecord>>, family: RefFamily) -> Option<Vec<String>> {
-    let qualifier = format!("refs/{}/", family.as_str());
+    let qualifier = format!("refs/{}/", family.as_ref());
     match fact {
         Ok(records) if records.len() <= REF_CEILING => Some(
             records

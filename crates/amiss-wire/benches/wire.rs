@@ -1,10 +1,11 @@
 #![expect(clippy::panic, reason = "benchmark fixture setup fails loudly")]
 
 use amiss_wire::controls::parse_organization_floor;
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::external::{
-    EVIDENCE_SCHEMA, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, assess, evidence_file,
-    probe_evidence_row,
+    EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
+    ExternalEvidenceSchema, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess,
+    evidence,
 };
 use amiss_wire::json::{Value, canonical, canonical_length, parse};
 use divan::counter::BytesCount;
@@ -178,12 +179,30 @@ fn assessment_fixture(count: usize) -> (Value, Value) {
     let rows = destinations
         .iter()
         .rev()
-        .map(|destination| {
-            probe_evidence_row(destination, "get", Some(200), None, None, "bench-instant")
+        .map(|destination| ExternalEvidenceRow::HttpProbe {
+            destination: destination.clone(),
+            method: ProbeMethod::Get,
+            status: Some(200),
+            failure: None,
+            final_destination: None,
+            redirect_chain_permanent: None,
+            checked_at: "bench-instant".to_owned(),
         })
         .collect();
-    let evidence = evidence_file(&plan, "benchmark", "0.0.0", rows)
+    let plan_payload_digest = plan
+        .text("payload_digest")
+        .and_then(Digest::from_wire)
         .unwrap_or_else(|| panic!("benchmark plan has no payload digest"));
+    let evidence = evidence(&ExternalEvidence {
+        schema: ExternalEvidenceSchema::Current,
+        plan_payload_digest,
+        producer: ExternalEvidenceProducer {
+            name: "benchmark".to_owned(),
+            version: "0.0.0".to_owned(),
+        },
+        rows,
+    })
+    .unwrap_or_else(|defect| panic!("benchmark evidence is malformed: {defect}"));
     assert_eq!(evidence.text("schema"), Some(EVIDENCE_SCHEMA));
     (plan, evidence)
 }

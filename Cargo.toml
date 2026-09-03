@@ -57,6 +57,7 @@ hmac = "0.13"
 html5gum = { version = "=0.8.4", default-features = false }
 jsonschema = { version = "0.51", default-features = false, features = ["resolve-file"] }
 jsonwebtoken = { version = "11.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+json-serde = "=0.0.1-alpha.1"
 memchr = "2.8.3"
 pem = "4.0.0"
 percent-encoding = "2"
@@ -82,6 +83,7 @@ trustfall-rustdoc-adapter = { version = "=61.0.1", default-features = false }
 unicode-general-category = "1.1"
 unicode-normalization = "0.1"
 url = "2"
+wary = { version = "=0.3.1", default-features = false, features = ["std", "derive", "serde"] }
 zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2"] }
 
 [workspace.lints.rust]

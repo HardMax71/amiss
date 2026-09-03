@@ -1,6 +1,7 @@
 #![cfg(test)]
 
-use amiss_wire::json::parse;
+use amiss_wire::external::parse_plan;
+use amiss_wire::json::{canonical, parse};
 
 use super::targets;
 
@@ -24,6 +25,7 @@ fn only_unshaped_https_destinations_are_selected_up_to_the_cap() {
         amiss_wire::digest::Digest::from_wire(engine.text("engine_digest").unwrap()).unwrap(),
     )
     .unwrap();
+    let plan = parse_plan(&canonical(&plan)).unwrap();
 
     let (selected, skipped) = targets(&plan, 64);
     assert_eq!(
