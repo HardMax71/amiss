@@ -94,35 +94,78 @@ pub enum ResolutionContent {
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BlobResolutionTargetKind {
+    #[serde(rename = "blob")]
+    Blob,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TreeResolutionTargetKind {
+    #[serde(rename = "tree")]
+    Tree,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(untagged)]
 pub enum ResolutionTarget {
     Blob {
         content: ResolutionContent,
+        kind: BlobResolutionTargetKind,
         mode: BlobMode,
         path: RepoPath,
     },
     Tree {
+        kind: TreeResolutionTargetKind,
         path: RepoPath,
     },
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum HeadingAnchorNotFoundResolutionReason {
+    #[serde(rename = "heading-anchor-not-found")]
+    HeadingAnchorNotFound,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LabelNotDeclaredResolutionReason {
+    #[serde(rename = "label-not-declared")]
+    LabelNotDeclared,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum LineFragmentOutOfRangeResolutionReason {
+    #[serde(rename = "line-fragment-out-of-range")]
+    LineFragmentOutOfRange,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PathNotFoundResolutionReason {
+    #[serde(rename = "path-not-found")]
+    PathNotFound,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "reason", rename_all = "kebab-case")]
+#[serde(untagged)]
 pub enum MissingResolution {
     HeadingAnchorNotFound {
         #[serde(deserialize_with = "Option::deserialize")]
         near: Option<String>,
         path: RepoPath,
+        reason: HeadingAnchorNotFoundResolutionReason,
     },
-    LabelNotDeclared,
+    LabelNotDeclared {
+        reason: LabelNotDeclaredResolutionReason,
+    },
     LineFragmentOutOfRange {
         path: RepoPath,
+        reason: LineFragmentOutOfRangeResolutionReason,
     },
     PathNotFound {
         #[serde(deserialize_with = "Option::deserialize")]
         near: Option<RepoPath>,
         path: RepoPath,
+        reason: PathNotFoundResolutionReason,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         same_object_at: Option<RepoPath>,
     },
@@ -148,12 +191,39 @@ pub enum UnsupportedSemanticsResolution {
     SiteRoute,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
-pub enum VersionScope {
-    KnownCommit { commit_oid: Oid, path: RepoPath },
-    KnownPath { path: RepoPath },
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum KnownCommitVersionScopeKind {
+    #[serde(rename = "known-commit")]
+    KnownCommit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum KnownPathVersionScopeKind {
+    #[serde(rename = "known-path")]
+    KnownPath,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnknownPathVersionScopeKind {
+    #[serde(rename = "unknown-path")]
     UnknownPath,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum VersionScope {
+    KnownCommit {
+        commit_oid: Oid,
+        kind: KnownCommitVersionScopeKind,
+        path: RepoPath,
+    },
+    KnownPath {
+        kind: KnownPathVersionScopeKind,
+        path: RepoPath,
+    },
+    UnknownPath {
+        kind: UnknownPathVersionScopeKind,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -178,38 +248,101 @@ pub enum ExternalResolutionReason {
     Url,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DeclaredUntrackedResolutionKind {
+    #[serde(rename = "declared-untracked")]
+    DeclaredUntracked,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ExternalResolutionKind {
+    #[serde(rename = "external")]
+    External,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum InvalidResolutionKind {
+    #[serde(rename = "invalid")]
+    Invalid,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MissingResolutionKind {
+    #[serde(rename = "missing")]
+    Missing,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ResolvedResolutionKind {
+    #[serde(rename = "resolved")]
+    Resolved,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TypeMismatchResolutionKind {
+    #[serde(rename = "type-mismatch")]
+    TypeMismatch,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnsupportedSemanticsResolutionKind {
+    #[serde(rename = "unsupported-semantics")]
+    UnsupportedSemantics,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnsupportedTargetResolutionKind {
+    #[serde(rename = "unsupported-target")]
+    UnsupportedTarget,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum UnsupportedVersionResolutionKind {
+    #[serde(rename = "unsupported-version")]
+    UnsupportedVersion,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(untagged)]
 pub enum Resolution {
     DeclaredUntracked {
         declared_by: RepoPath,
+        kind: DeclaredUntrackedResolutionKind,
         path: RepoPath,
     },
     External {
+        kind: ExternalResolutionKind,
         reason: ExternalResolutionReason,
     },
     Invalid {
+        kind: InvalidResolutionKind,
         reason: InvalidResolutionReason,
     },
     Missing {
+        kind: MissingResolutionKind,
         #[serde(flatten)]
         detail: MissingResolution,
     },
     Resolved {
+        kind: ResolvedResolutionKind,
         target: ResolutionTarget,
     },
     TypeMismatch {
+        kind: TypeMismatchResolutionKind,
         target: ResolutionTarget,
     },
     UnsupportedSemantics {
+        kind: UnsupportedSemanticsResolutionKind,
         #[serde(flatten)]
         detail: UnsupportedSemanticsResolution,
     },
     UnsupportedTarget {
+        kind: UnsupportedTargetResolutionKind,
         path: RepoPath,
         reason: UnsupportedTargetReason,
     },
     UnsupportedVersion {
+        kind: UnsupportedVersionResolutionKind,
         scope: VersionScope,
     },
 }
