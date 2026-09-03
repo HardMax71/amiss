@@ -90,9 +90,11 @@ pub(super) fn external_gate(
             crate::policy::trusted_time_invalid_row(),
         ));
     }
-    let debt = match (&setup_shell.debt, &time) {
-        (None, _) | (Some(_), None) => None,
-        (Some(input), Some(context)) => {
+    let debt = setup_shell
+        .debt
+        .as_ref()
+        .zip(time.as_ref())
+        .map(|(input, context)| {
             crate::policy::verify_debt(
                 input,
                 repository,
@@ -101,18 +103,20 @@ pub(super) fn external_gate(
                 &context.statement.evaluation_instant,
                 scan_limits.debt_items,
             )
-            .map_err(|row| (external_reason(&row), row))?;
-            Some(crate::policy::DebtContext {
-                digest: input.snapshot.digest(),
+            .map(|()| crate::policy::DebtContext {
+                digest: input.digest,
                 trust_source: input.trust_source,
-                adoption_tree: input.snapshot.adoption_tree().clone(),
-                items: input.snapshot.items().to_vec(),
+                adoption_tree: input.snapshot.adoption_tree.clone(),
+                items: input.snapshot.items.clone(),
             })
-        }
-    };
-    let waiver = match (&setup_shell.waiver, &time) {
-        (None, _) | (Some(_), None) => None,
-        (Some(input), Some(context)) => {
+        })
+        .transpose()
+        .map_err(|row| (external_reason(&row), row))?;
+    let waiver = setup_shell
+        .waiver
+        .as_ref()
+        .zip(time.as_ref())
+        .map(|(input, context)| {
             crate::policy::verify_waiver(
                 input,
                 repository,
@@ -120,25 +124,20 @@ pub(super) fn external_gate(
                 verified_floor,
                 &context.statement.evaluation_instant,
                 scan_limits.waiver_items,
-            )
-            .map_err(|row| (external_reason(&row), row))?;
-            let floor_lists = verified_floor.map(|floor| {
-                (
-                    floor.floor.authorized_waiver_issuers().to_vec(),
-                    floor.floor.waivable_finding_kinds().to_vec(),
-                )
-            });
-            let (authorized_issuers, waivable_kinds) = floor_lists.unwrap_or_default();
-            Some(crate::policy::WaiverContext {
-                digest: input.bundle.digest(),
+            )?;
+            let (authorized_issuers, waivable_kinds) =
+                verified_floor.map(waiver_authority).unwrap_or_default();
+            Ok(crate::policy::WaiverContext {
+                digest: input.digest,
                 trust_source: input.trust_source,
                 candidate_tree: tree,
-                items: input.bundle.items().to_vec(),
+                items: input.bundle.items.clone(),
                 authorized_issuers,
                 waivable_kinds,
             })
-        }
-    };
+        })
+        .transpose()
+        .map_err(|row: ErrorDetail| (external_reason(&row), row))?;
     Ok(ExternalVerified {
         debt,
         waiver,
@@ -146,6 +145,18 @@ pub(super) fn external_gate(
         constraint,
         semantic,
     })
+}
+
+fn waiver_authority(
+    floor: &crate::policy::FloorInput,
+) -> (
+    Vec<amiss_wire::model::OwnerId>,
+    Vec<amiss_wire::controls::EligibleFindingKind>,
+) {
+    (
+        floor.floor.authorized_waiver_issuers().to_vec(),
+        floor.floor.waivable_finding_kinds().to_vec(),
+    )
 }
 
 /// The controls-unavailable reason a rejected external control anchors:

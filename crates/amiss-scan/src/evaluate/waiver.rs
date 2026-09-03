@@ -101,7 +101,7 @@ pub(super) fn waiver_pass(
         }
         if !context
             .waivable_kinds
-            .contains(&item.authorized_fact.finding_kind())
+            .contains(&item.authorized_fact.finding_kind)
         {
             defects.push("kind");
         }
@@ -110,7 +110,7 @@ pub(super) fn waiver_pass(
         }
         if let Some(found) = target {
             if findings.get(found).is_some_and(|finding| {
-                finding.kind().as_ref() != item.authorized_fact.finding_kind().as_ref()
+                finding.kind().as_ref() != item.authorized_fact.finding_kind.as_ref()
             }) {
                 defects.push("key");
             }

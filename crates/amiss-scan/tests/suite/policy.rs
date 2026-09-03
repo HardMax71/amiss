@@ -7,7 +7,8 @@ use amiss_scan::{Includes, PolicySide};
 use amiss_wire::controls::{
     BlobLineSelection, Disposition, DocumentInclude, FACT_DOMAIN, FINDING_KEY_DOMAIN,
     FindingDisposition, IncludeKind, ProjectionAssertion, ProjectionKind, ProjectionSource,
-    PromotableFindingKind, ResourceName, ScannerPolicy, WaiverBundle,
+    PromotableFindingKind, ResourceName, ScannerPolicy, canonical_debt_snapshot,
+    canonical_waiver_bundle, parse_debt_snapshot, parse_waiver_bundle,
 };
 use amiss_wire::digest::hj;
 use amiss_wire::model::{RepoPath, RepoPathText, UtcInstant};
@@ -362,8 +363,13 @@ fn debt_input(item_count: usize) -> DebtInput {
         push_item(&mut document, second);
     }
     let bytes = serde_json::to_vec(&document).expect("debt document JSON");
+    let snapshot = parse_debt_snapshot(&bytes).expect("valid debt fixture");
+    let digest = canonical_debt_snapshot(&snapshot)
+        .expect("canonical debt fixture")
+        .1;
     DebtInput {
-        snapshot: amiss_wire::controls::DebtSnapshot::parse(&bytes).expect("valid debt fixture"),
+        snapshot,
+        digest,
         trust_source: RequestTrust::ExternalRequiredCheck,
     }
 }
@@ -384,8 +390,13 @@ fn waiver_input(item_count: usize) -> WaiverInput {
         push_item(&mut document, second);
     }
     let bytes = serde_json::to_vec(&document).expect("waiver document JSON");
+    let bundle = parse_waiver_bundle(&bytes).expect("valid waiver fixture");
+    let digest = canonical_waiver_bundle(&bundle)
+        .expect("canonical waiver fixture")
+        .1;
     WaiverInput {
-        bundle: WaiverBundle::parse(&bytes).expect("valid waiver fixture"),
+        bundle,
+        digest,
         trust_source: RequestTrust::ExternalRequiredCheck,
     }
 }

@@ -66,6 +66,7 @@ pub fn verify_floor(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DebtInput {
     pub snapshot: amiss_wire::controls::DebtSnapshot,
+    pub digest: Digest,
     pub trust_source: RequestTrust,
 }
 
@@ -73,6 +74,7 @@ pub struct DebtInput {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WaiverInput {
     pub bundle: amiss_wire::controls::WaiverBundle,
+    pub digest: Digest,
     pub trust_source: RequestTrust,
 }
 
@@ -210,16 +212,16 @@ pub fn verify_debt(
     item_limit: u64,
 ) -> Result<(), ErrorDetail> {
     let snapshot = &input.snapshot;
-    verify_item_limit(ResourceName::DebtItems, snapshot.items().len(), item_limit)?;
+    verify_item_limit(ResourceName::DebtItems, snapshot.items.len(), item_limit)?;
     let floor = floor.ok_or(binding_mismatch_row())?;
     let bound = identity_matches(
-        snapshot.repository(),
-        snapshot.ref_name(),
+        &snapshot.repository,
+        &snapshot.ref_name,
         repository,
         target_ref,
-    ) && snapshot.organization_floor_digest() == floor.floor.digest()
-        && snapshot.created_at() <= instant
-        && snapshot.items().iter().all(|item| {
+    ) && snapshot.organization_floor_digest == floor.floor.digest()
+        && snapshot.created_at <= *instant
+        && snapshot.items.iter().all(|item| {
             item.created_at <= *instant
                 && floor.floor.authorized_debt_owners().contains(&item.owner)
         });
@@ -247,15 +249,11 @@ pub fn verify_waiver(
     item_limit: u64,
 ) -> Result<(), ErrorDetail> {
     let bundle = &input.bundle;
-    verify_item_limit(ResourceName::WaiverItems, bundle.items().len(), item_limit)?;
+    verify_item_limit(ResourceName::WaiverItems, bundle.items.len(), item_limit)?;
     let floor = floor.ok_or(binding_mismatch_row())?;
-    let bound = identity_matches(
-        bundle.repository(),
-        bundle.ref_name(),
-        repository,
-        target_ref,
-    ) && bundle.organization_floor_digest() == floor.floor.digest()
-        && bundle.created_at() <= instant;
+    let bound = identity_matches(&bundle.repository, &bundle.ref_name, repository, target_ref)
+        && bundle.organization_floor_digest == floor.floor.digest()
+        && bundle.created_at <= *instant;
     if bound {
         Ok(())
     } else {

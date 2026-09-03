@@ -15,7 +15,6 @@ mod debt;
 mod execution_constraint;
 mod fact;
 mod floor;
-mod item;
 mod policy;
 mod resources;
 mod taxonomy;
@@ -23,13 +22,19 @@ mod taxonomy;
 mod trusted_time;
 mod waiver;
 
-pub use debt::{DebtItem, DebtSnapshot};
+pub use debt::{
+    DebtItem, DebtSnapshot, DebtSnapshotSchema, canonical_debt_snapshot, parse_debt_snapshot,
+};
 pub use execution_constraint::{
     ACTION_BOOTSTRAP_CONTRACT, ActionBootstrapContract, ConstraintPlatform,
     EXECUTION_CONSTRAINT_SCHEMA, ExecutionConstraintDescriptor, ExecutionConstraintSchema,
     canonical_execution_constraint, parse_execution_constraint, valid_required_status_name,
 };
-pub use fact::{Fact, FindingKeyInput, FindingScope, TargetIntent};
+pub use fact::{
+    Fact, FactEvidence, FactEvidenceKind, FactSchema, FindingKeyInput, FindingKeyInputSchema,
+    FindingOccurrence, FindingScope, MissingResolution, OccurrenceKind, ReferenceScopeKind,
+    StructuralResolution, TargetIntent, TargetIntentKind, canonical_fact, parse_fact,
+};
 pub use floor::{
     FloorDefect, FloorDisposition, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor,
     ResourceLimit,
@@ -52,7 +57,10 @@ pub use trusted_time::{
     TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement, canonical_trusted_time,
     parse_trusted_time,
 };
-pub use waiver::{WaiverBundle, WaiverItem};
+pub use waiver::{
+    WaiverBundle, WaiverBundleSchema, WaiverItem, WaiverResidualDisposition,
+    canonical_waiver_bundle, parse_waiver_bundle,
+};
 
 pub const SCANNER_POLICY_PATH: &str = ".amiss/scanner-policy.json";
 
@@ -182,11 +190,6 @@ fn decode_branch_ref(path: &str, value: Value) -> Result<BranchRef, Error> {
         .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
-fn decode_instant(path: &str, value: Value) -> Result<UtcInstant, Error> {
-    UtcInstant::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
 pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {
     let mut obj = Obj::new(path, value)?;
     let host = obj.required("host", de::string)?;
@@ -209,11 +212,49 @@ pub(crate) fn provider_run_id_valid(raw: &str) -> bool {
         && bytes.iter().all(allowed)
 }
 
-fn decode_tree(path: &str, value: Value) -> Result<TreeIdentity, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let object_format = obj.required("object_format", decode_enum)?;
-    let tree_oid = obj.required("tree_oid", de::string)?;
-    obj.finish()?;
-    TreeIdentity::new(object_format, tree_oid)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+pub(crate) fn validate_repository(
+    path: &str,
+    repository: &RepositoryIdentity,
+) -> Result<(), Error> {
+    if RepositoryIdentity::new(
+        repository.host().to_owned(),
+        repository.owner().to_owned(),
+        repository.name().to_owned(),
+    )
+    .as_ref()
+        == Some(repository)
+    {
+        Ok(())
+    } else {
+        fail(path, ErrorKind::InvalidValue)
+    }
+}
+
+pub(crate) fn validate_owner(path: &str, owner: &OwnerId) -> Result<(), Error> {
+    if OwnerId::new(owner.as_str().to_owned()).as_ref() == Some(owner) {
+        Ok(())
+    } else {
+        fail(path, ErrorKind::InvalidValue)
+    }
+}
+
+pub(crate) fn validate_instant(path: &str, instant: &UtcInstant) -> Result<(), Error> {
+    if UtcInstant::new(instant.as_str().to_owned()).as_ref() == Some(instant) {
+        Ok(())
+    } else {
+        fail(path, ErrorKind::InvalidValue)
+    }
+}
+
+pub(crate) fn validate_tree(path: &str, tree: &TreeIdentity) -> Result<(), Error> {
+    if tree.tree_oid.object_format() == tree.object_format {
+        Ok(())
+    } else {
+        fail(path, ErrorKind::InvalidValue)
+    }
+}
+
+pub(crate) fn valid_reason(raw: &str) -> bool {
+    let length = raw.chars().count();
+    (1..=1024).contains(&length) && raw.chars().any(|character| !character.is_whitespace())
 }

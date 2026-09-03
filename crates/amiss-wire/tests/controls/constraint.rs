@@ -1,7 +1,8 @@
 use amiss_wire::controls::{
-    ActionBootstrapContract, DebtSnapshot, ExecutionConstraintSchema, OrganizationFloor,
-    TrustedTimeController, TrustedTimeSchema, WaiverBundle, canonical_execution_constraint,
-    parse_execution_constraint, parse_trusted_time,
+    ActionBootstrapContract, DebtSnapshotSchema, ExecutionConstraintSchema, OrganizationFloor,
+    TrustedTimeController, TrustedTimeSchema, WaiverBundleSchema, canonical_debt_snapshot,
+    canonical_execution_constraint, canonical_waiver_bundle, parse_debt_snapshot,
+    parse_execution_constraint, parse_trusted_time, parse_waiver_bundle,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -30,20 +31,26 @@ fn controls_accept_open_forge_identities() {
         .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
         .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
     let debt_value = json::parse(debt.as_bytes()).unwrap();
-    let debt = DebtSnapshot::parse(debt.as_bytes()).unwrap();
-    assert_eq!(debt.schema(), "amiss/debt-snapshot");
-    assert_eq!(debt.repository().owner(), "platform/security");
-    assert_eq!(debt.digest(), hj("amiss/debt-snapshot", &debt_value));
+    let debt = parse_debt_snapshot(debt.as_bytes()).unwrap();
+    assert_eq!(debt.schema, DebtSnapshotSchema::Current);
+    assert_eq!(debt.repository.owner(), "platform/security");
+    assert_eq!(
+        canonical_debt_snapshot(&debt).unwrap().1,
+        hj("amiss/debt-snapshot", &debt_value)
+    );
 
     let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
     let waiver = waiver_bundle(&[item])
         .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
         .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
     let waiver_value = json::parse(waiver.as_bytes()).unwrap();
-    let waiver = WaiverBundle::parse(waiver.as_bytes()).unwrap();
-    assert_eq!(waiver.schema(), "amiss/waiver-bundle");
-    assert_eq!(waiver.repository().owner(), "platform/security");
-    assert_eq!(waiver.digest(), hj("amiss/waiver-bundle", &waiver_value));
+    let waiver = parse_waiver_bundle(waiver.as_bytes()).unwrap();
+    assert_eq!(waiver.schema, WaiverBundleSchema::Current);
+    assert_eq!(waiver.repository.owner(), "platform/security");
+    assert_eq!(
+        canonical_waiver_bundle(&waiver).unwrap().1,
+        hj("amiss/waiver-bundle", &waiver_value)
+    );
 
     let time = parse_trusted_time(TIME_STATEMENT.as_bytes()).unwrap();
     assert_eq!(time.schema, TrustedTimeSchema::Current);

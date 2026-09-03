@@ -1,6 +1,7 @@
 use amiss_wire::controls::{
-    DebtSnapshot, OrganizationFloor, TrustedTimeController, TrustedTimeSchema,
-    TrustedTimeStatement, WaiverBundle, canonical_trusted_time,
+    OrganizationFloor, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
+    canonical_debt_snapshot, canonical_trusted_time, canonical_waiver_bundle, parse_debt_snapshot,
+    parse_waiver_bundle,
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{BranchRef, RepositoryIdentity, UtcInstant};
@@ -86,18 +87,20 @@ fn identity_inputs(policy: &PolicyControls) -> [IdentityInput<'_>; 3] {
         (
             policy.debt_snapshot.as_ref(),
             |bytes| {
-                DebtSnapshot::parse(bytes)
+                parse_debt_snapshot(bytes)
                     .ok()
-                    .map(|snapshot| snapshot.digest())
+                    .and_then(|snapshot| canonical_debt_snapshot(&snapshot).ok())
+                    .map(|(_bytes, digest)| digest)
             },
             BootstrapJobError::DebtSnapshot,
         ),
         (
             policy.waiver_bundle.as_ref(),
             |bytes| {
-                WaiverBundle::parse(bytes)
+                parse_waiver_bundle(bytes)
                     .ok()
-                    .map(|bundle| bundle.digest())
+                    .and_then(|bundle| canonical_waiver_bundle(&bundle).ok())
+                    .map(|(_bytes, digest)| digest)
             },
             BootstrapJobError::WaiverBundle,
         ),
@@ -268,11 +271,14 @@ pub(super) fn request(
                 run,
                 floor_digest,
                 |bytes| {
-                    DebtSnapshot::parse(bytes).map(|snapshot| ControlBinding {
-                        digest: snapshot.digest(),
-                        repository: snapshot.repository().clone(),
-                        ref_name: snapshot.ref_name().clone(),
-                        organization_floor_digest: Some(snapshot.organization_floor_digest()),
+                    parse_debt_snapshot(bytes).and_then(|snapshot| {
+                        let digest = canonical_debt_snapshot(&snapshot)?.1;
+                        Ok(ControlBinding {
+                            digest,
+                            repository: snapshot.repository,
+                            ref_name: snapshot.ref_name,
+                            organization_floor_digest: Some(snapshot.organization_floor_digest),
+                        })
                     })
                 },
                 BootstrapJobError::DebtSnapshot,
@@ -288,11 +294,14 @@ pub(super) fn request(
                 run,
                 floor_digest,
                 |bytes| {
-                    WaiverBundle::parse(bytes).map(|bundle| ControlBinding {
-                        digest: bundle.digest(),
-                        repository: bundle.repository().clone(),
-                        ref_name: bundle.ref_name().clone(),
-                        organization_floor_digest: Some(bundle.organization_floor_digest()),
+                    parse_waiver_bundle(bytes).and_then(|bundle| {
+                        let digest = canonical_waiver_bundle(&bundle)?.1;
+                        Ok(ControlBinding {
+                            digest,
+                            repository: bundle.repository,
+                            ref_name: bundle.ref_name,
+                            organization_floor_digest: Some(bundle.organization_floor_digest),
+                        })
                     })
                 },
                 BootstrapJobError::WaiverBundle,

@@ -13,9 +13,11 @@ use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, WaiverInput};
 use amiss_scan::report::{CandidateBlock, candidate_identity_digest};
 use amiss_scan::{Effects, Setup, SetupShell, SnapshotIdentity, commit_pair};
 use amiss_wire::controls::{
-    DebtSnapshot, OrganizationFloor, Profile, WaiverBundle, parse_trusted_time,
+    OrganizationFloor, Profile, canonical_debt_snapshot, canonical_waiver_bundle,
+    parse_debt_snapshot, parse_trusted_time, parse_waiver_bundle,
 };
-use amiss_wire::digest::hb;
+use amiss_wire::de::Error;
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::RequestTrust;
@@ -223,10 +225,10 @@ pub(crate) fn debt_json(
 }
 
 pub(crate) fn debt_input(doc: &str) -> DebtInput {
+    let (snapshot, digest) = parsed_control(doc, parse_debt_snapshot, canonical_debt_snapshot);
     DebtInput {
-        snapshot: DebtSnapshot::parse(doc.as_bytes())
-            .map_err(|defect| format!("{defect:?}"))
-            .unwrap(),
+        snapshot,
+        digest,
         trust_source: RequestTrust::ExternalRequiredCheck,
     }
 }
@@ -266,12 +268,24 @@ pub(crate) fn waiver_json(
 }
 
 pub(crate) fn waiver_input(doc: &str) -> WaiverInput {
+    let (bundle, digest) = parsed_control(doc, parse_waiver_bundle, canonical_waiver_bundle);
     WaiverInput {
-        bundle: WaiverBundle::parse(doc.as_bytes())
-            .map_err(|defect| format!("{defect:?}"))
-            .unwrap(),
+        bundle,
+        digest,
         trust_source: RequestTrust::ExternalRequiredCheck,
     }
+}
+
+fn parsed_control<T>(
+    doc: &str,
+    parse: impl FnOnce(&[u8]) -> Result<T, Error>,
+    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), Error>,
+) -> (T, Digest) {
+    let value = parse(doc.as_bytes())
+        .map_err(|defect| format!("{defect:?}"))
+        .unwrap();
+    let digest = canonical(&value).unwrap().1;
+    (value, digest)
 }
 
 pub(crate) fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {

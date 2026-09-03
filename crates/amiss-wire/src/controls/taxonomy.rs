@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, IntoStaticStr,
@@ -93,8 +94,11 @@ pub enum PromotableFindingKind {
     EnumIter,
     EnumString,
     IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum EligibleFindingKind {
     ExplicitTargetMissing,
     ExplicitTargetTypeMismatch,
@@ -112,6 +116,9 @@ pub enum EligibleFindingKind {
     EnumIter,
     EnumString,
     IntoStaticStr,
+    Display,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum SourceConstruct {
     #[strum(serialize = "markdown-inline-link")]
@@ -197,8 +204,11 @@ impl SourceConstruct {
     EnumIter,
     EnumString,
     IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum TargetKind {
     Blob,
     Tree,

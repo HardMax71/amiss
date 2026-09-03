@@ -38,14 +38,14 @@ pub fn reproduce(
     scan_limits: ScanLimits,
     context: &DebtContext,
 ) -> Result<(), ErrorDetail> {
-    if context.adoption_tree.object_format() != repo.object_format() {
+    if context.adoption_tree.object_format != repo.object_format() {
         return Err(mismatch());
     }
-    let tree = context.adoption_tree.oid().clone();
+    let tree = context.adoption_tree.tree_oid.clone();
     let documents: BTreeSet<RepoPath> = context
         .items
         .iter()
-        .map(|item| RepoPath::from(&item.accepted_fact.key_input().scope.document))
+        .map(|item| RepoPath::from(&item.accepted_fact.key_input.scope.document))
         .collect();
 
     let mut scan = ScanResources::new(scan_limits);

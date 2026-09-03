@@ -32,7 +32,8 @@ impl FromStr for ArtifactId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(transparent)]
 pub struct OwnerId(String);
 
 impl OwnerId {

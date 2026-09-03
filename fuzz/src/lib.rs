@@ -54,12 +54,12 @@ pub fn controls(bytes: &[u8]) {
         amiss_wire::controls::OrganizationFloor::parse(bytes),
     );
     assert_eq!(
-        amiss_wire::controls::DebtSnapshot::parse(bytes),
-        amiss_wire::controls::DebtSnapshot::parse(bytes),
+        amiss_wire::controls::parse_debt_snapshot(bytes),
+        amiss_wire::controls::parse_debt_snapshot(bytes),
     );
     assert_eq!(
-        amiss_wire::controls::WaiverBundle::parse(bytes),
-        amiss_wire::controls::WaiverBundle::parse(bytes),
+        amiss_wire::controls::parse_waiver_bundle(bytes),
+        amiss_wire::controls::parse_waiver_bundle(bytes),
     );
     assert_eq!(
         amiss_wire::controls::parse_trusted_time(bytes),

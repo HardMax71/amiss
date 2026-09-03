@@ -1,20 +1,26 @@
 use crate::digest::Digest;
 use crate::model::Oid;
+use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, EnumString};
 
 /// The two ordinary Git blob modes. Trees, symlinks, and gitlinks are
 /// represented by other target types and cannot be smuggled into a blob.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter, Serialize, Deserialize,
+)]
 pub enum BlobMode {
+    #[serde(rename = "100644")]
     #[strum(serialize = "100644")]
     Regular,
+    #[serde(rename = "100755")]
     #[strum(serialize = "100755")]
     Executable,
 }
 
 /// The content evidence retained for a located blob. An available blob has
 /// both digests; an LFS pointer has only the digest of the pointer bytes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 #[strum_discriminants(name(BlobContentTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
@@ -46,7 +52,8 @@ impl BlobContent {
 }
 
 /// A located ordinary blob and the evidence read from it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BlobTarget<P> {
     pub path: P,
     pub mode: BlobMode,
@@ -55,7 +62,8 @@ pub struct BlobTarget<P> {
 
 /// A located target. A tree has no blob content; a blob always carries a
 /// valid blob mode and one exact content-evidence shape.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 #[strum_discriminants(name(TargetTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
