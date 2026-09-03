@@ -147,6 +147,7 @@ pub(crate) struct PolicyIncludePreview {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PolicyIncludeInvocation {
     pub(crate) policy: ScannerPolicy,
+    pub(crate) policy_digest: amiss_wire::digest::Digest,
     pub(crate) preview: Option<PolicyIncludePreview>,
 }
 

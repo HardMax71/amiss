@@ -1,4 +1,5 @@
-use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
 
 /// The five closed source adapters. Every wire string an adapter contributes
 /// (identity, grammar profile, frontmatter contract, projection, address
@@ -15,6 +16,9 @@ use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
     EnumIter,
     EnumString,
     IntoStaticStr,
+    Display,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum Adapter {

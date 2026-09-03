@@ -1,15 +1,13 @@
 use serde::{Deserialize, Serialize};
 
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::{Digest, hj};
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
 use crate::extraction::governed_name_valid;
 use crate::json::{self, Value};
 use crate::model::{Adapter, ArtifactId, RepoPathText};
 
 use super::{
-    Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA,
-    decode_disposition_rule, decode_enum, decode_items, decode_path_set, decode_repo_path, root,
-    sorted_set,
+    Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA, root, sorted_set,
 };
 
 /// Maximum UTF-8 byte length of one exact document suffix selector.
@@ -21,6 +19,12 @@ pub const TREE_PATHS_SOURCE: &str = "tree-paths";
 pub const RECORD_VALUE_SOURCE: &str = "record-value";
 pub const RECORD_SET_SOURCE: &str = "record-set";
 pub const SOURCE_MARKER_BYTES: usize = 256;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ScannerPolicySchema {
+    #[serde(rename = "amiss/scanner-policy")]
+    Current,
+}
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, Serialize, Deserialize,
@@ -35,72 +39,25 @@ pub enum ProjectionKind {
     DecimalCountV1,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ProjectionSink {
+    #[serde(rename = "previous-code")]
+    PreviousCode,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DocumentInclude {
     pub path: RepoPathText,
     pub kind: IncludeKind,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub adapter: Option<Adapter>,
 }
 
-/// Projects one validated include row through the scanner-policy wire shape.
-#[must_use]
-pub fn document_include_value(include: DocumentInclude) -> Value {
-    let mut fields = vec![
-        ("path".into(), Value::String(include.path.as_str().into())),
-        ("kind".into(), Value::String(include.kind.as_ref().into())),
-    ];
-    if let Some(suffix) = include.suffix {
-        fields.push(("suffix".into(), Value::String(suffix.into())));
-    }
-    if let Some(adapter) = include.adapter {
-        fields.push(("adapter".into(), Value::String(adapter.as_ref().into())));
-    }
-    Value::Object(fields.into_boxed_slice())
-}
-
-fn exact_suffix(path: &str, value: Value) -> Result<String, Error> {
-    let suffix = de::string(path, value)?;
-    if !exact_suffix_valid(&suffix) {
-        return fail(path, ErrorKind::InvalidValue);
-    }
-    Ok(suffix)
-}
-
-fn exact_suffix_valid(suffix: &str) -> bool {
-    suffix.strip_prefix('.').is_some_and(|tail| {
-        !tail.is_empty()
-            && suffix.len() <= DOCUMENT_SUFFIX_BYTES
-            && !tail.bytes().any(|byte| matches!(byte, b'/' | b'\\' | 0))
-    })
-}
-
-fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let include_path = obj.required("path", decode_repo_path)?;
-    let kind = obj.required("kind", decode_enum)?;
-    let suffix_path = obj.field("suffix");
-    let raw_suffix = obj.take_optional("suffix");
-    if raw_suffix.is_some() && kind != IncludeKind::Tree {
-        return fail(&suffix_path, ErrorKind::Inconsistent);
-    }
-    let suffix = raw_suffix
-        .map(|value| exact_suffix(&suffix_path, value))
-        .transpose()?;
-    let adapter = obj
-        .take_optional("adapter")
-        .map(|value| decode_enum(&obj.field("adapter"), value))
-        .transpose()?;
-    obj.finish()?;
-    Ok(DocumentInclude {
-        path: include_path,
-        kind,
-        suffix,
-        adapter,
-    })
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FindingDisposition {
     pub finding_kind: PromotableFindingKind,
     pub disposition: Disposition,
@@ -154,32 +111,209 @@ pub enum ProjectionSource {
     RecordSet(RecordSetSelection),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProjectionAssertion {
     pub document: RepoPathText,
     pub name: String,
     pub projection: ProjectionKind,
+    pub sink: ProjectionSink,
     pub source: ProjectionSource,
 }
 
-fn safe_line(path: &str, value: Value) -> Result<u64, Error> {
-    let line = de::integer(path, value)?;
-    u64::try_from(line)
-        .ok()
-        .filter(|line| safe_line_valid(*line))
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScannerPolicy {
+    pub schema: ScannerPolicySchema,
+    pub document_includes: Vec<DocumentInclude>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub projection_assertions: Option<Vec<ProjectionAssertion>>,
+    pub protected_inventory: Vec<RepoPathText>,
+    pub finding_dispositions: Vec<FindingDisposition>,
+}
+
+/// Parses and validates one repository scanner policy.
+///
+/// # Errors
+///
+/// Fails on strict-JSON defects, schema-shape violations, unknown fields,
+/// invalid grammar values, and unsorted or duplicate set members.
+pub fn parse_scanner_policy(bytes: &[u8]) -> Result<ScannerPolicy, Error> {
+    let strict = root(bytes)?;
+    if matches!(strict.member("projection_assertions"), Some(Value::Null)) {
+        return fail("$.projection_assertions", ErrorKind::WrongType);
+    }
+    let policy = de::deserialize_json(bytes)?;
+    validate_scanner_policy(&policy)?;
+    Ok(policy)
+}
+
+/// Produces one valid scanner policy's canonical bytes and digest.
+///
+/// # Errors
+///
+/// A public field violates the same laws [`parse_scanner_policy`] enforces,
+/// or the typed value cannot be serialized.
+pub fn canonical_scanner_policy(policy: &ScannerPolicy) -> Result<(Vec<u8>, Digest), Error> {
+    validate_scanner_policy(policy)?;
+    let bytes = serde_json_canonicalizer::to_vec(policy)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let digest = hb(SCANNER_POLICY_SCHEMA, &bytes);
+    Ok((bytes, digest))
+}
+
+/// Checks a directly constructed source through the same closed grammar and
+/// projection compatibility laws as a scanner-policy assertion.
+///
+/// # Errors
+///
+/// The source violates its bounded field grammar or is incompatible with the
+/// selected projection.
+pub fn check_projection_source(
+    projection: ProjectionKind,
+    source: &ProjectionSource,
+) -> Result<(), Error> {
+    validate_projection_source("$", projection, source)
+}
+
+/// Parses one standalone projection source through the scanner-policy grammar.
+///
+/// # Errors
+///
+/// The JSON is not strict, the source is malformed, or it is incompatible with the selected
+/// projection.
+pub fn parse_projection_source(
+    bytes: &[u8],
+    projection: ProjectionKind,
+) -> Result<ProjectionSource, Error> {
+    root(bytes)?;
+    let source = de::deserialize_json(bytes)?;
+    validate_projection_source("$", projection, &source)?;
+    Ok(source)
+}
+
+fn validate_scanner_policy(policy: &ScannerPolicy) -> Result<(), Error> {
+    if policy.document_includes.len() > 100_000 {
+        return fail("$.document_includes", ErrorKind::LimitExceeded);
+    }
+    for (index, include) in policy.document_includes.iter().enumerate() {
+        validate_document_include(&format!("$.document_includes[{index}]"), include)?;
+    }
+    sorted_set(
+        "$.document_includes",
+        &policy.document_includes,
+        |left, right| (left.path.as_str(), left.kind).cmp(&(right.path.as_str(), right.kind)),
+    )?;
+
+    let assertions = policy.projection_assertions.as_deref().unwrap_or_default();
+    if assertions.len() > 100_000 {
+        return fail("$.projection_assertions", ErrorKind::LimitExceeded);
+    }
+    for (index, assertion) in assertions.iter().enumerate() {
+        validate_projection_assertion(&format!("$.projection_assertions[{index}]"), assertion)?;
+    }
+    sorted_set("$.projection_assertions", assertions, |left, right| {
+        (left.document.as_str(), left.name.as_str())
+            .cmp(&(right.document.as_str(), right.name.as_str()))
+    })?;
+
+    if policy.protected_inventory.len() > 100_000 {
+        return fail("$.protected_inventory", ErrorKind::LimitExceeded);
+    }
+    sorted_set(
+        "$.protected_inventory",
+        &policy.protected_inventory,
+        |left, right| left.as_str().cmp(right.as_str()),
+    )?;
+
+    if policy.finding_dispositions.len() > 3 {
+        return fail("$.finding_dispositions", ErrorKind::LimitExceeded);
+    }
+    sorted_set(
+        "$.finding_dispositions",
+        &policy.finding_dispositions,
+        |left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()),
+    )
+}
+
+fn validate_document_include(path: &str, include: &DocumentInclude) -> Result<(), Error> {
+    if include.suffix.is_some() && include.kind != IncludeKind::Tree {
+        return fail(&format!("{path}.suffix"), ErrorKind::Inconsistent);
+    }
+    if include
+        .suffix
+        .as_deref()
+        .is_some_and(|suffix| !exact_suffix_valid(suffix))
+    {
+        return fail(&format!("{path}.suffix"), ErrorKind::InvalidValue);
+    }
+    Ok(())
+}
+
+fn validate_projection_assertion(path: &str, assertion: &ProjectionAssertion) -> Result<(), Error> {
+    if !governed_name_valid(&assertion.name) {
+        return fail(&format!("{path}.name"), ErrorKind::InvalidValue);
+    }
+    validate_projection_source(
+        &format!("{path}.source"),
+        assertion.projection,
+        &assertion.source,
+    )
+}
+
+fn validate_projection_source(
+    path: &str,
+    projection: ProjectionKind,
+    source: &ProjectionSource,
+) -> Result<(), Error> {
+    match source {
+        ProjectionSource::BlobLines(selection) => {
+            if !safe_line_valid(selection.first_line) || !safe_line_valid(selection.last_line) {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+            if selection.first_line > selection.last_line {
+                return fail(path, ErrorKind::Inconsistent);
+            }
+        }
+        ProjectionSource::NamedRegion(selection) => {
+            if !source_marker_valid(&selection.start_marker)
+                || !source_marker_valid(&selection.end_marker)
+            {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+            if selection.start_marker == selection.end_marker {
+                return fail(path, ErrorKind::Inconsistent);
+            }
+        }
+        ProjectionSource::TreePaths(selection) => {
+            if !safe_line_valid(selection.maximum_depth)
+                || !selection.suffix.as_deref().is_none_or(exact_suffix_valid)
+            {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+        }
+        ProjectionSource::RecordValue(selection) => {
+            if !record_key_valid(&selection.key) {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+        }
+        ProjectionSource::RecordSet(_) => {}
+    }
+    projection_source_compatible(projection, source)
+        .then_some(())
+        .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
+}
+
+fn exact_suffix_valid(suffix: &str) -> bool {
+    suffix.strip_prefix('.').is_some_and(|tail| {
+        !tail.is_empty()
+            && suffix.len() <= DOCUMENT_SUFFIX_BYTES
+            && !tail.bytes().any(|byte| matches!(byte, b'/' | b'\\' | 0))
+    })
 }
 
 fn safe_line_valid(line: u64) -> bool {
     (1..=json::MAX_SAFE_INTEGER.unsigned_abs()).contains(&line)
-}
-
-fn source_marker(path: &str, value: Value) -> Result<String, Error> {
-    let marker = de::string(path, value)?;
-    if !source_marker_valid(&marker) {
-        return fail(path, ErrorKind::InvalidValue);
-    }
-    Ok(marker)
 }
 
 fn source_marker_valid(marker: &str) -> bool {
@@ -198,68 +332,6 @@ fn record_key_valid(key: &str) -> bool {
         && !key.chars().any(char::is_control)
 }
 
-fn decode_projection_source(path: &str, value: Value) -> Result<ProjectionSource, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let kind_path = obj.field("kind");
-    let kind = obj.required("kind", de::string)?;
-    let source = if kind == BLOB_LINES_SOURCE {
-        let selection = BlobLineSelection {
-            path: obj.required("path", decode_repo_path)?,
-            first_line: obj.required("first_line", safe_line)?,
-            last_line: obj.required("last_line", safe_line)?,
-        };
-        if selection.first_line > selection.last_line {
-            return fail(path, ErrorKind::Inconsistent);
-        }
-        ProjectionSource::BlobLines(selection)
-    } else if kind == NAMED_REGION_SOURCE {
-        let selection = NamedRegionSelection {
-            path: obj.required("path", decode_repo_path)?,
-            start_marker: obj.required("start_marker", source_marker)?,
-            end_marker: obj.required("end_marker", source_marker)?,
-        };
-        if selection.start_marker == selection.end_marker {
-            return fail(path, ErrorKind::Inconsistent);
-        }
-        ProjectionSource::NamedRegion(selection)
-    } else if kind == TREE_PATHS_SOURCE {
-        let suffix_path = obj.field("suffix");
-        ProjectionSource::TreePaths(TreePathSelection {
-            root: obj.required("root", decode_repo_path)?,
-            suffix: obj
-                .take_optional("suffix")
-                .map(|value| exact_suffix(&suffix_path, value))
-                .transpose()?,
-            maximum_depth: obj.required("maximum_depth", safe_line)?,
-        })
-    } else if kind == RECORD_VALUE_SOURCE {
-        ProjectionSource::RecordValue(RecordValueSelection {
-            set: obj.required("set", |path, value| {
-                ArtifactId::new(de::string(path, value)?)
-                    .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-            })?,
-            key: obj.required("key", |path, value| {
-                let key = de::string(path, value)?;
-                if !record_key_valid(&key) {
-                    return fail(path, ErrorKind::InvalidValue);
-                }
-                Ok(key)
-            })?,
-        })
-    } else if kind == RECORD_SET_SOURCE {
-        ProjectionSource::RecordSet(RecordSetSelection {
-            set: obj.required("set", |path, value| {
-                ArtifactId::new(de::string(path, value)?)
-                    .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-            })?,
-        })
-    } else {
-        return fail(&kind_path, ErrorKind::InvalidValue);
-    };
-    obj.finish()?;
-    Ok(source)
-}
-
 fn projection_source_compatible(projection: ProjectionKind, source: &ProjectionSource) -> bool {
     match source {
         ProjectionSource::BlobLines(_)
@@ -270,91 +342,6 @@ fn projection_source_compatible(projection: ProjectionKind, source: &ProjectionS
             ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1
         ),
     }
-}
-
-/// Checks a directly constructed source through the same closed grammar and
-/// projection compatibility laws as a scanner-policy assertion.
-///
-/// # Errors
-///
-/// The source violates its bounded field grammar or is incompatible with the
-/// selected projection.
-pub fn check_projection_source(
-    projection: ProjectionKind,
-    source: &ProjectionSource,
-) -> Result<(), Error> {
-    let valid = match source {
-        ProjectionSource::BlobLines(selection) => {
-            safe_line_valid(selection.first_line)
-                && safe_line_valid(selection.last_line)
-                && selection.first_line <= selection.last_line
-        }
-        ProjectionSource::NamedRegion(selection) => {
-            source_marker_valid(&selection.start_marker)
-                && source_marker_valid(&selection.end_marker)
-                && selection.start_marker != selection.end_marker
-        }
-        ProjectionSource::TreePaths(selection) => {
-            safe_line_valid(selection.maximum_depth)
-                && selection.suffix.as_deref().is_none_or(exact_suffix_valid)
-        }
-        ProjectionSource::RecordValue(selection) => record_key_valid(&selection.key),
-        ProjectionSource::RecordSet(_) => true,
-    };
-    if !valid {
-        return fail("$", ErrorKind::InvalidValue);
-    }
-    projection_source_compatible(projection, source)
-        .then_some(())
-        .ok_or_else(|| Error::new("$", ErrorKind::Inconsistent))
-}
-
-/// Parses one standalone projection source through the scanner-policy grammar.
-///
-/// # Errors
-///
-/// The JSON is not strict, the source is malformed, or it is incompatible with the selected
-/// projection.
-pub fn parse_projection_source(
-    bytes: &[u8],
-    projection: ProjectionKind,
-) -> Result<ProjectionSource, Error> {
-    decode_checked_projection_source("$", root(bytes)?, projection)
-}
-
-fn decode_checked_projection_source(
-    path: &str,
-    value: Value,
-    projection: ProjectionKind,
-) -> Result<ProjectionSource, Error> {
-    let source = decode_projection_source(path, value)?;
-    projection_source_compatible(projection, &source)
-        .then_some(source)
-        .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
-}
-
-fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAssertion, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let document = obj.required("document", decode_repo_path)?;
-    let name = obj.required("name", de::string)?;
-    if !governed_name_valid(&name) {
-        return fail(&obj.field("name"), ErrorKind::InvalidValue);
-    }
-    let projection = obj.required("projection", decode_enum)?;
-    obj.required("sink", |path, value| {
-        de::const_str(path, value, PREVIOUS_CODE_SINK)
-    })?;
-    let source = obj.required("source", decode_projection_source)?;
-    if !projection_source_compatible(projection, &source) {
-        return fail(path, ErrorKind::Inconsistent);
-    }
-    obj.finish()?;
-    Ok(ProjectionAssertion {
-        document,
-        name,
-        projection,
-        source,
-    })
 }
 
 #[must_use]
@@ -413,183 +400,5 @@ pub fn projection_source_value(source: &ProjectionSource) -> Value {
                 Value::String(selection.set.as_str().to_owned().into()),
             ),
         ])),
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ScannerPolicy {
-    digest: Digest,
-    document_includes: Vec<DocumentInclude>,
-    projection_assertions: Vec<ProjectionAssertion>,
-    protected_inventory: Vec<RepoPathText>,
-    finding_dispositions: Vec<FindingDisposition>,
-}
-
-impl ScannerPolicy {
-    /// Builds a policy through the same ordering, uniqueness, and digest laws
-    /// used for repository-controlled bytes.
-    ///
-    /// # Errors
-    ///
-    /// The supplied sets contain duplicates or otherwise fail the
-    /// scanner-policy grammar.
-    pub fn new(
-        mut document_includes: Vec<DocumentInclude>,
-        mut projection_assertions: Vec<ProjectionAssertion>,
-        mut protected_inventory: Vec<RepoPathText>,
-        mut finding_dispositions: Vec<FindingDisposition>,
-    ) -> Result<Self, Error> {
-        document_includes.sort_by(|left, right| {
-            (left.path.as_str(), left.kind).cmp(&(right.path.as_str(), right.kind))
-        });
-        projection_assertions.sort_by(|left, right| {
-            (left.document.as_str(), left.name.as_str())
-                .cmp(&(right.document.as_str(), right.name.as_str()))
-        });
-        protected_inventory.sort();
-        finding_dispositions
-            .sort_by(|left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()));
-        let include_rows: Vec<Value> = document_includes
-            .into_iter()
-            .map(document_include_value)
-            .collect();
-        let inventory: Vec<Value> = protected_inventory
-            .into_iter()
-            .map(|path| Value::String(path.as_str().into()))
-            .collect();
-        let assertions: Vec<Value> = projection_assertions
-            .into_iter()
-            .map(|assertion| {
-                Value::Object(Box::new([
-                    (
-                        "document".into(),
-                        Value::String(assertion.document.as_str().into()),
-                    ),
-                    ("name".into(), Value::String(assertion.name.into())),
-                    (
-                        "projection".into(),
-                        Value::String(assertion.projection.as_ref().into()),
-                    ),
-                    ("sink".into(), Value::String(PREVIOUS_CODE_SINK.into())),
-                    ("source".into(), projection_source_value(&assertion.source)),
-                ]))
-            })
-            .collect();
-        let dispositions: Vec<Value> = finding_dispositions
-            .into_iter()
-            .map(|row| {
-                Value::Object(Box::new([
-                    (
-                        "finding_kind".into(),
-                        Value::String(row.finding_kind.as_ref().into()),
-                    ),
-                    (
-                        "disposition".into(),
-                        Value::String(row.disposition.as_ref().into()),
-                    ),
-                ]))
-            })
-            .collect();
-        let value = Value::Object(Box::new([
-            ("schema".into(), Value::String(SCANNER_POLICY_SCHEMA.into())),
-            (
-                "document_includes".into(),
-                Value::Array(include_rows.into_boxed_slice()),
-            ),
-            (
-                "projection_assertions".into(),
-                Value::Array(assertions.into_boxed_slice()),
-            ),
-            (
-                "protected_inventory".into(),
-                Value::Array(inventory.into_boxed_slice()),
-            ),
-            (
-                "finding_dispositions".into(),
-                Value::Array(dispositions.into_boxed_slice()),
-            ),
-        ]));
-        Self::parse(&json::canonical(&value))
-    }
-
-    #[must_use]
-    pub const fn digest(&self) -> Digest {
-        self.digest
-    }
-
-    #[must_use]
-    pub fn document_includes(&self) -> &[DocumentInclude] {
-        &self.document_includes
-    }
-
-    #[must_use]
-    pub fn protected_inventory(&self) -> &[RepoPathText] {
-        &self.protected_inventory
-    }
-
-    #[must_use]
-    pub fn projection_assertions(&self) -> &[ProjectionAssertion] {
-        &self.projection_assertions
-    }
-
-    #[must_use]
-    pub fn finding_dispositions(&self) -> &[FindingDisposition] {
-        &self.finding_dispositions
-    }
-
-    /// # Errors
-    ///
-    /// Fails on strict-JSON defects, schema-shape violations, unknown fields,
-    /// invalid grammar values, and unsorted or duplicate set members.
-    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let digest = hj(SCANNER_POLICY_SCHEMA, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, SCANNER_POLICY_SCHEMA)
-        })?;
-
-        let includes_path = obj.field("document_includes");
-        let includes = de::array(&includes_path, obj.take("document_includes")?)?;
-        let document_includes = decode_items(&includes_path, includes, 100_000, decode_include)?;
-        sorted_set(&includes_path, &document_includes, |a, b| {
-            (a.path.as_str(), a.kind).cmp(&(b.path.as_str(), b.kind))
-        })?;
-
-        let assertions_path = obj.field("projection_assertions");
-        let projection_assertions = match obj.take_optional("projection_assertions") {
-            Some(value) => decode_items(
-                &assertions_path,
-                de::array(&assertions_path, value)?,
-                100_000,
-                decode_projection_assertion,
-            )?,
-            None => Vec::new(),
-        };
-        sorted_set(&assertions_path, &projection_assertions, |left, right| {
-            (left.document.as_str(), left.name.as_str())
-                .cmp(&(right.document.as_str(), right.name.as_str()))
-        })?;
-
-        let inventory_path = obj.field("protected_inventory");
-        let protected_inventory =
-            decode_path_set(&inventory_path, obj.take("protected_inventory")?)?;
-
-        let dispositions_path = obj.field("finding_dispositions");
-        let raw = de::array(&dispositions_path, obj.take("finding_dispositions")?)?;
-        let finding_dispositions =
-            decode_items(&dispositions_path, raw, 3, decode_disposition_rule)?;
-        sorted_set(&dispositions_path, &finding_dispositions, |a, b| {
-            a.finding_kind.as_ref().cmp(b.finding_kind.as_ref())
-        })?;
-
-        obj.finish()?;
-        Ok(Self {
-            digest,
-            document_includes,
-            projection_assertions,
-            protected_inventory,
-            finding_dispositions,
-        })
     }
 }

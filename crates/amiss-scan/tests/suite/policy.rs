@@ -6,9 +6,10 @@ use amiss_scan::policy::{
 use amiss_scan::{Includes, PolicySide};
 use amiss_wire::controls::{
     BlobLineSelection, Disposition, DocumentInclude, FACT_DOMAIN, FINDING_KEY_DOMAIN,
-    FindingDisposition, IncludeKind, ProjectionAssertion, ProjectionKind, ProjectionSource,
-    PromotableFindingKind, ResourceName, ScannerPolicy, canonical_debt_snapshot,
-    canonical_waiver_bundle, parse_debt_snapshot, parse_waiver_bundle,
+    FindingDisposition, IncludeKind, ProjectionAssertion, ProjectionKind, ProjectionSink,
+    ProjectionSource, PromotableFindingKind, ResourceName, ScannerPolicy, ScannerPolicySchema,
+    canonical_debt_snapshot, canonical_scanner_policy, canonical_waiver_bundle,
+    parse_debt_snapshot, parse_waiver_bundle,
 };
 use amiss_wire::digest::hj;
 use amiss_wire::model::{RepoPath, RepoPathText, UtcInstant};
@@ -18,6 +19,17 @@ use amiss_wire::requests::RequestTrust;
 #[expect(clippy::expect_used, reason = "test fixture paths are valid")]
 fn path(raw: &str) -> RepoPath {
     RepoPath::new(raw.to_owned()).expect("valid repository path")
+}
+
+#[expect(clippy::expect_used, reason = "test fixture policy is valid")]
+fn policy_side(policy: ScannerPolicy) -> PolicySide {
+    let digest = canonical_scanner_policy(&policy)
+        .expect("valid policy fixture")
+        .1;
+    PolicySide {
+        digest: Some(digest),
+        policy: Some(policy),
+    }
 }
 
 #[test]
@@ -110,7 +122,7 @@ fn policy_comparison_indexes_kind_path_and_inventory_membership() {
 
 #[expect(clippy::expect_used, reason = "test fixture paths are valid")]
 fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
-    let document_includes = includes
+    let mut document_includes = includes
         .iter()
         .map(|(raw, kind)| DocumentInclude {
             path: RepoPathText::new((*raw).to_owned()).expect("valid include path"),
@@ -118,48 +130,45 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
             suffix: None,
             adapter: None,
         })
-        .collect();
-    let protected_inventory = inventory
+        .collect::<Vec<_>>();
+    document_includes.sort_by(|left, right| {
+        (left.path.as_str(), left.kind).cmp(&(right.path.as_str(), right.kind))
+    });
+    let mut protected_inventory = inventory
         .iter()
         .map(|raw| RepoPathText::new((*raw).to_owned()).expect("valid inventory path"))
-        .collect();
-    let policy = ScannerPolicy::new(
+        .collect::<Vec<_>>();
+    protected_inventory.sort();
+    policy_side(ScannerPolicy {
+        schema: ScannerPolicySchema::Current,
         document_includes,
-        Vec::new(),
+        projection_assertions: Some(Vec::new()),
         protected_inventory,
-        Vec::new(),
-    )
-    .expect("valid policy fixture");
-    PolicySide {
-        digest: Some(policy.digest()),
-        policy: Some(policy),
-    }
+        finding_dispositions: Vec::new(),
+    })
 }
 
 #[test]
 fn a_projection_selector_change_keeps_identity_and_removal_weakens() {
     let side = |first_line| {
-        let policy = ScannerPolicy::new(
-            Vec::new(),
-            vec![ProjectionAssertion {
+        policy_side(ScannerPolicy {
+            schema: ScannerPolicySchema::Current,
+            document_includes: Vec::new(),
+            projection_assertions: Some(vec![ProjectionAssertion {
                 document: RepoPathText::new("docs/example.md".to_owned())
                     .expect("valid document path"),
                 name: "example".to_owned(),
                 projection: ProjectionKind::CodeTextV1,
+                sink: ProjectionSink::PreviousCode,
                 source: ProjectionSource::BlobLines(BlobLineSelection {
                     path: RepoPathText::new("src/lib.rs".to_owned()).expect("valid source path"),
                     first_line,
                     last_line: first_line,
                 }),
-            }],
-            Vec::new(),
-            Vec::new(),
-        )
-        .expect("valid projection policy");
-        PolicySide {
-            digest: Some(policy.digest()),
-            policy: Some(policy),
-        }
+            }]),
+            protected_inventory: Vec::new(),
+            finding_dispositions: Vec::new(),
+        })
     };
     let base = side(1);
     let changed = effects(&base, &side(2), &|_| InventoryState::Scanned);
@@ -200,22 +209,18 @@ fn the_union_carries_both_sides_includes() {
 #[test]
 fn the_union_carries_both_suffixes_but_the_candidate_binding() {
     let side = |suffix: &str, adapter| {
-        let policy = ScannerPolicy::new(
-            vec![DocumentInclude {
+        policy_side(ScannerPolicy {
+            schema: ScannerPolicySchema::Current,
+            document_includes: vec![DocumentInclude {
                 path: RepoPathText::new("manual".to_owned()).expect("valid include path"),
                 kind: IncludeKind::Tree,
                 suffix: Some(suffix.to_owned()),
                 adapter: Some(adapter),
             }],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        )
-        .expect("valid suffix selector");
-        PolicySide {
-            digest: Some(policy.digest()),
-            policy: Some(policy),
-        }
+            projection_assertions: Some(Vec::new()),
+            protected_inventory: Vec::new(),
+            finding_dispositions: Vec::new(),
+        })
     };
     let base = side(".txt", amiss_wire::model::Adapter::Rst);
     let candidate = side(".guide", amiss_wire::model::Adapter::Markdown);
@@ -230,24 +235,22 @@ fn the_union_carries_both_suffixes_but_the_candidate_binding() {
     );
 }
 
-#[expect(clippy::expect_used, reason = "test fixture helper")]
 fn disposition_side(rows: &[(PromotableFindingKind, Disposition)]) -> PolicySide {
-    let policy = ScannerPolicy::new(
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        rows.iter()
-            .map(|(finding_kind, disposition)| FindingDisposition {
-                finding_kind: *finding_kind,
-                disposition: *disposition,
-            })
-            .collect(),
-    )
-    .expect("valid disposition fixture");
-    PolicySide {
-        digest: Some(policy.digest()),
-        policy: Some(policy),
-    }
+    let mut finding_dispositions = rows
+        .iter()
+        .map(|(finding_kind, disposition)| FindingDisposition {
+            finding_kind: *finding_kind,
+            disposition: *disposition,
+        })
+        .collect::<Vec<_>>();
+    finding_dispositions.sort_by_key(|disposition| <&str>::from(disposition.finding_kind));
+    policy_side(ScannerPolicy {
+        schema: ScannerPolicySchema::Current,
+        document_includes: Vec::new(),
+        projection_assertions: Some(Vec::new()),
+        protected_inventory: Vec::new(),
+        finding_dispositions,
+    })
 }
 
 #[test]
@@ -528,22 +531,18 @@ fn bound_adapter_answers_only_policy_included_rows() {
 fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
     use amiss_wire::model::Adapter;
     let side = |adapter: Option<Adapter>| {
-        let policy = ScannerPolicy::new(
-            vec![DocumentInclude {
+        policy_side(ScannerPolicy {
+            schema: ScannerPolicySchema::Current,
+            document_includes: vec![DocumentInclude {
                 path: RepoPathText::new("man".to_owned()).expect("valid include path"),
                 kind: IncludeKind::Tree,
                 suffix: None,
                 adapter,
             }],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        )
-        .expect("valid binding fixture");
-        PolicySide {
-            digest: Some(policy.digest()),
-            policy: Some(policy),
-        }
+            projection_assertions: Some(Vec::new()),
+            protected_inventory: Vec::new(),
+            finding_dispositions: Vec::new(),
+        })
     };
     let removed = |got: &amiss_scan::policy::Effects| {
         got.controls
@@ -575,22 +574,18 @@ fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
 fn suffix_selector_changes_keep_their_stable_root_identity() {
     use amiss_wire::model::Adapter;
     let side = |suffix: Option<&str>, adapter: Option<Adapter>| {
-        let policy = ScannerPolicy::new(
-            vec![DocumentInclude {
+        policy_side(ScannerPolicy {
+            schema: ScannerPolicySchema::Current,
+            document_includes: vec![DocumentInclude {
                 path: RepoPathText::new("manual".to_owned()).expect("valid include path"),
                 kind: IncludeKind::Tree,
                 suffix: suffix.map(str::to_owned),
                 adapter,
             }],
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-        )
-        .expect("valid selector fixture");
-        PolicySide {
-            digest: Some(policy.digest()),
-            policy: Some(policy),
-        }
+            projection_assertions: Some(Vec::new()),
+            protected_inventory: Vec::new(),
+            finding_dispositions: Vec::new(),
+        })
     };
     let absent = PolicySide::default();
     let selected = side(Some(".txt"), Some(Adapter::Rst));

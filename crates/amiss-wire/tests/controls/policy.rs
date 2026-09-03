@@ -1,24 +1,31 @@
 use amiss_wire::controls::{
     BlobLineSelection, DOCUMENT_SUFFIX_BYTES, ProjectionKind, ProjectionSource,
-    SOURCE_MARKER_BYTES, ScannerPolicy, check_projection_source, parse_projection_source,
+    SOURCE_MARKER_BYTES, canonical_scanner_policy, check_projection_source,
+    parse_projection_source, parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
+use amiss_wire::json;
 use amiss_wire::model::RepoPathText;
 
 use crate::support::POLICY;
 
 #[test]
 fn parses_the_policy_fixture() {
-    let policy = ScannerPolicy::parse(POLICY).unwrap();
-    assert_eq!(policy.document_includes().len(), 2);
-    assert_eq!(policy.projection_assertions().len(), 2);
-    assert_eq!(policy.protected_inventory().len(), 2);
-    assert_eq!(policy.finding_dispositions().len(), 1);
+    let policy = parse_scanner_policy(POLICY).unwrap();
+    assert_eq!(policy.document_includes.len(), 2);
     assert_eq!(
-        policy.document_includes()[0].suffix.as_deref(),
-        Some(".txt")
+        policy
+            .projection_assertions
+            .as_deref()
+            .unwrap_or_default()
+            .len(),
+        2
     );
-    let assertion = &policy.projection_assertions()[0];
+    assert_eq!(policy.protected_inventory.len(), 2);
+    assert_eq!(policy.finding_dispositions.len(), 1);
+    assert_eq!(policy.document_includes[0].suffix.as_deref(), Some(".txt"));
+    let assertions = policy.projection_assertions.as_deref().unwrap_or_default();
+    let assertion = &assertions[0];
     assert_eq!(assertion.document.as_str(), "docs/architecture.md");
     assert_eq!(assertion.name, "request-shape");
     assert_eq!(assertion.projection, ProjectionKind::CodeTextV1);
@@ -27,16 +34,15 @@ fn parses_the_policy_fixture() {
     };
     assert_eq!(source.path.as_str(), "crates/amiss/src/request.rs");
     assert_eq!((source.first_line, source.last_line), (10, 14));
-    let ProjectionSource::NamedRegion(source) = &policy.projection_assertions()[1].source else {
+    let ProjectionSource::NamedRegion(source) = &assertions[1].source else {
         panic!("fixture second assertion uses a named region");
     };
     assert_eq!(source.path.as_str(), "examples/generated.txt");
     assert_eq!(source.start_marker, "// amiss:generated:start");
     assert_eq!(source.end_marker, "// amiss:generated:end");
-    assert_eq!(
-        policy.digest(),
-        ScannerPolicy::parse(POLICY).unwrap().digest()
-    );
+    let digest = canonical_scanner_policy(&policy).unwrap().1;
+    let reparsed = parse_scanner_policy(POLICY).unwrap();
+    assert_eq!(digest, canonical_scanner_policy(&reparsed).unwrap().1);
 }
 
 #[test]
@@ -53,8 +59,8 @@ fn directly_constructed_projection_sources_reuse_the_policy_grammar() {
         ErrorKind::InvalidValue
     );
 
-    let policy = ScannerPolicy::parse(POLICY).unwrap();
-    let source = &policy.projection_assertions()[0].source;
+    let policy = parse_scanner_policy(POLICY).unwrap();
+    let source = &policy.projection_assertions.as_deref().unwrap_or_default()[0].source;
     assert!(check_projection_source(ProjectionKind::CodeTextV1, source).is_ok());
     assert_eq!(
         parse_projection_source(
@@ -86,7 +92,7 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
         )
     };
     let valid = policy_with_assertions(&row("docs/a.md", "example", 1, 9_007_199_254_740_991));
-    assert!(ScannerPolicy::parse(valid.as_bytes()).is_ok());
+    assert!(parse_scanner_policy(valid.as_bytes()).is_ok());
 
     let unsorted = policy_with_assertions(&format!(
         "{},{}",
@@ -94,7 +100,7 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
         row("docs/a.md", "example", 1, 1)
     ));
     assert_eq!(
-        ScannerPolicy::parse(unsorted.as_bytes()).unwrap_err().kind,
+        parse_scanner_policy(unsorted.as_bytes()).unwrap_err().kind,
         ErrorKind::UnsortedSet
     );
 
@@ -104,22 +110,24 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
         row("docs/a.md", "example", 2, 2)
     ));
     assert_eq!(
-        ScannerPolicy::parse(duplicate.as_bytes()).unwrap_err().kind,
+        parse_scanner_policy(duplicate.as_bytes()).unwrap_err().kind,
         ErrorKind::DuplicateMember,
         "a selector change does not mint another assertion identity"
     );
 
     let reversed = policy_with_assertions(&row("docs/a.md", "example", 2, 1));
     assert_eq!(
-        ScannerPolicy::parse(reversed.as_bytes()).unwrap_err().kind,
+        parse_scanner_policy(reversed.as_bytes()).unwrap_err().kind,
         ErrorKind::Inconsistent
     );
 
     let named = policy_with_assertions(
         r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"named-region","path":"src/lib.rs","start_marker":"// amiss:start","end_marker":"// amiss:end"}}"#,
     );
-    let parsed = ScannerPolicy::parse(named.as_bytes()).unwrap();
-    let ProjectionSource::NamedRegion(source) = &parsed.projection_assertions()[0].source else {
+    let parsed = parse_scanner_policy(named.as_bytes()).unwrap();
+    let ProjectionSource::NamedRegion(source) =
+        &parsed.projection_assertions.as_deref().unwrap_or_default()[0].source
+    else {
         panic!("named-region source survives the policy reader");
     };
     assert_eq!(source.path.as_str(), "src/lib.rs");
@@ -129,12 +137,14 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
     let tree = policy_with_assertions(
         r#"{"document":"docs/a.md","name":"example","projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"tree-paths","root":"crates","suffix":".rs","maximum_depth":3}}"#,
     );
-    let parsed = ScannerPolicy::parse(tree.as_bytes()).unwrap();
+    let parsed = parse_scanner_policy(tree.as_bytes()).unwrap();
     assert_eq!(
-        parsed.projection_assertions()[0].projection,
+        parsed.projection_assertions.as_deref().unwrap_or_default()[0].projection,
         ProjectionKind::SortedRowsV1
     );
-    let ProjectionSource::TreePaths(source) = &parsed.projection_assertions()[0].source else {
+    let ProjectionSource::TreePaths(source) =
+        &parsed.projection_assertions.as_deref().unwrap_or_default()[0].source
+    else {
         panic!("tree-paths source survives the policy reader");
     };
     assert_eq!(source.root.as_str(), "crates");
@@ -142,21 +152,23 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
     assert_eq!(source.maximum_depth, 3);
 
     let count = tree.replace("sorted-rows-v1", "decimal-count-v1");
-    let parsed = ScannerPolicy::parse(count.as_bytes()).unwrap();
+    let parsed = parse_scanner_policy(count.as_bytes()).unwrap();
     assert_eq!(
-        parsed.projection_assertions()[0].projection,
+        parsed.projection_assertions.as_deref().unwrap_or_default()[0].projection,
         ProjectionKind::DecimalCountV1
     );
     assert!(matches!(
-        parsed.projection_assertions()[0].source,
+        parsed.projection_assertions.as_deref().unwrap_or_default()[0].source,
         ProjectionSource::TreePaths(_)
     ));
 
     let record = policy_with_assertions(
         r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"record-value","set":"rust/public-api","key":"amiss::check"}}"#,
     );
-    let parsed = ScannerPolicy::parse(record.as_bytes()).unwrap();
-    let ProjectionSource::RecordValue(source) = &parsed.projection_assertions()[0].source else {
+    let parsed = parse_scanner_policy(record.as_bytes()).unwrap();
+    let ProjectionSource::RecordValue(source) =
+        &parsed.projection_assertions.as_deref().unwrap_or_default()[0].source
+    else {
         panic!("record-value source survives the policy reader");
     };
     assert_eq!(source.set.as_str(), "rust/public-api");
@@ -165,13 +177,15 @@ fn projection_assertions_have_one_closed_sorted_grammar() {
     let records = policy_with_assertions(
         r#"{"document":"docs/a.md","name":"example","projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"record-set","set":"rust/public-api"}}"#,
     );
-    let parsed = ScannerPolicy::parse(records.as_bytes()).unwrap();
-    let ProjectionSource::RecordSet(source) = &parsed.projection_assertions()[0].source else {
+    let parsed = parse_scanner_policy(records.as_bytes()).unwrap();
+    let ProjectionSource::RecordSet(source) =
+        &parsed.projection_assertions.as_deref().unwrap_or_default()[0].source
+    else {
         panic!("record-set source survives the policy reader");
     };
     assert_eq!(source.set.as_str(), "rust/public-api");
     let count = records.replace("sorted-rows-v1", "decimal-count-v1");
-    assert!(ScannerPolicy::parse(count.as_bytes()).is_ok());
+    assert!(parse_scanner_policy(count.as_bytes()).is_ok());
 }
 
 #[test]
@@ -186,7 +200,7 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
     ] {
         let policy = policy_with_assertions(&invalid);
         assert_eq!(
-            ScannerPolicy::parse(policy.as_bytes()).unwrap_err().kind,
+            parse_scanner_policy(policy.as_bytes()).unwrap_err().kind,
             ErrorKind::InvalidValue,
             "invalid row: {invalid}"
         );
@@ -205,14 +219,14 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
         r#"{"document":"docs/a.md","name":"example","projection":"code-text-v1","sink":"previous-code","source":{"kind":"record-set","set":"rust/public-api"}}"#.to_owned(),
     ] {
         assert!(
-            ScannerPolicy::parse(policy_with_assertions(&invalid).as_bytes()).is_err(),
+            parse_scanner_policy(policy_with_assertions(&invalid).as_bytes()).is_err(),
             "{invalid}"
         );
     }
     let unsafe_integer =
         policy_with_assertions(&valid.replace("\"last_line\":1", "\"last_line\":9007199254740992"));
     assert!(matches!(
-        ScannerPolicy::parse(unsafe_integer.as_bytes())
+        parse_scanner_policy(unsafe_integer.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::Json(_)
@@ -234,7 +248,7 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
         ),
     ] {
         assert!(
-            ScannerPolicy::parse(invalid.as_bytes()).is_err(),
+            parse_scanner_policy(invalid.as_bytes()).is_err(),
             "{invalid}"
         );
     }
@@ -250,7 +264,7 @@ fn rejects_policy_shape_defects() {
       "extra": 1
     }"#;
     assert_eq!(
-        ScannerPolicy::parse(unknown).unwrap_err().kind,
+        parse_scanner_policy(unknown).unwrap_err().kind,
         ErrorKind::UnknownField
     );
 
@@ -261,7 +275,7 @@ fn rejects_policy_shape_defects() {
       "finding_dispositions": []
     }"#;
     assert_eq!(
-        ScannerPolicy::parse(wrong_schema).unwrap_err().kind,
+        parse_scanner_policy(wrong_schema).unwrap_err().kind,
         ErrorKind::InvalidValue
     );
 
@@ -272,7 +286,7 @@ fn rejects_policy_shape_defects() {
       "finding_dispositions": []
     }"#;
     assert_eq!(
-        ScannerPolicy::parse(unsorted).unwrap_err().kind,
+        parse_scanner_policy(unsorted).unwrap_err().kind,
         ErrorKind::UnsortedSet
     );
 
@@ -286,11 +300,49 @@ fn rejects_policy_shape_defects() {
             }}"#
         );
         assert_eq!(
-            ScannerPolicy::parse(doc.as_bytes()).unwrap_err().kind,
+            parse_scanner_policy(doc.as_bytes()).unwrap_err().kind,
             ErrorKind::InvalidValue,
             "path {bad_path}"
         );
     }
+}
+
+#[test]
+fn optional_projection_assertions_preserve_presence_and_reject_null() {
+    let absent = br#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[]}"#;
+    let present = br#"{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":[],"protected_inventory":[],"finding_dispositions":[]}"#;
+    let null = br#"{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":null,"protected_inventory":[],"finding_dispositions":[]}"#;
+
+    let absent_policy = parse_scanner_policy(absent).unwrap();
+    let present_policy = parse_scanner_policy(present).unwrap();
+    assert_eq!(absent_policy.projection_assertions, None);
+    assert_eq!(present_policy.projection_assertions, Some(Vec::new()));
+    assert_eq!(
+        canonical_scanner_policy(&absent_policy).unwrap().0,
+        json::canonical(&json::parse(absent).unwrap())
+    );
+    assert_eq!(
+        canonical_scanner_policy(&present_policy).unwrap().0,
+        json::canonical(&json::parse(present).unwrap())
+    );
+    assert_ne!(
+        canonical_scanner_policy(&absent_policy).unwrap().1,
+        canonical_scanner_policy(&present_policy).unwrap().1
+    );
+    assert_eq!(
+        parse_scanner_policy(null).unwrap_err().kind,
+        ErrorKind::WrongType
+    );
+}
+
+#[test]
+fn canonical_policy_rechecks_mutable_public_fields() {
+    let mut policy = parse_scanner_policy(POLICY).unwrap();
+    policy.document_includes.swap(0, 1);
+    assert_eq!(
+        canonical_scanner_policy(&policy).unwrap_err().kind,
+        ErrorKind::UnsortedSet
+    );
 }
 
 /// An include's optional adapter is a closed spelling: each wire id parses to
@@ -298,22 +350,22 @@ fn rejects_policy_shape_defects() {
 #[test]
 fn an_include_binding_is_a_closed_adapter_spelling() {
     let bound = r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"tree","path":"manual"}],"protected_inventory":[],"finding_dispositions":[]}"#;
-    let policy = ScannerPolicy::parse(bound.as_bytes()).unwrap();
+    let policy = parse_scanner_policy(bound.as_bytes()).unwrap();
     assert_eq!(
-        policy.document_includes()[0].adapter,
+        policy.document_includes[0].adapter,
         Some(amiss_wire::model::Adapter::Rst)
     );
 
     let unbound = r#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"tree","path":"manual"}],"protected_inventory":[],"finding_dispositions":[]}"#;
-    let policy = ScannerPolicy::parse(unbound.as_bytes()).unwrap();
-    assert_eq!(policy.document_includes()[0].adapter, None);
+    let policy = parse_scanner_policy(unbound.as_bytes()).unwrap();
+    assert_eq!(policy.document_includes[0].adapter, None);
 
     for bad in ["latex", "Rst", "restructuredtext", ""] {
         let doc = format!(
             r#"{{"schema":"amiss/scanner-policy","document_includes":[{{"adapter":"{bad}","kind":"tree","path":"manual"}}],"protected_inventory":[],"finding_dispositions":[]}}"#
         );
         assert_eq!(
-            ScannerPolicy::parse(doc.as_bytes()).unwrap_err().kind,
+            parse_scanner_policy(doc.as_bytes()).unwrap_err().kind,
             ErrorKind::InvalidValue,
             "adapter {bad}"
         );
@@ -323,24 +375,21 @@ fn an_include_binding_is_a_closed_adapter_spelling() {
 #[test]
 fn a_tree_suffix_is_one_bounded_exact_selector() {
     let selected = r#"{"schema":"amiss/scanner-policy","document_includes":[{"adapter":"rst","kind":"tree","path":"manual","suffix":".txt"}],"protected_inventory":[],"finding_dispositions":[]}"#;
-    let policy = ScannerPolicy::parse(selected.as_bytes()).unwrap();
-    assert_eq!(
-        policy.document_includes()[0].suffix.as_deref(),
-        Some(".txt")
-    );
+    let policy = parse_scanner_policy(selected.as_bytes()).unwrap();
+    assert_eq!(policy.document_includes[0].suffix.as_deref(), Some(".txt"));
 
     let longest = format!(".{}", "x".repeat(DOCUMENT_SUFFIX_BYTES.saturating_sub(1)));
     let at_limit = format!(
         r#"{{"schema":"amiss/scanner-policy","document_includes":[{{"kind":"tree","path":"manual","suffix":"{longest}"}}],"protected_inventory":[],"finding_dispositions":[]}}"#
     );
-    assert!(ScannerPolicy::parse(at_limit.as_bytes()).is_ok());
+    assert!(parse_scanner_policy(at_limit.as_bytes()).is_ok());
 
     for suffix in ["", ".", "txt", ".a/b"] {
         let invalid = format!(
             r#"{{"schema":"amiss/scanner-policy","document_includes":[{{"kind":"tree","path":"manual","suffix":"{suffix}"}}],"protected_inventory":[],"finding_dispositions":[]}}"#
         );
         assert_eq!(
-            ScannerPolicy::parse(invalid.as_bytes()).unwrap_err().kind,
+            parse_scanner_policy(invalid.as_bytes()).unwrap_err().kind,
             ErrorKind::InvalidValue,
             "suffix {suffix:?}"
         );
@@ -351,7 +400,7 @@ fn a_tree_suffix_is_one_bounded_exact_selector() {
         r#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"tree","path":"manual","suffix":".a\u0000b"}],"protected_inventory":[],"finding_dispositions":[]}"#,
     ] {
         assert_eq!(
-            ScannerPolicy::parse(invalid.as_bytes()).unwrap_err().kind,
+            parse_scanner_policy(invalid.as_bytes()).unwrap_err().kind,
             ErrorKind::InvalidValue
         );
     }
@@ -363,7 +412,7 @@ fn a_tree_suffix_is_one_bounded_exact_selector() {
             r#"{{"schema":"amiss/scanner-policy","document_includes":[{{"kind":"tree","path":"manual","suffix":"{suffix}"}}],"protected_inventory":[],"finding_dispositions":[]}}"#
         );
         assert_eq!(
-            ScannerPolicy::parse(invalid.as_bytes()).unwrap_err().kind,
+            parse_scanner_policy(invalid.as_bytes()).unwrap_err().kind,
             ErrorKind::InvalidValue,
             "the UTF-8 encoding crosses the byte ceiling"
         );
@@ -371,13 +420,13 @@ fn a_tree_suffix_is_one_bounded_exact_selector() {
 
     let document = r#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"document","path":"manual.txt","suffix":".txt"}],"protected_inventory":[],"finding_dispositions":[]}"#;
     assert_eq!(
-        ScannerPolicy::parse(document.as_bytes()).unwrap_err().kind,
+        parse_scanner_policy(document.as_bytes()).unwrap_err().kind,
         ErrorKind::Inconsistent
     );
 
     let duplicate = r#"{"schema":"amiss/scanner-policy","document_includes":[{"kind":"tree","path":"manual","suffix":".rst"},{"kind":"tree","path":"manual","suffix":".txt"}],"protected_inventory":[],"finding_dispositions":[]}"#;
     assert_eq!(
-        ScannerPolicy::parse(duplicate.as_bytes()).unwrap_err().kind,
+        parse_scanner_policy(duplicate.as_bytes()).unwrap_err().kind,
         ErrorKind::DuplicateMember,
         "suffix does not mint a second selector identity at one root"
     );

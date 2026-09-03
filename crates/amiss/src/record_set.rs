@@ -18,7 +18,9 @@ pub(crate) fn run(invocation: &RecordSetInvocation) -> ExitCode {
     .map_err(Failure::Read)
     .and_then(|bytes| amiss_wire::semantic::record::parse_input(&bytes).map_err(Failure::Contract))
     .and_then(|input| amiss_wire::semantic::record::template(input).map_err(Failure::Contract))
-    .and_then(|template| crate::output::write_json(&template).map_err(Failure::Write));
+    .and_then(|template| {
+        crate::output::write_json(&amiss_wire::json::canonical(&template)).map_err(Failure::Write)
+    });
 
     match result {
         Ok(()) => ExitCode::SUCCESS,

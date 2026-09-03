@@ -2,7 +2,6 @@ use std::process::ExitCode;
 
 use amiss_git::{GitLimits, GitResources, Repository, parse_index_file};
 use amiss_scan::policy::{Includes, PolicySide};
-use amiss_wire::controls::document_include_value;
 use amiss_wire::json;
 use amiss_wire::model::RepoPath;
 
@@ -10,12 +9,14 @@ use crate::invocation::{PolicyIncludeInvocation, PolicyIncludePreview};
 
 #[expect(clippy::print_stderr, reason = "authoring refusal channel")]
 pub(crate) fn run(invocation: &PolicyIncludeInvocation) -> ExitCode {
-    let Some(include) = invocation.policy.document_includes().first() else {
+    let Some(include) = invocation.policy.document_includes.first() else {
         eprintln!("amiss policy-include: the validated selector is unavailable");
         return ExitCode::FAILURE;
     };
     let result = match &invocation.preview {
-        None => crate::output::write_json(&document_include_value(include.clone())),
+        None => serde_json_canonicalizer::to_vec(include)
+            .map_err(std::io::Error::other)
+            .and_then(|bytes| crate::output::write_json(&bytes)),
         Some(preview) => {
             let Some(paths) = staged_paths(invocation, preview) else {
                 return ExitCode::FAILURE;
@@ -67,7 +68,7 @@ fn staged_paths(
     }
 
     let candidate = PolicySide {
-        digest: Some(invocation.policy.digest()),
+        digest: Some(invocation.policy_digest),
         policy: Some(invocation.policy.clone()),
     };
     let includes = Includes::union(&PolicySide::default(), &candidate);

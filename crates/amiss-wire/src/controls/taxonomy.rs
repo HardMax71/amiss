@@ -3,7 +3,19 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumString,
+    IntoStaticStr,
+    Display,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum IncludeKind {
@@ -12,7 +24,19 @@ pub enum IncludeKind {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    AsRefStr,
+    EnumString,
+    IntoStaticStr,
+    Display,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum Disposition {
@@ -74,6 +98,9 @@ impl Profile {
     EnumIter,
     EnumString,
     IntoStaticStr,
+    Display,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum PromotableFindingKind {

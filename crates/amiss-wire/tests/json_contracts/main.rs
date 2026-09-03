@@ -154,8 +154,15 @@ fn sealed_request_examples_match_their_typed_sources() {
 }
 
 #[test]
-fn exception_control_examples_match_their_typed_sources() {
+fn control_examples_match_their_typed_sources() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
+    let policy_bytes = fs::read(examples.join("scanner-policy.json")).unwrap();
+    let policy = controls::parse_scanner_policy(&policy_bytes).unwrap();
+    assert_eq!(
+        controls::canonical_scanner_policy(&policy).unwrap().0,
+        json::canonical(&json::parse(&policy_bytes).unwrap())
+    );
+
     let debt_bytes = fs::read(examples.join("debt-snapshot.json")).unwrap();
     let debt = controls::parse_debt_snapshot(&debt_bytes).unwrap();
     assert_eq!(

@@ -282,7 +282,7 @@ fn the_policy_include_form_uses_the_policy_grammar_and_an_optional_index_group()
     let crate::invocation::Command::PolicyInclude(invocation) = *command else {
         panic!("expected a policy include command");
     };
-    let [include] = invocation.policy.document_includes() else {
+    let [include] = invocation.policy.document_includes.as_slice() else {
         panic!("expected one validated include");
     };
     assert_eq!(include.path.as_str(), "docs");
