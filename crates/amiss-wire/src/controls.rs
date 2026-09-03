@@ -3,9 +3,7 @@ use std::str::FromStr;
 
 use crate::de::{self, Error, ErrorKind, Obj, fail};
 use crate::json::{self, Value};
-use crate::model::{
-    ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdentity, TreeIdentity, UtcInstant,
-};
+use crate::model::{OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
 
 pub use crate::semantic::RECORD_KEY_BYTES;
 
@@ -36,8 +34,8 @@ pub use fact::{
     StructuralResolution, TargetIntent, TargetIntentKind, canonical_fact, parse_fact,
 };
 pub use floor::{
-    FloorDefect, FloorDisposition, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor,
-    ResourceLimit,
+    FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor, OrganizationFloorSchema,
+    ResourceLimit, canonical_organization_floor, parse_organization_floor,
 };
 pub use policy::{
     BLOB_LINES_SOURCE, BlobLineSelection, DOCUMENT_SUFFIX_BYTES, DocumentInclude,
@@ -88,21 +86,6 @@ pub fn root(bytes: &[u8]) -> Result<Value, Error> {
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
-fn decode_items<T>(
-    path: &str,
-    raw: Vec<Value>,
-    limit: usize,
-    decode: impl Fn(&str, Value) -> Result<T, Error>,
-) -> Result<Vec<T>, Error> {
-    if raw.len() > limit {
-        return fail(path, ErrorKind::LimitExceeded);
-    }
-    raw.into_iter()
-        .enumerate()
-        .map(|(index, value)| decode(&format!("{path}[{index}]"), value))
-        .collect()
-}
-
 fn sorted_set<T>(
     path: &str,
     items: &[T],
@@ -118,73 +101,6 @@ fn sorted_set<T>(
         }
     }
     Ok(())
-}
-
-fn decode_disposition_rule(path: &str, value: Value) -> Result<FindingDisposition, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let finding_kind = obj.required("finding_kind", decode_enum)?;
-    let disposition = obj.required("disposition", decode_enum)?;
-    obj.finish()?;
-    Ok(FindingDisposition {
-        finding_kind,
-        disposition,
-    })
-}
-
-fn decode_resource_limit(path: &str, value: Value) -> Result<ResourceLimit, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let resource = obj.required("resource", ResourceName::decode)?;
-    let maximum_path = obj.field("maximum");
-    let maximum = de::integer(&maximum_path, obj.take("maximum")?)?;
-    obj.finish()?;
-    if in_bounds(resource, maximum) {
-        Ok(ResourceLimit { resource, maximum })
-    } else {
-        fail(&maximum_path, ErrorKind::InvalidValue)
-    }
-}
-
-/// Two resources fix their own maximum: the retained-error count is a small
-/// range, and the report reservation may be declared but never moved.
-fn in_bounds(resource: ResourceName, maximum: i64) -> bool {
-    if resource == ResourceName::TypedAnalysisErrorsRetained {
-        (1..=64).contains(&maximum)
-    } else if resource == ResourceName::MachineJsonBytes {
-        u64::try_from(maximum).is_ok_and(|value| value == crate::report::MACHINE_JSON_BYTES)
-    } else {
-        maximum >= 0
-    }
-}
-
-fn decode_path_items(path: &str, raw: Vec<Value>) -> Result<Vec<RepoPathText>, Error> {
-    let paths = decode_items(path, raw, 100_000, decode_repo_path)?;
-    sorted_set(path, &paths, |a, b| a.as_str().cmp(b.as_str()))?;
-    Ok(paths)
-}
-
-fn decode_owner_items(path: &str, raw: Vec<Value>) -> Result<Vec<OwnerId>, Error> {
-    let owners = decode_items(path, raw, 10_000, decode_owner)?;
-    sorted_set(path, &owners, |a, b| a.as_str().cmp(b.as_str()))?;
-    Ok(owners)
-}
-
-fn decode_repo_path(path: &str, value: Value) -> Result<RepoPathText, Error> {
-    RepoPathText::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn decode_artifact_id(path: &str, value: Value) -> Result<ArtifactId, Error> {
-    ArtifactId::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn decode_owner(path: &str, value: Value) -> Result<OwnerId, Error> {
-    OwnerId::new(de::string(path, value)?).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn decode_branch_ref(path: &str, value: Value) -> Result<BranchRef, Error> {
-    BranchRef::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }
 
 pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {

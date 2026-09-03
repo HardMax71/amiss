@@ -6,7 +6,7 @@ use amiss_git::Repository;
 use amiss_scan::SetupShell;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{FloorInput, verify_floor};
-use amiss_wire::controls::{OrganizationFloor, Profile};
+use amiss_wire::controls::{Profile, canonical_organization_floor, parse_organization_floor};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
@@ -48,8 +48,11 @@ const EMPTY_ARRAYS: &str = r#"  "minimum_dispositions": [],
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn floor_input(extra: &str) -> FloorInput {
+    let floor = parse_organization_floor(floor_json(extra).as_bytes()).unwrap();
+    let digest = canonical_organization_floor(&floor).unwrap().1;
     FloorInput {
-        floor: OrganizationFloor::parse(floor_json(extra).as_bytes()).unwrap(),
+        floor,
+        digest,
         trust_source: RequestTrust::ExternalRequiredCheck,
     }
 }
@@ -156,14 +159,16 @@ fn the_floor_binding_is_repository_ref_and_profile_ordering() {
     );
     assert!(verify_floor(&input, Some(&repository), None, Profile::Observe).is_err());
 
+    let strict_floor = parse_organization_floor(
+        floor_json(EMPTY_ARRAYS)
+            .replace("\"observe\"", "\"enforce\"")
+            .as_bytes(),
+    )
+    .map_err(|defect| format!("{defect:?}"))
+    .unwrap();
     let strict = FloorInput {
-        floor: OrganizationFloor::parse(
-            floor_json(EMPTY_ARRAYS)
-                .replace("\"observe\"", "\"enforce\"")
-                .as_bytes(),
-        )
-        .map_err(|defect| format!("{defect:?}"))
-        .unwrap(),
+        digest: canonical_organization_floor(&strict_floor).unwrap().1,
+        floor: strict_floor,
         trust_source: RequestTrust::OrganizationPolicy,
     };
     assert!(
@@ -256,7 +261,7 @@ fn a_verified_floor_raises_dispositions_and_discloses_provenance() {
         "\"minimum_dispositions\": [ { \"finding_kind\": \"explicit-target-missing\", \"disposition\": \"fail\" } ]",
     );
     let input = floor_input(&extra);
-    let floor_digest = input.floor.digest().to_string();
+    let floor_digest = input.digest.to_string();
     let report = payload(&shell(Some(input)), &repo, &base, &candidate);
 
     let provenance = &report["controls"]["organization_floor"];

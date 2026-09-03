@@ -50,8 +50,8 @@ pub fn controls(bytes: &[u8]) {
         amiss_wire::controls::parse_scanner_policy(bytes),
     );
     assert_eq!(
-        amiss_wire::controls::OrganizationFloor::parse(bytes),
-        amiss_wire::controls::OrganizationFloor::parse(bytes),
+        amiss_wire::controls::parse_organization_floor(bytes),
+        amiss_wire::controls::parse_organization_floor(bytes),
     );
     assert_eq!(
         amiss_wire::controls::parse_debt_snapshot(bytes),

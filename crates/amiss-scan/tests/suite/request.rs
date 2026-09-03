@@ -118,12 +118,16 @@ fn supplied_semantic(evidence: SemanticEvidence) -> SuppliedSemanticEvidence {
 #[test]
 fn a_verified_floor_lands_typed() {
     let floor =
-        amiss_wire::controls::OrganizationFloor::parse(FLOOR.as_bytes()).expect("fixture parses");
+        amiss_wire::controls::parse_organization_floor(FLOOR.as_bytes()).expect("fixture parses");
+    let digest = amiss_wire::controls::canonical_organization_floor(&floor)
+        .unwrap()
+        .1;
     let mut request = empty();
-    request.organization_floor = Some(supplied(FLOOR, floor.digest()));
+    request.organization_floor = Some(supplied(FLOOR, digest));
     let inputs = controls(&request).expect("a matching digest passes the gate");
     let landed = inputs.floor.expect("the floor lands typed");
-    assert_eq!(landed.floor.digest(), floor.digest());
+    assert_eq!(landed.floor, floor);
+    assert_eq!(landed.digest, digest);
     assert!(inputs.time.is_none() && inputs.debt.is_none());
 }
 

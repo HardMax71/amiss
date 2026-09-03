@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 
 use amiss_fixtures::{SiteObservation, site_navigation, site_observation};
 use amiss_wire::assessment::Nullable;
-use amiss_wire::controls::{OrganizationFloor, Profile};
+use amiss_wire::controls::{Profile, canonical_organization_floor, parse_organization_floor};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::{
@@ -208,11 +208,11 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
       "authorized_waiver_issuers":[],
       "resource_limits":[]
     }"#;
-    let floor = OrganizationFloor::parse(floor_bytes).unwrap();
+    let floor = parse_organization_floor(floor_bytes).unwrap();
     let controls = ControlsRequest {
         organization_floor: Some(SuppliedControl {
             value: serde_json::from_slice(floor_bytes).unwrap(),
-            expected_digest: floor.digest(),
+            expected_digest: canonical_organization_floor(&floor).unwrap().1,
             trust_source: RequestTrust::OrganizationPolicy,
         }),
         ..ControlsRequest::default()

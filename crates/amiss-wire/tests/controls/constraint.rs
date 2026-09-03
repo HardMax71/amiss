@@ -1,8 +1,9 @@
 use amiss_wire::controls::{
-    ActionBootstrapContract, DebtSnapshotSchema, ExecutionConstraintSchema, OrganizationFloor,
-    TrustedTimeController, TrustedTimeSchema, WaiverBundleSchema, canonical_debt_snapshot,
-    canonical_execution_constraint, canonical_waiver_bundle, parse_debt_snapshot,
-    parse_execution_constraint, parse_trusted_time, parse_waiver_bundle,
+    ActionBootstrapContract, DebtSnapshotSchema, ExecutionConstraintSchema,
+    OrganizationFloorSchema, TrustedTimeController, TrustedTimeSchema, WaiverBundleSchema,
+    canonical_debt_snapshot, canonical_execution_constraint, canonical_waiver_bundle,
+    parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_trusted_time,
+    parse_waiver_bundle,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
@@ -14,10 +15,10 @@ use crate::support::{
 
 #[test]
 fn controls_accept_open_forge_identities() {
-    let floor = OrganizationFloor::parse(FLOOR).unwrap();
-    assert_eq!(floor.schema(), "amiss/organization-floor");
-    assert_eq!(floor.repository().host(), "gitlab.com");
-    assert_eq!(floor.repository().owner(), "platform/security");
+    let floor = parse_organization_floor(FLOOR).unwrap();
+    assert_eq!(floor.schema, OrganizationFloorSchema::Current);
+    assert_eq!(floor.repository.host(), "gitlab.com");
+    assert_eq!(floor.repository.owner(), "platform/security");
 
     let (key, fact) = computed_digests();
     let item = debt_item(

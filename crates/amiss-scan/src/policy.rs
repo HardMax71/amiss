@@ -19,10 +19,11 @@ pub use floor::{
 };
 
 /// A verified organization floor as the wrapper supplies it: the parsed
-/// value plus the external trust source that authorized it.
+/// value, canonical digest, and external trust source that authorized it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FloorInput {
     pub floor: amiss_wire::controls::OrganizationFloor,
+    pub digest: Digest,
     pub trust_source: RequestTrust,
 }
 
@@ -50,13 +51,13 @@ pub fn verify_floor(
         return Err(mismatch);
     };
     let floor = &input.floor;
-    if floor.repository() != identity {
+    if &floor.repository != identity {
         return Err(mismatch);
     }
-    if target_ref != Some(floor.ref_name().as_str()) {
+    if target_ref != Some(floor.ref_name.as_str()) {
         return Err(mismatch);
     }
-    if profile < floor.minimum_profile() {
+    if profile < floor.minimum_profile {
         return Err(mismatch);
     }
     Ok(())
@@ -219,11 +220,10 @@ pub fn verify_debt(
         &snapshot.ref_name,
         repository,
         target_ref,
-    ) && snapshot.organization_floor_digest == floor.floor.digest()
+    ) && snapshot.organization_floor_digest == floor.digest
         && snapshot.created_at <= *instant
         && snapshot.items.iter().all(|item| {
-            item.created_at <= *instant
-                && floor.floor.authorized_debt_owners().contains(&item.owner)
+            item.created_at <= *instant && floor.floor.authorized_debt_owners.contains(&item.owner)
         });
     if bound {
         Ok(())
@@ -252,7 +252,7 @@ pub fn verify_waiver(
     verify_item_limit(ResourceName::WaiverItems, bundle.items.len(), item_limit)?;
     let floor = floor.ok_or(binding_mismatch_row())?;
     let bound = identity_matches(&bundle.repository, &bundle.ref_name, repository, target_ref)
-        && bundle.organization_floor_digest == floor.floor.digest()
+        && bundle.organization_floor_digest == floor.digest
         && bundle.created_at <= *instant;
     if bound {
         Ok(())

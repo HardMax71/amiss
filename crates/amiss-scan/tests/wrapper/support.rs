@@ -13,8 +13,8 @@ use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, WaiverInput};
 use amiss_scan::report::{CandidateBlock, candidate_identity_digest};
 use amiss_scan::{Effects, Setup, SetupShell, SnapshotIdentity, commit_pair};
 use amiss_wire::controls::{
-    OrganizationFloor, Profile, canonical_debt_snapshot, canonical_waiver_bundle,
-    parse_debt_snapshot, parse_trusted_time, parse_waiver_bundle,
+    Profile, canonical_debt_snapshot, canonical_organization_floor, canonical_waiver_bundle,
+    parse_debt_snapshot, parse_organization_floor, parse_trusted_time, parse_waiver_bundle,
 };
 use amiss_wire::de::Error;
 use amiss_wire::digest::{Digest, hb};
@@ -84,8 +84,11 @@ pub(crate) fn floor_input() -> FloorInput {
   "authorized_waiver_issuers": [ "team:release-engineering" ],
   "resource_limits": []
 }"#;
+    let floor = parse_organization_floor(doc.as_bytes()).unwrap();
+    let digest = canonical_organization_floor(&floor).unwrap().1;
     FloorInput {
-        floor: OrganizationFloor::parse(doc.as_bytes()).unwrap(),
+        floor,
+        digest,
         trust_source: RequestTrust::OrganizationPolicy,
     }
 }

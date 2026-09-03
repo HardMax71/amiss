@@ -1,40 +1,43 @@
-use crate::de::{self, Error, Obj};
-use crate::digest::{Digest, hj};
+use serde::{Deserialize, Serialize};
+
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::{Digest, hb};
 use crate::model::{ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdentity};
 
 use super::{
-    Disposition, EligibleFindingKind, FindingDisposition, ORGANIZATION_FLOOR_SCHEMA, Profile,
-    PromotableFindingKind, ResourceName, decode_artifact_id, decode_branch_ref,
-    decode_disposition_rule, decode_enum, decode_items, decode_owner_items, decode_path_items,
-    decode_repository, decode_resource_limit, root, sorted_set,
+    EligibleFindingKind, FindingDisposition, ORGANIZATION_FLOOR_SCHEMA, Profile, ResourceName,
+    root, sorted_set, validate_owner, validate_repository,
 };
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum OrganizationFloorSchema {
+    #[serde(rename = "amiss/organization-floor")]
+    Current,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResourceLimit {
     pub resource: ResourceName,
     pub maximum: i64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FloorDisposition {
-    pub finding_kind: PromotableFindingKind,
-    pub disposition: Disposition,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OrganizationFloor {
-    digest: Digest,
-    floor_id: ArtifactId,
-    repository: RepositoryIdentity,
-    ref_name: BranchRef,
-    minimum_profile: Profile,
-    minimum_dispositions: Vec<FindingDisposition>,
-    protected_inventory: Vec<RepoPathText>,
-    protected_control_paths: Vec<RepoPathText>,
-    waivable_finding_kinds: Vec<EligibleFindingKind>,
-    authorized_debt_owners: Vec<OwnerId>,
-    authorized_waiver_issuers: Vec<OwnerId>,
-    resource_limits: Vec<ResourceLimit>,
+    pub schema: OrganizationFloorSchema,
+    pub floor_id: ArtifactId,
+    pub repository: RepositoryIdentity,
+    #[serde(rename = "ref")]
+    pub ref_name: BranchRef,
+    pub minimum_profile: Profile,
+    pub minimum_dispositions: Vec<FindingDisposition>,
+    pub protected_inventory: Vec<RepoPathText>,
+    pub protected_control_paths: Vec<RepoPathText>,
+    pub waivable_finding_kinds: Vec<EligibleFindingKind>,
+    pub authorized_debt_owners: Vec<OwnerId>,
+    pub authorized_waiver_issuers: Vec<OwnerId>,
+    pub resource_limits: Vec<ResourceLimit>,
 }
 
 /// A floor rejection: a schema-layer defect, or the combined
@@ -48,184 +51,148 @@ pub enum FloorDefect {
     },
 }
 
-impl From<Error> for FloorDefect {
-    fn from(error: Error) -> Self {
-        Self::Schema(error)
-    }
-}
-
 pub const ORGANIZATION_POLICY_ENTRIES_LIMIT: u64 = 100_000;
 
-impl OrganizationFloor {
-    #[must_use]
-    pub const fn digest(&self) -> Digest {
-        self.digest
+/// Parses and validates one organization floor.
+///
+/// # Errors
+///
+/// Fails on strict-JSON defects, schema-shape violations, unknown fields,
+/// invalid grammar values, per-resource bound violations, unsorted or
+/// duplicate set members, and a combined entry count over the built-in
+/// `organization-policy-entries` limit or a tighter self-declared one.
+pub fn parse_organization_floor(bytes: &[u8]) -> Result<OrganizationFloor, FloorDefect> {
+    root(bytes).map_err(FloorDefect::Schema)?;
+    let floor = de::deserialize_json(bytes).map_err(FloorDefect::Schema)?;
+    validate_organization_floor(&floor)?;
+    Ok(floor)
+}
+
+/// Produces one valid organization floor's canonical bytes and digest.
+///
+/// # Errors
+///
+/// A public field violates the same laws [`parse_organization_floor`]
+/// enforces, or the typed value cannot be serialized.
+pub fn canonical_organization_floor(
+    floor: &OrganizationFloor,
+) -> Result<(Vec<u8>, Digest), FloorDefect> {
+    validate_organization_floor(floor)?;
+    let bytes = serde_json_canonicalizer::to_vec(floor)
+        .map_err(|_defect| FloorDefect::Schema(Error::new("$", ErrorKind::InvalidValue)))?;
+    let digest = hb(ORGANIZATION_FLOOR_SCHEMA, &bytes);
+    Ok((bytes, digest))
+}
+
+fn validate_organization_floor(floor: &OrganizationFloor) -> Result<(), FloorDefect> {
+    validate_repository("$.repository", &floor.repository).map_err(FloorDefect::Schema)?;
+    let combined = [
+        floor.minimum_dispositions.len(),
+        floor.protected_inventory.len(),
+        floor.protected_control_paths.len(),
+        floor.waivable_finding_kinds.len(),
+        floor.authorized_debt_owners.len(),
+        floor.authorized_waiver_issuers.len(),
+        floor.resource_limits.len(),
+    ]
+    .into_iter()
+    .map(|length| u64::try_from(length).unwrap_or(u64::MAX))
+    .fold(0_u64, u64::saturating_add);
+    if combined > ORGANIZATION_POLICY_ENTRIES_LIMIT {
+        return Err(FloorDefect::Entries {
+            configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
+            observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT.saturating_add(1),
+        });
     }
 
-    #[must_use]
-    pub const fn minimum_profile(&self) -> Profile {
-        self.minimum_profile
-    }
-
-    #[must_use]
-    pub fn floor_id(&self) -> &ArtifactId {
-        &self.floor_id
-    }
-
-    #[must_use]
-    pub fn repository(&self) -> &RepositoryIdentity {
-        &self.repository
-    }
-
-    #[must_use]
-    pub fn ref_name(&self) -> &BranchRef {
-        &self.ref_name
-    }
-
-    #[must_use]
-    pub fn minimum_dispositions(&self) -> &[FindingDisposition] {
-        &self.minimum_dispositions
-    }
-
-    #[must_use]
-    pub fn protected_inventory(&self) -> &[RepoPathText] {
-        &self.protected_inventory
-    }
-
-    #[must_use]
-    pub fn protected_control_paths(&self) -> &[RepoPathText] {
-        &self.protected_control_paths
-    }
-
-    #[must_use]
-    pub fn waivable_finding_kinds(&self) -> &[EligibleFindingKind] {
-        &self.waivable_finding_kinds
-    }
-
-    #[must_use]
-    pub fn authorized_debt_owners(&self) -> &[OwnerId] {
-        &self.authorized_debt_owners
-    }
-
-    #[must_use]
-    pub fn authorized_waiver_issuers(&self) -> &[OwnerId] {
-        &self.authorized_waiver_issuers
-    }
-
-    #[must_use]
-    pub fn resource_limits(&self) -> &[ResourceLimit] {
-        &self.resource_limits
-    }
-
-    #[must_use]
-    pub const fn schema(&self) -> &'static str {
-        ORGANIZATION_FLOOR_SCHEMA
-    }
-
-    /// # Errors
-    ///
-    /// Fails on strict-JSON defects, schema-shape violations, unknown fields,
-    /// invalid grammar values, per-resource bound violations, unsorted or
-    /// duplicate set members, and a combined entry count over the built-in
-    /// `organization-policy-entries` limit or a tighter self-declared one.
-    pub fn parse(bytes: &[u8]) -> Result<Self, FloorDefect> {
-        let value = root(bytes)?;
-        let digest = hj(ORGANIZATION_FLOOR_SCHEMA, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, ORGANIZATION_FLOOR_SCHEMA)
-        })?;
-
-        let floor_id = obj.required("floor_id", decode_artifact_id)?;
-        let repository = obj.required("repository", decode_repository)?;
-        let ref_name = obj.required("ref", decode_branch_ref)?;
-        let minimum_profile = obj.required("minimum_profile", decode_enum)?;
-
-        let dispositions_path = obj.field("minimum_dispositions");
-        let dispositions_raw = de::array(&dispositions_path, obj.take("minimum_dispositions")?)?;
-        let inventory_path = obj.field("protected_inventory");
-        let inventory_raw = de::array(&inventory_path, obj.take("protected_inventory")?)?;
-        let control_paths_path = obj.field("protected_control_paths");
-        let control_paths_raw =
-            de::array(&control_paths_path, obj.take("protected_control_paths")?)?;
-        let waivable_path = obj.field("waivable_finding_kinds");
-        let waivable_raw = de::array(&waivable_path, obj.take("waivable_finding_kinds")?)?;
-        let owners_path = obj.field("authorized_debt_owners");
-        let owners_raw = de::array(&owners_path, obj.take("authorized_debt_owners")?)?;
-        let issuers_path = obj.field("authorized_waiver_issuers");
-        let issuers_raw = de::array(&issuers_path, obj.take("authorized_waiver_issuers")?)?;
-        let limits_path = obj.field("resource_limits");
-        let limits_raw = de::array(&limits_path, obj.take("resource_limits")?)?;
-
-        let combined = [
-            dispositions_raw.len(),
-            inventory_raw.len(),
-            control_paths_raw.len(),
-            waivable_raw.len(),
-            owners_raw.len(),
-            issuers_raw.len(),
-            limits_raw.len(),
-        ]
+    validate_floor_shape(floor).map_err(FloorDefect::Schema)?;
+    if let Some(declared) = floor
+        .resource_limits
         .iter()
-        .map(|&len| u64::try_from(len).unwrap_or(u64::MAX))
-        .fold(0_u64, u64::saturating_add);
-        if combined > ORGANIZATION_POLICY_ENTRIES_LIMIT {
+        .find(|row| row.resource == ResourceName::OrganizationPolicyEntries)
+    {
+        let declared = u64::try_from(declared.maximum).unwrap_or(u64::MAX);
+        if combined > declared {
             return Err(FloorDefect::Entries {
-                configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
-                observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT.saturating_add(1),
+                configured_limit: declared,
+                observed_lower_bound: declared.saturating_add(1),
             });
         }
+    }
+    Ok(())
+}
 
-        let minimum_dispositions = decode_items(
-            &dispositions_path,
-            dispositions_raw,
-            3,
-            decode_disposition_rule,
-        )?;
-        sorted_set(&dispositions_path, &minimum_dispositions, |a, b| {
-            a.finding_kind.as_ref().cmp(b.finding_kind.as_ref())
-        })?;
-        let protected_inventory = decode_path_items(&inventory_path, inventory_raw)?;
-        let protected_control_paths = decode_path_items(&control_paths_path, control_paths_raw)?;
-        let waivable_finding_kinds: Vec<EligibleFindingKind> =
-            decode_items(&waivable_path, waivable_raw, 2, decode_enum)?;
-        sorted_set(&waivable_path, &waivable_finding_kinds, |a, b| {
-            a.as_ref().cmp(b.as_ref())
-        })?;
-        let authorized_debt_owners = decode_owner_items(&owners_path, owners_raw)?;
-        let authorized_waiver_issuers = decode_owner_items(&issuers_path, issuers_raw)?;
-        let cap = ResourceName::all().len();
-        let resource_limits = decode_items(&limits_path, limits_raw, cap, decode_resource_limit)?;
-        sorted_set(&limits_path, &resource_limits, |a, b| {
-            a.resource.as_str().cmp(b.resource.as_str())
-        })?;
+fn validate_floor_shape(floor: &OrganizationFloor) -> Result<(), Error> {
+    if floor.minimum_dispositions.len() > 3 {
+        return fail("$.minimum_dispositions", ErrorKind::LimitExceeded);
+    }
+    sorted_set(
+        "$.minimum_dispositions",
+        &floor.minimum_dispositions,
+        |left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()),
+    )?;
 
-        obj.finish()?;
-        if let Some(declared) = resource_limits
-            .iter()
-            .find(|row| row.resource == ResourceName::OrganizationPolicyEntries)
-        {
-            let declared = u64::try_from(declared.maximum).unwrap_or(u64::MAX);
-            if combined > declared {
-                return Err(FloorDefect::Entries {
-                    configured_limit: declared,
-                    observed_lower_bound: declared.saturating_add(1),
-                });
-            }
+    for (path, items) in [
+        ("$.protected_inventory", &floor.protected_inventory),
+        ("$.protected_control_paths", &floor.protected_control_paths),
+    ] {
+        if items.len() > 100_000 {
+            return fail(path, ErrorKind::LimitExceeded);
         }
-        Ok(Self {
-            digest,
-            floor_id,
-            repository,
-            ref_name,
-            minimum_profile,
-            minimum_dispositions,
-            protected_inventory,
-            protected_control_paths,
-            waivable_finding_kinds,
-            authorized_debt_owners,
-            authorized_waiver_issuers,
-            resource_limits,
-        })
+        sorted_set(path, items, |left, right| left.as_str().cmp(right.as_str()))?;
+    }
+
+    if floor.waivable_finding_kinds.len() > 2 {
+        return fail("$.waivable_finding_kinds", ErrorKind::LimitExceeded);
+    }
+    sorted_set(
+        "$.waivable_finding_kinds",
+        &floor.waivable_finding_kinds,
+        |left, right| left.as_ref().cmp(right.as_ref()),
+    )?;
+
+    for (path, owners) in [
+        ("$.authorized_debt_owners", &floor.authorized_debt_owners),
+        (
+            "$.authorized_waiver_issuers",
+            &floor.authorized_waiver_issuers,
+        ),
+    ] {
+        if owners.len() > 10_000 {
+            return fail(path, ErrorKind::LimitExceeded);
+        }
+        for (index, owner) in owners.iter().enumerate() {
+            validate_owner(&format!("{path}[{index}]"), owner)?;
+        }
+        sorted_set(path, owners, |left, right| {
+            left.as_str().cmp(right.as_str())
+        })?;
+    }
+
+    if floor.resource_limits.len() > ResourceName::all().len() {
+        return fail("$.resource_limits", ErrorKind::LimitExceeded);
+    }
+    for (index, limit) in floor.resource_limits.iter().enumerate() {
+        if !resource_maximum_valid(limit.resource, limit.maximum) {
+            return fail(
+                &format!("$.resource_limits[{index}].maximum"),
+                ErrorKind::InvalidValue,
+            );
+        }
+    }
+    sorted_set(
+        "$.resource_limits",
+        &floor.resource_limits,
+        |left, right| left.resource.as_str().cmp(right.resource.as_str()),
+    )
+}
+
+fn resource_maximum_valid(resource: ResourceName, maximum: i64) -> bool {
+    if resource == ResourceName::TypedAnalysisErrorsRetained {
+        (1..=64).contains(&maximum)
+    } else if resource == ResourceName::MachineJsonBytes {
+        u64::try_from(maximum).is_ok_and(|value| value == crate::report::MACHINE_JSON_BYTES)
+    } else {
+        maximum >= 0
     }
 }
