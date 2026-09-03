@@ -196,14 +196,15 @@ fn a_complete_manifest_parses_with_every_runtime_role() {
     assert_eq!(manifest.engine_version, "0.5.1");
     let artifact = manifest.artifacts.first().expect("one artifact");
     assert_eq!(artifact.runtime_files.len(), 3);
-    assert_eq!(
-        artifact
-            .runtime_files
-            .iter()
-            .filter(|file| file.role == RuntimeRole::Executable)
-            .count(),
-        1
-    );
+    let mut executables = artifact
+        .runtime_files
+        .iter()
+        .filter(|file| file.role == RuntimeRole::Executable);
+    let executable = executables.next().expect("one executable row");
+    assert!(executables.next().is_none());
+    assert_eq!(executable.path, artifact.tree_path);
+    assert_eq!(executable.git_mode, GitMode::ExecutableFile);
+    assert_eq!(executable.file_sha256, artifact.binary_sha256);
 }
 
 const LOCK: &str = r#"{"schema":"amiss/scanner-dependency-lock-input","files":[{"path":"Cargo.lock","raw_digest":"sha256:4444444444444444444444444444444444444444444444444444444444444444"}]}"#;
