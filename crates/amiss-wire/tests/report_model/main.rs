@@ -1,5 +1,6 @@
 use amiss_wire::report::model::{
-    AnalysisError, Controls, DocumentResult, Engine, Evaluation, ObservationComparison, Summary,
+    AnalysisError, Controls, DocumentResult, Engine, Evaluation, Feedback, Finding,
+    ObservationComparison, Summary,
 };
 
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
@@ -18,4 +19,6 @@ fn published_provenance_blocks_match_the_models() {
         serde_json::from_value(payload.get("documents").unwrap().clone()).unwrap();
     let _: Vec<ObservationComparison> =
         serde_json::from_value(payload.get("observations").unwrap().clone()).unwrap();
+    let _: Feedback = serde_json::from_value(payload.get("feedback").unwrap().clone()).unwrap();
+    let _: Vec<Finding> = serde_json::from_value(payload.get("findings").unwrap().clone()).unwrap();
 }

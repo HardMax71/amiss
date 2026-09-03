@@ -27,8 +27,9 @@ pub enum FindingScope {
 }
 
 /// The closed disposition values a policy step can produce.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, Serialize, Deserialize)]
 #[strum(serialize_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
 pub enum Disposition {
     Record,
     Warn,
@@ -134,8 +135,9 @@ static CONTROL_PLANE: FindingMetadata = FindingMetadata {
 
 declare_taxonomy! {
     /// The complete closed finding taxonomy, in schema declaration order.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumIter, IntoStaticStr)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumIter, IntoStaticStr, Serialize, Deserialize)]
     #[strum(serialize_all = "kebab-case")]
+    #[serde(rename_all = "kebab-case")]
     pub enum FindingKind {
         ExplicitTargetMissing => {
             meaning: "a reference names a repository path, a line range inside one, or a heading anchor no known renderer publishes; restore the target or correct the link",
