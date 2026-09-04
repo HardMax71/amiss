@@ -195,7 +195,7 @@ fn candidate_identity(run: &RunRequest) -> Digest {
 }
 
 fn semantic_template(context_digest: Digest) -> Vec<u8> {
-    let template = amiss_wire::semantic::template(SemanticEvidenceTemplate {
+    amiss_wire::semantic::template(SemanticEvidenceTemplate {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
             kind: ArtifactId::new("site-build".to_owned()).unwrap(),
@@ -207,8 +207,7 @@ fn semantic_template(context_digest: Digest) -> Vec<u8> {
         complete: true,
         observations: Arc::from([]),
     })
-    .unwrap();
-    json::canonical(&template)
+    .unwrap()
 }
 
 struct SiteAcquisition {
@@ -329,7 +328,7 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     let source = acquisition.template;
     let template = amiss_wire::semantic::parse_template(&source.bytes).unwrap();
     let evidence = amiss_wire::semantic::bind_template(&template, candidate).unwrap();
-    let evidence_digest = amiss_wire::semantic::parse(&json::canonical(&evidence))
+    let evidence_digest = amiss_wire::semantic::parse(&evidence)
         .unwrap()
         .payload_digest;
     let job = bootstrap(&run, std::slice::from_ref(&source)).unwrap();
@@ -369,7 +368,7 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     let envelope_digest = amiss_wire::digest::sha256(&retained_envelope).to_string();
     let payload_digest = evidence_digest.to_string();
     assert_eq!(retained_template, source.bytes.as_ref());
-    assert_eq!(retained_envelope, json::canonical(&evidence));
+    assert_eq!(retained_envelope, evidence);
     assert_eq!(
         acquired.text("template_digest"),
         Some(template_digest.as_str())

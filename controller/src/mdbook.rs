@@ -3,7 +3,6 @@ use std::collections::BTreeMap;
 use amiss_controller_files::read_bounded_at;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::Value;
 use amiss_wire::model::RepoPathText;
 use amiss_wire::semantic::observation::SiteBuildObservation;
 use amiss_wire::semantic::{PayloadSchema, SemanticProducer, SemanticSubject};
@@ -96,7 +95,7 @@ pub fn mdbook_site_evidence(
     site: &SiteBuildContext,
     context_bytes: &[u8],
     html_output: &Dir,
-) -> Result<Value, MdBookEvidenceError> {
+) -> Result<Vec<u8>, MdBookEvidenceError> {
     if u64::try_from(context_bytes.len()).unwrap_or(u64::MAX) > MDBOOK_RENDER_CONTEXT_BYTES {
         return Err(MdBookEvidenceError::ContextBytes);
     }

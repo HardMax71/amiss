@@ -583,7 +583,7 @@ fn the_semantic_evidence_example_matches_its_checked_writer() {
     let example =
         amiss_wire::json::parse(&bytes).expect("the semantic evidence example is strict JSON");
     assert_eq!(
-        amiss_wire::json::canonical(&written),
+        written,
         amiss_wire::json::canonical(&example),
         "the semantic evidence example drifted from its writer"
     );
@@ -603,7 +603,7 @@ fn the_record_set_input_example_produces_the_semantic_template_example() {
     let template =
         amiss_wire::json::parse(&template).expect("the semantic template example is strict JSON");
     assert_eq!(
-        amiss_wire::json::canonical(&written),
+        written,
         amiss_wire::json::canonical(&template),
         "the record-set input and semantic template examples drifted"
     );

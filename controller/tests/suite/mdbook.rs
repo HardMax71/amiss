@@ -10,7 +10,6 @@ use amiss_controller::{
     mdbook_site_evidence, mdbook_site_expectation,
 };
 use amiss_wire::digest::hb;
-use amiss_wire::json::canonical;
 use amiss_wire::model::RepoPathText;
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -112,7 +111,7 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     let site = site("docs/book.toml", "/manual/");
 
     let evidence = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
-    let parsed = amiss_wire::semantic::parse(&canonical(&evidence)).unwrap();
+    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
 
     assert_eq!(parsed.payload.subject.candidate_identity_digest, candidate);
     assert_eq!(parsed.payload.producer.kind.as_str(), "site-build");
@@ -174,7 +173,7 @@ fn generated_chapters_need_no_repository_attribution() {
         &output(&root),
     )
     .unwrap();
-    let parsed = amiss_wire::semantic::parse(&canonical(&evidence)).unwrap();
+    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
     let routes: Vec<&serde_json::Value> = parsed
         .payload
         .observations
@@ -238,7 +237,7 @@ fn completed_links_not_chapter_membership_define_navigation() {
         &output(&root),
     )
     .unwrap();
-    let parsed = amiss_wire::semantic::parse(&canonical(&evidence)).unwrap();
+    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
     let navigation = parsed
         .payload
         .observations
@@ -309,8 +308,8 @@ fn resolved_renderer_configuration_is_part_of_the_input_identity() {
     let site = site("book.toml", "/");
     let first = mdbook_site_evidence(candidate, &site, &original, &output(&root)).unwrap();
     let second = mdbook_site_evidence(candidate, &site, &changed, &output(&root)).unwrap();
-    let first = amiss_wire::semantic::parse(&canonical(&first)).unwrap();
-    let second = amiss_wire::semantic::parse(&canonical(&second)).unwrap();
+    let first = amiss_wire::semantic::parse(&first).unwrap();
+    let second = amiss_wire::semantic::parse(&second).unwrap();
 
     assert_eq!(
         first.payload.producer.context_digest,

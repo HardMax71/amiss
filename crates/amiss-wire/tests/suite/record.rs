@@ -26,8 +26,8 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
         r#"[{"key":"amiss::Request","value":"pub struct Request"},{"key":"amiss::run","value":"pub fn run()"}]"#,
     ))
     .unwrap();
-    let value = template(source).unwrap();
-    let parsed = amiss_wire::semantic::parse_template(&canonical(&value)).unwrap();
+    let bytes = template(source).unwrap();
+    let parsed = amiss_wire::semantic::parse_template(&bytes).unwrap();
     assert_eq!(parsed.producer.kind.as_str(), "record-set");
     assert_eq!(parsed.producer.identity.as_str(), "test-public-api");
     assert_eq!(parsed.producer.version, "1");

@@ -9,7 +9,6 @@ use amiss_controller::{
     WorkflowArtifactExpectation,
 };
 use amiss_wire::digest::{hb, sha256};
-use amiss_wire::json;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -245,7 +244,7 @@ fn artifact_page(run: &WorkflowRunRecord, name: &str, archive: &[u8]) -> Workflo
 }
 
 fn template(context_digest: amiss_wire::digest::Digest) -> Vec<u8> {
-    let value = amiss_wire::semantic::template(SemanticEvidenceTemplate {
+    amiss_wire::semantic::template(SemanticEvidenceTemplate {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
             kind: ArtifactId::new("site-build".to_owned()).unwrap(),
@@ -257,8 +256,7 @@ fn template(context_digest: amiss_wire::digest::Digest) -> Vec<u8> {
         complete: true,
         observations: Arc::from([]),
     })
-    .unwrap();
-    json::canonical(&value)
+    .unwrap()
 }
 
 fn archive(payload: &[u8]) -> Vec<u8> {

@@ -27,12 +27,12 @@ fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
         complete: true,
         observations: Arc::from([]),
     };
-    let value = amiss_wire::semantic::template(template.clone())
+    let template_bytes = amiss_wire::semantic::template(template.clone())
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     let input = bind_input(
         &template,
         None,
-        Arc::from(json::canonical(&value)),
+        template_bytes.into(),
         hb("amiss/test-candidate", b"candidate"),
     )?;
     let artifact = input_artifact(std::slice::from_ref(&input), u64::MAX)?;

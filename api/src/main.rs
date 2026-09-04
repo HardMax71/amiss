@@ -67,8 +67,7 @@ fn run(arguments: impl Iterator<Item = OsString>) -> Result<(), Failure> {
     let rustdoc_bytes =
         amiss_controller_files::read_bounded(&rustdoc_path, normalize::RUSTDOC_BYTES)
             .map_err(Failure::RustdocRead)?;
-    let template = produce(&context_bytes, &rustdoc_bytes)?;
-    let mut output = amiss_wire::json::canonical(&template);
+    let mut output = produce(&context_bytes, &rustdoc_bytes)?;
     output.push(b'\n');
     std::io::stdout()
         .lock()
@@ -100,7 +99,7 @@ fn invocation(mut arguments: impl Iterator<Item = OsString>) -> Result<Invocatio
     Ok(Invocation { context, rustdoc })
 }
 
-fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Value, Failure> {
+fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Vec<u8>, Failure> {
     let context = context::parse(context_bytes)?;
     let normalized = normalize::function_declarations(
         rustdoc_bytes,
