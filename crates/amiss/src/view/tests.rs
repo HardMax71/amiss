@@ -47,25 +47,22 @@ fn only_the_bytes_atom_is_read_as_bytes() {
 fn measurement_report(finding_count: usize) -> Value {
     let findings = (0..finding_count)
         .map(|index| {
-            super::object(vec![
+            object(&[
                 (
                     "description",
-                    super::string("the referenced target is absent from the candidate tree"),
+                    Value::string("the referenced target is absent from the candidate tree"),
                 ),
-                ("effective_disposition", super::string("fail")),
-                (
-                    "finding_key",
-                    super::string(&format!("sha256:{index:064x}")),
-                ),
+                ("effective_disposition", Value::string("fail")),
+                ("finding_key", Value::string(format!("sha256:{index:064x}"))),
                 ("fix", Value::Null),
-                ("kind", super::string("explicit-target-missing")),
+                ("kind", Value::string("explicit-target-missing")),
                 (
                     "location",
-                    super::object(vec![
-                        ("path", super::string(&format!("docs/guide-{index:05}.md"))),
+                    object(&[
+                        ("path", Value::string(format!("docs/guide-{index:05}.md"))),
                         (
                             "span",
-                            super::object(vec![
+                            object(&[
                                 ("end_column", Value::Integer(20)),
                                 ("end_line", Value::Integer(1)),
                                 ("start_column", Value::Integer(1)),
@@ -77,14 +74,14 @@ fn measurement_report(finding_count: usize) -> Value {
             ])
         })
         .collect();
-    super::object(vec![(
+    object(&[(
         "payload",
-        super::object(vec![
+        object(&[
             ("errors", Value::array(Vec::new())),
             ("findings", Value::array(findings)),
             (
                 "result",
-                super::object(vec![
+                object(&[
                     ("complete", Value::Bool(true)),
                     ("exit_code", Value::Integer(1)),
                 ]),
