@@ -2,81 +2,23 @@ mod analysis;
 mod build;
 mod documents;
 mod identity;
+mod index;
 mod summary;
 
 pub(crate) use build::construct_with_site;
 pub use build::{construct, construct_incomplete};
 pub use identity::candidate_identity_digest;
+pub use index::{INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, synthetic_candidate};
 
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::Digest;
 use amiss_wire::json::{Value, canonical};
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{BranchRef, RepoPath};
 use amiss_wire::report::EngineProvenance;
 pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 pub use amiss_wire::requests::GitSnapshotIdentity as SnapshotIdentity;
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
-pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection";
-pub const SNAPSHOT_SCHEMA: &str = "amiss/scanner-snapshot";
-
-/// The canonical logical-index projection and the synthetic snapshot input
-/// built over it, with both digests.
-#[must_use]
-pub fn synthetic_candidate(
-    base_object_format: ObjectFormat,
-    base_commit_oid: &Oid,
-    entries: &[(RepoPath, amiss_wire::controls::GitMode, Oid, bool)],
-    skip_worktree_paths: u64,
-) -> IndexCandidate {
-    let rows: Vec<Value> = entries
-        .iter()
-        .map(|(path, mode, oid, skip)| {
-            let entry_kind = match mode {
-                amiss_wire::controls::GitMode::Symlink => "symlink",
-                amiss_wire::controls::GitMode::Gitlink => "gitlink",
-                amiss_wire::controls::GitMode::RegularFile
-                | amiss_wire::controls::GitMode::ExecutableFile
-                | amiss_wire::controls::GitMode::Tree => "blob",
-            };
-            object(vec![
-                ("path", path.to_value()),
-                ("entry_kind", string(entry_kind)),
-                ("git_mode", string(mode.as_ref())),
-                ("object_format", string(base_object_format.as_ref())),
-                ("object_oid", string(oid.as_str())),
-                ("skip_worktree", Value::Bool(*skip)),
-            ])
-        })
-        .collect();
-    let projection = object(vec![
-        ("schema", string(INDEX_PROJECTION_SCHEMA)),
-        ("entries", Value::array(rows)),
-    ]);
-    let projection_digest = hj(INDEX_PROJECTION_SCHEMA, &projection);
-    let snapshot_input = object(vec![
-        ("schema", string(SNAPSHOT_SCHEMA)),
-        ("kind", string("index")),
-        ("identity_scope", string("complete-logical-index")),
-        ("base_object_format", string(base_object_format.as_ref())),
-        ("base_commit_oid", string(base_commit_oid.as_str())),
-        ("index_projection_digest", digest_value(projection_digest)),
-    ]);
-    let snapshot_digest = hj(SNAPSHOT_SCHEMA, &snapshot_input);
-    IndexCandidate {
-        snapshot: amiss_wire::requests::IndexSnapshotIdentity {
-            base_commit_oid: base_commit_oid.clone(),
-            base_object_format,
-            entry_count: u64::try_from(entries.len()).unwrap_or(u64::MAX),
-            identity_scope: amiss_wire::requests::IndexIdentityScope::CompleteLogicalIndex,
-            index_projection_digest: projection_digest,
-            kind: amiss_wire::requests::IndexSnapshotKind::Index,
-            snapshot_digest,
-            snapshot_schema: amiss_wire::requests::IndexSnapshotSchema::Current,
-        },
-        skip_worktree_paths,
-    }
-}
 
 /// The candidate side of the evaluation identity: a Git commit, the
 /// synthetic complete logical staged index, or the unavailable projection an

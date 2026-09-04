@@ -168,7 +168,7 @@ fn index_candidate_block(
     base_oid: &Oid,
     index: &amiss_git::LogicalIndex,
     skip_worktree_paths: u64,
-) -> Result<CandidateBlock, Vec<ErrorDetail>> {
+) -> Result<CandidateBlock, (Vec<ErrorDetail>, &'static str)> {
     let disclosure_cap = amiss_git::GitLimits::CONTRACT.raw_path_bytes;
     let mut entries: Vec<(RepoPath, amiss_wire::controls::GitMode, Oid, bool)> =
         Vec::with_capacity(index.entries.len());
@@ -187,14 +187,16 @@ fn index_candidate_block(
         entries.push((path, entry.mode, entry.oid.clone(), entry.skip_worktree));
     }
     if !failures.is_empty() {
-        return Err(failures);
+        return Err((failures, "unrepresentable-path"));
     }
-    Ok(CandidateBlock::Index(synthetic_candidate(
+    synthetic_candidate(
         repo.object_format(),
         base_oid,
         &entries,
         skip_worktree_paths,
-    )))
+    )
+    .map(CandidateBlock::Index)
+    .map_err(|defect| (vec![detail(&defect, None)], "not-evaluated"))
 }
 
 /// The staged run's candidate identity, or its refusals folded into the
@@ -206,10 +208,12 @@ fn resolved_candidate_block(
     skip_worktree_paths: u64,
     failures: &mut Vec<ErrorDetail>,
 ) -> CandidateBlock {
-    index_candidate_block(repo, base_oid, index, skip_worktree_paths).unwrap_or_else(|rows| {
-        failures.extend(rows);
-        CandidateBlock::Unavailable(vec!["unrepresentable-path"])
-    })
+    index_candidate_block(repo, base_oid, index, skip_worktree_paths).unwrap_or_else(
+        |(rows, reason)| {
+            failures.extend(rows);
+            CandidateBlock::Unavailable(vec![reason])
+        },
+    )
 }
 
 /// The staged external-control stage: trusted time verifies against the
@@ -229,16 +233,14 @@ fn staged_gate(
     index: &amiss_git::LogicalIndex,
     skip_worktree_paths: u64,
 ) -> PipelineResult<ExternalVerified> {
-    let candidate_block = match index_candidate_block(repo, base_oid, index, skip_worktree_paths) {
-        Ok(block) => block,
-        Err(rows) => {
+    let candidate_block = index_candidate_block(repo, base_oid, index, skip_worktree_paths)
+        .map_err(|(rows, reason)| {
             let setup = setup_shell.with(
                 base_tree.1.clone(),
-                CandidateBlock::Unavailable(vec!["unrepresentable-path"]),
+                CandidateBlock::Unavailable(vec![reason]),
             );
-            return Err(PipelineFailure::new(setup, rows));
-        }
-    };
+            PipelineFailure::new(setup, rows)
+        })?;
     let provisional = setup_shell.with(base_tree.1.clone(), candidate_block);
     external_gate(setup_shell, verified_floor, scan_limits, &provisional, None).map_err(
         |(reason, row)| {

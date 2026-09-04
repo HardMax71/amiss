@@ -15,6 +15,7 @@ mod evaluate;
 mod floor;
 mod governed;
 mod identity;
+mod index_identity;
 mod lfs;
 mod pipeline;
 mod policy;
