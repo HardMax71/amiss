@@ -8,6 +8,7 @@ mod correlation_vectors;
 mod declared;
 mod determinism;
 mod discovery;
+mod document_contract;
 mod eligibility;
 mod envelope;
 mod evaluate;

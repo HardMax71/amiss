@@ -71,7 +71,7 @@ fn snapshot(
         let DocumentStatus::Scanned(scanned) = &record.status else {
             continue;
         };
-        let Some(adapter) = record.classification.adapter() else {
+        let Some(adapter) = record.adapter else {
             continue;
         };
         let adapter_contract_digest = adapter_contract(&engine(), adapter).1;
@@ -598,7 +598,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
             .map(|path| DocumentRecord {
                 path: RepoPath::new((*path).to_owned()).unwrap(),
                 classification: Classification::StructuredMarkdown,
-                adapter: Classification::StructuredMarkdown.adapter(),
+                adapter: Some(amiss_wire::model::Adapter::Markdown),
                 status: DocumentStatus::ExcludedBuiltIn,
                 oid: oid.clone(),
                 mode: GitMode::RegularFile,

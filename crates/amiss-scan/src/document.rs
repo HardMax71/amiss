@@ -1,21 +1,5 @@
 use amiss_wire::model::Adapter;
-
-/// The intrinsic built-in classification rows, applied first match wins. The
-/// fifth row, `policy-included`, needs a repository policy and is not a
-/// property of the path alone, so it lives with the policy layer.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::IntoStaticStr)]
-#[strum(serialize_all = "kebab-case")]
-pub enum Classification {
-    StructuredMarkdown,
-    StructuredMdx,
-    #[strum(serialize = "structured-asciidoc")]
-    StructuredAsciiDoc,
-    StructuredRst,
-    ExtensionlessMarkdown,
-    PlainAdvisory,
-    UnparsedMarkup,
-    PolicyIncluded,
-}
+pub use amiss_wire::report::model::DocumentClassification as Classification;
 
 const EXTENSIONLESS: [&str; 6] = [
     "README",
@@ -38,19 +22,18 @@ const EXCLUDED_TREES: [&str; 9] = [
     "tests",
 ];
 
-impl Classification {
-    /// The native adapter, where one exists. A policy include installs no
-    /// parser, and neither does a markup this engine does not read.
-    #[must_use]
-    pub const fn adapter(self) -> Option<Adapter> {
-        match self {
-            Self::StructuredMarkdown | Self::ExtensionlessMarkdown => Some(Adapter::Markdown),
-            Self::StructuredMdx => Some(Adapter::Mdx),
-            Self::StructuredAsciiDoc => Some(Adapter::AsciiDoc),
-            Self::StructuredRst => Some(Adapter::Rst),
-            Self::PlainAdvisory => Some(Adapter::PlainAdvisory),
-            Self::UnparsedMarkup | Self::PolicyIncluded => None,
+/// A policy include needs an explicit binding; unparsed markup has no native adapter.
+#[must_use]
+pub const fn native_adapter(classification: Classification) -> Option<Adapter> {
+    match classification {
+        Classification::StructuredMarkdown | Classification::ExtensionlessMarkdown => {
+            Some(Adapter::Markdown)
         }
+        Classification::StructuredMdx => Some(Adapter::Mdx),
+        Classification::StructuredAsciiDoc => Some(Adapter::AsciiDoc),
+        Classification::StructuredRst => Some(Adapter::Rst),
+        Classification::PlainAdvisory => Some(Adapter::PlainAdvisory),
+        Classification::UnparsedMarkup | Classification::PolicyIncluded => None,
     }
 }
 

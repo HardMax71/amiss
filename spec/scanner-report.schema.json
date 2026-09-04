@@ -2159,6 +2159,7 @@
             "structured-rst",
             "extensionless-markdown",
             "plain-advisory",
+            "unparsed-markup",
             "policy-included"
           ]
         },

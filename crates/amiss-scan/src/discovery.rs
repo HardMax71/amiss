@@ -5,7 +5,7 @@ use amiss_git::{GitResources, ObjectKind, Repository, TreeEntry, ValueCap, parse
 use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 
-use crate::document::{Classification, classify, excluded_by_built_in};
+use crate::document::{Classification, classify, excluded_by_built_in, native_adapter};
 use crate::policy::Includes;
 use crate::resources::{ScanIdentity, ScanResources, crossing};
 use crate::scan::{Scanned, replay_scan_charges, scan_bytes};
@@ -219,7 +219,7 @@ fn record_document(
     let adapter = if classification == Classification::PolicyIncluded {
         context.includes.binding(&path)
     } else {
-        classification.adapter()
+        native_adapter(classification)
     };
     if context
         .scope

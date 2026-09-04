@@ -16,16 +16,31 @@ pub enum RepoPath {
     Bytes(RepoPathBytes),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    strum::AsRefStr,
+    strum::IntoStaticStr,
+    strum::EnumIter,
+)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum DocumentClassification {
     ExtensionlessMarkdown,
     PlainAdvisory,
     PolicyIncluded,
-    StructuredAsciidoc,
+    #[serde(rename = "structured-asciidoc")]
+    #[strum(serialize = "structured-asciidoc")]
+    StructuredAsciiDoc,
     StructuredMarkdown,
     StructuredMdx,
     StructuredRst,
+    UnparsedMarkup,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
