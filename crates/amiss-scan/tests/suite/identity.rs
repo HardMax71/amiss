@@ -1,5 +1,6 @@
 #![expect(
     clippy::expect_used,
+    clippy::unwrap_used,
     reason = "integration assertions over repository-owned identity goldens"
 )]
 
@@ -14,7 +15,9 @@ use amiss_scan::resolve::Intent;
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::{Value, canonical, parse};
-use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
+use amiss_wire::model::{
+    Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
+};
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 use strum::IntoEnumIterator;
 
@@ -33,9 +36,10 @@ fn fixture_digest(name: &str, definition: &str, domain: &str) -> Digest {
 
 fn snapshot(commit: char, tree: char) -> SnapshotIdentity {
     SnapshotIdentity {
-        object_format: "sha1",
-        commit_oid: commit.to_string().repeat(40),
-        tree_oid: tree.to_string().repeat(40),
+        commit_oid: Oid::new(ObjectFormat::Sha1, commit.to_string().repeat(40)).unwrap(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
+        tree_oid: Oid::new(ObjectFormat::Sha1, tree.to_string().repeat(40)).unwrap(),
     }
 }
 
@@ -149,28 +153,28 @@ fn the_commit_candidate_identity_fixture_matches_the_runtime_preimage() {
         "docs".to_owned(),
     );
     setup.forge = Some(ForgeDialect::Gitlab);
-    setup.candidate_ref = Some("refs/heads/amiss-controller".to_owned());
-    setup.target_ref = Some("refs/heads/main".to_owned());
-    setup.default_branch_ref = Some("refs/heads/main".to_owned());
+    setup.candidate_ref = BranchRef::new("refs/heads/amiss-controller".to_owned());
+    setup.target_ref = BranchRef::new("refs/heads/main".to_owned());
+    setup.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
 
     let published = fixture_digest(
         "candidate-identity.json",
         "CandidateIdentityInput",
         CANDIDATE_IDENTITY_DOMAIN,
     );
-    let gitlab = candidate_identity_digest(&setup);
+    let gitlab = candidate_identity_digest(&setup).unwrap();
     assert_eq!(gitlab, published);
 
     setup.forge = Some(ForgeDialect::Github);
     assert_ne!(
-        candidate_identity_digest(&setup),
+        candidate_identity_digest(&setup).unwrap(),
         gitlab,
         "a trusted-time statement cannot be replayed under another URL dialect"
     );
 
     setup.forge = None;
     assert_ne!(
-        candidate_identity_digest(&setup),
+        candidate_identity_digest(&setup).unwrap(),
         gitlab,
         "a trusted-time statement cannot be replayed without its selected URL dialect"
     );
@@ -182,25 +186,25 @@ fn the_commit_candidate_identity_fixture_matches_the_runtime_preimage() {
 /// builder's digests.
 #[test]
 fn the_staged_identity_fixtures_reproduce_the_runtime_digest_chain() {
-    let base_commit = "1".repeat(40);
+    let base_commit = Oid::new(ObjectFormat::Sha1, "1".repeat(40)).unwrap();
     let entries = [
         (
             RepoPath::new("README.md".to_owned()).expect("fixture path is canonical"),
             GitMode::RegularFile,
-            "a".repeat(40),
+            Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
             false,
         ),
         (
             RepoPath::new("vendor.bin".to_owned()).expect("fixture path is canonical"),
             GitMode::RegularFile,
-            "b".repeat(40),
+            Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap(),
             true,
         ),
     ];
-    let candidate = synthetic_candidate("sha1", &base_commit, &entries, 1);
+    let candidate = synthetic_candidate(ObjectFormat::Sha1, &base_commit, &entries, 1);
 
     assert_eq!(
-        candidate.projection_digest,
+        candidate.snapshot.index_projection_digest,
         fixture_digest(
             "index-projection.json",
             "IndexProjectionInput",
@@ -208,19 +212,19 @@ fn the_staged_identity_fixtures_reproduce_the_runtime_digest_chain() {
         ),
     );
     assert_eq!(
-        candidate.snapshot_digest,
+        candidate.snapshot.snapshot_digest,
         fixture_digest(
             "synthetic-snapshot.json",
             "SyntheticSnapshotInput",
             SNAPSHOT_SCHEMA,
         ),
     );
-    assert_eq!(candidate.entry_count, 2);
+    assert_eq!(candidate.snapshot.entry_count, 2);
     assert_eq!(candidate.skip_worktree_paths, 1);
 
     let setup = setup(CandidateBlock::Index(candidate));
     assert_eq!(
-        candidate_identity_digest(&setup),
+        candidate_identity_digest(&setup).unwrap(),
         fixture_digest(
             "candidate-identity-index.json",
             "CandidateIdentityInput",

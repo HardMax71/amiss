@@ -11,7 +11,7 @@ use amiss_wire::controls::{
     canonical_debt_snapshot, canonical_organization_floor, parse_debt_snapshot,
     parse_organization_floor, parse_trusted_time,
 };
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
 
@@ -143,6 +143,7 @@ fn a_minted_snapshot_clears_its_own_reader_and_schema() {
 /// The centerpiece: the same evaluation that failed the finding tolerates it
 /// once the minted snapshot rides in as the debt control.
 #[test]
+#[expect(clippy::too_many_lines, reason = "one end-to-end adoption path")]
 fn a_minted_snapshot_round_trips_into_tolerance() {
     let (minted, path) = minted();
     let args = adopt_args(&minted, &path);
@@ -162,22 +163,32 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         amiss_wire::model::RepositoryIdentity::github("acme".to_owned(), "docs".to_owned())
             .unwrap();
     let base_block = SnapshotIdentity {
-        object_format: "sha1",
-        commit_oid: minted.base.clone(),
-        tree_oid: minted.chain.commits.first().unwrap().tree.clone(),
+        commit_oid: base.clone(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
+        tree_oid: Oid::new(
+            ObjectFormat::Sha1,
+            minted.chain.commits.first().unwrap().tree.clone(),
+        )
+        .unwrap(),
     };
     let candidate_block = SnapshotIdentity {
-        object_format: "sha1",
-        commit_oid: minted.candidate.clone(),
-        tree_oid: minted.chain.commits.get(1).unwrap().tree.clone(),
+        commit_oid: candidate.clone(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
+        tree_oid: Oid::new(
+            ObjectFormat::Sha1,
+            minted.chain.commits.get(1).unwrap().tree.clone(),
+        )
+        .unwrap(),
     };
     let time_setup = Setup {
         engine: engine.clone(),
         profile: amiss_wire::controls::Profile::Enforce,
         repository: Some(identity.clone()),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: Some("refs/heads/main".to_owned()),
-        target_ref: Some("refs/heads/main".to_owned()),
+        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
+        target_ref: BranchRef::new("refs/heads/main".to_owned()),
         default_branch_ref: None,
         base: base_block,
         candidate: CandidateBlock::Commit(candidate_block),
@@ -198,7 +209,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
   "evaluation_instant": "2026-08-08T12:00:00Z",
   "valid_until": "2026-08-08T12:04:00Z"
 }}"#,
-        candidate_identity_digest(&time_setup)
+        candidate_identity_digest(&time_setup).unwrap()
     );
     let statement = parse_trusted_time(statement.as_bytes()).unwrap();
     let debt_digest = canonical_debt_snapshot(&snapshot).unwrap().1;
@@ -207,8 +218,8 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         profile: amiss_wire::controls::Profile::Enforce,
         repository: Some(identity),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: Some("refs/heads/main".to_owned()),
-        target_ref: Some("refs/heads/main".to_owned()),
+        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
+        target_ref: BranchRef::new("refs/heads/main".to_owned()),
         default_branch_ref: None,
         floor: Some({
             let floor = parse_organization_floor(FLOOR.as_bytes()).unwrap();

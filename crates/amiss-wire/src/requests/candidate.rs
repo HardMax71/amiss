@@ -86,20 +86,20 @@ pub enum CandidateSnapshot {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CandidateIdentity {
-    pub schema: CandidateIdentitySchema,
-    pub mode: RequestMode,
-    pub event_kind: CandidateEventKind,
-    pub finality: CandidateFinality,
-    pub repository: Nullable<RepositoryIdentity>,
-    pub candidate_ref: Nullable<BranchRef>,
-    pub target_ref: Nullable<BranchRef>,
-    pub default_branch_ref: Nullable<BranchRef>,
     pub base: GitSnapshotIdentity,
     pub candidate: CandidateSnapshot,
-    pub materialization: SnapshotMaterialization,
-    pub skip_worktree_paths: u64,
-    pub index_only_materialized_paths: u64,
+    pub candidate_ref: Nullable<BranchRef>,
+    pub default_branch_ref: Nullable<BranchRef>,
+    pub event_kind: CandidateEventKind,
+    pub finality: CandidateFinality,
     pub forge: Nullable<ForgeDialect>,
+    pub index_only_materialized_paths: u64,
+    pub materialization: SnapshotMaterialization,
+    pub mode: RequestMode,
+    pub repository: Nullable<RepositoryIdentity>,
+    pub schema: CandidateIdentitySchema,
+    pub skip_worktree_paths: u64,
+    pub target_ref: Nullable<BranchRef>,
 }
 
 /// Computes the commit-pair candidate identity carried by a complete report.
@@ -157,7 +157,7 @@ pub fn commit_candidate_identity_digest(
         index_only_materialized_paths: 0,
         forge: evaluation.forge.map_or(Nullable::Null, Nullable::Value),
     };
-    serde_json_canonicalizer::to_vec(&identity)
+    serde_json::to_vec(&identity)
         .ok()
         .map(|canonical| hb(CANDIDATE_IDENTITY_DOMAIN, &canonical))
 }

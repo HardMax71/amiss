@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
-use amiss_wire::model::{ArtifactId, Oid, RepoPath};
+use amiss_wire::model::{ArtifactId, BranchRef, Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
 use amiss_wire::resolution::{Missing, Resolution};
 
@@ -215,7 +215,7 @@ fn floor_gate(
         crate::policy::verify_floor(
             floor,
             setup_shell.repository.as_ref(),
-            setup_shell.target_ref.as_deref(),
+            setup_shell.target_ref.as_ref().map(BranchRef::as_str),
             setup_shell.profile,
         )
         .err()
@@ -556,9 +556,10 @@ fn resolve_tree(
     Ok((
         commit.tree.clone(),
         SnapshotIdentity {
-            object_format: repo.object_format().into(),
-            commit_oid: commit_oid.as_str().to_owned(),
-            tree_oid: commit.tree.as_str().to_owned(),
+            commit_oid: commit_oid.clone(),
+            kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+            object_format: repo.object_format(),
+            tree_oid: commit.tree.clone(),
         },
     ))
 }
@@ -612,9 +613,9 @@ pub struct SetupShell {
     pub profile: amiss_wire::controls::Profile,
     pub repository: Option<amiss_wire::model::RepositoryIdentity>,
     pub forge: Option<amiss_wire::model::ForgeDialect>,
-    pub candidate_ref: Option<String>,
-    pub target_ref: Option<String>,
-    pub default_branch_ref: Option<String>,
+    pub candidate_ref: Option<BranchRef>,
+    pub target_ref: Option<BranchRef>,
+    pub default_branch_ref: Option<BranchRef>,
     pub floor: Option<crate::policy::FloorInput>,
     pub debt: Option<crate::policy::DebtInput>,
     pub waiver: Option<crate::policy::WaiverInput>,

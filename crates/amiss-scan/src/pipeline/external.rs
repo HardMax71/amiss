@@ -1,9 +1,10 @@
+use amiss_wire::model::BranchRef;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 
 use crate::report::Setup;
 use crate::resources::ScanLimits;
 
-use super::SetupShell;
+use super::{SetupShell, detail};
 
 /// The verified external controls after the gate, ready to join the run's
 /// effects.
@@ -46,8 +47,9 @@ pub(super) fn external_gate(
     candidate_tree: Option<amiss_wire::model::TreeIdentity>,
 ) -> Result<ExternalVerified, (&'static str, ErrorDetail)> {
     let repository = setup_shell.repository.as_ref();
-    let target_ref = setup_shell.target_ref.as_deref();
-    let identity = crate::report::candidate_identity_digest(provisional);
+    let target_ref = setup_shell.target_ref.as_ref().map(BranchRef::as_str);
+    let identity = crate::report::candidate_identity_digest(provisional)
+        .map_err(|error| ("not-parsed", detail(&error, None)))?;
     let time = setup_shell
         .time
         .as_ref()
