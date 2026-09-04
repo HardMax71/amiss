@@ -8,7 +8,7 @@ use amiss_wire::resolution::{BlobTarget, Missing, Target, UnsupportedSemantics};
 use crate::Error;
 use crate::anchor::anchor_set;
 use crate::discovery::SnapshotDiscovery;
-use crate::document::classify;
+use crate::document::{classify, native_adapter};
 use crate::resources::{Aggregate, ScanResources};
 
 use super::content::{Content, content_cache};
@@ -86,7 +86,7 @@ pub(super) fn fragment_resolution(
         return line_resolution(resolver, path, mode, blob, range);
     }
     match classify(path.as_bytes()) {
-        Some(classification) => match classification.adapter() {
+        Some(classification) => match native_adapter(classification) {
             Some(adapter) => anchor_resolution(resolver, path, mode, blob, adapter, decoded),
             None => Ok(Resolution::UnsupportedSemantics(
                 UnsupportedSemantics::Fragment(blob),

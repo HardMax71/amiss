@@ -4,6 +4,7 @@ use amiss_wire::model::{Adapter, RepoPath};
 
 use super::{digest_value, integer, nullable, object, string};
 use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind};
+use crate::document::Classification;
 
 fn side_facets(
     record: &DocumentRecord,
@@ -134,7 +135,7 @@ fn document_side_value(record: Option<&DocumentRecord>) -> Value {
 
 pub(super) struct PairedDocument<'a> {
     pub(super) path: RepoPath,
-    classification: &'static str,
+    classification: Classification,
     pub(super) base: Option<&'a DocumentRecord>,
     pub(super) candidate: Option<&'a DocumentRecord>,
 }
@@ -202,7 +203,7 @@ fn paired_document<'a>(
 ) -> PairedDocument<'a> {
     PairedDocument {
         path: record.path.clone(),
-        classification: record.classification.into(),
+        classification: record.classification,
         base,
         candidate,
     }
@@ -220,7 +221,7 @@ pub(super) fn document_result_value(paired: &PairedDocument<'_>) -> Value {
     };
     object(vec![
         ("path", paired.path.to_value()),
-        ("classification", string(paired.classification)),
+        ("classification", string(paired.classification.as_ref())),
         ("base", base),
         ("candidate", candidate),
         ("change", string(change)),

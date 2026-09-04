@@ -1,11 +1,35 @@
-use std::{fs, path::Path};
+use std::{collections::BTreeSet, fs, path::Path};
 
 use amiss_wire::{
     controls, external, json, locale, manifest, publication, relation, report, requests, semantic,
 };
+use strum::IntoEnumIterator;
 
 #[path = "../support/relation.rs"]
 mod relation_fixture;
+
+#[test]
+fn document_classifications_match_the_report_schema() {
+    let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
+        "../../../../spec/scanner-report.schema.json"
+    ))
+    .unwrap();
+    let declared: BTreeSet<_> =
+        schema["$defs"]["DocumentResult"]["properties"]["classification"]["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap().to_owned())
+            .collect();
+    let generated: BTreeSet<_> = report::model::DocumentClassification::iter()
+        .map(|classification| {
+            let value = serde_json::to_value(classification).unwrap();
+            assert_eq!(value.as_str(), Some(classification.as_ref()));
+            classification.as_ref().to_owned()
+        })
+        .collect();
+    assert_eq!(declared, generated);
+}
 
 #[test]
 fn report_examples_match_their_typed_source() {

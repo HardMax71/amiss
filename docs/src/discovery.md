@@ -12,6 +12,7 @@ tree-and-suffix selector bound to `rst`; unrelated suffixes remain outside. `.ip
 are `unparsed-markup`: this engine has no parser for a notebook or
 for Org markup, so those files are discovered and counted as `unsupported-document-format`
 and their content is never read, the same honest count an unbound policy include reaches.
+Reports retain `unparsed-markup` on either snapshot side, including files under excluded trees.
 Notebook Markdown has measured reference yield, but its decoded cell spans are not physical JSON
 spans and the current report cannot name a cell; the
 [notebook measurement](ledger.md#notebook-markdown-yield-measured-and-held) records why that

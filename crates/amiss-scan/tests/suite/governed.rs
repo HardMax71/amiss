@@ -184,7 +184,7 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
         documents: vec![DocumentRecord {
             path,
             classification: Classification::StructuredMarkdown,
-            adapter: Classification::StructuredMarkdown.adapter(),
+            adapter: Some(Adapter::Markdown),
             status: DocumentStatus::Scanned(scanned.into()),
             oid,
             mode: GitMode::RegularFile,

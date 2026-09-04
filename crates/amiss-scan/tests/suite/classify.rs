@@ -1,3 +1,4 @@
+use amiss_scan::document::native_adapter;
 use amiss_scan::{Classification, classify, excluded_by_built_in};
 use amiss_wire::model::Adapter;
 
@@ -69,7 +70,7 @@ fn advisory_basenames_run_no_grammar() {
     assert_eq!(classify(b"LLMS.txt"), None);
     assert_eq!(classify(b"a/b.cursorrules"), None);
     assert_eq!(
-        Classification::PlainAdvisory.adapter(),
+        native_adapter(Classification::PlainAdvisory),
         Some(Adapter::PlainAdvisory)
     );
 }
@@ -77,14 +78,17 @@ fn advisory_basenames_run_no_grammar() {
 #[test]
 fn classifications_map_to_their_adapters() {
     assert_eq!(
-        Classification::StructuredMarkdown.adapter(),
+        native_adapter(Classification::StructuredMarkdown),
         Some(Adapter::Markdown)
     );
     assert_eq!(
-        Classification::ExtensionlessMarkdown.adapter(),
+        native_adapter(Classification::ExtensionlessMarkdown),
         Some(Adapter::Markdown)
     );
-    assert_eq!(Classification::StructuredMdx.adapter(), Some(Adapter::Mdx));
+    assert_eq!(
+        native_adapter(Classification::StructuredMdx),
+        Some(Adapter::Mdx)
+    );
     assert_eq!(
         Classification::StructuredMarkdown.as_ref(),
         "structured-markdown"
@@ -138,7 +142,10 @@ fn the_markup_suffixes_reach_their_own_adapters() {
         classify(b"docs/guide.rst"),
         Some(Classification::StructuredRst),
     );
-    assert_eq!(Classification::StructuredRst.adapter(), Some(Adapter::Rst));
+    assert_eq!(
+        native_adapter(Classification::StructuredRst),
+        Some(Adapter::Rst)
+    );
     for path in [&b"docs/guide.adoc"[..], b"docs/guide.asciidoc"] {
         assert_eq!(
             classify(path),
@@ -148,7 +155,7 @@ fn the_markup_suffixes_reach_their_own_adapters() {
         );
     }
     assert_eq!(
-        Classification::StructuredAsciiDoc.adapter(),
+        native_adapter(Classification::StructuredAsciiDoc),
         Some(Adapter::AsciiDoc),
     );
     for path in [&b"docs/guide.txt"[..], b"docs/guide.rst.bak", b"docs/RST"] {
@@ -171,7 +178,7 @@ fn a_notebook_or_org_file_is_a_document_that_is_never_read() {
             String::from_utf8_lossy(path),
         );
     }
-    assert_eq!(Classification::UnparsedMarkup.adapter(), None);
+    assert_eq!(native_adapter(Classification::UnparsedMarkup), None);
     for path in [
         &b"docs/tour.IPYNB"[..],
         b"docs/tour.ipynb.bak",
