@@ -115,7 +115,7 @@ fn measure<T, F: Fn() -> T>(label: &str, project: F) {
     );
 }
 
-/// Measures the two materialized JSON projections over the same large report.
+/// Measures projection construction, excluding report creation and JSON serialization.
 #[test]
 #[ignore = "promotion evidence, run explicitly in release"]
 fn large_projection_latency_and_memory() {
