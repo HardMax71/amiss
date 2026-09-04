@@ -3,8 +3,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use amiss_wire::digest::{hb, hj};
-use amiss_wire::json::Value;
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::record::{Input, InputSchema, Record};
 
@@ -19,6 +18,12 @@ const PRODUCER_IDENTITY: &str = "amiss-rust-public-api";
 struct Invocation {
     context: PathBuf,
     rustdoc: PathBuf,
+}
+
+#[derive(serde::Serialize)]
+struct InputIdentity {
+    context_digest: Digest,
+    rustdoc_digest: Digest,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -37,6 +42,8 @@ enum Failure {
     Normalize(#[from] normalize::Error),
     #[error("the fixed producer identity is invalid")]
     ProducerIdentity,
+    #[error("the producer input identity cannot be encoded")]
+    InputIdentity(#[source] serde_json::Error),
     #[error("the semantic template cannot be produced")]
     Template(#[source] amiss_wire::de::Error),
     #[error("stdout could not be written")]
@@ -100,33 +107,25 @@ fn invocation(mut arguments: impl Iterator<Item = OsString>) -> Result<Invocatio
 }
 
 fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Vec<u8>, Failure> {
-    let context = context::parse(context_bytes)?;
+    let (context, context_digest) = context::parse(context_bytes)?;
     let normalized = normalize::function_declarations(
         rustdoc_bytes,
         context.rustdoc_format,
         &context.target,
         &context.target_triple,
     )?;
-    let rustdoc_digest = hb(RUSTDOC_DOMAIN, rustdoc_bytes);
-    let input_digest = hj(
-        INPUT_DOMAIN,
-        &Value::object(vec![
-            (
-                "context_digest".to_owned(),
-                Value::string(context.digest.to_string()),
-            ),
-            (
-                "rustdoc_digest".to_owned(),
-                Value::string(rustdoc_digest.to_string()),
-            ),
-        ]),
-    );
+    let input_digest = serde_json::to_vec(&InputIdentity {
+        context_digest,
+        rustdoc_digest: hb(RUSTDOC_DOMAIN, rustdoc_bytes),
+    })
+    .map(|canonical| hb(INPUT_DOMAIN, &canonical))
+    .map_err(Failure::InputIdentity)?;
     let producer_identity =
         ArtifactId::new(PRODUCER_IDENTITY.to_owned()).ok_or(Failure::ProducerIdentity)?;
     amiss_wire::semantic::record::template(Input {
         schema: InputSchema::Current,
         producer_identity,
-        context_digest: context.digest,
+        context_digest,
         input_digest,
         complete: normalized.complete,
         name: context.name,

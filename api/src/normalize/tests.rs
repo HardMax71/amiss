@@ -11,6 +11,44 @@ use super::{Error, FunctionRow, function_declarations, record};
 
 mod real;
 
+#[test]
+fn produced_templates_keep_the_context_and_rustdoc_digest_preimages() {
+    let rustdoc = rustdoc(0, 1, None);
+    let context = crate::context::Context {
+        cfg: vec!["custom".to_owned()],
+        compiler: "rustc test".to_owned(),
+        dependencies_digest: amiss_wire::digest::hb("test/dependencies", b"dependencies"),
+        features: vec!["default".to_owned()],
+        name: amiss_wire::model::ArtifactId::new(
+            "rust/example/local-function-declarations".to_owned(),
+        )
+        .unwrap(),
+        package: "example-package".to_owned(),
+        rustdoc_format: 61,
+        schema: crate::context::ContextSchema::Current,
+        target: "example".to_owned(),
+        target_triple: "x86_64-unknown-linux-gnu".to_owned(),
+    };
+    let context_bytes = serde_json::to_vec(&context).unwrap();
+    let context_digest = amiss_wire::digest::hj(
+        "amiss/rust-public-api-context-v1",
+        &amiss_wire::json::parse(&context_bytes).unwrap(),
+    );
+    let rustdoc_digest = amiss_wire::digest::hb("amiss/rust-public-api-rustdoc-v1", &rustdoc);
+    let identity =
+        format!(r#"{{"context_digest":"{context_digest}","rustdoc_digest":"{rustdoc_digest}"}}"#);
+    let input_digest = amiss_wire::digest::hj(
+        "amiss/rust-public-api-input-v1",
+        &amiss_wire::json::parse(identity.as_bytes()).unwrap(),
+    );
+    let bytes = crate::produce(&context_bytes, &rustdoc).unwrap();
+    let template = amiss_wire::semantic::parse_template(&bytes).unwrap();
+    assert_eq!(template.producer.context_digest, context_digest);
+    assert_eq!(template.producer.input_digest, input_digest);
+    assert_eq!(template.observations[0]["name"], context.name.as_str());
+    assert!(template.complete);
+}
+
 fn rustdoc(root_id: u32, function_id: u32, unrelated_id: Option<u32>) -> Vec<u8> {
     let root = Id(root_id);
     let function_item = Id(function_id);
