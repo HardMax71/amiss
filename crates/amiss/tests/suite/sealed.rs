@@ -11,7 +11,6 @@ use amiss_fixtures::{SiteObservation, site_navigation, site_observation};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{Profile, canonical_organization_floor, parse_organization_floor};
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity,
 };
@@ -23,9 +22,9 @@ use amiss_wire::requests::{
 use amiss_wire::semantic::observation::{SphinxLabelKind, SphinxLabelObservation};
 use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
 
-fn supplied_semantic(value: &Value, expected_context_digest: Digest) -> SuppliedSemanticEvidence {
+fn supplied_semantic(bytes: &[u8], expected_context_digest: Digest) -> SuppliedSemanticEvidence {
     SuppliedSemanticEvidence {
-        value: serde_json::from_slice(&canonical(value)).unwrap(),
+        value: serde_json::from_slice(bytes).unwrap(),
         expected_context_digest,
     }
 }
@@ -334,7 +333,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     let expected_context_digest = semantic.producer.context_digest;
     let evidence = amiss_wire::semantic::envelope(semantic).unwrap();
     let expected_provenance = vec![SemanticEvidenceProvenance {
-        payload_digest: amiss_wire::semantic::parse(&canonical(&evidence))
+        payload_digest: amiss_wire::semantic::parse(&evidence)
             .unwrap()
             .payload_digest,
         producer: SemanticEvidenceProducer {

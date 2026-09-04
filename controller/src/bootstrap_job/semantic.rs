@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::requests::SuppliedSemanticEvidence;
 use base64::Engine as _;
@@ -74,12 +73,12 @@ pub fn bind_semantic_evidence(
         .collect::<BTreeMap<_, _>>();
     let mut bound = Vec::with_capacity(count);
     for template in templates {
-        let template_value = amiss_wire::semantic::template(template.clone())
+        let template_bytes = amiss_wire::semantic::template(template.clone())
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
         bound.push(bind_input(
             template,
             None,
-            Arc::from(json::canonical(&template_value)),
+            template_bytes.into(),
             candidate_identity_digest,
         )?);
     }
@@ -129,9 +128,8 @@ fn bind_input(
     template_bytes: Arc<[u8]>,
     candidate_identity_digest: Digest,
 ) -> Result<BoundInput, BootstrapJobError> {
-    let value = amiss_wire::semantic::bind_template(template, candidate_identity_digest)
+    let envelope_bytes = amiss_wire::semantic::bind_template(template, candidate_identity_digest)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    let envelope_bytes = json::canonical(&value);
     let envelope = amiss_wire::semantic::parse(&envelope_bytes)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     if envelope.payload.subject.candidate_identity_digest != candidate_identity_digest

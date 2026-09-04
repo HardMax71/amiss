@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::de::{self, Error, ErrorKind};
 use crate::digest::Digest;
-use crate::json::{self, Value};
 use crate::model::ArtifactId;
 
 use super::{
@@ -61,50 +60,37 @@ pub enum ObservationKind {
 /// Fails on oversized or malformed strict JSON, unknown fields, invalid identities or digests,
 /// and records that are not bounded, control-free, sorted, and unique by key.
 pub fn parse_input(bytes: &[u8]) -> Result<Input, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > super::SEMANTIC_EVIDENCE_BYTES {
-        return de::fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let input: Input = de::deserialize_json(bytes)?;
-    validate_input(&input)?;
+    let input: Input = super::parse_document(bytes)?;
+    validate_records("$.records", &input.records)?;
     Ok(input)
 }
 
-/// Produces the canonical semantic template value for one validated record-set input.
+/// Produces canonical semantic template bytes for one validated record-set input.
 ///
 /// # Errors
 ///
 /// Fails when a directly constructed input violates the reader's record laws, the fixed producer
 /// contract is invalid, or the encoded template exceeds the semantic evidence bounds.
-pub fn template(input: Input) -> Result<Value, Error> {
-    validate_input(&input)?;
-    let Input {
-        schema: InputSchema::Current,
-        producer_identity,
-        context_digest,
-        input_digest,
-        complete,
-        name,
-        records,
-    } = input;
+pub fn template(input: Input) -> Result<Vec<u8>, Error> {
+    validate_records("$.records", &input.records)?;
     let producer_kind = ArtifactId::new(PRODUCER_KIND.to_owned())
         .ok_or_else(|| Error::new("$.producer.kind", ErrorKind::InvalidValue))?;
     let observation = serde_json::to_value(Observation {
         kind: ObservationKind::Current,
-        name,
-        records,
+        name: input.name,
+        records: input.records,
     })
     .map_err(|_defect| Error::new("$.observations[0]", ErrorKind::InvalidValue))?;
     super::template(SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
             kind: producer_kind,
-            identity: producer_identity,
+            identity: input.producer_identity,
             version: PRODUCER_VERSION.to_owned(),
-            context_digest,
-            input_digest,
+            context_digest: input.context_digest,
+            input_digest: input.input_digest,
         },
-        complete,
+        complete: input.complete,
         observations: vec![observation].into(),
     })
 }
@@ -118,10 +104,6 @@ pub fn decode_observation(path: &str, value: serde_json::Value) -> Result<Observ
     let observation: Observation = de::deserialize_value(path, value)?;
     validate_records(&format!("{path}.records"), &observation.records)?;
     Ok(observation)
-}
-
-fn validate_input(input: &Input) -> Result<(), Error> {
-    validate_records("$.records", &input.records)
 }
 
 fn validate_records(path: &str, records: &[Record]) -> Result<(), Error> {

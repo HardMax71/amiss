@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
-use crate::json::{self, Value};
+use crate::json;
 use crate::model::ArtifactId;
 
 pub mod observation;
@@ -128,7 +128,7 @@ fn parse_document<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Err
 pub fn bind_template(
     template: &SemanticEvidenceTemplate,
     candidate_identity_digest: Digest,
-) -> Result<Value, Error> {
+) -> Result<Vec<u8>, Error> {
     envelope(SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
@@ -141,32 +141,32 @@ pub fn bind_template(
     })
 }
 
-/// Builds the unique candidate-independent value for one semantic evidence template.
-/// Observation order is canonicalized before the value is emitted.
+/// Writes the canonical bytes of one candidate-independent semantic evidence template.
+/// Observation order is canonicalized before the bytes are returned.
 ///
 /// # Errors
 ///
 /// Fails when producer metadata or an observation violates the same bounds [`parse_template`]
 /// enforces, when observations repeat, or when the resulting template exceeds the byte ceiling.
-pub fn template(mut input: SemanticEvidenceTemplate) -> Result<Value, Error> {
+pub fn template(mut input: SemanticEvidenceTemplate) -> Result<Vec<u8>, Error> {
     validate_producer("$.producer", &input.producer)?;
     input.observations =
         ordered_observations("$.observations", input.observations.as_ref().to_vec())?.into();
-    canonical_value(&input)
+    canonical_bytes(&input)
 }
 
-/// Builds the unique digest-bound value for one semantic evidence payload.
+/// Writes the canonical bytes of one digest-bound semantic evidence payload.
 /// Observation order is canonicalized, so traversal order cannot change its identity.
 ///
 /// # Errors
 ///
 /// Fails when producer metadata or an observation violates the same bounds [`parse`] enforces,
 /// when observations repeat, or when the resulting envelope exceeds the byte ceiling.
-pub fn envelope(mut evidence: SemanticEvidence) -> Result<Value, Error> {
+pub fn envelope(mut evidence: SemanticEvidence) -> Result<Vec<u8>, Error> {
     validate_producer("$.payload.producer", &evidence.producer)?;
     evidence.observations = ordered_observations("$.payload.observations", evidence.observations)?;
     let payload_digest = payload_digest(&evidence)?;
-    canonical_value(&SemanticEvidenceEnvelope {
+    canonical_bytes(&SemanticEvidenceEnvelope {
         schema: EnvelopeSchema::Current,
         payload: evidence,
         payload_digest,
@@ -253,11 +253,12 @@ fn payload_digest(payload: &SemanticEvidence) -> Result<Digest, Error> {
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
-fn canonical_value(document: &impl Serialize) -> Result<Value, Error> {
+fn canonical_bytes<T: Serialize>(document: &T) -> Result<Vec<u8>, Error> {
     let canonical = serde_json_canonicalizer::to_vec(document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    Ok(canonical)
 }

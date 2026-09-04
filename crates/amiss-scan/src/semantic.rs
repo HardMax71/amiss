@@ -121,16 +121,14 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
         Input::None => return Ok(Context::default()),
         Input::Bound(inputs) => inputs,
         Input::Template(template) => {
-            let value = amiss_wire::semantic::bind_template(template, candidate)
+            let bytes = amiss_wire::semantic::bind_template(template, candidate)
                 .map_err(|error| crate::request::configuration_detail(&error))?;
-            let value = serde_json::from_slice(&amiss_wire::json::canonical(&value)).map_err(
-                |_defect| {
-                    crate::request::configuration_detail(&amiss_wire::de::Error::new(
-                        "$.semantic_evidence",
-                        amiss_wire::de::ErrorKind::InvalidValue,
-                    ))
-                },
-            )?;
+            let value = serde_json::from_slice(&bytes).map_err(|_defect| {
+                crate::request::configuration_detail(&amiss_wire::de::Error::new(
+                    "$.semantic_evidence",
+                    amiss_wire::de::ErrorKind::InvalidValue,
+                ))
+            })?;
             let supplied = [amiss_wire::requests::SuppliedSemanticEvidence {
                 value,
                 expected_context_digest: template.producer.context_digest,

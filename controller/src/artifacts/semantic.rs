@@ -91,7 +91,7 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
         candidate_identity = Some(candidate);
         let rebound = amiss_wire::semantic::bind_template(&template, candidate)
             .map_err(|_defect| ArtifactError::Corrupt)?;
-        if json::canonical(&rebound) != envelope_bytes {
+        if rebound != envelope_bytes {
             return Err(ArtifactError::Corrupt);
         }
         payload_digests.push(payload_digest);

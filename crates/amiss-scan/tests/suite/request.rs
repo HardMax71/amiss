@@ -106,11 +106,10 @@ fn semantic_evidence(
 
 fn supplied_semantic(evidence: SemanticEvidence) -> SuppliedSemanticEvidence {
     let expected_context_digest = evidence.producer.context_digest;
-    let value = amiss_wire::semantic::envelope(evidence)
+    let bytes = amiss_wire::semantic::envelope(evidence)
         .expect("the generic envelope admits producer-defined semantics");
     SuppliedSemanticEvidence {
-        value: serde_json::from_slice(&amiss_wire::json::canonical(&value))
-            .expect("the envelope is JSON"),
+        value: serde_json::from_slice(&bytes).expect("the envelope is JSON"),
         expected_context_digest,
     }
 }
@@ -338,10 +337,9 @@ fn semantic_evidence_must_match_the_independently_supplied_context() {
         Vec::new(),
     );
     let mut request = empty();
-    let value = amiss_wire::semantic::envelope(evidence).expect("the generic envelope is valid");
+    let bytes = amiss_wire::semantic::envelope(evidence).expect("the generic envelope is valid");
     request.semantic_evidence = vec![SuppliedSemanticEvidence {
-        value: serde_json::from_slice(&amiss_wire::json::canonical(&value))
-            .expect("the envelope is JSON"),
+        value: serde_json::from_slice(&bytes).expect("the envelope is JSON"),
         expected_context_digest: hb("test/inventory", b"another inventory"),
     }];
 

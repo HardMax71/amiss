@@ -3,7 +3,6 @@
 use std::sync::Arc;
 
 use amiss_wire::digest::{hb, sha256};
-use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 use base64::Engine as _;
@@ -26,13 +25,11 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
         complete: true,
         observations: Arc::from([]),
     };
-    let template_value = amiss_wire::semantic::template(template.clone())
+    let mut template_bytes = amiss_wire::semantic::template(template.clone())
         .map_err(|_defect| ArtifactError::Corrupt)?;
-    let mut template_bytes = json::canonical(&template_value);
     template_bytes.push(b'\n');
-    let envelope_value = amiss_wire::semantic::bind_template(&template, candidate)
+    let envelope_bytes = amiss_wire::semantic::bind_template(&template, candidate)
         .map_err(|_defect| ArtifactError::Corrupt)?;
-    let envelope_bytes = json::canonical(&envelope_value);
     let payload_digest = amiss_wire::semantic::parse(&envelope_bytes)
         .map_err(|_defect| ArtifactError::Corrupt)?
         .payload_digest;
