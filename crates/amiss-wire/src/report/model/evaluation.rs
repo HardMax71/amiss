@@ -1,54 +1,16 @@
 use serde::{Deserialize, Serialize};
 
 use crate::digest::Digest;
-use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant};
+use crate::model::{BranchRef, ForgeDialect, RepositoryIdentity, UtcInstant};
 use crate::requests::{
-    CandidateEventKind, CandidateFinality, RequestMode, SnapshotMaterialization,
+    CandidateEventKind, CandidateFinality, CandidateSnapshot, RequestMode, SnapshotMaterialization,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum GitSnapshotKind {
-    #[serde(rename = "git-commit")]
-    GitCommit,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GitSnapshot {
-    pub commit_oid: Oid,
-    pub kind: GitSnapshotKind,
-    pub object_format: ObjectFormat,
-    pub tree_oid: Oid,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SyntheticSnapshotKind {
-    #[serde(rename = "index")]
-    Index,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SyntheticSnapshotSchema {
-    #[serde(rename = "amiss/scanner-snapshot")]
-    Current,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SyntheticIdentityScope {
-    #[serde(rename = "complete-logical-index")]
-    CompleteLogicalIndex,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SyntheticSnapshot {
-    pub base_commit_oid: Oid,
-    pub base_object_format: ObjectFormat,
-    pub entry_count: u64,
-    pub identity_scope: SyntheticIdentityScope,
-    pub index_projection_digest: Digest,
-    pub kind: SyntheticSnapshotKind,
-    pub snapshot_digest: Digest,
-    pub snapshot_schema: SyntheticSnapshotSchema,
-}
+pub use crate::requests::{
+    GitSnapshotIdentity as GitSnapshot, GitSnapshotKind,
+    IndexIdentityScope as SyntheticIdentityScope, IndexSnapshotIdentity as SyntheticSnapshot,
+    IndexSnapshotKind as SyntheticSnapshotKind, IndexSnapshotSchema as SyntheticSnapshotSchema,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum UnavailableSnapshotKind {
@@ -76,9 +38,9 @@ pub enum SnapshotUnavailableReason {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnavailableSnapshot {
     pub kind: UnavailableSnapshotKind,
+    pub reasons: Vec<SnapshotUnavailableReason>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub request_digest: Option<Digest>,
-    pub reasons: Vec<SnapshotUnavailableReason>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -91,8 +53,7 @@ pub enum BaseSnapshot {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Snapshot {
-    Git(GitSnapshot),
-    Synthetic(SyntheticSnapshot),
+    Available(CandidateSnapshot),
     Unavailable(UnavailableSnapshot),
 }
 

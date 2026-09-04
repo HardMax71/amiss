@@ -39,11 +39,10 @@ pub enum GitSnapshotKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct GitSnapshotIdentity {
+    pub commit_oid: Oid,
     pub kind: GitSnapshotKind,
     pub object_format: ObjectFormat,
-    pub commit_oid: Oid,
     pub tree_oid: Oid,
 }
 
@@ -59,25 +58,29 @@ pub enum IndexIdentityScope {
     CompleteLogicalIndex,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", deny_unknown_fields)]
-pub enum CandidateSnapshot {
-    #[serde(rename = "git-commit")]
-    GitCommit {
-        object_format: ObjectFormat,
-        commit_oid: Oid,
-        tree_oid: Oid,
-    },
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum IndexSnapshotKind {
     #[serde(rename = "index")]
-    Index {
-        snapshot_schema: IndexSnapshotSchema,
-        identity_scope: IndexIdentityScope,
-        base_object_format: ObjectFormat,
-        base_commit_oid: Oid,
-        index_projection_digest: Digest,
-        entry_count: u64,
-        snapshot_digest: Digest,
-    },
+    Index,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexSnapshotIdentity {
+    pub base_commit_oid: Oid,
+    pub base_object_format: ObjectFormat,
+    pub entry_count: u64,
+    pub identity_scope: IndexIdentityScope,
+    pub index_projection_digest: Digest,
+    pub kind: IndexSnapshotKind,
+    pub snapshot_digest: Digest,
+    pub snapshot_schema: IndexSnapshotSchema,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum CandidateSnapshot {
+    Git(GitSnapshotIdentity),
+    Index(IndexSnapshotIdentity),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,11 +146,12 @@ pub fn commit_candidate_identity_digest(
             commit_oid: evaluation.base_commit.clone(),
             tree_oid: base_tree,
         },
-        candidate: CandidateSnapshot::GitCommit {
-            object_format,
+        candidate: CandidateSnapshot::Git(GitSnapshotIdentity {
             commit_oid: candidate_commit,
+            kind: GitSnapshotKind::GitCommit,
+            object_format,
             tree_oid: candidate_tree,
-        },
+        }),
         materialization: SnapshotMaterialization::GitObjects,
         skip_worktree_paths: 0,
         index_only_materialized_paths: 0,

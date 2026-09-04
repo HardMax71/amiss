@@ -1,9 +1,10 @@
 use amiss_wire::report::model::{
-    AnalysisError, Controls, DocumentResult, Engine, Evaluation, ExceptionDiagnostic, Feedback,
-    Finding, FindingFactEvidence, FindingKeyScope, MissingResolution, ObservationComparison,
-    ProjectionDifference, ProjectionSource, ReportEnvelope, Resolution, ResolutionTarget, Summary,
-    VersionScope,
+    AnalysisError, BaseSnapshot, Controls, DocumentResult, Engine, Evaluation, ExceptionDiagnostic,
+    Feedback, Finding, FindingFactEvidence, FindingKeyScope, MissingResolution,
+    ObservationComparison, ProjectionDifference, ProjectionSource, ReportEnvelope, Resolution,
+    ResolutionTarget, Snapshot, Summary, VersionScope,
 };
+use amiss_wire::requests::CandidateSnapshot;
 
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
@@ -36,9 +37,40 @@ fn entire_report_streams_in_canonical_order() {
 }
 
 #[test]
+fn report_snapshots_accept_additive_members() {
+    let mut report: serde_json::Value = serde_json::from_slice(REPORT).unwrap();
+    report["payload"]["evaluation"]["base"]["future_member"] = true.into();
+    report["payload"]["evaluation"]["candidate"]["future_member"] = true.into();
+    let _: ReportEnvelope = serde_json::from_value(report).unwrap();
+
+    let identity: serde_json::Value = serde_json::from_slice(include_bytes!(
+        "../../../../spec/examples/candidate-identity-index.json"
+    ))
+    .unwrap();
+    let mut snapshot = identity["candidate"].clone();
+    snapshot["future_member"] = true.into();
+    let _: Snapshot = serde_json::from_value(snapshot).unwrap();
+}
+
+#[test]
 fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::error::Error>> {
     const DIGEST: &str = "sha256:0000000000000000000000000000000000000000000000000000000000000000";
     const OID: &str = "0000000000000000000000000000000000000000";
+
+    let git = format!(
+        r#"{{"commit_oid":"{OID}","kind":"git-commit","object_format":"sha1","tree_oid":"{OID}"}}"#,
+    );
+    assert_canonical::<BaseSnapshot>(&git)?;
+    assert_canonical::<CandidateSnapshot>(&git)?;
+    assert_canonical::<Snapshot>(&git)?;
+    let synthetic = format!(
+        r#"{{"base_commit_oid":"{OID}","base_object_format":"sha1","entry_count":0,"identity_scope":"complete-logical-index","index_projection_digest":"{DIGEST}","kind":"index","snapshot_digest":"{DIGEST}","snapshot_schema":"amiss/scanner-snapshot"}}"#,
+    );
+    assert_canonical::<CandidateSnapshot>(&synthetic)?;
+    assert_canonical::<Snapshot>(&synthetic)?;
+    let unavailable = r#"{"kind":"unavailable","reasons":["not-evaluated"],"request_digest":null}"#;
+    assert_canonical::<BaseSnapshot>(unavailable)?;
+    assert_canonical::<Snapshot>(unavailable)?;
 
     for template in [
         r#"{"content":{"kind":"lfs-pointer","raw_digest":"$digest"},"kind":"blob","mode":"100644","path":"a.md"}"#,

@@ -13,7 +13,8 @@ mod evaluation;
 pub use candidate::{
     CandidateEventKind, CandidateFinality, CandidateIdentity, CandidateIdentitySchema,
     CandidateSnapshot, GitSnapshotIdentity, GitSnapshotKind, IndexIdentityScope,
-    IndexSnapshotSchema, commit_candidate_identity_digest,
+    IndexSnapshotIdentity, IndexSnapshotKind, IndexSnapshotSchema,
+    commit_candidate_identity_digest,
 };
 pub use evaluation::{EvaluationRequest, EvaluationRequestSchema};
 
