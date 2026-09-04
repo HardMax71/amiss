@@ -27,6 +27,9 @@ fn the_sarif_projection_mirrors_the_report_and_stays_deterministic() {
     assert_eq!(first, second, "identical inputs, identical SARIF bytes");
 
     let log: serde_json::Value = serde_json::from_slice(&first).unwrap();
+    let mut canonical = serde_json::to_vec(&log).unwrap();
+    canonical.push(b'\n');
+    assert_eq!(first, canonical, "SARIF remains one canonical JSON line");
     assert_eq!(log.get("version").unwrap(), "2.1.0");
     let run = log.pointer("/runs/0").unwrap();
     assert_eq!(run.pointer("/tool/driver/name").unwrap(), "amiss");
@@ -53,20 +56,15 @@ fn the_sarif_projection_mirrors_the_report_and_stays_deterministic() {
     ];
     let (_code, wire, _stderr) = amiss(&wire_args);
     let wire_payload = payload(&wire);
-    let findings = wire_payload
-        .get("findings")
-        .unwrap()
-        .as_array()
-        .unwrap()
-        .clone();
-    let results = run.get("results").unwrap().as_array().unwrap().clone();
+    let findings = wire_payload["findings"].as_array().unwrap();
+    let results = run["results"].as_array().unwrap();
     assert_eq!(results.len(), findings.len());
     let rules = run
         .pointer("/tool/driver/rules")
         .unwrap()
         .as_array()
         .unwrap();
-    for (result, finding) in results.iter().zip(&findings) {
+    for (result, finding) in results.iter().zip(findings) {
         assert_eq!(result.get("ruleId"), finding.get("kind"));
         assert_eq!(
             result

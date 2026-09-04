@@ -131,7 +131,9 @@ fn project(
 ) {
     match format {
         OutputFormat::Json => emit(reserve, envelope),
-        OutputFormat::Sarif => emit(reserve, &sarif::log(envelope)),
+        OutputFormat::Sarif => {
+            diagnose_emission(output::write_serialized(&sarif::log(envelope)));
+        }
         OutputFormat::CodeQuality => {
             diagnose_emission(output::write_serialized(&codequality::issues(envelope)));
         }
