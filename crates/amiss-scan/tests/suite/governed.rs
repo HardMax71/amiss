@@ -1,6 +1,7 @@
 #![expect(
     clippy::expect_used,
     clippy::panic,
+    clippy::unwrap_used,
     reason = "integration assertions over a repository-owned semantic corpus"
 )]
 
@@ -199,14 +200,16 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
 
 fn setup() -> Setup {
     let base = SnapshotIdentity {
-        object_format: "sha1",
-        commit_oid: "a".repeat(40),
-        tree_oid: "b".repeat(40),
+        commit_oid: Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
+        tree_oid: Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap(),
     };
     let candidate = SnapshotIdentity {
-        object_format: "sha1",
-        commit_oid: "c".repeat(40),
-        tree_oid: "d".repeat(40),
+        commit_oid: Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
+        tree_oid: Oid::new(ObjectFormat::Sha1, "d".repeat(40)).unwrap(),
     };
     Setup {
         engine: EngineProvenance {

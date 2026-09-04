@@ -298,7 +298,7 @@ fn candidate_identity_examples_match_their_typed_source() {
         let bytes = fs::read(examples.join(name)).unwrap();
         let identity: requests::CandidateIdentity = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(
-            serde_json_canonicalizer::to_vec(&identity).unwrap(),
+            serde_json::to_vec(&identity).unwrap(),
             json::canonical(&json::parse(&bytes).unwrap())
         );
     }

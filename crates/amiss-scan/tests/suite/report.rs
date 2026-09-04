@@ -15,7 +15,7 @@ use amiss_scan::{
 use amiss_wire::controls::GitMode;
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::parse;
-use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{
     AnalysisErrorCode, EngineProvenance, ErrorDetail, MACHINE_JSON_BYTES, adapter_contract,
 };
@@ -122,9 +122,10 @@ fn snapshot(
         }
     }
     let identity = SnapshotIdentity {
-        object_format: "sha1",
-        commit_oid: commit_hex.to_owned(),
-        tree_oid: commit.tree.as_str().to_owned(),
+        commit_oid: Oid::new(ObjectFormat::Sha1, commit_hex.to_owned()).unwrap(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
+        tree_oid: commit.tree,
     };
     (
         identity,
@@ -524,11 +525,13 @@ fn the_summary_counts_each_attribution_it_names() {
     }
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn bare_setup(errors_retained: u64) -> Setup {
-    let oid = "a".repeat(40);
+    let oid = Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap();
     let identity = SnapshotIdentity {
-        object_format: "sha1",
         commit_oid: oid.clone(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
         tree_oid: oid,
     };
     Setup {
@@ -1062,9 +1065,9 @@ fn the_evaluation_echoes_a_self_hosted_forge_host() {
             "widget".to_owned(),
         ),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: Some("refs/heads/main".to_owned()),
+        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
         target_ref: None,
-        default_branch_ref: Some("refs/heads/main".to_owned()),
+        default_branch_ref: BranchRef::new("refs/heads/main".to_owned()),
         floor: None,
         debt: None,
         waiver: None,

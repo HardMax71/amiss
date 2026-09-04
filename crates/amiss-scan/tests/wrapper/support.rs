@@ -18,7 +18,7 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::Error;
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::RequestTrust;
 
@@ -102,8 +102,8 @@ pub(crate) fn shell(profile: Profile) -> SetupShell {
                 .unwrap(),
         ),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: Some("refs/heads/main".to_owned()),
-        target_ref: Some("refs/heads/main".to_owned()),
+        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
+        target_ref: BranchRef::new("refs/heads/main".to_owned()),
         default_branch_ref: None,
         floor: Some(floor_input()),
         debt: None,
@@ -119,9 +119,10 @@ pub(crate) fn shell(profile: Profile) -> SetupShell {
 
 pub(crate) fn identity(commit: &Oid, tree: &str) -> SnapshotIdentity {
     SnapshotIdentity {
-        object_format: "sha1",
-        commit_oid: commit.as_str().to_owned(),
-        tree_oid: tree.to_owned(),
+        commit_oid: commit.clone(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
+        tree_oid: Oid::new(ObjectFormat::Sha1, tree.to_owned()).unwrap(),
     }
 }
 
@@ -134,8 +135,8 @@ pub(crate) fn time_input(fx: &Fixture) -> TimeInput {
                 .unwrap(),
         ),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: Some("refs/heads/main".to_owned()),
-        target_ref: Some("refs/heads/main".to_owned()),
+        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
+        target_ref: BranchRef::new("refs/heads/main".to_owned()),
         default_branch_ref: None,
         base: identity(&fx.base, &fx.base_tree),
         candidate: CandidateBlock::Commit(identity(&fx.candidate, &fx.candidate_tree)),
@@ -143,7 +144,7 @@ pub(crate) fn time_input(fx: &Fixture) -> TimeInput {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let digest = candidate_identity_digest(&setup);
+    let digest = candidate_identity_digest(&setup).unwrap();
     let doc = format!(
         r#"{{
   "schema": "amiss/scanner-trusted-time-statement",

@@ -11,9 +11,10 @@ pub use identity::candidate_identity_digest;
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::{Value, canonical};
-use amiss_wire::model::RepoPath;
+use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
 pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
+pub use amiss_wire::requests::GitSnapshotIdentity as SnapshotIdentity;
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection";
@@ -23,9 +24,9 @@ pub const SNAPSHOT_SCHEMA: &str = "amiss/scanner-snapshot";
 /// built over it, with both digests.
 #[must_use]
 pub fn synthetic_candidate(
-    base_object_format: &'static str,
-    base_commit_oid: &str,
-    entries: &[(RepoPath, amiss_wire::controls::GitMode, String, bool)],
+    base_object_format: ObjectFormat,
+    base_commit_oid: &Oid,
+    entries: &[(RepoPath, amiss_wire::controls::GitMode, Oid, bool)],
     skip_worktree_paths: u64,
 ) -> IndexCandidate {
     let rows: Vec<Value> = entries
@@ -42,8 +43,8 @@ pub fn synthetic_candidate(
                 ("path", path.to_value()),
                 ("entry_kind", string(entry_kind)),
                 ("git_mode", string(mode.as_ref())),
-                ("object_format", string(base_object_format)),
-                ("object_oid", string(oid)),
+                ("object_format", string(base_object_format.as_ref())),
+                ("object_oid", string(oid.as_str())),
                 ("skip_worktree", Value::Bool(*skip)),
             ])
         })
@@ -57,27 +58,24 @@ pub fn synthetic_candidate(
         ("schema", string(SNAPSHOT_SCHEMA)),
         ("kind", string("index")),
         ("identity_scope", string("complete-logical-index")),
-        ("base_object_format", string(base_object_format)),
-        ("base_commit_oid", string(base_commit_oid)),
+        ("base_object_format", string(base_object_format.as_ref())),
+        ("base_commit_oid", string(base_commit_oid.as_str())),
         ("index_projection_digest", digest_value(projection_digest)),
     ]);
     let snapshot_digest = hj(SNAPSHOT_SCHEMA, &snapshot_input);
     IndexCandidate {
-        base_object_format,
-        base_commit_oid: base_commit_oid.to_owned(),
-        projection_digest,
-        entry_count: u64::try_from(entries.len()).unwrap_or(u64::MAX),
-        snapshot_digest,
+        snapshot: amiss_wire::requests::IndexSnapshotIdentity {
+            base_commit_oid: base_commit_oid.clone(),
+            base_object_format,
+            entry_count: u64::try_from(entries.len()).unwrap_or(u64::MAX),
+            identity_scope: amiss_wire::requests::IndexIdentityScope::CompleteLogicalIndex,
+            index_projection_digest: projection_digest,
+            kind: amiss_wire::requests::IndexSnapshotKind::Index,
+            snapshot_digest,
+            snapshot_schema: amiss_wire::requests::IndexSnapshotSchema::Current,
+        },
         skip_worktree_paths,
     }
-}
-
-/// One snapshot's identity in the evaluation block.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SnapshotIdentity {
-    pub object_format: &'static str,
-    pub commit_oid: String,
-    pub tree_oid: String,
 }
 
 /// The candidate side of the evaluation identity: a Git commit, the
@@ -92,11 +90,7 @@ pub enum CandidateBlock {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct IndexCandidate {
-    pub base_object_format: &'static str,
-    pub base_commit_oid: String,
-    pub projection_digest: Digest,
-    pub entry_count: u64,
-    pub snapshot_digest: Digest,
+    pub snapshot: amiss_wire::requests::IndexSnapshotIdentity,
     pub skip_worktree_paths: u64,
 }
 
@@ -119,9 +113,9 @@ pub struct Setup {
     pub profile: Profile,
     pub repository: Option<amiss_wire::model::RepositoryIdentity>,
     pub forge: Option<amiss_wire::model::ForgeDialect>,
-    pub candidate_ref: Option<String>,
-    pub target_ref: Option<String>,
-    pub default_branch_ref: Option<String>,
+    pub candidate_ref: Option<BranchRef>,
+    pub target_ref: Option<BranchRef>,
+    pub default_branch_ref: Option<BranchRef>,
     pub base: SnapshotIdentity,
     pub candidate: CandidateBlock,
     pub policy: crate::policy::Effects,

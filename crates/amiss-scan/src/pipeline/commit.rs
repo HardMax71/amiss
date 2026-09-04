@@ -24,9 +24,10 @@ fn oid_fallback(
     candidate_oid: &Oid,
 ) -> Setup {
     let placeholder = |oid: &Oid| SnapshotIdentity {
-        object_format: repo.object_format().into(),
-        commit_oid: oid.as_str().to_owned(),
-        tree_oid: oid.as_str().to_owned(),
+        commit_oid: oid.clone(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: repo.object_format(),
+        tree_oid: oid.clone(),
     };
     setup_shell.with(
         placeholder(base_oid),

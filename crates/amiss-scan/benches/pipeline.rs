@@ -295,10 +295,13 @@ fn bench_shell() -> SetupShell {
 }
 
 fn report_setup() -> Setup {
-    let oid = "a".repeat(40);
+    let Some(oid) = Oid::new(ObjectFormat::Sha1, "a".repeat(40)) else {
+        panic!("the benchmark OID is valid")
+    };
     let identity = SnapshotIdentity {
-        object_format: "sha1",
         commit_oid: oid.clone(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
         tree_oid: oid,
     };
     Setup {

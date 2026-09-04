@@ -1,6 +1,12 @@
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::assessment::Nullable;
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::Value;
+use amiss_wire::model::BranchRef;
 use amiss_wire::report::sandbox_descriptor;
+use amiss_wire::requests::{
+    CandidateEventKind, CandidateFinality, CandidateIdentity, CandidateIdentitySchema,
+    CandidateSnapshot, RequestMode, SnapshotMaterialization,
+};
 
 use super::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, SNAPSHOT_SCHEMA, Setup, SnapshotIdentity,
@@ -10,9 +16,9 @@ use super::{
 fn snapshot_value(snapshot: &SnapshotIdentity) -> Value {
     object(vec![
         ("kind", string("git-commit")),
-        ("object_format", string(snapshot.object_format)),
-        ("commit_oid", string(&snapshot.commit_oid)),
-        ("tree_oid", string(&snapshot.tree_oid)),
+        ("object_format", string(snapshot.object_format.as_ref())),
+        ("commit_oid", string(snapshot.commit_oid.as_str())),
+        ("tree_oid", string(snapshot.tree_oid.as_str())),
     ])
 }
 
@@ -23,14 +29,23 @@ fn candidate_value(candidate: &CandidateBlock, snapshot_request: Option<Digest>)
             ("kind", string("index")),
             ("snapshot_schema", string(SNAPSHOT_SCHEMA)),
             ("identity_scope", string("complete-logical-index")),
-            ("base_object_format", string(index.base_object_format)),
-            ("base_commit_oid", string(&index.base_commit_oid)),
+            (
+                "base_object_format",
+                string(index.snapshot.base_object_format.as_ref()),
+            ),
+            (
+                "base_commit_oid",
+                string(index.snapshot.base_commit_oid.as_str()),
+            ),
             (
                 "index_projection_digest",
-                digest_value(index.projection_digest),
+                digest_value(index.snapshot.index_projection_digest),
             ),
-            ("entry_count", integer(index.entry_count)),
-            ("snapshot_digest", digest_value(index.snapshot_digest)),
+            ("entry_count", integer(index.snapshot.entry_count)),
+            (
+                "snapshot_digest",
+                digest_value(index.snapshot.snapshot_digest),
+            ),
         ]),
         CandidateBlock::Unavailable(reasons) => object(vec![
             ("kind", string("unavailable")),
@@ -83,11 +98,17 @@ fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
                 .as_ref()
                 .map_or(Value::Null, repository_value),
         ),
-        ("candidate_ref", nullable(setup.candidate_ref.as_deref())),
-        ("target_ref", nullable(setup.target_ref.as_deref())),
+        (
+            "candidate_ref",
+            nullable(setup.candidate_ref.as_ref().map(BranchRef::as_str)),
+        ),
+        (
+            "target_ref",
+            nullable(setup.target_ref.as_ref().map(BranchRef::as_str)),
+        ),
         (
             "default_branch_ref",
-            nullable(setup.default_branch_ref.as_deref()),
+            nullable(setup.default_branch_ref.as_ref().map(BranchRef::as_str)),
         ),
         ("base", snapshot_value(&setup.base)),
         (
@@ -100,46 +121,78 @@ fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
     ]
 }
 
-/// The rolling candidate identity. The selected forge is resolution-significant,
-/// so it is bound alongside the repository and snapshots.
-fn candidate_identity_value(setup: &Setup) -> Value {
-    identity_value(
-        setup,
-        vec![("schema", string(CANDIDATE_IDENTITY_DOMAIN))],
-        Vec::new(),
-    )
-}
-
 /// The candidate-identity digest a trusted-time statement must carry: `HJ`
 /// over the resolved-evaluation identity, including its forge.
-#[must_use]
-pub fn candidate_identity_digest(setup: &Setup) -> Digest {
-    hj(CANDIDATE_IDENTITY_DOMAIN, &candidate_identity_value(setup))
+///
+/// # Errors
+///
+/// Returns [`crate::Error::Internal`] when the candidate snapshot is
+/// unavailable or its closed serde model cannot be encoded.
+pub fn candidate_identity_digest(setup: &Setup) -> Result<Digest, crate::Error> {
+    let (mode, event_kind, finality, candidate, materialization, skip_worktree_paths) =
+        match &setup.candidate {
+            CandidateBlock::Commit(snapshot) => (
+                RequestMode::CommitPair,
+                CandidateEventKind::ExplicitCommitPair,
+                CandidateFinality::ExplicitReplay,
+                CandidateSnapshot::Git(snapshot.clone()),
+                SnapshotMaterialization::GitObjects,
+                0,
+            ),
+            CandidateBlock::Index(index) => (
+                RequestMode::Index,
+                CandidateEventKind::LocalIndex,
+                CandidateFinality::LocalNonfinal,
+                CandidateSnapshot::Index(index.snapshot.clone()),
+                SnapshotMaterialization::Index,
+                index.skip_worktree_paths,
+            ),
+            CandidateBlock::Unavailable(_reasons) => return Err(crate::Error::Internal),
+        };
+    let identity = CandidateIdentity {
+        schema: CandidateIdentitySchema::Current,
+        mode,
+        event_kind,
+        finality,
+        repository: setup
+            .repository
+            .clone()
+            .map_or(Nullable::Null, Nullable::Value),
+        candidate_ref: setup
+            .candidate_ref
+            .clone()
+            .map_or(Nullable::Null, Nullable::Value),
+        target_ref: setup
+            .target_ref
+            .clone()
+            .map_or(Nullable::Null, Nullable::Value),
+        default_branch_ref: setup
+            .default_branch_ref
+            .clone()
+            .map_or(Nullable::Null, Nullable::Value),
+        base: setup.base.clone(),
+        candidate,
+        materialization,
+        skip_worktree_paths,
+        index_only_materialized_paths: 0,
+        forge: setup.forge.map_or(Nullable::Null, Nullable::Value),
+    };
+    serde_json::to_vec(&identity)
+        .map(|bytes| hb(CANDIDATE_IDENTITY_DOMAIN, &bytes))
+        .map_err(|_defect| crate::Error::Internal)
 }
 
 pub(super) fn evaluation_value(setup: &Setup) -> Value {
-    identity_value(
-        setup,
-        Vec::new(),
-        vec![
-            (
-                "evaluation_instant",
-                setup.policy.time.as_ref().map_or(Value::Null, |time| {
-                    string(time.statement.evaluation_instant.as_str())
-                }),
-            ),
-            ("trusted_time", Value::Bool(setup.policy.time.is_some())),
-        ],
-    )
-}
-
-fn identity_value(
-    setup: &Setup,
-    mut rows: Vec<(&'static str, Value)>,
-    before_forge: Vec<(&'static str, Value)>,
-) -> Value {
-    rows.extend(identity_rows(setup));
-    rows.extend(before_forge);
+    let mut rows = identity_rows(setup);
+    rows.extend([
+        (
+            "evaluation_instant",
+            setup.policy.time.as_ref().map_or(Value::Null, |time| {
+                string(time.statement.evaluation_instant.as_str())
+            }),
+        ),
+        ("trusted_time", Value::Bool(setup.policy.time.is_some())),
+    ]);
     rows.push((
         "forge",
         setup

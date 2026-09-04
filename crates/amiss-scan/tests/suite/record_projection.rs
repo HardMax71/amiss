@@ -44,9 +44,10 @@ fn policy(projection: &str, source: &serde_json::Value) -> String {
 
 fn snapshot(commit: &str, tree: &str) -> SnapshotIdentity {
     SnapshotIdentity {
-        object_format: "sha1",
-        commit_oid: commit.to_owned(),
-        tree_oid: tree.to_owned(),
+        commit_oid: Oid::new(ObjectFormat::Sha1, commit.to_owned()).unwrap(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: ObjectFormat::Sha1,
+        tree_oid: Oid::new(ObjectFormat::Sha1, tree.to_owned()).unwrap(),
     }
 }
 
@@ -120,7 +121,7 @@ fn run(
         time: None,
         constraint: None,
         semantic: semantic::Input::Bound(semantic_inputs(
-            amiss_scan::report::candidate_identity_digest(&setup),
+            amiss_scan::report::candidate_identity_digest(&setup).unwrap(),
             complete,
             set,
             records,

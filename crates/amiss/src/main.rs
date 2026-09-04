@@ -234,18 +234,9 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
         profile: evaluation.profile,
         repository: evaluation.repository.clone(),
         forge: evaluation.forge,
-        candidate_ref: evaluation
-            .candidate_ref
-            .as_ref()
-            .map(|reference| reference.as_str().to_owned()),
-        target_ref: evaluation
-            .target_ref
-            .as_ref()
-            .map(|reference| reference.as_str().to_owned()),
-        default_branch_ref: evaluation
-            .default_branch_ref
-            .as_ref()
-            .map(|reference| reference.as_str().to_owned()),
+        candidate_ref: evaluation.candidate_ref.clone(),
+        target_ref: evaluation.target_ref.clone(),
+        default_branch_ref: evaluation.default_branch_ref.clone(),
         floor: inputs.floor,
         debt: inputs.debt,
         waiver: inputs.waiver,
@@ -349,10 +340,9 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         profile: invocation.profile,
         repository: identity.map(|identity| identity.repository.clone()),
         forge: invocation.forge,
-        candidate_ref: identity.map(|identity| identity.ref_name.as_str().to_owned()),
+        candidate_ref: identity.map(|identity| identity.ref_name.clone()),
         target_ref: None,
-        default_branch_ref: identity
-            .map(|identity| identity.default_branch_ref.as_str().to_owned()),
+        default_branch_ref: identity.map(|identity| identity.default_branch_ref.clone()),
         // Public semantic templates remain self-asserted inputs.
         floor: None,
         debt: None,
@@ -430,9 +420,10 @@ fn fatal(
     use amiss_scan::report::{Setup, SnapshotIdentity, construct_incomplete};
 
     let identity = |oid: &Oid| SnapshotIdentity {
-        object_format: invocation.object_format.into(),
-        commit_oid: oid.as_str().to_owned(),
-        tree_oid: oid.as_str().to_owned(),
+        commit_oid: oid.clone(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: invocation.object_format,
+        tree_oid: oid.clone(),
     };
     let candidate = match &invocation.candidate {
         CandidateSelector::Commit(oid) => amiss_scan::report::CandidateBlock::Commit(identity(oid)),

@@ -170,7 +170,7 @@ fn index_candidate_block(
     skip_worktree_paths: u64,
 ) -> Result<CandidateBlock, Vec<ErrorDetail>> {
     let disclosure_cap = amiss_git::GitLimits::CONTRACT.raw_path_bytes;
-    let mut entries: Vec<(RepoPath, amiss_wire::controls::GitMode, String, bool)> =
+    let mut entries: Vec<(RepoPath, amiss_wire::controls::GitMode, Oid, bool)> =
         Vec::with_capacity(index.entries.len());
     let mut failures = Vec::new();
     for entry in &index.entries {
@@ -184,19 +184,14 @@ fn index_candidate_block(
             });
             continue;
         };
-        entries.push((
-            path,
-            entry.mode,
-            entry.oid.as_str().to_owned(),
-            entry.skip_worktree,
-        ));
+        entries.push((path, entry.mode, entry.oid.clone(), entry.skip_worktree));
     }
     if !failures.is_empty() {
         return Err(failures);
     }
     Ok(CandidateBlock::Index(synthetic_candidate(
-        repo.object_format().into(),
-        base_oid.as_str(),
+        repo.object_format(),
+        base_oid,
         &entries,
         skip_worktree_paths,
     )))
@@ -320,9 +315,10 @@ fn staged_open(
     let (scan_limits, git_limits) = effective_limits(verified_floor);
     let mut git_resources = GitResources::new(git_limits);
     let base_placeholder = SnapshotIdentity {
-        object_format: repo.object_format().into(),
-        commit_oid: base_oid.as_str().to_owned(),
-        tree_oid: base_oid.as_str().to_owned(),
+        commit_oid: base_oid.clone(),
+        kind: amiss_wire::requests::GitSnapshotKind::GitCommit,
+        object_format: repo.object_format(),
+        tree_oid: base_oid.clone(),
     };
     let (initial, index, skip_worktree_paths) = pinned_index(repo, &mut git_resources)
         .map_err(|defect| candidate_unavailable(setup_shell, base_placeholder.clone(), &defect))?;

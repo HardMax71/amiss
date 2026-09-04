@@ -8,7 +8,7 @@ use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{FloorInput, verify_floor};
 use amiss_wire::controls::{Profile, canonical_organization_floor, parse_organization_floor};
 use amiss_wire::digest::hb;
-use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
@@ -68,8 +68,8 @@ fn shell(floor: Option<FloorInput>) -> SetupShell {
         profile: Profile::Observe,
         repository: Some(identity("acme", "docs")),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: Some("refs/heads/main".to_owned()),
-        target_ref: Some("refs/heads/main".to_owned()),
+        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
+        target_ref: BranchRef::new("refs/heads/main".to_owned()),
         default_branch_ref: None,
         floor,
         debt: None,
@@ -223,7 +223,7 @@ fn a_mismatched_floor_makes_controls_unavailable_with_real_identities() {
     let (repo, base, candidate) = two_commits(root);
 
     let mut setup = shell(Some(floor_input(EMPTY_ARRAYS)));
-    setup.target_ref = Some("refs/heads/dev".to_owned());
+    setup.target_ref = BranchRef::new("refs/heads/dev".to_owned());
     let report = payload(&setup, &repo, &base, &candidate);
 
     assert_eq!(report["exit_code"], 2);

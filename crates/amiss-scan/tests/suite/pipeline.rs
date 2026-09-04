@@ -7,7 +7,7 @@ use amiss_scan::report::{Built, RequestDigests};
 use amiss_scan::resolve::ForgeContext;
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
-use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::{EngineProvenance, FixKind};
 use tempfile::TempDir;
 
@@ -278,8 +278,8 @@ fn a_historical_absence_never_borrows_candidate_relocation_evidence() {
     let mut setup = shell();
     setup.repository = RepositoryIdentity::github("acme".to_owned(), "widgets".to_owned());
     setup.forge = Some(ForgeDialect::Github);
-    setup.candidate_ref = Some("refs/heads/main".to_owned());
-    setup.default_branch_ref = Some("refs/heads/main".to_owned());
+    setup.candidate_ref = BranchRef::new("refs/heads/main".to_owned());
+    setup.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let built = commit_pair(
         &repo,

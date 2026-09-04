@@ -13,7 +13,7 @@ use amiss_scan::report::RequestDigests;
 use amiss_scan::resolve::ForgeContext;
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::hb;
-use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
 use tempfile::TempDir;
 
@@ -56,9 +56,9 @@ fn shell(profile: Profile) -> SetupShell {
             RepositoryIdentity::github("hardmax71".to_owned(), "spec_to_rest".to_owned()).unwrap(),
         ),
         forge: Some(ForgeDialect::Github),
-        candidate_ref: Some("refs/heads/main".to_owned()),
+        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
         target_ref: None,
-        default_branch_ref: Some("refs/heads/main".to_owned()),
+        default_branch_ref: BranchRef::new("refs/heads/main".to_owned()),
         floor: None,
         debt: None,
         waiver: None,
