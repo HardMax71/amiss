@@ -335,10 +335,10 @@ fn semantic_evidence_value(evidence: &crate::semantic::Provenance) -> Value {
         (
             "producer",
             object(vec![
-                ("kind", string(evidence.producer_kind.as_str())),
-                ("identity", string(evidence.producer_identity.as_str())),
-                ("version", string(&evidence.producer_version)),
-                ("input_digest", digest_value(evidence.input_digest)),
+                ("kind", string(evidence.producer.kind.as_str())),
+                ("identity", string(evidence.producer.identity.as_str())),
+                ("version", string(&evidence.producer.version)),
+                ("input_digest", digest_value(evidence.producer.input_digest)),
             ]),
         ),
     ])
