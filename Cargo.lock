@@ -471,6 +471,7 @@ dependencies = [
  "jsonschema",
  "memchr",
  "percent-encoding",
+ "serde",
  "serde_json",
  "serde_json_canonicalizer",
  "stats_alloc",

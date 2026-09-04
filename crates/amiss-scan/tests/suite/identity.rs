@@ -201,7 +201,7 @@ fn the_staged_identity_fixtures_reproduce_the_runtime_digest_chain() {
             true,
         ),
     ];
-    let candidate = synthetic_candidate(ObjectFormat::Sha1, &base_commit, &entries, 1);
+    let candidate = synthetic_candidate(ObjectFormat::Sha1, &base_commit, &entries, 1).unwrap();
 
     assert_eq!(
         candidate.snapshot.index_projection_digest,
