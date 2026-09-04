@@ -16,6 +16,7 @@ use amiss_wire::controls::GitMode;
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::parse;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepoPath};
+use amiss_wire::report::model::{DocumentCounts, FindingCounts, ReferenceCounts, Summary};
 use amiss_wire::report::{
     AnalysisErrorCode, EngineProvenance, ErrorDetail, MACHINE_JSON_BYTES, adapter_contract,
 };
@@ -695,6 +696,21 @@ fn error_overflow_retains_the_lowest_keys_and_the_sentinel() {
     assert_eq!(sentinel["configured_limit"], 3);
     assert_eq!(sentinel["observed_lower_bound"], 4);
     assert_eq!(wire["payload"]["result"]["error_count"], 3);
+    let summary: Summary = serde_json::from_value(wire["payload"]["summary"].clone()).unwrap();
+    assert_eq!(
+        summary,
+        Summary {
+            counts_complete: false,
+            documents: DocumentCounts::default(),
+            references: ReferenceCounts::default(),
+            findings: FindingCounts {
+                analysis_errors: 3,
+                ..FindingCounts::default()
+            },
+            governed_claims: 0,
+            unattested_claims: 0,
+        },
+    );
     assert_eq!(
         wire["payload"]["feedback"],
         serde_json::json!({"status": "unavailable"})
