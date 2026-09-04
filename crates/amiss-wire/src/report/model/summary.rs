@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DocumentCounts {
     pub discovered: u64,
     pub excluded_builtin: u64,
@@ -19,7 +19,7 @@ pub struct DocumentCounts {
     pub unsupported: u64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReferenceCounts {
     pub explicit_local: u64,
     pub external_out_of_scope: u64,
@@ -30,7 +30,7 @@ pub struct ReferenceCounts {
     pub unsupported: u64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FindingCounts {
     pub analysis_errors: u64,
     pub debt_tolerated: u64,

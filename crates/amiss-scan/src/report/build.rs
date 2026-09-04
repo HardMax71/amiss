@@ -14,7 +14,7 @@ use crate::evaluate::{DocumentInput, Finding};
 use super::analysis::{comparison_value, document_input, feedback_value, finding_value};
 use super::documents::{PairedDocument, document_result_value, paired_documents};
 use super::identity::{controls_value, evaluation_value};
-use super::summary::{summary_counts, zero_counts};
+use super::summary::summary_counts;
 use super::{Built, ENVELOPE_SCHEMA, Setup, digest_value, integer, object, string};
 
 /// Constructs the complete report for a local commit-pair run with no
@@ -77,7 +77,7 @@ pub(crate) fn construct_with_site(
     let (complete, status, exit_code) = run_result(&findings, &governed_errors);
     let feedback = feedback_value(complete, &findings, &comparisons);
     let finding_count = u64::try_from(findings.len()).unwrap_or(u64::MAX);
-    let counts = summary_counts(&paired, &comparisons, &findings, finding_count);
+    let counts = summary_counts(&paired, &comparisons, &findings, 0);
     let (governed_claims, unattested_claims) = claim_counters(claims);
     let (candidate_start, comparison_rows) = report_comparisons(comparisons);
     let (base_only_rows, candidate_rows) = comparison_rows.split_at(candidate_start);
@@ -429,7 +429,7 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
     let retained = retained_details(details, error_ceiling(setup));
     let error_rows: Vec<Value> = retained.iter().map(error_row_value).collect();
     let error_count = u64::try_from(error_rows.len()).unwrap_or(u64::MAX);
-    let counts = zero_counts(error_count);
+    let counts = summary_counts(&[], &[], &[], error_count);
 
     let payload = object(vec![
         ("schema", string(PAYLOAD_SCHEMA)),
