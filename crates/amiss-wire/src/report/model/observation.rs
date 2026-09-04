@@ -5,6 +5,10 @@ use crate::digest::Digest;
 use crate::extraction::BlockKind;
 use crate::model::{Adapter, Oid};
 use crate::resolution::BlobMode;
+pub use crate::resolution::{
+    ExternalReference as ExternalResolutionReason, InvalidReference as InvalidResolutionReason,
+    UnsupportedTargetTag as UnsupportedTargetReason,
+};
 
 use super::RepoPath;
 
@@ -171,13 +175,6 @@ pub enum MissingResolution {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum UnsupportedTargetReason {
-    Gitlink,
-    Symlink,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "kebab-case")]
 pub enum UnsupportedSemanticsResolution {
@@ -224,28 +221,6 @@ pub enum VersionScope {
     UnknownPath {
         kind: UnknownPathVersionScopeKind,
     },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum InvalidResolutionReason {
-    BackslashSeparator,
-    DecodedPathControl,
-    EncodedSlash,
-    FragmentEncoding,
-    PathTraversal,
-    PercentEncoding,
-    Syntax,
-    Uri,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum ExternalResolutionReason {
-    ForeignRepository,
-    IntersphinxInventory,
-    SiteBuild,
-    Url,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

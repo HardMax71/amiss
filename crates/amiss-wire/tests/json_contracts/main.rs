@@ -32,6 +32,87 @@ fn document_classifications_match_the_report_schema() {
 }
 
 #[test]
+fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
+    use amiss_wire::report::model::{
+        ExternalResolutionKind, InvalidResolutionKind, RepoPath, Resolution,
+        UnsupportedTargetResolutionKind,
+    };
+    use amiss_wire::resolution::{ExternalReference, InvalidReference, UnsupportedTargetTag};
+
+    let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
+        "../../../../spec/scanner-report.schema.json"
+    ))
+    .unwrap();
+    let path = RepoPath::Text("docs/target.md".parse().unwrap());
+    for (definition, rows) in [
+        (
+            "InvalidResolution",
+            InvalidReference::iter()
+                .map(|reason| {
+                    (
+                        reason.as_ref().to_owned(),
+                        Resolution::Invalid {
+                            kind: InvalidResolutionKind::Invalid,
+                            reason,
+                        },
+                    )
+                })
+                .collect::<Vec<_>>(),
+        ),
+        (
+            "ExternalResolution",
+            ExternalReference::iter()
+                .map(|reason| {
+                    (
+                        reason.as_ref().to_owned(),
+                        Resolution::External {
+                            kind: ExternalResolutionKind::External,
+                            reason,
+                        },
+                    )
+                })
+                .collect(),
+        ),
+        (
+            "UnsupportedTargetResolution",
+            UnsupportedTargetTag::iter()
+                .map(|reason| {
+                    (
+                        reason.as_ref().to_owned(),
+                        Resolution::UnsupportedTarget {
+                            kind: UnsupportedTargetResolutionKind::UnsupportedTarget,
+                            path: path.clone(),
+                            reason,
+                        },
+                    )
+                })
+                .collect(),
+        ),
+    ] {
+        let declared: BTreeSet<_> = schema["$defs"][definition]["properties"]["reason"]["enum"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_str().unwrap().to_owned())
+            .collect();
+        let mut generated = BTreeSet::new();
+        for (name, row) in rows {
+            let bytes = serde_json::to_vec(&row).unwrap();
+            assert_eq!(bytes, serde_json_canonicalizer::to_vec(&row).unwrap());
+            assert_eq!(serde_json::from_slice::<Resolution>(&bytes).unwrap(), row);
+            let mut value = serde_json::to_value(&row).unwrap();
+            assert_eq!(value["reason"].as_str(), Some(name.as_str()));
+            generated.insert(name);
+            for invalid in [serde_json::Value::Null, "unknown-reason".into(), 0.into()] {
+                value["reason"] = invalid;
+                assert!(serde_json::from_value::<Resolution>(value.clone()).is_err());
+            }
+        }
+        assert_eq!(declared, generated, "{definition}");
+    }
+}
+
+#[test]
 fn report_examples_match_their_typed_source() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     for name in ["scanner-report.canonical.json", "scanner-report.json"] {
