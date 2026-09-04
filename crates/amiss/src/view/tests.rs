@@ -93,7 +93,7 @@ fn measurement_report(finding_count: usize) -> Value {
     )])
 }
 
-fn measure(label: &str, project: impl Fn() -> Value) {
+fn measure<T, F: Fn() -> T>(label: &str, project: F) {
     let mut samples = [std::time::Duration::ZERO; 7];
     for elapsed in &mut samples {
         let start = Instant::now();

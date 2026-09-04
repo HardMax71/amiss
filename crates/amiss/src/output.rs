@@ -8,6 +8,14 @@ pub(crate) fn write_json(bytes: &[u8]) -> std::io::Result<()> {
     output.flush()
 }
 
+pub(crate) fn write_serialized<T: serde::Serialize + ?Sized>(value: &T) -> std::io::Result<()> {
+    let stdout = std::io::stdout();
+    let mut output = std::io::BufWriter::new(stdout.lock());
+    serde_json::to_writer(&mut output, value)?;
+    output.write_all(b"\n")?;
+    output.flush()
+}
+
 pub(crate) fn write_json_array<T>(
     items: impl IntoIterator<Item = T>,
     mut encode: impl FnMut(T) -> Vec<u8>,

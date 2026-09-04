@@ -84,33 +84,15 @@ fn main() -> ExitCode {
             failure
         }
         Outcome::Rejected {
-            format: OutputFormat::Json,
+            format: format @ (OutputFormat::Json | OutputFormat::Sarif | OutputFormat::CodeQuality),
             codes,
         } => {
             match machine_refusal(&codes) {
-                Ok(envelope) => emit(&mut reserve, &envelope),
-                Err(code) => eprintln!("amiss: {}", code.as_ref()),
-            }
-            failure
-        }
-        Outcome::Rejected {
-            format: OutputFormat::Sarif,
-            codes,
-        } => {
-            match machine_refusal(&codes) {
-                Ok(envelope) => emit(&mut reserve, &sarif::log(&envelope)),
-                Err(code) => eprintln!("amiss: {}", code.as_ref()),
-            }
-            failure
-        }
-        Outcome::Rejected {
-            format: OutputFormat::CodeQuality,
-            codes,
-        } => {
-            match machine_refusal(&codes) {
-                Ok(envelope) => emit(&mut reserve, &codequality::issues(&envelope)),
+                Ok(envelope) => project(&envelope, format, false, false, &mut reserve),
                 Err(code) => {
-                    emit(&mut reserve, &amiss_wire::json::Value::array(Vec::new()));
+                    if format == OutputFormat::CodeQuality {
+                        emit(&mut reserve, &amiss_wire::json::Value::array(Vec::new()));
+                    }
                     eprintln!("amiss: {}", code.as_ref());
                 }
             }
@@ -150,7 +132,9 @@ fn project(
     match format {
         OutputFormat::Json => emit(reserve, envelope),
         OutputFormat::Sarif => emit(reserve, &sarif::log(envelope)),
-        OutputFormat::CodeQuality => emit(reserve, &codequality::issues(envelope)),
+        OutputFormat::CodeQuality => {
+            diagnose_emission(output::write_serialized(&codequality::issues(envelope)));
+        }
         OutputFormat::Junit => emit_junit(envelope),
         OutputFormat::Human => human::report(envelope, explain_scope, full_feedback),
     }

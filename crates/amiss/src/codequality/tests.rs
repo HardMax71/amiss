@@ -37,38 +37,58 @@ fn a_global_finding_yields_a_valid_placeholder_location() {
         row(vec![("findings", Value::array(vec![finding]))]),
     )]);
 
-    let Value::Array(issues) = issues(&envelope) else {
-        panic!("the artifact is an array");
-    };
-    let [issue] = issues.as_ref() else {
-        panic!("one finding is one issue");
-    };
-    let Value::Object(members) = issue else {
-        panic!("an issue is an object");
-    };
-    let location = members
-        .iter()
-        .find(|(key, _)| key == "location")
-        .map(|(_, value)| value.clone());
-    let Some(Value::Object(location)) = location else {
-        panic!("the issue carries a location");
-    };
-    assert!(
-        location
-            .iter()
-            .any(|(key, value)| key == "path" && *value == Value::string("(global)")),
-        "a null wire path answers with the placeholder, got {location:?}",
+    assert_eq!(
+        serde_json::to_vec(&issues(&envelope)).unwrap(),
+        br#"[{"check_name":"organization-floor-unavailable","description":"a control sentence","fingerprint":"sha256:ab","location":{"lines":{"begin":1},"path":"(global)"},"severity":"major"}]"#,
     );
-    assert!(
-        location.iter().any(|(key, value)| {
-            key == "lines"
-                && matches!(
-                    value,
-                    Value::Object(lines)
-                        if lines.iter().any(|(name, line)| name == "begin"
-                            && *line == Value::Integer(1))
-                )
-        }),
-        "a null span reads as line one, got {location:?}",
-    );
+}
+
+#[test]
+fn paths_and_dispositions_keep_their_projection_without_owned_json_rows() {
+    for (path, line, disposition, expected_path, expected_line, severity) in [
+        (
+            Value::string("docs/a\"b\n.md"),
+            7,
+            "warn",
+            "docs/a\"b\n.md",
+            7,
+            "minor",
+        ),
+        (
+            row(vec![("bytes_hex", Value::string("646f63732fff2e6d64"))]),
+            0,
+            "record",
+            "646f63732fff2e6d64",
+            1,
+            "info",
+        ),
+    ] {
+        let envelope = row(vec![(
+            "payload",
+            row(vec![(
+                "findings",
+                Value::array(vec![row(vec![
+                    ("kind", Value::string("explicit-target-missing")),
+                    ("description", Value::string("a \"missing\" target\n")),
+                    ("finding_key", Value::string("sha256:ab")),
+                    ("effective_disposition", Value::string(disposition)),
+                    (
+                        "location",
+                        row(vec![
+                            ("path", path),
+                            ("span", row(vec![("start_line", Value::Integer(line))])),
+                        ]),
+                    ),
+                ])]),
+            )]),
+        )]);
+        let projected = issues(&envelope);
+        let bytes = serde_json::to_vec(&projected).unwrap();
+        assert_eq!(bytes, serde_json_canonicalizer::to_vec(&projected).unwrap());
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(value[0]["location"]["path"], expected_path);
+        assert_eq!(value[0]["location"]["lines"]["begin"], expected_line);
+        assert_eq!(value[0]["severity"], severity);
+        assert_eq!(value[0]["description"], "a \"missing\" target\n");
+    }
 }
