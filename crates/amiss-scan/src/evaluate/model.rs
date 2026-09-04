@@ -1,6 +1,7 @@
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::{Oid, RepoPath};
+pub use amiss_wire::report::model::{Attribution, LocationSide, PolicyStep};
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 
 use super::finding::{key_digest, key_value};
@@ -26,36 +27,6 @@ pub enum DocumentSide {
     },
     Unsupported,
     ExcludedBuiltIn,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
-#[strum(serialize_all = "kebab-case")]
-pub enum Attribution {
-    Introduced,
-    PreExisting,
-    Resolved,
-    Unknown,
-    NotApplicable,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
-#[strum(serialize_all = "kebab-case")]
-pub enum LocationSide {
-    Base,
-    Candidate,
-    Control,
-    Global,
-}
-
-/// One policy-trace step. Adjacent steps chain exactly: each `before` equals
-/// the preceding `after`, the built-in step always starts from `record`, and
-/// steps appear only when applicable.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PolicyStep {
-    pub source: &'static str,
-    pub rule_id: String,
-    pub before: Disposition,
-    pub after: Disposition,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

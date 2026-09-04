@@ -3,6 +3,9 @@ use std::collections::BTreeMap;
 use amiss_wire::controls::{GitMode, SourceConstruct};
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{Adapter, RepoPath};
+pub use amiss_wire::report::model::{
+    Correlation as Outcome, CorrelationReason as Reason, Impact, SourceChange, TargetChange,
+};
 
 use crate::resolve::{Intent, Resolution};
 
@@ -38,61 +41,6 @@ pub struct Observation {
 pub struct Side {
     pub observations: Vec<Observation>,
     pub documents: BTreeMap<RepoPath, (GitMode, Digest)>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
-#[strum(serialize_all = "kebab-case")]
-pub enum Outcome {
-    Exact,
-    Candidate,
-    Ambiguous,
-    None,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
-#[strum(serialize_all = "kebab-case")]
-pub enum Reason {
-    SameExtractionKeyAndProjection,
-    SameIntentUnchangedProjection,
-    SameIntentSourceChanged,
-    ExactDocumentRenameUnchangedProjection,
-    MultipleCounterparts,
-    NewObservation,
-    RemovedObservation,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
-#[strum(serialize_all = "kebab-case")]
-pub enum SourceChange {
-    Equal,
-    Changed,
-    Unknown,
-    Added,
-    Removed,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
-#[strum(serialize_all = "kebab-case")]
-pub enum TargetChange {
-    Equal,
-    Changed,
-    NewlyResolved,
-    BecameMissing,
-    NotComparable,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
-#[strum(serialize_all = "kebab-case")]
-pub enum Impact {
-    None,
-    SubjectChanged,
-    DependencyChangedSubjectUnchanged,
-    DependencyAndSubjectCochanged,
-    ReferenceResolved,
-    NotApplicable,
-    ObservationCorrelationAmbiguous,
-    NewObservation,
-    RemovedObservation,
 }
 
 /// One comparison row: a primary on each present side, alternatives only for

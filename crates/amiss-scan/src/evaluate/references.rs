@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
+use amiss_wire::report::model::PolicySource;
 use amiss_wire::report::{Disposition, FindingKind};
 
 use crate::correlate::{Comparison, Impact, Observation, Outcome};
@@ -165,7 +166,7 @@ pub(super) fn structural_findings(
             waiver: None,
             steps: if attribution == Attribution::Resolved {
                 vec![PolicyStep {
-                    source: "resolved-projection",
+                    source: PolicySource::ResolvedProjection,
                     rule_id: "resolved-projection".to_owned(),
                     before: Disposition::Record,
                     after: Disposition::Record,

@@ -335,7 +335,7 @@ fn trace_value(finding: &Finding) -> Vec<Value> {
         .iter()
         .map(|step| {
             object(vec![
-                ("source", string(step.source)),
+                ("source", string(step.source.as_ref())),
                 ("rule_id", string(&step.rule_id)),
                 ("before", string(step.before.as_ref())),
                 ("after", string(step.after.as_ref())),

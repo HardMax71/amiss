@@ -2,6 +2,7 @@ use amiss_wire::controls::Profile;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
+use amiss_wire::report::model::PolicySource;
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 use amiss_wire::resolution::{Missing, Resolution};
 
@@ -300,7 +301,7 @@ pub(super) fn simple(
 /// table for the selected profile.
 pub(super) fn built_in_step(kind: FindingKind, profile: Profile) -> PolicyStep {
     PolicyStep {
-        source: "built-in",
+        source: PolicySource::BuiltIn,
         rule_id: format!(
             "scanner-policy-defaults/{}/{}",
             kind.as_ref(),
