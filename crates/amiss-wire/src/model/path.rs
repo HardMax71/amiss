@@ -1,5 +1,6 @@
 use core::{fmt, str::FromStr};
 
+use serde::Serialize;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 use crate::json::Value;
@@ -39,13 +40,18 @@ impl FromStr for RepoPathText {
 /// `RepoPath` union: text when the raw bytes are valid UTF-8, and the bytes
 /// themselves otherwise. Construction classifies, so one logical path has
 /// exactly one representation and a digest can never split across forms.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(transparent)]
 pub struct RepoPath(Repr);
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(untagged)]
 enum Repr {
     Text(String),
-    Bytes(Vec<u8>),
+    Bytes {
+        #[serde(serialize_with = "hex::serialize")]
+        bytes_hex: Vec<u8>,
+    },
 }
 
 impl RepoPath {
@@ -58,7 +64,9 @@ impl RepoPath {
         }
         match String::from_utf8(raw) {
             Ok(text) => Some(Self(Repr::Text(text))),
-            Err(invalid) => Some(Self(Repr::Bytes(invalid.into_bytes()))),
+            Err(invalid) => Some(Self(Repr::Bytes {
+                bytes_hex: invalid.into_bytes(),
+            })),
         }
     }
 
@@ -71,7 +79,7 @@ impl RepoPath {
     pub fn as_bytes(&self) -> &[u8] {
         match &self.0 {
             Repr::Text(text) => text.as_bytes(),
-            Repr::Bytes(bytes) => bytes,
+            Repr::Bytes { bytes_hex } => bytes_hex,
         }
     }
 
@@ -79,7 +87,7 @@ impl RepoPath {
     pub fn as_str(&self) -> Option<&str> {
         match &self.0 {
             Repr::Text(text) => Some(text),
-            Repr::Bytes(_) => None,
+            Repr::Bytes { .. } => None,
         }
     }
 
@@ -89,9 +97,9 @@ impl RepoPath {
     pub fn to_value(&self) -> Value {
         match &self.0 {
             Repr::Text(text) => Value::String(text.clone().into()),
-            Repr::Bytes(bytes) => Value::Object(Box::new([(
+            Repr::Bytes { bytes_hex } => Value::Object(Box::new([(
                 "bytes_hex".into(),
-                Value::String(hex_lower(bytes).into()),
+                Value::String(hex::encode(bytes_hex).into()),
             )])),
         }
     }
@@ -141,12 +149,4 @@ fn path_bytes_valid(raw: &[u8]) -> bool {
     }
     !raw.split(|byte| *byte == b'/')
         .any(|segment| segment.is_empty() || segment == b"." || segment == b"..")
-}
-
-pub(crate) fn hex_lower(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
-    for byte in bytes {
-        let _infallible = std::fmt::Write::write_fmt(&mut out, format_args!("{byte:02x}"));
-    }
-    out
 }
