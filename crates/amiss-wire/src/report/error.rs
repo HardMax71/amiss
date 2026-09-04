@@ -263,7 +263,7 @@ pub(super) fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
         (
             "path_bytes_hex",
             detail.path_bytes.as_deref().map_or(Value::Null, |bytes| {
-                Value::String(crate::model::hex_lower(bytes).into())
+                Value::String(hex::encode(bytes).into())
             }),
         ),
         ("resource", resource),

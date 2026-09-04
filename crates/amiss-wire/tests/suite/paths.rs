@@ -107,6 +107,33 @@ fn the_wire_form_is_the_string_or_the_hex_object() {
 }
 
 #[test]
+fn serde_paths_preserve_the_canonical_text_and_byte_forms() {
+    let paths = small_universe().into_iter().chain([
+        "docs/quoted-\"β\n\t.md".as_bytes().to_vec(),
+        vec![b'a'; 4096],
+        vec![0xff; 4096],
+        (1..=255).filter(|byte| !b"/\\".contains(byte)).collect(),
+    ]);
+    for raw in paths {
+        let Some(path) = RepoPath::from_bytes(raw.clone()) else {
+            continue;
+        };
+        let bytes = serde_json::to_vec(&path).unwrap();
+        assert_eq!(
+            bytes,
+            amiss_wire::json::canonical(&path.to_value()),
+            "{raw:?}"
+        );
+        assert_eq!(bytes, serde_json_canonicalizer::to_vec(&path).unwrap());
+    }
+    let bytes = RepoPath::from_bytes(b"docs/b\xff.md".to_vec()).unwrap();
+    assert_eq!(
+        serde_json::to_string(&bytes).unwrap(),
+        r#"{"bytes_hex":"646f63732f62ff2e6d64"}"#
+    );
+}
+
+#[test]
 fn the_length_ceiling_binds_at_exactly_the_contract_figure() {
     assert!(RepoPath::from_bytes(vec![b'a'; 4096]).is_some());
     assert!(RepoPath::from_bytes(vec![b'a'; 4097]).is_none());
