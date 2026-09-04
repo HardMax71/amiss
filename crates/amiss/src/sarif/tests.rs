@@ -74,12 +74,15 @@ fn typed_sarif_preserves_optional_fields_and_canonical_order() {
     for omitted in ["ruleIndex", "locations", "fixes"] {
         assert!(unknown.get(omitted).is_none(), "{omitted}");
     }
-    let unlocated = &run["results"][2];
-    assert_eq!(unlocated["level"], "note");
-    assert!(
-        unlocated["locations"][0]["physicalLocation"]
-            .get("region")
-            .is_none()
+    let without_span = &run["results"][2];
+    assert_eq!(without_span["level"], "note");
+    assert_eq!(
+        without_span["locations"],
+        serde_json::json!([{
+            "physicalLocation": {
+                "artifactLocation": {"uri": "docs/b.md"}
+            }
+        }])
     );
-    assert!(unlocated.get("fixes").is_none());
+    assert!(without_span.get("fixes").is_none());
 }
