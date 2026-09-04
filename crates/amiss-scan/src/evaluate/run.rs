@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
+use amiss_wire::report::model::PolicySource;
 use amiss_wire::report::{Disposition, ErrorDetail, FindingKind};
 use amiss_wire::resolution::Resolution;
 
@@ -135,8 +136,18 @@ pub(crate) fn evaluate_with_site(
         if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {
             continue;
         }
-        apply_raise(finding, &policy.raised, "repository-policy", "repository");
-        apply_raise(finding, &policy.floor_raised, "organization-floor", "floor");
+        apply_raise(
+            finding,
+            &policy.raised,
+            PolicySource::RepositoryPolicy,
+            "repository",
+        );
+        apply_raise(
+            finding,
+            &policy.floor_raised,
+            PolicySource::OrganizationFloor,
+            "floor",
+        );
         finding.configured_disposition = finding
             .steps
             .last()
@@ -149,7 +160,7 @@ pub(crate) fn evaluate_with_site(
                 && finding.attribution == Attribution::PreExisting
             {
                 finding.steps.push(PolicyStep {
-                    source: "built-in",
+                    source: PolicySource::BuiltIn,
                     rule_id: format!(
                         "scanner-policy-defaults/{}/enforce-introduced",
                         finding.kind().as_ref()
@@ -266,7 +277,7 @@ fn apply_valid_exceptions(
                     .last()
                     .map_or(finding.configured_disposition, |step| step.after);
                 finding.steps.push(PolicyStep {
-                    source: "debt-snapshot",
+                    source: PolicySource::DebtSnapshot,
                     rule_id: format!("debt/{}", item.debt_id.as_str()),
                     before: current,
                     after: Disposition::Warn,
@@ -294,7 +305,7 @@ fn apply_valid_exceptions(
                     .map_or(finding.configured_disposition, |step| step.after);
                 if current == Disposition::Fail {
                     finding.steps.push(PolicyStep {
-                        source: "waiver-bundle",
+                        source: PolicySource::WaiverBundle,
                         rule_id: format!("waiver/{}", item.waiver_id.as_str()),
                         before: Disposition::Fail,
                         after: Disposition::Warn,
@@ -317,7 +328,7 @@ fn apply_valid_exceptions(
 fn apply_raise(
     finding: &mut Finding,
     raised: &[(FindingKind, Disposition)],
-    source: &'static str,
+    source: PolicySource,
     prefix: &str,
 ) {
     let Some((_kind, target)) = raised.iter().find(|(kind, _)| *kind == finding.kind()) else {

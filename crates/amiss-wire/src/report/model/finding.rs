@@ -517,8 +517,9 @@ pub enum InvariantClass {
     Ratcheted,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum Attribution {
     Introduced,
     NotApplicable,
@@ -547,8 +548,9 @@ pub struct FindingAggregation {
     pub strategy: AggregationStrategy,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum LocationSide {
     Base,
     Candidate,
@@ -579,8 +581,9 @@ pub struct FindingFix {
     pub span: ByteSpan,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum PolicySource {
     BuiltIn,
     DebtSnapshot,
@@ -591,6 +594,7 @@ pub enum PolicySource {
     WaiverBundle,
 }
 
+/// Built-in starts at `record`; each later `before` equals the previous `after`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PolicyStep {
     pub after: Disposition,
