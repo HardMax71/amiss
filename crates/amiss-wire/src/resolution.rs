@@ -125,8 +125,9 @@ pub struct DeclaredUntracked<P> {
 /// repository target. Each diagnostic owns the affected path.
 #[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
 #[strum_discriminants(name(UnsupportedTargetTag))]
-#[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
+#[strum_discriminants(derive(AsRefStr, EnumString, EnumIter, Serialize, Deserialize))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
+#[strum_discriminants(serde(rename_all = "kebab-case"))]
 pub enum UnsupportedTarget<P> {
     Symlink { path: P },
     Gitlink { path: P },
@@ -178,7 +179,10 @@ pub enum VersionScope<P> {
 
 /// A syntax defect that prevents a reference from identifying a repository or
 /// external target.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter, Serialize, Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum InvalidReference {
     Uri,
@@ -193,7 +197,10 @@ pub enum InvalidReference {
 
 /// References that are valid but intentionally outside the evaluated
 /// repository.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter, Serialize, Deserialize,
+)]
+#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum ExternalReference {
     Url,
