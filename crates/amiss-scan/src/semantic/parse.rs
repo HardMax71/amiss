@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::digest::Digest;
+use amiss_wire::report::model::SemanticEvidenceProducer;
 use amiss_wire::requests::SuppliedSemanticEvidence;
 use amiss_wire::semantic::SemanticEvidenceEnvelope;
 use amiss_wire::semantic::observation::{
@@ -38,16 +39,9 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
             candidate_identity_digest,
             source_report_payload_digest,
         } = subject;
-        let amiss_wire::semantic::SemanticProducer {
-            kind: producer_kind,
-            identity: producer_identity,
-            version: producer_version,
-            context_digest: _context_digest,
-            input_digest,
-        } = producer;
-        match producer_kind.as_str() {
+        match producer.kind.as_str() {
             SPHINX_INVENTORY_PRODUCER => {
-                if producer_version != SPHINX_INVENTORY_VERSION {
+                if producer.version != SPHINX_INVENTORY_VERSION {
                     return fail(
                         &format!("{path}.payload.producer.version"),
                         ErrorKind::InvalidValue,
@@ -75,7 +69,7 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
                 }
             }
             SITE_BUILD_PRODUCER => {
-                if producer_version != SITE_BUILD_VERSION {
+                if producer.version != SITE_BUILD_VERSION {
                     return fail(
                         &format!("{path}.payload.producer.version"),
                         ErrorKind::InvalidValue,
@@ -89,7 +83,7 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
                     site_build_inputs(&mut inputs.routes, &path, observations, &mut site_items)?;
             }
             amiss_wire::semantic::record::PRODUCER_KIND => {
-                if producer_version != amiss_wire::semantic::record::PRODUCER_VERSION {
+                if producer.version != amiss_wire::semantic::record::PRODUCER_VERSION {
                     return fail(
                         &format!("{path}.payload.producer.version"),
                         ErrorKind::InvalidValue,
@@ -108,10 +102,12 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
         inputs.candidate_bindings.push(candidate_identity_digest);
         inputs.provenance.push(Provenance {
             payload_digest: envelope.payload_digest,
-            producer_kind,
-            producer_identity,
-            producer_version,
-            input_digest,
+            producer: SemanticEvidenceProducer {
+                kind: producer.kind,
+                identity: producer.identity,
+                version: producer.version,
+                input_digest: producer.input_digest,
+            },
         });
     }
     Ok(inputs)

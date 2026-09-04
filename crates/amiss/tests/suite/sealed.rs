@@ -326,9 +326,24 @@ fn intersphinx_case() -> (
 
 #[test]
 fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
-    let (fixture, evaluation, semantic) = intersphinx_case();
+    use amiss_wire::report::model::{SemanticEvidenceProducer, SemanticEvidenceProvenance};
+
+    let (fixture, evaluation, mut semantic) = intersphinx_case();
+    semantic.producer.input_digest = hb("amiss-test/input", b"inventory bytes");
+    let producer = semantic.producer.clone();
     let expected_context_digest = semantic.producer.context_digest;
     let evidence = amiss_wire::semantic::envelope(semantic).unwrap();
+    let expected_provenance = vec![SemanticEvidenceProvenance {
+        payload_digest: amiss_wire::semantic::parse(&canonical(&evidence))
+            .unwrap()
+            .payload_digest,
+        producer: SemanticEvidenceProducer {
+            kind: producer.kind,
+            identity: producer.identity,
+            version: producer.version,
+            input_digest: producer.input_digest,
+        },
+    }];
     let controls = ControlsRequest {
         semantic_evidence: vec![supplied_semantic(&evidence, expected_context_digest)],
         ..ControlsRequest::default()
@@ -370,11 +385,13 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
         "a named inventory and ambiguous prefixless evidence remain unsupported"
     );
     assert_eq!(
-        envelope["payload"]["controls"]["semantic_evidence"]
-            .as_array()
-            .unwrap()
-            .len(),
-        1
+        envelope["payload"]["controls"]["semantic_evidence"],
+        serde_json::to_value(&expected_provenance).unwrap(),
+    );
+    assert_eq!(
+        serde_json::to_vec(&expected_provenance).unwrap(),
+        serde_json_canonicalizer::to_vec(&envelope["payload"]["controls"]["semantic_evidence"])
+            .unwrap(),
     );
     assert_eq!(envelope["payload"]["summary"]["references"]["resolved"], 1);
 }

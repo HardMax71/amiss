@@ -8,6 +8,7 @@ use std::sync::Arc;
 use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
 use amiss_wire::model::ArtifactId;
+pub use amiss_wire::report::model::SemanticEvidenceProvenance as Provenance;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 
 pub(crate) use parse::parse;
@@ -97,15 +98,6 @@ pub(crate) struct SiteDefect {
     pub(crate) evidence: Value,
     pub(crate) source: Option<amiss_wire::model::RepoPath>,
     pub(crate) member_count: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Provenance {
-    pub payload_digest: Digest,
-    pub producer_kind: ArtifactId,
-    pub producer_identity: ArtifactId,
-    pub producer_version: String,
-    pub input_digest: Digest,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
