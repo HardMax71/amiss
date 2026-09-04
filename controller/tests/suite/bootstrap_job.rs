@@ -32,6 +32,8 @@ use amiss_wire::requests::{
 };
 use base64::Engine as _;
 
+mod plan_identity;
+
 const LARGE_INVENTORY_ENTRIES: usize = 4_093;
 const MAX_PATH_BYTES: usize = 4_096;
 

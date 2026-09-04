@@ -50,6 +50,8 @@ pub enum BootstrapJobError {
     RunIdentity,
     #[error("the check plan changed after validation")]
     CheckPlan,
+    #[error("the check plan identity cannot be encoded")]
+    PlanEncoding,
     #[error("the organization floor is invalid")]
     OrganizationFloor,
     #[error("the debt snapshot is invalid")]
@@ -86,7 +88,7 @@ pub struct BoundSemanticEvidence {
     pub artifact: Option<Vec<u8>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub struct SemanticEvidenceExpectation {
     pub acquisition_identity: ArtifactId,
     pub producer_kind: ArtifactId,

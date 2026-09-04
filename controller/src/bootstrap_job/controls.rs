@@ -31,7 +31,7 @@ pub struct PolicyControls {
     pub workflow_artifacts: Vec<super::WorkflowArtifactExpectation>,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, serde::Serialize)]
 pub(super) struct ControlIdentity {
     pub(super) digest: Digest,
     pub(super) trust_source: RequestTrust,

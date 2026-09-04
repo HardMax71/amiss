@@ -1,8 +1,11 @@
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, canonical_execution_constraint,
 };
-use amiss_wire::digest::hj;
-use amiss_wire::json::Value;
+use amiss_wire::digest::hb;
+
+mod model;
+
+use model::{PlanIdentity, SemanticIdentity, WorkflowArtifactIdentity};
 
 use super::controls;
 use super::{
@@ -18,7 +21,7 @@ const CANDIDATE_BINDING: &str = "provider-run-candidate-commit";
 ///
 /// # Errors
 ///
-/// A policy artifact or execution constraint is invalid.
+/// A policy artifact or execution constraint is invalid, or the identity cannot be encoded.
 pub fn check_plan(
     profile: Profile,
     mut policy: PolicyControls,
@@ -40,16 +43,51 @@ pub fn check_plan(
     let (constraint, execution_digest) = canonical_execution_constraint(&execution)
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
     controls::validate_request_size(&policy, &policy_identity, execution_digest, &constraint)?;
-    let digest = hj(
-        CHECK_PLAN_DOMAIN,
-        &plan_value(
-            profile,
-            &policy,
-            &policy_identity,
-            execution_digest,
-            &execution,
-        ),
-    );
+    let identity = PlanIdentity {
+        debt_snapshot: policy_identity.debt_snapshot,
+        execution_constraint_digest: execution_digest,
+        external_policy: policy.external_policy,
+        organization_floor: policy_identity.organization_floor,
+        profile,
+        required_status_name: &execution.required_status_name,
+        schema: CHECK_PLAN_DOMAIN,
+        semantic_acquisitions: &policy.semantic_acquisitions,
+        semantic_evidence: policy
+            .semantic_evidence
+            .iter()
+            .map(|template| SemanticIdentity {
+                complete: template.complete,
+                context_digest: template.producer.context_digest,
+                input_digest: template.producer.input_digest,
+                producer_identity: &template.producer.identity,
+                producer_kind: &template.producer.kind,
+                producer_version: &template.producer.version,
+            })
+            .collect(),
+        waiver_bundle: policy_identity.waiver_bundle,
+        workflow_artifacts: policy
+            .workflow_artifacts
+            .iter()
+            .map(|artifact| WorkflowArtifactIdentity {
+                archive_byte_limit: artifact.archive_byte_limit,
+                artifact_name: &artifact.artifact_name,
+                candidate_binding: CANDIDATE_BINDING,
+                event: artifact.event.as_str(),
+                file_byte_limit: artifact.file_byte_limit,
+                payload_file: &artifact.payload_file,
+                provider_instance: artifact.provider.instance.as_str(),
+                provider_namespace: artifact.provider.namespace.as_str(),
+                repository_host: artifact.repository.host(),
+                repository_name: artifact.repository.name(),
+                repository_owner: artifact.repository.owner(),
+                semantic: &artifact.semantic,
+                workflow_identity: artifact.workflow_identity.as_str(),
+            })
+            .collect(),
+    };
+    let bytes = serde_json_canonicalizer::to_vec(&identity)
+        .map_err(|_defect| BootstrapJobError::PlanEncoding)?;
+    let digest = hb(CHECK_PLAN_DOMAIN, &bytes);
     Ok(CheckPlan {
         digest,
         profile,
@@ -81,185 +119,6 @@ pub(super) fn validated_plan(plan: &CheckPlan) -> Result<CheckPlan, BootstrapJob
     (checked.digest == plan.digest)
         .then_some(checked)
         .ok_or(BootstrapJobError::CheckPlan)
-}
-
-fn plan_value(
-    profile: Profile,
-    policy: &PolicyControls,
-    identity: &controls::PolicyIdentity,
-    execution_digest: amiss_wire::digest::Digest,
-    execution: &ExecutionConstraintDescriptor,
-) -> Value {
-    Value::object(vec![
-        (
-            "schema".to_owned(),
-            Value::string(CHECK_PLAN_DOMAIN.to_owned()),
-        ),
-        (
-            "profile".to_owned(),
-            Value::string(profile.as_ref().to_owned()),
-        ),
-        (
-            "external_policy".to_owned(),
-            Value::string(policy.external_policy.as_ref().to_owned()),
-        ),
-        (
-            "organization_floor".to_owned(),
-            control_identity_value(identity.organization_floor),
-        ),
-        (
-            "debt_snapshot".to_owned(),
-            control_identity_value(identity.debt_snapshot),
-        ),
-        (
-            "waiver_bundle".to_owned(),
-            control_identity_value(identity.waiver_bundle),
-        ),
-        (
-            "execution_constraint_digest".to_owned(),
-            Value::string(execution_digest.to_string()),
-        ),
-        (
-            "required_status_name".to_owned(),
-            Value::string(execution.required_status_name.clone()),
-        ),
-        (
-            "semantic_evidence".to_owned(),
-            Value::array(
-                policy
-                    .semantic_evidence
-                    .iter()
-                    .map(|template| {
-                        Value::object(vec![
-                            (
-                                "producer_kind".to_owned(),
-                                Value::string(template.producer.kind.as_str().to_owned()),
-                            ),
-                            (
-                                "producer_identity".to_owned(),
-                                Value::string(template.producer.identity.as_str().to_owned()),
-                            ),
-                            (
-                                "producer_version".to_owned(),
-                                Value::string(template.producer.version.clone()),
-                            ),
-                            (
-                                "context_digest".to_owned(),
-                                Value::string(template.producer.context_digest.to_string()),
-                            ),
-                            (
-                                "input_digest".to_owned(),
-                                Value::string(template.producer.input_digest.to_string()),
-                            ),
-                            ("complete".to_owned(), Value::Bool(template.complete)),
-                        ])
-                    })
-                    .collect(),
-            ),
-        ),
-        (
-            "semantic_acquisitions".to_owned(),
-            Value::array(
-                policy
-                    .semantic_acquisitions
-                    .iter()
-                    .map(expectation_value)
-                    .collect(),
-            ),
-        ),
-        (
-            "workflow_artifacts".to_owned(),
-            Value::array(
-                policy
-                    .workflow_artifacts
-                    .iter()
-                    .map(workflow_artifact_value)
-                    .collect(),
-            ),
-        ),
-    ])
-}
-
-fn expectation_value(expectation: &SemanticEvidenceExpectation) -> Value {
-    Value::object(vec![
-        (
-            "acquisition_identity".to_owned(),
-            Value::string(expectation.acquisition_identity.as_str().to_owned()),
-        ),
-        (
-            "producer_kind".to_owned(),
-            Value::string(expectation.producer_kind.as_str().to_owned()),
-        ),
-        (
-            "producer_identity".to_owned(),
-            Value::string(expectation.producer_identity.as_str().to_owned()),
-        ),
-        (
-            "producer_version".to_owned(),
-            Value::string(expectation.producer_version.clone()),
-        ),
-        (
-            "context_digest".to_owned(),
-            Value::string(expectation.context_digest.to_string()),
-        ),
-    ])
-}
-
-fn workflow_artifact_value(expectation: &WorkflowArtifactExpectation) -> Value {
-    Value::object(vec![
-        (
-            "provider_namespace".to_owned(),
-            Value::string(expectation.provider.namespace.as_str().to_owned()),
-        ),
-        (
-            "provider_instance".to_owned(),
-            Value::string(expectation.provider.instance.as_str().to_owned()),
-        ),
-        (
-            "repository_host".to_owned(),
-            Value::string(expectation.repository.host().to_owned()),
-        ),
-        (
-            "repository_owner".to_owned(),
-            Value::string(expectation.repository.owner().to_owned()),
-        ),
-        (
-            "repository_name".to_owned(),
-            Value::string(expectation.repository.name().to_owned()),
-        ),
-        (
-            "workflow_identity".to_owned(),
-            Value::string(expectation.workflow_identity.as_str().to_owned()),
-        ),
-        (
-            "event".to_owned(),
-            Value::string(expectation.event.as_str().to_owned()),
-        ),
-        (
-            "artifact_name".to_owned(),
-            Value::string(expectation.artifact_name.clone()),
-        ),
-        (
-            "payload_file".to_owned(),
-            Value::string(expectation.payload_file.as_str().to_owned()),
-        ),
-        (
-            "archive_byte_limit".to_owned(),
-            Value::Integer(i64::try_from(expectation.archive_byte_limit).unwrap_or(i64::MAX)),
-        ),
-        (
-            "file_byte_limit".to_owned(),
-            Value::Integer(i64::try_from(expectation.file_byte_limit).unwrap_or(i64::MAX)),
-        ),
-        (
-            "candidate_binding".to_owned(),
-            Value::string(CANDIDATE_BINDING.to_owned()),
-        ),
-        (
-            "semantic".to_owned(),
-            expectation_value(&expectation.semantic),
-        ),
-    ])
 }
 
 pub(super) fn semantic_acquisition_expectations(
@@ -332,19 +191,4 @@ pub(super) fn normalized_expectations(
         return Err(BootstrapJobError::SemanticEvidence);
     }
     Ok(normalized)
-}
-
-fn control_identity_value(identity: Option<controls::ControlIdentity>) -> Value {
-    identity.map_or(Value::Null, |control| {
-        Value::object(vec![
-            (
-                "digest".to_owned(),
-                Value::string(control.digest.to_string()),
-            ),
-            (
-                "trust_source".to_owned(),
-                Value::string(control.trust_source.as_ref().to_owned()),
-            ),
-        ])
-    })
 }
