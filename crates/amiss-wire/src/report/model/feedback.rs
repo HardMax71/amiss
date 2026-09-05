@@ -5,8 +5,9 @@ use crate::model::RepoPathText;
 use super::super::{Disposition, FindingKind};
 use super::{RepoPath, SourceSpan, UnavailableStatus};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum FeedbackAction {
     Check,
     Existing,

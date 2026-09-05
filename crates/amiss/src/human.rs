@@ -3,115 +3,109 @@ use std::collections::BTreeSet;
 use amiss_wire::human::{atom, atom_bytes};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
+use amiss_wire::report::model::RepoPath as ReportPath;
+use amiss_wire::report::model::{
+    Evaluation, Feedback, FeedbackAction, FeedbackItem, ReportPayload,
+};
 
 use crate::view::View;
 
-/// The human output channel: a closed pipe ends the narration and never the
-/// verdict, so a consumer that stops reading still gets the run's exit class.
 struct Channel {
     out: std::io::Stdout,
     open: bool,
 }
 
-impl Channel {
-    fn new() -> Self {
-        Self {
-            out: std::io::stdout(),
-            open: true,
-        }
-    }
-
-    fn line(&mut self, text: std::fmt::Arguments<'_>) {
-        use std::io::Write as _;
-        if self.open && writeln!(self.out, "{text}").is_err() {
-            self.open = false;
-        }
+fn line(out: &mut Channel, text: std::fmt::Arguments<'_>) {
+    use std::io::Write as _;
+    if out.open && writeln!(out.out, "{text}").is_err() {
+        out.open = false;
     }
 }
 
 macro_rules! say {
     ($out:expr, $($arg:tt)*) => {
-        $out.line(format_args!($($arg)*))
+        line($out, format_args!($($arg)*))
     };
 }
 
-/// The human projection: a non-wire convenience over the same payload that
-/// cannot change facts, ordering, totals, or exit. It prints two ten-row
-/// windows, fix and check items then the existing backlog, each with its own
-/// overflow line, plus retained analysis errors, their meanings, and the
-/// exact raw totals. A full replay removes only the two row limits.
-pub(crate) fn report(envelope: &Value, explain_scope: bool, full_feedback: bool) {
-    let mut out = Channel::new();
-    let envelope = View::of(envelope);
-    let payload = envelope.view("payload");
-    let result = payload.view("result");
-    let feedback = payload.view("feedback");
-    let items = feedback.rows("items");
-    let available = feedback.text("status") == "available";
-    if available {
-        let fixes = items
-            .clone()
-            .filter(|item| item.text("action") == "fix")
-            .count();
-        let checks = items
-            .clone()
-            .filter(|item| item.text("action") == "check")
-            .count();
-        say!(
-            out,
-            "amiss: {} (fix {}, check {}, existing {}, errors {}, exit {})",
-            result.text("status"),
-            fixes,
-            checks,
-            feedback.number("existing_count"),
-            result.number("error_count"),
-            result.number("exit_code")
-        );
-    } else {
-        say!(
-            out,
-            "amiss: scan failed (errors {}, exit {})",
-            result.number("error_count"),
-            result.number("exit_code")
-        );
-    }
+pub(crate) fn report(payload: &ReportPayload, explain_scope: bool, full_feedback: bool) {
+    let mut out = Channel {
+        out: std::io::stdout(),
+        open: true,
+    };
+    let result = &payload.result;
+    let items = match &payload.feedback {
+        Feedback::Available(feedback) => {
+            let fixes = feedback
+                .items
+                .iter()
+                .filter(|item| item.action == FeedbackAction::Fix)
+                .count();
+            let checks = feedback
+                .items
+                .iter()
+                .filter(|item| item.action == FeedbackAction::Check)
+                .count();
+            say!(
+                &mut out,
+                "amiss: {} (fix {}, check {}, existing {}, errors {}, exit {})",
+                result.status.as_ref(),
+                fixes,
+                checks,
+                feedback.existing_count,
+                result.error_count,
+                result.exit_code
+            );
+            feedback.items.as_slice()
+        }
+        Feedback::Unavailable(_) => {
+            say!(
+                &mut out,
+                "amiss: scan failed (errors {}, exit {})",
+                result.error_count,
+                result.exit_code
+            );
+            &[]
+        }
+    };
     if explain_scope {
         explain(&mut out, payload);
     }
-    for row in payload.rows("errors") {
-        let resource = row.text("resource");
-        if resource.is_empty() {
+    for row in &payload.errors {
+        if let Some(resource) = row.resource {
             say!(
-                out,
-                "error {} {} {}",
-                row.text("phase"),
-                row.text("code"),
-                row.atom_or_dash("path")
+                &mut out,
+                "error {} {} {} {} {}/{}",
+                row.phase.as_ref(),
+                row.code.as_ref(),
+                path_atom(row.path.as_ref()),
+                resource.as_ref(),
+                row.configured_limit.unwrap_or(0),
+                row.observed_lower_bound.unwrap_or(0)
             );
         } else {
             say!(
-                out,
-                "error {} {} {} {} {}/{}",
-                row.text("phase"),
-                row.text("code"),
-                row.atom_or_dash("path"),
-                resource,
-                row.number("configured_limit"),
-                row.number("observed_lower_bound")
+                &mut out,
+                "error {} {} {}",
+                row.phase.as_ref(),
+                row.code.as_ref(),
+                path_atom(row.path.as_ref())
             );
         }
     }
     windowed(
         &mut out,
         items
-            .clone()
-            .filter(|item| item.text("action") != "existing"),
+            .iter()
+            .filter(|item| item.action != FeedbackAction::Existing),
         "feedback",
         full_feedback,
     );
     windowed(
         &mut out,
-        items.filter(|item| item.text("action") == "existing"),
+        items
+            .iter()
+            .filter(|item| item.action == FeedbackAction::Existing),
         "existing",
         full_feedback,
     );
@@ -119,13 +113,26 @@ pub(crate) fn report(envelope: &Value, explain_scope: bool, full_feedback: bool)
     totals(&mut out, payload);
 }
 
+fn path_atom(path: Option<&ReportPath>) -> String {
+    match path {
+        Some(ReportPath::Text(path)) => atom(path.as_str()),
+        Some(ReportPath::Bytes(path)) => {
+            atom_bytes(&amiss_wire::human::decode_hex(&path.bytes_hex))
+        }
+        None => "-".to_owned(),
+    }
+}
+
 pub(crate) fn references(target: &RepoPath, occurrences: &[&Value]) {
-    let mut out = Channel::new();
+    let mut out = Channel {
+        out: std::io::stdout(),
+        open: true,
+    };
     let shown_target = target
         .as_str()
         .map_or_else(|| atom_bytes(target.as_bytes()), atom);
     say!(
-        out,
+        &mut out,
         "amiss refs: target {shown_target} candidate occurrences {}",
         occurrences.len()
     );
@@ -133,7 +140,7 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[&Value]) {
         let row = View::of(occurrence);
         let span = row.view("source_span");
         say!(
-            out,
+            &mut out,
             "reference {}:{}:{} {} {} {}",
             row.atom_or_dash("document"),
             span.number("start_line"),
@@ -145,9 +152,9 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[&Value]) {
     }
 }
 
-fn windowed<'value>(
+fn windowed<'report>(
     out: &mut Channel,
-    items: impl Iterator<Item = View<'value>> + Clone,
+    items: impl Iterator<Item = &'report FeedbackItem> + Clone,
     label: &str,
     full: bool,
 ) {
@@ -155,7 +162,7 @@ fn windowed<'value>(
     let limit = if full { count } else { 10 };
     let overflow = count.saturating_sub(limit);
     for item in items.take(limit) {
-        let mut action = item.text("action").to_owned();
+        let mut action = item.action.as_ref().to_owned();
         if let Some(first) = action.get_mut(0..1) {
             first.make_ascii_uppercase();
         }
@@ -163,8 +170,8 @@ fn windowed<'value>(
             out,
             "{} target {} affected places {}",
             action,
-            item.atom_or_dash("target"),
-            item.number("location_count")
+            path_atom(item.target.as_ref()),
+            item.location_count
         );
     }
     if overflow > 0 {
@@ -172,65 +179,57 @@ fn windowed<'value>(
     }
 }
 
-/// One `note` line per error code used by this run.
-fn notes(out: &mut Channel, payload: View<'_>) {
-    let mut seen: BTreeSet<&str> = BTreeSet::new();
-    for row in payload.rows("errors") {
-        let name = row.text("code");
-        let description = row.text("description");
-        if !name.is_empty() && !description.is_empty() && seen.insert(name) {
-            say!(out, "note {name}: {description}");
+fn notes(out: &mut Channel, payload: &ReportPayload) {
+    let mut seen = BTreeSet::new();
+    for row in &payload.errors {
+        if !row.description.is_empty() && seen.insert(row.code) {
+            say!(out, "note {}: {}", row.code.as_ref(), row.description);
         }
     }
 }
 
-fn totals(out: &mut Channel, payload: View<'_>) {
-    let summary = payload.view("summary");
-    let documents = summary.view("documents");
+fn totals(out: &mut Channel, payload: &ReportPayload) {
+    let summary = &payload.summary;
+    let documents = &summary.documents;
     say!(
         out,
         "documents: discovered {} scanned {} unsupported {} excluded {} unlinked {}",
-        documents.number("discovered"),
-        documents.number("scanned"),
-        documents.number("unsupported"),
-        documents.number("excluded_builtin"),
-        documents.number("unlinked"),
+        documents.discovered,
+        documents.scanned,
+        documents.unsupported,
+        documents.excluded_builtin,
+        documents.unlinked,
     );
-    let references = summary.view("references");
+    let references = &summary.references;
     say!(
         out,
         "references: extracted {} local {} same-repo {} external {} unsupported {} missing {}",
-        references.number("extracted"),
-        references.number("explicit_local"),
-        references.number("same_repository"),
-        references.number("external_out_of_scope"),
-        references.number("unsupported"),
-        references.number("missing"),
+        references.extracted,
+        references.explicit_local,
+        references.same_repository,
+        references.external_out_of_scope,
+        references.unsupported,
+        references.missing,
     );
-    let undeclared = !matches!(
-        payload.view("evaluation").field("repository"),
-        Some(Value::Object(_))
-    );
-    if undeclared && references.number("external_out_of_scope") > 0 {
+    let declared = matches!(&payload.evaluation, Evaluation::Resolved(evaluation) if evaluation.repository.is_some());
+    if !declared && references.external_out_of_scope > 0 {
         say!(
             out,
             "references: without a declared forge identity a same-repository URL counts as external"
         );
     }
-    let findings = summary.view("findings");
+    let findings = &summary.findings;
     say!(
         out,
         "findings: total {} fail {} warn {} record {}",
-        findings.number("total"),
-        findings.number("fail"),
-        findings.number("warn"),
-        findings.number("record"),
+        findings.total,
+        findings.fail,
+        findings.warn,
+        findings.record
     );
 }
 
-/// The deterministic scope explanation the human projection may add: the
-/// closed built-in document classes and this run's discovered surface.
-fn explain(out: &mut Channel, payload: View<'_>) {
+fn explain(out: &mut Channel, payload: &ReportPayload) {
     say!(
         out,
         "scope: built-in documents are *.md, *.mdx, *.markdown, *.adoc, *.asciidoc,"
@@ -251,42 +250,55 @@ fn explain(out: &mut Channel, payload: View<'_>) {
         out,
         "scope: trees are excluded unless a repository policy includes them"
     );
-    let documents = payload.view("summary").view("documents");
+    let documents = &payload.summary.documents;
     say!(
         out,
         "scope: this run discovered {} candidate documents and scanned {}",
-        documents.number("discovered"),
-        documents.number("scanned"),
+        documents.discovered,
+        documents.scanned,
     );
 }
 
 pub(crate) fn plan(envelope: &Value) {
-    let mut out = Channel::new();
+    let mut out = Channel {
+        out: std::io::stdout(),
+        open: true,
+    };
     let payload = View::of(envelope).view("payload");
     let introduced = payload.rows("introduced");
-    out.line(format_args!(
-        "amiss external-plan: introduced {} removed {} retained {}",
-        introduced.len(),
-        payload.rows("removed").len(),
-        payload.number("retained_count"),
-    ));
+    line(
+        &mut out,
+        format_args!(
+            "amiss external-plan: introduced {} removed {} retained {}",
+            introduced.len(),
+            payload.rows("removed").len(),
+            payload.number("retained_count"),
+        ),
+    );
     let overflow = introduced.len().saturating_sub(10);
     for row in introduced.take(10) {
-        out.line(format_args!(
-            "introduced {} in {} documents",
-            row.text("destination"),
-            row.rows("documents").len(),
-        ));
+        line(
+            &mut out,
+            format_args!(
+                "introduced {} in {} documents",
+                row.text("destination"),
+                row.rows("documents").len(),
+            ),
+        );
     }
     if overflow > 0 {
-        out.line(format_args!(
-            "introduced overflow: {overflow} more in the full plan"
-        ));
+        line(
+            &mut out,
+            format_args!("introduced overflow: {overflow} more in the full plan"),
+        );
     }
 }
 
 pub(crate) fn assessment(envelope: &Value) {
-    let mut out = Channel::new();
+    let mut out = Channel {
+        out: std::io::stdout(),
+        open: true,
+    };
     let payload = View::of(envelope).view("payload");
     let verdicts = payload.rows("verdicts");
     let count = |wanted: &str| {
@@ -298,39 +310,50 @@ pub(crate) fn assessment(envelope: &Value) {
     let refuted = count("refuted");
     let unproven = count("unproven");
     let reachable = count("reachable");
-    out.line(format_args!(
-        "amiss external-assess: refuted {refuted} unproven {unproven} reachable {reachable}",
-    ));
+    line(
+        &mut out,
+        format_args!(
+            "amiss external-assess: refuted {refuted} unproven {unproven} reachable {reachable}",
+        ),
+    );
     for row in verdicts
         .clone()
         .filter(|row| row.text("verdict") == "refuted")
         .take(10)
     {
-        out.line(format_args!(
-            "refuted {} ({})",
-            atom(row.text("destination")),
-            row.text("reason")
-        ));
+        line(
+            &mut out,
+            format_args!(
+                "refuted {} ({})",
+                atom(row.text("destination")),
+                row.text("reason")
+            ),
+        );
     }
     let overflow = refuted.saturating_sub(10);
     if overflow > 0 {
-        out.line(format_args!(
-            "refuted overflow: {overflow} more in the full assessment"
-        ));
+        line(
+            &mut out,
+            format_args!("refuted overflow: {overflow} more in the full assessment"),
+        );
     }
     let retargets = verdicts.filter(|row| !row.text("retarget").is_empty());
     let retarget_count = retargets.clone().count();
     for row in retargets.take(10) {
-        out.line(format_args!(
-            "retarget suggestion {} -> {}",
-            atom(row.text("destination")),
-            atom(row.text("retarget"))
-        ));
+        line(
+            &mut out,
+            format_args!(
+                "retarget suggestion {} -> {}",
+                atom(row.text("destination")),
+                atom(row.text("retarget"))
+            ),
+        );
     }
     let overflow = retarget_count.saturating_sub(10);
     if overflow > 0 {
-        out.line(format_args!(
-            "retarget overflow: {overflow} more in the full assessment"
-        ));
+        line(
+            &mut out,
+            format_args!("retarget overflow: {overflow} more in the full assessment"),
+        );
     }
 }

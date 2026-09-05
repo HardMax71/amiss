@@ -1,32 +1,16 @@
 #![cfg(test)]
 
-use amiss_wire::json::Value;
+use amiss_wire::model::RepoPathText;
+use amiss_wire::report::model::{
+    AnalysisError, AnalysisPhase, RepoPath, ReportEnvelope, ReportPayload, ReportStatus,
+};
+use amiss_wire::report::{AnalysisErrorCode, Disposition};
 use quick_xml::Reader;
 use quick_xml::events::Event;
 
 use super::write;
 
-fn row(members: Vec<(&str, Value)>) -> Value {
-    Value::object(
-        members
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-    )
-}
-
-fn envelope(status: &str, findings: Vec<Value>, errors: Vec<Value>) -> Value {
-    row(vec![(
-        "payload",
-        row(vec![
-            ("result", row(vec![("status", Value::string(status))])),
-            ("findings", Value::array(findings)),
-            ("errors", Value::array(errors)),
-        ]),
-    )])
-}
-
-fn render(value: &Value) -> String {
+fn render(value: &ReportPayload) -> String {
     let mut bytes = Vec::new();
     write(value, &mut bytes).expect("write JUnit");
     let mut reader = Reader::from_reader(bytes.as_slice());
@@ -50,29 +34,32 @@ fn render(value: &Value) -> String {
 
 #[test]
 fn dispositions_and_analysis_errors_keep_their_report_meaning() {
-    let location = row(vec![("path", Value::string("docs/guide.md"))]);
-    let finding = |disposition: &str, key: &str| {
-        row(vec![
-            ("kind", Value::string("explicit-target-missing")),
-            ("finding_key", Value::string(key)),
-            ("effective_disposition", Value::string(disposition)),
-            ("description", Value::string("the target is missing")),
-            ("location", location.clone()),
-        ])
-    };
-    let error = row(vec![
-        ("code", Value::string("RESOURCE_LIMIT_EXCEEDED")),
-        (
-            "description",
-            Value::string("a resource limit was exceeded"),
-        ),
-        ("path", Value::Null),
-    ]);
-    let xml = render(&envelope(
-        "incomplete",
-        vec![finding("fail", "sha256:a"), finding("warn", "sha256:b")],
-        vec![error],
-    ));
+    let mut report: ReportEnvelope =
+        serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+    let payload = &mut report.payload;
+    for (finding, disposition) in payload
+        .findings
+        .iter_mut()
+        .zip([Disposition::Fail, Disposition::Warn])
+    {
+        finding.description = "the target is missing".to_owned();
+        finding.effective_disposition = disposition;
+        finding.location.path = Some(RepoPath::Text(
+            RepoPathText::new("docs/guide.md".to_owned()).unwrap(),
+        ));
+    }
+    payload.errors = vec![AnalysisError {
+        code: AnalysisErrorCode::ResourceLimitExceeded,
+        description: "a resource limit was exceeded".to_owned(),
+        phase: AnalysisPhase::Internal,
+        path: None,
+        path_bytes_hex: None,
+        resource: None,
+        configured_limit: None,
+        observed_lower_bound: None,
+    }];
+    payload.result.status = ReportStatus::Incomplete;
+    let xml = render(payload);
 
     assert!(xml.contains("tests=\"3\" failures=\"1\" errors=\"1\""));
     assert!(xml.contains("<failure message=\"the target is missing\""));
@@ -83,30 +70,42 @@ fn dispositions_and_analysis_errors_keep_their_report_meaning() {
 
 #[test]
 fn empty_success_and_hostile_xml_scalars_stay_well_formed() {
-    let empty = render(&envelope("pass", Vec::new(), Vec::new()));
-    assert!(empty.contains("tests=\"1\" failures=\"0\" errors=\"0\""));
-    assert!(empty.contains("<testcase classname=\"amiss.result\" name=\"report\" time=\"0\"/>"));
-
-    let failed = render(&envelope("fail", Vec::new(), Vec::new()));
-    assert!(failed.contains("<failure message=\"fail\" type=\"amiss-result\">fail</failure>"));
-    let incomplete = render(&envelope("incomplete", Vec::new(), Vec::new()));
-    assert!(
-        incomplete
-            .contains("<error message=\"incomplete\" type=\"amiss-result\">incomplete</error>")
-    );
-
-    let hostile = row(vec![
-        ("kind", Value::string("kind<&\"")),
-        ("finding_key", Value::string("key<&\"")),
-        ("effective_disposition", Value::string("warn")),
-        ("description", Value::string("bad\u{1} description")),
+    let mut report: ReportEnvelope =
+        serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+    let payload = &mut report.payload;
+    let mut hostile = payload.findings[0].clone();
+    payload.findings.clear();
+    payload.errors.clear();
+    for (status, counts, result) in [
         (
-            "location",
-            row(vec![("path", Value::string("docs/bad\u{1}.md"))]),
+            ReportStatus::Pass,
+            "tests=\"1\" failures=\"0\" errors=\"0\"",
+            "<testcase classname=\"amiss.result\" name=\"report\" time=\"0\"/>",
         ),
-    ]);
-    let xml = render(&envelope("pass", vec![hostile], Vec::new()));
-    assert!(xml.contains("kind&lt;&amp;&quot;:key&lt;&amp;&quot;"));
-    assert!(xml.contains("bad\u{fffd} description"));
+        (
+            ReportStatus::Fail,
+            "tests=\"1\" failures=\"1\" errors=\"0\"",
+            "<failure message=\"fail\" type=\"amiss-result\">fail</failure>",
+        ),
+        (
+            ReportStatus::Incomplete,
+            "tests=\"1\" failures=\"0\" errors=\"1\"",
+            "<error message=\"incomplete\" type=\"amiss-result\">incomplete</error>",
+        ),
+    ] {
+        payload.result.status = status;
+        let xml = render(payload);
+        assert!(xml.contains(counts), "{xml}");
+        assert!(xml.contains(result), "{xml}");
+    }
+
+    hostile.effective_disposition = Disposition::Fail;
+    hostile.description = "bad\u{1} description <&\"".to_owned();
+    hostile.location.path = Some(RepoPath::Text(
+        RepoPathText::new("docs/bad\u{1}.md".to_owned()).unwrap(),
+    ));
+    payload.findings.push(hostile);
+    let xml = render(payload);
+    assert!(xml.contains("bad\u{fffd} description &lt;&amp;&quot;"));
     assert!(!xml.contains(" file="));
 }

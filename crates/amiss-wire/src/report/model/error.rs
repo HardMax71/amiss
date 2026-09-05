@@ -5,8 +5,9 @@ use crate::controls::ResourceName;
 use super::super::AnalysisErrorCode;
 use super::RepoPath;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
 pub enum AnalysisPhase {
     Configuration,
     Discovery,
