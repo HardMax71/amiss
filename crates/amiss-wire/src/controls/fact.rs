@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hb, hj_ordered};
 use crate::model::{Oid, RepoPathText};
 use crate::resolution::Target;
 
@@ -49,19 +49,19 @@ pub enum FactEvidenceKind {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TargetIntent {
-    pub kind: TargetIntentKind,
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
         deserialize_with = "json_serde::deserialize_some"
     )]
     pub commit_oid: Option<Oid>,
-    pub path: RepoPathText,
-    pub target_kind: TargetKind,
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub query_digest: Option<Digest>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub fragment_digest: Option<Digest>,
+    pub kind: TargetIntentKind,
+    pub path: RepoPathText,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub query_digest: Option<Digest>,
+    pub target_kind: TargetKind,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -74,18 +74,18 @@ pub struct FindingOccurrence {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FindingScope {
-    pub kind: ReferenceScopeKind,
     pub document: RepoPathText,
-    pub source_construct: SourceConstruct,
+    pub kind: ReferenceScopeKind,
     pub normalized_target_intent: TargetIntent,
     pub occurrence: FindingOccurrence,
+    pub source_construct: SourceConstruct,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FindingKeyInput {
-    pub schema: FindingKeyInputSchema,
     pub finding_kind: EligibleFindingKind,
+    pub schema: FindingKeyInputSchema,
     pub scope: FindingScope,
 }
 
@@ -167,11 +167,11 @@ pub fn canonical_fact(fact: &Fact) -> Result<(Vec<u8>, Digest), Error> {
 
 pub(super) fn fact_digests(path: &str, fact: &Fact) -> Result<(Digest, Digest), Error> {
     validate_fact(path, fact)?;
-    let key = serde_json_canonicalizer::to_vec(&fact.key_input)
+    let key = hj_ordered(FINDING_KEY_DOMAIN, &fact.key_input)
         .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
     let encoded = serde_json_canonicalizer::to_vec(fact)
         .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
-    Ok((hb(FINDING_KEY_DOMAIN, &key), hb(FACT_DOMAIN, &encoded)))
+    Ok((key, hb(FACT_DOMAIN, &encoded)))
 }
 
 fn validate_fact(path: &str, fact: &Fact) -> Result<(), Error> {
