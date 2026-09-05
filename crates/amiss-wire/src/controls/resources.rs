@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
+use crate::report::model::AnalysisPhase;
+
 macro_rules! resource_names {
-    ($($variant:ident => $phase:literal),+ $(,)?) => {
+    ($($variant:ident => $phase:ident),+ $(,)?) => {
         #[derive(
             Clone,
             Copy,
@@ -31,9 +33,9 @@ macro_rules! resource_names {
             }
 
             #[must_use]
-            pub const fn phase(self) -> &'static str {
+            pub const fn phase(self) -> AnalysisPhase {
                 match self {
-                    $(Self::$variant => $phase),+
+                    $(Self::$variant => AnalysisPhase::$phase),+
                 }
             }
 
@@ -46,49 +48,49 @@ macro_rules! resource_names {
 }
 
 resource_names! {
-    GitObjectBytes => "git",
-    GitCompressedObjectBytes => "git",
-    AggregateGitCompressedObjectBytesPerEvaluation => "git",
-    GitPackDirectoryEntries => "git",
-    GitPackFiles => "git",
-    GitPackIndexBytes => "git",
-    AggregateGitPackIndexBytes => "git",
-    GitDeltaDepth => "git",
-    GitIndexBytes => "git",
-    GitTreeEntriesPerSnapshot => "git",
-    DocumentsPerSnapshot => "discovery",
-    ControlInputBytes => "configuration",
-    SelectedControlBlobBytes => "discovery",
-    AggregateSelectedControlBytesPerSnapshot => "discovery",
-    RepositoryPolicyEntries => "configuration",
-    DebtItems => "configuration",
-    WaiverItems => "configuration",
-    RawPathBytes => "git",
-    DocumentBlobBytes => "discovery",
-    ReferencedTargetBlobBytes => "resolution",
-    AggregateReferencedTargetBytesPerSnapshot => "resolution",
-    IgnoreDeclarationBlobBytes => "resolution",
-    AggregateIgnoreDeclarationBytesPerSnapshot => "resolution",
-    AggregateLineFragmentEvaluationBytesPerSnapshot => "resolution",
-    AggregateHeadingAnchorEvaluationBytesPerSnapshot => "resolution",
-    ProjectionAssertionsPerSnapshot => "resolution",
-    AggregateProjectionSelectedBytesPerSnapshot => "resolution",
-    ProjectionRecordsComparedPerSnapshot => "resolution",
-    AggregateProjectionProjectedBytesPerSnapshot => "resolution",
-    AggregateProjectionPreviewBytesPerSnapshot => "resolution",
-    AggregateDocumentBytesPerSnapshot => "discovery",
-    RawLinkDestinationBytes => "parse",
-    ParserNesting => "parse",
-    ParserNodesPerDocument => "parse",
-    ParserNodesPerSnapshot => "parse",
-    AggregateEmbeddedCodeEvaluationBytesPerSnapshot => "parse",
-    ReferencesPerDocument => "parse",
-    ReferencesPerSnapshot => "parse",
-    DeclaredLabelsPerSnapshot => "parse",
-    OrganizationPolicyEntries => "configuration",
-    CompleteFindings => "policy",
-    TypedAnalysisErrorsRetained => "internal",
-    MachineJsonBytes => "output",
-    PrivateTemporaryStorageBytes => "internal",
-    EvaluatorManagedMemoryBytes => "internal",
+    GitObjectBytes => Git,
+    GitCompressedObjectBytes => Git,
+    AggregateGitCompressedObjectBytesPerEvaluation => Git,
+    GitPackDirectoryEntries => Git,
+    GitPackFiles => Git,
+    GitPackIndexBytes => Git,
+    AggregateGitPackIndexBytes => Git,
+    GitDeltaDepth => Git,
+    GitIndexBytes => Git,
+    GitTreeEntriesPerSnapshot => Git,
+    DocumentsPerSnapshot => Discovery,
+    ControlInputBytes => Configuration,
+    SelectedControlBlobBytes => Discovery,
+    AggregateSelectedControlBytesPerSnapshot => Discovery,
+    RepositoryPolicyEntries => Configuration,
+    DebtItems => Configuration,
+    WaiverItems => Configuration,
+    RawPathBytes => Git,
+    DocumentBlobBytes => Discovery,
+    ReferencedTargetBlobBytes => Resolution,
+    AggregateReferencedTargetBytesPerSnapshot => Resolution,
+    IgnoreDeclarationBlobBytes => Resolution,
+    AggregateIgnoreDeclarationBytesPerSnapshot => Resolution,
+    AggregateLineFragmentEvaluationBytesPerSnapshot => Resolution,
+    AggregateHeadingAnchorEvaluationBytesPerSnapshot => Resolution,
+    ProjectionAssertionsPerSnapshot => Resolution,
+    AggregateProjectionSelectedBytesPerSnapshot => Resolution,
+    ProjectionRecordsComparedPerSnapshot => Resolution,
+    AggregateProjectionProjectedBytesPerSnapshot => Resolution,
+    AggregateProjectionPreviewBytesPerSnapshot => Resolution,
+    AggregateDocumentBytesPerSnapshot => Discovery,
+    RawLinkDestinationBytes => Parse,
+    ParserNesting => Parse,
+    ParserNodesPerDocument => Parse,
+    ParserNodesPerSnapshot => Parse,
+    AggregateEmbeddedCodeEvaluationBytesPerSnapshot => Parse,
+    ReferencesPerDocument => Parse,
+    ReferencesPerSnapshot => Parse,
+    DeclaredLabelsPerSnapshot => Parse,
+    OrganizationPolicyEntries => Configuration,
+    CompleteFindings => Policy,
+    TypedAnalysisErrorsRetained => Internal,
+    MachineJsonBytes => Output,
+    PrivateTemporaryStorageBytes => Internal,
+    EvaluatorManagedMemoryBytes => Internal,
 }
