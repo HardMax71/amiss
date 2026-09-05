@@ -44,10 +44,7 @@ fn assert_valid(validator: &jsonschema::Validator, value: &serde_json::Value, la
 pub(crate) fn generated_report(
     bytes: &[u8],
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    {
-        let strict = amiss_wire::json::parse(bytes)?;
-        amiss_wire::report::validate_envelope(&strict)?;
-    }
+    amiss_wire::report::validate_envelope(bytes)?;
     let value = serde_json::from_slice(bytes)?;
     REPORT_VALIDATOR
         .validate(&value)

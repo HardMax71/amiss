@@ -1,5 +1,4 @@
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::json;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{
     DocsCandidate, PublicationEvidenceEnvelope, assess, evidence, parse_evidence, parse_plan, plan,
@@ -20,8 +19,7 @@ pub struct PublicationAuditFixture {
 #[must_use]
 pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture> {
     let report = REPORT.to_vec();
-    let parsed = json::parse(&report).ok()?;
-    let (_, report_payload_digest, _) = amiss_wire::report::validate_envelope(&parsed).ok()?;
+    let (_, report_payload_digest, _) = amiss_wire::report::validate_envelope(&report).ok()?;
     let mut plan_envelope = parse_plan(PLAN).ok()?;
     plan_envelope.payload.report_payload_digest = report_payload_digest;
     plan_envelope.payload.docs = DocsCandidate {

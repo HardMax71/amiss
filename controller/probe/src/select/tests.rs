@@ -21,7 +21,7 @@ fn only_unshaped_https_destinations_are_selected_up_to_the_cap() {
         .and_then(|payload| payload.member("engine"))
         .unwrap();
     let plan = amiss_wire::external::plan(
-        &parsed,
+        &report,
         engine.text("engine_version").unwrap(),
         amiss_wire::digest::Digest::from_wire(engine.text("engine_digest").unwrap()).unwrap(),
     )

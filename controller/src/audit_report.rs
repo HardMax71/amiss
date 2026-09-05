@@ -31,7 +31,7 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
     }
     let report = json::parse(bytes).map_err(|_defect| ArtifactError::Corrupt)?;
     let (ReportPayload { evaluation, .. }, payload_digest, verdict) =
-        amiss_wire::report::validate_envelope(&report).map_err(|_defect| ArtifactError::Corrupt)?;
+        amiss_wire::report::validate_envelope(bytes).map_err(|_defect| ArtifactError::Corrupt)?;
     if verdict == amiss_wire::ExitClass::Failure {
         return Err(ArtifactError::Corrupt);
     }

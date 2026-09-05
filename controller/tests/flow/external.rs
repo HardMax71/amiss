@@ -46,7 +46,7 @@ fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Ve
         .and_then(|payload| payload.member("engine"))
         .unwrap();
     let plan = amiss_wire::external::plan(
-        &parsed,
+        &report,
         engine.text("engine_version").unwrap(),
         amiss_wire::digest::Digest::from_wire(engine.text("engine_digest").unwrap()).unwrap(),
     )

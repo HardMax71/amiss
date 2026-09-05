@@ -50,8 +50,7 @@ fn run(repo: Option<&str>, input: &[u8]) -> std::process::Output {
 }
 
 fn contract_report(bytes: &[u8]) -> serde_json::Value {
-    let strict = amiss_wire::json::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap();
-    validate_envelope(&strict).unwrap();
+    validate_envelope(bytes.strip_suffix(b"\n").unwrap()).unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(bytes).unwrap();
     let schema: serde_json::Value =
         serde_json::from_str(include_str!("../../../../spec/scanner-report.schema.json")).unwrap();

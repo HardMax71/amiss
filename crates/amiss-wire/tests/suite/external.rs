@@ -193,8 +193,12 @@ fn expand_occurrence(
 }
 
 fn planned(observations: Vec<Value>) -> Value {
-    let bytes =
-        plan(&report(observations), "0.0.0", sample_digest()).expect("the report yields a plan");
+    let bytes = plan(
+        &amiss_wire::json::canonical(&report(observations)),
+        "0.0.0",
+        sample_digest(),
+    )
+    .expect("the report yields a plan");
     amiss_wire::json::parse(&bytes).expect("the plan is strict JSON")
 }
 
@@ -376,7 +380,11 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
     historical.retain(|(name, _)| name != "external_destination");
     let source = report(vec![row(Value::Null, Value::object(historical))]);
     assert_eq!(
-        plan(&source, "0.0.0", sample_digest()),
+        plan(
+            &amiss_wire::json::canonical(&source),
+            "0.0.0",
+            sample_digest()
+        ),
         Err(PlanDefect::MalformedExternal)
     );
 }
@@ -384,7 +392,12 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
 #[test]
 fn the_envelope_binds_the_source_digest_and_its_own() {
     let source = report(Vec::new());
-    let derived = plan(&source, "0.0.0", sample_digest()).expect("an empty report yields a plan");
+    let derived = plan(
+        &amiss_wire::json::canonical(&source),
+        "0.0.0",
+        sample_digest(),
+    )
+    .expect("an empty report yields a plan");
     let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
     assert_eq!(field(&derived, "schema"), &string(PLAN_ENVELOPE_SCHEMA));
     let payload = field(&derived, "payload");
@@ -415,7 +428,12 @@ fn the_plan_model_reads_the_checked_writer() {
 
 #[test]
 fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
-    let written = plan(&report(Vec::new()), "0.0.0", sample_digest()).expect("valid report");
+    let written = plan(
+        &amiss_wire::json::canonical(&report(Vec::new())),
+        "0.0.0",
+        sample_digest(),
+    )
+    .expect("valid report");
     let document: serde_json::Value = serde_json::from_slice(&written).expect("valid plan");
     for side in ["base", "candidate"] {
         let mut extended = document.clone();
@@ -509,7 +527,11 @@ fn a_tampered_payload_is_refused() {
         }
     }
     assert_eq!(
-        plan(&Value::object(envelope), "0.0.0", sample_digest()),
+        plan(
+            &amiss_wire::json::canonical(&Value::object(envelope)),
+            "0.0.0",
+            sample_digest()
+        ),
         Err(PlanDefect::DigestMismatch)
     );
 }
@@ -525,7 +547,11 @@ fn an_incomplete_report_is_refused() {
     let envelope = amiss_wire::json::parse(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
         .expect("the incomplete report is strict JSON");
     assert_eq!(
-        plan(&envelope, "0.0.0", sample_digest()),
+        plan(
+            &amiss_wire::json::canonical(&envelope),
+            "0.0.0",
+            sample_digest()
+        ),
         Err(PlanDefect::Incomplete)
     );
 }
@@ -533,12 +559,12 @@ fn an_incomplete_report_is_refused() {
 #[test]
 fn a_foreign_value_is_not_a_report() {
     assert_eq!(
-        plan(&Value::Null, "0.0.0", sample_digest()),
+        plan(b"null", "0.0.0", sample_digest()),
         Err(PlanDefect::NotAReport)
     );
     assert_eq!(
         plan(
-            &object(vec![("schema", string("amiss/something-else"))]),
+            br#"{"schema":"amiss/something-else"}"#,
             "0.0.0",
             sample_digest()
         ),
@@ -684,8 +710,12 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
         let envelope =
             amiss_wire::json::parse(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
                 .expect("the declared-host report is strict JSON");
-        let derived = plan(&envelope, "0.0.0", sample_digest())
-            .expect("the declared-host report yields a plan");
+        let derived = plan(
+            &amiss_wire::json::canonical(&envelope),
+            "0.0.0",
+            sample_digest(),
+        )
+        .expect("the declared-host report yields a plan");
         let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
         let repository = repository_of(&derived, destination).expect("the declared host is shaped");
         assert_eq!(
@@ -1362,7 +1392,11 @@ fn an_external_occurrence_missing_its_promise_is_refused() {
     occurrence.retain(|(name, _)| name != "external_destination");
     let source = report(vec![row(Value::Null, Value::object(occurrence))]);
     assert_eq!(
-        plan(&source, "0.0.0", sample_digest()),
+        plan(
+            &amiss_wire::json::canonical(&source),
+            "0.0.0",
+            sample_digest()
+        ),
         Err(PlanDefect::MalformedExternal)
     );
 }

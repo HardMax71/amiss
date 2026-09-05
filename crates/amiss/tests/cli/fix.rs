@@ -80,8 +80,7 @@ fn byte_named_documents_keep_findings_without_invalid_fixes() {
         args.extend(["--format", "json"]);
         let (code, bytes, stderr) = amiss(&args);
         assert_eq!((code, stderr.as_str()), (1, ""));
-        let envelope = amiss_wire::json::parse(&bytes).unwrap();
-        let (payload, _, _) = validate_envelope(&envelope).unwrap();
+        let (payload, _, _) = validate_envelope(&bytes).unwrap();
         let rows: Vec<_> = payload
             .findings
             .iter()

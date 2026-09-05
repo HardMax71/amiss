@@ -12,14 +12,14 @@ const MALFORMED: &str = "the report carries a malformed candidate occurrence";
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
 pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
-    let envelope = match crate::input::strict_json(&invocation.report) {
-        Ok(input) => input.value,
+    let input = match crate::input::strict_json(&invocation.report) {
+        Ok(input) => input,
         Err(defect) => {
             eprintln!("amiss refs: {defect}");
             return failure;
         }
     };
-    let occurrences = match matching_occurrences(&envelope, &invocation.target) {
+    let occurrences = match matching_occurrences(&input, &invocation.target) {
         Ok(occurrences) => occurrences,
         Err(defect) => {
             eprintln!("amiss refs: {defect}");
@@ -47,12 +47,13 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
 }
 
 fn matching_occurrences<'report>(
-    envelope: &'report Value,
+    input: &'report crate::input::StrictJson,
     target: &RepoPath,
 ) -> Result<Vec<&'report Value>, String> {
     let (_payload, _digest, _verdict) =
-        validate_envelope(envelope).map_err(|error| error.to_string())?;
-    let payload = envelope
+        validate_envelope(&input.bytes).map_err(|error| error.to_string())?;
+    let payload = input
+        .value
         .member("payload")
         .ok_or_else(|| ReportDefect::NotAReport.to_string())?;
     if payload

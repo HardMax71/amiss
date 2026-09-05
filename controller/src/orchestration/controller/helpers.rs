@@ -359,7 +359,7 @@ fn prepare_external(
             ..PreparedExternal::default()
         };
     };
-    let Ok(plan_bytes) = amiss_wire::external::plan(&parsed, version, engine_digest) else {
+    let Ok(plan_bytes) = amiss_wire::external::plan(report, version, engine_digest) else {
         return PreparedExternal {
             incomplete: true,
             ..PreparedExternal::default()
