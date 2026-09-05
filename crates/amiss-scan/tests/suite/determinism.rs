@@ -115,7 +115,7 @@ fn pair(order: [&str; 3]) -> Pair {
 
 fn run(pair: &Pair) -> Vec<u8> {
     let repo = Repository::open(&pair.root, ObjectFormat::Sha1).unwrap();
-    commit_pair(
+    let wire = commit_pair(
         &repo,
         &engine(),
         None,
@@ -123,7 +123,9 @@ fn run(pair: &Pair) -> Vec<u8> {
         &pair.base,
         &pair.candidate,
     )
-    .wire()
+    .wire();
+    crate::support::generated_report(&wire);
+    wire
 }
 
 /// The report is a function of the repository and the two commits, and of
@@ -196,8 +198,8 @@ fn index_and_commit_modes_agree_on_every_fact_and_disclose_their_mode() {
     );
     let from_index = staged_index(&repo, &engine(), None, &bare_shell(), &fixture.base);
 
-    let commit: serde_json::Value = serde_json::from_slice(&from_commit.wire()).unwrap();
-    let index: serde_json::Value = serde_json::from_slice(&from_index.wire()).unwrap();
+    let commit: serde_json::Value = crate::support::generated_report(&from_commit.wire());
+    let index: serde_json::Value = crate::support::generated_report(&from_index.wire());
     let (commit, index) = (&commit["payload"], &index["payload"]);
 
     for fact in ["documents", "observations", "findings", "summary", "result"] {

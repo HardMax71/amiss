@@ -51,7 +51,7 @@ fn unavailable_report_blocks_match_the_shared_models() {
                         resource: None,
                     }],
                 );
-                let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+                let envelope = support::generated_report(&built.wire());
                 let candidate = &envelope["payload"]["evaluation"]["candidate"];
                 let controls = &envelope["payload"]["controls"];
                 snapshot_schema.assert_value(candidate, snapshot_reason.as_ref());

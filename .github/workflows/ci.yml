@@ -20,13 +20,15 @@ env:
 jobs:
   json-contract-drift:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - run: >-
           cargo test -p amiss-wire --test json_contracts --locked
+      - name: Check generated scanner reports
+        run: cargo test -p amiss-scan --test suite --locked
       - run: >-
           cargo test -p amiss --test documentation_contracts --locked
 

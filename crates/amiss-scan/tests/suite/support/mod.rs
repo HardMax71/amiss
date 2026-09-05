@@ -5,6 +5,19 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::LazyLock;
+
+static REPORT_SCHEMA: LazyLock<serde_json::Value> = LazyLock::new(|| {
+    serde_json::from_slice(
+        &fs::read(repository_root().join("spec/scanner-report.schema.json"))
+            .expect("the report schema is readable"),
+    )
+    .expect("the report schema is JSON")
+});
+
+static REPORT_VALIDATOR: LazyLock<jsonschema::Validator> = LazyLock::new(|| {
+    jsonschema::validator_for(&REPORT_SCHEMA).expect("the report schema compiles")
+});
 
 pub(crate) fn repository_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -15,14 +28,7 @@ pub(crate) fn fixture_bytes(name: &str) -> Vec<u8> {
         .expect("the specification ships this fixture")
 }
 
-fn report_schema() -> serde_json::Value {
-    serde_json::from_slice(
-        &fs::read(repository_root().join("spec/scanner-report.schema.json"))
-            .expect("the report schema is readable"),
-    )
-    .expect("the report schema is JSON")
-}
-
+#[track_caller]
 fn assert_valid(validator: &jsonschema::Validator, value: &serde_json::Value, label: &str) {
     let defects: Vec<String> = validator
         .iter_errors(value)
@@ -35,10 +41,20 @@ fn assert_valid(validator: &jsonschema::Validator, value: &serde_json::Value, la
     );
 }
 
-pub(crate) fn assert_report(value: &serde_json::Value, label: &str) {
-    let validator =
-        jsonschema::validator_for(&report_schema()).expect("the report schema compiles");
-    assert_valid(&validator, value, label);
+#[track_caller]
+pub(crate) fn generated_report(bytes: &[u8]) -> serde_json::Value {
+    {
+        let strict =
+            amiss_wire::json::parse(bytes).expect("the generated report meets the wire profile");
+        amiss_wire::report::validate_envelope(&strict)
+            .expect("the generated report passes the real reader and digest checks");
+    }
+    let value = serde_json::from_slice(bytes).expect("the generated report is JSON");
+    assert_valid(&REPORT_VALIDATOR, &value, "generated report");
+    let canonical = serde_json_canonicalizer::to_vec(&value)
+        .expect("the generated report has canonical JSON bytes");
+    assert_eq!(bytes.strip_suffix(b"\n"), Some(canonical.as_slice()));
+    value
 }
 
 pub(crate) struct ReportSchemaFragment {
@@ -48,7 +64,7 @@ pub(crate) struct ReportSchemaFragment {
 
 impl ReportSchemaFragment {
     pub(crate) fn new(definition: &str) -> Self {
-        let schema = report_schema();
+        let schema = &*REPORT_SCHEMA;
         let harness = serde_json::json!({
             "$schema": schema
                 .get("$schema")
