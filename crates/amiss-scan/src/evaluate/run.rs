@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
-use amiss_wire::json::Value;
 use amiss_wire::report::model::PolicySource;
 use amiss_wire::report::{Disposition, ErrorDetail, FindingKind};
 use amiss_wire::resolution::Resolution;
@@ -16,8 +15,8 @@ use super::projections::projection_finding;
 use super::references::{comparison_findings, structural_findings};
 use super::waiver::waiver_pass;
 use super::{
-    Attribution, DebtApplied, DocumentInput, Finding, FindingFact, Location, LocationSide,
-    PolicyStep, WaiverApplied, resolution_kinds,
+    Attribution, DebtApplied, DocumentInput, Finding, Location, LocationSide, PolicyStep,
+    WaiverApplied, resolution_kinds,
 };
 use crate::correlate::{Comparison, Outcome};
 
@@ -182,19 +181,6 @@ pub(crate) fn evaluate_with_site(
     Ok((findings, errors))
 }
 
-pub(super) fn tree_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
-    Value::object(vec![
-        (
-            "object_format".to_owned(),
-            Value::string(tree.object_format.as_ref().to_owned()),
-        ),
-        (
-            "tree_oid".to_owned(),
-            Value::string(tree.tree_oid.as_str().to_owned()),
-        ),
-    ])
-}
-
 /// Candidate findings exception items may target: exact keys with candidate
 /// facts, excluding resolved projections and every scope exceptions cannot
 /// touch. First insertion preserves the former linear `position` semantics if
@@ -210,7 +196,7 @@ fn exception_targets(findings: &[Finding]) -> BTreeMap<Digest, usize> {
 }
 
 pub(super) fn candidate_digest_of(finding: &Finding) -> Option<Digest> {
-    finding.candidate_fact.as_ref().map(FindingFact::digest)
+    finding.candidate_fact.as_ref().map(|fact| fact.digest)
 }
 
 /// Steps four and five with their defect findings: exact active debt, one

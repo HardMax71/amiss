@@ -178,8 +178,10 @@ pub(crate) fn structural_evidence(fx: &Fixture) -> (String, String, String) {
         &shell(Profile::Enforce),
         &fx.base,
         &fx.candidate,
-    );
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    )
+    .unwrap();
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let finding = envelope["payload"]["findings"]
         .as_array()
         .unwrap()
@@ -293,8 +295,9 @@ fn parsed_control<T>(
 }
 
 pub(crate) fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {
-    let built = commit_pair(&fx.repo, &engine(), None, setup, &fx.base, &fx.candidate);
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let built = commit_pair(&fx.repo, &engine(), None, setup, &fx.base, &fx.candidate).unwrap();
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let schema_text = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )

@@ -53,11 +53,11 @@ fn representative_repository_latency_and_memory() {
     };
 
     let start = Instant::now();
-    let built = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate);
+    let built = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate).unwrap();
     let elapsed = start.elapsed();
 
     let profiler = dhat::Profiler::builder().testing().build();
-    let repeated = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate);
+    let repeated = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate).unwrap();
     let stats = dhat::HeapStats::get();
     drop(profiler);
     assert_eq!(
@@ -66,12 +66,13 @@ fn representative_repository_latency_and_memory() {
     );
 
     if built.exit_code != 0 {
-        let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap_or_default();
+        let wire: serde_json::Value =
+            serde_json::from_slice(&amiss_scan::report::wire(&built).unwrap()).unwrap_or_default();
         eprintln!("errors: {}", wire["payload"]["errors"]);
         eprintln!("result: {}", wire["payload"]["result"]);
     }
     assert_eq!(built.exit_code, 0, "the representative evaluation passes");
-    let wire = built.wire();
+    let wire = amiss_scan::report::wire(&built).unwrap();
     let observations = serde_json::from_slice::<serde_json::Value>(&wire)
         .ok()
         .and_then(|envelope| envelope["payload"]["observations"].as_array().map(Vec::len))

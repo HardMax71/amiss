@@ -9,10 +9,11 @@ use std::fs;
 use std::path::Path;
 
 use amiss_wire::digest::{hb, hj};
-use amiss_wire::json::{Value, canonical_length};
+use amiss_wire::json::Value;
+use amiss_wire::report::model::{ReportEnvelope, ReportPayload};
 use amiss_wire::report::{
-    AnalysisErrorCode, EngineProvenance, FATAL_SCRATCH_BYTES, FatalSerializer, MACHINE_JSON_BYTES,
-    PAYLOAD_SCHEMA, unavailable_evaluation_wire,
+    AnalysisErrorCode, EngineProvenance, FATAL_SCRATCH_BYTES, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA,
+    emit_report, unavailable_evaluation_wire,
 };
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
 
@@ -80,7 +81,10 @@ fn artifact(platform: &str) -> Value {
         ("platform", string(platform)),
         (
             "artifact_name",
-            string(&format!("amiss-{platform}{}", ".x".repeat(60))),
+            string(&format!(
+                "amiss-{platform}{}",
+                "x".repeat(122_usize.saturating_sub(platform.len()))
+            )),
         ),
         ("tree_path", string(&maximal_path(9_000))),
         ("binary_sha256", string(DIGEST)),
@@ -169,7 +173,7 @@ fn maximal_provenance() -> Value {
         ("selected_platform", string("linux-x86_64")),
         (
             "selected_artifact_name",
-            string(&format!("amiss-linux-x86_64{}", ".x".repeat(60))),
+            string(&format!("amiss-linux-x86_64{}", "x".repeat(110))),
         ),
     ])
 }
@@ -233,6 +237,7 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     let request_digest = hb("amiss/scanner-evaluation-request", b"maximal");
     let base_wire =
         unavailable_evaluation_wire(&engine, &codes, Some(request_digest), Some(request_digest))
+            .unwrap()
             .unwrap();
     let trimmed = base_wire.strip_suffix(b"\n").unwrap();
     let envelope = amiss_wire::json::parse(trimmed).unwrap();
@@ -309,25 +314,53 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
         wire.len()
     );
 
-    prove_streamed_emission(&maximal, &wire);
+    let typed: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    prove_streamed_emission(&typed, &wire);
+
+    prove_binary_error_paths(&engine);
 }
 
-/// The scratch-bound half of the E0 golden: the streamed emission is
-/// byte-identical to the materialized wire, the counting pass reports the
-/// exact length, and one maximal emission allocates at most the fixed
-/// scratch beyond the reserve.
-#[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn prove_streamed_emission(maximal: &Value, wire: &[u8]) {
-    assert_eq!(
-        canonical_length(maximal).saturating_add(1),
-        u64::try_from(wire.len()).unwrap(),
-        "the counting canonical-serialization pass reports the exact wire length"
-    );
+#[expect(clippy::unwrap_used, reason = "allocation fixture setup")]
+fn prove_binary_error_paths(engine: &EngineProvenance) {
+    let mut binary = amiss_wire::report::invocation_failure_envelope(
+        engine,
+        &BTreeSet::from([AnalysisErrorCode::InvalidInvocation]),
+    )
+    .unwrap()
+    .unwrap();
+    binary.payload.errors = (128_u8..192)
+        .map(|first| {
+            let path =
+                amiss_wire::model::RepoPath::from_bytes([vec![first], vec![0xff; 4095]].concat())
+                    .unwrap();
+            amiss_wire::report::error_row(&amiss_wire::report::ErrorDetail {
+                code: AnalysisErrorCode::GitObjectUnreadable,
+                path: Some(path),
+                path_bytes: None,
+                resource: None,
+            })
+        })
+        .collect();
+    binary.payload.result.error_count = 64;
+    binary.payload_digest = amiss_wire::digest::hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&binary.payload, &mut writer)
+    })
+    .unwrap();
+    let mut wire = serde_json_canonicalizer::to_vec(&binary).unwrap();
+    wire.push(b'\n');
+    assert_schema_valid(&wire);
+    prove_streamed_emission(&binary, &wire);
+}
 
-    let mut reserve = FatalSerializer::new();
-    let mut streamed: Vec<u8> = Vec::with_capacity(wire.len());
+#[expect(clippy::unwrap_used, reason = "allocation assertions")]
+fn prove_streamed_emission<P: serde::Serialize>(
+    maximal: &ReportEnvelope<ReportPayload<P>>,
+    wire: &[u8],
+) {
+    let mut streamed =
+        std::io::BufWriter::with_capacity(FATAL_SCRATCH_BYTES, Vec::with_capacity(wire.len()));
     let region = Region::new(GLOBAL);
-    let emitted = reserve.emit(maximal, &mut streamed).unwrap();
+    let emitted = emit_report(maximal, &mut streamed).unwrap();
     let stats = region.change();
     assert_eq!(
         emitted,
@@ -335,7 +368,8 @@ fn prove_streamed_emission(maximal: &Value, wire: &[u8]) {
         "the streamed emission reports the exact wire length"
     );
     assert_eq!(
-        streamed, wire,
+        streamed.into_inner().unwrap(),
+        wire,
         "the streamed wire is byte-identical to the materialized wire"
     );
     let scratch = stats

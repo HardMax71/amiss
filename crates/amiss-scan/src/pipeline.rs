@@ -3,19 +3,14 @@ use std::collections::BTreeMap;
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::digest::hj_serde;
 use amiss_wire::model::{Adapter, ArtifactId, BranchRef, Oid, RepoPath};
-use amiss_wire::report::model::{
-    ControlsUnavailableReason, ObservationIdInput, ObservationIdInputSchema, StructuralAddress,
-    StructuralAddressSchema, TargetIntent,
-};
-use amiss_wire::report::{
-    AnalysisErrorCode, EngineProvenance, ErrorDetail, IntentKind, adapter_contract,
-};
+use amiss_wire::report::model::ControlsUnavailableReason;
+use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
 use amiss_wire::resolution::{Missing, Resolution};
 
 use crate::Error;
 use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
-use crate::observe::{OBSERVATION_ID_DOMAIN, fragment_digest, query_digest};
+use crate::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input};
 use crate::report::{Built, CandidateBlock, Setup, SnapshotIdentity, construct_incomplete};
 use crate::resolve::{ForgeContext, Resolver, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
@@ -127,7 +122,8 @@ pub(crate) fn side_observations(
                     continue;
                 };
                 let (_descriptor, adapter_contract_digest) =
-                    adapter_contract(context.engine, adapter);
+                    adapter_contract(context.engine, adapter)
+                        .map_err(|_defect| detail(&Error::Internal, Some(&record.path)))?;
                 for occurrence in &scanned.occurrences {
                     observations.push(
                         resolved_observation(
@@ -173,42 +169,17 @@ fn resolved_observation(
 ) -> Result<Observation, Error> {
     let (intent, resolution, external_destination) =
         resolver.resolve_scanned(context.forge, context.semantic, adapter, path, occurrence)?;
-    let identity = ObservationIdInput {
-        adapter_id: adapter,
-        adapter_contract_digest,
+    let identity = observation_input(ObservationIdentity {
+        adapter,
+        contract_digest: adapter_contract_digest,
         document: path,
-        source_construct: occurrence.occurrence.construct,
-        structural_address: StructuralAddress {
-            address_kind: adapter
-                .metadata()
-                .structural_address
-                .ok_or(Error::Internal)?,
-            construct_index: 0,
-            duplicate_index: 0,
-            node_path: occurrence
-                .occurrence
-                .node_path
-                .iter()
-                .map(|index| i64::try_from(*index).unwrap_or(i64::MAX).unsigned_abs())
-                .collect(),
-            schema: StructuralAddressSchema::Current,
-        },
-        source_projection_digest: occurrence.projection_digest,
-        extracted_intent: TargetIntent {
-            commit_oid: intent.commit_oid.clone(),
-            external_scheme: intent
-                .external_scheme
-                .clone()
-                .filter(|_scheme| intent.kind == IntentKind::ExternalUrl),
-            fragment_digest: fragment_digest(&intent),
-            kind: intent.kind,
-            query_digest: query_digest(&intent),
-            raw_destination_digest: occurrence.raw_destination_digest,
-            repository_path: intent.repository_path.as_ref(),
-            target_kind: intent.target_kind,
-        },
-        schema: ObservationIdInputSchema::Current,
-    };
+        repository_path: intent.repository_path.as_ref(),
+        construct: occurrence.occurrence.construct,
+        node_path: &occurrence.occurrence.node_path,
+        projection_digest: occurrence.projection_digest,
+        intent: &intent,
+        raw_destination_digest: occurrence.raw_destination_digest,
+    })?;
     let id = hj_serde(OBSERVATION_ID_DOMAIN, |writer| {
         serde_json::to_writer(writer, &identity)
     })
@@ -355,10 +326,6 @@ impl PipelineFailure {
     fn one(setup: Setup, detail: ErrorDetail) -> Self {
         Self::new(setup, vec![detail])
     }
-
-    fn into_built(self) -> Built {
-        construct_incomplete(&self.0.setup, &self.0.details)
-    }
 }
 
 type PipelineResult<T> = Result<T, PipelineFailure>;
@@ -399,7 +366,7 @@ fn conclude(
     site: &crate::semantic::SiteEvaluation,
     outcomes: &CandidateOutcomes,
     failures: &[ErrorDetail],
-) -> Built {
+) -> Result<Built, Error> {
     if !failures.is_empty() {
         return construct_incomplete(setup, failures);
     }

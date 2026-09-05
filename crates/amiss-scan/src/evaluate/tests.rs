@@ -3,7 +3,6 @@
 use std::collections::BTreeSet;
 
 use amiss_wire::digest::hb;
-use amiss_wire::json;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model as report;
 use amiss_wire::resolution::{
@@ -38,10 +37,6 @@ fn source_groups_preserve_sorted_digests_and_exact_multiplicities() {
                 for _ in 0..input.len().max(1) {
                     let sources = super::source_multiplicities(input.iter().copied());
                     assert_eq!(serde_json::to_vec(&sources).unwrap(), expected);
-                    assert_eq!(
-                        json::canonical(&super::claims::sources_value(&sources)),
-                        expected
-                    );
                     if !input.is_empty() {
                         input.rotate_left(1);
                     }
@@ -83,11 +78,6 @@ fn derived_resolutions_match_produced_bytes_and_the_report_reader() -> Result<()
         assert_eq!(cases.len(), 56);
         for resolution in cases {
             let encoded = serde_json_canonicalizer::to_vec(&resolution)?;
-            assert_eq!(
-                encoded,
-                json::canonical(&super::resolution_row(&resolution)),
-                "{resolution:?}"
-            );
             let decoded: report::Resolution = serde_json::from_slice(&encoded)?;
             assert_eq!(serde_json_canonicalizer::to_vec(&decoded)?, encoded);
         }

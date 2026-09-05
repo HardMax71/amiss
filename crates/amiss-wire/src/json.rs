@@ -4,7 +4,7 @@ mod read;
 mod write;
 
 pub use read::{Error, ErrorKind, parse};
-pub(crate) use write::{Callback, Scratch};
+pub(crate) use write::Callback;
 pub use write::{Sink, canonical, canonical_length, stream, write_string};
 
 pub const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;

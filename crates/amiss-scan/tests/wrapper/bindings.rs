@@ -184,8 +184,9 @@ fn index_mode_rejects_tree_bound_exceptions() {
         "2026-07-01T00:00:00Z",
         "2026-08-01T00:00:00Z",
     )));
-    let built = staged_index(&fx.repo, &engine(), None, &setup, &fx.base);
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let built = staged_index(&fx.repo, &engine(), None, &setup, &fx.base).unwrap();
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let report = &envelope["payload"];
 
     assert_eq!(built.exit_code, 2);

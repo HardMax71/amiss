@@ -160,9 +160,11 @@ fn payload(fixture: &Recorded, profile: Profile) -> (i64, serde_json::Value) {
         &shell(profile),
         &fixture.base,
         &fixture.candidate,
-    );
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
-    (built.exit_code, wire["payload"].clone())
+    )
+    .unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
+    (i64::from(built.exit_code), wire["payload"].clone())
 }
 
 /// The two broken same-repository GitHub links the history replay recorded in

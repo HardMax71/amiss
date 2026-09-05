@@ -1,10 +1,7 @@
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumIter, IntoEnumIterator, IntoStaticStr};
 
-use crate::json::Value;
-
-use super::model::{AnalysisPhase, EvaluationUnavailableReason};
-use super::{object, string};
+use super::model::{AnalysisError, AnalysisPhase, EvaluationUnavailableReason};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct AnalysisRoute {
@@ -225,7 +222,7 @@ pub struct ErrorDetail {
 
 /// One wire error row with its partition phase.
 #[must_use]
-pub fn error_row_value(detail: &ErrorDetail) -> Value {
+pub fn error_row(detail: &ErrorDetail) -> AnalysisError<crate::model::RepoPath> {
     let phase = detail.resource.map_or_else(
         || {
             detail
@@ -235,35 +232,18 @@ pub fn error_row_value(detail: &ErrorDetail) -> Value {
         },
         |(name, _limit, _observed)| name.phase(),
     );
-    let (resource, limit, observed) = detail.resource.map_or(
-        (Value::Null, Value::Null, Value::Null),
-        |(name, limit, observed)| {
-            (
-                string(name.as_str()),
-                Value::Integer(i64::try_from(limit).unwrap_or(i64::MAX)),
-                Value::Integer(i64::try_from(observed).unwrap_or(i64::MAX)),
-            )
-        },
-    );
-    object(vec![
-        ("phase", string(phase.as_ref())),
-        ("code", string(detail.code.as_ref())),
-        ("description", string(detail.code.meaning())),
-        (
-            "path",
-            detail
-                .path
-                .as_ref()
-                .map_or(Value::Null, crate::model::RepoPath::to_value),
-        ),
-        (
-            "path_bytes_hex",
-            detail.path_bytes.as_deref().map_or(Value::Null, |bytes| {
-                Value::String(hex::encode(bytes).into())
-            }),
-        ),
-        ("resource", resource),
-        ("configured_limit", limit),
-        ("observed_lower_bound", observed),
-    ])
+    AnalysisError {
+        phase,
+        code: detail.code,
+        description: detail.code.meaning().to_owned(),
+        path: detail.path.clone(),
+        path_bytes_hex: detail.path_bytes.as_ref().map(hex::encode),
+        resource: detail.resource.map(|(name, _, _)| name),
+        configured_limit: detail
+            .resource
+            .map(|(_, limit, _)| limit.min(i64::MAX.unsigned_abs())),
+        observed_lower_bound: detail
+            .resource
+            .map(|(_, _, observed)| observed.min(i64::MAX.unsigned_abs())),
+    }
 }

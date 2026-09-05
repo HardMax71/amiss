@@ -115,7 +115,7 @@ fn pair(order: [&str; 3]) -> Pair {
 
 fn run(pair: &Pair) -> Vec<u8> {
     let repo = Repository::open(&pair.root, ObjectFormat::Sha1).unwrap();
-    let wire = commit_pair(
+    let built = commit_pair(
         &repo,
         &engine(),
         None,
@@ -123,7 +123,8 @@ fn run(pair: &Pair) -> Vec<u8> {
         &pair.base,
         &pair.candidate,
     )
-    .wire();
+    .unwrap();
+    let wire = amiss_scan::report::wire(&built).unwrap();
     crate::support::generated_report(&wire).unwrap();
     wire
 }
@@ -195,11 +196,14 @@ fn index_and_commit_modes_agree_on_every_fact_and_disclose_their_mode() {
         &bare_shell(),
         &fixture.base,
         &fixture.candidate,
-    );
-    let from_index = staged_index(&repo, &engine(), None, &bare_shell(), &fixture.base);
+    )
+    .unwrap();
+    let from_index = staged_index(&repo, &engine(), None, &bare_shell(), &fixture.base).unwrap();
 
-    let commit: serde_json::Value = crate::support::generated_report(&from_commit.wire()).unwrap();
-    let index: serde_json::Value = crate::support::generated_report(&from_index.wire()).unwrap();
+    let commit: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&from_commit).unwrap()).unwrap();
+    let index: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&from_index).unwrap()).unwrap();
     let (commit, index) = (&commit["payload"], &index["payload"]);
 
     for fact in ["documents", "observations", "findings", "summary", "result"] {

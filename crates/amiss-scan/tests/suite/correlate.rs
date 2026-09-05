@@ -6,7 +6,7 @@ use amiss_scan::observe::{ObservationIdentity, observation_input};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 use amiss_wire::resolution::{
@@ -76,6 +76,7 @@ struct Spec {
     resolution: Resolution,
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture identity")]
 fn observation(spec: &Spec) -> Observation {
     let scanned = ScannedOccurrence {
         occurrence: Occurrence {
@@ -102,20 +103,24 @@ fn observation(spec: &Spec) -> Observation {
         ),
     };
     let document = rp(&spec.document);
-    let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).1;
-    let id = hj(
-        amiss_scan::observe::OBSERVATION_ID_DOMAIN,
-        &observation_input(&ObservationIdentity {
-            adapter: Adapter::Markdown,
-            contract_digest: adapter_contract_digest,
-            document: &document,
-            construct: scanned.occurrence.construct,
-            node_path: &scanned.occurrence.node_path,
-            projection_digest: scanned.projection_digest,
-            intent: &spec.intent,
-            raw_destination_digest: scanned.raw_destination_digest,
-        }),
-    );
+    let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).unwrap().1;
+    let input = observation_input(ObservationIdentity {
+        adapter: Adapter::Markdown,
+        contract_digest: adapter_contract_digest,
+        document: &document,
+        construct: scanned.occurrence.construct,
+        node_path: &scanned.occurrence.node_path,
+        projection_digest: scanned.projection_digest,
+        intent: &spec.intent,
+        raw_destination_digest: scanned.raw_destination_digest,
+
+        repository_path: spec.intent.repository_path.as_ref(),
+    })
+    .unwrap();
+    let id = amiss_wire::digest::hj_serde(amiss_scan::observe::OBSERVATION_ID_DOMAIN, |writer| {
+        serde_json::to_writer(writer, &input)
+    })
+    .unwrap();
     Observation {
         id,
         adapter_contract_digest,

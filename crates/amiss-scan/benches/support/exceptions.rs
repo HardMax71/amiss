@@ -4,7 +4,7 @@ use amiss_md::extract::BlockKind;
 use amiss_scan::correlate::{
     Comparison, Impact, Observation, Outcome, Reason, SourceChange, TargetChange,
 };
-use amiss_scan::evaluate::{FindingFact, evaluate};
+use amiss_scan::evaluate::evaluate;
 use amiss_scan::policy::{DebtContext, Effects, TimeContext};
 use amiss_scan::resolve::Intent;
 use amiss_scan::scan::SpanDisplay;
@@ -60,7 +60,7 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
             let accepted_fact_digest = finding
                 .candidate_fact
                 .as_ref()
-                .map_or_else(|| panic!("benchmark candidate fact"), FindingFact::digest);
+                .map_or_else(|| panic!("benchmark candidate fact"), |fact| fact.digest);
             DebtItem {
                 debt_id: artifact_id(format!("bench/debt-{index:05}")),
                 finding_key: finding.finding_key,

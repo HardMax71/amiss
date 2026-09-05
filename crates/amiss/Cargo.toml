@@ -12,6 +12,7 @@ repository.workspace = true
 exclude.workspace = true
 
 [dependencies]
+hex.workspace = true
 amiss-git = { path = "../amiss-git", version = "0.27.0" }
 amiss-md = { path = "../amiss-md", version = "0.27.0" }
 amiss-scan = { path = "../amiss-scan", version = "0.27.0" }

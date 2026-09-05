@@ -5,7 +5,7 @@
 )]
 
 use amiss_scan::observe::{
-    OBSERVATION_ID_DOMAIN, ObservationIdentity, intent_value, observation_input,
+    OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input, target_intent,
 };
 use amiss_scan::report::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, Setup,
@@ -14,7 +14,7 @@ use amiss_scan::report::{
 use amiss_scan::resolve::Intent;
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::digest::{Digest, hb, hj, hj_serde};
-use amiss_wire::json::{Value, canonical, parse};
+use amiss_wire::json::{Value, parse};
 use amiss_wire::model::{
     Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
 };
@@ -50,8 +50,10 @@ fn unavailable_report_blocks_match_the_shared_models() {
                         path_bytes: None,
                         resource: None,
                     }],
-                );
-                let envelope = support::generated_report(&built.wire()).unwrap();
+                )
+                .unwrap();
+                let envelope =
+                    support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
                 let candidate = &envelope["payload"]["evaluation"]["candidate"];
                 let controls = &envelope["payload"]["controls"];
                 snapshot_schema.assert_value(candidate, snapshot_reason.as_ref());
@@ -180,10 +182,11 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
     let node_path = [0, 42, usize::MAX];
     let projection_digest = hb("amiss/source-projection", b"projection");
     let raw_destination_digest = hb("amiss/raw-destination", b"destination");
-    let historical_intent: serde_json::Value = serde_json::from_slice(&canonical(&intent_value(
+    let historical_intent: serde_json::Value = serde_json::to_value(target_intent(
         &intents[2],
         raw_destination_digest,
-    )))
+        intents[2].repository_path.as_ref(),
+    ))
     .expect("the historical intent is JSON");
     ReportSchemaFragment::new("TargetIntent")
         .assert_value(&historical_intent, "historical target intent");
@@ -192,7 +195,7 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
             assert_eq!(adapter, Adapter::PlainAdvisory);
             continue;
         }
-        let contract_digest = adapter_contract(&engine, adapter).1;
+        let contract_digest = adapter_contract(&engine, adapter).unwrap().1;
         for (document, intent) in [
             (&text_path, &intents[0]),
             (&byte_path, &intents[1]),
@@ -206,20 +209,22 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
                     adapter,
                     contract_digest,
                     document,
+                    repository_path: intent.repository_path.as_ref(),
                     construct: SourceConstruct::InlineLink,
                     node_path: &node_path,
                     projection_digest,
                     intent: &intent,
                     raw_destination_digest,
                 };
-                let input = observation_input(&identity);
-                let typed: ObservationIdInput = serde_json::from_slice(&canonical(&input)).unwrap();
+                let input = observation_input(identity).unwrap();
+                let bytes = serde_json::to_vec(&input).unwrap();
+                let typed: ObservationIdInput = serde_json::from_slice(&bytes).unwrap();
                 assert_eq!(
                     hj_serde(OBSERVATION_ID_DOMAIN, |writer| serde_json::to_writer(
                         writer, &typed
                     ))
                     .unwrap(),
-                    hj(OBSERVATION_ID_DOMAIN, &input),
+                    hb(OBSERVATION_ID_DOMAIN, &bytes),
                     "{} {document:?} {kind:?}",
                     adapter.as_ref()
                 );

@@ -47,9 +47,12 @@ fn builds_the_fatal_incomplete_envelope() {
         AnalysisErrorCode::InvalidProfile,
         AnalysisErrorCode::InvalidEvent,
     ]);
-    let wire = invocation_failure_wire(&engine(), &codes).unwrap();
+    let wire = invocation_failure_wire(&engine(), &codes).unwrap().unwrap();
     assert_eq!(wire.last(), Some(&b'\n'));
-    assert_eq!(invocation_failure_wire(&engine(), &codes).unwrap(), wire);
+    assert_eq!(
+        invocation_failure_wire(&engine(), &codes).unwrap().unwrap(),
+        wire
+    );
 
     let envelope = parse(&wire).unwrap();
     let Value::String(schema) = member(&envelope, "schema") else {
@@ -147,7 +150,7 @@ fn orders_reasons_and_errors_independently() {
         AnalysisErrorCode::InvalidProfile,
         AnalysisErrorCode::RequestUnreadable,
     ]);
-    let wire = invocation_failure_wire(&engine(), &codes).unwrap();
+    let wire = invocation_failure_wire(&engine(), &codes).unwrap().unwrap();
     let envelope = parse(&wire).unwrap();
     let payload = member(&envelope, "payload");
     assert_eq!(
@@ -179,15 +182,19 @@ fn orders_reasons_and_errors_independently() {
 
 #[test]
 fn refuses_inputs_outside_the_invocation_phase() {
-    assert!(invocation_failure_wire(&engine(), &BTreeSet::new()).is_none());
+    assert!(
+        invocation_failure_wire(&engine(), &BTreeSet::new())
+            .unwrap()
+            .is_none()
+    );
     let git: BTreeSet<AnalysisErrorCode> = BTreeSet::from([AnalysisErrorCode::GitObjectMissing]);
-    assert!(invocation_failure_wire(&engine(), &git).is_none());
+    assert!(invocation_failure_wire(&engine(), &git).unwrap().is_none());
 }
 
 #[test]
 fn error_routes_preserve_the_canonical_wire() {
     use amiss_wire::controls::ResourceName;
-    use amiss_wire::report::{ErrorDetail, error_row_value};
+    use amiss_wire::report::{ErrorDetail, error_row};
 
     let ordinary = AnalysisErrorCode::all().map(|code| ErrorDetail {
         code,
@@ -201,21 +208,21 @@ fn error_routes_preserve_the_canonical_wire() {
         path_bytes: None,
         resource: Some((name, 1, 2)),
     });
-    let rows = Value::array(
-        ordinary
-            .chain(resources)
-            .map(|detail| {
-                let row = error_row_value(&detail);
-                let typed: amiss_wire::report::model::AnalysisError =
-                    serde_json::from_slice(&amiss_wire::json::canonical(&row)).unwrap();
-                assert_eq!(typed.code, detail.code);
-                assert_eq!(typed.description, detail.code.meaning());
-                row
-            })
-            .collect(),
-    );
+    let rows: Vec<_> = ordinary
+        .chain(resources)
+        .map(|detail| {
+            let row = error_row(&detail);
+            assert_eq!(row.code, detail.code);
+            assert_eq!(row.description, detail.code.meaning());
+            row
+        })
+        .collect();
     assert_eq!(
-        hj("amiss/test-error-routes", &rows).to_string(),
+        hb(
+            "amiss/test-error-routes",
+            &serde_json_canonicalizer::to_vec(&rows).unwrap()
+        )
+        .to_string(),
         "sha256:25a99d8043b027e8da184a3a0458e984e2180da5399bc96957e9a9d86c590274",
     );
 }
@@ -291,46 +298,6 @@ fn the_kind_projections_are_populated_and_distinct() {
     assert!(invariants.len() > 1 && invariants.iter().all(|text| !text.is_empty()));
 }
 
-/// The fatal serializer's bytes are exactly the canonical wire and a newline,
-/// whatever the piece sizes, and its count is the byte count.
-#[test]
-fn the_fatal_serializer_writes_the_canonical_wire_exactly() {
-    use amiss_wire::json::{Value, canonical};
-    use amiss_wire::report::{FATAL_SCRATCH_BYTES, FatalSerializer};
-
-    let mut serializer = FatalSerializer::default();
-    for length in [
-        1,
-        FATAL_SCRATCH_BYTES - 1,
-        FATAL_SCRATCH_BYTES,
-        FATAL_SCRATCH_BYTES + 1,
-    ] {
-        let members: Vec<(String, Value)> = (0..8)
-            .map(|index| {
-                (
-                    format!("k{index}"),
-                    Value::string("v".repeat(length / 4 + 1)),
-                )
-            })
-            .chain(std::iter::once((
-                "big".to_owned(),
-                Value::string("x".repeat(length)),
-            )))
-            .collect();
-        let envelope = Value::object(members);
-        let mut expected = canonical(&envelope);
-        expected.push(b'\n');
-
-        let wire = serializer.wire_bytes(&envelope);
-        assert_eq!(wire, expected, "piece length {length}");
-
-        let mut out = Vec::new();
-        let written = serializer.emit(&envelope, &mut out).unwrap();
-        assert_eq!(out, expected);
-        assert_eq!(written, u64::try_from(expected.len()).unwrap());
-    }
-}
-
 #[test]
 fn a_failure_envelope_exists_exactly_when_a_reason_does() {
     use std::collections::BTreeSet;
@@ -339,11 +306,17 @@ fn a_failure_envelope_exists_exactly_when_a_reason_does() {
 
     let mut codes = BTreeSet::new();
     assert!(
-        invocation_failure_envelope(&engine(), &codes).is_none(),
+        invocation_failure_envelope(&engine(), &codes)
+            .unwrap()
+            .is_none(),
         "no code, no envelope"
     );
     codes.insert(AnalysisErrorCode::InvalidInvocation);
-    assert!(invocation_failure_envelope(&engine(), &codes).is_some());
+    assert!(
+        invocation_failure_envelope(&engine(), &codes)
+            .unwrap()
+            .is_some()
+    );
 }
 
 /// The fix vocabulary answers like the other fixed-sentence tables: every
@@ -368,7 +341,7 @@ fn report_emission_preserves_bytes_and_propagates_short_writes() {
     use std::io::{BufWriter, Cursor, ErrorKind};
 
     let codes = BTreeSet::from([AnalysisErrorCode::InvalidInvocation]);
-    let refusal = invocation_failure_wire(&engine(), &codes).unwrap();
+    let refusal = invocation_failure_wire(&engine(), &codes).unwrap().unwrap();
     let normal: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
     for bytes in [normal, refusal.as_slice()] {
         let envelope: ReportEnvelope = serde_json::from_slice(bytes).unwrap();

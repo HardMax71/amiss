@@ -2,54 +2,30 @@ use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
-use amiss_wire::json::Value;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::FindingKind;
+use amiss_wire::report::model::{DebtExceptionDiagnosticKind, ExceptionDiagnostic};
 
 use super::control::control_row;
-use super::{Finding, candidate_digest_of, tree_value};
+use super::{Finding, candidate_digest_of};
 
 fn debt_diagnostic(
     item: &amiss_wire::controls::DebtItem,
     context: &crate::policy::DebtContext,
     current_fact_digest: Digest,
-) -> Value {
-    Value::object(vec![
-        ("kind".to_owned(), Value::string("debt".to_owned())),
-        (
-            "debt_id".to_owned(),
-            Value::string(item.debt_id.as_str().to_owned()),
-        ),
-        (
-            "debt_snapshot_digest".to_owned(),
-            Value::string(context.digest.to_string()),
-        ),
-        (
-            "adoption_tree".to_owned(),
-            tree_value(&context.adoption_tree),
-        ),
-        (
-            "accepted_fact_digest".to_owned(),
-            Value::string(item.accepted_fact_digest.to_string()),
-        ),
-        (
-            "current_fact_digest".to_owned(),
-            Value::string(current_fact_digest.to_string()),
-        ),
-        (
-            "owner".to_owned(),
-            Value::string(item.owner.as_str().to_owned()),
-        ),
-        ("reason".to_owned(), Value::string(item.reason.clone())),
-        (
-            "created_at".to_owned(),
-            Value::string(item.created_at.as_str().to_owned()),
-        ),
-        (
-            "expires_at".to_owned(),
-            Value::string(item.expires_at.as_str().to_owned()),
-        ),
-    ])
+) -> ExceptionDiagnostic {
+    ExceptionDiagnostic::Debt {
+        kind: DebtExceptionDiagnosticKind::Debt,
+        debt_id: item.debt_id.clone(),
+        debt_snapshot_digest: context.digest,
+        adoption_tree: context.adoption_tree.clone(),
+        accepted_fact_digest: item.accepted_fact_digest,
+        current_fact_digest,
+        owner: item.owner.clone(),
+        reason: item.reason.clone(),
+        created_at: item.created_at.clone(),
+        expires_at: item.expires_at.clone(),
+    }
 }
 
 /// The debt item pass: expiry before fact inequality, both defect rows able
@@ -82,7 +58,7 @@ pub(super) fn debt_pass(
                 format!("debt/{}/expired", item.debt_id.as_str()),
                 None,
                 (None, Some(context.digest)),
-                debt_diagnostic(item, context, current),
+                Some(debt_diagnostic(item, context, current)),
                 profile,
             )?);
         }
@@ -92,7 +68,7 @@ pub(super) fn debt_pass(
                 format!("debt/{}/fact", item.debt_id.as_str()),
                 None,
                 (None, Some(context.digest)),
-                debt_diagnostic(item, context, current),
+                Some(debt_diagnostic(item, context, current)),
                 profile,
             )?);
         }

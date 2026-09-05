@@ -108,8 +108,9 @@ fn payload(
     base: &Oid,
     candidate: &Oid,
 ) -> serde_json::Value {
-    let built = commit_pair(repo, &engine(), None, setup, base, candidate);
-    let envelope: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let built = commit_pair(repo, &engine(), None, setup, base, candidate).unwrap();
+    let envelope: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let mut value = envelope["payload"].clone();
     value["exit_code"] = serde_json::Value::from(built.exit_code);
     value
