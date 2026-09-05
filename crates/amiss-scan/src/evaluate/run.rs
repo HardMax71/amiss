@@ -163,7 +163,7 @@ pub(crate) fn evaluate_with_site(
                     source: PolicySource::BuiltIn,
                     rule_id: format!(
                         "scanner-policy-defaults/{}/enforce-introduced",
-                        finding.kind().as_ref()
+                        finding.key_input.finding_kind.as_ref()
                     ),
                     before: Disposition::Fail,
                     after: Disposition::Warn,
@@ -177,7 +177,7 @@ pub(crate) fn evaluate_with_site(
     for seed in &policy.controls {
         findings.push(control_finding(seed, policy, profile));
     }
-    findings.sort_by_key(|finding| finding.key.digest());
+    findings.sort_by_key(|finding| finding.finding_key);
     (findings, errors)
 }
 
@@ -202,7 +202,7 @@ fn exception_targets(findings: &[Finding]) -> BTreeMap<Digest, usize> {
     let mut targets = BTreeMap::new();
     for (index, finding) in findings.iter().enumerate() {
         if finding.candidate_fact.is_some() {
-            targets.entry(finding.key.digest()).or_insert(index);
+            targets.entry(finding.finding_key).or_insert(index);
         }
     }
     targets
@@ -259,8 +259,8 @@ fn apply_valid_exceptions(
 ) -> bool {
     let mut overlap = false;
     for finding in findings.iter_mut() {
-        let debt_item = debt_valid.get(&finding.key.digest()).copied();
-        let waiver_item = waiver_valid.get(&finding.key.digest()).copied();
+        let debt_item = debt_valid.get(&finding.finding_key).copied();
+        let waiver_item = waiver_valid.get(&finding.finding_key).copied();
         match (debt_item, waiver_item) {
             (Some(_), Some(_)) => {
                 overlap = true;
@@ -331,7 +331,10 @@ fn apply_raise(
     source: PolicySource,
     prefix: &str,
 ) {
-    let Some((_kind, target)) = raised.iter().find(|(kind, _)| *kind == finding.kind()) else {
+    let Some((_kind, target)) = raised
+        .iter()
+        .find(|(kind, _)| *kind == finding.key_input.finding_kind)
+    else {
         return;
     };
     let current = finding
@@ -341,7 +344,7 @@ fn apply_raise(
     if *target > current {
         finding.steps.push(PolicyStep {
             source,
-            rule_id: format!("{prefix}/{}", finding.kind().as_ref()),
+            rule_id: format!("{prefix}/{}", finding.key_input.finding_kind.as_ref()),
             before: current,
             after: *target,
         });
@@ -420,6 +423,6 @@ fn ordinary(
         comparison_findings(comparison, profile, &mut findings);
     }
 
-    findings.sort_by_key(|finding| finding.key.digest());
+    findings.sort_by_key(|finding| finding.finding_key);
     findings
 }

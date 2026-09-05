@@ -50,7 +50,11 @@ fn reference_keys_preserve_normalization_and_optional_identity_fields() {
                 );
                 let finding = only(findings, FindingKind::ExplicitTargetMissing);
                 let expected = json::parse(expected.as_bytes()).expect("key fixture");
-                assert_eq!(finding.key().digest(), hj(FINDING_KEY_DOMAIN, &expected));
+                assert_eq!(finding.finding_key, hj(FINDING_KEY_DOMAIN, &expected));
+                assert_eq!(
+                    serde_json::to_vec(&finding.key_input).expect("typed key"),
+                    json::canonical(&expected)
+                );
             }
         }
     }
@@ -99,13 +103,17 @@ fn nonreference_keys_preserve_document_observation_and_control_scopes() {
         ("policy-weakened", r#"{"control_path":"config.json","kind":"control","rule_id":"rule"}"#.to_owned()),
     ].map(|(kind, scope)| {
         let input = format!(r#"{{"finding_kind":"{kind}","schema":"amiss/scanner-finding-key-input","scope":{scope}}}"#);
-        hj(FINDING_KEY_DOMAIN, &json::parse(input.as_bytes()).expect("key fixture"))
+        let input = json::parse(input.as_bytes()).expect("key fixture");
+        (hj(FINDING_KEY_DOMAIN, &input), json::canonical(&input))
     });
     expected.sort_unstable();
     assert_eq!(
         findings
             .iter()
-            .map(|finding| finding.key().digest())
+            .map(|finding| (
+                finding.finding_key,
+                serde_json::to_vec(&finding.key_input).expect("typed key")
+            ))
             .collect::<Vec<_>>(),
         expected
     );

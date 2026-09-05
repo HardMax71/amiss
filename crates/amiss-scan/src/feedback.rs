@@ -92,7 +92,7 @@ pub(crate) fn project(findings: &[Finding], comparisons: &[Comparison]) -> Feedb
                     effective_disposition: finding.effective_disposition,
                     annotation: None,
                 });
-                group.finding_kinds.insert(finding.kind());
+                group.finding_kinds.insert(finding.key_input.finding_kind);
                 group.location_count = group.location_count.saturating_add(finding.member_count);
                 group.effective_disposition = group
                     .effective_disposition
@@ -236,7 +236,7 @@ fn candidate_annotation(finding: &Finding) -> Option<Annotation> {
         path: finding.location.path.as_ref()?.as_str()?.to_owned(),
         span: finding.location.span?,
         display: finding.location.display?,
-        tie: finding.key().digest(),
+        tie: finding.finding_key,
     })
 }
 

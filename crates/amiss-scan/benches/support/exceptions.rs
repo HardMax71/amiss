@@ -57,11 +57,12 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
                 .remove(&observation_id)
                 .unwrap_or_else(|| panic!("benchmark control projection"));
             let accepted_fact_digest = finding
-                .candidate_fact()
+                .candidate_fact
+                .as_ref()
                 .map_or_else(|| panic!("benchmark candidate fact"), FindingFact::digest);
             DebtItem {
                 debt_id: artifact_id(format!("bench/debt-{index:05}")),
-                finding_key: finding.key().digest(),
+                finding_key: finding.finding_key,
                 accepted_fact,
                 accepted_fact_digest,
                 owner: owner_id("team:benchmark"),
