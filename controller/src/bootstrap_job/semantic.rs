@@ -14,8 +14,7 @@ use super::{
     AcquiredSemanticTemplate, BootstrapJobError, BoundSemanticEvidence,
     SEMANTIC_INPUT_ARTIFACT_BYTES, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
 };
-
-const INPUT_ARTIFACT_SCHEMA: &str = "amiss/controller-semantic-input-artifact-v1";
+use crate::semantic_artifact::{InputArtifact, InputArtifactRow, InputArtifactSchema};
 
 struct BoundInput {
     payload_digest: Digest,
@@ -25,22 +24,6 @@ struct BoundInput {
     template_digest: Digest,
     envelope_bytes: Vec<u8>,
     envelope_digest: Digest,
-}
-
-#[derive(serde::Serialize)]
-struct InputArtifact<'a> {
-    inputs: Vec<InputArtifactRow<'a>>,
-    schema: &'static str,
-}
-
-#[derive(serde::Serialize)]
-struct InputArtifactRow<'a> {
-    acquisition_identity: Option<&'a str>,
-    envelope_bytes_base64: String,
-    envelope_digest: String,
-    payload_digest: String,
-    template_bytes_base64: String,
-    template_digest: String,
 }
 
 /// Binds controller-produced and independently acquired templates to one exact candidate.
@@ -158,15 +141,15 @@ fn input_artifact(inputs: &[BoundInput], limit: u64) -> Result<Vec<u8>, Bootstra
         inputs: inputs
             .iter()
             .map(|input| InputArtifactRow {
-                acquisition_identity: input.acquisition_identity.as_ref().map(ArtifactId::as_str),
+                acquisition_identity: input.acquisition_identity.as_ref(),
                 envelope_bytes_base64: String::new(),
-                envelope_digest: input.envelope_digest.to_string(),
-                payload_digest: input.payload_digest.to_string(),
+                envelope_digest: input.envelope_digest,
+                payload_digest: input.payload_digest,
                 template_bytes_base64: String::new(),
-                template_digest: input.template_digest.to_string(),
+                template_digest: input.template_digest,
             })
             .collect(),
-        schema: INPUT_ARTIFACT_SCHEMA,
+        schema: InputArtifactSchema::Current,
     };
     let metadata =
         serde_json::to_vec(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
