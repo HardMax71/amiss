@@ -1,12 +1,17 @@
 mod tests;
 
-use amiss_wire::digest::{Digest, hj, sha256};
-use amiss_wire::json::{self, Value};
+use std::collections::BTreeMap;
+
+use amiss_wire::digest::{Digest, hj_serde, sha256};
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
-use amiss_wire::report::model::{BaseSnapshot, Evaluation, ReportPayload, Snapshot};
-use amiss_wire::requests::{
-    CandidateEventKind, CandidateFinality, CandidateSnapshot, RequestMode, SnapshotMaterialization,
+use amiss_wire::report::model::{
+    BaseSnapshot, Evaluation, ReportEnvelope, ReportPayload, Snapshot,
 };
+use amiss_wire::requests::{
+    CANDIDATE_IDENTITY_DOMAIN, CandidateEventKind, CandidateFinality, CandidateIdentitySchema,
+    CandidateSnapshot, RequestMode, SnapshotMaterialization,
+};
+use serde::{Deserialize, Serialize, de::IgnoredAny};
 
 use crate::ArtifactError;
 
@@ -25,11 +30,34 @@ pub(crate) struct AcceptedSnapshot {
     pub(crate) tree: Oid,
 }
 
+#[derive(Deserialize)]
+struct IdentityPayload {
+    evaluation: IdentityEvaluation,
+}
+
+#[derive(Deserialize, Serialize)]
+struct IdentityEvaluation {
+    #[serde(default, skip_serializing, rename = "schema")]
+    _schema: json_serde::Absent,
+    #[serde(skip_serializing, rename = "evaluation_instant")]
+    _evaluation_instant: IgnoredAny,
+    #[serde(skip_serializing, rename = "trusted_time")]
+    _trusted_time: IgnoredAny,
+    #[serde(flatten)]
+    fields: BTreeMap<String, serde_json::Value>,
+}
+
+#[derive(Serialize)]
+struct IdentityPreimage {
+    #[serde(flatten)]
+    evaluation: IdentityEvaluation,
+    schema: CandidateIdentitySchema,
+}
+
 pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactError> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > amiss_wire::report::MACHINE_JSON_BYTES {
         return Err(ArtifactError::TooLarge);
     }
-    let report = json::parse(bytes).map_err(|_defect| ArtifactError::Corrupt)?;
     let (ReportPayload { evaluation, .. }, payload_digest, verdict) =
         amiss_wire::report::validate_envelope(bytes).map_err(|_defect| ArtifactError::Corrupt)?;
     if verdict == amiss_wire::ExitClass::Failure {
@@ -69,39 +97,19 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
     .ok_or(ArtifactError::Corrupt)?;
     let target_ref = evaluation.target_ref;
 
-    let Value::Object(envelope) = report else {
-        return Err(ArtifactError::Corrupt);
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    // Report validation has already enforced the strict document depth ceiling.
+    deserializer.disable_recursion_limit();
+    let identity = ReportEnvelope::<IdentityPayload>::deserialize(&mut deserializer)
+        .map_err(|_defect| ArtifactError::Corrupt)?;
+    let preimage = IdentityPreimage {
+        evaluation: identity.payload.evaluation,
+        schema: CandidateIdentitySchema::Current,
     };
-    let payload = envelope
-        .into_vec()
-        .into_iter()
-        .find_map(|(key, value)| (key == "payload").then_some(value))
-        .ok_or(ArtifactError::Corrupt)?;
-    let Value::Object(payload) = payload else {
-        return Err(ArtifactError::Corrupt);
-    };
-    let evaluation = payload
-        .into_vec()
-        .into_iter()
-        .find_map(|(key, value)| (key == "evaluation").then_some(value))
-        .ok_or(ArtifactError::Corrupt)?;
-    if evaluation.member("schema").is_some() {
-        return Err(ArtifactError::Corrupt);
-    }
-    let Value::Object(members) = evaluation else {
-        return Err(ArtifactError::Corrupt);
-    };
-    let mut identity = vec![(
-        "schema".to_owned(),
-        Value::string(amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN.to_owned()),
-    )];
-    identity.extend(
-        members
-            .into_vec()
-            .into_iter()
-            .filter(|(key, _value)| !matches!(key.as_str(), "evaluation_instant" | "trusted_time")),
-    );
-    let identity = Value::object(identity);
+    let candidate_identity_digest = hj_serde(CANDIDATE_IDENTITY_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&preimage, &mut writer)
+    })
+    .map_err(|_defect| ArtifactError::Corrupt)?;
     Ok(AcceptedReport {
         report_digest: sha256(bytes),
         payload_digest,
@@ -115,6 +123,6 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
             commit: candidate.commit_oid,
             tree: candidate.tree_oid,
         },
-        candidate_identity_digest: hj(amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN, &identity),
+        candidate_identity_digest,
     })
 }
