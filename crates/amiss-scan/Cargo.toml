@@ -33,6 +33,11 @@ jsonschema.workspace = true
 stats_alloc = "0.1.10"
 tempfile.workspace = true
 
+# Allocation statistics are process-wide; keep this target to one test.
+[[test]]
+name = "fatal_envelope"
+path = "tests/suite/envelope.rs"
+
 [[bench]]
 name = "adapters"
 harness = false
