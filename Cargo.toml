@@ -40,6 +40,7 @@ repository = "https://github.com/HardMax71/amiss"
 exclude = ["/tests", "/benches"]
 
 [workspace.dependencies]
+countio = "0.3.0"
 amiss-controller-bootstrap-fixture = { path = "controller/bootstrap-fixture" }
 amiss-controller-fixtures = { path = "controller/fixtures" }
 atomicwrites = "0.4.4"

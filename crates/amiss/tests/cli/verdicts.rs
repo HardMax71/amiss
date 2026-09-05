@@ -103,6 +103,17 @@ fn a_closed_pipe_ends_the_narration_and_not_the_verdict() {
 }
 
 #[test]
+fn report_emission_rejects_a_read_only_destination() {
+    use amiss_wire::report::model::ReportEnvelope;
+
+    let report: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+    let file = tempfile::NamedTempFile::new().unwrap();
+    let mut output = std::io::BufWriter::new(fs::File::open(file.path()).unwrap());
+    assert!(amiss_wire::report::emit_report(&report, &mut output).is_err());
+    assert_eq!(file.as_file().metadata().unwrap().len(), 0);
+}
+
+#[test]
 fn a_clean_observe_run_passes_with_a_complete_report() {
     let fx = fixture();
     let (code, stdout, stderr) = amiss(&[

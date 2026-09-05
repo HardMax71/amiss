@@ -87,6 +87,7 @@ dependencies = [
 name = "amiss-wire"
 version = "0.27.0"
 dependencies = [
+ "countio",
  "digest-io",
  "hex",
  "hex_fmt",
@@ -176,6 +177,12 @@ name = "const-oid"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
+
+[[package]]
+name = "countio"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9702aee5d1d744c01d82f6915644f950f898e014903385464c773b96fefdecb"
 
 [[package]]
 name = "cpufeatures"

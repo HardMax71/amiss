@@ -360,3 +360,35 @@ fn every_fix_kind_states_its_own_sentence() {
     let unique: BTreeSet<&str> = sentences.iter().copied().collect();
     assert_eq!(unique.len(), sentences.len(), "{sentences:?}");
 }
+
+#[test]
+fn report_emission_preserves_bytes_and_propagates_short_writes() {
+    use amiss_wire::report::model::ReportEnvelope;
+    use amiss_wire::report::{FATAL_SCRATCH_BYTES, emit_report};
+    use std::io::{BufWriter, Cursor, ErrorKind};
+
+    let codes = BTreeSet::from([AnalysisErrorCode::InvalidInvocation]);
+    let refusal = invocation_failure_wire(&engine(), &codes).unwrap();
+    let normal: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
+    for bytes in [normal, refusal.as_slice()] {
+        let envelope: ReportEnvelope = serde_json::from_slice(bytes).unwrap();
+        let mut expected = serde_json_canonicalizer::to_vec(&envelope).unwrap();
+        expected.push(b'\n');
+        for capacity in [0, 1, FATAL_SCRATCH_BYTES] {
+            let mut out = BufWriter::with_capacity(capacity, Vec::new());
+            let written = emit_report(&envelope, &mut out).unwrap();
+            assert_eq!(
+                out.into_inner().unwrap(),
+                expected,
+                "buffer capacity {capacity}"
+            );
+            assert_eq!(written, u64::try_from(expected.len()).unwrap());
+        }
+        let mut short = vec![0; expected.len() - 1];
+        let mut output = Cursor::new(short.as_mut_slice());
+        assert_eq!(
+            emit_report(&envelope, &mut output).unwrap_err().kind(),
+            ErrorKind::WriteZero
+        );
+    }
+}
