@@ -129,6 +129,36 @@ fn additive_evaluation_fields_remain_bound_but_time_does_not() -> Result<(), Art
     Ok(())
 }
 
+#[test]
+fn opaque_identity_fields_keep_the_report_depth_ceiling() -> Result<(), ArtifactError> {
+    let fixture = amiss_fixtures::publication_audit(true).ok_or(ArtifactError::Corrupt)?;
+    let original = accepted_report(&fixture.report)?;
+    for depth in [127, 256, 513] {
+        let changed = edited_report(&fixture.report, |evaluation| {
+            let mut nested = Value::Null;
+            for _ in 0..depth {
+                nested = json!([nested]);
+            }
+            evaluation["candidate"]["future_field"] = nested;
+            Ok(())
+        })?;
+        if depth <= 256 {
+            let accepted = accepted_report(&changed)?;
+            assert_ne!(accepted.payload_digest, original.payload_digest);
+            assert_ne!(
+                accepted.candidate_identity_digest,
+                original.candidate_identity_digest
+            );
+        } else {
+            assert!(matches!(
+                accepted_report(&changed),
+                Err(ArtifactError::Corrupt)
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn edited_report(
     bytes: &[u8],
     edit: impl FnOnce(&mut Value) -> Result<(), ArtifactError>,
