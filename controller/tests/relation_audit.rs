@@ -164,17 +164,14 @@ fn with_null_report_target(
 
     let mut rebound = parse_plan(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     rebound.payload.report_payload_digest = report_payload_digest;
-    fixture.plan =
-        json::canonical(&plan(&rebound.payload).map_err(|_defect| ArtifactError::Corrupt)?);
+    fixture.plan = plan(&rebound.payload).map_err(|_defect| ArtifactError::Corrupt)?;
     let rebound = parse_plan(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
-    fixture.assessment = json::canonical(
-        &assess(
-            &rebound,
-            None,
-            &recorded.payload.engine.engine_version,
-            recorded.payload.engine.engine_digest,
-        )
-        .map_err(|_defect| ArtifactError::Corrupt)?,
-    );
+    fixture.assessment = assess(
+        &rebound,
+        None,
+        &recorded.payload.engine.engine_version,
+        recorded.payload.engine.engine_digest,
+    )
+    .map_err(|_defect| ArtifactError::Corrupt)?;
     Ok(fixture)
 }

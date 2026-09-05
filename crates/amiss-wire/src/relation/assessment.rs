@@ -4,7 +4,7 @@ use strum::{AsRefStr, EnumString};
 use crate::assessment::{AssessmentEngine, AssessmentSubject, Nullable};
 use crate::de::{Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
-use crate::json::{self, Value};
+use crate::json;
 use crate::semantic::producer_version_valid;
 
 use super::evidence::{RelationEvidenceEnvelope, RelationProjectionSlot, evidence_payload_digest};
@@ -111,7 +111,7 @@ pub fn assess(
     evidence: Option<&RelationEvidenceEnvelope>,
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Value, Error> {
+) -> Result<Vec<u8>, Error> {
     if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -187,7 +187,8 @@ pub fn assess(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    Ok(canonical)
 }
 
 fn validate_assessment(assessment: &RelationAssessment) -> Result<(), Error> {

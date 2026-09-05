@@ -11,7 +11,6 @@ use amiss_controller_git::{
     RelationProjectionError, RelationProjectionRequest, project_relation_evidence,
 };
 use amiss_wire::digest::Digest;
-use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::relation::{assess, parse_evidence, parse_plan};
 
@@ -144,18 +143,18 @@ pub fn execute_relation_audit(
         .ok_or(RelationAuditExecutionError::Superseded)?;
     let plan_bytes = relation_audit_plan(&request.pending.transition, request.report)?;
     let plan = parse_plan(&plan_bytes)?;
-    let evidence_bytes = json::canonical(&project_relation_evidence(RelationProjectionRequest {
+    let evidence_bytes = project_relation_evidence(RelationProjectionRequest {
         transition: &request.pending.transition,
         plan: &plan,
         roots: request.roots,
-    })?);
+    })?;
     let evidence = parse_evidence(&evidence_bytes)?;
-    let assessment_bytes = json::canonical(&assess(
+    let assessment_bytes = assess(
         &plan,
         Some(&evidence),
         request.engine_version,
         request.engine_digest,
-    )?);
+    )?;
     let bundle = RelationAuditBundle {
         transition: &request.pending.transition,
         report: request.report,

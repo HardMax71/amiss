@@ -13,21 +13,18 @@ use amiss_wire::relation::{
 };
 
 fn plan_envelope() -> RelationPlanEnvelope {
-    parse_plan(&json::canonical(&plan(&relation_contract().plan).unwrap())).unwrap()
+    parse_plan(&plan(&relation_contract().plan).unwrap()).unwrap()
 }
 
 fn evidence_envelope(input: &RelationEvidence) -> RelationEvidenceEnvelope {
-    parse_evidence(&json::canonical(&evidence(input).unwrap())).unwrap()
+    parse_evidence(&evidence(input).unwrap()).unwrap()
 }
 
 fn assessed(
     plan: &RelationPlanEnvelope,
     evidence: Option<&RelationEvidenceEnvelope>,
 ) -> RelationAssessmentEnvelope {
-    parse_assessment(&json::canonical(
-        &assess(plan, evidence, "0.26.0", digest('a')).unwrap(),
-    ))
-    .unwrap()
+    parse_assessment(&assess(plan, evidence, "0.26.0", digest('a')).unwrap()).unwrap()
 }
 
 #[test]
@@ -133,9 +130,10 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
     let evidence = evidence_envelope(&input);
-    let value = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
+    let bytes = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
+    let value = json::parse(&bytes).unwrap();
     let recorded = value.text("payload_digest").unwrap();
-    let inconsistent = String::from_utf8(json::canonical(&value))
+    let inconsistent = String::from_utf8(bytes)
         .unwrap()
         .replace("\"introduced-drift\"", "\"unproven\"");
     let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
@@ -154,8 +152,7 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
 
 #[test]
 fn nullable_assessment_fields_are_required() {
-    let value = assess(&plan_envelope(), None, "0.26.0", digest('a')).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = assess(&plan_envelope(), None, "0.26.0", digest('a')).unwrap();
 
     let mut missing_reason: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(
@@ -211,7 +208,7 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
     .unwrap();
 
     assert_eq!(
-        json::canonical(&replayed),
+        replayed,
         json::canonical(&json::parse(&published_bytes).unwrap())
     );
 }

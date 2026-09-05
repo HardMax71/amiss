@@ -25,8 +25,8 @@ mod assessment;
 #[test]
 fn relation_plan_round_trips_all_four_exact_snapshots_and_example() {
     let expected = relation_contract().plan;
-    let value = plan(&expected).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = plan(&expected).unwrap();
+    let value = json::parse(&bytes).unwrap();
     let parsed = parse_plan(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
@@ -42,7 +42,7 @@ fn relation_plan_round_trips_all_four_exact_snapshots_and_example() {
     .unwrap();
     let example = parse_plan(&example_bytes).unwrap();
     assert_eq!(
-        json::canonical(&plan(&example.payload).unwrap()),
+        plan(&example.payload).unwrap(),
         json::canonical(&json::parse(&example_bytes).unwrap())
     );
 }
@@ -142,19 +142,14 @@ fn relation_plan_preserves_every_projection_source_shape() {
         for subject in &mut input.subjects {
             subject.source = source.clone();
         }
-        assert_eq!(
-            parse_plan(&json::canonical(&plan(&input).unwrap()))
-                .unwrap()
-                .payload,
-            input
-        );
+        assert_eq!(parse_plan(&plan(&input).unwrap()).unwrap().payload, input);
     }
 }
 
 #[test]
 fn relation_plan_refuses_repository_values_that_bypass_construction() {
     let value = plan(&relation_contract().plan).unwrap();
-    let mut document: serde_json::Value = serde_json::from_slice(&json::canonical(&value)).unwrap();
+    let mut document: serde_json::Value = serde_json::from_slice(&value).unwrap();
     document["payload"]["subjects"][0]["repository"]["host"] = serde_json::json!("invalid/host");
     let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
     document["payload_digest"] = serde_json::json!(hb(PLAN_PAYLOAD_SCHEMA, &payload).to_string());
@@ -167,8 +162,8 @@ fn relation_plan_refuses_repository_values_that_bypass_construction() {
 #[test]
 fn relation_evidence_round_trips_four_independent_slots() {
     let expected = relation_contract().evidence;
-    let value = evidence(&expected).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = evidence(&expected).unwrap();
+    let value = json::parse(&bytes).unwrap();
     let parsed = parse_evidence(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
@@ -185,7 +180,7 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
     partial.subjects[1].candidate = RelationProjectionSlot::Unproven;
     partial.subjects[1].base = RelationProjectionSlot::Projected(projected('a', 0));
 
-    let parsed = parse_evidence(&json::canonical(&evidence(&partial).unwrap())).unwrap();
+    let parsed = parse_evidence(&evidence(&partial).unwrap()).unwrap();
     assert_eq!(parsed.payload, partial);
 
     for subject in &mut partial.subjects {
@@ -193,7 +188,7 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
         subject.candidate = RelationProjectionSlot::Unproven;
     }
     assert_eq!(
-        parse_evidence(&json::canonical(&evidence(&partial).unwrap()))
+        parse_evidence(&evidence(&partial).unwrap())
             .unwrap()
             .payload,
         partial
@@ -202,7 +197,7 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
 
 #[test]
 fn nullable_projection_slots_are_still_required_fields() {
-    let bytes = json::canonical(&evidence(&relation_contract().evidence).unwrap());
+    let bytes = evidence(&relation_contract().evidence).unwrap();
     let mut document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(
         document
@@ -242,7 +237,7 @@ fn relation_evidence_refuses_role_and_value_shape_drift() {
 #[test]
 fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
     struct Document {
-        value: json::Value,
+        bytes: Vec<u8>,
         payload_schema: &'static str,
         first_payload_field: &'static str,
         parse: fn(&[u8]) -> Result<(), amiss_wire::de::Error>,
@@ -251,14 +246,14 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
 
     let documents = [
         Document {
-            value: plan(&relation_contract().plan).unwrap(),
+            bytes: plan(&relation_contract().plan).unwrap(),
             payload_schema: PLAN_PAYLOAD_SCHEMA,
             first_payload_field: "report_payload_digest",
             parse: |bytes| parse_plan(bytes).map(|_envelope| ()),
             open_error: ("$", ErrorKind::InvalidValue),
         },
         Document {
-            value: evidence(&relation_contract().evidence).unwrap(),
+            bytes: evidence(&relation_contract().evidence).unwrap(),
             payload_schema: EVIDENCE_PAYLOAD_SCHEMA,
             first_payload_field: "plan_payload_digest",
             parse: |bytes| parse_evidence(bytes).map(|_envelope| ()),
@@ -267,28 +262,27 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
     ];
 
     for Document {
-        value,
+        bytes,
         payload_schema,
         first_payload_field,
         parse,
         open_error,
     } in documents
     {
+        let value = json::parse(&bytes).unwrap();
         let recorded = value.text("payload_digest").unwrap();
-        let tampered = String::from_utf8(json::canonical(&value))
+        let tampered = String::from_utf8(bytes.clone())
             .unwrap()
             .replace(recorded, &digest('f').to_string());
         let error = parse(tampered.as_bytes()).unwrap_err();
         assert_eq!(error.path, "$.payload_digest");
         assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
-        let open = String::from_utf8(json::canonical(&value))
-            .unwrap()
-            .replacen(
-                &format!("\"{first_payload_field}\":"),
-                &format!("\"unknown\":true,\"{first_payload_field}\":"),
-                1,
-            );
+        let open = String::from_utf8(bytes.clone()).unwrap().replacen(
+            &format!("\"{first_payload_field}\":"),
+            &format!("\"unknown\":true,\"{first_payload_field}\":"),
+            1,
+        );
         let open_value = json::parse(open.as_bytes()).unwrap();
         let rebound = open.replace(
             recorded,

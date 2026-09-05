@@ -10,13 +10,12 @@ use amiss_controller::{
 };
 use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
 use amiss_wire::digest::sha256;
-use amiss_wire::json;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
 };
 use amiss_wire::relation::{
     RelationIdentity, RelationPlanEnvelope, RelationSnapshot, RelationSubject as PlannedSubject,
-    RelationVerdict, assess, parse_evidence, parse_plan, plan,
+    RelationVerdict, assess, parse_assessment, parse_evidence, parse_plan, plan,
 };
 
 use super::{RelationProjectionError, RelationProjectionRequest, project_relation_evidence};
@@ -158,7 +157,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
         subjects,
     })
     .expect("relation plan");
-    let plan = parse_plan(&json::canonical(&value)).expect("parsed relation plan");
+    let plan = parse_plan(&value).expect("parsed relation plan");
     Fixture {
         source,
         documentation,
@@ -190,7 +189,7 @@ fn four_exact_repository_projections_produce_the_plan_bound_transition() {
         roots: roots(&fixture),
     })
     .expect("complete projection evidence");
-    let evidence = parse_evidence(&json::canonical(&value)).expect("parsed evidence");
+    let evidence = parse_evidence(&value).expect("parsed evidence");
     let [documentation, source] = &evidence.payload.subjects;
 
     assert_eq!(documentation.base, documentation.candidate);
@@ -210,10 +209,11 @@ fn four_exact_repository_projections_produce_the_plan_bound_transition() {
     )
     .expect("transition assessment");
     assert_eq!(
-        assessment
-            .member("payload")
-            .and_then(|payload| payload.text("verdict")),
-        Some(RelationVerdict::IntroducedDrift.as_ref())
+        parse_assessment(&assessment)
+            .expect("parsed assessment")
+            .payload
+            .verdict,
+        RelationVerdict::IntroducedDrift
     );
 }
 
@@ -227,7 +227,7 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
         last_line: 1,
     });
     let changed = plan(&changed).expect("rewritten plan");
-    let changed = parse_plan(&json::canonical(&changed)).expect("parsed rewritten plan");
+    let changed = parse_plan(&changed).expect("parsed rewritten plan");
     assert_eq!(
         project_relation_evidence(RelationProjectionRequest {
             transition: &fixture.transition,
@@ -241,7 +241,7 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
     let mut changed = fixture.plan.payload.clone();
     changed.relation.context_digest = sha256(b"substituted operator relation context");
     let changed = plan(&changed).expect("rewritten plan");
-    let changed = parse_plan(&json::canonical(&changed)).expect("parsed rewritten plan");
+    let changed = parse_plan(&changed).expect("parsed rewritten plan");
     assert_eq!(
         project_relation_evidence(RelationProjectionRequest {
             transition: &fixture.transition,

@@ -226,7 +226,7 @@ fn sidecar_examples_match_their_typed_sources() {
         contract.plan
     );
     assert_eq!(
-        json::canonical(&generated_plan),
+        generated_plan,
         json::canonical(&json::parse(&committed_plan).unwrap())
     );
 
@@ -239,7 +239,7 @@ fn sidecar_examples_match_their_typed_sources() {
         contract.evidence
     );
     assert_eq!(
-        json::canonical(&generated_evidence),
+        generated_evidence,
         json::canonical(&json::parse(&committed_evidence).unwrap())
     );
 

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::de::{Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
-use crate::json::{self, Value};
+use crate::json;
 use crate::model::ArtifactId;
 
 use super::RELATION_DOCUMENT_BYTES;
@@ -95,7 +95,7 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<RelationEvidenceEnvelope, Error> {
 /// Fails when a public field violates the same closed grammar
 /// [`parse_evidence`] enforces or the encoded document exceeds its byte
 /// ceiling.
-pub fn evidence(input: &RelationEvidence) -> Result<Value, Error> {
+pub fn evidence(input: &RelationEvidence) -> Result<Vec<u8>, Error> {
     let payload_digest = evidence_payload_digest(input)?;
     let document = EvidenceEnvelope::Current {
         payload: EvidencePayload::Current(input),
@@ -106,7 +106,8 @@ pub fn evidence(input: &RelationEvidence) -> Result<Value, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    Ok(canonical)
 }
 
 pub(super) fn evidence_payload_digest(input: &RelationEvidence) -> Result<Digest, Error> {

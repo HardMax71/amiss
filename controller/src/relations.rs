@@ -86,8 +86,10 @@ pub fn verify_relation_plan(
 ) -> Result<(), RelationAcquisitionError> {
     let rebuilt = amiss_wire::relation::plan(&plan.payload)
         .map_err(|_defect| RelationAcquisitionError::InvalidTransition)?;
+    let rebuilt = amiss_wire::relation::parse_plan(&rebuilt)
+        .map_err(|_defect| RelationAcquisitionError::InvalidTransition)?;
     let registered = transition.relation.plan.as_ref();
-    (rebuilt.text("payload_digest") == Some(&plan.payload_digest.to_string())
+    (rebuilt.payload_digest == plan.payload_digest
         && plan.payload.relation.identity == registered.identity
         && plan.payload.relation.context_digest == registered.context_digest
         && plan.payload.coordination == transition.coordination

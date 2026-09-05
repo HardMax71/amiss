@@ -59,7 +59,7 @@ pub fn relation_audit_with_coordination(
         report,
         plan,
         evidence,
-        assessment: json::canonical(&assessment),
+        assessment,
     })
 }
 
@@ -236,5 +236,4 @@ fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Optio
         ],
     })
     .ok()
-    .map(|value| json::canonical(&value))
 }
