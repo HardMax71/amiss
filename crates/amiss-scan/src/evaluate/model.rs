@@ -1,6 +1,6 @@
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
-use amiss_wire::model::{Oid, RepoPath};
+use amiss_wire::model::{Oid, RepoPath, RepoPathText};
 pub use amiss_wire::report::model::{Attribution, LocationSide, PolicyStep};
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 
@@ -126,7 +126,7 @@ impl FindingFact {
 /// A repository edit kept as domain data until report serialization.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FindingFix {
-    pub(crate) path: RepoPath,
+    pub(crate) path: RepoPathText,
     pub(crate) span: (usize, usize),
     pub(crate) replacement: String,
     pub(crate) kind: FixKind,

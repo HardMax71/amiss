@@ -41,6 +41,70 @@ fn run_fix(root: &Path, base: &str) -> (i32, String) {
     (code, String::from_utf8(stdout).unwrap())
 }
 
+#[test]
+fn byte_named_documents_keep_findings_without_invalid_fixes() {
+    use amiss_wire::report::{FindingKind, validate_envelope};
+
+    for (input, expected, kind) in [
+        (
+            "[a](Sections.md)\n",
+            "[a](sections.md)\n",
+            FindingKind::ExplicitTargetMissing,
+        ),
+        (
+            "[a](sections.md#Sections)\n",
+            "[a](sections.md#sections)\n",
+            FindingKind::ExplicitTargetMissing,
+        ),
+        (
+            "[value][amiss:section].\n\n[amiss:section]: <amiss:value?path=sections.md&line=L1> \"old\"\n",
+            "[value][amiss:section].\n\n[amiss:section]: <amiss:value?path=sections.md&line=L1> \"# Sections\"\n",
+            FindingKind::ClaimBroken,
+        ),
+    ] {
+        let (dir, base) = staged_repo(input);
+        let root = dir.path();
+        let document = amiss_fixtures::loose_object(root, "blob", input.as_bytes()).unwrap();
+        let sections = git(root, &["rev-parse", "HEAD:sections.md"]).unwrap();
+        amiss_fixtures::index_file(
+            root,
+            &[
+                (b"guide.md".as_slice(), document.as_str()),
+                (b"sections.md".as_slice(), sections.trim()),
+                (b"\xff.md".as_slice(), document.as_str()),
+            ],
+        )
+        .unwrap();
+        let mut args = fix_args(root.to_str().unwrap(), &base);
+        args[0] = "check";
+        args.extend(["--format", "json"]);
+        let (code, bytes, stderr) = amiss(&args);
+        assert_eq!((code, stderr.as_str()), (1, ""));
+        let envelope = amiss_wire::json::parse(&bytes).unwrap();
+        let (payload, _, _) = validate_envelope(&envelope).unwrap();
+        let rows: Vec<_> = payload
+            .findings
+            .iter()
+            .filter(|row| row.kind == kind)
+            .collect();
+        assert_eq!(rows.len(), 2, "{input}");
+        assert_eq!(rows.iter().filter(|row| row.fix.is_some()).count(), 1);
+        assert!(
+            rows.iter()
+                .any(|row| row.location.path.as_ref().is_some_and(|path| {
+                    matches!(path, amiss_wire::report::model::RepoPath::Bytes(_))
+                }) && row.fix.is_none())
+        );
+        let (code, stdout) = run_fix(root, &base);
+        assert_eq!(code, 0, "{stdout}");
+        assert!(stdout.contains("fixed guide.md"), "{stdout}");
+        assert_eq!(
+            fs::read(root.join("guide.md")).unwrap(),
+            expected.as_bytes()
+        );
+    }
+}
+
 /// The staged case-drifted path is rewritten in place, byte for byte, and a
 /// second run finds the repair already present instead of drifting.
 #[test]

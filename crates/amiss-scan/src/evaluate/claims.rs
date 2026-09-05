@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
-use amiss_wire::model::RepoPath;
+use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::{FindingKind, FixKind};
 
 use crate::claim::{ClaimMissingReason, ClaimVerdict};
@@ -203,7 +203,7 @@ fn claim_fix(group: &ClaimGroup) -> Option<FindingFix> {
     )?;
     let span = group.representative_span?;
     Some(FindingFix {
-        path: group.document.clone(),
+        path: RepoPathText::new(group.document.as_str()?.to_owned())?,
         span,
         replacement,
         kind: FixKind::ClaimValueRewrite,
