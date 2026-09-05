@@ -1,8 +1,6 @@
-use std::fmt;
-
 use amiss_wire::controls::SourceConstruct;
-use amiss_wire::digest::{Digest, hb, hj_stream};
-use amiss_wire::json::{Sink, Value, write_string};
+use amiss_wire::digest::{Digest, hb};
+use amiss_wire::json::Value;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::IntentKind;
 
@@ -13,15 +11,6 @@ pub const OBSERVATION_ID_INPUT_SCHEMA: &str = "amiss/scanner-observation-id-inpu
 pub const STRUCTURAL_ADDRESS_SCHEMA: &str = "amiss/scanner-structural-address";
 pub const LINK_QUERY_DOMAIN: &str = "amiss/scanner-link-query";
 pub const LINK_FRAGMENT_DOMAIN: &str = "amiss/scanner-link-fragment";
-
-struct SinkFormatter<'a>(&'a mut dyn Sink);
-
-impl fmt::Write for SinkFormatter<'_> {
-    fn write_str(&mut self, text: &str) -> fmt::Result {
-        self.0.write(text);
-        Ok(())
-    }
-}
 
 fn external_scheme(intent: &Intent) -> Option<&str> {
     match intent.kind {
@@ -56,83 +45,6 @@ pub fn fragment_digest(intent: &Intent) -> Option<Digest> {
         .map(|text| hb(LINK_FRAGMENT_DOMAIN, text.as_bytes()))
 }
 
-#[derive(Clone, Copy)]
-enum IdentityValue<'a> {
-    Omitted,
-    Null,
-    Integer(i64),
-    String(&'a str),
-    Digest(Digest),
-    Path(&'a RepoPath),
-    IntegerArray(&'a [usize]),
-    Object(&'a [(&'static str, IdentityValue<'a>)]),
-}
-
-fn write_identity_value(sink: &mut dyn Sink, value: &IdentityValue<'_>) {
-    match value {
-        IdentityValue::Omitted => {}
-        IdentityValue::Null => sink.write("null"),
-        IdentityValue::Integer(integer) => {
-            let _infallible = fmt::write(&mut SinkFormatter(sink), format_args!("{integer}"));
-        }
-        IdentityValue::String(text) => write_string(sink, text),
-        IdentityValue::Digest(digest) => {
-            sink.write("\"");
-            let _infallible = fmt::write(&mut SinkFormatter(sink), format_args!("{digest}"));
-            sink.write("\"");
-        }
-        IdentityValue::Path(path) => write_path(sink, path),
-        IdentityValue::IntegerArray(values) => {
-            sink.write("[");
-            for (position, value) in values.iter().enumerate() {
-                if position != 0 {
-                    sink.write(",");
-                }
-                let integer = i64::try_from(*value).unwrap_or(i64::MAX);
-                let _infallible = fmt::write(&mut SinkFormatter(sink), format_args!("{integer}"));
-            }
-            sink.write("]");
-        }
-        IdentityValue::Object(members) => {
-            sink.write("{");
-            let mut populated = false;
-            for (key, value) in *members {
-                if matches!(value, IdentityValue::Omitted) {
-                    continue;
-                }
-                if populated {
-                    sink.write(",");
-                }
-                populated = true;
-                write_string(sink, key);
-                sink.write(":");
-                write_identity_value(sink, value);
-            }
-            sink.write("}");
-        }
-    }
-}
-
-fn write_path(sink: &mut dyn Sink, path: &RepoPath) {
-    if let Some(text) = path.as_str() {
-        write_string(sink, text);
-        return;
-    }
-    sink.write("{\"bytes_hex\":\"");
-    for byte in path.as_bytes() {
-        let pair = [hex_digit(byte.wrapping_shr(4)), hex_digit(byte & 0x0f)];
-        sink.write(std::str::from_utf8(&pair).unwrap_or("00"));
-    }
-    sink.write("\"}");
-}
-
-const fn hex_digit(nibble: u8) -> u8 {
-    match nibble {
-        0..=9 => b'0'.wrapping_add(nibble),
-        _ => b'a'.wrapping_add(nibble.wrapping_sub(10)),
-    }
-}
-
 /// The borrowed fields of one observation-identity preimage.
 pub struct ObservationIdentity<'a> {
     pub adapter: Adapter,
@@ -143,87 +55,6 @@ pub struct ObservationIdentity<'a> {
     pub projection_digest: Digest,
     pub intent: &'a Intent,
     pub raw_destination_digest: Digest,
-}
-
-fn with_observation_value<R>(
-    input: &ObservationIdentity<'_>,
-    consume: impl FnOnce(IdentityValue<'_>) -> R,
-) -> R {
-    let intent = [
-        (
-            "commit_oid",
-            input
-                .intent
-                .commit_oid
-                .as_ref()
-                .map_or(IdentityValue::Omitted, |oid| {
-                    IdentityValue::String(oid.as_str())
-                }),
-        ),
-        (
-            "external_scheme",
-            external_scheme(input.intent).map_or(IdentityValue::Null, IdentityValue::String),
-        ),
-        (
-            "fragment_digest",
-            fragment_digest(input.intent).map_or(IdentityValue::Null, IdentityValue::Digest),
-        ),
-        ("kind", IdentityValue::String(input.intent.kind.as_ref())),
-        (
-            "query_digest",
-            query_digest(input.intent).map_or(IdentityValue::Null, IdentityValue::Digest),
-        ),
-        (
-            "raw_destination_digest",
-            IdentityValue::Digest(input.raw_destination_digest),
-        ),
-        (
-            "repository_path",
-            input
-                .intent
-                .repository_path
-                .as_ref()
-                .map_or(IdentityValue::Null, IdentityValue::Path),
-        ),
-        (
-            "target_kind",
-            input
-                .intent
-                .target_kind
-                .map(Into::into)
-                .map_or(IdentityValue::Null, IdentityValue::String),
-        ),
-    ];
-    let address = [
-        (
-            "address_kind",
-            IdentityValue::String(input.adapter.metadata().structural_address),
-        ),
-        ("construct_index", IdentityValue::Integer(0)),
-        ("duplicate_index", IdentityValue::Integer(0)),
-        ("node_path", IdentityValue::IntegerArray(input.node_path)),
-        ("schema", IdentityValue::String(STRUCTURAL_ADDRESS_SCHEMA)),
-    ];
-    let members = [
-        (
-            "adapter_contract_digest",
-            IdentityValue::Digest(input.contract_digest),
-        ),
-        ("adapter_id", IdentityValue::String(input.adapter.as_ref())),
-        ("document", IdentityValue::Path(input.document)),
-        ("extracted_intent", IdentityValue::Object(&intent)),
-        ("schema", IdentityValue::String(OBSERVATION_ID_INPUT_SCHEMA)),
-        (
-            "source_construct",
-            IdentityValue::String(input.construct.into()),
-        ),
-        (
-            "source_projection_digest",
-            IdentityValue::Digest(input.projection_digest),
-        ),
-        ("structural_address", IdentityValue::Object(&address)),
-    ];
-    consume(IdentityValue::Object(&members))
 }
 
 /// The wire target intent: one flat shape whose null pattern is fixed by the
@@ -294,7 +125,13 @@ pub fn address_value(adapter: Adapter, node_path: &[usize]) -> Value {
         ),
         (
             "address_kind".to_owned(),
-            Value::string(adapter.metadata().structural_address.to_owned()),
+            Value::string(
+                adapter
+                    .metadata()
+                    .structural_address
+                    .map_or("none", Into::into)
+                    .to_owned(),
+            ),
         ),
         (
             "node_path".to_owned(),
@@ -344,14 +181,4 @@ pub fn observation_input(input: &ObservationIdentity<'_>) -> Value {
             intent_value(input.intent, input.raw_destination_digest),
         ),
     ])
-}
-
-/// Hashes the borrowed observation input without materializing its JSON tree.
-#[must_use]
-pub fn observation_digest(input: &ObservationIdentity<'_>) -> Digest {
-    with_observation_value(input, |value| {
-        hj_stream(OBSERVATION_ID_DOMAIN, |sink| {
-            write_identity_value(sink, &value);
-        })
-    })
 }

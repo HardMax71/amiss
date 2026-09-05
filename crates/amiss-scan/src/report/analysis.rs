@@ -1,4 +1,4 @@
-use amiss_wire::digest::Digest;
+use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingScope;
@@ -40,8 +40,8 @@ fn occurrence_value(observation: &Observation) -> Value {
         intent: &observation.intent,
         raw_destination_digest: observation.raw_destination_digest,
     };
-    let id = observe::observation_digest(&identity);
     let input = observe::observation_input(&identity);
+    let id = hj(observe::OBSERVATION_ID_DOMAIN, &input);
     let resolution = crate::evaluate::resolution_row(&observation.resolution);
     let mut members = vec![
         ("observation_id", digest_value(id)),

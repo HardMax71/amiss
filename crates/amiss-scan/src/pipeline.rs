@@ -1,15 +1,21 @@
 use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
-use amiss_wire::model::{ArtifactId, BranchRef, Oid, RepoPath};
-use amiss_wire::report::model::ControlsUnavailableReason;
-use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
+use amiss_wire::digest::hj_ordered;
+use amiss_wire::model::{Adapter, ArtifactId, BranchRef, Oid, RepoPath};
+use amiss_wire::report::model::{
+    ControlsUnavailableReason, ObservationIdInput, ObservationIdInputSchema, StructuralAddress,
+    StructuralAddressSchema, TargetIntent,
+};
+use amiss_wire::report::{
+    AnalysisErrorCode, EngineProvenance, ErrorDetail, IntentKind, adapter_contract,
+};
 use amiss_wire::resolution::{Missing, Resolution};
 
 use crate::Error;
 use crate::correlate::{Observation, Side, correlate, unique_path_pairs};
 use crate::discovery::{DocumentStatus, SnapshotDiscovery, discover};
-use crate::observe::{ObservationIdentity, observation_digest};
+use crate::observe::{OBSERVATION_ID_DOMAIN, fragment_digest, query_digest};
 use crate::report::{Built, CandidateBlock, Setup, SnapshotIdentity, construct_incomplete};
 use crate::resolve::{ForgeContext, Resolver, TargetCache};
 use crate::resources::{ScanLimits, ScanResources};
@@ -20,6 +26,7 @@ mod commit;
 /// by both orchestration modes.
 mod external;
 mod staged;
+mod tests;
 
 pub use commit::commit_pair;
 pub use staged::staged_index;
@@ -122,44 +129,17 @@ pub(crate) fn side_observations(
                 let (_descriptor, adapter_contract_digest) =
                     adapter_contract(context.engine, adapter);
                 for occurrence in &scanned.occurrences {
-                    let (intent, resolution, external_destination) = resolver
-                        .resolve_scanned(
-                            context.forge,
-                            context.semantic,
+                    observations.push(
+                        resolved_observation(
+                            &mut resolver,
+                            context,
                             adapter,
+                            adapter_contract_digest,
                             &record.path,
                             occurrence,
                         )
-                        .map_err(|defect| detail(&defect, Some(&record.path)))?;
-                    let id = observation_digest(&ObservationIdentity {
-                        adapter,
-                        contract_digest: adapter_contract_digest,
-                        document: &record.path,
-                        construct: occurrence.occurrence.construct,
-                        node_path: &occurrence.occurrence.node_path,
-                        projection_digest: occurrence.projection_digest,
-                        intent: &intent,
-                        raw_destination_digest: occurrence.raw_destination_digest,
-                    });
-                    observations.push(Observation {
-                        id,
-                        adapter_contract_digest,
-                        document: record.path.clone(),
-                        span: occurrence.occurrence.span,
-                        display: occurrence.display,
-                        block_kind: occurrence.occurrence.block_kind,
-                        node_path: occurrence.occurrence.node_path.clone(),
-                        adapter,
-                        construct: occurrence.occurrence.construct,
-                        external_destination,
-                        intent,
-                        raw_destination: occurrence.occurrence.raw_destination.clone(),
-                        raw_destination_digest: occurrence.raw_destination_digest,
-                        projection_digest: occurrence.projection_digest,
-                        resolution,
-                        fragment_span: occurrence.occurrence.fragment_span,
-                        path_span: occurrence.occurrence.path_span,
-                    });
+                        .map_err(|defect| detail(&defect, Some(&record.path)))?,
+                    );
                 }
                 if let Some(candidate) = candidate.as_mut() {
                     document_claims(
@@ -181,6 +161,74 @@ pub(crate) fn side_observations(
         },
         failures,
     ))
+}
+
+fn resolved_observation(
+    resolver: &mut Resolver<'_>,
+    context: ObservationContext<'_>,
+    adapter: Adapter,
+    adapter_contract_digest: amiss_wire::digest::Digest,
+    path: &RepoPath,
+    occurrence: &crate::scan::ScannedOccurrence,
+) -> Result<Observation, Error> {
+    let (intent, resolution, external_destination) =
+        resolver.resolve_scanned(context.forge, context.semantic, adapter, path, occurrence)?;
+    let identity = ObservationIdInput {
+        adapter_id: adapter,
+        adapter_contract_digest,
+        document: path,
+        source_construct: occurrence.occurrence.construct,
+        structural_address: StructuralAddress {
+            address_kind: adapter
+                .metadata()
+                .structural_address
+                .ok_or(Error::Internal)?,
+            construct_index: 0,
+            duplicate_index: 0,
+            node_path: occurrence
+                .occurrence
+                .node_path
+                .iter()
+                .map(|index| i64::try_from(*index).unwrap_or(i64::MAX).unsigned_abs())
+                .collect(),
+            schema: StructuralAddressSchema::Current,
+        },
+        source_projection_digest: occurrence.projection_digest,
+        extracted_intent: TargetIntent {
+            commit_oid: intent.commit_oid.clone(),
+            external_scheme: intent
+                .external_scheme
+                .clone()
+                .filter(|_scheme| intent.kind == IntentKind::ExternalUrl),
+            fragment_digest: fragment_digest(&intent),
+            kind: intent.kind,
+            query_digest: query_digest(&intent),
+            raw_destination_digest: occurrence.raw_destination_digest,
+            repository_path: intent.repository_path.as_ref(),
+            target_kind: intent.target_kind,
+        },
+        schema: ObservationIdInputSchema::Current,
+    };
+    let id = hj_ordered(OBSERVATION_ID_DOMAIN, &identity).map_err(|_defect| Error::Internal)?;
+    Ok(Observation {
+        id,
+        adapter_contract_digest,
+        document: path.clone(),
+        span: occurrence.occurrence.span,
+        display: occurrence.display,
+        block_kind: occurrence.occurrence.block_kind,
+        node_path: occurrence.occurrence.node_path.clone(),
+        adapter,
+        construct: occurrence.occurrence.construct,
+        external_destination,
+        intent,
+        raw_destination: occurrence.occurrence.raw_destination.clone(),
+        raw_destination_digest: occurrence.raw_destination_digest,
+        projection_digest: occurrence.projection_digest,
+        resolution,
+        fragment_span: occurrence.occurrence.fragment_span,
+        path_span: occurrence.occurrence.path_span,
+    })
 }
 
 fn evaluate_projections(

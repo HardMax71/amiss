@@ -3,7 +3,7 @@ use std::path::Path;
 
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository, parse_commit};
 use amiss_scan::correlate::{Observation, Side, correlate};
-use amiss_scan::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_digest};
+use amiss_scan::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input};
 use amiss_scan::report::{
     Built, CandidateBlock, Setup, SnapshotIdentity, construct, construct_incomplete,
 };
@@ -87,16 +87,19 @@ fn snapshot(
                     &occurrence.occurrence.semantic_destination,
                 )
                 .unwrap();
-            let id = observation_digest(&ObservationIdentity {
-                adapter,
-                contract_digest: adapter_contract_digest,
-                document: &record.path,
-                construct: occurrence.occurrence.construct,
-                node_path: &occurrence.occurrence.node_path,
-                projection_digest: occurrence.projection_digest,
-                intent: &intent,
-                raw_destination_digest: occurrence.raw_destination_digest,
-            });
+            let id = hj(
+                OBSERVATION_ID_DOMAIN,
+                &observation_input(&ObservationIdentity {
+                    adapter,
+                    contract_digest: adapter_contract_digest,
+                    document: &record.path,
+                    construct: occurrence.occurrence.construct,
+                    node_path: &occurrence.occurrence.node_path,
+                    projection_digest: occurrence.projection_digest,
+                    intent: &intent,
+                    raw_destination_digest: occurrence.raw_destination_digest,
+                }),
+            );
             observations.push(Observation {
                 id,
                 adapter_contract_digest,

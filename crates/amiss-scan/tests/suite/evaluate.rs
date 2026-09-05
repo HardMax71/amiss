@@ -6,12 +6,12 @@ use amiss_scan::evaluate::{
     Attribution, DocumentInput, DocumentSide, Finding, GovernedSeed, LocationSide, evaluate,
     evaluate_with_policy,
 };
-use amiss_scan::observe::{ObservationIdentity, observation_digest};
+use amiss_scan::observe::{ObservationIdentity, observation_input};
 use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{Profile, SourceConstruct, TargetKind};
-use amiss_wire::digest::hb;
+use amiss_wire::digest::{hb, hj};
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{
     Disposition, EngineProvenance, FindingKind, IntentKind, adapter_contract,
@@ -127,16 +127,19 @@ fn observation(from: &Spec) -> Observation {
         raw_destination_digest: hb("amiss/scanner-raw-destination", b"x"),
     };
     let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).1;
-    let id = observation_digest(&ObservationIdentity {
-        adapter: Adapter::Markdown,
-        contract_digest: adapter_contract_digest,
-        document: &from.document,
-        construct: scanned.occurrence.construct,
-        node_path: &scanned.occurrence.node_path,
-        projection_digest: scanned.projection_digest,
-        intent: &from.intent,
-        raw_destination_digest: scanned.raw_destination_digest,
-    });
+    let id = hj(
+        amiss_scan::observe::OBSERVATION_ID_DOMAIN,
+        &observation_input(&ObservationIdentity {
+            adapter: Adapter::Markdown,
+            contract_digest: adapter_contract_digest,
+            document: &from.document,
+            construct: scanned.occurrence.construct,
+            node_path: &scanned.occurrence.node_path,
+            projection_digest: scanned.projection_digest,
+            intent: &from.intent,
+            raw_destination_digest: scanned.raw_destination_digest,
+        }),
+    );
     Observation {
         id,
         adapter_contract_digest,

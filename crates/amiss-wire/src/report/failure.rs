@@ -172,7 +172,10 @@ pub fn adapter_contract(engine: &EngineProvenance, adapter: Adapter) -> (Value, 
             string(metadata.frontmatter_contract),
         ),
         ("source_projection", string(metadata.source_projection)),
-        ("structural_address", string(metadata.structural_address)),
+        (
+            "structural_address",
+            string(metadata.structural_address.map_or("none", Into::into)),
+        ),
     ]);
     let digest = hj(ADAPTER_CONTRACT_SCHEMA, &descriptor);
     (descriptor, digest)
