@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use amiss_wire::controls::{ProjectionAssertion, ProjectionKind, ProjectionSource};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{ArtifactId, RepoPath};
+use amiss_wire::report::model::ProjectionObserved;
 
 use crate::Error;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
@@ -41,34 +42,6 @@ pub(crate) fn normalized_line_endings(selected: &[u8]) -> Cow<'_, [u8]> {
     Cow::Owned(normalized)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
-#[strum(serialize_all = "kebab-case")]
-pub(crate) enum DriftReason {
-    SinkDocumentUnavailable,
-    SinkAbsent,
-    SinkAmbiguous,
-    SinkNotAdjacent,
-    SourceAbsent,
-    SourceNotABlob,
-    SourceLfsPointer,
-    SourceLinesOutOfRange,
-    SourceStartMarkerAbsent,
-    SourceStartMarkerAmbiguous,
-    SourceEndMarkerAbsent,
-    SourceEndMarkerAmbiguous,
-    SourceRegionOrderInvalid,
-    SourceRegionNotUtf8,
-    SourceTreeRootAbsent,
-    SourceTreeRootNotATree,
-    SourceTreePathNotUtf8,
-    SourceTreePathNotARow,
-    SourceRecordSetAbsent,
-    SourceRecordSetIncomplete,
-    SourceRecordAbsent,
-    SourceRecordUnproven,
-    ContentDiffers,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RowDifference {
     pub ordering_only: bool,
@@ -95,7 +68,7 @@ pub(crate) enum Difference {
 pub(crate) enum Verdict {
     Attested,
     Drift {
-        reason: DriftReason,
+        reason: ProjectionObserved,
         expected_digest: Option<Digest>,
         observed_digest: Option<Digest>,
         expected_bytes: Option<u64>,
@@ -104,7 +77,7 @@ pub(crate) enum Verdict {
     },
 }
 
-pub(crate) fn unavailable(reason: DriftReason, sink: &SemanticCodeSink) -> Verdict {
+pub(crate) fn unavailable(reason: ProjectionObserved, sink: &SemanticCodeSink) -> Verdict {
     Verdict::Drift {
         reason,
         expected_digest: None,
@@ -130,7 +103,7 @@ fn drift(
     carrier_digests: Vec<Digest>,
     answered_spans: Vec<(usize, usize)>,
     representative: Option<((usize, usize), SpanDisplay)>,
-    reason: DriftReason,
+    reason: ProjectionObserved,
 ) -> Outcome {
     Outcome {
         assertion: assertion.clone(),
@@ -175,7 +148,7 @@ pub(crate) fn evaluate(
             Vec::new(),
             Vec::new(),
             None,
-            DriftReason::SinkDocumentUnavailable,
+            ProjectionObserved::SinkDocumentUnavailable,
         ));
     };
     let carriers: Vec<_> = scanned
@@ -195,9 +168,9 @@ pub(crate) fn evaluate(
         .map(|carrier| (carrier.span, carrier.display));
     let [carrier] = carriers.as_slice() else {
         let reason = if carriers.is_empty() {
-            DriftReason::SinkAbsent
+            ProjectionObserved::SinkAbsent
         } else {
-            DriftReason::SinkAmbiguous
+            ProjectionObserved::SinkAmbiguous
         };
         return Ok(drift(
             assertion,
@@ -213,7 +186,7 @@ pub(crate) fn evaluate(
             carrier_digests,
             answered_spans,
             representative,
-            DriftReason::SinkNotAdjacent,
+            ProjectionObserved::SinkNotAdjacent,
         ));
     };
     let verdict = match (assertion.projection, &assertion.source) {
@@ -266,7 +239,7 @@ fn record_projection(
         | ProjectionSource::TreePaths(_) => return Err(Error::Internal),
     };
     let Some(set) = record_sets.get(set_name) else {
-        return Ok(unavailable(DriftReason::SourceRecordSetAbsent, sink));
+        return Ok(unavailable(ProjectionObserved::SourceRecordSetAbsent, sink));
     };
     match source {
         ProjectionSource::RecordValue(selection) => {
@@ -276,9 +249,9 @@ fn record_projection(
             let Some(value) = set.records.get(&selection.key) else {
                 return Ok(unavailable(
                     if set.complete {
-                        DriftReason::SourceRecordAbsent
+                        ProjectionObserved::SourceRecordAbsent
                     } else {
-                        DriftReason::SourceRecordUnproven
+                        ProjectionObserved::SourceRecordUnproven
                     },
                     sink,
                 ));
@@ -295,7 +268,7 @@ fn record_projection(
                 return Ok(Verdict::Attested);
             }
             Ok(Verdict::Drift {
-                reason: DriftReason::ContentDiffers,
+                reason: ProjectionObserved::ContentDiffers,
                 expected_digest: Some(hb(CODE_TEXT_SOURCE_DOMAIN, value.as_bytes())),
                 observed_digest: Some(sink.digest),
                 expected_bytes: Some(u64::try_from(value.len()).unwrap_or(u64::MAX)),
@@ -308,7 +281,10 @@ fn record_projection(
                 return Err(Error::Internal);
             }
             if !set.complete {
-                return Ok(unavailable(DriftReason::SourceRecordSetIncomplete, sink));
+                return Ok(unavailable(
+                    ProjectionObserved::SourceRecordSetIncomplete,
+                    sink,
+                ));
             }
             resources.charge(
                 Aggregate::ProjectionSelectedBytes,
