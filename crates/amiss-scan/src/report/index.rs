@@ -1,5 +1,5 @@
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::{Digest, hj_ordered};
+use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::DocumentEntryKind;
 use amiss_wire::requests::{
@@ -69,8 +69,10 @@ pub fn synthetic_candidate(
             .collect(),
         schema: INDEX_PROJECTION_SCHEMA,
     };
-    let index_projection_digest = hj_ordered(INDEX_PROJECTION_SCHEMA, &projection)
-        .map_err(|_defect| crate::Error::Internal)?;
+    let index_projection_digest = hj_serde(INDEX_PROJECTION_SCHEMA, |writer| {
+        serde_json::to_writer(writer, &projection)
+    })
+    .map_err(|_defect| crate::Error::Internal)?;
     let input = SnapshotInput {
         base_commit_oid,
         base_object_format,
@@ -79,8 +81,10 @@ pub fn synthetic_candidate(
         kind: IndexSnapshotKind::Index,
         schema: IndexSnapshotSchema::Current,
     };
-    let snapshot_digest =
-        hj_ordered(SNAPSHOT_SCHEMA, &input).map_err(|_defect| crate::Error::Internal)?;
+    let snapshot_digest = hj_serde(SNAPSHOT_SCHEMA, |writer| {
+        serde_json::to_writer(writer, &input)
+    })
+    .map_err(|_defect| crate::Error::Internal)?;
     Ok(IndexCandidate {
         snapshot: IndexSnapshotIdentity {
             base_commit_oid: base_commit_oid.clone(),

@@ -125,17 +125,21 @@ pub fn hj(domain: &str, value: &Value) -> Digest {
     canonical_hash(domain, value, |_| {})
 }
 
-/// Hashes serde's compact JSON directly, without buffering the encoded bytes.
-/// The input must already serialize in canonical key order with integer numbers.
+/// Hashes bytes from the selected serde writer without a separate output buffer.
+/// The selected serializer may still buffer internally.
+/// The caller must select canonical serialization when key order is not already fixed.
 ///
 /// # Errors
 ///
 /// Returns the serialization error without producing a partial digest.
-pub fn hj_ordered(domain: &str, value: &impl serde::Serialize) -> serde_json::Result<Digest> {
+pub fn hj_serde(
+    domain: &str,
+    serialize: impl FnOnce(&mut dyn std::io::Write) -> serde_json::Result<()>,
+) -> serde_json::Result<Digest> {
     let mut writer = digest_io::IoWrapper(Sha256::new());
     writer.0.update(domain.as_bytes());
     writer.0.update([0_u8]);
-    serde_json::to_writer(&mut writer, value)?;
+    serialize(&mut writer)?;
     Ok(Digest(writer.0.finalize().into()))
 }
 

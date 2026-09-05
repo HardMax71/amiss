@@ -1,5 +1,5 @@
 use amiss_wire::controls::{FindingKeyInputSchema, Profile};
-use amiss_wire::digest::{Digest, hj_ordered};
+use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::model::{FindingKeyInput, PolicySource, RepositoryIntentPath};
@@ -255,8 +255,10 @@ pub(super) fn simple(
         schema: FindingKeyInputSchema::Current,
         scope,
     };
-    let finding_key =
-        hj_ordered(FINDING_KEY_DOMAIN, &key_input).map_err(|_defect| crate::Error::Internal)?;
+    let finding_key = hj_serde(FINDING_KEY_DOMAIN, |writer| {
+        serde_json::to_writer(writer, &key_input)
+    })
+    .map_err(|_defect| crate::Error::Internal)?;
     let configured = kind.built_in_disposition(profile);
     Ok(Finding {
         key_input,

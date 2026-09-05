@@ -13,7 +13,7 @@ use amiss_scan::report::{
 };
 use amiss_scan::resolve::Intent;
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
-use amiss_wire::digest::{Digest, hb, hj, hj_ordered};
+use amiss_wire::digest::{Digest, hb, hj, hj_serde};
 use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::{
     Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
@@ -215,7 +215,10 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
                 let input = observation_input(&identity);
                 let typed: ObservationIdInput = serde_json::from_slice(&canonical(&input)).unwrap();
                 assert_eq!(
-                    hj_ordered(OBSERVATION_ID_DOMAIN, &typed).unwrap(),
+                    hj_serde(OBSERVATION_ID_DOMAIN, |writer| serde_json::to_writer(
+                        writer, &typed
+                    ))
+                    .unwrap(),
                     hj(OBSERVATION_ID_DOMAIN, &input),
                     "{} {document:?} {kind:?}",
                     adapter.as_ref()

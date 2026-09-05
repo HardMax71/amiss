@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::{FindingKeyInputSchema, Profile, TargetKind};
-use amiss_wire::digest::{Digest, hj_ordered};
+use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
     EmptyRepositoryPath, FindingKeyInput, ObservationFindingKeyScopeKind, PolicySource,
@@ -83,7 +83,10 @@ fn collect_structural<'a>(
             source_construct: observation.construct,
         },
     };
-    let digest = hj_ordered(FINDING_KEY_DOMAIN, &key).map_err(|_defect| crate::Error::Internal)?;
+    let digest = hj_serde(FINDING_KEY_DOMAIN, |writer| {
+        serde_json::to_writer(writer, &key)
+    })
+    .map_err(|_defect| crate::Error::Internal)?;
     let group = groups.entry(digest).or_insert_with(|| KeyGroup {
         key,
         base: Vec::new(),
