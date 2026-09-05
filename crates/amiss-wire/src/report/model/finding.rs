@@ -520,8 +520,9 @@ pub enum CoverageRequirement {
     RepositoryRequested,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum EvidenceClass {
     AnalysisIntegrity,
     ControlPlane,
@@ -531,8 +532,9 @@ pub enum EvidenceClass {
     Unsupported,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum InvariantClass {
     Absolute,
     Advisory,

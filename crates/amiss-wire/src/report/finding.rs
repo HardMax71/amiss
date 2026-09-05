@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumIter, IntoEnumIterator, IntoStaticStr};
 
+use super::model::{EvidenceClass, InvariantClass};
+
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumIter, Serialize, Deserialize,
 )]
@@ -44,93 +46,93 @@ pub enum Disposition {
 #[non_exhaustive]
 pub struct FindingMetadata {
     pub scope: FindingScope,
-    pub evidence_class: &'static str,
-    pub invariant_class: &'static str,
+    pub evidence_class: EvidenceClass,
+    pub invariant_class: InvariantClass,
     pub observe_disposition: Disposition,
     pub enforce_disposition: Disposition,
 }
 
 static RATCHETED_REFERENCE: FindingMetadata = FindingMetadata {
     scope: FindingScope::Reference,
-    evidence_class: "deterministic-structural",
-    invariant_class: "ratcheted",
+    evidence_class: EvidenceClass::DeterministicStructural,
+    invariant_class: InvariantClass::Ratcheted,
     observe_disposition: Disposition::Warn,
     enforce_disposition: Disposition::Fail,
 };
 static RATCHETED_OBSERVATION: FindingMetadata = FindingMetadata {
     scope: FindingScope::Observation,
-    evidence_class: "deterministic-structural",
-    invariant_class: "ratcheted",
+    evidence_class: EvidenceClass::DeterministicStructural,
+    invariant_class: InvariantClass::Ratcheted,
     observe_disposition: Disposition::Warn,
     enforce_disposition: Disposition::Fail,
 };
 static ABSOLUTE_OBSERVATION: FindingMetadata = FindingMetadata {
     scope: FindingScope::Observation,
-    evidence_class: "deterministic-structural",
-    invariant_class: "absolute",
+    evidence_class: EvidenceClass::DeterministicStructural,
+    invariant_class: InvariantClass::Absolute,
     observe_disposition: Disposition::Warn,
     enforce_disposition: Disposition::Fail,
 };
 static RATCHETED_CONTROL: FindingMetadata = FindingMetadata {
     scope: FindingScope::Control,
-    evidence_class: "deterministic-structural",
-    invariant_class: "ratcheted",
+    evidence_class: EvidenceClass::DeterministicStructural,
+    invariant_class: InvariantClass::Ratcheted,
     observe_disposition: Disposition::Warn,
     enforce_disposition: Disposition::Fail,
 };
 static COVERAGE_OBSERVATION: FindingMetadata = FindingMetadata {
     scope: FindingScope::Observation,
-    evidence_class: "coverage-boundary",
-    invariant_class: "advisory",
+    evidence_class: EvidenceClass::CoverageBoundary,
+    invariant_class: InvariantClass::Advisory,
     observe_disposition: Disposition::Record,
     enforce_disposition: Disposition::Record,
 };
 static COVERAGE_DOCUMENT: FindingMetadata = FindingMetadata {
     scope: FindingScope::Document,
-    evidence_class: "coverage-boundary",
-    invariant_class: "advisory",
+    evidence_class: EvidenceClass::CoverageBoundary,
+    invariant_class: InvariantClass::Advisory,
     observe_disposition: Disposition::Record,
     enforce_disposition: Disposition::Record,
 };
 static UNSUPPORTED_OBSERVATION: FindingMetadata = FindingMetadata {
     scope: FindingScope::Observation,
-    evidence_class: "unsupported",
-    invariant_class: "advisory",
+    evidence_class: EvidenceClass::Unsupported,
+    invariant_class: InvariantClass::Advisory,
     observe_disposition: Disposition::Record,
     enforce_disposition: Disposition::Record,
 };
 static UNSUPPORTED_DOCUMENT: FindingMetadata = FindingMetadata {
     scope: FindingScope::Document,
-    evidence_class: "unsupported",
-    invariant_class: "advisory",
+    evidence_class: EvidenceClass::Unsupported,
+    invariant_class: InvariantClass::Advisory,
     observe_disposition: Disposition::Record,
     enforce_disposition: Disposition::Record,
 };
 static UNSUPPORTED_CONTROL: FindingMetadata = FindingMetadata {
     scope: FindingScope::Control,
-    evidence_class: "unsupported",
-    invariant_class: "analysis-integrity",
+    evidence_class: EvidenceClass::Unsupported,
+    invariant_class: InvariantClass::AnalysisIntegrity,
     observe_disposition: Disposition::Fail,
     enforce_disposition: Disposition::Fail,
 };
 static IMPACT_WARNING: FindingMetadata = FindingMetadata {
     scope: FindingScope::Observation,
-    evidence_class: "impact-observation",
-    invariant_class: "advisory",
+    evidence_class: EvidenceClass::ImpactObservation,
+    invariant_class: InvariantClass::Advisory,
     observe_disposition: Disposition::Warn,
     enforce_disposition: Disposition::Warn,
 };
 static IMPACT_RECORD: FindingMetadata = FindingMetadata {
     scope: FindingScope::Observation,
-    evidence_class: "impact-observation",
-    invariant_class: "advisory",
+    evidence_class: EvidenceClass::ImpactObservation,
+    invariant_class: InvariantClass::Advisory,
     observe_disposition: Disposition::Record,
     enforce_disposition: Disposition::Record,
 };
 static CONTROL_PLANE: FindingMetadata = FindingMetadata {
     scope: FindingScope::Control,
-    evidence_class: "control-plane",
-    invariant_class: "absolute",
+    evidence_class: EvidenceClass::ControlPlane,
+    invariant_class: InvariantClass::Absolute,
     observe_disposition: Disposition::Fail,
     enforce_disposition: Disposition::Fail,
 };
