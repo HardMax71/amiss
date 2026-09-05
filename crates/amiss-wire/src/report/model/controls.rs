@@ -7,15 +7,37 @@ use crate::requests::RequestTrust;
 
 use super::{SandboxProvenance, UnavailableStatus};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ControlStatus {
     None,
     Verified,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ControlTrustSource {
     ExternalRequiredCheck,
     None,
@@ -30,9 +52,20 @@ pub struct ControlProvenance {
     pub trust_source: ControlTrustSource,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
 pub enum NoControlStatus {
-    #[serde(rename = "none")]
+    #[strum(serialize = "none")]
     None,
 }
 
@@ -41,9 +74,20 @@ pub struct NoExecutionConstraint {
     pub status: NoControlStatus,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
 pub enum VerifiedControlStatus {
-    #[serde(rename = "verified")]
+    #[strum(serialize = "verified")]
     Verified,
 }
 
@@ -67,9 +111,20 @@ pub struct NoTrustedTime {
     pub status: NoControlStatus,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
 pub enum TrustedTimeTrustSource {
-    #[serde(rename = "external-required-check")]
+    #[strum(serialize = "external-required-check")]
     ExternalRequiredCheck,
 }
 

@@ -55,11 +55,11 @@ pub enum Disposition {
     AsRefStr,
     EnumString,
     IntoStaticStr,
-    Serialize,
-    Deserialize,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum Profile {
     Observe,
     EnforceIntroduced,
