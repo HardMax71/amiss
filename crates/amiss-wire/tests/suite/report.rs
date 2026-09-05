@@ -281,12 +281,12 @@ fn the_kind_projections_are_populated_and_distinct() {
     assert!(kind_names.iter().all(|text| !text.is_empty()));
     let evidence: BTreeSet<&str> = kinds
         .iter()
-        .map(|kind| kind.metadata().evidence_class)
+        .map(|kind| kind.metadata().evidence_class.as_ref())
         .collect();
     assert!(evidence.len() > 1 && evidence.iter().all(|text| !text.is_empty()));
     let invariants: BTreeSet<&str> = kinds
         .iter()
-        .map(|kind| kind.metadata().invariant_class)
+        .map(|kind| kind.metadata().invariant_class.as_ref())
         .collect();
     assert!(invariants.len() > 1 && invariants.iter().all(|text| !text.is_empty()));
 }
