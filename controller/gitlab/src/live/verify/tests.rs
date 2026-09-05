@@ -7,7 +7,7 @@ use std::time::Duration;
 use amiss_controller::ProviderError;
 use amiss_fixtures::{external_facts, external_plan};
 use amiss_wire::digest::hj;
-use amiss_wire::external::assess;
+use amiss_wire::external::{ExternalReason, ExternalVerdict, assess};
 use amiss_wire::json::Value;
 
 use super::super::transport::Budget;
@@ -229,8 +229,10 @@ fn every_visibility_and_resolution_becomes_its_fact() {
     let document = amiss_wire::external::parse_evidence(&evidence).expect("the evidence is valid");
     assert_eq!(document.producer.name, PRODUCER_NAME);
     assert_eq!(
-        Some(document.plan_payload_digest.to_string()).as_deref(),
-        plan.text("payload_digest"),
+        document.plan_payload_digest,
+        amiss_wire::external::parse_plan(&plan)
+            .expect("the plan is valid")
+            .payload_digest,
         "the evidence binds the exact plan"
     );
 }
@@ -336,21 +338,22 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
         verify_external(&rest, &plan, "gitlab.com", "0.0.0", "t0").expect("evidence is produced");
     let assessment = assess(&plan, &evidence, "0.0.0", hj("t", &Value::Null))
         .expect("the engine judges the evidence");
-    let Some(Value::Array(verdicts)) = assessment
-        .member("payload")
-        .and_then(|payload| payload.member("verdicts"))
-    else {
-        panic!("the assessment holds verdicts");
-    };
-    let verdicts: Vec<(Option<&str>, Option<&str>)> = verdicts
+    let document =
+        amiss_wire::external::parse_assessment(&assessment).expect("the assessment is valid");
+    let verdicts: Vec<_> = document
+        .payload
+        .verdicts
         .iter()
-        .map(|row| (row.text("verdict"), row.text("reason")))
+        .map(|row| (row.verdict, row.reason))
         .collect();
     assert_eq!(
         verdicts,
         vec![
-            (Some("refuted"), Some("path-missing")),
-            (Some("unproven"), Some("repository-unseen")),
-        ],
+            (ExternalVerdict::Refuted, Some(ExternalReason::PathMissing)),
+            (
+                ExternalVerdict::Unproven,
+                Some(ExternalReason::RepositoryUnseen)
+            ),
+        ]
     );
 }

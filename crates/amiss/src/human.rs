@@ -259,30 +259,29 @@ fn explain(out: &mut Channel, payload: &ReportPayload) {
     );
 }
 
-pub(crate) fn plan(envelope: &Value) {
+pub(crate) fn plan(payload: &amiss_wire::external::ExternalPlan) {
     let mut out = Channel {
         out: std::io::stdout(),
         open: true,
     };
-    let payload = View::of(envelope).view("payload");
-    let introduced = payload.rows("introduced");
+    let introduced = &payload.introduced;
     line(
         &mut out,
         format_args!(
             "amiss external-plan: introduced {} removed {} retained {}",
             introduced.len(),
-            payload.rows("removed").len(),
-            payload.number("retained_count"),
+            payload.removed.len(),
+            payload.retained_count,
         ),
     );
     let overflow = introduced.len().saturating_sub(10);
-    for row in introduced.take(10) {
+    for row in introduced.iter().take(10) {
         line(
             &mut out,
             format_args!(
                 "introduced {} in {} documents",
-                row.text("destination"),
-                row.rows("documents").len(),
+                row.destination,
+                row.documents.len(),
             ),
         );
     }
@@ -294,22 +293,17 @@ pub(crate) fn plan(envelope: &Value) {
     }
 }
 
-pub(crate) fn assessment(envelope: &Value) {
+pub(crate) fn assessment(payload: &amiss_wire::external::ExternalAssessment) {
+    use amiss_wire::external::ExternalVerdict;
     let mut out = Channel {
         out: std::io::stdout(),
         open: true,
     };
-    let payload = View::of(envelope).view("payload");
-    let verdicts = payload.rows("verdicts");
-    let count = |wanted: &str| {
-        verdicts
-            .clone()
-            .filter(|row| row.text("verdict") == wanted)
-            .count()
-    };
-    let refuted = count("refuted");
-    let unproven = count("unproven");
-    let reachable = count("reachable");
+    let verdicts = &payload.verdicts;
+    let count = |wanted| verdicts.iter().filter(|row| row.verdict == wanted).count();
+    let refuted = count(ExternalVerdict::Refuted);
+    let unproven = count(ExternalVerdict::Unproven);
+    let reachable = count(ExternalVerdict::Reachable);
     line(
         &mut out,
         format_args!(
@@ -317,16 +311,16 @@ pub(crate) fn assessment(envelope: &Value) {
         ),
     );
     for row in verdicts
-        .clone()
-        .filter(|row| row.text("verdict") == "refuted")
+        .iter()
+        .filter(|row| row.verdict == ExternalVerdict::Refuted)
         .take(10)
     {
         line(
             &mut out,
             format_args!(
                 "refuted {} ({})",
-                atom(row.text("destination")),
-                row.text("reason")
+                atom(&row.destination),
+                row.reason.as_ref().map_or("", AsRef::as_ref)
             ),
         );
     }
@@ -337,15 +331,19 @@ pub(crate) fn assessment(envelope: &Value) {
             format_args!("refuted overflow: {overflow} more in the full assessment"),
         );
     }
-    let retargets = verdicts.filter(|row| !row.text("retarget").is_empty());
+    let retargets = verdicts.iter().filter_map(|row| {
+        row.retarget
+            .as_ref()
+            .map(|target| (&row.destination, target))
+    });
     let retarget_count = retargets.clone().count();
-    for row in retargets.take(10) {
+    for (destination, target) in retargets.take(10) {
         line(
             &mut out,
             format_args!(
                 "retarget suggestion {} -> {}",
-                atom(row.text("destination")),
-                atom(row.text("retarget"))
+                atom(destination),
+                atom(target)
             ),
         );
     }

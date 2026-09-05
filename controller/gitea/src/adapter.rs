@@ -80,7 +80,7 @@ impl<A: GiteaApi> ProviderAdapter for GiteaPullRequestAdapter<A> {
 
     fn verify_external(
         &self,
-        plan: &amiss_wire::json::Value,
+        plan: &[u8],
         checked_at: &str,
     ) -> Result<Option<Vec<u8>>, ProviderError> {
         self.api.verify_external(plan, checked_at)

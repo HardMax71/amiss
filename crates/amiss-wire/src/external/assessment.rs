@@ -5,7 +5,7 @@ use wary::Validate;
 
 use crate::de::{self, Error, ErrorKind};
 use crate::digest::{Digest, hb, hj};
-use crate::json::{self, Value};
+use crate::json;
 
 use super::evidence::{
     EvidenceDefect, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
@@ -119,8 +119,11 @@ pub enum ExternalVerdict {
     Unproven,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, strum::AsRefStr,
+)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum ExternalReason {
     Gone,
     PathMissing,
@@ -190,12 +193,12 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
 /// bound one-to-one to introduced destinations, or the result cannot satisfy
 /// the assessment contract.
 pub fn assess(
-    plan: &Value,
+    plan: &[u8],
     evidence_bytes: &[u8],
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Value, AssessDefect> {
-    let plan = parse_plan(&json::canonical(plan))?;
+) -> Result<Vec<u8>, AssessDefect> {
+    let plan = parse_plan(plan)?;
     let evidence = parse_evidence(evidence_bytes)?;
     let evidence_digest = hj(
         EVIDENCE_SCHEMA,
@@ -232,9 +235,9 @@ pub fn assess(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
         return Err(AssessmentDefect::Wire(Error::new("$", ErrorKind::LimitExceeded)).into());
     }
-    let document = json::parse(&canonical)
+    json::parse(&canonical)
         .map_err(|defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::Json(defect))))?;
-    Ok(document)
+    Ok(canonical)
 }
 
 fn assessment_payload_digest(assessment: &ExternalAssessment) -> Result<Digest, AssessmentDefect> {

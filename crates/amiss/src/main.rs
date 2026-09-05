@@ -116,8 +116,8 @@ fn main() -> ExitCode {
         Outcome::Accepted(command) => match *command {
             invocation::Command::Scan(invocation) => run(&invocation, &mut reserve),
             invocation::Command::Author(author) => author::run(&author),
-            invocation::Command::Plan(plan) => external::run_plan(&plan, &mut reserve),
-            invocation::Command::Assess(assess) => external::run_assess(&assess, &mut reserve),
+            invocation::Command::Plan(plan) => external::run_plan(&plan),
+            invocation::Command::Assess(assess) => external::run_assess(&assess),
             invocation::Command::Render(render) => render::run(&render, &mut reserve),
             invocation::Command::Refs(refs) => references::run(&refs),
             invocation::Command::PolicyInclude(include) => policy_include::run(&include),

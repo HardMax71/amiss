@@ -1,18 +1,14 @@
 #![expect(clippy::panic, reason = "benchmark fixture setup fails loudly")]
 
 use amiss_wire::controls::parse_organization_floor;
-use amiss_wire::digest::{Digest, hb, hj};
+use amiss_wire::digest::{hb, hj};
 use amiss_wire::external::{
     EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
-    ExternalEvidenceSchema, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess,
-    evidence,
+    ExternalEvidenceSchema, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess, evidence,
 };
 use amiss_wire::json::{Value, canonical, canonical_length, parse};
 use divan::counter::BytesCount;
 use divan::{Bencher, black_box};
-
-const SAMPLE_DIGEST: &str =
-    "sha256:0000000000000000000000000000000000000000000000000000000000000000";
 
 fn main() {
     divan::main();
@@ -112,21 +108,11 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     let engine_digest = hj("amiss/benchmark-engine", &Value::Null);
     let validation = assess(&plan, &evidence, "0.0.0", engine_digest)
         .unwrap_or_else(|defect| panic!("dense assessment fixture: {defect:?}"));
-    let verdict_count = validation
-        .member("payload")
-        .and_then(|payload| payload.member("verdicts"))
-        .and_then(|verdicts| match verdicts {
-            Value::Array(rows) => Some(rows.len()),
-            Value::Null
-            | Value::Bool(_)
-            | Value::Integer(_)
-            | Value::String(_)
-            | Value::Object(_) => None,
-        });
-    assert_eq!(verdict_count, Some(16_384));
+    let document = amiss_wire::external::parse_assessment(&validation)
+        .unwrap_or_else(|defect| panic!("dense assessment output: {defect}"));
+    assert_eq!(document.payload.verdicts.len(), 16_384);
 
-    let bytes =
-        canonical_length(&plan).saturating_add(u64::try_from(evidence.len()).unwrap_or(u64::MAX));
+    let bytes = plan.len().saturating_add(evidence.len());
     bencher.counter(BytesCount::new(bytes)).bench_local(|| {
         assess(
             black_box(&plan),
@@ -137,46 +123,30 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     });
 }
 
-fn assessment_fixture(count: usize) -> (Value, Vec<u8>) {
+fn assessment_fixture(count: usize) -> (Vec<u8>, Vec<u8>) {
     let destinations: Vec<String> = (0..count)
         .map(|index| format!("https://example.com/resource-{index:05}"))
         .collect();
-    let introduced = destinations
+    let mut document = amiss_wire::external::parse_plan(include_bytes!(
+        "../../../spec/examples/scanner-external-plan.json"
+    ))
+    .unwrap_or_else(|defect| panic!("benchmark plan example: {defect}"));
+    document.payload.introduced = destinations
         .iter()
-        .map(|destination| {
-            Value::object(vec![
-                ("destination".to_owned(), Value::string(destination.clone())),
-                (
-                    "documents".to_owned(),
-                    Value::array(vec![Value::string("docs/bench.md".to_owned())]),
-                ),
-                ("scheme".to_owned(), Value::string("https".to_owned())),
-            ])
+        .map(|destination| amiss_wire::external::ExternalDestination {
+            destination: destination.clone(),
+            documents: vec!["docs/bench.md".to_owned()],
+            scheme: "https".to_owned(),
+            repository: None,
         })
         .collect();
-    let payload = Value::object(vec![
-        ("introduced".to_owned(), Value::array(introduced)),
-        (
-            "report".to_owned(),
-            Value::object(vec![(
-                "payload_digest".to_owned(),
-                Value::string(SAMPLE_DIGEST.to_owned()),
-            )]),
-        ),
-        (
-            "schema".to_owned(),
-            Value::string(PLAN_PAYLOAD_SCHEMA.to_owned()),
-        ),
-    ]);
-    let payload_digest = hj(PLAN_PAYLOAD_SCHEMA, &payload).to_string();
-    let plan = Value::object(vec![
-        ("payload".to_owned(), payload),
-        ("payload_digest".to_owned(), Value::string(payload_digest)),
-        (
-            "schema".to_owned(),
-            Value::string(PLAN_ENVELOPE_SCHEMA.to_owned()),
-        ),
-    ]);
+    document.payload.removed.clear();
+    document.payload.retained_count = 0;
+    let payload = serde_json_canonicalizer::to_vec(&document.payload)
+        .unwrap_or_else(|defect| panic!("benchmark payload: {defect}"));
+    document.payload_digest = hb(PLAN_PAYLOAD_SCHEMA, &payload);
+    let plan = serde_json_canonicalizer::to_vec(&document)
+        .unwrap_or_else(|defect| panic!("benchmark plan: {defect}"));
     let rows = destinations
         .iter()
         .rev()
@@ -190,13 +160,9 @@ fn assessment_fixture(count: usize) -> (Value, Vec<u8>) {
             checked_at: "bench-instant".to_owned(),
         })
         .collect();
-    let plan_payload_digest = plan
-        .text("payload_digest")
-        .and_then(Digest::from_wire)
-        .unwrap_or_else(|| panic!("benchmark plan has no payload digest"));
     let evidence = evidence(&ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
-        plan_payload_digest,
+        plan_payload_digest: document.payload_digest,
         producer: ExternalEvidenceProducer {
             name: "benchmark".to_owned(),
             version: "0.0.0".to_owned(),

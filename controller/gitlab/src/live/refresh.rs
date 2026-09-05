@@ -24,7 +24,7 @@ struct ChangeData {
 impl GitLabApi for GitLabClient {
     fn verify_external(
         &self,
-        plan: &amiss_wire::json::Value,
+        plan: &[u8],
         checked_at: &str,
     ) -> Result<Option<Vec<u8>>, ProviderError> {
         super::verify::verify_external(

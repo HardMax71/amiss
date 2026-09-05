@@ -32,7 +32,7 @@ pub trait GitLabApi: Send + Sync {
     /// No fact could be gathered before the first one.
     fn verify_external(
         &self,
-        _plan: &amiss_wire::json::Value,
+        _plan: &[u8],
         _checked_at: &str,
     ) -> Result<Option<Vec<u8>>, ProviderError> {
         Ok(None)
@@ -151,7 +151,7 @@ impl<A: GitLabApi> ProviderAdapter for GitLabMergeTrainAdapter<A> {
 
     fn verify_external(
         &self,
-        plan: &amiss_wire::json::Value,
+        plan: &[u8],
         checked_at: &str,
     ) -> Result<Option<Vec<u8>>, ProviderError> {
         self.api.verify_external(plan, checked_at)

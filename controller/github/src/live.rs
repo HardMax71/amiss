@@ -168,7 +168,7 @@ impl GitHubApp {
 impl GitHubApi for GitHubApp {
     fn verify_external(
         &self,
-        plan: &amiss_wire::json::Value,
+        plan: &[u8],
         checked_at: &str,
     ) -> Result<Option<Vec<u8>>, ProviderError> {
         verify::verify_external(
