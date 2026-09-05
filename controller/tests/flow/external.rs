@@ -11,7 +11,6 @@ use amiss_wire::external::{
     ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
     ForgeRepository, ForgeTail, evidence,
 };
-use amiss_wire::json::Value;
 
 use crate::support::{
     FakeAdapter, RecordingSink, controller, controller_with_ledger, delivery, locator, oid,
@@ -39,7 +38,7 @@ fn external_outcome(run: &amiss_controller::RunIdentity) -> RunnerOutcome {
     }
 }
 
-fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Value {
+fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Vec<u8> {
     let report = amiss_fixtures::external_report(&[DESTINATION]).unwrap();
     let parsed = amiss_wire::json::parse(&report).unwrap();
     let engine = parsed
@@ -81,7 +80,7 @@ fn set_external_policy<L, R>(controller: &mut Controller<L, R>, external_policy:
 
 fn published_with(
     external_policy: ExternalPolicy,
-    verify: impl IntoIterator<Item = Result<Option<Value>, ProviderError>>,
+    verify: impl IntoIterator<Item = Result<Option<Vec<u8>>, ProviderError>>,
     sink: Option<&Arc<RecordingSink>>,
 ) -> (Arc<FakeAdapter>, HandleOutcome) {
     let provider = provider();

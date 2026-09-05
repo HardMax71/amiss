@@ -34,7 +34,7 @@ pub trait GitLabApi: Send + Sync {
         &self,
         _plan: &amiss_wire::json::Value,
         _checked_at: &str,
-    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+    ) -> Result<Option<Vec<u8>>, ProviderError> {
         Ok(None)
     }
 }
@@ -153,7 +153,7 @@ impl<A: GitLabApi> ProviderAdapter for GitLabMergeTrainAdapter<A> {
         &self,
         plan: &amiss_wire::json::Value,
         checked_at: &str,
-    ) -> Result<Option<amiss_wire::json::Value>, ProviderError> {
+    ) -> Result<Option<Vec<u8>>, ProviderError> {
         self.api.verify_external(plan, checked_at)
     }
 }

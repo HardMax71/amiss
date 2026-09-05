@@ -554,8 +554,6 @@ fn the_assessment_example_derives_from_the_plan_and_evidence_examples() {
     let plan = amiss_wire::json::parse(&plan_bytes).expect("the plan example is strict JSON");
     let evidence_bytes = fs::read(root.join("spec/examples/scanner-external-evidence.json"))
         .expect("the evidence example is readable");
-    let evidence =
-        amiss_wire::json::parse(&evidence_bytes).expect("the evidence example is strict JSON");
     let assessment_bytes = fs::read(root.join("spec/examples/scanner-external-assessment.json"))
         .expect("the assessment example is readable");
     let assessment =
@@ -563,7 +561,7 @@ fn the_assessment_example_derives_from_the_plan_and_evidence_examples() {
     let example: serde_json::Value =
         serde_json::from_slice(&assessment_bytes).expect("the assessment example is JSON");
     let (version, digest) = external_engine(&example);
-    let derived = amiss_wire::external::assess(&plan, &evidence, version, digest)
+    let derived = amiss_wire::external::assess(&plan, &evidence_bytes, version, digest)
         .expect("the plan and evidence examples yield an assessment");
     assert_eq!(
         derived, assessment,

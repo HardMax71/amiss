@@ -203,7 +203,7 @@ fn the_external_examples_match_their_typed_sources() {
         fs::read(examples.join("scanner-external-evidence.json")).unwrap();
     let external_evidence = external::parse_evidence(&external_evidence_bytes).unwrap();
     assert_eq!(
-        serde_json_canonicalizer::to_vec(&external_evidence).unwrap(),
+        external::evidence(&external_evidence).unwrap(),
         json::canonical(&json::parse(&external_evidence_bytes).unwrap())
     );
     let external_assessment_bytes =

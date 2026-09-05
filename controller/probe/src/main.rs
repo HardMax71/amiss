@@ -3,7 +3,7 @@ mod select;
 
 use std::env;
 use std::fs;
-use std::io::Read as _;
+use std::io::{Read as _, Write as _};
 use std::process::ExitCode;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -11,7 +11,6 @@ use amiss_wire::external::{
     ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
     ExternalPlanEnvelope, evidence, parse_plan,
 };
-use amiss_wire::json;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use crate::net::{Observation, probe, shown};
@@ -124,9 +123,16 @@ fn main() -> ExitCode {
         eprintln!("amiss-probe: the evidence could not be encoded");
         return ExitCode::from(2);
     };
-    let mut out = String::new();
-    json::stream(&evidence, &mut out);
-    println!("{out}");
+    let mut out = std::io::BufWriter::new(std::io::stdout().lock());
+    if let Err(defect) = out
+        .write_all(&evidence)
+        .and_then(|()| out.write_all(b"\n"))
+        .and_then(|()| out.flush())
+        && defect.kind() != std::io::ErrorKind::BrokenPipe
+    {
+        eprintln!("amiss-probe: the evidence could not be written");
+        return ExitCode::from(2);
+    }
     ExitCode::SUCCESS
 }
 

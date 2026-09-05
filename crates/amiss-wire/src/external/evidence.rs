@@ -5,7 +5,7 @@ use wary::Validate;
 
 use crate::de::{self, Error, ErrorKind};
 use crate::digest::Digest;
-use crate::json::{self, Value};
+use crate::json;
 
 use super::EXTERNAL_DOCUMENT_BYTES;
 
@@ -179,7 +179,7 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<ExternalEvidence, EvidenceDefect> 
 ///
 /// Fails when a public field violates the same grammar [`parse_evidence`]
 /// enforces or the encoded document exceeds its byte ceiling.
-pub fn evidence(input: &ExternalEvidence) -> Result<Value, EvidenceDefect> {
+pub fn evidence(input: &ExternalEvidence) -> Result<Vec<u8>, EvidenceDefect> {
     input.validate(&()).map_err(EvidenceDefect::Contract)?;
     let canonical = serde_json_canonicalizer::to_vec(input)
         .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
@@ -190,5 +190,6 @@ pub fn evidence(input: &ExternalEvidence) -> Result<Value, EvidenceDefect> {
         )));
     }
     json::parse(&canonical)
-        .map_err(|defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::Json(defect))))
+        .map_err(|defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::Json(defect))))?;
+    Ok(canonical)
 }

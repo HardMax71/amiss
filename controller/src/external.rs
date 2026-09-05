@@ -81,7 +81,7 @@ pub fn forge_evidence<S>(
     producer: ForgeProducer<'_>,
     prepare: impl FnOnce() -> Result<S, ProviderError>,
     mut inspect: impl FnMut(&mut S, &ExternalRepository) -> Result<ForgeEvidence, ProviderError>,
-) -> Result<Value, ProviderError> {
+) -> Result<Vec<u8>, ProviderError> {
     let plan = parse_plan(&canonical(plan)).map_err(|_defect| ProviderError::InvalidResponse)?;
     let mut state = prepare()?;
     let mut rows = Vec::new();

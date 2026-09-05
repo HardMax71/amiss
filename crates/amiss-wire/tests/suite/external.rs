@@ -661,8 +661,8 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
     }
 }
 
-fn evidence(plan: &Value, rows: Vec<Value>) -> Value {
-    object(vec![
+fn evidence(plan: &Value, rows: Vec<Value>) -> Vec<u8> {
+    amiss_wire::json::canonical(&object(vec![
         ("schema", string(EVIDENCE_SCHEMA)),
         ("plan_payload_digest", field(plan, "payload_digest").clone()),
         (
@@ -673,7 +673,7 @@ fn evidence(plan: &Value, rows: Vec<Value>) -> Value {
             ]),
         ),
         ("rows", Value::array(rows)),
-    ])
+    ]))
 }
 
 fn probe(destination: &str, method: &str, status: i64) -> Value {
@@ -724,6 +724,70 @@ fn additive_evidence_fields_are_inert_but_known_nulls_are_refused() {
         parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
             .is_err()
     );
+}
+
+#[test]
+fn evidence_bytes_preserve_escaping_and_round_trip() {
+    let document = ExternalEvidence {
+        schema: ExternalEvidenceSchema::Current,
+        plan_payload_digest: sample_digest(),
+        producer: ExternalEvidenceProducer {
+            name: "probe \"quoted\" \\ \n \t 😀".to_owned(),
+            version: "0.0.0".to_owned(),
+        },
+        rows: vec![ExternalEvidenceRow::HttpProbe {
+            destination: "https://example.com/é".to_owned(),
+            method: ProbeMethod::Get,
+            status: Some(200),
+            failure: None,
+            final_destination: None,
+            redirect_chain_permanent: None,
+            checked_at: "t0".to_owned(),
+        }],
+    };
+    let bytes = amiss_wire::external::evidence(&document).expect("the evidence encodes");
+    assert_eq!(
+        parse_evidence(&bytes).expect("the evidence parses"),
+        document
+    );
+    assert_eq!(
+        bytes,
+        amiss_wire::json::canonical(&amiss_wire::json::parse(&bytes).expect("strict JSON")),
+    );
+    assert!(!bytes.ends_with(b"\n"));
+}
+
+#[test]
+fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
+    let plan = planned(introduced("https://a.example/x"));
+    let mut document: serde_json::Value = serde_json::from_slice(&evidence(
+        &plan,
+        vec![probe("https://a.example/x", "get", 200)],
+    ))
+    .expect("the evidence is JSON");
+    document["future_field"] = serde_json::json!({"😀": "\t", "\u{e000}": null});
+    let canonical = serde_json_canonicalizer::to_vec(&document).expect("canonical evidence");
+    let pretty = serde_json::to_vec_pretty(&document).expect("formatted evidence");
+    let assessment = assess(&plan, &pretty, "0.0.0", sample_digest()).expect("valid evidence");
+    let subject = field(field(&assessment, "payload"), "subject");
+    assert_eq!(
+        text(field(subject, "evidence_digest")),
+        hb(EVIDENCE_SCHEMA, &canonical).to_string(),
+    );
+    let typed = parse_evidence(&canonical).expect("valid evidence");
+    assert_ne!(
+        hb(EVIDENCE_SCHEMA, &canonical),
+        hb(
+            EVIDENCE_SCHEMA,
+            &amiss_wire::external::evidence(&typed).expect("typed evidence")
+        ),
+    );
+    let mut trailing = pretty;
+    trailing.extend_from_slice(b" null");
+    assert!(matches!(
+        assess(&plan, &trailing, "0.0.0", sample_digest()),
+        Err(AssessDefect::Evidence(_)),
+    ));
 }
 
 #[test]
@@ -1045,7 +1109,9 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
             Err(AssessDefect::UnboundEvidence)
         ));
     }
-    let Value::Object(members) = evidence(&plan, Vec::new()) else {
+    let Value::Object(members) =
+        amiss_wire::json::parse(&evidence(&plan, Vec::new())).expect("the evidence is strict JSON")
+    else {
         panic!("the evidence is an object");
     };
     let mut members = members.into_vec();
@@ -1055,7 +1121,7 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
         string(&sample_digest().to_string()),
     ));
     members.sort_by(|left, right| left.0.cmp(&right.0));
-    let foreign = Value::object(members);
+    let foreign = amiss_wire::json::canonical(&Value::object(members));
     assert!(matches!(
         assess(&plan, &foreign, "0.0.0", sample_digest()),
         Err(AssessDefect::UnboundEvidence)
@@ -1095,7 +1161,9 @@ fn malformed_evidence_rows_are_refused() {
 #[test]
 fn the_judge_is_no_laxer_than_its_contracts() {
     let plan = planned(introduced("https://a.example/x"));
-    let Value::Object(unnamed) = evidence(&plan, Vec::new()) else {
+    let Value::Object(unnamed) =
+        amiss_wire::json::parse(&evidence(&plan, Vec::new())).expect("the evidence is strict JSON")
+    else {
         panic!("the evidence is an object");
     };
     let mut unnamed = unnamed.into_vec();
@@ -1105,7 +1173,12 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         }
     }
     assert!(matches!(
-        assess(&plan, &Value::object(unnamed), "0.0.0", sample_digest(),),
+        assess(
+            &plan,
+            &amiss_wire::json::canonical(&Value::object(unnamed)),
+            "0.0.0",
+            sample_digest(),
+        ),
         Err(AssessDefect::Evidence(_))
     ));
 
@@ -1181,7 +1254,7 @@ fn the_assessment_binds_the_whole_chain() {
     );
     assert_eq!(
         text(field(subject, "evidence_digest")),
-        hj(EVIDENCE_SCHEMA, &evidence).to_string()
+        hb(EVIDENCE_SCHEMA, &evidence).to_string()
     );
     let payload = field(&assessment, "payload");
     assert_eq!(

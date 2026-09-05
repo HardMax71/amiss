@@ -26,7 +26,19 @@ pub(crate) fn run_assess(invocation: &AssessInvocation, reserve: &mut FatalSeria
         || {
             Ok((
                 crate::input::strict_value(&invocation.plan)?,
-                crate::input::strict_value(&invocation.evidence)?,
+                crate::input::bounded_bytes(
+                    &invocation.evidence,
+                    amiss_wire::external::EXTERNAL_DOCUMENT_BYTES,
+                )
+                .map_err(|defect| {
+                    let path = invocation.evidence.display();
+                    match defect {
+                        crate::input::ReadError::Unreadable => format!("{path} is unreadable"),
+                        crate::input::ReadError::TooLarge => {
+                            format!("{path} is larger than a scanner report can be")
+                        }
+                    }
+                })?,
             ))
         },
         |(plan, evidence), version, digest| {

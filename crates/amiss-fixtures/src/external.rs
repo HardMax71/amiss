@@ -82,7 +82,8 @@ pub fn external_plan(destinations: &[&str]) -> Option<Value> {
 
 /// Flattens forge evidence rows into the facts provider tests compare.
 #[must_use]
-pub fn external_facts(evidence: &Value) -> Option<Vec<String>> {
+pub fn external_facts(evidence: &[u8]) -> Option<Vec<String>> {
+    let evidence = amiss_wire::json::parse(evidence).ok()?;
     let Value::Array(rows) = evidence.member("rows")? else {
         return None;
     };
