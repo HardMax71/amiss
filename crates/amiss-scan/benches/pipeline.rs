@@ -263,6 +263,7 @@ fn evaluate_matching_debt(bencher: Bencher<'_, '_>, count: usize) {
             &[],
             &[],
         )
+        .unwrap_or_else(|error| panic!("benchmark evaluation: {error:?}"))
     });
 }
 

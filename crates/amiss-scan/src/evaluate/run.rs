@@ -57,12 +57,14 @@ fn invalid_attributions(comparisons: &[Comparison]) -> BTreeMap<Digest, Attribut
 /// boundaries, structural aggregation by key with attribution, and the
 /// comparison-derived removal, ambiguity, and impact findings. Analysis
 /// errors never enter, and the result is in canonical finding-key order.
-#[must_use]
+///
+/// # Errors
+/// Returns [`crate::Error::Internal`] if a finding key cannot be serialized.
 pub fn evaluate(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
     profile: Profile,
-) -> Vec<Finding> {
+) -> Result<Vec<Finding>, crate::Error> {
     let (findings, _no_exceptions) = evaluate_with_policy(
         documents,
         comparisons,
@@ -70,8 +72,8 @@ pub fn evaluate(
         &crate::policy::Effects::default(),
         &[],
         &[],
-    );
-    findings
+    )?;
+    Ok(findings)
 }
 
 /// The full projection with the candidate policy applied: the raise-only
@@ -80,7 +82,9 @@ pub fn evaluate(
 /// control findings, and one unsupported-capability finding per candidate
 /// document holding reserved governed definitions. The returned rows are the
 /// exception-overlap errors; any row makes the run incomplete.
-#[must_use]
+///
+/// # Errors
+/// Returns [`crate::Error::Internal`] if a finding key cannot be serialized.
 pub fn evaluate_with_policy(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
@@ -88,7 +92,7 @@ pub fn evaluate_with_policy(
     policy: &crate::policy::Effects,
     governed: &[GovernedSeed],
     claims: &[ClaimGroup],
-) -> (Vec<Finding>, Vec<ErrorDetail>) {
+) -> Result<(Vec<Finding>, Vec<ErrorDetail>), crate::Error> {
     let site = crate::semantic::SiteEvaluation::default();
     evaluate_with_site(
         documents,
@@ -118,20 +122,17 @@ pub(crate) fn evaluate_with_site(
     profile: Profile,
     policy: &crate::policy::Effects,
     inputs: GovernedInputs<'_>,
-) -> (Vec<Finding>, Vec<ErrorDetail>) {
-    let mut findings = ordinary(documents, comparisons, profile, inputs.site);
+) -> Result<(Vec<Finding>, Vec<ErrorDetail>), crate::Error> {
+    let mut findings = ordinary(documents, comparisons, profile, inputs.site)?;
     for seed in inputs.governed {
-        findings.push(governed_finding(seed, profile));
+        findings.push(governed_finding(seed, profile)?);
     }
     for group in inputs.claims {
-        findings.push(claim_finding(group, profile));
+        findings.push(claim_finding(group, profile)?);
     }
-    findings.extend(
-        inputs
-            .projections
-            .iter()
-            .filter_map(|outcome| projection_finding(outcome, profile)),
-    );
+    for outcome in inputs.projections {
+        findings.extend(projection_finding(outcome, profile)?);
+    }
     for finding in &mut findings {
         if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {
             continue;
@@ -172,13 +173,13 @@ pub(crate) fn evaluate_with_site(
             }
         }
     }
-    let (exception_findings, errors) = apply_exceptions(&mut findings, policy, profile);
+    let (exception_findings, errors) = apply_exceptions(&mut findings, policy, profile)?;
     findings.extend(exception_findings);
     for seed in &policy.controls {
-        findings.push(control_finding(seed, policy, profile));
+        findings.push(control_finding(seed, policy, profile)?);
     }
     findings.sort_by_key(|finding| finding.finding_key);
-    (findings, errors)
+    Ok((findings, errors))
 }
 
 pub(super) fn tree_value(tree: &amiss_wire::model::TreeIdentity) -> Value {
@@ -219,21 +220,21 @@ fn apply_exceptions(
     findings: &mut [Finding],
     policy: &crate::policy::Effects,
     profile: Profile,
-) -> (Vec<Finding>, Vec<ErrorDetail>) {
+) -> Result<(Vec<Finding>, Vec<ErrorDetail>), crate::Error> {
     let mut extra: Vec<Finding> = Vec::new();
     if policy.debt.is_none() && policy.waiver.is_none() {
-        return (extra, Vec::new());
+        return Ok((extra, Vec::new()));
     }
     let Some(instant) = policy
         .time
         .as_ref()
         .map(|time| time.statement.evaluation_instant.clone())
     else {
-        return (extra, Vec::new());
+        return Ok((extra, Vec::new()));
     };
     let targets = exception_targets(findings);
-    let debt_valid = debt_pass(findings, &targets, policy, profile, &instant, &mut extra);
-    let waiver_valid = waiver_pass(findings, &targets, policy, profile, &instant, &mut extra);
+    let debt_valid = debt_pass(findings, &targets, policy, profile, &instant, &mut extra)?;
+    let waiver_valid = waiver_pass(findings, &targets, policy, profile, &instant, &mut extra)?;
     let overlap = apply_valid_exceptions(findings, policy, &debt_valid, &waiver_valid);
     let errors = if overlap {
         vec![ErrorDetail {
@@ -245,7 +246,7 @@ fn apply_exceptions(
     } else {
         Vec::new()
     };
-    (extra, errors)
+    Ok((extra, errors))
 }
 
 /// The application and overlap law: a finding matched by both valid items
@@ -356,11 +357,11 @@ fn ordinary(
     comparisons: &[Comparison],
     profile: Profile,
     site: &crate::semantic::SiteEvaluation,
-) -> Vec<Finding> {
+) -> Result<Vec<Finding>, crate::Error> {
     let mut findings: Vec<Finding> = Vec::new();
 
     for document in documents {
-        document_findings(document, profile, site.navigation.as_deref(), &mut findings);
+        document_findings(document, profile, site.navigation.as_deref(), &mut findings)?;
     }
     for defect in site.defects.iter() {
         findings.push(candidate_fact_finding(
@@ -378,7 +379,7 @@ fn ordinary(
                 display: None,
             },
             profile,
-        ));
+        )?);
     }
 
     let invalid = invalid_attributions(comparisons);
@@ -396,7 +397,7 @@ fn ordinary(
         } else {
             Attribution::NotApplicable
         };
-        let mut emit = |kind: FindingKind| {
+        let mut emit = |kind: FindingKind| -> Result<(), crate::Error> {
             findings.push(simple(
                 kind,
                 super::FindingKeyScope::Observation {
@@ -407,22 +408,23 @@ fn ordinary(
                 vec![observation.id],
                 observation_location(observation, LocationSide::Candidate),
                 profile,
-            ));
+            )?);
+            Ok(())
         };
         if let Some(kind) = resolution_kinds(&observation.resolution).boundary {
-            emit(kind);
+            emit(kind)?;
         }
         if observation.resolution.is_lfs_pointer() {
-            emit(FindingKind::UnsupportedTargetKind);
+            emit(FindingKind::UnsupportedTargetKind)?;
         }
     }
 
-    structural_findings(comparisons, profile, &mut findings);
+    structural_findings(comparisons, profile, &mut findings)?;
 
     for comparison in comparisons {
-        comparison_findings(comparison, profile, &mut findings);
+        comparison_findings(comparison, profile, &mut findings)?;
     }
 
     findings.sort_by_key(|finding| finding.finding_key);
-    findings
+    Ok(findings)
 }

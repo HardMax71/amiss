@@ -12,7 +12,7 @@ pub(super) fn document_findings(
     profile: Profile,
     navigation: Option<&crate::semantic::SiteNavigation>,
     findings: &mut Vec<Finding>,
-) {
+) -> Result<(), crate::Error> {
     let path = &document.path;
     if document.base.is_some() && document.candidate.is_none() {
         findings.push(simple(
@@ -30,8 +30,8 @@ pub(super) fn document_findings(
                 display: None,
             },
             profile,
-        ));
-        return;
+        )?);
+        return Ok(());
     }
     let candidate_location = || Location {
         side: LocationSide::Candidate,
@@ -52,7 +52,7 @@ pub(super) fn document_findings(
                 Vec::new(),
                 candidate_location(),
                 profile,
-            ));
+            )?);
         }
         Some(DocumentSide::Scanned {
             mdx_regions,
@@ -70,7 +70,7 @@ pub(super) fn document_findings(
                     Vec::new(),
                     candidate_location(),
                     profile,
-                ));
+                )?);
             }
             if html_regions > 0 {
                 findings.push(simple(
@@ -83,7 +83,7 @@ pub(super) fn document_findings(
                     Vec::new(),
                     candidate_location(),
                     profile,
-                ));
+                )?);
             }
             if navigation.is_some_and(|navigation| {
                 crate::semantic::navigation_contains(navigation.root.as_ref(), path)
@@ -100,8 +100,9 @@ pub(super) fn document_findings(
                     Vec::new(),
                     candidate_location(),
                     profile,
-                ));
+                )?);
             }
         }
     }
+    Ok(())
 }

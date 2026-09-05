@@ -62,10 +62,10 @@ pub(super) fn debt_pass(
     profile: Profile,
     instant: &UtcInstant,
     extra: &mut Vec<Finding>,
-) -> BTreeMap<Digest, usize> {
+) -> Result<BTreeMap<Digest, usize>, crate::Error> {
     let mut debt_valid: BTreeMap<Digest, usize> = BTreeMap::new();
     let Some(context) = &policy.debt else {
-        return debt_valid;
+        return Ok(debt_valid);
     };
     for (index, item) in context.items.iter().enumerate() {
         let Some(target) = targets.get(&item.finding_key).copied() else {
@@ -84,7 +84,7 @@ pub(super) fn debt_pass(
                 (None, Some(context.digest)),
                 debt_diagnostic(item, context, current),
                 profile,
-            ));
+            )?);
         }
         if !equal {
             extra.push(control_row(
@@ -94,11 +94,11 @@ pub(super) fn debt_pass(
                 (None, Some(context.digest)),
                 debt_diagnostic(item, context, current),
                 profile,
-            ));
+            )?);
         }
         if !expired && equal {
             debt_valid.insert(item.finding_key, index);
         }
     }
-    debt_valid
+    Ok(debt_valid)
 }

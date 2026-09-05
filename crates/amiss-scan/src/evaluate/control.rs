@@ -33,7 +33,7 @@ pub(super) fn control_fact_finding(
     member_count: u64,
     representative: (Option<(usize, usize)>, Option<SpanDisplay>),
     profile: Profile,
-) -> Finding {
+) -> Result<Finding, crate::Error> {
     candidate_fact_finding(
         kind,
         FindingKeyScope::Control {
@@ -57,7 +57,10 @@ pub(super) fn control_fact_finding(
 /// document under the one closed rule, with null base state, candidate
 /// `unsupported`, exact node multiplicity, and the sorted distinct source
 /// digests.
-pub(super) fn governed_finding(seed: &GovernedSeed, profile: Profile) -> Finding {
+pub(super) fn governed_finding(
+    seed: &GovernedSeed,
+    profile: Profile,
+) -> Result<Finding, crate::Error> {
     let rule_id = "unsupported/governed-claim";
     let evidence = Value::object(vec![
         ("kind".to_owned(), Value::string("control".to_owned())),
@@ -101,7 +104,7 @@ pub(super) fn control_finding(
     seed: &crate::policy::ControlSeed,
     policy: &crate::policy::Effects,
     profile: Profile,
-) -> Finding {
+) -> Result<Finding, crate::Error> {
     control_row(
         seed.kind,
         seed.rule_id.clone(),
@@ -122,7 +125,7 @@ pub(super) fn control_row(
     control_digests: (Option<Digest>, Option<Digest>),
     exception: Value,
     profile: Profile,
-) -> Finding {
+) -> Result<Finding, crate::Error> {
     let nullable_digest = |value: Option<Digest>| {
         value.map_or(Value::Null, |digest| Value::string(digest.to_string()))
     };

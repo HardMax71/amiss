@@ -146,7 +146,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
 
 /// One defective claim group as a control-scoped finding carrying the claim
 /// evidence family.
-pub(super) fn claim_finding(group: &ClaimGroup, profile: Profile) -> Finding {
+pub(super) fn claim_finding(group: &ClaimGroup, profile: Profile) -> Result<Finding, crate::Error> {
     let rule_id = format!("claim/value/{}", group.name);
     let evidence = Value::object(vec![
         ("kind".to_owned(), Value::string("claim".to_owned())),
@@ -181,9 +181,9 @@ pub(super) fn claim_finding(group: &ClaimGroup, profile: Profile) -> Finding {
         group.member_count,
         (group.representative_span, group.representative_display),
         profile,
-    );
+    )?;
     finding.fix = claim_fix(group);
-    finding
+    Ok(finding)
 }
 
 /// The provable rewrite for a lone broken claim, or None: grouped members

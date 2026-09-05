@@ -42,7 +42,8 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
             }
         })
         .collect();
-    let findings = evaluate(&[], &comparisons, amiss_wire::controls::Profile::Enforce);
+    let findings = evaluate(&[], &comparisons, amiss_wire::controls::Profile::Enforce)
+        .unwrap_or_else(|error| panic!("benchmark evaluation: {error:?}"));
     assert_eq!(findings.len(), count, "one structural finding per target");
     let items = findings
         .iter()

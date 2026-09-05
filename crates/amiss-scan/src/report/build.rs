@@ -49,15 +49,21 @@ pub(crate) fn construct_with_site(
     projections: &[crate::projection::Outcome],
 ) -> Built {
     let paired = paired_documents(base, candidate);
-    let (governed, findings, exception_errors) = evaluate_paired(
+    let governed = governed_seeds(candidate, claims, projections);
+    let (findings, exception_errors) = match evaluate_paired(
         setup,
         &paired,
-        candidate,
+        &governed,
         &comparisons,
         site,
         claims,
         projections,
-    );
+    ) {
+        Ok(evaluated) => evaluated,
+        Err(defect) => {
+            return construct_incomplete(setup, &[crate::pipeline::detail(&defect, None)]);
+        }
+    };
 
     if let Some(crossing) = findings_ceiling_crossing(setup, &findings) {
         let mut details = logical_error_set(&governed, &exception_errors);
@@ -240,40 +246,32 @@ fn governed_details(governed: &[crate::evaluate::GovernedSeed]) -> Vec<ErrorDeta
         .collect()
 }
 
-/// The effective typed-analysis-errors-retained ceiling `E`, defended to the
-/// schema range even if a caller-supplied value strays.
 /// The evaluation step of construction: the paired documents projected to
 /// evaluator inputs, the governed seeds, and the complete findings with their
 /// exception errors.
 fn evaluate_paired(
     setup: &Setup,
     paired: &[PairedDocument<'_>],
-    candidate: &SnapshotDiscovery,
+    governed: &[crate::evaluate::GovernedSeed],
     comparisons: &[Comparison],
     site: &crate::semantic::SiteEvaluation,
     claims: &[crate::claim::ClaimOutcome],
     projections: &[crate::projection::Outcome],
-) -> (
-    Vec<crate::evaluate::GovernedSeed>,
-    Vec<Finding>,
-    Vec<ErrorDetail>,
-) {
+) -> Result<(Vec<Finding>, Vec<ErrorDetail>), crate::Error> {
     let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
-    let governed = governed_seeds(candidate, claims, projections);
     let groups = crate::evaluate::claim_groups(claims);
-    let (findings, exception_errors) = crate::evaluate::evaluate_with_site(
+    crate::evaluate::evaluate_with_site(
         &inputs,
         comparisons,
         setup.profile,
         &setup.policy,
         crate::evaluate::GovernedInputs {
             site,
-            governed: &governed,
+            governed,
             claims: &groups,
             projections,
         },
-    );
-    (governed, findings, exception_errors)
+    )
 }
 
 /// The complete-findings ceiling, charged against the exact array the report

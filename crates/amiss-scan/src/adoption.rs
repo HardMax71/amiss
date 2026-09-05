@@ -73,7 +73,8 @@ pub fn reproduce(
         return Err(first);
     }
 
-    let facts = crate::evaluate::structural_facts(&side.observations);
+    let facts = crate::evaluate::structural_facts(&side.observations)
+        .map_err(|defect| detail(&defect, None))?;
     for item in &context.items {
         if facts.get(&item.finding_key) != Some(&(1, item.accepted_fact_digest)) {
             return Err(mismatch());

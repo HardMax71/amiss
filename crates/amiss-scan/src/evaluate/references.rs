@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::{FindingKeyInputSchema, Profile, TargetKind};
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::{Digest, hj_ordered};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
     EmptyRepositoryPath, FindingKeyInput, ObservationFindingKeyScopeKind, PolicySource,
@@ -16,20 +16,24 @@ use crate::observe;
 use super::finding::{built_in_step, missing_fix, observation_location, reference_fact, simple};
 use super::{
     Attribution, FINDING_KEY_DOMAIN, Finding, FindingKeyScope, Location, LocationSide, PolicyStep,
-    key_value, resolution_kinds,
+    resolution_kinds,
 };
 
 /// The adoption-reproduction projection: every structural key among the
 /// observations, with its occurrence count and the fact digest computed at
 /// that count. Exactly one occurrence with the accepted fact digest is the
 /// reproduction requirement.
-#[must_use]
-pub fn structural_facts(observations: &[Observation]) -> BTreeMap<Digest, (u64, Digest)> {
+///
+/// # Errors
+/// Returns [`crate::Error::Internal`] if a finding key cannot be serialized.
+pub fn structural_facts(
+    observations: &[Observation],
+) -> Result<BTreeMap<Digest, (u64, Digest)>, crate::Error> {
     let mut groups: BTreeMap<Digest, KeyGroup<'_>> = BTreeMap::new();
     for observation in observations {
-        collect_structural(&mut groups, observation, false);
+        collect_structural(&mut groups, observation, false)?;
     }
-    groups
+    Ok(groups
         .into_iter()
         .filter_map(|(digest, group)| {
             let first = group.candidate.first()?;
@@ -37,7 +41,7 @@ pub fn structural_facts(observations: &[Observation]) -> BTreeMap<Digest, (u64, 
             let fact = reference_fact(&group.key, first, multiplicity);
             Some((digest, (multiplicity, fact.digest())))
         })
-        .collect()
+        .collect())
 }
 
 struct KeyGroup<'a> {
@@ -50,9 +54,9 @@ fn collect_structural<'a>(
     groups: &mut BTreeMap<Digest, KeyGroup<'a>>,
     observation: &'a Observation,
     is_base: bool,
-) {
+) -> Result<(), crate::Error> {
     let Some(kind) = resolution_kinds(&observation.resolution).structural else {
-        return;
+        return Ok(());
     };
     let intent = &observation.intent;
     let key = FindingKeyInput {
@@ -79,7 +83,7 @@ fn collect_structural<'a>(
             source_construct: observation.construct,
         },
     };
-    let digest = hj(FINDING_KEY_DOMAIN, &key_value(&key));
+    let digest = hj_ordered(FINDING_KEY_DOMAIN, &key).map_err(|_defect| crate::Error::Internal)?;
     let group = groups.entry(digest).or_insert_with(|| KeyGroup {
         key,
         base: Vec::new(),
@@ -90,6 +94,7 @@ fn collect_structural<'a>(
     } else {
         group.candidate.push(observation);
     }
+    Ok(())
 }
 
 /// Step three: structural kinds aggregate independently by key across both
@@ -100,21 +105,19 @@ pub(super) fn structural_findings(
     comparisons: &[Comparison],
     profile: Profile,
     findings: &mut Vec<Finding>,
-) {
+) -> Result<(), crate::Error> {
     let mut groups: BTreeMap<Digest, KeyGroup<'_>> = BTreeMap::new();
-    for observation in comparisons.iter().flat_map(|comparison| {
-        comparison
+    for comparison in comparisons {
+        for observation in comparison
             .candidate
             .iter()
             .chain(&comparison.alternatives_candidate)
-    }) {
-        collect_structural(&mut groups, observation, false);
-    }
-    for observation in comparisons
-        .iter()
-        .flat_map(|comparison| comparison.base.iter().chain(&comparison.alternatives_base))
-    {
-        collect_structural(&mut groups, observation, true);
+        {
+            collect_structural(&mut groups, observation, false)?;
+        }
+        for observation in comparison.base.iter().chain(&comparison.alternatives_base) {
+            collect_structural(&mut groups, observation, true)?;
+        }
     }
 
     for (digest, group) in groups {
@@ -204,6 +207,7 @@ pub(super) fn structural_findings(
             },
         });
     }
+    Ok(())
 }
 
 /// Step four: one removal per base-only comparison, one ambiguity per
@@ -212,7 +216,7 @@ pub(super) fn comparison_findings(
     comparison: &Comparison,
     profile: Profile,
     findings: &mut Vec<Finding>,
-) {
+) -> Result<(), crate::Error> {
     if comparison.outcome == Outcome::None
         && comparison.base.is_some()
         && comparison.candidate.is_none()
@@ -228,9 +232,9 @@ pub(super) fn comparison_findings(
                 vec![base.id],
                 observation_location(base, LocationSide::Base),
                 profile,
-            ));
+            )?);
         }
-        return;
+        return Ok(());
     }
     let primary = comparison
         .candidate
@@ -243,7 +247,7 @@ pub(super) fn comparison_findings(
                 .map(|observation| (observation, LocationSide::Base))
         });
     let Some((primary, side)) = primary else {
-        return;
+        return Ok(());
     };
     if comparison.outcome == Outcome::Ambiguous {
         findings.push(simple(
@@ -256,8 +260,8 @@ pub(super) fn comparison_findings(
             vec![primary.id],
             observation_location(primary, side),
             profile,
-        ));
-        return;
+        )?);
+        return Ok(());
     }
     let impact_kind = match comparison.impact {
         Impact::DependencyChangedSubjectUnchanged => {
@@ -283,6 +287,7 @@ pub(super) fn comparison_findings(
             vec![primary.id],
             observation_location(primary, side),
             profile,
-        ));
+        )?);
     }
+    Ok(())
 }

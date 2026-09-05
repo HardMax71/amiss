@@ -71,7 +71,10 @@ fn difference_value(difference: &Difference) -> Value {
     }
 }
 
-pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<Finding> {
+pub(super) fn projection_finding(
+    outcome: &Outcome,
+    profile: Profile,
+) -> Result<Option<Finding>, crate::Error> {
     let Verdict::Drift {
         reason,
         expected_digest,
@@ -81,7 +84,7 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
         ref difference,
     } = outcome.verdict
     else {
-        return None;
+        return Ok(None);
     };
     let nullable_digest = |digest: Option<amiss_wire::digest::Digest>| {
         digest.map_or(Value::Null, |value| Value::string(value.to_string()))
@@ -131,7 +134,7 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
     if let Some(difference) = difference.as_ref() {
         evidence.push(("difference".to_owned(), difference_value(difference)));
     }
-    Some(control_fact_finding(
+    control_fact_finding(
         FindingKind::ProjectionDrift,
         &RepoPath::from(&assertion.document),
         &format!("claim/projection/{}", assertion.name),
@@ -139,5 +142,6 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
         1,
         (outcome.representative_span, outcome.representative_display),
         profile,
-    ))
+    )
+    .map(Some)
 }
