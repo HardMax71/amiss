@@ -383,12 +383,13 @@ fn report_emission_preserves_bytes_and_propagates_short_writes() {
                 "buffer capacity {capacity}"
             );
             assert_eq!(written, u64::try_from(expected.len()).unwrap());
+            let mut short = vec![0; expected.len() - 1];
+            let mut output = BufWriter::with_capacity(capacity, Cursor::new(short.as_mut_slice()));
+            assert_eq!(
+                emit_report(&envelope, &mut output).unwrap_err().kind(),
+                ErrorKind::WriteZero,
+                "buffer capacity {capacity}"
+            );
         }
-        let mut short = vec![0; expected.len() - 1];
-        let mut output = Cursor::new(short.as_mut_slice());
-        assert_eq!(
-            emit_report(&envelope, &mut output).unwrap_err().kind(),
-            ErrorKind::WriteZero
-        );
     }
 }
