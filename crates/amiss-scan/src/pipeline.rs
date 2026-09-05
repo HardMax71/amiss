@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::model::{ArtifactId, BranchRef, Oid, RepoPath};
+use amiss_wire::report::model::ControlsUnavailableReason;
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
 use amiss_wire::resolution::{Missing, Resolution};
 
@@ -315,7 +316,7 @@ fn controls_failure(
     setup_shell: &SetupShell,
     base: SnapshotIdentity,
     candidate: CandidateBlock,
-    reason: &'static str,
+    reason: ControlsUnavailableReason,
     row: ErrorDetail,
 ) -> PipelineFailure {
     let mut setup = setup_shell.with(base, candidate);
@@ -333,7 +334,7 @@ fn binding_mismatch(
         setup_shell,
         base,
         candidate,
-        "control-binding-mismatch",
+        ControlsUnavailableReason::ControlBindingMismatch,
         row,
     )
 }
@@ -391,14 +392,14 @@ fn conclude(
 
 /// `invalid-repository-policy` requires its `CONFIGURATION_INVALID` anchor;
 /// any other acquisition failure leaves the controls merely not parsed.
-fn policy_unavailable_reason(details: &[ErrorDetail]) -> &'static str {
+fn policy_unavailable_reason(details: &[ErrorDetail]) -> ControlsUnavailableReason {
     if details
         .iter()
         .any(|row| row.code == AnalysisErrorCode::ConfigurationInvalid)
     {
-        "invalid-repository-policy"
+        ControlsUnavailableReason::InvalidRepositoryPolicy
     } else {
-        "not-parsed"
+        ControlsUnavailableReason::NotParsed
     }
 }
 
@@ -626,7 +627,7 @@ pub struct SetupShell {
     pub requests: crate::report::RequestDigests,
     /// A wrapper-established external-control defect, settled against the
     /// resolved snapshot identities exactly like a binding mismatch.
-    pub external_defect: Option<(&'static str, ErrorDetail)>,
+    pub external_defect: Option<(ControlsUnavailableReason, ErrorDetail)>,
     /// The effective typed-analysis-errors-retained ceiling `E`: the
     /// built-in 64 until a verified floor tightens it, at which point the
     /// pipeline re-shells with the effective value so every fatal

@@ -55,7 +55,12 @@ fn candidate_value(candidate: &CandidateBlock, snapshot_request: Option<Digest>)
             ),
             (
                 "reasons",
-                Value::array(reasons.iter().map(|reason| string(reason)).collect()),
+                Value::array(
+                    reasons
+                        .iter()
+                        .map(|reason| string(reason.as_ref()))
+                        .collect(),
+                ),
             ),
         ]),
     }
@@ -229,7 +234,7 @@ pub(super) fn controls_value(setup: &Setup) -> Value {
                 "request_digest",
                 setup.requests.controls.map_or(Value::Null, digest_value),
             ),
-            ("reasons", Value::array(vec![string(reason)])),
+            ("reasons", Value::array(vec![string(reason.as_ref())])),
         ]);
     }
     let (descriptor, descriptor_digest) = sandbox_descriptor();
