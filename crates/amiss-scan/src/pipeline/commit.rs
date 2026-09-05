@@ -194,6 +194,10 @@ fn commit_pair_result(
         (&candidate_tree, &mut candidate_scan),
     )?;
     let includes = crate::policy::Includes::union(&base_policy, &candidate_policy);
+    let mut setup = setup_shell.with(
+        base_tree.1.clone(),
+        CandidateBlock::Commit(candidate_tree.1.clone()),
+    );
 
     let (base, candidate, outcomes) = evaluated_pair(
         repo,
@@ -222,10 +226,6 @@ fn commit_pair_result(
                 (&candidate.discovery, &mut candidate_scan),
                 &mut failures,
             );
-            let mut setup = setup_shell.with(
-                base.identity.clone(),
-                CandidateBlock::Commit(candidate.identity.clone()),
-            );
             setup.policy = effects;
             setup.policy.errors_retained = setup_shell.errors_retained;
             setup.policy.complete_findings = scan_limits.complete_findings;
@@ -238,21 +238,12 @@ fn commit_pair_result(
                 &failures,
             )
         }
-        (Err(defect), Ok(_)) | (Ok(_), Err(defect)) => construct_incomplete(
-            &oid_fallback(repo, setup_shell, base_oid, candidate_oid),
-            &[defect],
-        ),
-        (Err(base_defect), Err(candidate_defect)) => construct_incomplete(
-            &oid_fallback(repo, setup_shell, base_oid, candidate_oid),
-            &[base_defect, candidate_defect],
-        ),
+        (Err(defect), Ok(_)) | (Ok(_), Err(defect)) => construct_incomplete(&setup, &[defect]),
+        (Err(base_defect), Err(candidate_defect)) => {
+            construct_incomplete(&setup, &[base_defect, candidate_defect])
+        }
     }
-    .map_err(|defect| {
-        PipelineFailure::one(
-            oid_fallback(repo, setup_shell, base_oid, candidate_oid),
-            detail(&defect, None),
-        )
-    })
+    .map_err(|defect| PipelineFailure::one(setup, detail(&defect, None)))
 }
 
 /// Acquires both repository policies, each side on its own per-snapshot
