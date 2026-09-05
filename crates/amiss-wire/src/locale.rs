@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
-use crate::json::{self, Value};
+use crate::json;
 use crate::model::ArtifactId;
 use crate::publication::{
     DocsCandidate, PublicationProducer, PublicationResource, PublicationUriKind, validate_docs,
@@ -38,9 +38,9 @@ pub const PAGE_KEY_BYTES: usize = crate::semantic::RECORD_KEY_BYTES;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LocaleCoveragePlanEnvelope {
+pub struct LocaleCoveragePlanEnvelope<T = LocaleCoveragePlan> {
     pub schema: PlanEnvelopeSchema,
-    pub payload: LocaleCoveragePlan,
+    pub payload: T,
     pub payload_digest: Digest,
 }
 
@@ -126,11 +126,11 @@ pub fn parse_plan(bytes: &[u8]) -> Result<LocaleCoveragePlanEnvelope, Error> {
 ///
 /// Fails when a field violates the same closed grammar [`parse_plan`] enforces or the encoded
 /// document exceeds its byte ceiling.
-pub fn plan(input: &LocaleCoveragePlan) -> Result<Value, Error> {
+pub fn plan(input: &LocaleCoveragePlan) -> Result<Vec<u8>, Error> {
     let payload_digest = plan_payload_digest(input)?;
     let document = LocaleCoveragePlanEnvelope {
         schema: PlanEnvelopeSchema::Current,
-        payload: input.clone(),
+        payload: input,
         payload_digest,
     };
     let canonical = serde_json_canonicalizer::to_vec(&document)
@@ -138,7 +138,8 @@ pub fn plan(input: &LocaleCoveragePlan) -> Result<Value, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > LOCALE_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    Ok(canonical)
 }
 
 fn plan_payload_digest(input: &LocaleCoveragePlan) -> Result<Digest, Error> {

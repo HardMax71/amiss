@@ -73,10 +73,7 @@ pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
     let plan_value = plan(&planned).unwrap();
     LocaleCoverageEvidence {
         schema: EvidencePayloadSchema::Current,
-        plan_payload_digest: hj(
-            amiss_wire::locale::PLAN_PAYLOAD_SCHEMA,
-            plan_value.member("payload").unwrap(),
-        ),
+        plan_payload_digest: parse_plan(&plan_value).unwrap().payload_digest,
         docs: planned.docs,
         scope: planned.scope,
         producer: planned.producer,
@@ -106,8 +103,8 @@ pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
 #[test]
 fn locale_evidence_round_trips_with_independent_inventories_and_example() {
     let expected = locale_evidence();
-    let value = evidence(&expected).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = evidence(&expected).unwrap();
+    let value = json::parse(&bytes).unwrap();
     let parsed = parse_evidence(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
@@ -136,7 +133,7 @@ fn locale_evidence_round_trips_with_independent_inventories_and_example() {
     assert_eq!(example.payload.scope, planned.payload.scope);
     assert_eq!(example.payload.producer, planned.payload.producer);
     assert_eq!(
-        json::canonical(&evidence(&example.payload).unwrap()),
+        evidence(&example.payload).unwrap(),
         json::canonical(&example_value)
     );
 }
@@ -147,7 +144,7 @@ fn source_and_target_completeness_remain_independent() {
     partial_source.source.complete = false;
     partial_source.target.complete = true;
     partial_source.source.pages.clear();
-    let parsed = parse_evidence(&json::canonical(&evidence(&partial_source).unwrap())).unwrap();
+    let parsed = parse_evidence(&evidence(&partial_source).unwrap()).unwrap();
 
     assert!(!parsed.payload.source.complete);
     assert!(parsed.payload.target.complete);
@@ -160,7 +157,8 @@ fn source_and_target_product_receipts_remain_independent() {
     input.source.product = Nullable::Value(product_resource('b'));
     input.target.product = Nullable::Value(product_resource('c'));
 
-    let parsed = parse_evidence(&json::canonical(&evidence(&input).unwrap())).unwrap();
+    let bytes = evidence(&input).unwrap();
+    let parsed = parse_evidence(&bytes).unwrap();
     assert_eq!(parsed.payload.source.product, input.source.product);
     assert_eq!(parsed.payload.target.product, input.target.product);
 }
@@ -176,10 +174,11 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
         &mut input.target.pages,
         fallback_page("reference/api", 'a', "source-copy", '7'),
     );
-    let parsed = parse_evidence(&json::canonical(&evidence(&input).unwrap())).unwrap();
+    let parsed = parse_evidence(&evidence(&input).unwrap()).unwrap();
     assert_eq!(parsed.payload, input);
 
-    let mut unknown = evidence(&input).unwrap();
+    let value = json::parse(&evidence(&input).unwrap()).unwrap();
+    let mut unknown = value.clone();
     let target = member_mut(member_mut(&mut unknown, "payload"), "target");
     let Value::Array(pages) = member_mut(target, "pages") else {
         panic!("the checked writer produced a non-array target page set");
@@ -191,7 +190,7 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
     assert_eq!(error.path, "$.payload.target.pages[1].origin.kind");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
-    let mut missing_origin = evidence(&locale_evidence()).unwrap();
+    let mut missing_origin = json::parse(&evidence(&locale_evidence()).unwrap()).unwrap();
     let target = member_mut(member_mut(&mut missing_origin, "payload"), "target");
     let Value::Array(pages) = member_mut(target, "pages") else {
         panic!("the checked writer produced a non-array target page set");
@@ -201,7 +200,7 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
     assert_eq!(error.path, "$.payload.target.pages[0].origin");
     assert_eq!(error.kind, ErrorKind::WrongType);
 
-    let mut invalid_lineage = evidence(&input).unwrap();
+    let mut invalid_lineage = value.clone();
     let target = member_mut(member_mut(&mut invalid_lineage, "payload"), "target");
     let Value::Array(pages) = member_mut(target, "pages") else {
         panic!("the checked writer produced a non-array target page set");
@@ -212,7 +211,7 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
     assert_eq!(error.path, "$.payload.target.pages[0].origin");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
-    let mut missing_lineage = evidence(&input).unwrap();
+    let mut missing_lineage = value;
     let target = member_mut(member_mut(&mut missing_lineage, "payload"), "target");
     let Value::Array(pages) = member_mut(target, "pages") else {
         panic!("the checked writer produced a non-array target page set");
@@ -249,8 +248,7 @@ fn locale_evidence_refuses_invalid_page_keys_and_tampering() {
     assert_eq!(error.path, "$.payload.source.pages[1].key");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
-    let value = evidence(&locale_evidence()).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = evidence(&locale_evidence()).unwrap();
     let parsed = parse_evidence(&bytes).unwrap();
     let tampered = String::from_utf8(bytes)
         .unwrap()
@@ -262,13 +260,15 @@ fn locale_evidence_refuses_invalid_page_keys_and_tampering() {
 
 #[test]
 fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
-    let mut unsorted = evidence(&locale_evidence()).unwrap();
+    let bytes = evidence(&locale_evidence()).unwrap();
+    let value = json::parse(&bytes).unwrap();
+    let mut unsorted = value.clone();
     pages_mut(&mut unsorted).reverse();
     let error = parse_evidence(&sealed(unsorted)).unwrap_err();
     assert_eq!(error.path, "$.payload.source.pages");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 
-    let mut duplicate = evidence(&locale_evidence()).unwrap();
+    let mut duplicate = value.clone();
     let pages = pages_mut(&mut duplicate);
     let first = pages.first().unwrap().clone();
     *pages.last_mut().unwrap() = first;
@@ -276,7 +276,7 @@ fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
     assert_eq!(error.path, "$.payload.source.pages");
     assert_eq!(error.kind, ErrorKind::DuplicateMember);
 
-    let mut mistyped = evidence(&locale_evidence()).unwrap();
+    let mut mistyped = value.clone();
     let payload = member_mut(&mut mistyped, "payload");
     let source = member_mut(payload, "source");
     *member_mut(source, "complete") = Value::string("true");
@@ -285,7 +285,7 @@ fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
     assert_eq!(error.kind, ErrorKind::WrongType);
 
     for inventory in ["source", "target"] {
-        let mut missing_product = evidence(&locale_evidence()).unwrap();
+        let mut missing_product = value.clone();
         let payload = member_mut(&mut missing_product, "payload");
         let inventory_value = member_mut(payload, inventory);
         let Value::Object(members) = inventory_value else {

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
-use crate::json::{self, Value};
+use crate::json;
 use crate::model::ArtifactId;
 use crate::publication::{
     DocsCandidate, PublicationProducer, PublicationResource, PublicationUriKind, validate_docs,
@@ -19,9 +19,9 @@ pub const PAGE_ITEMS_LIMIT: usize = crate::semantic::SEMANTIC_OBSERVATIONS_LIMIT
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LocaleCoverageEvidenceEnvelope {
+pub struct LocaleCoverageEvidenceEnvelope<T = LocaleCoverageEvidence> {
     pub schema: EvidenceEnvelopeSchema,
-    pub payload: LocaleCoverageEvidence,
+    pub payload: T,
     pub payload_digest: Digest,
 }
 
@@ -118,11 +118,11 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<LocaleCoverageEvidenceEnvelope, Er
 ///
 /// Fails when a public field violates the same closed grammar [`parse_evidence`] enforces or the
 /// encoded document exceeds its byte ceiling.
-pub fn evidence(input: &LocaleCoverageEvidence) -> Result<Value, Error> {
+pub fn evidence(input: &LocaleCoverageEvidence) -> Result<Vec<u8>, Error> {
     let payload_digest = evidence_payload_digest(input)?;
     let document = LocaleCoverageEvidenceEnvelope {
         schema: EvidenceEnvelopeSchema::Current,
-        payload: input.clone(),
+        payload: input,
         payload_digest,
     };
     let canonical = serde_json_canonicalizer::to_vec(&document)
@@ -130,7 +130,8 @@ pub fn evidence(input: &LocaleCoverageEvidence) -> Result<Value, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EVIDENCE_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    Ok(canonical)
 }
 
 pub(super) fn evidence_payload_digest(input: &LocaleCoverageEvidence) -> Result<Digest, Error> {

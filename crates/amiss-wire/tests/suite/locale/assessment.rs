@@ -21,12 +21,12 @@ use amiss_wire::locale::{
 
 fn plan_envelope() -> amiss_wire::locale::LocaleCoveragePlanEnvelope {
     let value = plan(&locale_plan()).unwrap();
-    parse_plan(&json::canonical(&value)).unwrap()
+    parse_plan(&value).unwrap()
 }
 
 fn evidence_envelope(input: &LocaleCoverageEvidence) -> LocaleCoverageEvidenceEnvelope {
     let value = evidence(input).unwrap();
-    parse_evidence(&json::canonical(&value)).unwrap()
+    parse_evidence(&value).unwrap()
 }
 
 fn assessed(
@@ -34,7 +34,7 @@ fn assessed(
     evidence: Option<&LocaleCoverageEvidenceEnvelope>,
 ) -> LocaleCoverageAssessmentEnvelope {
     let value = assess(plan, evidence, "0.26.0", digest('a')).unwrap();
-    parse_assessment(&json::canonical(&value)).unwrap()
+    parse_assessment(&value).unwrap()
 }
 
 #[test]
@@ -85,7 +85,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
     let mut all_source = locale_plan();
     all_source.policy.required = LocalePageRequirement::AllSource;
     let value = plan(&all_source).unwrap();
-    let all_source = parse_plan(&json::canonical(&value)).unwrap();
+    let all_source = parse_plan(&value).unwrap();
 
     let mut partial_source = locale_evidence();
     partial_source.plan_payload_digest = all_source.payload_digest;
@@ -258,7 +258,7 @@ fn all_source_fallback_rules_authorize_each_observed_source_page() {
     let mut input_plan = locale_plan();
     input_plan.policy.fallbacks[0].pages = LocalePageRequirement::AllSource;
     let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&json::canonical(&value)).unwrap();
+    let plan = parse_plan(&value).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
     set_target_page(
@@ -288,7 +288,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
     let mut input_plan = locale_plan();
     input_plan.policy.require_target_lineage = true;
     let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&json::canonical(&value)).unwrap();
+    let plan = parse_plan(&value).unwrap();
 
     let mut current = locale_evidence();
     current.plan_payload_digest = plan.payload_digest;
@@ -366,7 +366,7 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
     let mut input_plan = locale_plan();
     input_plan.policy.require_target_lineage = true;
     let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&json::canonical(&value)).unwrap();
+    let plan = parse_plan(&value).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
     let source_page = LocaleSourcePage {
@@ -405,7 +405,7 @@ fn lineage_is_not_inferred_without_an_observed_current_source() {
     let mut input_plan = locale_plan();
     input_plan.policy.require_target_lineage = true;
     let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&json::canonical(&value)).unwrap();
+    let plan = parse_plan(&value).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
     input.source.complete = false;
@@ -441,7 +441,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     let mut input_plan = locale_plan();
     input_plan.product = Nullable::Value(product_resource('c'));
     let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&json::canonical(&value)).unwrap();
+    let plan = parse_plan(&value).unwrap();
     let mut aligned = locale_evidence();
     aligned.plan_payload_digest = plan.payload_digest;
     aligned.source.product = Nullable::Value(product_resource('c'));
@@ -520,7 +520,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
     let mut all_source_plan = locale_plan();
     all_source_plan.policy.required = LocalePageRequirement::AllSource;
     let value = plan(&all_source_plan).unwrap();
-    let all_source_plan = parse_plan(&json::canonical(&value)).unwrap();
+    let all_source_plan = parse_plan(&value).unwrap();
     let mut all_source_evidence = locale_evidence();
     all_source_evidence.plan_payload_digest = all_source_plan.payload_digest;
     all_source_evidence.target.pages = page_map(
@@ -632,9 +632,10 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
     let evidence = evidence_envelope(&locale_evidence());
-    let value = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
+    let bytes = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
+    let value = json::parse(&bytes).unwrap();
     let recorded = value.text("payload_digest").unwrap();
-    let inconsistent = String::from_utf8(json::canonical(&value))
+    let inconsistent = String::from_utf8(bytes)
         .unwrap()
         .replace("\"refuted\"", "\"matched\"");
     let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
@@ -672,8 +673,7 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
 
 #[test]
 fn nullable_assessment_fields_are_required() {
-    let value = assess(&plan_envelope(), None, "0.26.0", digest('a')).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = assess(&plan_envelope(), None, "0.26.0", digest('a')).unwrap();
 
     let mut missing_product: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(
@@ -720,7 +720,7 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
     .unwrap();
 
     assert_eq!(
-        json::canonical(&replayed),
+        replayed,
         json::canonical(&json::parse(&published_bytes).unwrap())
     );
 }

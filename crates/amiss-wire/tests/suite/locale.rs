@@ -86,8 +86,8 @@ fn locale_plan() -> LocaleCoveragePlan {
 #[test]
 fn locale_plan_round_trips_with_its_payload_digest_and_example() {
     let expected = locale_plan();
-    let value = plan(&expected).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = plan(&expected).unwrap();
+    let value = json::parse(&bytes).unwrap();
     let parsed = parse_plan(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
@@ -113,7 +113,7 @@ fn locale_plan_round_trips_with_its_payload_digest_and_example() {
     );
     let example = parse_plan(&example_bytes).unwrap();
     assert_eq!(
-        json::canonical(&plan(&example.payload).unwrap()),
+        plan(&example.payload).unwrap(),
         json::canonical(&json::parse(&example_bytes).unwrap())
     );
 }
@@ -125,7 +125,7 @@ fn locale_plan_keeps_all_source_and_named_policies_distinct() {
     all_source.policy.required = LocalePageRequirement::AllSource;
     all_source.policy.require_target_lineage = true;
 
-    let parsed = parse_plan(&json::canonical(&plan(&all_source).unwrap())).unwrap();
+    let parsed = parse_plan(&plan(&all_source).unwrap()).unwrap();
     assert_eq!(parsed.payload, all_source);
 }
 
@@ -134,7 +134,7 @@ fn product_alignment_uses_the_existing_exact_publication_resource() {
     let mut aligned = locale_plan();
     aligned.product = Nullable::Value(product_resource('c'));
 
-    let parsed = parse_plan(&json::canonical(&plan(&aligned).unwrap())).unwrap();
+    let parsed = parse_plan(&plan(&aligned).unwrap()).unwrap();
     assert_eq!(parsed.payload, aligned);
 }
 
@@ -145,7 +145,7 @@ fn fallback_authorizations_are_class_sorted_and_page_scoped() {
         class: identity("vendor-copy"),
         pages: LocalePageRequirement::AllSource,
     });
-    let parsed = parse_plan(&json::canonical(&plan(&valid).unwrap())).unwrap();
+    let parsed = parse_plan(&plan(&valid).unwrap()).unwrap();
     assert_eq!(parsed.payload, valid);
 
     let mut unsorted = valid.clone();
@@ -245,8 +245,7 @@ fn locale_plan_requires_one_sorted_unique_bounded_named_set() {
 
 #[test]
 fn locale_plan_refuses_tampering_open_shapes_and_oversized_documents() {
-    let value = plan(&locale_plan()).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = plan(&locale_plan()).unwrap();
     let parsed = parse_plan(&bytes).unwrap();
     let tampered = String::from_utf8(bytes)
         .unwrap()
@@ -256,24 +255,22 @@ fn locale_plan_refuses_tampering_open_shapes_and_oversized_documents() {
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
     let value = plan(&locale_plan()).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let open = String::from_utf8(json::canonical(&value))
-        .unwrap()
-        .replacen(
-            "\"report_payload_digest\":",
-            "\"unknown\":true,\"report_payload_digest\":",
-            1,
-        );
+    let recorded = parse_plan(&value).unwrap().payload_digest.to_string();
+    let open = String::from_utf8(value).unwrap().replacen(
+        "\"report_payload_digest\":",
+        "\"unknown\":true,\"report_payload_digest\":",
+        1,
+    );
     let open_value = json::parse(open.as_bytes()).unwrap();
     let rebound = open.replace(
-        recorded,
+        &recorded,
         &hj(PLAN_PAYLOAD_SCHEMA, open_value.member("payload").unwrap()).to_string(),
     );
     let error = parse_plan(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.unknown");
     assert_eq!(error.kind, ErrorKind::UnknownField);
 
-    let canonical = String::from_utf8(json::canonical(&plan(&locale_plan()).unwrap())).unwrap();
+    let canonical = String::from_utf8(plan(&locale_plan()).unwrap()).unwrap();
     for (member, path) in [
         ("\"product\":null,", "$.payload.product"),
         (",\"version\":\"1.2\"", "$.payload.scope.version"),
