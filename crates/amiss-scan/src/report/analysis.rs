@@ -346,7 +346,7 @@ fn trace_value(finding: &Finding) -> Vec<Value> {
 
 fn fix_value(fix: &FindingFix) -> Value {
     object(vec![
-        ("path", fix.path.to_value()),
+        ("path", string(fix.path.as_str())),
         (
             "span",
             object(vec![

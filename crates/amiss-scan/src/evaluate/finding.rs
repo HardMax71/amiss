@@ -1,7 +1,7 @@
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
-use amiss_wire::model::RepoPath;
+use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::model::PolicySource;
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 use amiss_wire::resolution::{Missing, Resolution};
@@ -198,7 +198,7 @@ pub(super) fn missing_fix(candidates: &[&Observation]) -> Option<FindingFix> {
 
 fn anchor_fix(observation: &Observation, near: &str) -> Option<FindingFix> {
     Some(FindingFix {
-        path: observation.document.clone(),
+        path: RepoPathText::new(observation.document.as_str()?.to_owned())?,
         span: observation.fragment_span?,
         replacement: near.to_owned(),
         kind: FixKind::AnchorRespelling,
@@ -226,7 +226,7 @@ fn path_fix(observation: &Observation, near: &RepoPath) -> Option<FindingFix> {
     }
     let replacement = near.as_str()?.get(tail_at..)?.to_owned();
     Some(FindingFix {
-        path: observation.document.clone(),
+        path: RepoPathText::new(observation.document.as_str()?.to_owned())?,
         span,
         replacement,
         kind: FixKind::PathRespelling,
