@@ -276,14 +276,14 @@ fn sidecar_examples_match_their_typed_sources() {
     let locale_plan_bytes = fs::read(examples.join("locale-coverage-plan.json")).unwrap();
     let locale_plan = locale::parse_plan(&locale_plan_bytes).unwrap();
     assert_eq!(
-        json::canonical(&locale::plan(&locale_plan.payload).unwrap()),
+        locale::plan(&locale_plan.payload).unwrap(),
         json::canonical(&json::parse(&locale_plan_bytes).unwrap())
     );
 
     let locale_evidence_bytes = fs::read(examples.join("locale-coverage-evidence.json")).unwrap();
     let locale_evidence = locale::parse_evidence(&locale_evidence_bytes).unwrap();
     assert_eq!(
-        json::canonical(&locale::evidence(&locale_evidence.payload).unwrap()),
+        locale::evidence(&locale_evidence.payload).unwrap(),
         json::canonical(&json::parse(&locale_evidence_bytes).unwrap())
     );
 
@@ -298,7 +298,7 @@ fn sidecar_examples_match_their_typed_sources() {
     )
     .unwrap();
     assert_eq!(
-        json::canonical(&replayed),
+        replayed,
         json::canonical(&json::parse(&locale_assessment_bytes).unwrap())
     );
 

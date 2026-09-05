@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
-use crate::json::{self, Value};
+use crate::json;
 use crate::model::ArtifactId;
 use crate::semantic::producer_version_valid;
 
@@ -173,7 +173,7 @@ pub fn assess(
     evidence: Option<&LocaleCoverageEvidenceEnvelope>,
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Value, Error> {
+) -> Result<Vec<u8>, Error> {
     if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -267,7 +267,8 @@ pub fn assess(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    Ok(canonical)
 }
 
 fn compare_coverage(
