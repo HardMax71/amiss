@@ -28,7 +28,7 @@ fn item(action: FeedbackAction, target: Option<RepoPath>, places: u64) -> Feedba
         annotation: None,
         effective_disposition: Disposition::Fail,
         finding_kinds: vec![FindingKind::ExplicitTargetMissing],
-        location_count: places,
+        location_count: std::num::NonZeroU64::new(places).unwrap(),
         target,
     }
 }
@@ -143,7 +143,7 @@ fn unreadable_or_absent_feedback_adds_nothing() {
 
 #[test]
 fn malformed_feedback_cannot_turn_into_plausible_counts_or_labels() {
-    let bytes = report(0, vec![item(FeedbackAction::Fix, None, 1)]);
+    let bytes = report(0, vec![item(FeedbackAction::Fix, None, 1); 11]);
     for (path, invalid) in [
         ("/payload/feedback/status", serde_json::json!("future")),
         ("/payload/feedback/items", serde_json::Value::Null),
@@ -155,6 +155,14 @@ fn malformed_feedback_cannot_turn_into_plausible_counts_or_labels() {
         (
             "/payload/feedback/items/0/location_count",
             serde_json::json!(-1),
+        ),
+        (
+            "/payload/feedback/items/0/location_count",
+            serde_json::json!(0),
+        ),
+        (
+            "/payload/feedback/items/10/location_count",
+            serde_json::json!(0),
         ),
         ("/payload/feedback/items/0/target", serde_json::json!(42)),
     ] {
@@ -171,6 +179,59 @@ fn malformed_feedback_cannot_turn_into_plausible_counts_or_labels() {
         .unwrap()
         .remove("target");
     assert!(feedback_lines(Some(&serde_json::to_vec(&missing).unwrap()), false).is_empty());
+}
+
+#[test]
+fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
+    for invalid in [
+        String::new(),
+        "gg".to_owned(),
+        "f".to_owned(),
+        "fG".to_owned(),
+        "FF".to_owned(),
+        "ff00".to_owned(),
+        "ff5c".to_owned(),
+        "2fff".to_owned(),
+        "ff2f".to_owned(),
+        "ff2f2fff".to_owned(),
+        "2e2fff".to_owned(),
+        "ff2f2e2e".to_owned(),
+        "646f63732f612e6d64".to_owned(),
+        "ff".repeat(4097),
+    ] {
+        for index in [0, 10] {
+            let mut items = vec![item(FeedbackAction::Fix, None, 1); 11];
+            items[index].target = Some(RepoPath::Bytes(RepoPathBytes {
+                bytes_hex: invalid.clone(),
+            }));
+            let bytes = report(0, items);
+            assert!(
+                feedback_lines(Some(&bytes), false).is_empty(),
+                "accepted byte target {invalid:?} at item {index}"
+            );
+            assert_eq!(
+                with_feedback("summary", Some(&bytes), None),
+                Some(format!(
+                    "summary\nreport: {}",
+                    amiss_wire::digest::sha256(&bytes)
+                ))
+            );
+        }
+    }
+    let target = Some(RepoPath::Bytes(RepoPathBytes {
+        bytes_hex: "ff".repeat(4096),
+    }));
+    let bytes = report(0, vec![item(FeedbackAction::Fix, target, 1)]);
+    assert_eq!(
+        feedback_lines(Some(&bytes), false),
+        vec![
+            "findings: fix 1, check 0, existing 0".to_owned(),
+            format!(
+                "- Fix target \"{}...\" affected places 1",
+                "\\u00ff".repeat(200)
+            ),
+        ]
+    );
 }
 
 #[test]

@@ -1,6 +1,6 @@
 mod tests;
 
-use amiss_wire::human::{atom, atom_bytes, decode_hex};
+use amiss_wire::human::{atom, atom_bytes};
 use amiss_wire::json;
 use amiss_wire::report::model::{AvailableFeedback, FeedbackAction, FeedbackItem, RepoPath};
 use serde::Deserialize;
@@ -100,6 +100,27 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     };
     let feedback = report.payload.feedback;
     let items = &feedback.items;
+    if items.iter().any(|item| {
+        let Some(RepoPath::Bytes(encoded)) = &item.target else {
+            return false;
+        };
+        hex::decode(&encoded.bytes_hex)
+            .ok()
+            .and_then(amiss_wire::model::RepoPath::from_bytes)
+            .is_none_or(|path| {
+                path.as_str().is_some() || hex::encode(path.as_bytes()) != encoded.bytes_hex
+            })
+    }) {
+        return Vec::new();
+    }
+    let Ok(displayed) = items
+        .iter()
+        .take(DISPLAYED_ITEMS)
+        .map(item_line)
+        .collect::<Result<Vec<_>, _>>()
+    else {
+        return Vec::new();
+    };
     let fixes = items
         .iter()
         .filter(|item| item.action == FeedbackAction::Fix)
@@ -112,7 +133,7 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     let mut lines = vec![format!(
         "findings: fix {fixes}, check {checks}, existing {existing}"
     )];
-    lines.extend(items.iter().take(DISPLAYED_ITEMS).map(item_line));
+    lines.extend(displayed);
     let overflow = items.len().saturating_sub(DISPLAYED_ITEMS);
     if overflow == 1 {
         lines.push(if retained {
@@ -130,18 +151,18 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     lines
 }
 
-fn item_line(item: &FeedbackItem) -> String {
+fn item_line(item: &FeedbackItem) -> Result<String, hex::FromHexError> {
     let mut action = item.action.as_ref().to_owned();
     if let Some(first) = action.get_mut(0..1) {
         first.make_ascii_uppercase();
     }
     let target = match &item.target {
         Some(RepoPath::Text(path)) => atom(path.as_str()),
-        Some(RepoPath::Bytes(path)) => atom_bytes(&decode_hex(&path.bytes_hex)),
+        Some(RepoPath::Bytes(path)) => atom_bytes(&hex::decode(&path.bytes_hex)?),
         None => "-".to_owned(),
     };
-    format!(
+    Ok(format!(
         "- {action} target {target} affected places {}",
         item.location_count
-    )
+    ))
 }

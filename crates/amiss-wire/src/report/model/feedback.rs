@@ -1,3 +1,5 @@
+use std::num::NonZeroU64;
+
 use serde::{Deserialize, Serialize};
 
 use crate::model::RepoPathText;
@@ -27,7 +29,7 @@ pub struct FeedbackItem {
     pub annotation: Option<FeedbackAnnotation>,
     pub effective_disposition: Disposition,
     pub finding_kinds: Vec<FindingKind>,
-    pub location_count: u64,
+    pub location_count: NonZeroU64,
     #[serde(deserialize_with = "Option::deserialize")]
     pub target: Option<RepoPath>,
 }
