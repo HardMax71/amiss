@@ -13,6 +13,7 @@ bench = false
 [dependencies]
 digest-io.workspace = true
 hex = { workspace = true, features = ["serde"] }
+hex_fmt.workspace = true
 json-serde.workspace = true
 serde.workspace = true
 serde_json.workspace = true

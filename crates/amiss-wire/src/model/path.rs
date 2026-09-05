@@ -1,7 +1,9 @@
 use core::{fmt, str::FromStr};
+use std::sync::Arc;
 
+use hex_fmt::HexFmt;
 use serde::Serialize;
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{DeserializeFromStr, DisplayFromStr, SerializeDisplay, serde_as};
 
 use crate::json::Value;
 
@@ -44,13 +46,14 @@ impl FromStr for RepoPathText {
 #[serde(transparent)]
 pub struct RepoPath(Repr);
 
+#[serde_as]
 #[derive(Clone, Debug, Serialize)]
 #[serde(untagged)]
 enum Repr {
     Text(String),
     Bytes {
-        #[serde(serialize_with = "hex::serialize")]
-        bytes_hex: Vec<u8>,
+        #[serde_as(as = "DisplayFromStr")]
+        bytes_hex: Arc<HexFmt<Vec<u8>>>,
     },
 }
 
@@ -65,7 +68,7 @@ impl RepoPath {
         match String::from_utf8(raw) {
             Ok(text) => Some(Self(Repr::Text(text))),
             Err(invalid) => Some(Self(Repr::Bytes {
-                bytes_hex: invalid.into_bytes(),
+                bytes_hex: Arc::new(HexFmt(invalid.into_bytes())),
             })),
         }
     }
@@ -79,7 +82,7 @@ impl RepoPath {
     pub fn as_bytes(&self) -> &[u8] {
         match &self.0 {
             Repr::Text(text) => text.as_bytes(),
-            Repr::Bytes { bytes_hex } => bytes_hex,
+            Repr::Bytes { bytes_hex } => &bytes_hex.0,
         }
     }
 
@@ -99,7 +102,7 @@ impl RepoPath {
             Repr::Text(text) => Value::String(text.clone().into()),
             Repr::Bytes { bytes_hex } => Value::Object(Box::new([(
                 "bytes_hex".into(),
-                Value::String(hex::encode(bytes_hex).into()),
+                Value::String(bytes_hex.to_string().into()),
             )])),
         }
     }
