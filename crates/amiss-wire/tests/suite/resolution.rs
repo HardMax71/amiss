@@ -19,7 +19,9 @@ fn payload_variant_names_are_generated_in_kebab_case() {
         commit_oid: Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap_or_else(|| panic!()),
         path: (),
     };
-    let resolution = Resolution::TypeMismatch(Target::Tree { path: () });
+    let resolution = Resolution::TypeMismatch {
+        target: Target::Tree { path: () },
+    };
 
     assert_eq!(
         missing.discriminant().as_ref(),
@@ -123,9 +125,24 @@ fn the_pointer_answer_survives_every_wrapper() {
     assert!(!UnsupportedSemantics::<()>::Query(blob(available())).is_lfs_pointer());
     assert!(!UnsupportedSemantics::<()>::SiteRoute.is_lfs_pointer());
 
-    assert!(Resolution::Resolved(blob(pointer())).is_lfs_pointer());
-    assert!(!Resolution::Resolved(blob(available())).is_lfs_pointer());
-    assert!(Resolution::TypeMismatch(blob(pointer())).is_lfs_pointer());
+    assert!(
+        Resolution::Resolved {
+            target: blob(pointer())
+        }
+        .is_lfs_pointer()
+    );
+    assert!(
+        !Resolution::Resolved {
+            target: blob(available())
+        }
+        .is_lfs_pointer()
+    );
+    assert!(
+        Resolution::TypeMismatch {
+            target: blob(pointer())
+        }
+        .is_lfs_pointer()
+    );
     assert!(
         Resolution::UnsupportedSemantics(fragment(pointer())).is_lfs_pointer(),
         "a wrapper does not lose the answer"

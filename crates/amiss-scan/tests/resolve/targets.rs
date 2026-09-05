@@ -23,7 +23,10 @@ fn lfs_pointer_targets_resolve_with_pointer_availability() {
             "../pointer.bin",
         )
         .unwrap_or_else(|_d| panic!());
-    let Resolution::Resolved(Target::Blob(blob)) = row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("pointer.bin"));
@@ -62,7 +65,10 @@ fn target_digests_recompute_exactly() {
     let (_i, row) = bed
         .run_as(Adapter::Markdown, None, "docs/guide.md", false, "data.json")
         .unwrap_or_else(|_d| panic!());
-    let Resolution::Resolved(Target::Blob(blob)) = row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     let BlobContent::Available {
@@ -119,7 +125,10 @@ fn a_reused_target_cache_tracks_object_and_scan_scope() {
         )
         .unwrap_or_else(|_defect| panic!("resolve first snapshot"))
         .1;
-    let Resolution::Resolved(Target::Blob(first)) = first else {
+    let Resolution::Resolved {
+        target: Target::Blob(first),
+    } = first
+    else {
         panic!("unexpected first resolution: {first:?}");
     };
 
@@ -155,7 +164,10 @@ fn a_reused_target_cache_tracks_object_and_scan_scope() {
         )
         .unwrap_or_else(|_defect| panic!("resolve changed snapshot"))
         .1;
-    let Resolution::Resolved(Target::Blob(second)) = second else {
+    let Resolution::Resolved {
+        target: Target::Blob(second),
+    } = second
+    else {
         panic!("unexpected changed resolution: {second:?}");
     };
     assert_ne!(
@@ -174,7 +186,12 @@ fn a_reused_target_cache_tracks_object_and_scan_scope() {
         )
         .unwrap_or_else(|_defect| panic!("resolve in fresh scan scope"))
         .1;
-    assert_eq!(repeated, Resolution::Resolved(Target::Blob(second)));
+    assert_eq!(
+        repeated,
+        Resolution::Resolved {
+            target: Target::Blob(second)
+        }
+    );
     let changed_len = u64::try_from(changed.len()).unwrap_or(u64::MAX);
     assert_eq!(bed.scan_resources.target_bytes(), changed_len);
     assert_eq!(bed.scan_resources.line_fragment_bytes(), changed_len);

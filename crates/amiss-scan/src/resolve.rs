@@ -570,7 +570,7 @@ pub(super) fn lookup(
             let decoded = decode_fragment(raw_fragment).unwrap_or_default();
             fragment_resolution(resolver, path, mode, entry, forge, &decoded)
         }
-        Some(_) | None => Ok(Resolution::Resolved(entry)),
+        Some(_) | None => Ok(Resolution::Resolved { target: entry }),
     }
 }
 
@@ -591,7 +591,7 @@ fn refusal(
         TargetKind::Either => true,
     };
     if !compatible {
-        return Some(Resolution::TypeMismatch(entry));
+        return Some(Resolution::TypeMismatch { target: entry });
     }
     let evaluable = !is_tree
         && classify(path.as_bytes()).is_some_and(|class| class != Classification::PlainAdvisory)

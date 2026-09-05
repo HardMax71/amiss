@@ -135,7 +135,7 @@ fn a_full_local_commit_resolves_only_in_the_declared_object_format() {
             )
             .unwrap_or_else(|_defect| panic!());
         assert!(
-            matches!(resolution, Resolution::Resolved(_)),
+            matches!(resolution, Resolution::Resolved { .. }),
             "{destination}"
         );
         assert_eq!(
@@ -196,7 +196,10 @@ fn an_exact_historical_url_reads_only_its_own_tree_and_content() {
         intent.commit_oid.as_ref().map(Oid::as_str),
         Some(historical.as_str())
     );
-    let Resolution::Resolved(Target::Blob(blob)) = resolution else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = resolution
+    else {
         panic!("unexpected resolution: {resolution:?}");
     };
     let BlobContent::Available { raw_digest, .. } = blob.content else {
@@ -216,7 +219,7 @@ fn an_exact_historical_url_reads_only_its_own_tree_and_content() {
             &format!("{destination}#historical-heading"),
         )
         .unwrap_or_else(|defect| panic!("{defect:?}"));
-    assert!(matches!(old_anchor, Resolution::Resolved(_)));
+    assert!(matches!(old_anchor, Resolution::Resolved { .. }));
 
     let (_intent, candidate_anchor) = bed
         .run_as(
@@ -365,7 +368,10 @@ fn gitea_recognition_resolves_against_the_tree() {
         .unwrap_or_else(|_defect| panic!());
     assert_eq!(intent.kind, IntentKind::SameRepositoryGitea);
     assert_eq!(intent.target_kind, Some(TargetKind::Either));
-    let Resolution::Resolved(Target::Blob(blob)) = row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
@@ -387,7 +393,7 @@ fn gitea_recognition_resolves_against_the_tree() {
         )
         .unwrap_or_else(|_defect| panic!());
     assert!(
-        matches!(pinned, Resolution::Resolved(_)),
+        matches!(pinned, Resolution::Resolved { .. }),
         "an available exact commit resolves from its own tree"
     );
 
@@ -441,7 +447,7 @@ fn bitbucket_cloud_recognizes_only_the_documented_source_contract() {
         Some("fileviewer=file-view-default")
     );
     assert_eq!(intent.fragment.as_deref(), Some("lib.rs-1"));
-    assert!(matches!(candidate, Resolution::Resolved(_)));
+    assert!(matches!(candidate, Resolution::Resolved { .. }));
 
     let (_intent, custom_viewer) = bed
         .run_as(
@@ -500,7 +506,7 @@ fn bitbucket_data_center_recognizes_query_bound_browse_routes() {
             "{destination}"
         );
         assert!(
-            matches!(resolution, Resolution::Resolved(_)),
+            matches!(resolution, Resolution::Resolved { .. }),
             "{destination}: {resolution:?}"
         );
     }
@@ -561,7 +567,7 @@ fn bitbucket_data_center_history_query_binds_the_path() {
         intent.commit_oid.as_ref().map(Oid::as_str),
         Some(raw.as_str())
     );
-    assert!(matches!(resolution, Resolution::Resolved(_)));
+    assert!(matches!(resolution, Resolution::Resolved { .. }));
 }
 
 /// One wrong fact makes a same-repository spelling foreign: the owner, the
@@ -701,7 +707,7 @@ fn nested_group_owners_match_segment_by_segment() {
         )
         .unwrap();
     assert_eq!(intent.kind, IntentKind::SameRepositoryGitlab);
-    assert!(matches!(row, Resolution::Resolved(_)));
+    assert!(matches!(row, Resolution::Resolved { .. }));
 
     let (foreign, _row) = bed
         .run_as(
@@ -736,7 +742,7 @@ fn a_terminal_slash_is_tolerated_only_as_a_directory_hint() {
     assert_eq!(tree.kind, IntentKind::SameRepositoryGitlab);
     assert_eq!(tree.target_kind, Some(TargetKind::Tree));
     assert!(
-        matches!(tree_row, Resolution::Resolved(_)),
+        matches!(tree_row, Resolution::Resolved { .. }),
         "a tree with a directory-hint slash resolves: {tree_row:?}"
     );
 
@@ -750,7 +756,7 @@ fn a_terminal_slash_is_tolerated_only_as_a_directory_hint() {
         )
         .unwrap();
     assert!(
-        !matches!(blob_row, Resolution::Resolved(_)),
+        !matches!(blob_row, Resolution::Resolved { .. }),
         "a blob does not tolerate the hint: {blob_row:?}"
     );
 }
@@ -773,7 +779,7 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
     assert_eq!(hinted.kind, IntentKind::SameRepositoryGitea);
     assert_eq!(hinted.target_kind, Some(TargetKind::Tree));
     assert!(
-        matches!(hinted_row, Resolution::Resolved(_)),
+        matches!(hinted_row, Resolution::Resolved { .. }),
         "{hinted_row:?}"
     );
 
@@ -788,7 +794,7 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
         .unwrap();
     assert_eq!(bare.target_kind, None, "no hint from a bare slash");
     assert!(
-        !matches!(bare_row, Resolution::Resolved(_)),
+        !matches!(bare_row, Resolution::Resolved { .. }),
         "a bare slash after the ref is not a target: {bare_row:?}"
     );
 
@@ -807,7 +813,7 @@ fn a_directory_hint_needs_a_segment_before_its_slash() {
         "a lone terminal slash after the ref is no spelling of a target"
     );
     assert!(
-        !matches!(github_row, Resolution::Resolved(_)),
+        !matches!(github_row, Resolution::Resolved { .. }),
         "a lone terminal slash after the ref stays a defect: {github_row:?}"
     );
 }

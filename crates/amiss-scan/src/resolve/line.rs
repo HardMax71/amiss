@@ -335,7 +335,9 @@ pub(super) fn line_resolution(
         raw_digest,
         projection_digest,
     };
-    Ok(Resolution::Resolved(Target::Blob(blob)))
+    Ok(Resolution::Resolved {
+        target: Target::Blob(blob),
+    })
 }
 
 /// One safe line number: nonzero first digit, at most sixteen digits, and

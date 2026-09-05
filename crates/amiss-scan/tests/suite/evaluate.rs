@@ -59,17 +59,21 @@ fn available_blob(path: &str, body: &[u8]) -> BlobTarget<RepoPath> {
 }
 
 fn resolved_blob(path: &str, body: &[u8]) -> Resolution {
-    Resolution::Resolved(Target::Blob(available_blob(path, body)))
+    Resolution::Resolved {
+        target: Target::Blob(available_blob(path, body)),
+    }
 }
 
 fn lfs_pointer(path: &str) -> Resolution {
-    Resolution::Resolved(Target::Blob(BlobTarget {
-        path: repo_path(path),
-        mode: BlobMode::Regular,
-        content: BlobContent::LfsPointer {
-            raw_digest: hb("amiss/raw-evidence", b"lfs pointer"),
-        },
-    }))
+    Resolution::Resolved {
+        target: Target::Blob(BlobTarget {
+            path: repo_path(path),
+            mode: BlobMode::Regular,
+            content: BlobContent::LfsPointer {
+                raw_digest: hb("amiss/raw-evidence", b"lfs pointer"),
+            },
+        }),
+    }
 }
 
 fn path_not_found(path: &str) -> Resolution {

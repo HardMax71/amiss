@@ -179,7 +179,10 @@ pub(crate) fn github_urls_need_the_whole_trusted_chain() {
         Some("docs/guide.md")
     );
     assert_eq!(intent.target_kind, Some(TargetKind::Blob));
-    let Resolution::Resolved(Target::Blob(blob)) = row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
@@ -306,7 +309,10 @@ fn github_candidate_urls_resolve_targets_and_fragments() {
             "https://github.com/acme/widgets/tree/feature/x/docs/",
         )
         .unwrap_or_else(|_d| panic!());
-    let Resolution::Resolved(Target::Tree { path }) = tree else {
+    let Resolution::Resolved {
+        target: Target::Tree { path },
+    } = tree
+    else {
         panic!("unexpected resolution: {tree:?}");
     };
     assert_eq!(path.as_str(), Some("docs"));
@@ -320,7 +326,10 @@ fn github_candidate_urls_resolve_targets_and_fragments() {
             "https://github.com/acme/widgets/blob/feature/x/src/lib.rs#L1-L1",
         )
         .unwrap_or_else(|_d| panic!());
-    let Resolution::Resolved(Target::Blob(blob)) = lines else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = lines
+    else {
         panic!("unexpected resolution: {lines:?}");
     };
     assert_eq!(blob.path.as_str(), Some("src/lib.rs"));
@@ -428,7 +437,10 @@ pub(crate) fn gitlab_recognition_resolves_against_the_tree() {
         )
         .unwrap_or_else(|_defect| panic!());
     assert_eq!(intent.kind, IntentKind::SameRepositoryGitlab);
-    let Resolution::Resolved(Target::Blob(blob)) = row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));

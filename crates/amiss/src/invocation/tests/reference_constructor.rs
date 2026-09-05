@@ -215,7 +215,7 @@ fn assert_split_outcome(intent: &Intent, row: &Resolution, expected: &Value, id:
     let expected_commit = expected.get("commit_oid").and_then(Value::as_str);
     match text(expected, "status") {
         "candidate" => {
-            let Resolution::Resolved(target) = &row else {
+            let Resolution::Resolved { target } = &row else {
                 panic!("{id}: the candidate ref did not resolve: {row:?}");
             };
             let path = match target {
@@ -224,10 +224,7 @@ fn assert_split_outcome(intent: &Intent, row: &Resolution, expected: &Value, id:
             };
             assert_eq!(path.as_str(), expected_path, "{id}");
             assert_eq!(
-                intent
-                    .repository_path
-                    .as_ref()
-                    .and_then(|path| path.as_str()),
+                intent.repository_path.as_ref().and_then(RepoPath::as_str),
                 expected_path,
                 "{id}"
             );
@@ -335,7 +332,7 @@ fn line_fragment_case(bed: &mut Bed, case: &Value, id: &str) {
     };
     let (_intent, row) = bed.run(Some(&run_context), "README.md", false, &url);
     let matches_boundary = if case.get("expected").and_then(Value::as_bool).unwrap() {
-        matches!(&row, Resolution::Resolved(_))
+        matches!(&row, Resolution::Resolved { .. })
     } else {
         matches!(
             &row,
@@ -516,7 +513,7 @@ fn boundary_case(bed: &mut Bed, case: &Value, id: &str) {
     assert_eq!(row.discriminant().as_ref(), text(expected, "kind"), "{id}");
     let expected_reason = expected.get("reason").and_then(Value::as_str);
     match &row {
-        Resolution::Resolved(_) => assert_eq!(expected_reason, None, "{id}"),
+        Resolution::Resolved { .. } => assert_eq!(expected_reason, None, "{id}"),
         Resolution::Missing(
             missing @ (Missing::LineFragmentOutOfRange { .. }
             | Missing::HeadingAnchorNotFound { .. }),
@@ -536,7 +533,7 @@ fn boundary_case(bed: &mut Bed, case: &Value, id: &str) {
         }
         Resolution::Missing(_)
         | Resolution::DeclaredUntracked(_)
-        | Resolution::TypeMismatch(_)
+        | Resolution::TypeMismatch { .. }
         | Resolution::UnsupportedTarget(_)
         | Resolution::UnsupportedVersion(_)
         | Resolution::Invalid(_)
@@ -623,7 +620,10 @@ fn dispatch(bed: &mut Bed, case: &Value) {
         "empty-native-destination" => {
             let source = text(case, "source_document");
             let (_intent, row) = bed.run(None, source, false, "");
-            let Resolution::Resolved(Target::Blob(blob)) = &row else {
+            let Resolution::Resolved {
+                target: Target::Blob(blob),
+            } = &row
+            else {
                 panic!("{id}: the empty destination did not resolve to its document: {row:?}");
             };
             assert_eq!(blob.path.as_str(), Some(text(case, "expected")), "{id}");
@@ -671,10 +671,7 @@ fn dispatch(bed: &mut Bed, case: &Value) {
             let (intent, _row) = bed.run(None, "README.md", false, text(case, "value"));
             let expected = case.get("expected").unwrap();
             assert_eq!(
-                intent
-                    .repository_path
-                    .as_ref()
-                    .and_then(|path| path.as_str()),
+                intent.repository_path.as_ref().and_then(RepoPath::as_str),
                 expected.get("path").and_then(Value::as_str),
                 "{id}"
             );

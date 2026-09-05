@@ -130,7 +130,7 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             }
         }
         match &observation.resolution {
-            Resolution::Resolved(_)
+            Resolution::Resolved { .. }
             | Resolution::External(
                 amiss_wire::resolution::ExternalReference::IntersphinxInventory
                 | amiss_wire::resolution::ExternalReference::SiteBuild,
@@ -140,7 +140,7 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             Resolution::Missing(_) => {
                 counts.missing = counts.missing.saturating_add(1);
             }
-            Resolution::TypeMismatch(_)
+            Resolution::TypeMismatch { .. }
             | Resolution::DeclaredUntracked(_)
             | Resolution::UnsupportedTarget(_)
             | Resolution::UnsupportedSemantics(_)

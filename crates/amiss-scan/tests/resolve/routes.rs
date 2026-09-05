@@ -22,7 +22,10 @@ fn a_router_spelling_reaches_the_source_file_it_serves() {
             .run_as(Adapter::Markdown, None, "docs/index.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
-        let Resolution::Resolved(Target::Blob(blob)) = &row else {
+        let Resolution::Resolved {
+            target: Target::Blob(blob),
+        } = &row
+        else {
             panic!("{destination} is served by a known router: {row:?}");
         };
         assert_eq!(blob.path.as_str(), Some(served), "{destination}");
@@ -41,7 +44,10 @@ fn a_routed_reference_keeps_the_authored_destination_as_its_intent() {
         intent.repository_path.as_ref().and_then(RepoPath::as_str),
         Some("docs/guide")
     );
-    let Resolution::Resolved(Target::Blob(blob)) = &row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = &row
+    else {
         panic!("guide resolves: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
@@ -114,7 +120,10 @@ fn a_fragment_on_a_routed_reference_reads_the_served_file() {
         )
         .unwrap_or_else(|_defect| panic!("resolve the routed anchor"))
         .1;
-    let Resolution::Resolved(Target::Blob(blob)) = &row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = &row
+    else {
         panic!("the anchor resolves on the served file: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/anchors.md"));
@@ -153,7 +162,10 @@ fn an_asciidoc_page_identity_is_a_catalogue_question() {
         .run_as(Adapter::AsciiDoc, None, "docs/index.md", false, "guide.md")
         .unwrap_or_else(|_defect| panic!("resolve adoc file path"))
         .1;
-    let Resolution::Resolved(Target::Blob(blob)) = &row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = &row
+    else {
         panic!("a dotted segment is a file, not a page identity: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));

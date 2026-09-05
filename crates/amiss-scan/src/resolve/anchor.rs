@@ -175,7 +175,9 @@ fn anchor_resolution(
         .binary_search_by(|identity| identity.as_str().cmp(fragment))
         .is_ok()
     {
-        return Ok(Resolution::Resolved(Target::Blob(blob)));
+        return Ok(Resolution::Resolved {
+            target: Target::Blob(blob),
+        });
     }
     if !complete {
         return Ok(unsupported);

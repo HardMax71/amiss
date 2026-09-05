@@ -39,14 +39,16 @@ fn repo_intent(path: &str) -> Intent {
 
 fn resolved(path: &str, body: &[u8]) -> Resolution {
     let raw = hb("amiss/raw-evidence", body);
-    Resolution::Resolved(Target::Blob(BlobTarget {
-        path: rp(path),
-        mode: BlobMode::Regular,
-        content: BlobContent::Available {
-            raw_digest: raw,
-            projection_digest: hb("amiss/scanner-target-projection", body),
-        },
-    }))
+    Resolution::Resolved {
+        target: Target::Blob(BlobTarget {
+            path: rp(path),
+            mode: BlobMode::Regular,
+            content: BlobContent::Available {
+                raw_digest: raw,
+                projection_digest: hb("amiss/scanner-target-projection", body),
+            },
+        }),
+    }
 }
 
 fn missing(path: &str) -> Resolution {
@@ -353,13 +355,15 @@ fn the_derivation_table_is_total() {
 fn a_type_mismatch_is_comparable_only_against_the_same_target() {
     let mismatched = |path: &str| {
         let mut spec = basic("d.md", "t.md", "same [x](x)");
-        spec.resolution = Resolution::TypeMismatch(Target::Blob(BlobTarget {
-            path: rp(path),
-            mode: BlobMode::Regular,
-            content: BlobContent::LfsPointer {
-                raw_digest: hb("amiss/raw-evidence", path.as_bytes()),
-            },
-        }));
+        spec.resolution = Resolution::TypeMismatch {
+            target: Target::Blob(BlobTarget {
+                path: rp(path),
+                mode: BlobMode::Regular,
+                content: BlobContent::LfsPointer {
+                    raw_digest: hb("amiss/raw-evidence", path.as_bytes()),
+                },
+            }),
+        };
         spec
     };
     let same_kind = mismatched("t.md");
