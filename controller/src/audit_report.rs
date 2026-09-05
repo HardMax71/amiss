@@ -1,6 +1,12 @@
+mod tests;
+
 use amiss_wire::digest::{Digest, hj, sha256};
 use amiss_wire::json::{self, Value};
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
+use amiss_wire::report::model::{BaseSnapshot, Evaluation, ReportPayload, Snapshot};
+use amiss_wire::requests::{
+    CandidateEventKind, CandidateFinality, CandidateSnapshot, RequestMode, SnapshotMaterialization,
+};
 
 use crate::ArtifactError;
 
@@ -24,11 +30,45 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
         return Err(ArtifactError::TooLarge);
     }
     let report = json::parse(bytes).map_err(|_defect| ArtifactError::Corrupt)?;
-    let (_, payload_digest, verdict) =
+    let (ReportPayload { evaluation, .. }, payload_digest, verdict) =
         amiss_wire::report::validate_envelope(&report).map_err(|_defect| ArtifactError::Corrupt)?;
     if verdict == amiss_wire::ExitClass::Failure {
         return Err(ArtifactError::Corrupt);
     }
+    let Evaluation::Resolved(evaluation) = evaluation else {
+        return Err(ArtifactError::Corrupt);
+    };
+    if evaluation.mode != RequestMode::CommitPair
+        || evaluation.event_kind != CandidateEventKind::ExplicitCommitPair
+        || evaluation.finality != CandidateFinality::ExplicitReplay
+        || evaluation.materialization != SnapshotMaterialization::GitObjects
+        || evaluation.skip_worktree_paths != 0
+        || evaluation.index_only_materialized_paths != 0
+    {
+        return Err(ArtifactError::Corrupt);
+    }
+    let (BaseSnapshot::Git(base), Snapshot::Available(CandidateSnapshot::Git(candidate))) =
+        (evaluation.base, evaluation.candidate)
+    else {
+        return Err(ArtifactError::Corrupt);
+    };
+    if base.object_format != candidate.object_format
+        || [&base, &candidate].into_iter().any(|snapshot| {
+            snapshot.commit_oid.object_format() != snapshot.object_format
+                || snapshot.tree_oid.object_format() != snapshot.object_format
+        })
+    {
+        return Err(ArtifactError::Corrupt);
+    }
+    let repository = evaluation.repository.ok_or(ArtifactError::Corrupt)?;
+    let repository = RepositoryIdentity::new(
+        repository.host().to_owned(),
+        repository.owner().to_owned(),
+        repository.name().to_owned(),
+    )
+    .ok_or(ArtifactError::Corrupt)?;
+    let target_ref = evaluation.target_ref;
+
     let Value::Object(envelope) = report else {
         return Err(ArtifactError::Corrupt);
     };
@@ -45,46 +85,9 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
         .into_iter()
         .find_map(|(key, value)| (key == "evaluation").then_some(value))
         .ok_or(ArtifactError::Corrupt)?;
-    if evaluation.text("mode") != Some("commit-pair")
-        || evaluation.text("event_kind") != Some("explicit-commit-pair")
-        || evaluation.text("finality") != Some("explicit-replay")
-        || evaluation.text("materialization") != Some("git-objects")
-        || evaluation.member("skip_worktree_paths") != Some(&Value::Integer(0))
-        || evaluation.member("index_only_materialized_paths") != Some(&Value::Integer(0))
-        || evaluation.member("schema").is_some()
-    {
+    if evaluation.member("schema").is_some() {
         return Err(ArtifactError::Corrupt);
     }
-    let repository = evaluation
-        .member("repository")
-        .and_then(|repository| {
-            RepositoryIdentity::new(
-                repository.text("host")?.to_owned(),
-                repository.text("owner")?.to_owned(),
-                repository.text("name")?.to_owned(),
-            )
-        })
-        .ok_or(ArtifactError::Corrupt)?;
-    let (base_format, base) = snapshot(evaluation.member("base").ok_or(ArtifactError::Corrupt)?)
-        .ok_or(ArtifactError::Corrupt)?;
-    let (candidate_format, candidate) = snapshot(
-        evaluation
-            .member("candidate")
-            .ok_or(ArtifactError::Corrupt)?,
-    )
-    .ok_or(ArtifactError::Corrupt)?;
-    if base_format != candidate_format {
-        return Err(ArtifactError::Corrupt);
-    }
-    let target_ref = match evaluation.member("target_ref") {
-        Some(Value::String(value)) => {
-            Some(BranchRef::new(value.to_string()).ok_or(ArtifactError::Corrupt)?)
-        }
-        Some(Value::Null) => None,
-        Some(Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_)) | None => {
-            return Err(ArtifactError::Corrupt);
-        }
-    };
     let Value::Object(members) = evaluation else {
         return Err(ArtifactError::Corrupt);
     };
@@ -104,22 +107,14 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
         payload_digest,
         repository,
         target_ref,
-        base,
-        candidate,
+        base: AcceptedSnapshot {
+            commit: base.commit_oid,
+            tree: base.tree_oid,
+        },
+        candidate: AcceptedSnapshot {
+            commit: candidate.commit_oid,
+            tree: candidate.tree_oid,
+        },
         candidate_identity_digest: hj(amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN, &identity),
     })
-}
-
-fn snapshot(value: &Value) -> Option<(ObjectFormat, AcceptedSnapshot)> {
-    if value.text("kind") != Some("git-commit") {
-        return None;
-    }
-    let object_format = value.text("object_format")?.parse().ok()?;
-    Some((
-        object_format,
-        AcceptedSnapshot {
-            commit: Oid::new(object_format, value.text("commit_oid")?.to_owned())?,
-            tree: Oid::new(object_format, value.text("tree_oid")?.to_owned())?,
-        },
-    ))
 }
