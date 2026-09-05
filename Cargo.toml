@@ -50,6 +50,7 @@ base64 = { version = "0.23", default-features = false, features = ["std"] }
 cap-fs-ext = "4.0.2"
 cap-std = "4.0.2"
 divan = "0.1.21"
+digest-io = "0.1.0"
 flate2 = "1"
 getrandom = "0.4.3"
 hex = "0.4"

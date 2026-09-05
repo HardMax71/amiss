@@ -1,6 +1,40 @@
 use amiss_wire::digest::{hj, hj_with_length};
 use amiss_wire::json::{ErrorKind, Value, canonical, canonical_length, parse};
 
+#[test]
+fn ordered_serde_hashing_binds_exact_bytes_and_propagates_serialization_errors() {
+    use std::collections::BTreeMap;
+
+    use amiss_wire::digest::{hb, hj_ordered};
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct Input<'a> {
+        escaped: &'a str,
+        integers: [i64; 3],
+        nullable: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        omitted: Option<bool>,
+    }
+
+    let input = Input {
+        escaped: "q\" \\ \n \u{1} β",
+        integers: [-42, 0, 42],
+        nullable: None,
+        omitted: None,
+    };
+    let bytes = b"{\"escaped\":\"q\\\" \\\\ \\n \\u0001 \xce\xb2\",\"integers\":[-42,0,42],\"nullable\":null}";
+    for domain in ["", "amiss/typed-test", "amiss/typed-test\0"] {
+        assert_eq!(hj_ordered(domain, &input).unwrap(), hb(domain, bytes));
+    }
+    assert_ne!(
+        hj_ordered("amiss/typed-test", &input).unwrap(),
+        hj_ordered("amiss/typed-test\0", &input).unwrap()
+    );
+    let invalid = BTreeMap::from([((1, 2), true)]);
+    assert!(hj_ordered("amiss/typed-test", &invalid).is_err());
+}
+
 #[cfg(target_pointer_width = "64")]
 #[test]
 fn an_owned_value_uses_three_machine_words() {
