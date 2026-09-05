@@ -2,10 +2,10 @@ use amiss_wire::digest::{hj, hj_with_length};
 use amiss_wire::json::{ErrorKind, Value, canonical, canonical_length, parse};
 
 #[test]
-fn ordered_serde_hashing_binds_exact_bytes_and_propagates_serialization_errors() {
+fn serde_hashing_binds_the_selected_writer_and_propagates_errors() {
     use std::collections::BTreeMap;
 
-    use amiss_wire::digest::{hb, hj_ordered};
+    use amiss_wire::digest::{hb, hj_serde};
     use serde::Serialize;
 
     #[derive(Serialize)]
@@ -17,6 +17,12 @@ fn ordered_serde_hashing_binds_exact_bytes_and_propagates_serialization_errors()
         omitted: Option<bool>,
     }
 
+    #[derive(Serialize)]
+    struct Unordered<'a> {
+        z: &'a str,
+        a: BTreeMap<&'a str, u64>,
+    }
+
     let input = Input {
         escaped: "q\" \\ \n \u{1} β",
         integers: [-42, 0, 42],
@@ -25,14 +31,52 @@ fn ordered_serde_hashing_binds_exact_bytes_and_propagates_serialization_errors()
     };
     let bytes = b"{\"escaped\":\"q\\\" \\\\ \\n \\u0001 \xce\xb2\",\"integers\":[-42,0,42],\"nullable\":null}";
     for domain in ["", "amiss/typed-test", "amiss/typed-test\0"] {
-        assert_eq!(hj_ordered(domain, &input).unwrap(), hb(domain, bytes));
+        assert_eq!(
+            hj_serde(domain, |writer| serde_json::to_writer(writer, &input)).unwrap(),
+            hb(domain, bytes)
+        );
     }
     assert_ne!(
-        hj_ordered("amiss/typed-test", &input).unwrap(),
-        hj_ordered("amiss/typed-test\0", &input).unwrap()
+        hj_serde("amiss/typed-test", |writer| serde_json::to_writer(
+            writer, &input
+        ))
+        .unwrap(),
+        hj_serde("amiss/typed-test\0", |writer| serde_json::to_writer(
+            writer, &input
+        ))
+        .unwrap()
     );
     let invalid = BTreeMap::from([((1, 2), true)]);
-    assert!(hj_ordered("amiss/typed-test", &invalid).is_err());
+    assert!(
+        hj_serde("amiss/typed-test", |writer| serde_json::to_writer(
+            writer, &invalid
+        ))
+        .is_err()
+    );
+
+    let unordered = Unordered {
+        z: "line\n",
+        a: BTreeMap::from([("\u{e000}", 2), ("\u{10000}", 1)]),
+    };
+    let expected = "{\"a\":{\"\u{10000}\":1,\"\u{e000}\":2},\"z\":\"line\\n\"}";
+    let canonical = hj_serde("amiss/typed-test", |mut writer| {
+        serde_json_canonicalizer::to_writer(&unordered, &mut writer)
+    })
+    .unwrap();
+    assert_eq!(canonical, hb("amiss/typed-test", expected.as_bytes()));
+    assert_ne!(
+        canonical,
+        hj_serde("amiss/typed-test", |writer| serde_json::to_writer(
+            writer, &unordered
+        ))
+        .unwrap()
+    );
+    assert!(
+        hj_serde("amiss/typed-test", |mut writer| {
+            serde_json_canonicalizer::to_writer(&invalid, &mut writer)
+        })
+        .is_err()
+    );
 }
 
 #[cfg(target_pointer_width = "64")]

@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
-use amiss_wire::digest::hj_ordered;
+use amiss_wire::digest::hj_serde;
 use amiss_wire::model::{Adapter, ArtifactId, BranchRef, Oid, RepoPath};
 use amiss_wire::report::model::{
     ControlsUnavailableReason, ObservationIdInput, ObservationIdInputSchema, StructuralAddress,
@@ -209,7 +209,10 @@ fn resolved_observation(
         },
         schema: ObservationIdInputSchema::Current,
     };
-    let id = hj_ordered(OBSERVATION_ID_DOMAIN, &identity).map_err(|_defect| Error::Internal)?;
+    let id = hj_serde(OBSERVATION_ID_DOMAIN, |writer| {
+        serde_json::to_writer(writer, &identity)
+    })
+    .map_err(|_defect| Error::Internal)?;
     Ok(Observation {
         id,
         adapter_contract_digest,

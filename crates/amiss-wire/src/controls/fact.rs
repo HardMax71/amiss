@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb, hj_ordered};
+use crate::digest::{Digest, hb, hj_serde};
 use crate::model::{Oid, RepoPathText};
 use crate::resolution::Target;
 
@@ -167,11 +167,15 @@ pub fn canonical_fact(fact: &Fact) -> Result<(Vec<u8>, Digest), Error> {
 
 pub(super) fn fact_digests(path: &str, fact: &Fact) -> Result<(Digest, Digest), Error> {
     validate_fact(path, fact)?;
-    let key = hj_ordered(FINDING_KEY_DOMAIN, &fact.key_input)
-        .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
-    let encoded = serde_json_canonicalizer::to_vec(fact)
-        .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
-    Ok((key, hb(FACT_DOMAIN, &encoded)))
+    let key = hj_serde(FINDING_KEY_DOMAIN, |writer| {
+        serde_json::to_writer(writer, &fact.key_input)
+    })
+    .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
+    let digest = hj_serde(FACT_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(fact, &mut writer)
+    })
+    .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
+    Ok((key, digest))
 }
 
 fn validate_fact(path: &str, fact: &Fact) -> Result<(), Error> {
