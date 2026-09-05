@@ -1,9 +1,10 @@
 mod tests;
 
 use amiss_wire::digest::Digest;
-use amiss_wire::report::model::{RepoPath, ReportPayload};
+use amiss_wire::report::model::ReportPayload;
 use amiss_wire::report::{Disposition, FindingKind};
 use serde::Serialize;
+use std::borrow::Cow;
 
 #[derive(Serialize)]
 pub(crate) struct Issue<'report> {
@@ -17,7 +18,7 @@ pub(crate) struct Issue<'report> {
 #[derive(Serialize)]
 struct Location<'report> {
     lines: Lines,
-    path: &'report str,
+    path: Cow<'report, str>,
 }
 
 #[derive(Serialize)]
@@ -39,7 +40,10 @@ enum Severity {
 /// shape for analysis errors or refusals, so those stay on the exit class and
 /// the other lanes, and like every projection it cannot change facts,
 /// ordering, totals, or exit.
-pub(crate) fn issues(payload: &ReportPayload) -> Vec<Issue<'_>> {
+pub(crate) fn issues<'report, P, R, M, E>(
+    payload: &'report ReportPayload<P, R, M, E>,
+    path_label: impl Fn(&'report P) -> Cow<'report, str>,
+) -> Vec<Issue<'report>> {
     payload
         .findings
         .iter()
@@ -53,11 +57,10 @@ pub(crate) fn issues(payload: &ReportPayload) -> Vec<Issue<'_>> {
                     lines: Lines {
                         begin: location.span.map_or(1, |span| span.start_line.max(1)),
                     },
-                    path: match &location.path {
-                        Some(RepoPath::Text(path)) => path.as_str(),
-                        Some(RepoPath::Bytes(path)) => &path.bytes_hex,
-                        None => "(global)",
-                    },
+                    path: location
+                        .path
+                        .as_ref()
+                        .map_or(Cow::Borrowed("(global)"), &path_label),
                 },
                 severity: match row.effective_disposition {
                     Disposition::Fail => Severity::Major,

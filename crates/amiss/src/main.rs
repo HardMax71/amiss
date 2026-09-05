@@ -15,6 +15,7 @@ mod repair;
 mod sarif;
 mod view;
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
@@ -139,16 +140,39 @@ fn project(
         return Ok(());
     }
     let (payload, _digest, _verdict) = report::validate_envelope(envelope)?;
+    let path: fn(&report::model::RepoPath) -> Result<&str, Cow<'_, str>> = |path| match path {
+        report::model::RepoPath::Text(text) => Ok(text.as_str()),
+        report::model::RepoPath::Bytes(bytes) => Err(Cow::Borrowed(&bytes.bytes_hex)),
+    };
     match format {
         OutputFormat::Json => {}
         OutputFormat::Sarif => {
-            diagnose_emission(output::write_serialized(&sarif::log(&payload)));
+            diagnose_emission(output::write_serialized(&sarif::log(&payload, |value| {
+                path(value).ok()
+            })));
         }
         OutputFormat::CodeQuality => {
-            diagnose_emission(output::write_serialized(&codequality::issues(&payload)));
+            diagnose_emission(output::write_serialized(&codequality::issues(
+                &payload,
+                |value| path(value).map_or_else(|hex| hex, Cow::Borrowed),
+            )));
         }
-        OutputFormat::Junit => emit_junit(&payload),
-        OutputFormat::Human => human::report(&payload, explain_scope, full_feedback),
+        OutputFormat::Junit => {
+            let stdout = std::io::stdout();
+            let mut output = std::io::BufWriter::new(stdout.lock());
+            diagnose_emission(junit::write(&payload, &mut output, |value| {
+                path(value).ok()
+            }));
+        }
+        OutputFormat::Human => human::report(&payload, explain_scope, full_feedback, |value| {
+            value.map_or_else(
+                || "-".to_owned(),
+                |value| match path(value) {
+                    Ok(text) => amiss_wire::human::atom(text),
+                    Err(hex) => amiss_wire::human::atom_bytes(&amiss_wire::human::decode_hex(&hex)),
+                },
+            )
+        }),
     }
     Ok(())
 }
@@ -475,12 +499,6 @@ fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {
             .emit(envelope, &mut std::io::stdout())
             .map(|_written| ()),
     );
-}
-
-fn emit_junit(payload: &report::model::ReportPayload) {
-    let stdout = std::io::stdout();
-    let mut output = std::io::BufWriter::new(stdout.lock());
-    diagnose_emission(junit::write(payload, &mut output));
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]

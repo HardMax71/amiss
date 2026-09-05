@@ -3,7 +3,7 @@ mod tests;
 
 use std::collections::BTreeSet;
 
-use amiss_wire::report::model::{Finding, FindingFix, FindingLocation, RepoPath, ReportPayload};
+use amiss_wire::report::model::{Finding, FindingFix, FindingLocation, ReportPayload};
 use amiss_wire::report::{Disposition, FindingKind};
 
 use model::{
@@ -16,7 +16,10 @@ use model::{
 /// cannot change facts, ordering, totals, or exit. Findings become results
 /// under their kind's rule, retained analysis errors become tool execution
 /// notifications, and the finding key rides as the stable fingerprint.
-pub(crate) fn log(payload: &ReportPayload) -> Log<'_> {
+pub(crate) fn log<P, R, M, E>(
+    payload: &ReportPayload<P, R, M, E>,
+    path_text: impl Fn(&P) -> Option<&str> + Copy,
+) -> Log<'_> {
     let present_names: BTreeSet<FindingKind> =
         payload.findings.iter().map(|row| row.kind).collect();
     let present: Vec<FindingKind> = FindingKind::all()
@@ -44,7 +47,7 @@ pub(crate) fn log(payload: &ReportPayload) -> Log<'_> {
             results: payload
                 .findings
                 .iter()
-                .map(|row| finding_result(row, &present))
+                .map(|row| finding_result(row, &present, path_text))
                 .collect(),
             tool: Tool {
                 driver: Driver {
@@ -67,9 +70,10 @@ pub(crate) fn log(payload: &ReportPayload) -> Log<'_> {
     }
 }
 
-fn finding_result<'report>(
-    row: &'report Finding,
+fn finding_result<'report, P, E>(
+    row: &'report Finding<P, E>,
     present: &[FindingKind],
+    path_text: impl Fn(&P) -> Option<&str> + Copy,
 ) -> FindingResult<'report> {
     FindingResult {
         fixes: row.fix.as_ref().map(|value| [fix(value)]),
@@ -78,7 +82,7 @@ fn finding_result<'report>(
             Disposition::Warn => Level::Warning,
             Disposition::Record => Level::Note,
         },
-        locations: location(&row.location).map(|location| [location]),
+        locations: location(&row.location, path_text).map(|location| [location]),
         message: Message {
             text: &row.description,
         },
@@ -116,15 +120,14 @@ fn fix(fix: &FindingFix) -> Fix<'_> {
 
 /// A location renders only when the wire path is printable text; a
 /// `bytes_hex` path names no artifact URI, and the row still carries it.
-fn location(location: &FindingLocation) -> Option<Location> {
-    let Some(RepoPath::Text(path)) = &location.path else {
-        return None;
-    };
+fn location<P>(
+    location: &FindingLocation<P>,
+    path_text: impl Fn(&P) -> Option<&str>,
+) -> Option<Location> {
+    let path = location.path.as_ref().and_then(path_text)?;
     Some(Location {
         physical_location: PhysicalLocation {
-            artifact_location: ArtifactLocation {
-                uri: uri(path.as_str()),
-            },
+            artifact_location: ArtifactLocation { uri: uri(path) },
             region: location.span.map(|span| Region {
                 end_column: span.end_column,
                 end_line: span.end_line,

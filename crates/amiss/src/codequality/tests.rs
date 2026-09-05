@@ -19,7 +19,12 @@ fn a_global_finding_yields_a_valid_placeholder_location() {
     finding.location.span = None;
     let fingerprint = finding.finding_key.to_string();
 
-    let projected = issues(&report.payload);
+    let projected = issues(&report.payload, |path| {
+        std::borrow::Cow::Borrowed(match path {
+            RepoPath::Text(text) => text.as_str(),
+            RepoPath::Bytes(bytes) => &bytes.bytes_hex,
+        })
+    });
     let bytes = serde_json::to_vec(&projected).unwrap();
     assert_eq!(bytes, serde_json_canonicalizer::to_vec(&projected).unwrap());
     assert_eq!(
@@ -64,7 +69,12 @@ fn paths_and_dispositions_keep_their_projection_without_owned_json_rows() {
         finding.location.span.as_mut().unwrap().start_line = line;
         finding.effective_disposition = disposition;
         finding.description = "a \"missing\" target\n".to_owned();
-        let projected = issues(&report.payload);
+        let projected = issues(&report.payload, |path| {
+            std::borrow::Cow::Borrowed(match path {
+                RepoPath::Text(text) => text.as_str(),
+                RepoPath::Bytes(bytes) => &bytes.bytes_hex,
+            })
+        });
         let bytes = serde_json::to_vec(&projected).unwrap();
         assert_eq!(bytes, serde_json_canonicalizer::to_vec(&projected).unwrap());
         let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();

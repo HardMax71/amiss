@@ -70,7 +70,10 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
 fn typed_sarif_preserves_optional_fields_and_canonical_order() {
     let payload = projection_payload();
     let fingerprint = payload.findings[0].finding_key.to_string();
-    let log = super::log(&payload);
+    let log = super::log(&payload, |path| match path {
+        RepoPath::Text(text) => Some(text.as_str()),
+        RepoPath::Bytes(_) => None,
+    });
     let bytes = serde_json::to_vec(&log).unwrap();
     assert_eq!(bytes, serde_json_canonicalizer::to_vec(&log).unwrap());
     let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
