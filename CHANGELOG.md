@@ -7,6 +7,104 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.28.0](https://github.com/HardMax71/amiss/compare/v0.27.0...v0.28.0) - 2026-09-05
+
+### Changes
+
+- Preserve resolved failure context and remove unreachable render path
+- Produce and consume scanner reports through shared serde models
+- Let report projections consume stored path types directly
+- Keep portable write and flush failure checks with the emitter
+- Emit typed report envelopes with serde and standard buffering
+- Derive serialization for complete resolution outcomes
+- Name resolved targets in resolver data
+- Use shared report types for unavailable scanner inputs
+- Serialize external plans and assessments directly to artifact bytes
+- Preserve path-aware strict JSON refusals for evidence input
+- Carry serialized external evidence through provider boundaries
+- Use typed report fields for adoption and repair
+- *(cli)* read typed human and JUnit reports
+- Restrict machine-applicable fixes to text document paths
+- *(cli)* read typed SARIF and Code Quality findings
+- *(wire)* reuse canonical semantic output bytes
+- *(cli)* require SARIF artifact for spanless locations
+- *(cli)* serialize SARIF from borrowed structs
+- *(cli)* clarify projection benchmark scope
+- *(cli)* serialize Code Quality from borrowed structs
+- *(scan)* share semantic evidence report provenance
+- *(scan)* hash typed candidate identities
+- *(report)* admit site-build defect evidence
+- *(wire)* validate reports through typed model
+- *(external)* derive assessment JSON
+- *(external)* derive evidence JSON
+- *(wire)* derive external plan JSON
+- *(wire)* derive release manifest JSON
+- *(controls)* derive organization floor JSON
+- *(controls)* derive scanner policy JSON
+- *(controls)* derive debt and waiver JSON
+- *(wire)* derive execution constraint JSON
+- *(wire)* derive trusted time JSON
+- *(wire)* derive controls request JSON
+- *(wire)* derive snapshot request JSON
+- Use shared enum classifications in finding metadata
+- Keep generated-report failures contextual and remove duplicate checks
+- Check generated scanner reports in the contract drift gate
+- Share projection difference data with the report model
+- Use one projection reason vocabulary in producers and reports
+- Produce shared evidence source counts directly
+- Hash adoption facts from borrowed serde inputs
+- Hash through the selected serde writer
+- Stream produced finding keys and propagate evaluation errors
+- Store finding key inputs as direct shared data
+- Use shared finding scopes in the evaluator
+- Stream candidate identities directly into their hasher
+- Replace the observation identity encoder with shared serde models
+- Stream typed index identities directly into SHA-256
+- Isolate the process-wide fatal allocation measurement
+- *(scan)* hash typed staged-index identities
+- *(scan)* reuse report counter structs
+- *(report)* share document classifications with the scanner
+- *(scan)* share report decision types
+- *(wire)* derive semantic evidence JSON
+- reuse existing report field types in canonical order
+- stream binary repository paths through serde
+- Use report payload types directly without aliases
+- Let report rows carry their stored serde types
+- Let fact inputs borrow their key and evidence
+- Derive serialization for resolution details
+- Stream accepted finding keys in canonical field order
+- Let serde enforce structural fact optionality
+- Let report models carry validated producer paths directly
+- Use typed analysis routes and one error-row builder
+- Reject invalid feedback byte paths and zero location counts
+- Serialize locale artifacts from borrowed payloads to bytes
+- Serialize publication artifacts from borrowed payloads to bytes
+- Carry canonical relation artifact bytes through the controller
+- *(wire)* derive repository path serialization
+- *(wire)* share resolver reasons with report models
+- *(wire)* share snapshot identity models
+- *(wire)* stream report findings canonically
+- *(wire)* stream report observations canonically
+- *(wire)* type report finding rows
+- *(wire)* type report analysis rows
+- *(wire)* type report provenance blocks
+- *(wire)* exercise manifest closure boundaries
+- *(controls)* bound floor resource limits
+- *(wire)* derive evaluation request JSON
+- *(wire)* derive candidate identity JSON
+- *(wire)* derive record-set input JSON
+- *(wire)* derive locale assessment JSON
+- *(test)* insert locale pages by order
+- *(wire)* derive locale evidence JSON
+- *(wire)* derive locale plan JSON
+- *(wire)* derive publication assessment JSON
+- *(wire)* derive publication evidence JSON
+- *(wire)* preserve publication parse diagnostics
+- *(wire)* derive publication plan JSON
+- *(wire)* derive relation assessment JSON
+- *(wire)* derive relation plan JSON
+- *(wire)* derive relation evidence JSON
+
 ## [0.27.0](https://github.com/HardMax71/amiss/compare/v0.26.0...v0.27.0) - 2026-09-01
 
 ### Changes
