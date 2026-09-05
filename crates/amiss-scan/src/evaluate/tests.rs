@@ -14,6 +14,44 @@ use amiss_wire::resolution::{
 use strum::{IntoDiscriminant, IntoEnumIterator};
 
 #[test]
+fn source_groups_preserve_sorted_digests_and_exact_multiplicities() {
+    let first =
+        amiss_wire::digest::Digest::from_wire(&format!("sha256:{}", "1".repeat(64))).unwrap();
+    let second =
+        amiss_wire::digest::Digest::from_wire(&format!("sha256:{}", "a".repeat(64))).unwrap();
+    for first_count in 0..=3 {
+        for second_count in 0..=3 {
+            let mut input: Vec<_> = std::iter::repeat_n(first, first_count)
+                .chain(std::iter::repeat_n(second, second_count))
+                .collect();
+            let expected = [(first, first_count), (second, second_count)]
+                .into_iter()
+                .filter(|(_, count)| *count != 0)
+                .map(|(digest, count)| format!(r#"{{"digest":"{digest}","multiplicity":{count}}}"#))
+                .collect::<Vec<_>>()
+                .join(",");
+            let expected = format!("[{expected}]").into_bytes();
+            for reverse in [false, true] {
+                if reverse {
+                    input.reverse();
+                }
+                for _ in 0..input.len().max(1) {
+                    let sources = super::source_multiplicities(input.iter().copied());
+                    assert_eq!(serde_json::to_vec(&sources).unwrap(), expected);
+                    assert_eq!(
+                        json::canonical(&super::claims::sources_value(&sources)),
+                        expected
+                    );
+                    if !input.is_empty() {
+                        input.rotate_left(1);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn derived_resolutions_match_produced_bytes_and_the_report_reader() -> Result<(), serde_json::Error>
 {
     for raw in [

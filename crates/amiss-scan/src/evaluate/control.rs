@@ -3,7 +3,7 @@ use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
-use amiss_wire::report::model::ControlFindingKeyScopeKind;
+use amiss_wire::report::model::{ControlFindingKeyScopeKind, ControlStateSource};
 
 use crate::scan::SpanDisplay;
 
@@ -18,7 +18,7 @@ use super::{Finding, FindingKeyScope, Location, LocationSide};
 pub struct GovernedSeed {
     pub document: RepoPath,
     pub member_count: u64,
-    pub sources: Vec<(Digest, u64)>,
+    pub sources: Vec<ControlStateSource>,
     pub representative_span: Option<(usize, usize)>,
     pub representative_display: Option<SpanDisplay>,
 }

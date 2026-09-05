@@ -13,6 +13,7 @@ use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{Profile, SourceConstruct, TargetKind};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
+use amiss_wire::report::model::ControlStateSource;
 use amiss_wire::report::{
     Disposition, EngineProvenance, FindingKind, IntentKind, adapter_contract,
 };
@@ -562,7 +563,10 @@ fn introduced_only_demotes_pre_existing_failures_alone() {
     let governed = GovernedSeed {
         document: repo_path("governed.md"),
         member_count: 1,
-        sources: vec![(hb("amiss/scanner-source-projection", b"governed"), 1)],
+        sources: vec![ControlStateSource {
+            digest: hb("amiss/scanner-source-projection", b"governed"),
+            multiplicity: 1,
+        }],
         representative_span: None,
         representative_display: None,
     };

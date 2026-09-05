@@ -4,6 +4,7 @@ use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
+use amiss_wire::report::model::ControlStateSource;
 use amiss_wire::report::{FindingKind, FixKind};
 
 use crate::claim::{ClaimMissingReason, ClaimVerdict};
@@ -21,7 +22,7 @@ pub struct ClaimGroup {
     pub document: RepoPath,
     pub name: String,
     pub member_count: u64,
-    pub sources: Vec<(Digest, u64)>,
+    pub sources: Vec<ControlStateSource>,
     pub representative_span: Option<(usize, usize)>,
     pub representative_display: Option<SpanDisplay>,
     pub target_path: RepoPath,
@@ -34,19 +35,19 @@ pub struct ClaimGroup {
 
 /// The sorted distinct source digests with their multiplicities, in the
 /// wire's control-source shape.
-pub(super) fn sources_value(sources: &[(Digest, u64)]) -> Value {
+pub(super) fn sources_value(sources: &[ControlStateSource]) -> Value {
     Value::array(
         sources
             .iter()
-            .map(|(source_digest, multiplicity)| {
+            .map(|source| {
                 Value::object(vec![
                     (
                         "multiplicity".to_owned(),
-                        Value::Integer(i64::try_from(*multiplicity).unwrap_or(i64::MAX)),
+                        Value::Integer(i64::try_from(source.multiplicity).unwrap_or(i64::MAX)),
                     ),
                     (
                         "digest".to_owned(),
-                        Value::string(source_digest.to_string()),
+                        Value::string(source.digest.to_string()),
                     ),
                 ])
             })
@@ -56,15 +57,16 @@ pub(super) fn sources_value(sources: &[(Digest, u64)]) -> Value {
 
 pub(crate) fn source_multiplicities(
     digests: impl IntoIterator<Item = Digest>,
-) -> Vec<(Digest, u64)> {
+) -> Vec<ControlStateSource> {
     let mut digests: Vec<Digest> = digests.into_iter().collect();
     digests.sort_unstable();
     digests
         .chunk_by(|left, right| left == right)
         .filter_map(|run| {
-            run.first()
-                .copied()
-                .map(|digest| (digest, u64::try_from(run.len()).unwrap_or(u64::MAX)))
+            run.first().copied().map(|digest| ControlStateSource {
+                digest,
+                multiplicity: u64::try_from(run.len()).unwrap_or(u64::MAX),
+            })
         })
         .collect()
 }
