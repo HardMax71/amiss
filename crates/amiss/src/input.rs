@@ -11,6 +11,11 @@ pub(crate) enum ReadError {
     TooLarge,
 }
 
+pub(crate) struct StrictJson {
+    pub bytes: Vec<u8>,
+    pub value: Value,
+}
+
 pub(crate) fn bounded_bytes(path: &Path, limit: u64) -> Result<Vec<u8>, ReadError> {
     let file = fs::File::open(path).map_err(|_error| ReadError::Unreadable)?;
     let mut bytes = Vec::new();
@@ -26,11 +31,13 @@ pub(crate) fn bounded_bytes(path: &Path, limit: u64) -> Result<Vec<u8>, ReadErro
 
 /// The writer caps an envelope at `MACHINE_JSON_BYTES`, so a larger input
 /// cannot be one of the scanner's artifacts.
-pub(crate) fn strict_value(path: &Path) -> Result<Value, String> {
+pub(crate) fn strict_json(path: &Path) -> Result<StrictJson, String> {
     let shown = path.display();
     let bytes = bounded_bytes(path, MACHINE_JSON_BYTES).map_err(|error| match error {
         ReadError::Unreadable => format!("{shown} is unreadable"),
         ReadError::TooLarge => format!("{shown} is larger than a scanner report can be"),
     })?;
-    json::parse(&bytes).map_err(|_error| format!("{shown} is not the scanner's strict JSON"))
+    let value = json::parse(&bytes)
+        .map_err(|_error| format!("{shown} is not the scanner's strict JSON"))?;
+    Ok(StrictJson { bytes, value })
 }

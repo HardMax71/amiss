@@ -12,7 +12,7 @@ pub(crate) fn run_plan(invocation: &PlanInvocation, reserve: &mut FatalSerialize
         "external-plan",
         invocation.format,
         reserve,
-        || crate::input::strict_value(&invocation.report),
+        || crate::input::strict_json(&invocation.report).map(|input| input.value),
         |report, version, digest| amiss_wire::external::plan(&report, version, digest),
         crate::human::plan,
     )
@@ -25,20 +25,8 @@ pub(crate) fn run_assess(invocation: &AssessInvocation, reserve: &mut FatalSeria
         reserve,
         || {
             Ok((
-                crate::input::strict_value(&invocation.plan)?,
-                crate::input::bounded_bytes(
-                    &invocation.evidence,
-                    amiss_wire::external::EXTERNAL_DOCUMENT_BYTES,
-                )
-                .map_err(|defect| {
-                    let path = invocation.evidence.display();
-                    match defect {
-                        crate::input::ReadError::Unreadable => format!("{path} is unreadable"),
-                        crate::input::ReadError::TooLarge => {
-                            format!("{path} is larger than a scanner report can be")
-                        }
-                    }
-                })?,
+                crate::input::strict_json(&invocation.plan)?.value,
+                crate::input::strict_json(&invocation.evidence)?.bytes,
             ))
         },
         |(plan, evidence), version, digest| {
