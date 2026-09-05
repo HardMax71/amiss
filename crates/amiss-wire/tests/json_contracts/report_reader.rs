@@ -36,6 +36,26 @@ fn additive_fields_are_checked_before_typed_decoding() {
 }
 
 #[test]
+fn the_outer_envelope_rejects_members_outside_the_payload_digest() {
+    let original: Value = serde_json::from_slice(REPORT).unwrap();
+    let schema: Value = serde_json::from_slice(include_bytes!(
+        "../../../../spec/scanner-report.schema.json"
+    ))
+    .unwrap();
+    assert_eq!(schema["additionalProperties"], false);
+    validate_envelope(REPORT).unwrap();
+    for extra in [Value::Null, json!(false), json!(1), json!({"nested": []})] {
+        let mut report = original.clone();
+        report["future_field"] = extra;
+        let bytes = serde_json::to_vec(&report).unwrap();
+        assert_eq!(
+            validate_envelope(&bytes).map(|_| ()),
+            Err(ReportDefect::NotAReport)
+        );
+    }
+}
+
+#[test]
 fn report_headers_and_verdicts_keep_their_closed_json_shapes() {
     for (path, invalid, expected) in [
         (
@@ -126,7 +146,7 @@ fn unowned_fields_keep_the_strict_number_duplicate_and_stream_rules() {
         r#""future":0,"future":0,"#,
         r#""future":0,"\u0066uture":0,"#,
     ] {
-        let changed = report.replacen('{', &format!("{{{inserted}"), 1);
+        let changed = report.replacen(r#""payload":{"#, &format!(r#""payload":{{{inserted}"#), 1);
         assert_eq!(
             validate_envelope(changed.as_bytes()).map(|_| ()),
             Err(ReportDefect::NotAReport)
