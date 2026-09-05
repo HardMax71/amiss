@@ -1,6 +1,7 @@
+use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{
     DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, MissingResolution, StructuralResolution,
-    canonical_fact, parse_debt_snapshot,
+    canonical_fact, parse_debt_snapshot, parse_fact,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::hj;
@@ -71,7 +72,6 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
                 .normalized_target_intent
                 .commit_oid
                 .as_ref()
-                .and_then(Option::as_ref)
                 .map(amiss_wire::model::Oid::as_str),
             Some(commit_oid.as_str())
         );
@@ -101,11 +101,22 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
     )
     .unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::InvalidValue);
+    assert_eq!(defect.kind, ErrorKind::WrongType);
     assert!(
         defect
             .path
             .ends_with(".normalized_target_intent.commit_oid")
+    );
+    let fact = fact_json_for(
+        "explicit-target-missing",
+        &null,
+        r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
+    );
+    let defect = parse_fact(fact.as_bytes()).unwrap_err();
+    assert_eq!(defect.kind, ErrorKind::WrongType);
+    assert_eq!(
+        defect.path,
+        "$.key_input.scope.normalized_target_intent.commit_oid"
     );
 }
 
@@ -127,7 +138,7 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
         &path_missing.items[0].accepted_fact.evidence.resolution,
         StructuralResolution::Missing(MissingResolution::PathNotFound {
             path,
-            same_object_at: Some(Some(moved)),
+            same_object_at: Some(Nullable::Value(moved)),
             ..
         }) if path.as_str() == "docs/missing.md" && moved.as_str() == "docs/moved.md"
     ));
@@ -147,7 +158,7 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
     assert!(matches!(
         &explicit_null.items[0].accepted_fact.evidence.resolution,
         StructuralResolution::Missing(MissingResolution::PathNotFound {
-            same_object_at: Some(None),
+            same_object_at: Some(Nullable::Null),
             ..
         })
     ));
@@ -167,6 +178,24 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
         StructuralResolution::Missing(MissingResolution::LineFragmentOutOfRange { path })
             if path.as_str() == "src/lib.rs"
     ));
+
+    let omitted = parse_debt_fact_case(
+        "explicit-target-missing",
+        "explicit-target-missing",
+        r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null}"#,
+    )
+    .unwrap();
+    let mut digests = std::collections::BTreeSet::new();
+    for snapshot in [omitted, explicit_null, path_missing] {
+        let item = &snapshot.items[0];
+        let (bytes, digest) = canonical_fact(&item.accepted_fact).unwrap();
+        assert_eq!(digest, item.accepted_fact_digest);
+        assert_eq!(parse_fact(&bytes).unwrap(), item.accepted_fact);
+        assert!(
+            digests.insert(digest),
+            "absence, null and a path have distinct facts"
+        );
+    }
 }
 
 #[test]

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
 use crate::model::{Oid, RepoPathText};
@@ -52,9 +53,9 @@ pub struct TargetIntent {
     #[serde(
         default,
         skip_serializing_if = "Option::is_none",
-        with = "serde_with::rust::double_option"
+        deserialize_with = "json_serde::deserialize_some"
     )]
-    pub commit_oid: Option<Option<Oid>>,
+    pub commit_oid: Option<Oid>,
     pub path: RepoPathText,
     pub target_kind: TargetKind,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -98,9 +99,9 @@ pub enum MissingResolution {
         #[serde(
             default,
             skip_serializing_if = "Option::is_none",
-            with = "serde_with::rust::double_option"
+            deserialize_with = "json_serde::deserialize_some"
         )]
-        same_object_at: Option<Option<RepoPathText>>,
+        same_object_at: Option<Nullable<RepoPathText>>,
     },
     LineFragmentOutOfRange {
         path: RepoPathText,
@@ -174,15 +175,6 @@ pub(super) fn fact_digests(path: &str, fact: &Fact) -> Result<(Digest, Digest), 
 }
 
 fn validate_fact(path: &str, fact: &Fact) -> Result<(), Error> {
-    if matches!(
-        fact.key_input.scope.normalized_target_intent.commit_oid,
-        Some(None)
-    ) {
-        return fail(
-            &format!("{path}.key_input.scope.normalized_target_intent.commit_oid"),
-            ErrorKind::InvalidValue,
-        );
-    }
     let resolution_kind = match &fact.evidence.resolution {
         StructuralResolution::Missing(_) => EligibleFindingKind::ExplicitTargetMissing,
         StructuralResolution::TypeMismatch { .. } => {
