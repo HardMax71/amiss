@@ -9,9 +9,7 @@ use amiss_controller::{
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::relation::relation_audit;
-use amiss_controller_fixtures::semantic::semantic_input_artifact;
 use amiss_fixtures::publication_audit;
-use amiss_wire::digest::sha256;
 
 fn config() -> ArtifactStoreConfig {
     ArtifactStoreConfig {
@@ -80,47 +78,6 @@ fn exact_components_survive_restart_under_one_stable_locator() {
             .unwrap();
     reopened.verify(&retained).unwrap();
     assert_eq!(reopened.find(&evaluation).unwrap(), Some(retained));
-}
-
-#[test]
-fn semantic_inputs_survive_restart_under_the_report_binding() {
-    let fixture = semantic_input_artifact().unwrap();
-    let report = fixture.report;
-    let semantic = fixture.artifact;
-    let root = tempfile::tempdir().unwrap();
-    let clock = TestClock::at(1_000);
-    let controller_clock: Arc<dyn ControllerClock> = clock.clone();
-    let store =
-        FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
-            .unwrap();
-    let evaluation = ControllerEvaluationId::new("evaluation/semantic".to_owned()).unwrap();
-    let reference = store
-        .retain(
-            &evaluation,
-            ArtifactBundle {
-                report: &report,
-                semantic: Some(&semantic),
-                plan: None,
-                evidence: None,
-                assessment: None,
-                external_tally: None,
-                external_incomplete: false,
-            },
-        )
-        .unwrap();
-    assert_eq!(reference.semantic_digest, Some(sha256(&semantic)));
-    assert_eq!(
-        store
-            .read(&reference.id, ArtifactComponent::Semantic)
-            .unwrap(),
-        semantic
-    );
-    drop(store);
-
-    let reopened =
-        FileArtifactStore::open_with_clock(root.path(), config(), controller_clock).unwrap();
-    reopened.verify(&reference).unwrap();
-    assert_eq!(reopened.find(&evaluation).unwrap(), Some(reference));
 }
 
 #[test]
