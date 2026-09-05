@@ -1,33 +1,35 @@
 use amiss_wire::controls::ResourceName;
-use amiss_wire::digest::{Digest, hj, hj_with_length};
-use amiss_wire::json::{Value, canonical_length};
+use amiss_wire::digest::hj_serde;
 use amiss_wire::model::RepoPath;
+use amiss_wire::report::model;
 use amiss_wire::report::{
-    AnalysisErrorCode, COMPATIBILITY, Disposition, ErrorDetail, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA,
-    engine_block, error_row_value,
+    AnalysisErrorCode, Disposition, ErrorDetail, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, engine_block,
+    error_row,
 };
 
 use crate::correlate::Comparison;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::evaluate::{DocumentInput, Finding};
 
-use super::analysis::{comparison_value, document_input, feedback_value, finding_value};
-use super::documents::{PairedDocument, document_result_value, paired_documents};
-use super::identity::{controls_value, evaluation_value};
+use super::analysis::{self, document_input};
+use super::documents::{PairedDocument, document_result, paired_documents};
+use super::identity::{controls, evaluation};
 use super::summary::summary_counts;
-use super::{Built, ENVELOPE_SCHEMA, Setup, digest_value, integer, object, string};
+use super::{Built, Setup};
 
 /// Constructs the complete report for a local commit-pair run with no
 /// external controls: canonical payload, envelope, wire bytes, digest, and
 /// the process result.
-#[must_use]
+///
+/// # Errors
+/// Returns an internal error if the report cannot be serialized or hashed.
 pub fn construct(
     setup: &Setup,
     base: &SnapshotDiscovery,
     candidate: &SnapshotDiscovery,
     comparisons: Vec<Comparison>,
     claims: &[crate::claim::ClaimOutcome],
-) -> Built {
+) -> Result<Built, crate::Error> {
     construct_with_site(
         setup,
         base,
@@ -47,7 +49,7 @@ pub(crate) fn construct_with_site(
     site: &crate::semantic::SiteEvaluation,
     claims: &[crate::claim::ClaimOutcome],
     projections: &[crate::projection::Outcome],
-) -> Built {
+) -> Result<Built, crate::Error> {
     let paired = paired_documents(base, candidate);
     let governed = governed_seeds(candidate, claims, projections);
     let (findings, exception_errors) = match evaluate_paired(
@@ -71,106 +73,18 @@ pub(crate) fn construct_with_site(
         return construct_incomplete(setup, &details);
     }
 
-    let document_rows: Vec<(RepoPath, Value)> = paired
-        .iter()
-        .map(|pair| (pair.path.clone(), document_result_value(pair)))
-        .collect();
+    let document_rows: Vec<_> = paired.iter().map(document_result).collect();
     let error_details = logical_error_set(&governed, &exception_errors);
     if error_details.len() > error_ceiling(setup) {
         return construct_incomplete(setup, &error_details);
     }
-    let governed_errors: Vec<Value> = error_details.iter().map(error_row_value).collect();
-    let (complete, status, exit_code) = run_result(&findings, &governed_errors);
-    let feedback = feedback_value(complete, &findings, &comparisons);
+    let errors: Vec<_> = error_details.iter().map(error_row).collect();
+    let (complete, status, exit_code) = run_result(&findings, &errors);
+    let feedback = analysis::feedback(complete, &findings, &comparisons)?;
     let finding_count = u64::try_from(findings.len()).unwrap_or(u64::MAX);
-    let counts = summary_counts(&paired, &comparisons, &findings, 0);
-    let (governed_claims, unattested_claims) = claim_counters(claims);
-    let (candidate_start, comparison_rows) = report_comparisons(comparisons);
-    let (base_only_rows, candidate_rows) = comparison_rows.split_at(candidate_start);
-    let comparison_runs = [base_only_rows, candidate_rows];
-    let finding_rows: Vec<Value> = findings
-        .iter()
-        .map(|finding| finding_value(finding, comparison_runs, &document_rows))
-        .collect();
-
-    let payload = object(vec![
-        ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string(COMPATIBILITY)),
-        ("engine", engine_block(&setup.engine)),
-        ("evaluation", evaluation_value(setup)),
-        ("controls", controls_value(setup)),
-        (
-            "result",
-            result_value(
-                complete,
-                status,
-                exit_code,
-                finding_count,
-                u64::try_from(governed_errors.len()).unwrap_or(u64::MAX),
-            ),
-        ),
-        ("feedback", feedback),
-        (
-            "summary",
-            object(vec![
-                ("counts_complete", Value::Bool(true)),
-                ("documents", counts.documents),
-                ("references", counts.references),
-                ("findings", counts.findings),
-                governed_claims,
-                unattested_claims,
-            ]),
-        ),
-        (
-            "documents",
-            Value::array(document_rows.into_iter().map(|(_path, row)| row).collect()),
-        ),
-        (
-            "observations",
-            Value::array(
-                comparison_rows
-                    .into_iter()
-                    .map(|(_primary, row)| row)
-                    .collect(),
-            ),
-        ),
-        ("findings", Value::array(finding_rows)),
-        ("errors", Value::array(governed_errors)),
-    ]);
-    let (payload_digest, payload_length) = hj_with_length(PAYLOAD_SCHEMA, &payload);
-    let envelope = object(vec![
-        ("schema", string(ENVELOPE_SCHEMA)),
-        ("payload", payload),
-        ("payload_digest", digest_value(payload_digest)),
-    ]);
-    let built = Built {
-        envelope,
-        payload_digest,
-        status,
-        exit_code,
-    };
-    output_gate(setup, error_details, payload_length, built)
-}
-
-fn result_value(
-    complete: bool,
-    status: &str,
-    exit_code: i64,
-    finding_count: u64,
-    error_count: u64,
-) -> Value {
-    object(vec![
-        ("complete", Value::Bool(complete)),
-        ("status", string(status)),
-        ("exit_code", Value::Integer(exit_code)),
-        ("finding_count", integer(finding_count)),
-        ("error_count", integer(error_count)),
-    ])
-}
-
-fn report_comparisons(comparisons: Vec<Comparison>) -> (usize, Vec<(Option<Digest>, Value)>) {
+    let summary = summary_counts(&paired, &comparisons, &findings, claims, true, 0);
     let candidate_start = comparisons.partition_point(|comparison| comparison.candidate.is_none());
-    let rows = comparisons
+    let comparison_rows = comparisons
         .into_iter()
         .map(|comparison| {
             let primary = comparison
@@ -178,10 +92,63 @@ fn report_comparisons(comparisons: Vec<Comparison>) -> (usize, Vec<(Option<Diges
                 .as_ref()
                 .or(comparison.base.as_ref())
                 .map(|observation| observation.id);
-            (primary, comparison_value(&comparison))
+            analysis::comparison(comparison).map(|row| (primary, row))
         })
-        .collect();
-    (candidate_start, rows)
+        .collect::<Result<Vec<_>, _>>()?;
+    let (base_only_rows, candidate_rows) = comparison_rows.split_at(candidate_start);
+    let finding_rows = findings
+        .into_iter()
+        .map(|mut finding| {
+            if finding.candidate_fact.is_none() {
+                finding.candidate_fact = analysis::nonreference_fact(
+                    &finding,
+                    [base_only_rows, candidate_rows],
+                    &document_rows,
+                )?;
+            }
+            Ok(analysis::finding(finding))
+        })
+        .collect::<Result<_, crate::Error>>()?;
+
+    let payload = model::ReportPayload {
+        schema: model::ReportPayloadSchema::Current,
+        compatibility: model::ReportCompatibility::One,
+        engine: engine_block(&setup.engine).map_err(|_defect| crate::Error::Internal)?,
+        evaluation: model::Evaluation::Resolved(Box::new(evaluation(setup))),
+        controls: controls(setup)?,
+        result: model::ReportResult {
+            complete,
+            status,
+            exit_code,
+            finding_count,
+            error_count: u64::try_from(errors.len()).unwrap_or(u64::MAX),
+        },
+        feedback,
+        summary,
+        documents: document_rows,
+        observations: comparison_rows.into_iter().map(|(_, row)| row).collect(),
+        findings: finding_rows,
+        errors,
+    };
+    let mut payload_length = 0;
+    let payload_digest = hj_serde(PAYLOAD_SCHEMA, |writer| {
+        let mut counter = countio::Counter::new(writer);
+        serde_json_canonicalizer::to_writer(&payload, &mut counter)?;
+        payload_length = u64::try_from(counter.writer_bytes()).unwrap_or(u64::MAX);
+        Ok(())
+    })
+    .map_err(|_defect| crate::Error::Internal)?;
+    let built = Built {
+        envelope: model::ReportEnvelope {
+            schema: model::ReportEnvelopeSchema::Current,
+            payload,
+            payload_digest,
+        },
+        payload_digest,
+        status,
+        exit_code,
+    };
+    output_gate(setup, error_details, payload_length, built)
 }
 
 /// The deduplicated logical error set in canonical key order.
@@ -203,22 +170,22 @@ fn output_gate(
     details: Vec<ErrorDetail>,
     payload_length: u64,
     built: Built,
-) -> Built {
-    let envelope_shell = object(vec![
-        ("schema", string(ENVELOPE_SCHEMA)),
-        ("payload", Value::Null),
-        ("payload_digest", digest_value(built.payload_digest)),
-    ]);
-    let wire_length = canonical_length(&envelope_shell)
-        .saturating_sub(canonical_length(&Value::Null))
+) -> Result<Built, crate::Error> {
+    let envelope_shell = model::ReportEnvelope {
+        schema: model::ReportEnvelopeSchema::Current,
+        payload: (),
+        payload_digest: built.payload_digest,
+    };
+    let mut counter = countio::Counter::new(std::io::sink());
+    serde_json::to_writer(&mut counter, &envelope_shell)
+        .map_err(|_defect| crate::Error::Internal)?;
+    let wire_length = u64::try_from(counter.writer_bytes())
+        .unwrap_or(u64::MAX)
+        .saturating_sub(4)
         .saturating_add(payload_length)
         .saturating_add(1);
-    debug_assert_eq!(
-        wire_length,
-        canonical_length(&built.envelope).saturating_add(1)
-    );
     if wire_length <= MACHINE_JSON_BYTES {
-        return built;
+        return Ok(built);
     }
     let mut details = details;
     details.push(ErrorDetail {
@@ -324,17 +291,20 @@ fn retained_details(details: &[ErrorDetail], ceiling: usize) -> Vec<ErrorDetail>
 /// A complete run passes or fails by its effective dispositions; a run with
 /// reserved governed declarations is boundary-incomplete with full details
 /// and exit class two.
-fn run_result(findings: &[Finding], governed_errors: &[Value]) -> (bool, &'static str, i64) {
+fn run_result(
+    findings: &[Finding],
+    governed_errors: &[model::AnalysisError<RepoPath>],
+) -> (bool, model::ReportStatus, u8) {
     if !governed_errors.is_empty() {
-        return (false, "incomplete", 2);
+        return (false, model::ReportStatus::Incomplete, 2);
     }
     let failing = findings
         .iter()
         .any(|finding| finding.effective_disposition == Disposition::Fail);
     if failing {
-        (true, "fail", 1)
+        (true, model::ReportStatus::Fail, 1)
     } else {
-        (true, "pass", 0)
+        (true, model::ReportStatus::Pass, 0)
     }
 }
 
@@ -397,81 +367,49 @@ fn governed_seeds(
     seeds
 }
 
-/// The two summary claim counters: evaluated claims, and the defective
-/// subset that did not attest.
-fn claim_counters(
-    claims: &[crate::claim::ClaimOutcome],
-) -> ((&'static str, Value), (&'static str, Value)) {
-    let unattested = claims
-        .iter()
-        .filter(|outcome| outcome.verdict != crate::claim::ClaimVerdict::Attested)
-        .count();
-    (
-        (
-            "governed_claims",
-            integer(u64::try_from(claims.len()).unwrap_or(u64::MAX)),
-        ),
-        (
-            "unattested_claims",
-            integer(u64::try_from(unattested).unwrap_or(u64::MAX)),
-        ),
-    )
-}
-
 /// The fatal-incomplete report for a run whose evaluation identity resolved
 /// but whose analysis raised typed errors: resolved evaluation and controls,
 /// cleared detail arrays, zeroed inexact summary, every error row retained in
 /// canonical order, and exit class two.
-#[must_use]
-pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Built {
+///
+/// # Errors
+/// Returns an internal error if the report cannot be serialized or hashed.
+pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Result<Built, crate::Error> {
     let retained = retained_details(details, error_ceiling(setup));
-    let error_rows: Vec<Value> = retained.iter().map(error_row_value).collect();
-    let error_count = u64::try_from(error_rows.len()).unwrap_or(u64::MAX);
-    let counts = summary_counts(&[], &[], &[], error_count);
-
-    let payload = object(vec![
-        ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string(COMPATIBILITY)),
-        ("engine", engine_block(&setup.engine)),
-        ("evaluation", evaluation_value(setup)),
-        ("controls", controls_value(setup)),
-        (
-            "result",
-            object(vec![
-                ("complete", Value::Bool(false)),
-                ("status", string("incomplete")),
-                ("exit_code", Value::Integer(2)),
-                ("finding_count", integer(0)),
-                ("error_count", integer(error_count)),
-            ]),
-        ),
-        ("feedback", feedback_value(false, &[], &[])),
-        (
-            "summary",
-            object(vec![
-                ("counts_complete", Value::Bool(false)),
-                ("documents", counts.documents),
-                ("references", counts.references),
-                ("findings", counts.findings),
-                ("governed_claims", integer(0)),
-                ("unattested_claims", integer(0)),
-            ]),
-        ),
-        ("documents", Value::array(Vec::new())),
-        ("observations", Value::array(Vec::new())),
-        ("findings", Value::array(Vec::new())),
-        ("errors", Value::array(error_rows)),
-    ]);
-    let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
-    let envelope = object(vec![
-        ("schema", string(ENVELOPE_SCHEMA)),
-        ("payload", payload),
-        ("payload_digest", digest_value(payload_digest)),
-    ]);
-    Built {
-        envelope,
+    let errors: Vec<_> = retained.iter().map(error_row).collect();
+    let error_count = u64::try_from(errors.len()).unwrap_or(u64::MAX);
+    let payload = model::ReportPayload {
+        schema: model::ReportPayloadSchema::Current,
+        compatibility: model::ReportCompatibility::One,
+        engine: engine_block(&setup.engine).map_err(|_defect| crate::Error::Internal)?,
+        evaluation: model::Evaluation::Resolved(Box::new(evaluation(setup))),
+        controls: controls(setup)?,
+        result: model::ReportResult {
+            complete: false,
+            status: model::ReportStatus::Incomplete,
+            exit_code: 2,
+            finding_count: 0,
+            error_count,
+        },
+        feedback: analysis::feedback(false, &[], &[])?,
+        summary: summary_counts(&[], &[], &[], &[], false, error_count),
+        documents: Vec::new(),
+        observations: Vec::new(),
+        findings: Vec::new(),
+        errors,
+    };
+    let payload_digest = hj_serde(PAYLOAD_SCHEMA, |writer| {
+        serde_json::to_writer(writer, &payload)
+    })
+    .map_err(|_defect| crate::Error::Internal)?;
+    Ok(Built {
+        envelope: model::ReportEnvelope {
+            schema: model::ReportEnvelopeSchema::Current,
+            payload,
+            payload_digest,
+        },
         payload_digest,
-        status: "incomplete",
+        status: model::ReportStatus::Incomplete,
         exit_code: 2,
-    }
+    })
 }

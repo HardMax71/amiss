@@ -75,31 +75,34 @@ fn snapshot(
         let Some(adapter) = record.adapter else {
             continue;
         };
-        let adapter_contract_digest = adapter_contract(&engine(), adapter).1;
+        let adapter_contract_digest = adapter_contract(&engine(), adapter).unwrap().1;
         for occurrence in &scanned.occurrences {
-            let is_image = occurrence.occurrence.construct.is_image();
             let (intent, resolution) = resolver
                 .resolve(
                     None,
                     adapter,
                     &record.path,
-                    is_image,
+                    occurrence.occurrence.construct.is_image(),
                     &occurrence.occurrence.semantic_destination,
                 )
                 .unwrap();
-            let id = hj(
-                OBSERVATION_ID_DOMAIN,
-                &observation_input(&ObservationIdentity {
-                    adapter,
-                    contract_digest: adapter_contract_digest,
-                    document: &record.path,
-                    construct: occurrence.occurrence.construct,
-                    node_path: &occurrence.occurrence.node_path,
-                    projection_digest: occurrence.projection_digest,
-                    intent: &intent,
-                    raw_destination_digest: occurrence.raw_destination_digest,
-                }),
-            );
+            let input = observation_input(ObservationIdentity {
+                adapter,
+                contract_digest: adapter_contract_digest,
+                document: &record.path,
+                construct: occurrence.occurrence.construct,
+                node_path: &occurrence.occurrence.node_path,
+                projection_digest: occurrence.projection_digest,
+                intent: &intent,
+                raw_destination_digest: occurrence.raw_destination_digest,
+
+                repository_path: intent.repository_path.as_ref(),
+            })
+            .unwrap();
+            let id = amiss_wire::digest::hj_serde(OBSERVATION_ID_DOMAIN, |writer| {
+                serde_json::to_writer(writer, &input)
+            })
+            .unwrap();
             observations.push(Observation {
                 id,
                 adapter_contract_digest,
@@ -182,6 +185,7 @@ fn report_retaining(
         comparisons,
         &[],
     )
+    .unwrap()
 }
 
 #[expect(
@@ -266,9 +270,14 @@ fn a_complete_report_validates_against_the_schema() {
 
     let built = report_between(root, &base_commit, &candidate_commit);
 
-    assert_eq!(built.status, "pass", "observe profile never fails");
+    assert_eq!(
+        built.status,
+        amiss_wire::report::model::ReportStatus::Pass,
+        "observe profile never fails"
+    );
     assert_eq!(built.exit_code, 0);
-    let envelope_json: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let envelope_json: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
 
     let payload = envelope_json.get("payload").unwrap();
     assert_eq!(
@@ -363,7 +372,8 @@ fn invalid_references_split_new_existing_and_ambiguous_feedback() {
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
 
     let built = report_between(root, &base, &candidate);
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let feedback = &wire["payload"]["feedback"];
     assert_eq!(feedback["existing_count"], 1);
     let items = feedback["items"].as_array().unwrap();
@@ -400,7 +410,7 @@ fn mixed_findings(root: &Path) -> serde_json::Value {
     git(root, &["commit", "-qm", "candidate"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let built = report_between(root, &base, &candidate);
-    crate::support::generated_report(&built.wire()).unwrap()
+    crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap()
 }
 
 /// A document-scope finding embeds the row of the document it stands on, not
@@ -450,8 +460,10 @@ fn an_observation_fact_carries_its_own_comparison_row() {
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "candidate"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-    let wire: serde_json::Value =
-        crate::support::generated_report(&report_between(root, &base, &candidate).wire()).unwrap();
+    let wire: serde_json::Value = crate::support::generated_report(
+        &amiss_scan::report::wire(&report_between(root, &base, &candidate)).unwrap(),
+    )
+    .unwrap();
     let findings = wire["payload"]["findings"].as_array().unwrap();
 
     for kind in ["explicit-reference-removed", "subject-changed"] {
@@ -558,8 +570,9 @@ fn an_observation_row_hashes_the_identity_input_it_renders() {
     let mut setup = bare_setup(64);
     setup.base = identity.clone();
     setup.candidate = CandidateBlock::Commit(identity);
-    let built = construct(&setup, &discovery, &discovery, comparisons, &[]);
-    let envelope: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let built = construct(&setup, &discovery, &discovery, comparisons, &[]).unwrap();
+    let envelope: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let row = &envelope["payload"]["observations"][0]["candidate"];
     let input_bytes = serde_json::to_vec(&row["observation_id_input"]).unwrap();
     let input = parse(&input_bytes).unwrap();
@@ -598,8 +611,9 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
 fn document_rows_merge_both_sides_in_strict_raw_path_order() {
     let base = excluded_discovery(&["a-.md", "a/base.md", "a0.md"]);
     let candidate = excluded_discovery(&["a/candidate.md", "a0.md", "a1.md"]);
-    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]);
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]).unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let rows = wire["payload"]["documents"].as_array().unwrap();
     let actual: Vec<(String, String)> = rows
         .iter()
@@ -631,8 +645,9 @@ fn a_document_that_moved_is_not_unchanged() {
     let moved = candidate.documents.first_mut().unwrap();
     moved.oid = Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap();
 
-    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]);
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]).unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let rows = wire["payload"]["documents"].as_array().unwrap();
     let changes: Vec<(&str, &str)> = rows
         .iter()
@@ -663,8 +678,9 @@ fn error_overflow_retains_the_lowest_keys_and_the_sentinel() {
     let details: Vec<ErrorDetail> = (0..5)
         .map(|index| missing_detail(&format!("p{index}")))
         .collect();
-    let built = construct_incomplete(&bare_setup(3), &details);
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let built = construct_incomplete(&bare_setup(3), &details).unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let errors = wire["payload"]["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 3, "E - 1 ordinary errors plus the sentinel");
     assert_eq!(errors[0]["path"], "p0");
@@ -703,8 +719,9 @@ fn exactly_the_ceiling_emits_the_set_without_the_sentinel() {
     let details: Vec<ErrorDetail> = (0..3)
         .map(|index| missing_detail(&format!("p{index}")))
         .collect();
-    let built = construct_incomplete(&bare_setup(3), &details);
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let built = construct_incomplete(&bare_setup(3), &details).unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let errors = wire["payload"]["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 3, "at most E keys emit exactly");
     assert!(
@@ -716,8 +733,9 @@ fn exactly_the_ceiling_emits_the_set_without_the_sentinel() {
 #[test]
 fn a_ceiling_of_one_emits_only_the_sentinel() {
     let details = [missing_detail("p0"), missing_detail("p1")];
-    let built = construct_incomplete(&bare_setup(1), &details);
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let built = construct_incomplete(&bare_setup(1), &details).unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let errors = wire["payload"]["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 1, "E = 1 leaves room only for the sentinel");
     assert_eq!(errors[0]["code"], "TOO_MANY_ERRORS");
@@ -745,7 +763,8 @@ fn the_error_ceiling_is_crossed_above_it_and_not_at_it() {
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
 
     let at_ceiling = report_retaining(root, &base, &candidate, 3);
-    let wire: serde_json::Value = crate::support::generated_report(&at_ceiling.wire()).unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&at_ceiling).unwrap()).unwrap();
     let payload = &wire["payload"];
     assert_eq!(
         payload["errors"].as_array().unwrap().len(),
@@ -758,7 +777,9 @@ fn the_error_ceiling_is_crossed_above_it_and_not_at_it() {
     );
 
     let over_ceiling = report_retaining(root, &base, &candidate, 1);
-    let wire: serde_json::Value = crate::support::generated_report(&over_ceiling.wire()).unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&over_ceiling).unwrap())
+            .unwrap();
     let payload = &wire["payload"];
     assert!(
         payload["documents"].as_array().unwrap().is_empty(),
@@ -850,8 +871,10 @@ fn the_findings_counter_fires_before_the_wire_cap() {
         errors_retained: 64,
     };
     let built =
-        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate);
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate)
+            .unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let findings = wire["payload"]["findings"].as_array().unwrap();
 
     let kinds: Vec<&str> = findings
@@ -940,11 +963,14 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let built = construct(&setup, &base_discovery, &candidate_discovery, inflated, &[]);
+    let built = construct(&setup, &base_discovery, &candidate_discovery, inflated, &[]).unwrap();
 
-    assert_eq!(built.status, "incomplete");
+    assert_eq!(
+        built.status,
+        amiss_wire::report::model::ReportStatus::Incomplete
+    );
     assert_eq!(built.exit_code, 2);
-    let wire = built.wire();
+    let wire = amiss_scan::report::wire(&built).unwrap();
     assert!(
         u64::try_from(wire.len()).unwrap_or(u64::MAX) < MACHINE_JSON_BYTES,
         "the projection itself fits the reservation"
@@ -1014,8 +1040,10 @@ fn a_finding_location_carries_the_real_display_positions() {
         &candidate_discovery,
         comparisons,
         &[],
-    );
-    let envelope: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    )
+    .unwrap();
+    let envelope: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let span = envelope["payload"]["findings"]
         .as_array()
         .unwrap()
@@ -1077,8 +1105,10 @@ fn the_evaluation_echoes_a_self_hosted_forge_host() {
     let base = Oid::new(ObjectFormat::Sha1, base_commit).unwrap();
     let candidate = Oid::new(ObjectFormat::Sha1, candidate_commit).unwrap();
     let built =
-        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate);
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate)
+            .unwrap();
+    let wire: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let repository = &wire["payload"]["evaluation"]["repository"];
     assert_eq!(repository["host"], "ghes.example");
     assert_eq!(repository["owner"], "acme");

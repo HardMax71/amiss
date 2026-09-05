@@ -49,9 +49,9 @@ fn adoption_facts_match_evaluation_for_each_shape_and_multiplicity() -> Result<(
                 let fact = finding.candidate_fact.as_ref().expect("reference fact");
                 assert_eq!(
                     reproduced.get(&finding.finding_key),
-                    Some(&(u64::try_from(multiplicity).unwrap(), fact.digest()))
+                    Some(&(u64::try_from(multiplicity).unwrap(), fact.digest))
                 );
-                digests.insert(fact.digest());
+                digests.insert(fact.digest);
             }
             assert_eq!(digests.len(), 3, "multiplicity changes the bound fact");
         }

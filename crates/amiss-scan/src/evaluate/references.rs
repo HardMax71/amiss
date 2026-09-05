@@ -139,20 +139,19 @@ pub(super) fn structural_findings(
 
     for (digest, group) in groups {
         let kind = group.key.finding_kind;
-        let base_fact = group.base.first().map(|observation| {
-            reference_fact(
-                &group.key,
-                observation,
-                u64::try_from(group.base.len()).unwrap_or(u64::MAX),
-            )
+        let [base_fact, candidate_fact] = [&group.base, &group.candidate].map(|members| {
+            members
+                .first()
+                .map(|observation| {
+                    reference_fact(
+                        &group.key,
+                        observation,
+                        u64::try_from(members.len()).unwrap_or(u64::MAX),
+                    )
+                })
+                .transpose()
         });
-        let candidate_fact = group.candidate.first().map(|observation| {
-            reference_fact(
-                &group.key,
-                observation,
-                u64::try_from(group.candidate.len()).unwrap_or(u64::MAX),
-            )
-        });
+        let (base_fact, candidate_fact) = (base_fact?, candidate_fact?);
         let attribution = match (&base_fact, &candidate_fact) {
             (None, Some(_)) => Attribution::Introduced,
             (Some(_), None) => Attribution::Resolved,

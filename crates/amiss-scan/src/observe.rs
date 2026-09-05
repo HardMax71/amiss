@@ -1,8 +1,11 @@
 use amiss_wire::controls::SourceConstruct;
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::Value;
-use amiss_wire::model::{Adapter, RepoPath};
+use amiss_wire::model::Adapter;
 use amiss_wire::report::IntentKind;
+use amiss_wire::report::model::{
+    ObservationIdInput, ObservationIdInputSchema, StructuralAddress, StructuralAddressSchema,
+    TargetIntent,
+};
 
 use crate::resolve::Intent;
 
@@ -12,23 +15,6 @@ pub const STRUCTURAL_ADDRESS_SCHEMA: &str = "amiss/scanner-structural-address";
 pub const LINK_QUERY_DOMAIN: &str = "amiss/scanner-link-query";
 pub const LINK_FRAGMENT_DOMAIN: &str = "amiss/scanner-link-fragment";
 
-fn external_scheme(intent: &Intent) -> Option<&str> {
-    match intent.kind {
-        IntentKind::ExternalUrl => intent.external_scheme.as_deref(),
-        IntentKind::RepositoryPath
-        | IntentKind::SameRepositoryGithub
-        | IntentKind::SameRepositoryGitlab
-        | IntentKind::SameRepositoryGitea
-        | IntentKind::SameRepositoryBitbucketCloud
-        | IntentKind::SameRepositoryBitbucketDataCenter
-        | IntentKind::SiteRoute
-        | IntentKind::Label
-        | IntentKind::Unsupported => None,
-    }
-}
-
-/// The query component digest, where a present empty component hashes the
-/// empty byte string and an absent one is null.
 #[must_use]
 pub fn query_digest(intent: &Intent) -> Option<Digest> {
     intent
@@ -45,11 +31,11 @@ pub fn fragment_digest(intent: &Intent) -> Option<Digest> {
         .map(|text| hb(LINK_FRAGMENT_DOMAIN, text.as_bytes()))
 }
 
-/// The borrowed fields of one observation-identity preimage.
-pub struct ObservationIdentity<'a> {
+pub struct ObservationIdentity<'a, P> {
     pub adapter: Adapter,
     pub contract_digest: Digest,
-    pub document: &'a RepoPath,
+    pub document: P,
+    pub repository_path: Option<P>,
     pub construct: SourceConstruct,
     pub node_path: &'a [usize],
     pub projection_digest: Digest,
@@ -57,128 +43,59 @@ pub struct ObservationIdentity<'a> {
     pub raw_destination_digest: Digest,
 }
 
-/// The wire target intent: one flat shape whose null pattern is fixed by the
-/// kind, embedding the raw-destination digest and both component digests.
 #[must_use]
-pub fn intent_value(intent: &Intent, raw_destination_digest: Digest) -> Value {
-    Value::object(
-        intent
-            .commit_oid
-            .iter()
-            .map(|oid| {
-                (
-                    "commit_oid".to_owned(),
-                    Value::string(oid.as_str().to_owned()),
-                )
-            })
-            .chain([
-                (
-                    "kind".to_owned(),
-                    Value::string(intent.kind.as_ref().to_owned()),
-                ),
-                (
-                    "raw_destination_digest".to_owned(),
-                    Value::string(raw_destination_digest.to_string()),
-                ),
-                (
-                    "repository_path".to_owned(),
-                    intent
-                        .repository_path
-                        .as_ref()
-                        .map_or(Value::Null, RepoPath::to_value),
-                ),
-                (
-                    "target_kind".to_owned(),
-                    intent.target_kind.map_or(Value::Null, |kind| {
-                        Value::string(Into::<&'static str>::into(kind).to_owned())
-                    }),
-                ),
-                (
-                    "query_digest".to_owned(),
-                    query_digest(intent)
-                        .map_or(Value::Null, |digest| Value::string(digest.to_string())),
-                ),
-                (
-                    "fragment_digest".to_owned(),
-                    fragment_digest(intent)
-                        .map_or(Value::Null, |digest| Value::string(digest.to_string())),
-                ),
-                (
-                    "external_scheme".to_owned(),
-                    external_scheme(intent)
-                        .map_or(Value::Null, |scheme| Value::string(scheme.to_owned())),
-                ),
-            ])
-            .collect(),
-    )
+pub fn target_intent<P>(
+    intent: &Intent,
+    raw_destination_digest: Digest,
+    repository_path: Option<P>,
+) -> TargetIntent<P> {
+    TargetIntent {
+        commit_oid: intent.commit_oid.clone(),
+        external_scheme: intent
+            .external_scheme
+            .clone()
+            .filter(|_scheme| intent.kind == IntentKind::ExternalUrl),
+        fragment_digest: fragment_digest(intent),
+        kind: intent.kind,
+        query_digest: query_digest(intent),
+        raw_destination_digest,
+        repository_path,
+        target_kind: intent.target_kind,
+    }
 }
 
-/// The structural address: the child-index path to the syntax node itself,
-/// with the two reserved indices fixed at zero by the structural-address
-/// contract.
-#[must_use]
-pub fn address_value(adapter: Adapter, node_path: &[usize]) -> Value {
-    Value::object(vec![
-        (
-            "schema".to_owned(),
-            Value::string(STRUCTURAL_ADDRESS_SCHEMA.to_owned()),
+/// # Errors
+///
+/// Rejects adapters without a structural observation address.
+pub fn observation_input<P>(
+    input: ObservationIdentity<'_, P>,
+) -> Result<ObservationIdInput<P>, crate::Error> {
+    Ok(ObservationIdInput {
+        adapter_contract_digest: input.contract_digest,
+        adapter_id: input.adapter,
+        document: input.document,
+        extracted_intent: target_intent(
+            input.intent,
+            input.raw_destination_digest,
+            input.repository_path,
         ),
-        (
-            "address_kind".to_owned(),
-            Value::string(
-                adapter
-                    .metadata()
-                    .structural_address
-                    .map_or("none", Into::into)
-                    .to_owned(),
-            ),
-        ),
-        (
-            "node_path".to_owned(),
-            Value::array(
-                node_path
-                    .iter()
-                    .map(|index| Value::Integer(i64::try_from(*index).unwrap_or(i64::MAX)))
-                    .collect(),
-            ),
-        ),
-        ("construct_index".to_owned(), Value::Integer(0)),
-        ("duplicate_index".to_owned(), Value::Integer(0)),
-    ])
-}
-
-/// The complete strict observation-identity input retained by the report.
-#[must_use]
-pub fn observation_input(input: &ObservationIdentity<'_>) -> Value {
-    Value::object(vec![
-        (
-            "schema".to_owned(),
-            Value::string(OBSERVATION_ID_INPUT_SCHEMA.to_owned()),
-        ),
-        (
-            "adapter_id".to_owned(),
-            Value::string(input.adapter.as_ref().to_owned()),
-        ),
-        (
-            "adapter_contract_digest".to_owned(),
-            Value::string(input.contract_digest.to_string()),
-        ),
-        ("document".to_owned(), input.document.to_value()),
-        (
-            "source_construct".to_owned(),
-            Value::string(Into::<&'static str>::into(input.construct).to_owned()),
-        ),
-        (
-            "structural_address".to_owned(),
-            address_value(input.adapter, input.node_path),
-        ),
-        (
-            "source_projection_digest".to_owned(),
-            Value::string(input.projection_digest.to_string()),
-        ),
-        (
-            "extracted_intent".to_owned(),
-            intent_value(input.intent, input.raw_destination_digest),
-        ),
-    ])
+        schema: ObservationIdInputSchema::Current,
+        source_construct: input.construct,
+        source_projection_digest: input.projection_digest,
+        structural_address: StructuralAddress {
+            address_kind: input
+                .adapter
+                .metadata()
+                .structural_address
+                .ok_or(crate::Error::Internal)?,
+            construct_index: 0,
+            duplicate_index: 0,
+            node_path: input
+                .node_path
+                .iter()
+                .map(|index| i64::try_from(*index).unwrap_or(i64::MAX).unsigned_abs())
+                .collect(),
+            schema: StructuralAddressSchema::Current,
+        },
+    })
 }

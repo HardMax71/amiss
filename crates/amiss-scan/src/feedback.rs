@@ -9,13 +9,7 @@ use crate::correlate::{Comparison, Observation};
 use crate::evaluate::{Attribution, Finding, LocationSide};
 use crate::scan::SpanDisplay;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, strum::AsRefStr)]
-#[strum(serialize_all = "kebab-case")]
-pub(crate) enum Action {
-    Fix,
-    Check,
-    Existing,
-}
+use amiss_wire::report::model::FeedbackAction;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Annotation {
@@ -27,7 +21,7 @@ pub(crate) struct Annotation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Item {
-    pub(crate) action: Action,
+    pub(crate) action: FeedbackAction,
     pub(crate) target: Option<RepoPath>,
     pub(crate) finding_kinds: Vec<FindingKind>,
     pub(crate) location_count: u64,
@@ -62,7 +56,7 @@ struct Group {
 
 enum Decision {
     Item {
-        action: Action,
+        action: FeedbackAction,
         subject: Subject,
         target: Option<RepoPath>,
     },
@@ -73,7 +67,7 @@ enum Decision {
 /// audit unit; this groups only the small surface a reviewer acts on.
 pub(crate) fn project(findings: &[Finding], comparisons: &[Comparison]) -> Feedback {
     let candidates = candidate_index(comparisons);
-    let mut groups: BTreeMap<(Action, Subject), Group> = BTreeMap::new();
+    let mut groups: BTreeMap<(FeedbackAction, Subject), Group> = BTreeMap::new();
 
     for finding in findings {
         if finding.effective_disposition == Disposition::Record {
@@ -97,7 +91,7 @@ pub(crate) fn project(findings: &[Finding], comparisons: &[Comparison]) -> Feedb
                 group.effective_disposition = group
                     .effective_disposition
                     .max(finding.effective_disposition);
-                if action == Action::Fix
+                if action == FeedbackAction::Fix
                     && let Some(candidate) = candidate_annotation(finding)
                     && group
                         .annotation
@@ -113,7 +107,7 @@ pub(crate) fn project(findings: &[Finding], comparisons: &[Comparison]) -> Feedb
 
     let existing = groups
         .keys()
-        .filter(|(action, _subject)| *action == Action::Existing)
+        .filter(|(action, _subject)| *action == FeedbackAction::Existing)
         .count();
     let items = groups
         .into_iter()
@@ -171,7 +165,7 @@ fn classify(finding: &Finding, candidates: &BTreeMap<Digest, Candidate<'_>>) -> 
     };
     if candidate.is_some_and(|item| item.check) {
         return Decision::Item {
-            action: Action::Check,
+            action: FeedbackAction::Check,
             subject,
             target,
         };
@@ -187,17 +181,17 @@ fn attributed(
 ) -> Decision {
     match attribution {
         Attribution::Introduced => Decision::Item {
-            action: Action::Fix,
+            action: FeedbackAction::Fix,
             subject,
             target,
         },
         Attribution::PreExisting => Decision::Item {
-            action: Action::Existing,
+            action: FeedbackAction::Existing,
             subject,
             target,
         },
         Attribution::Unknown => Decision::Item {
-            action: Action::Check,
+            action: FeedbackAction::Check,
             subject,
             target,
         },
@@ -205,7 +199,7 @@ fn attributed(
         Attribution::NotApplicable => match side {
             LocationSide::Candidate | LocationSide::Control | LocationSide::Global => {
                 Decision::Item {
-                    action: Action::Fix,
+                    action: FeedbackAction::Fix,
                     subject,
                     target,
                 }

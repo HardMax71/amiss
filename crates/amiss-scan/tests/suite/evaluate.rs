@@ -112,6 +112,7 @@ fn missing_spec(document: &str, target: &str) -> Spec {
     spec(document, target, path_not_found(target))
 }
 
+#[expect(clippy::unwrap_used, reason = "test fixture identity")]
 fn observation(from: &Spec) -> Observation {
     let scanned = ScannedOccurrence {
         occurrence: Occurrence {
@@ -134,20 +135,24 @@ fn observation(from: &Spec) -> Observation {
         projection_digest: hb("amiss/scanner-source-projection", from.block.as_bytes()),
         raw_destination_digest: hb("amiss/scanner-raw-destination", b"x"),
     };
-    let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).1;
-    let id = hj(
-        amiss_scan::observe::OBSERVATION_ID_DOMAIN,
-        &observation_input(&ObservationIdentity {
-            adapter: Adapter::Markdown,
-            contract_digest: adapter_contract_digest,
-            document: &from.document,
-            construct: scanned.occurrence.construct,
-            node_path: &scanned.occurrence.node_path,
-            projection_digest: scanned.projection_digest,
-            intent: &from.intent,
-            raw_destination_digest: scanned.raw_destination_digest,
-        }),
-    );
+    let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).unwrap().1;
+    let input = observation_input(ObservationIdentity {
+        adapter: Adapter::Markdown,
+        contract_digest: adapter_contract_digest,
+        document: &from.document,
+        construct: scanned.occurrence.construct,
+        node_path: &scanned.occurrence.node_path,
+        projection_digest: scanned.projection_digest,
+        intent: &from.intent,
+        raw_destination_digest: scanned.raw_destination_digest,
+
+        repository_path: from.intent.repository_path.as_ref(),
+    })
+    .unwrap();
+    let id = amiss_wire::digest::hj_serde(amiss_scan::observe::OBSERVATION_ID_DOMAIN, |writer| {
+        serde_json::to_writer(writer, &input)
+    })
+    .unwrap();
     Observation {
         id,
         adapter_contract_digest,

@@ -2,70 +2,34 @@ use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
-use amiss_wire::json::Value;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::FindingKind;
+use amiss_wire::report::model::{ExceptionDiagnostic, WaiverExceptionDiagnosticKind};
 
 use super::control::control_row;
-use super::{Finding, candidate_digest_of, tree_value};
+use super::{Finding, candidate_digest_of};
 
 fn waiver_diagnostic(
     item: &amiss_wire::controls::WaiverItem,
     bundle_digest: Digest,
     current_fact_digest: Option<Digest>,
-) -> Value {
-    Value::object(vec![
-        ("kind".to_owned(), Value::string("waiver".to_owned())),
-        (
-            "waiver_id".to_owned(),
-            Value::string(item.waiver_id.as_str().to_owned()),
-        ),
-        (
-            "waiver_bundle_digest".to_owned(),
-            Value::string(bundle_digest.to_string()),
-        ),
-        (
-            "candidate_tree".to_owned(),
-            tree_value(&item.candidate_tree),
-        ),
-        (
-            "finding_key".to_owned(),
-            Value::string(item.finding_key.to_string()),
-        ),
-        (
-            "authorized_fact_digest".to_owned(),
-            Value::string(item.authorized_fact_digest.to_string()),
-        ),
-        (
-            "current_fact_digest".to_owned(),
-            current_fact_digest.map_or(Value::Null, |digest| Value::string(digest.to_string())),
-        ),
-        (
-            "owner".to_owned(),
-            Value::string(item.owner.as_str().to_owned()),
-        ),
-        (
-            "issuer".to_owned(),
-            Value::string(item.issuer.as_str().to_owned()),
-        ),
-        ("reason".to_owned(), Value::string(item.reason.clone())),
-        (
-            "created_at".to_owned(),
-            Value::string(item.created_at.as_str().to_owned()),
-        ),
-        (
-            "not_before".to_owned(),
-            Value::string(item.not_before.as_str().to_owned()),
-        ),
-        (
-            "expires_at".to_owned(),
-            Value::string(item.expires_at.as_str().to_owned()),
-        ),
-        (
-            "residual_disposition".to_owned(),
-            Value::string("warn".to_owned()),
-        ),
-    ])
+) -> ExceptionDiagnostic {
+    ExceptionDiagnostic::Waiver {
+        kind: WaiverExceptionDiagnosticKind::Waiver,
+        waiver_id: item.waiver_id.clone(),
+        waiver_bundle_digest: bundle_digest,
+        candidate_tree: item.candidate_tree.clone(),
+        finding_key: item.finding_key,
+        authorized_fact_digest: item.authorized_fact_digest,
+        issuer: item.issuer.clone(),
+        not_before: item.not_before.clone(),
+        residual_disposition: item.residual_disposition,
+        current_fact_digest,
+        owner: item.owner.clone(),
+        reason: item.reason.clone(),
+        created_at: item.created_at.clone(),
+        expires_at: item.expires_at.clone(),
+    }
 }
 
 /// The selected-waiver pass: the closed defect rows in construction order,
@@ -125,7 +89,7 @@ pub(super) fn waiver_pass(
                 format!("waiver/{}/{suffix}", item.waiver_id.as_str()),
                 None,
                 (None, Some(context.digest)),
-                waiver_diagnostic(item, context.digest, current),
+                Some(waiver_diagnostic(item, context.digest, current)),
                 profile,
             )?);
         }

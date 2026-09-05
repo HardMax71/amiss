@@ -19,13 +19,16 @@ use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
+use std::io::{BufWriter, Stdout};
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
 use amiss_wire::digest::hb;
 use amiss_wire::model::Oid;
-use amiss_wire::report::model::{ControlsUnavailableReason, SnapshotUnavailableReason};
-use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer};
+use amiss_wire::report::model::{
+    ControlsUnavailableReason, ReportEnvelope, ReportPayload, SnapshotUnavailableReason,
+};
+use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail};
 use amiss_wire::requests::{
     CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
     RequestMode, RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA,
@@ -68,7 +71,7 @@ const fn apply_sandbox() {}
 )]
 fn main() -> ExitCode {
     apply_sandbox();
-    let mut reserve = FatalSerializer::new();
+    let mut reserve = BufWriter::with_capacity(report::FATAL_SCRATCH_BYTES, std::io::stdout());
     let argv: Vec<std::ffi::OsString> = env::args_os().skip(1).collect();
     if argv.as_slice() == [std::ffi::OsString::from(SEALED_ENGINE_ARGUMENT)] {
         return run_sealed(&mut reserve);
@@ -91,13 +94,18 @@ fn main() -> ExitCode {
             match machine_refusal(&codes) {
                 Ok(envelope) => {
                     return projection_exit(
-                        project(&envelope, format, false, false, &mut reserve),
+                        project(&envelope, format, false, false, &mut reserve, |path| {
+                            path.as_str()
+                                .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
+                        }),
                         failure,
                     );
                 }
                 Err(code) => {
                     if format == OutputFormat::CodeQuality {
-                        emit(&mut reserve, &amiss_wire::json::Value::array(Vec::new()));
+                        diagnose_emission(output::write_serialized(
+                            &Vec::<codequality::Issue<'_>>::new(),
+                        ));
                     }
                     eprintln!("amiss: {}", code.as_ref());
                 }
@@ -128,43 +136,32 @@ fn main() -> ExitCode {
     }
 }
 
-fn project(
-    envelope: &amiss_wire::json::Value,
+fn project<P, R, M, E>(
+    envelope: &ReportEnvelope<ReportPayload<P, R, M, E>>,
     format: OutputFormat,
     explain_scope: bool,
     full_feedback: bool,
-    reserve: &mut FatalSerializer,
-) -> Result<(), report::ReportDefect> {
-    if format == OutputFormat::Json {
-        emit(reserve, envelope);
-        return Ok(());
-    }
-    let (payload, _digest, _verdict) = report::validate_envelope(envelope)?;
-    let path: fn(&report::model::RepoPath) -> Result<&str, Cow<'_, str>> = |path| match path {
-        report::model::RepoPath::Text(text) => Ok(text.as_str()),
-        report::model::RepoPath::Bytes(bytes) => Err(Cow::Borrowed(&bytes.bytes_hex)),
-    };
+    reserve: &mut BufWriter<Stdout>,
+    path: impl Fn(&P) -> Result<&str, Cow<'_, str>> + Copy,
+) -> std::io::Result<()>
+where
+    ReportPayload<P, R, M, E>: serde::Serialize,
+{
+    let payload = &envelope.payload;
     match format {
-        OutputFormat::Json => {}
+        OutputFormat::Json => {
+            report::emit_report(envelope, reserve)?;
+        }
         OutputFormat::Sarif => {
-            diagnose_emission(output::write_serialized(&sarif::log(&payload, |value| {
-                path(value).ok()
-            })));
+            output::write_serialized(&sarif::log(payload, |value| path(value).ok()))?;
         }
         OutputFormat::CodeQuality => {
-            diagnose_emission(output::write_serialized(&codequality::issues(
-                &payload,
-                |value| path(value).map_or_else(|hex| hex, Cow::Borrowed),
-            )));
+            output::write_serialized(&codequality::issues(payload, |value| {
+                path(value).map_or_else(|hex| hex, Cow::Borrowed)
+            }))?;
         }
-        OutputFormat::Junit => {
-            let stdout = std::io::stdout();
-            let mut output = std::io::BufWriter::new(stdout.lock());
-            diagnose_emission(junit::write(&payload, &mut output, |value| {
-                path(value).ok()
-            }));
-        }
-        OutputFormat::Human => human::report(&payload, explain_scope, full_feedback, |value| {
+        OutputFormat::Junit => junit::write(payload, reserve, |value| path(value).ok())?,
+        OutputFormat::Human => human::report(payload, explain_scope, full_feedback, |value| {
             value.map_or_else(
                 || "-".to_owned(),
                 |value| match path(value) {
@@ -178,11 +175,15 @@ fn project(
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn projection_exit(result: Result<(), report::ReportDefect>, verdict: ExitCode) -> ExitCode {
+fn projection_exit(result: std::io::Result<()>, verdict: ExitCode) -> ExitCode {
     match result {
         Ok(()) => verdict,
-        Err(defect) => {
-            eprintln!("amiss: {defect}");
+        Err(defect) if defect.kind() == std::io::ErrorKind::BrokenPipe => verdict,
+        Err(_defect) => {
+            eprintln!(
+                "amiss: {}",
+                AnalysisErrorCode::ReportConstructionFailed.as_ref()
+            );
             ExitCode::from(ExitClass::Failure.code())
         }
     }
@@ -191,16 +192,19 @@ fn projection_exit(result: Result<(), report::ReportDefect>, verdict: ExitCode) 
 /// The machine refusal lanes share one envelope; the error is the code the
 /// caller prints on stderr, and the artifact lane still answers its empty
 /// array, the one machine answer that needs no envelope.
-fn machine_refusal(codes: &BTreeSet<Code>) -> Result<amiss_wire::json::Value, AnalysisErrorCode> {
+fn machine_refusal(
+    codes: &BTreeSet<Code>,
+) -> Result<ReportEnvelope<ReportPayload<amiss_wire::model::RepoPath>>, AnalysisErrorCode> {
     let Some(engine) = engine_provenance() else {
         return Err(AnalysisErrorCode::InternalError);
     };
     report::invocation_failure_envelope(&engine, codes)
+        .map_err(|_defect| AnalysisErrorCode::ReportConstructionFailed)?
         .ok_or(AnalysisErrorCode::ReportConstructionFailed)
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
+fn run_sealed(reserve: &mut BufWriter<Stdout>) -> ExitCode {
     use amiss_scan::pipeline::SetupShell;
 
     let failure = ExitCode::from(ExitClass::Failure.code());
@@ -280,15 +284,23 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
             .map(|detail| (ControlsUnavailableReason::InvalidExternalControl, detail)),
         errors_retained: 64,
     };
-    let built = evaluate_snapshots(
+    let Ok(built) = evaluate_snapshots(
         &repo,
         forge.as_ref(),
         &shell,
         &evaluation.base_commit,
         evaluation.candidate_commit.as_ref(),
-    );
-    emit(reserve, &built.envelope);
-    exit_class(built.exit_code)
+    ) else {
+        eprintln!(
+            "amiss: {}",
+            AnalysisErrorCode::ReportConstructionFailed.as_ref()
+        );
+        return failure;
+    };
+    projection_exit(
+        report::emit_report(&built.envelope, reserve).map(|_written| ()),
+        ExitCode::from(built.exit_code),
+    )
 }
 
 fn forge_context(
@@ -320,7 +332,7 @@ fn evaluate_snapshots(
     shell: &amiss_scan::pipeline::SetupShell,
     base: &Oid,
     candidate: Option<&Oid>,
-) -> amiss_scan::report::Built {
+) -> Result<amiss_scan::report::Built, amiss_scan::Error> {
     match candidate {
         Some(candidate) => {
             amiss_scan::pipeline::commit_pair(repo, &shell.engine, forge, shell, base, candidate)
@@ -330,7 +342,7 @@ fn evaluate_snapshots(
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
-fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
+fn run(invocation: &Invocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
     use amiss_scan::pipeline::SetupShell;
 
     let failure = ExitCode::from(ExitClass::Failure.code());
@@ -391,7 +403,14 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         CandidateSelector::Commit(candidate) => Some(candidate),
         CandidateSelector::Index => None,
     };
-    let built = evaluate_snapshots(&repo, forge.as_ref(), &shell, &invocation.base, candidate);
+    let Ok(built) = evaluate_snapshots(&repo, forge.as_ref(), &shell, &invocation.base, candidate)
+    else {
+        eprintln!(
+            "amiss: {}",
+            AnalysisErrorCode::ReportConstructionFailed.as_ref()
+        );
+        return failure;
+    };
     if invocation.verb == Verb::Fix {
         return repair::run(
             &invocation.repo,
@@ -411,8 +430,12 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
             invocation.explain_scope,
             false,
             reserve,
+            |path| {
+                path.as_str()
+                    .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
+            },
         ),
-        exit_class(built.exit_code),
+        ExitCode::from(built.exit_code),
     )
 }
 
@@ -450,7 +473,7 @@ fn fatal(
     invocation: &Invocation,
     engine: &EngineProvenance,
     details: &[ErrorDetail],
-    reserve: &mut FatalSerializer,
+    reserve: &mut BufWriter<Stdout>,
 ) -> ExitCode {
     use amiss_scan::report::{Setup, SnapshotIdentity, construct_incomplete};
 
@@ -480,25 +503,24 @@ fn fatal(
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let built = construct_incomplete(&setup, details);
     projection_exit(
-        project(
-            &built.envelope,
-            invocation.format,
-            invocation.explain_scope,
-            false,
-            reserve,
-        ),
+        construct_incomplete(&setup, details)
+            .map_err(|defect| std::io::Error::other(defect.code().meaning()))
+            .and_then(|built| {
+                project(
+                    &built.envelope,
+                    invocation.format,
+                    invocation.explain_scope,
+                    false,
+                    reserve,
+                    |path| {
+                        path.as_str()
+                            .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
+                    },
+                )
+            }),
         ExitCode::from(ExitClass::Failure.code()),
     )
-}
-
-fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {
-    diagnose_emission(
-        reserve
-            .emit(envelope, &mut std::io::stdout())
-            .map(|_written| ()),
-    );
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
@@ -510,14 +532,6 @@ fn diagnose_emission(result: std::io::Result<()>) {
             "amiss: {}",
             AnalysisErrorCode::ReportConstructionFailed.as_ref()
         );
-    }
-}
-
-fn exit_class(code: i64) -> ExitCode {
-    match code {
-        0 => ExitCode::from(ExitClass::Success.code()),
-        1 => ExitCode::from(ExitClass::BlockingFindings.code()),
-        _ => ExitCode::from(ExitClass::Failure.code()),
     }
 }
 

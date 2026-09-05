@@ -270,7 +270,7 @@ fn recheck_index(
     base_identity: SnapshotIdentity,
     initial: &[u8],
     built: Built,
-) -> Built {
+) -> Result<Built, Error> {
     if let Err(defect) = repo.verify_index_unchanged(git_resources, initial) {
         let defect = Error::from(defect);
         let changed_setup = setup_shell.with(
@@ -279,7 +279,7 @@ fn recheck_index(
         );
         return construct_incomplete(&changed_setup, &[detail(&defect, None)]);
     }
-    built
+    Ok(built)
 }
 
 const fn unavailable_reason(defect: &Error) -> SnapshotUnavailableReason {
@@ -366,16 +366,20 @@ fn staged_open(
 /// candidate built from one pinned read of the complete logical index. After
 /// the scan, the current index is reread and compared; a change is solely a
 /// snapshot change.
-#[must_use]
+///
+/// # Errors
+/// Returns an internal error if the report cannot be serialized or hashed.
 pub fn staged_index(
     repo: &Repository,
     engine: &EngineProvenance,
     forge: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     base_oid: &Oid,
-) -> Built {
-    staged_index_result(repo, engine, forge, setup_shell, base_oid)
-        .unwrap_or_else(PipelineFailure::into_built)
+) -> Result<Built, Error> {
+    staged_index_result(repo, engine, forge, setup_shell, base_oid).map_or_else(
+        |failure| construct_incomplete(&failure.0.setup, &failure.0.details),
+        Ok,
+    )
 }
 
 fn staged_index_result(
@@ -473,7 +477,7 @@ fn staged_index_result(
     setup.policy = effects;
     setup.policy.errors_retained = setup_shell.errors_retained;
     setup.policy.complete_findings = scan_limits.complete_findings;
-    Ok(staged_finish(
+    staged_finish(
         repo,
         &mut git_resources,
         setup_shell,
@@ -484,7 +488,7 @@ fn staged_index_result(
         &outcomes,
         &failures,
         &initial,
-    ))
+    )
 }
 
 /// The staged conclusion plus the pinned-index recheck: a complete run
@@ -504,7 +508,7 @@ fn staged_finish(
     outcomes: &CandidateOutcomes,
     failures: &[ErrorDetail],
     initial: &[u8],
-) -> Built {
+) -> PipelineResult<Built> {
     let base_identity = base_evaluated.identity.clone();
     let built = match (candidate.1, failures) {
         (Some(candidate_side), []) => conclude(
@@ -517,12 +521,16 @@ fn staged_finish(
         ),
         _ => construct_incomplete(setup, failures),
     };
-    recheck_index(
-        repo,
-        git_resources,
-        setup_shell,
-        base_identity,
-        initial,
-        built,
-    )
+    built
+        .and_then(|built| {
+            recheck_index(
+                repo,
+                git_resources,
+                setup_shell,
+                base_identity,
+                initial,
+                built,
+            )
+        })
+        .map_err(|defect| PipelineFailure::one(setup.clone(), detail(&defect, None)))
 }

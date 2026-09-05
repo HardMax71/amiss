@@ -1,3 +1,9 @@
+use amiss_wire::controls::GitMode;
+use amiss_wire::controls::ProjectionSource;
+use amiss_wire::report::model::FindingFactEvidence;
+use amiss_wire::report::model::ProjectionDifference;
+use amiss_wire::report::model::RowsProjectionDifference;
+use amiss_wire::resolution::Resolution;
 mod parse;
 mod record;
 mod site;
@@ -6,8 +12,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use amiss_wire::digest::Digest;
-use amiss_wire::json::Value;
-use amiss_wire::model::ArtifactId;
+use amiss_wire::model::{ArtifactId, RepoPath};
 pub use amiss_wire::report::model::SemanticEvidenceProvenance as Provenance;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 
@@ -48,14 +53,14 @@ pub(crate) enum InventoryLabel {
 pub(crate) enum SiteRoute {
     Unique(SiteClaim),
     Ambiguous {
-        sources: Vec<amiss_wire::model::RepoPath>,
+        sources: Vec<RepoPath>,
         claims: Vec<Digest>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SiteClaim {
-    pub(crate) source: Option<amiss_wire::model::RepoPath>,
+    pub(crate) source: Option<RepoPath>,
     pub(crate) digest: Digest,
     pub(crate) target: SiteTarget,
 }
@@ -80,10 +85,10 @@ pub(crate) enum SitePageBacking {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SiteNavigation {
-    pub(crate) root: Option<amiss_wire::model::RepoPath>,
-    pub(crate) manifest: amiss_wire::model::RepoPath,
+    pub(crate) root: Option<RepoPath>,
+    pub(crate) manifest: RepoPath,
     pub(crate) entrypoints: Vec<String>,
-    pub(crate) reachable: Vec<amiss_wire::model::RepoPath>,
+    pub(crate) reachable: Vec<RepoPath>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -95,8 +100,14 @@ pub(crate) struct SiteEvaluation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct SiteDefect {
     pub(crate) id: Digest,
-    pub(crate) evidence: Value,
-    pub(crate) source: Option<amiss_wire::model::RepoPath>,
+    pub(crate) evidence: FindingFactEvidence<
+        RepoPath,
+        Resolution<RepoPath>,
+        ProjectionSource,
+        ProjectionDifference<Box<RowsProjectionDifference>>,
+        GitMode,
+    >,
+    pub(crate) source: Option<RepoPath>,
     pub(crate) member_count: u64,
 }
 

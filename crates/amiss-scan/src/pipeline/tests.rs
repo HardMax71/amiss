@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::{hb, hj_serde};
 use amiss_wire::model::{Adapter, ObjectFormat, RepoPath};
 use amiss_wire::report::{EngineProvenance, adapter_contract};
 
@@ -57,7 +57,7 @@ fn resolved_observations_bind_the_fields_retained_for_reporting() {
         let mut git = GitResources::new(GitLimits::CONTRACT);
         let mut cache = TargetCache::default();
         let mut resolver = Resolver::new(&repository, &mut git, &mut scan, &mut cache, &discovery);
-        let contract = adapter_contract(&engine, adapter).1;
+        let contract = adapter_contract(&engine, adapter).unwrap().1;
         for path in &paths {
             for occurrence in &scanned.occurrences {
                 let observation = resolved_observation(
@@ -69,17 +69,25 @@ fn resolved_observations_bind_the_fields_retained_for_reporting() {
                     occurrence,
                 )
                 .unwrap();
-                let retained = observation_input(&ObservationIdentity {
+                let retained = observation_input(ObservationIdentity {
                     adapter: observation.adapter,
                     contract_digest: observation.adapter_contract_digest,
                     document: &observation.document,
+                    repository_path: observation.intent.repository_path.as_ref(),
                     construct: observation.construct,
                     node_path: &observation.node_path,
                     projection_digest: observation.projection_digest,
                     intent: &observation.intent,
                     raw_destination_digest: observation.raw_destination_digest,
-                });
-                assert_eq!(observation.id, hj(OBSERVATION_ID_DOMAIN, &retained));
+                })
+                .unwrap();
+                assert_eq!(
+                    observation.id,
+                    hj_serde(OBSERVATION_ID_DOMAIN, |writer| serde_json::to_writer(
+                        writer, &retained
+                    ))
+                    .unwrap()
+                );
                 assert!(matches!(
                     resolved_observation(
                         &mut resolver,

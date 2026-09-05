@@ -1,152 +1,59 @@
-use amiss_wire::controls::{FindingKeyInputSchema, Profile};
+use amiss_wire::controls::GitMode;
+use amiss_wire::controls::ProjectionSource;
+use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, Profile};
 use amiss_wire::digest::{Digest, hj_serde};
-use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
-use amiss_wire::report::model::{FindingKeyInput, PolicySource, RepositoryIntentPath};
+use amiss_wire::report::model::ProjectionDifference;
+use amiss_wire::report::model::RowsProjectionDifference;
+use amiss_wire::report::model::{
+    FindingFactEvidence, FindingFactInput, FindingKeyInput, PolicySource, ReferenceFactEvidence,
+    ReferenceFactEvidenceKind,
+};
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 use amiss_wire::resolution::{Missing, Resolution};
 
 use crate::correlate::Observation;
 
 use super::{
-    Attribution, FINDING_KEY_DOMAIN, FINDING_KEY_SCHEMA, Finding, FindingFact, FindingFix,
-    FindingKeyScope, Location, LocationSide, PolicyStep, resolution_value,
+    Attribution, FACT_DOMAIN, FINDING_KEY_DOMAIN, Finding, FindingFact, FindingFix,
+    FindingKeyScope, Location, LocationSide, PolicyStep,
 };
 
-pub(super) fn nullable_path(path: Option<&RepoPath>) -> Value {
-    path.map_or(Value::Null, RepoPath::to_value)
-}
-
-pub(crate) fn key_value(input: &FindingKeyInput<RepoPath>) -> Value {
-    Value::object(vec![
-        (
-            "schema".to_owned(),
-            Value::string(FINDING_KEY_SCHEMA.to_owned()),
-        ),
-        (
-            "finding_kind".to_owned(),
-            Value::string(input.finding_kind.as_ref().to_owned()),
-        ),
-        ("scope".to_owned(), scope_value(&input.scope)),
-    ])
-}
-
-fn scope_value(scope: &FindingKeyScope) -> Value {
-    match scope {
-        FindingKeyScope::Document { document, .. } => Value::object(vec![
-            ("kind".to_owned(), Value::string("document".to_owned())),
-            ("document".to_owned(), document.to_value()),
-        ]),
-        FindingKeyScope::Observation { observation_id, .. } => Value::object(vec![
-            ("kind".to_owned(), Value::string("observation".to_owned())),
-            (
-                "observation_id".to_owned(),
-                Value::string(observation_id.to_string()),
-            ),
-        ]),
-        FindingKeyScope::Reference {
-            document,
-            source_construct,
-            normalized_target_intent: intent,
-            occurrence,
-            ..
-        } => Value::object(vec![
-            ("kind".to_owned(), Value::string("reference".to_owned())),
-            ("document".to_owned(), document.to_value()),
-            (
-                "source_construct".to_owned(),
-                Value::string(source_construct.as_ref().to_owned()),
-            ),
-            (
-                "normalized_target_intent".to_owned(),
-                Value::object(
-                    intent
-                        .commit_oid
-                        .iter()
-                        .map(|oid| {
-                            (
-                                "commit_oid".to_owned(),
-                                Value::string(oid.as_str().to_owned()),
-                            )
-                        })
-                        .chain([
-                            (
-                                "kind".to_owned(),
-                                Value::string("repository-path".to_owned()),
-                            ),
-                            (
-                                "path".to_owned(),
-                                match &intent.path {
-                                    RepositoryIntentPath::Empty(_) => Value::string(String::new()),
-                                    RepositoryIntentPath::Path(path) => path.to_value(),
-                                },
-                            ),
-                            (
-                                "target_kind".to_owned(),
-                                Value::string(
-                                    Into::<&'static str>::into(intent.target_kind).to_owned(),
-                                ),
-                            ),
-                            (
-                                "query_digest".to_owned(),
-                                intent.query_digest.map_or(Value::Null, |digest| {
-                                    Value::string(digest.to_string())
-                                }),
-                            ),
-                            (
-                                "fragment_digest".to_owned(),
-                                intent.fragment_digest.map_or(Value::Null, |digest| {
-                                    Value::string(digest.to_string())
-                                }),
-                            ),
-                        ])
-                        .collect(),
-                ),
-            ),
-            (
-                "occurrence".to_owned(),
-                Value::object(vec![
-                    (
-                        "kind".to_owned(),
-                        Value::string("source-projection".to_owned()),
-                    ),
-                    (
-                        "source_projection_digest".to_owned(),
-                        Value::string(occurrence.source_projection_digest.to_string()),
-                    ),
-                ]),
-            ),
-        ]),
-        FindingKeyScope::Control {
-            control_path,
-            rule_id,
-            ..
-        } => Value::object(vec![
-            ("kind".to_owned(), Value::string("control".to_owned())),
-            (
-                "control_path".to_owned(),
-                nullable_path(control_path.as_ref()),
-            ),
-            ("rule_id".to_owned(), Value::string(rule_id.clone())),
-        ]),
-    }
+pub(crate) fn fact(
+    key: &FindingKeyInput<RepoPath>,
+    evidence: FindingFactEvidence<
+        RepoPath,
+        Resolution<RepoPath>,
+        ProjectionSource,
+        ProjectionDifference<Box<RowsProjectionDifference>>,
+        GitMode,
+    >,
+) -> Result<FindingFact, crate::Error> {
+    let input = FindingFactInput {
+        evidence,
+        finding_kind: key.finding_kind,
+        key_input: key.clone(),
+        schema: FactSchema::Current,
+    };
+    let digest = hj_serde(FACT_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&input, &mut writer)
+    })
+    .map_err(|_defect| crate::Error::Internal)?;
+    Ok(FindingFact { input, digest })
 }
 
 pub(super) fn reference_fact(
     key: &FindingKeyInput<RepoPath>,
     observation: &Observation,
     multiplicity: u64,
-) -> FindingFact {
-    FindingFact::new(
+) -> Result<FindingFact, crate::Error> {
+    fact(
         key,
-        Value::object(vec![
-            ("kind".to_owned(), Value::string("reference".to_owned())),
-            ("resolution".to_owned(), resolution_value(observation)),
-            (
-                "occurrence_multiplicity".to_owned(),
-                Value::Integer(i64::try_from(multiplicity).unwrap_or(i64::MAX)),
-            ),
-        ]),
+        FindingFactEvidence::Reference(ReferenceFactEvidence {
+            kind: ReferenceFactEvidenceKind::Reference,
+            occurrence_multiplicity: multiplicity,
+            resolution: observation.resolution.clone(),
+        }),
     )
 }
 
@@ -224,7 +131,13 @@ pub(super) fn observation_location(observation: &Observation, side: LocationSide
 pub(super) fn candidate_fact_finding(
     kind: FindingKind,
     scope: FindingKeyScope,
-    evidence: Value,
+    evidence: FindingFactEvidence<
+        RepoPath,
+        Resolution<RepoPath>,
+        ProjectionSource,
+        ProjectionDifference<Box<RowsProjectionDifference>>,
+        GitMode,
+    >,
     member_count: u64,
     location: Location,
     profile: Profile,
@@ -237,7 +150,7 @@ pub(super) fn candidate_fact_finding(
         location,
         profile,
     )?;
-    finding.candidate_fact = Some(FindingFact::new(&finding.key_input, evidence));
+    finding.candidate_fact = Some(fact(&finding.key_input, evidence)?);
     finding.member_count = member_count;
     Ok(finding)
 }

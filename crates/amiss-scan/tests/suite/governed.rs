@@ -355,8 +355,8 @@ fn assert_report(
     );
     let base = discovery(base_scanned, base_source, '1');
     let candidate = discovery(candidate_scanned, candidate_source, '2');
-    let built = construct(&setup(), &base, &candidate, Vec::new(), &[]);
-    let wire = built.wire();
+    let built = construct(&setup(), &base, &candidate, Vec::new(), &[]).unwrap();
+    let wire = amiss_scan::report::wire(&built).unwrap();
     let envelope = support::generated_report(&wire)
         .unwrap_or_else(|error| panic!("{id}: generated report violates its contract: {error}"));
     let result = envelope
@@ -386,7 +386,11 @@ fn assert_report(
         assert!(governed.is_empty(), "{id} emitted a governed boundary");
         assert_eq!(result.get("complete"), Some(&Value::Bool(true)), "{id}");
         assert!(errors.is_empty(), "{id} emitted a governed analysis error");
-        assert_eq!(built.status, "pass", "{id} must remain complete");
+        assert_eq!(
+            built.status,
+            amiss_wire::report::model::ReportStatus::Pass,
+            "{id} must remain complete"
+        );
         assert_eq!(built.exit_code, 0, "{id} must remain complete");
         return;
     }
@@ -400,7 +404,11 @@ fn assert_report(
         expected_member_count,
         &expected_sources,
     );
-    assert_eq!(built.status, "incomplete", "{id} boundary status");
+    assert_eq!(
+        built.status,
+        amiss_wire::report::model::ReportStatus::Incomplete,
+        "{id} boundary status"
+    );
     assert_eq!(built.exit_code, 2, "{id} boundary exit class");
     assert_eq!(
         envelope
@@ -519,8 +527,8 @@ fn a_recognized_claim_without_an_answer_keeps_the_boundary() {
     let base_source = "plain words\n";
     let base = discovery(scanned(base_source), base_source, '1');
     let candidate = discovery(scanned(source), source, '2');
-    let built = construct(&setup(), &base, &candidate, Vec::new(), &[]);
-    let envelope = support::generated_report(&built.wire()).unwrap();
+    let built = construct(&setup(), &base, &candidate, Vec::new(), &[]).unwrap();
+    let envelope = support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     assert_eq!(built.exit_code, 2, "an unanswered claim is a boundary");
     let findings = envelope
         .pointer("/payload/findings")

@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_md::extract::BlockKind;
 use amiss_scan::correlate::{Observation, Outcome, Side, correlate};
-use amiss_scan::observe::intent_value;
+use amiss_scan::observe::target_intent;
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::SpanDisplay;
 use amiss_wire::controls::{SourceConstruct, TargetKind};
@@ -294,12 +294,22 @@ fn the_published_vectors_execute_live_correlation() {
             &format!("{id} right"),
         );
         assert_eq!(
-            canonical(&intent_value(&left_intent, left.raw_destination_digest)),
+            serde_json::to_vec(&target_intent(
+                &left_intent,
+                left.raw_destination_digest,
+                left_intent.repository_path.as_ref()
+            ))
+            .unwrap(),
             canonical(left_value),
             "{id} left target-intent preimage"
         );
         assert_eq!(
-            canonical(&intent_value(&right_intent, right.raw_destination_digest)),
+            serde_json::to_vec(&target_intent(
+                &right_intent,
+                right.raw_destination_digest,
+                right_intent.repository_path.as_ref()
+            ))
+            .unwrap(),
             canonical(right_value),
             "{id} right target-intent preimage"
         );

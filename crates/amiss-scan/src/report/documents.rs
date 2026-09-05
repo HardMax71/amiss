@@ -1,70 +1,71 @@
-use amiss_wire::controls::ContentAvailability;
-use amiss_wire::json::Value;
+use amiss_wire::controls::{ContentAvailability, GitMode};
 use amiss_wire::model::{Adapter, RepoPath};
+use amiss_wire::report::model::{
+    self, DocumentChange, DocumentEntryKind, DocumentResult, DocumentSide, UnsupportedReason,
+};
 
-use super::{digest_value, integer, nullable, object, string};
 use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind};
 use crate::document::Classification;
 
 fn side_facets(
     record: &DocumentRecord,
 ) -> (
-    &'static str,
-    Option<&'static str>,
+    model::DocumentStatus,
+    Option<UnsupportedReason>,
     ContentAvailability,
     Option<Adapter>,
 ) {
     match &record.status {
         DocumentStatus::Scanned(_) => (
-            "scanned",
+            model::DocumentStatus::Scanned,
             None,
             ContentAvailability::Available,
             record.adapter,
         ),
         DocumentStatus::ExcludedBuiltIn => (
-            "excluded-built-in",
+            model::DocumentStatus::ExcludedBuiltIn,
             None,
             ContentAvailability::NotRead,
             None,
         ),
         DocumentStatus::Unsupported(UnsupportedKind::LfsPointer) => (
-            "unsupported",
-            Some("lfs-pointer"),
+            model::DocumentStatus::Unsupported,
+            Some(UnsupportedReason::LfsPointer),
             ContentAvailability::LfsPointerOnly,
             None,
         ),
         DocumentStatus::Unsupported(UnsupportedKind::Symlink) => (
-            "unsupported",
-            Some("symlink-document"),
+            model::DocumentStatus::Unsupported,
+            Some(UnsupportedReason::SymlinkDocument),
             ContentAvailability::NotRead,
             None,
         ),
         DocumentStatus::Unsupported(UnsupportedKind::Gitlink) => (
-            "unsupported",
-            Some("gitlink-document"),
+            model::DocumentStatus::Unsupported,
+            Some(UnsupportedReason::GitlinkDocument),
             ContentAvailability::NotRead,
             None,
         ),
         DocumentStatus::Unsupported(UnsupportedKind::Format) => (
-            "unsupported",
-            Some("unsupported-document-format"),
+            model::DocumentStatus::Unsupported,
+            Some(UnsupportedReason::UnsupportedDocumentFormat),
             ContentAvailability::Available,
             None,
         ),
-        DocumentStatus::Failed(_) => ("scanned", None, ContentAvailability::NotRead, None),
+        DocumentStatus::Failed(_) => (
+            model::DocumentStatus::Scanned,
+            None,
+            ContentAvailability::NotRead,
+            None,
+        ),
     }
 }
 
-fn document_side_value(record: Option<&DocumentRecord>) -> Value {
-    let Some(record) = record else {
-        return Value::Null;
-    };
+fn document_side(record: &DocumentRecord) -> DocumentSide<GitMode> {
     let entry_kind = match record.mode {
-        amiss_wire::controls::GitMode::Symlink => "symlink",
-        amiss_wire::controls::GitMode::Gitlink => "gitlink",
-        amiss_wire::controls::GitMode::RegularFile
-        | amiss_wire::controls::GitMode::ExecutableFile
-        | amiss_wire::controls::GitMode::Tree => "blob",
+        GitMode::Symlink => DocumentEntryKind::Symlink,
+        GitMode::Gitlink => DocumentEntryKind::Gitlink,
+        GitMode::RegularFile | GitMode::ExecutableFile | GitMode::Tree => DocumentEntryKind::Blob,
     };
     let (status, reason, availability, adapter) = side_facets(record);
     let scanned = match &record.status {
@@ -74,63 +75,34 @@ fn document_side_value(record: Option<&DocumentRecord>) -> Value {
         | DocumentStatus::Failed(_) => None,
     };
     let opaque = scanned.map(|value| &value.opaque);
-    let count =
-        |value: Option<usize>| integer(u64::try_from(value.unwrap_or(0)).unwrap_or(u64::MAX));
+    let count = |value: Option<usize>| u64::try_from(value.unwrap_or(0)).unwrap_or(u64::MAX);
     let byte_sum = |spans: Option<&Vec<(usize, usize)>>| {
-        integer(spans.map_or(0, |list| {
+        spans.map_or(0, |list| {
             list.iter()
                 .map(|(start, end)| u64::try_from(end.saturating_sub(*start)).unwrap_or(u64::MAX))
                 .sum::<u64>()
-        }))
+        })
     };
-    object(vec![
-        ("entry_kind", string(entry_kind)),
-        ("entry_oid", string(record.oid.as_str())),
-        ("git_mode", string(record.mode.as_ref())),
-        (
-            "raw_digest",
-            record.raw_digest.map_or(Value::Null, digest_value),
-        ),
-        ("status", string(status)),
-        ("unsupported_reason", nullable(reason)),
-        ("content_availability", string(availability.as_ref())),
-        (
-            "adapter_id",
-            adapter.map_or(Value::Null, |value: Adapter| string(value.as_ref())),
-        ),
-        ("byte_count", integer(record.byte_count)),
-        (
-            "frontmatter_regions",
-            integer(
-                opaque
-                    .is_some_and(|value| value.frontmatter_bytes > 0)
-                    .into(),
-            ),
-        ),
-        (
-            "frontmatter_bytes",
-            count(opaque.map(|value| value.frontmatter_bytes)),
-        ),
-        (
-            "opaque_mdx_regions",
-            count(opaque.map(|value| value.mdx.len())),
-        ),
-        ("opaque_mdx_bytes", byte_sum(opaque.map(|value| &value.mdx))),
-        (
-            "opaque_html_regions",
-            count(opaque.map(|value| value.html.len())),
-        ),
-        (
-            "opaque_html_bytes",
-            byte_sum(opaque.map(|value| &value.html)),
-        ),
-        (
-            "extracted_references",
-            integer(scanned.map_or(0, |value| {
-                u64::try_from(value.occurrences.len()).unwrap_or(u64::MAX)
-            })),
-        ),
-    ])
+    DocumentSide {
+        entry_kind,
+        entry_oid: record.oid.clone(),
+        git_mode: record.mode,
+        raw_digest: record.raw_digest,
+        status,
+        unsupported_reason: reason,
+        content_availability: availability,
+        adapter_id: adapter,
+        byte_count: record.byte_count,
+        frontmatter_regions: u64::from(opaque.is_some_and(|value| value.frontmatter_bytes > 0)),
+        frontmatter_bytes: count(opaque.map(|value| value.frontmatter_bytes)),
+        opaque_mdx_regions: count(opaque.map(|value| value.mdx.len())),
+        opaque_mdx_bytes: byte_sum(opaque.map(|value| &value.mdx)),
+        opaque_html_regions: count(opaque.map(|value| value.html.len())),
+        opaque_html_bytes: byte_sum(opaque.map(|value| &value.html)),
+        extracted_references: scanned.map_or(0, |value| {
+            u64::try_from(value.occurrences.len()).unwrap_or(u64::MAX)
+        }),
+    }
 }
 
 pub(super) struct PairedDocument<'a> {
@@ -209,21 +181,23 @@ fn paired_document<'a>(
     }
 }
 
-pub(super) fn document_result_value(paired: &PairedDocument<'_>) -> Value {
-    let base = document_side_value(paired.base);
-    let candidate = document_side_value(paired.candidate);
+pub(super) fn document_result(
+    paired: &PairedDocument<'_>,
+) -> DocumentResult<RepoPath, DocumentSide<GitMode>> {
+    let base = paired.base.map(document_side);
+    let candidate = paired.candidate.map(document_side);
     let change = match (&base, &candidate) {
-        (Value::Null, Value::Null) => "unchanged",
-        (Value::Null, _present) => "added",
-        (_present, Value::Null) => "removed",
-        (left, right) if left == right => "unchanged",
-        _ => "changed",
+        (None, None) => DocumentChange::Unchanged,
+        (None, Some(_)) => DocumentChange::Added,
+        (Some(_), None) => DocumentChange::Removed,
+        (Some(left), Some(right)) if left == right => DocumentChange::Unchanged,
+        (Some(_), Some(_)) => DocumentChange::Changed,
     };
-    object(vec![
-        ("path", paired.path.to_value()),
-        ("classification", string(paired.classification.as_ref())),
-        ("base", base),
-        ("candidate", candidate),
-        ("change", string(change)),
-    ])
+    DocumentResult {
+        path: paired.path.clone(),
+        classification: paired.classification,
+        base,
+        candidate,
+        change,
+    }
 }

@@ -6,6 +6,10 @@ use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::digest::{Digest, hb, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
+use amiss_wire::report::model::{
+    BrokenRedirectFactEvidenceKind, BrokenRedirectReason, DuplicateRouteFactEvidenceKind,
+    FindingFactEvidence,
+};
 use amiss_wire::semantic::observation::{
     SITE_GENERATED_ROUTE, SITE_NAVIGATION, SITE_REDIRECT, SITE_ROUTE, SiteBuildObservation,
 };
@@ -279,26 +283,12 @@ fn site_defects(routes: &BTreeMap<String, SiteRoute>) -> Vec<SiteDefect> {
 }
 
 fn duplicate_route_defect(route: &str, sources: &[RepoPath], claims: &[Digest]) -> SiteDefect {
-    let evidence = Value::object(vec![
-        (
-            "claim_digests".to_owned(),
-            Value::array(
-                claims
-                    .iter()
-                    .map(|claim| Value::string(claim.to_string()))
-                    .collect(),
-            ),
-        ),
-        (
-            "kind".to_owned(),
-            Value::string("duplicate-route".to_owned()),
-        ),
-        ("route".to_owned(), Value::string(route.to_owned())),
-        (
-            "sources".to_owned(),
-            Value::array(sources.iter().map(RepoPath::to_value).collect()),
-        ),
-    ]);
+    let evidence = FindingFactEvidence::DuplicateRoute {
+        claim_digests: claims.to_vec(),
+        kind: DuplicateRouteFactEvidenceKind::DuplicateRoute,
+        route: route.to_owned(),
+        sources: sources.to_vec(),
+    };
     SiteDefect {
         id: site_defect_id("duplicate-route", route),
         evidence,
@@ -321,12 +311,12 @@ fn broken_redirect_defect(
     };
     let source = claim.source.as_ref()?;
     let reason = match routes.get(destination) {
-        None => "missing-route",
-        Some(SiteRoute::Ambiguous { .. }) => "ambiguous-route",
+        None => BrokenRedirectReason::MissingRoute,
+        Some(SiteRoute::Ambiguous { .. }) => BrokenRedirectReason::AmbiguousRoute,
         Some(SiteRoute::Unique(SiteClaim {
             target: SiteTarget::Redirect { .. },
             ..
-        })) => "nonterminal-redirect",
+        })) => BrokenRedirectReason::NonterminalRedirect,
         Some(SiteRoute::Unique(SiteClaim {
             target: SiteTarget::Page { anchors, .. },
             ..
@@ -337,7 +327,7 @@ fn broken_redirect_defect(
             if fragment_target(anchors, fragment) {
                 return None;
             }
-            "missing-anchor"
+            BrokenRedirectReason::MissingAnchor
         }
     };
     let mut published = destination.clone();
@@ -345,20 +335,14 @@ fn broken_redirect_defect(
         published.push('#');
         published.push_str(fragment);
     }
-    let evidence = Value::object(vec![
-        (
-            "claim_digest".to_owned(),
-            Value::string(claim.digest.to_string()),
-        ),
-        ("destination".to_owned(), Value::string(published)),
-        (
-            "kind".to_owned(),
-            Value::string("broken-redirect".to_owned()),
-        ),
-        ("reason".to_owned(), Value::string(reason.to_owned())),
-        ("route".to_owned(), Value::string(route.to_owned())),
-        ("source".to_owned(), source.to_value()),
-    ]);
+    let evidence = FindingFactEvidence::BrokenRedirect {
+        claim_digest: claim.digest,
+        destination: published,
+        kind: BrokenRedirectFactEvidenceKind::BrokenRedirect,
+        reason,
+        route: route.to_owned(),
+        source: source.clone(),
+    };
     Some(SiteDefect {
         id: site_defect_id("broken-redirect", route),
         evidence,

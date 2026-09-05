@@ -135,7 +135,9 @@ fn commit_controls(
 /// The complete commit-pair run: both sides, correlation, and construction.
 /// Any accumulated typed error makes the run incomplete with every safely
 /// established row retained; the report is emitted either way.
-#[must_use]
+///
+/// # Errors
+/// Returns an internal error if the report cannot be serialized or hashed.
 pub fn commit_pair(
     repo: &Repository,
     engine: &EngineProvenance,
@@ -143,9 +145,11 @@ pub fn commit_pair(
     setup_shell: &SetupShell,
     base_oid: &Oid,
     candidate_oid: &Oid,
-) -> Built {
-    commit_pair_result(repo, engine, forge, setup_shell, base_oid, candidate_oid)
-        .unwrap_or_else(PipelineFailure::into_built)
+) -> Result<Built, Error> {
+    commit_pair_result(repo, engine, forge, setup_shell, base_oid, candidate_oid).map_or_else(
+        |failure| construct_incomplete(&failure.0.setup, &failure.0.details),
+        Ok,
+    )
 }
 
 fn commit_pair_result(
@@ -203,7 +207,7 @@ fn commit_pair_result(
         base_tree,
         candidate_tree,
     );
-    Ok(match (base, candidate) {
+    match (base, candidate) {
         (Ok((base, base_failures)), Ok((candidate, candidate_failures))) => {
             let mut failures = base_failures;
             failures.extend(candidate_failures);
@@ -242,6 +246,12 @@ fn commit_pair_result(
             &oid_fallback(repo, setup_shell, base_oid, candidate_oid),
             &[base_defect, candidate_defect],
         ),
+    }
+    .map_err(|defect| {
+        PipelineFailure::one(
+            oid_fallback(repo, setup_shell, base_oid, candidate_oid),
+            detail(&defect, None),
+        )
     })
 }
 

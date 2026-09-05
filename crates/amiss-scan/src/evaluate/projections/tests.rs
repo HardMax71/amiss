@@ -1,6 +1,5 @@
 #![cfg(test)]
 
-use amiss_wire::json;
 use amiss_wire::report::model::{
     CountProjectionDifferenceKind, ProjectionDifference, RowsProjectionDifference,
     RowsProjectionDifferenceKind,
@@ -59,10 +58,6 @@ fn projection_difference_fields_keep_their_canonical_bytes() {
     for (difference, expected) in cases {
         assert_eq!(
             serde_json::to_vec(&difference).unwrap(),
-            expected.as_bytes()
-        );
-        assert_eq!(
-            json::canonical(&super::difference_value(&difference)),
             expected.as_bytes()
         );
         let decoded: ProjectionDifference = serde_json::from_str(expected).unwrap();

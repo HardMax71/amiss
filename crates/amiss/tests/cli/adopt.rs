@@ -248,8 +248,9 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         external_defect: None,
         errors_retained: 64,
     };
-    let built = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate);
-    let report: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let built = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate).unwrap();
+    let report: serde_json::Value =
+        serde_json::from_slice(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     assert_eq!(
         report["payload"]["summary"]["findings"]["debt_tolerated"], 1,
         "{}",

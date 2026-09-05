@@ -60,7 +60,7 @@ fn reference_keys_preserve_normalization_and_optional_identity_fields() {
                             .candidate_fact
                             .as_ref()
                             .expect("reference fact")
-                            .digest()
+                            .digest
                     ))
                 );
                 let expected = json::parse(expected.as_bytes()).expect("key fixture");

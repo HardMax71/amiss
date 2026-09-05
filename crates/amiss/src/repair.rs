@@ -9,7 +9,6 @@ use amiss_git::{GitLimits, GitResources, Repository, parse_index_file};
 use amiss_scan::report::Built;
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::report::model::ReportPayload;
-use amiss_wire::report::validate_envelope;
 
 struct Fix {
     start: usize,
@@ -38,11 +37,8 @@ pub(crate) fn run(
         println!("amiss fix: the evaluation could not be trusted; nothing applied");
         return ExitCode::from(2);
     }
-    let Ok((payload, _digest, _verdict)) = validate_envelope(&built.envelope) else {
-        println!("amiss fix: the evaluation could not be trusted; nothing applied");
-        return ExitCode::from(2);
-    };
-    let Ok((fixes, bare)) = collect(&payload) else {
+    let payload = &built.envelope.payload;
+    let Ok((fixes, bare)) = collect(payload) else {
         println!("amiss fix: a fix carries an unrepresentable byte span; nothing applied");
         return ExitCode::from(2);
     };
@@ -100,8 +96,8 @@ pub(crate) fn run(
     }
 }
 
-fn collect(
-    payload: &ReportPayload,
+fn collect<P, R, M, E>(
+    payload: &ReportPayload<P, R, M, E>,
 ) -> Result<(BTreeMap<String, Vec<Fix>>, usize), std::num::TryFromIntError> {
     let mut fixes: BTreeMap<String, Vec<Fix>> = BTreeMap::new();
     let mut bare = 0_usize;

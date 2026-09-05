@@ -1,15 +1,11 @@
 use std::collections::BTreeSet;
 
-use crate::digest::{Digest, hj};
-use crate::json::{Value, canonical};
-use crate::model::Adapter;
+use crate::digest::{Digest, hj_serde};
+use crate::model::{Adapter, RepoPath};
 use strum::IntoEnumIterator;
 
-use super::model::ControlsUnavailableReason;
-use super::{
-    ADAPTER_CONTRACT_SCHEMA, AnalysisErrorCode, BUILT_IN_POLICY, COMPATIBILITY, ENGINE_CONTRACT,
-    ENVELOPE_SCHEMA, ErrorDetail, PAYLOAD_SCHEMA, error_row_value, object, string,
-};
+use super::model;
+use super::{ADAPTER_CONTRACT_SCHEMA, AnalysisErrorCode, ErrorDetail, PAYLOAD_SCHEMA, error_row};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EngineProvenance {
@@ -17,251 +13,192 @@ pub struct EngineProvenance {
     pub digest: Digest,
 }
 
-/// Builds the canonical fatal-incomplete wire (`JCS(envelope) || LF`) for an
-/// invocation rejection: every detail array empty, every count zero, unavailable
-/// evaluation and controls with their reason sets, exit class 2.
+/// Returns no envelope when the codes do not identify an invocation refusal.
 ///
-/// Returns `None` when `codes` is empty or contains a non-invocation code.
-#[must_use]
+/// # Errors
+/// Returns serialization failures without partial output or a substitute digest.
 pub fn invocation_failure_wire(
     engine: &EngineProvenance,
     codes: &BTreeSet<AnalysisErrorCode>,
-) -> Option<Vec<u8>> {
+) -> std::io::Result<Option<Vec<u8>>> {
     unavailable_evaluation_wire(engine, codes, None, None)
 }
 
-/// The envelope value behind [`invocation_failure_wire`], for emission
-/// through the reserved fatal serializer.
-#[must_use]
+/// Returns no envelope when the codes do not identify an invocation refusal.
+///
+/// # Errors
+/// Returns serialization failures without partial output or a substitute digest.
 pub fn invocation_failure_envelope(
     engine: &EngineProvenance,
     codes: &BTreeSet<AnalysisErrorCode>,
-) -> Option<Value> {
+) -> serde_json::Result<Option<model::ReportEnvelope<model::ReportPayload<RepoPath>>>> {
     unavailable_evaluation_envelope(engine, codes, None, None)
 }
 
-/// The fatal unavailable-evaluation envelope for the request-wire lane: the
-/// same closed projection, carrying each request's diagnostic digest where
-/// its byte stream was completely captured.
+/// Returns no envelope when the codes do not identify an invocation refusal.
 ///
-/// Returns `None` when no code is supplied or a code has no evaluation
-/// reason, exactly as the invocation form.
-#[must_use]
+/// # Errors
+/// Returns serialization failures without partial output or a substitute digest.
 pub fn unavailable_evaluation_wire(
     engine: &EngineProvenance,
     codes: &BTreeSet<AnalysisErrorCode>,
     evaluation_request_digest: Option<Digest>,
     controls_request_digest: Option<Digest>,
-) -> Option<Vec<u8>> {
-    let envelope = unavailable_evaluation_envelope(
+) -> std::io::Result<Option<Vec<u8>>> {
+    unavailable_evaluation_envelope(
         engine,
         codes,
         evaluation_request_digest,
         controls_request_digest,
-    )?;
-    let mut wire = canonical(&envelope);
-    wire.push(b'\n');
-    Some(wire)
+    )?
+    .map(|envelope| {
+        let mut wire = Vec::new();
+        super::emit_report(&envelope, &mut wire)?;
+        Ok(wire)
+    })
+    .transpose()
 }
 
-/// The envelope value behind [`unavailable_evaluation_wire`], for emission
-/// through the reserved fatal serializer.
-#[must_use]
+/// Returns no envelope when the codes do not identify an invocation refusal.
+///
+/// # Errors
+/// Returns serialization failures without partial output or a substitute digest.
 pub fn unavailable_evaluation_envelope(
     engine: &EngineProvenance,
     codes: &BTreeSet<AnalysisErrorCode>,
     evaluation_request_digest: Option<Digest>,
     controls_request_digest: Option<Digest>,
-) -> Option<Value> {
+) -> serde_json::Result<Option<model::ReportEnvelope<model::ReportPayload<RepoPath>>>> {
     if codes.is_empty() {
-        return None;
+        return Ok(None);
     }
-    let mut reasons = Vec::new();
-    let mut errors = Vec::new();
-    for code in codes {
-        let route = code.route()?;
-        reasons.push(string(route.evaluation_reason?.as_ref()));
-        errors.push(*code);
-    }
-    errors.sort_by(|a, b| a.as_ref().cmp(b.as_ref()));
-    let error_rows: Vec<Value> = errors
+    let Some(reasons) = codes
         .iter()
+        .map(|code| code.route()?.evaluation_reason)
+        .collect::<Option<Vec<_>>>()
+    else {
+        return Ok(None);
+    };
+    let mut errors: Vec<_> = codes.iter().copied().collect();
+    errors.sort_by(|a, b| a.as_ref().cmp(b.as_ref()));
+    let errors: Vec<_> = errors
+        .into_iter()
         .map(|code| {
-            error_row_value(&ErrorDetail {
-                code: *code,
+            error_row(&ErrorDetail {
+                code,
                 path: None,
                 path_bytes: None,
                 resource: None,
             })
         })
         .collect();
-    let error_count = i64::try_from(error_rows.len()).ok()?;
-
-    let payload = object(vec![
-        ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string(COMPATIBILITY)),
-        ("engine", engine_block(engine)),
-        (
-            "evaluation",
-            object(vec![
-                ("status", string("unavailable")),
-                (
-                    "request_digest",
-                    evaluation_request_digest
-                        .map_or(Value::Null, |digest| string(&digest.to_string())),
-                ),
-                ("reasons", Value::Array(reasons.into_boxed_slice())),
-            ]),
-        ),
-        (
-            "controls",
-            object(vec![
-                ("status", string("unavailable")),
-                (
-                    "request_digest",
-                    controls_request_digest
-                        .map_or(Value::Null, |digest| string(&digest.to_string())),
-                ),
-                (
-                    "reasons",
-                    Value::Array(Box::new([string(
-                        ControlsUnavailableReason::NotParsed.as_ref(),
-                    )])),
-                ),
-            ]),
-        ),
-        ("feedback", object(vec![("status", string("unavailable"))])),
-        (
-            "result",
-            object(vec![
-                ("complete", Value::Bool(false)),
-                ("status", string("incomplete")),
-                ("exit_code", Value::Integer(2)),
-                ("finding_count", Value::Integer(0)),
-                ("error_count", Value::Integer(error_count)),
-            ]),
-        ),
-        ("summary", zero_summary()),
-        ("documents", Value::Array(Box::default())),
-        ("observations", Value::Array(Box::default())),
-        ("findings", Value::Array(Box::default())),
-        ("errors", Value::Array(error_rows.into_boxed_slice())),
-    ]);
-
-    let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
-    Some(object(vec![
-        ("schema", string(ENVELOPE_SCHEMA)),
-        ("payload", payload),
-        ("payload_digest", string(&payload_digest.to_string())),
-    ]))
+    let payload = model::ReportPayload {
+        schema: model::ReportPayloadSchema::Current,
+        compatibility: model::ReportCompatibility::One,
+        engine: engine_block(engine)?,
+        evaluation: model::Evaluation::Unavailable(model::UnavailableEvaluation {
+            status: model::UnavailableStatus::Unavailable,
+            request_digest: evaluation_request_digest,
+            reasons,
+        }),
+        controls: model::Controls::Unavailable(model::UnavailableControls {
+            status: model::UnavailableStatus::Unavailable,
+            request_digest: controls_request_digest,
+            reasons: vec![model::ControlsUnavailableReason::NotParsed],
+        }),
+        feedback: model::Feedback::Unavailable(model::UnavailableFeedback {
+            status: model::UnavailableStatus::Unavailable,
+        }),
+        result: model::ReportResult {
+            complete: false,
+            status: model::ReportStatus::Incomplete,
+            exit_code: 2,
+            finding_count: 0,
+            error_count: u64::try_from(errors.len()).unwrap_or(u64::MAX),
+        },
+        summary: model::Summary {
+            counts_complete: false,
+            documents: model::DocumentCounts::default(),
+            references: model::ReferenceCounts::default(),
+            findings: model::FindingCounts::default(),
+            governed_claims: 0,
+            unattested_claims: 0,
+        },
+        documents: Vec::new(),
+        observations: Vec::new(),
+        findings: Vec::new(),
+        errors,
+    };
+    let payload_digest = hj_serde(PAYLOAD_SCHEMA, |writer| {
+        serde_json::to_writer(writer, &payload)
+    })?;
+    Ok(Some(model::ReportEnvelope {
+        schema: model::ReportEnvelopeSchema::Current,
+        payload,
+        payload_digest,
+    }))
 }
 
-/// One adapter's complete contract descriptor and its digest, which every
-/// occurrence embeds through its observation-identity input.
-#[must_use]
-pub fn adapter_contract(engine: &EngineProvenance, adapter: Adapter) -> (Value, Digest) {
+/// The adapter descriptor and the digest of its canonical fields.
+///
+/// # Errors
+/// Returns serialization failures without producing a partial digest.
+pub fn adapter_contract(
+    engine: &EngineProvenance,
+    adapter: Adapter,
+) -> serde_json::Result<(model::AdapterContractDescriptor, Digest)> {
     let metadata = adapter.metadata();
-    let descriptor = object(vec![
-        ("schema", string(ADAPTER_CONTRACT_SCHEMA)),
-        ("adapter_id", string(adapter.as_ref())),
-        ("parser_name", string(metadata.parser_name)),
-        ("parser_version", string(&engine.version)),
-        ("grammar_profile", string(metadata.grammar_profile)),
-        (
-            "frontmatter_contract",
-            string(metadata.frontmatter_contract),
-        ),
-        ("source_projection", string(metadata.source_projection)),
-        (
-            "structural_address",
-            string(metadata.structural_address.map_or("none", Into::into)),
-        ),
-    ]);
-    let digest = hj(ADAPTER_CONTRACT_SCHEMA, &descriptor);
-    (descriptor, digest)
+    let descriptor = model::AdapterContractDescriptor {
+        schema: model::AdapterContractSchema::Current,
+        adapter_id: adapter,
+        parser_name: metadata.parser_name.to_owned(),
+        parser_version: engine.version.clone(),
+        grammar_profile: metadata.grammar_profile.to_owned(),
+        frontmatter_contract: metadata.frontmatter_contract,
+        source_projection: metadata.source_projection,
+        structural_address: match metadata.structural_address {
+            Some(model::AddressKind::AsciidocBlockPath) => {
+                model::StructuralAddressKind::AsciidocBlockPath
+            }
+            Some(model::AddressKind::MarkdownAstNodePath) => {
+                model::StructuralAddressKind::MarkdownAstNodePath
+            }
+            Some(model::AddressKind::MdxAstNodePath) => {
+                model::StructuralAddressKind::MdxAstNodePath
+            }
+            Some(model::AddressKind::RstBlockPath) => model::StructuralAddressKind::RstBlockPath,
+            None => model::StructuralAddressKind::None,
+        },
+    };
+    let digest = hj_serde(ADAPTER_CONTRACT_SCHEMA, |writer| {
+        serde_json::to_writer(writer, &descriptor)
+    })?;
+    Ok((descriptor, digest))
 }
 
-/// The complete engine block: contract, version, digest, provenance, policy
-/// version, and the three adapter descriptors with their digests.
-#[must_use]
-pub fn engine_block(engine: &EngineProvenance) -> Value {
-    let adapter_rows: Vec<Value> = Adapter::iter()
-        .map(|adapter| {
-            let (descriptor, digest) = adapter_contract(engine, adapter);
-            object(vec![
-                ("adapter_id", string(adapter.as_ref())),
-                ("contract_descriptor", descriptor),
-                ("contract_digest", string(&digest.to_string())),
-            ])
+/// The engine identity and its complete adapter contracts.
+///
+/// # Errors
+/// Returns a failure to serialize an adapter descriptor.
+pub fn engine_block(engine: &EngineProvenance) -> serde_json::Result<model::Engine> {
+    let adapters = Adapter::iter()
+        .map(|adapter_id| {
+            let (contract_descriptor, contract_digest) = adapter_contract(engine, adapter_id)?;
+            Ok(model::ReportAdapter {
+                adapter_id,
+                contract_descriptor,
+                contract_digest,
+            })
         })
-        .collect();
-    object(vec![
-        ("engine_contract", string(ENGINE_CONTRACT)),
-        ("engine_version", string(&engine.version)),
-        ("engine_digest", string(&engine.digest.to_string())),
-        ("action_provenance", object(vec![("kind", string("local"))])),
-        ("built_in_policy", string(BUILT_IN_POLICY)),
-        ("adapters", Value::Array(adapter_rows.into_boxed_slice())),
-    ])
-}
-
-fn zero_summary() -> Value {
-    let documents = [
-        "discovered",
-        "outside_document_set",
-        "scanned",
-        "unsupported",
-        "excluded_builtin",
-        "unlinked",
-        "frontmatter_documents",
-        "opaque_mdx_documents",
-        "opaque_html_documents",
-        "opaque_mdx_regions",
-        "opaque_mdx_bytes",
-        "opaque_html_regions",
-        "opaque_html_bytes",
-        "frontmatter_regions",
-        "frontmatter_bytes",
-    ];
-    let references = [
-        "extracted",
-        "explicit_local",
-        "same_repository",
-        "external_out_of_scope",
-        "unsupported",
-        "resolved",
-        "missing",
-    ];
-    let findings = [
-        "total",
-        "record",
-        "warn",
-        "fail",
-        "introduced",
-        "pre_existing",
-        "resolved",
-        "unknown",
-        "not_applicable",
-        "debt_tolerated",
-        "waived",
-        "analysis_errors",
-        "unsupported_capabilities",
-    ];
-    object(vec![
-        ("counts_complete", Value::Bool(false)),
-        ("documents", zero_counts(&documents)),
-        ("references", zero_counts(&references)),
-        ("findings", zero_counts(&findings)),
-        ("governed_claims", Value::Integer(0)),
-        ("unattested_claims", Value::Integer(0)),
-    ])
-}
-
-fn zero_counts(fields: &[&str]) -> Value {
-    Value::Object(
-        fields
-            .iter()
-            .map(|field| ((*field).into(), Value::Integer(0)))
-            .collect(),
-    )
+        .collect::<serde_json::Result<_>>()?;
+    Ok(model::Engine {
+        engine_contract: model::EngineContract::Current,
+        engine_version: engine.version.clone(),
+        engine_digest: engine.digest,
+        action_provenance: model::ActionProvenance::Local(model::LocalActionProvenance {
+            kind: model::LocalActionKind::Local,
+        }),
+        built_in_policy: model::BuiltInPolicy::Current,
+        adapters,
+    })
 }

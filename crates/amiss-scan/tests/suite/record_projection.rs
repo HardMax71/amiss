@@ -133,8 +133,9 @@ fn run(
     let repo = Repository::open(pair.root(), ObjectFormat::Sha1).unwrap();
     let base = Oid::new(ObjectFormat::Sha1, pair.base.clone()).unwrap();
     let candidate = Oid::new(ObjectFormat::Sha1, pair.candidate.clone()).unwrap();
-    let built = commit_pair(&repo, &engine(), None, &shell, &base, &candidate);
-    let envelope: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
+    let built = commit_pair(&repo, &engine(), None, &shell, &base, &candidate).unwrap();
+    let envelope: serde_json::Value =
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     envelope["payload"].clone()
 }
 

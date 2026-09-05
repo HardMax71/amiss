@@ -122,25 +122,29 @@ fn the_adapter_tables_are_populated_and_distinct() {
     let projections = [
         adapters
             .iter()
-            .map(|adapter| adapter.metadata().frontmatter_contract)
-            .collect::<BTreeSet<_>>(),
+            .map(|adapter| serde_json::to_value(adapter.metadata().frontmatter_contract).unwrap())
+            .collect::<Vec<_>>(),
         adapters
             .iter()
-            .map(|adapter| adapter.metadata().source_projection)
+            .map(|adapter| serde_json::to_value(adapter.metadata().source_projection).unwrap())
             .collect(),
         adapters
             .iter()
             .map(|adapter| {
-                adapter
-                    .metadata()
-                    .structural_address
-                    .map_or("none", Into::into)
+                serde_json::to_value(
+                    adapter
+                        .metadata()
+                        .structural_address
+                        .map_or("none", Into::into),
+                )
+                .unwrap()
             })
             .collect(),
     ];
     for values in projections {
-        assert!(values.len() > 1, "more than one contract value");
-        assert!(values.iter().all(|text| !text.is_empty()));
+        let texts: BTreeSet<_> = values.iter().map(|value| value.as_str().unwrap()).collect();
+        assert!(texts.len() > 1, "more than one contract value");
+        assert!(texts.iter().all(|text| !text.is_empty()));
     }
 }
 

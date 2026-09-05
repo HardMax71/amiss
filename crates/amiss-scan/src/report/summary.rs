@@ -1,5 +1,4 @@
-use amiss_wire::json::Value;
-use amiss_wire::report::model::{DocumentCounts, FindingCounts, ReferenceCounts};
+use amiss_wire::report::model::{DocumentCounts, FindingCounts, ReferenceCounts, Summary};
 use amiss_wire::report::{Disposition, FindingKind, IntentKind};
 use amiss_wire::resolution::Resolution;
 
@@ -8,14 +7,6 @@ use crate::discovery::{DocumentRecord, DocumentStatus};
 use crate::evaluate::{Attribution, Finding};
 
 use super::documents::PairedDocument;
-use super::{integer, object};
-
-pub(super) struct Counts {
-    pub(super) documents: Value,
-    pub(super) references: Value,
-    pub(super) findings: Value,
-}
-
 fn region_bytes(spans: &[(usize, usize)]) -> u64 {
     spans.iter().fold(0, |total, (start, end)| {
         total.saturating_add(u64::try_from(end.saturating_sub(*start)).unwrap_or(u64::MAX))
@@ -25,7 +16,7 @@ fn region_bytes(spans: &[(usize, usize)]) -> u64 {
 fn document_counts<'a>(
     candidate_records: impl IntoIterator<Item = &'a DocumentRecord>,
     unlinked: u64,
-) -> Value {
+) -> DocumentCounts {
     let mut counts = DocumentCounts {
         unlinked,
         ..DocumentCounts::default()
@@ -71,32 +62,10 @@ fn document_counts<'a>(
         }
     }
     counts.frontmatter_regions = counts.frontmatter_documents;
-    object(vec![
-        ("discovered", integer(counts.discovered)),
-        ("outside_document_set", integer(counts.outside_document_set)),
-        ("scanned", integer(counts.scanned)),
-        ("unsupported", integer(counts.unsupported)),
-        ("excluded_builtin", integer(counts.excluded_builtin)),
-        ("unlinked", integer(counts.unlinked)),
-        (
-            "frontmatter_documents",
-            integer(counts.frontmatter_documents),
-        ),
-        ("opaque_mdx_documents", integer(counts.opaque_mdx_documents)),
-        (
-            "opaque_html_documents",
-            integer(counts.opaque_html_documents),
-        ),
-        ("opaque_mdx_regions", integer(counts.opaque_mdx_regions)),
-        ("opaque_mdx_bytes", integer(counts.opaque_mdx_bytes)),
-        ("opaque_html_regions", integer(counts.opaque_html_regions)),
-        ("opaque_html_bytes", integer(counts.opaque_html_bytes)),
-        ("frontmatter_regions", integer(counts.frontmatter_regions)),
-        ("frontmatter_bytes", integer(counts.frontmatter_bytes)),
-    ])
+    counts
 }
 
-fn reference_counts(comparisons: &[Comparison]) -> Value {
+fn reference_counts(comparisons: &[Comparison]) -> ReferenceCounts {
     let mut counts = ReferenceCounts::default();
     for observation in comparisons.iter().flat_map(|comparison| {
         comparison
@@ -154,26 +123,17 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             } => {}
         }
     }
-    object(vec![
-        ("extracted", integer(counts.extracted)),
-        ("explicit_local", integer(counts.explicit_local)),
-        ("same_repository", integer(counts.same_repository)),
-        (
-            "external_out_of_scope",
-            integer(counts.external_out_of_scope),
-        ),
-        ("unsupported", integer(counts.unsupported)),
-        ("resolved", integer(counts.resolved)),
-        ("missing", integer(counts.missing)),
-    ])
+    counts
 }
 
 pub(super) fn summary_counts(
     paired: &[PairedDocument<'_>],
     comparisons: &[Comparison],
     findings: &[Finding],
+    claims: &[crate::claim::ClaimOutcome],
+    counts_complete: bool,
     analysis_errors: u64,
-) -> Counts {
+) -> Summary {
     let mut counts = FindingCounts {
         total: u64::try_from(findings.len()).unwrap_or(u64::MAX),
         analysis_errors,
@@ -220,27 +180,16 @@ pub(super) fn summary_counts(
         paired.iter().filter_map(|pair| pair.candidate),
         unlinked_documents,
     );
-    let findings_value = object(vec![
-        ("total", integer(counts.total)),
-        ("record", integer(counts.record)),
-        ("warn", integer(counts.warn)),
-        ("fail", integer(counts.fail)),
-        ("introduced", integer(counts.introduced)),
-        ("pre_existing", integer(counts.pre_existing)),
-        ("resolved", integer(counts.resolved)),
-        ("unknown", integer(counts.unknown)),
-        ("not_applicable", integer(counts.not_applicable)),
-        ("debt_tolerated", integer(counts.debt_tolerated)),
-        ("waived", integer(counts.waived)),
-        ("analysis_errors", integer(counts.analysis_errors)),
-        (
-            "unsupported_capabilities",
-            integer(counts.unsupported_capabilities),
-        ),
-    ]);
-    Counts {
+    let unattested = claims
+        .iter()
+        .filter(|outcome| outcome.verdict != crate::claim::ClaimVerdict::Attested)
+        .count();
+    Summary {
+        counts_complete,
         documents,
         references: reference_counts(comparisons),
-        findings: findings_value,
+        findings: counts,
+        governed_claims: u64::try_from(claims.len()).unwrap_or(u64::MAX),
+        unattested_claims: u64::try_from(unattested).unwrap_or(u64::MAX),
     }
 }

@@ -52,11 +52,13 @@ fn unparsed_documents_survive_the_report_contract() {
         errors_retained: 64,
     };
     for report in [
-        commit_pair(&repo, &engine, None, &setup, &commit, &commit),
-        staged_index(&repo, &engine, None, &setup, &commit),
+        commit_pair(&repo, &engine, None, &setup, &commit, &commit).unwrap(),
+        staged_index(&repo, &engine, None, &setup, &commit).unwrap(),
     ] {
         assert_eq!(report.exit_code, 0);
-        let (payload, digest, _) = validate_envelope(&report.envelope).unwrap();
+        let bytes = amiss_scan::report::wire(&report).unwrap();
+        let value = amiss_wire::json::parse(&bytes).unwrap();
+        let (payload, digest, _) = validate_envelope(&value).unwrap();
         assert_eq!(digest, report.payload_digest);
         assert_eq!(payload.documents.len(), 3);
         assert_eq!(payload.summary.documents.unsupported, 2);
@@ -74,6 +76,6 @@ fn unparsed_documents_survive_the_report_contract() {
                 assert_eq!(side.extracted_references, 0);
             }
         }
-        crate::support::generated_report(&report.wire()).unwrap();
+        crate::support::generated_report(&amiss_scan::report::wire(&report).unwrap()).unwrap();
     }
 }

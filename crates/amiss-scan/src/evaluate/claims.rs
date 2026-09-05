@@ -2,9 +2,10 @@ use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
-use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
-use amiss_wire::report::model::ControlStateSource;
+use amiss_wire::report::model::{
+    ClaimFactEvidenceKind, ClaimKind, ClaimObserved, ControlStateSource, FindingFactEvidence,
+};
 use amiss_wire::report::{FindingKind, FixKind};
 
 use crate::claim::{ClaimMissingReason, ClaimVerdict};
@@ -28,31 +29,9 @@ pub struct ClaimGroup {
     pub target_path: RepoPath,
     pub line: u64,
     pub expected_digest: Digest,
-    pub observed: &'static str,
+    pub observed: ClaimObserved,
     pub observed_digest: Option<Digest>,
     pub observed_line: Option<Vec<u8>>,
-}
-
-/// The sorted distinct source digests with their multiplicities, in the
-/// wire's control-source shape.
-pub(super) fn sources_value(sources: &[ControlStateSource]) -> Value {
-    Value::array(
-        sources
-            .iter()
-            .map(|source| {
-                Value::object(vec![
-                    (
-                        "multiplicity".to_owned(),
-                        Value::Integer(i64::try_from(source.multiplicity).unwrap_or(i64::MAX)),
-                    ),
-                    (
-                        "digest".to_owned(),
-                        Value::string(source.digest.to_string()),
-                    ),
-                ])
-            })
-            .collect(),
-    )
 }
 
 pub(crate) fn source_multiplicities(
@@ -78,7 +57,7 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
     struct Keyed<'outcome> {
         outcome: &'outcome crate::claim::ClaimOutcome,
         kind: FindingKind,
-        observed: &'static str,
+        observed: ClaimObserved,
         observed_digest: Option<Digest>,
         observed_line: Option<&'outcome [u8]>,
     }
@@ -92,17 +71,17 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
                 observed,
             } => (
                 FindingKind::ClaimBroken,
-                "line-differs",
+                ClaimObserved::LineDiffers,
                 Some(*observed_digest),
                 Some(observed.as_slice()),
             ),
             ClaimVerdict::TargetMissing(reason) => (
                 FindingKind::ClaimTargetMissing,
                 match reason {
-                    ClaimMissingReason::Absent => "target-absent",
-                    ClaimMissingReason::NotABlob => "target-not-a-blob",
-                    ClaimMissingReason::LfsPointer => "target-lfs-pointer",
-                    ClaimMissingReason::LineOutOfRange => "line-out-of-range",
+                    ClaimMissingReason::Absent => ClaimObserved::TargetAbsent,
+                    ClaimMissingReason::NotABlob => ClaimObserved::TargetNotABlob,
+                    ClaimMissingReason::LfsPointer => ClaimObserved::TargetLfsPointer,
+                    ClaimMissingReason::LineOutOfRange => ClaimObserved::LineOutOfRange,
                 },
                 None,
                 None,
@@ -150,31 +129,21 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
 /// evidence family.
 pub(super) fn claim_finding(group: &ClaimGroup, profile: Profile) -> Result<Finding, crate::Error> {
     let rule_id = format!("claim/value/{}", group.name);
-    let evidence = Value::object(vec![
-        ("kind".to_owned(), Value::string("claim".to_owned())),
-        ("claim_kind".to_owned(), Value::string("value".to_owned())),
-        ("name".to_owned(), Value::string(group.name.clone())),
-        ("target_path".to_owned(), group.target_path.to_value()),
-        (
-            "line".to_owned(),
-            Value::Integer(i64::try_from(group.line).unwrap_or(i64::MAX)),
-        ),
-        (
-            "expected_digest".to_owned(),
-            Value::string(group.expected_digest.to_string()),
-        ),
-        (
-            "observed".to_owned(),
-            Value::string(group.observed.to_owned()),
-        ),
-        (
-            "observed_digest".to_owned(),
-            group
-                .observed_digest
-                .map_or(Value::Null, |value| Value::string(value.to_string())),
-        ),
-        ("sources".to_owned(), sources_value(&group.sources)),
-    ]);
+    let evidence = FindingFactEvidence::Claim {
+        kind: ClaimFactEvidenceKind::Claim,
+        claim_kind: ClaimKind::Value,
+        name: group.name.clone(),
+        target_path: group
+            .target_path
+            .as_str()
+            .and_then(|path| RepoPathText::new(path.to_owned()))
+            .ok_or(crate::Error::Internal)?,
+        line: group.line,
+        expected_digest: group.expected_digest,
+        observed: group.observed,
+        observed_digest: group.observed_digest,
+        sources: group.sources.clone(),
+    };
     let mut finding = control_fact_finding(
         group.kind,
         &group.document,

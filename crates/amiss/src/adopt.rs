@@ -8,7 +8,7 @@ use amiss_wire::controls::{
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, OwnerId, TreeIdentity, UtcInstant};
 use amiss_wire::report::model::{Evaluation, ReportPayload, Snapshot};
-use amiss_wire::report::{Disposition, FindingKind, validate_envelope};
+use amiss_wire::report::{Disposition, FindingKind};
 use amiss_wire::requests::CandidateSnapshot;
 
 use crate::invocation::{Adoption, Invocation, ProviderIdentity};
@@ -31,16 +31,13 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         println!("amiss adopt: the output path already exists; nothing recorded");
         return ExitCode::FAILURE;
     }
-    let Ok((payload, _digest, _verdict)) = validate_envelope(&built.envelope) else {
-        println!("amiss adopt: the evaluation could not be trusted; nothing recorded");
-        return ExitCode::from(2);
-    };
-    let Ok((items, ineligible, factless)) = items(&payload, adoption) else {
+    let payload = &built.envelope.payload;
+    let Ok((items, ineligible, factless)) = items(payload, adoption) else {
         println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
         return ExitCode::from(2);
     };
     let recorded = items.len();
-    let Some(snapshot) = snapshot(&payload, identity, adoption, built.payload_digest, items) else {
+    let Some(snapshot) = snapshot(payload, identity, adoption, built.payload_digest, items) else {
         println!("amiss adopt: the report carries no candidate tree; nothing recorded");
         return ExitCode::from(2);
     };
@@ -71,8 +68,8 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
 /// Every blocking, debt-eligible finding becomes one item carrying the fact
 /// the adoption accepts; blocking rows outside the eligible kinds are
 /// counted and left to be fixed instead.
-fn items(
-    payload: &ReportPayload,
+fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
+    payload: &ReportPayload<P, R, M, E>,
     adoption: &Adoption,
 ) -> Result<(Vec<DebtItem>, usize, usize), ()> {
     let owner = OwnerId::new(adoption.owner.clone()).ok_or(())?;
@@ -114,8 +111,8 @@ fn items(
     Ok((rows, ineligible, factless))
 }
 
-fn snapshot(
-    payload: &ReportPayload,
+fn snapshot<P, R, M, E>(
+    payload: &ReportPayload<P, R, M, E>,
     identity: &ProviderIdentity,
     adoption: &Adoption,
     payload_digest: Digest,

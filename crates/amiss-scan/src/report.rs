@@ -10,14 +10,15 @@ pub use build::{construct, construct_incomplete};
 pub use identity::candidate_identity_digest;
 pub use index::{INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, synthetic_candidate};
 
-use amiss_wire::controls::Profile;
+use amiss_wire::controls::{GitMode, Profile, ProjectionSource};
 use amiss_wire::digest::Digest;
-use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::{BranchRef, RepoPath};
 use amiss_wire::report::EngineProvenance;
+use amiss_wire::report::model;
 use amiss_wire::report::model::{ControlsUnavailableReason, SnapshotUnavailableReason};
 pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 pub use amiss_wire::requests::GitSnapshotIdentity as SnapshotIdentity;
+use amiss_wire::resolution::Resolution;
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 
@@ -68,51 +69,34 @@ pub struct Setup {
 
 /// A constructed report: the envelope value, the payload digest, and the
 /// result the process must exit with. The wire is never materialized here;
-/// a binary streams the envelope through its reserved fatal serializer.
+/// a binary streams the envelope through its reserved output buffer.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Built {
-    pub envelope: Value,
+pub struct Built<
+    P = model::ReportPayload<
+        RepoPath,
+        Resolution<RepoPath>,
+        GitMode,
+        model::FindingFactEvidence<
+            RepoPath,
+            Resolution<RepoPath>,
+            ProjectionSource,
+            model::ProjectionDifference<Box<model::RowsProjectionDifference>>,
+            GitMode,
+        >,
+    >,
+> {
+    pub envelope: model::ReportEnvelope<P>,
     pub payload_digest: Digest,
-    pub status: &'static str,
-    pub exit_code: i64,
+    pub status: model::ReportStatus,
+    pub exit_code: u8,
 }
 
-impl Built {
-    /// The exact report wire, `JCS(envelope) || LF`, for callers that must
-    /// hold the bytes.
-    #[must_use]
-    pub fn wire(&self) -> Vec<u8> {
-        let mut wire = canonical(&self.envelope);
-        wire.push(b'\n');
-        wire
-    }
-}
-
-fn string(text: &str) -> Value {
-    Value::string(text.to_owned())
-}
-
-fn nullable(text: Option<&str>) -> Value {
-    text.map_or(Value::Null, string)
-}
-
-fn nullable_path(path: Option<&RepoPath>) -> Value {
-    path.map_or(Value::Null, RepoPath::to_value)
-}
-
-fn integer(value: u64) -> Value {
-    Value::Integer(i64::try_from(value).unwrap_or(i64::MAX))
-}
-
-fn digest_value(digest: Digest) -> Value {
-    Value::string(digest.to_string())
-}
-
-fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::object(
-        members
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-    )
+/// The exact canonical report bytes, including the trailing newline.
+///
+/// # Errors
+/// Returns the serialization error without returning partial output.
+pub fn wire(built: &Built) -> std::io::Result<Vec<u8>> {
+    let mut wire = Vec::new();
+    amiss_wire::report::emit_report(&built.envelope, &mut wire)?;
+    Ok(wire)
 }

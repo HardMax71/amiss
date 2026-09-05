@@ -68,7 +68,6 @@ macro_rules! declare_meaningful_enum {
 
 mod error;
 mod failure;
-mod fatal;
 mod finding;
 pub mod model;
 mod output;
@@ -77,12 +76,11 @@ mod sandbox;
 use crate::digest::hj;
 use crate::json::Value;
 
-pub use error::{AnalysisErrorCode, ErrorDetail, error_row_value};
+pub use error::{AnalysisErrorCode, ErrorDetail, error_row};
 pub use failure::{
     EngineProvenance, adapter_contract, engine_block, invocation_failure_envelope,
     invocation_failure_wire, unavailable_evaluation_envelope, unavailable_evaluation_wire,
 };
-pub use fatal::FatalSerializer;
 pub use finding::{Disposition, FindingKind, FindingMetadata, FindingScope, FixKind, IntentKind};
 pub use output::emit_report;
 pub use sandbox::sandbox_descriptor;
@@ -193,17 +191,4 @@ pub fn validate_envelope(
         .map_err(|_defect| ReportDefect::NotAReport)?;
     let recorded = crate::digest::Digest::from_wire(recorded).ok_or(ReportDefect::NotAReport)?;
     Ok((typed, recorded, verdict))
-}
-
-fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::Object(
-        members
-            .into_iter()
-            .map(|(key, value)| (key.into(), value))
-            .collect(),
-    )
-}
-
-fn string(value: &str) -> Value {
-    Value::String(value.into())
 }
