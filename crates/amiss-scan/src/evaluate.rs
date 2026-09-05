@@ -18,6 +18,7 @@ mod model;
 mod projections;
 mod references;
 mod run;
+mod tests;
 mod waiver;
 
 pub(crate) use claims::source_multiplicities;
@@ -107,7 +108,7 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
         Resolution::UnsupportedSemantics(semantics) => {
             unsupported_semantics_value(resolution.discriminant().as_ref(), semantics)
         }
-        Resolution::UnsupportedVersion(scope) => {
+        Resolution::UnsupportedVersion { scope } => {
             let mut fields = vec![(
                 "kind".to_owned(),
                 Value::string(scope.discriminant().as_ref().to_owned()),
@@ -130,12 +131,12 @@ pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
                 vec![("scope", Value::object(fields))],
             )
         }
-        Resolution::Invalid(reason) => reasoned_resolution(
+        Resolution::Invalid { reason } => reasoned_resolution(
             resolution.discriminant().as_ref(),
             reason.as_ref(),
             Vec::new(),
         ),
-        Resolution::External(reason) => reasoned_resolution(
+        Resolution::External { reason } => reasoned_resolution(
             resolution.discriminant().as_ref(),
             reason.as_ref(),
             Vec::new(),
@@ -270,7 +271,7 @@ pub(super) const fn resolution_kinds(resolution: &crate::resolve::Resolution) ->
             structural: Some(FindingKind::ExplicitTargetTypeMismatch),
             boundary: None,
         },
-        Resolution::Invalid(_) => ResolutionKinds {
+        Resolution::Invalid { .. } => ResolutionKinds {
             structural: None,
             boundary: Some(FindingKind::InvalidReference),
         },
@@ -278,7 +279,7 @@ pub(super) const fn resolution_kinds(resolution: &crate::resolve::Resolution) ->
             structural: None,
             boundary: Some(FindingKind::UnsupportedReferenceSemantics),
         },
-        Resolution::UnsupportedVersion(_) => ResolutionKinds {
+        Resolution::UnsupportedVersion { .. } => ResolutionKinds {
             structural: None,
             boundary: Some(FindingKind::UnsupportedVersionScope),
         },
@@ -290,7 +291,7 @@ pub(super) const fn resolution_kinds(resolution: &crate::resolve::Resolution) ->
             structural: None,
             boundary: Some(FindingKind::TargetDeclaredUntracked),
         },
-        Resolution::Resolved { .. } | Resolution::External(_) => ResolutionKinds {
+        Resolution::Resolved { .. } | Resolution::External { .. } => ResolutionKinds {
             structural: None,
             boundary: None,
         },

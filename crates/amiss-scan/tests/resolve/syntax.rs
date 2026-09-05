@@ -21,7 +21,12 @@ fn component_splitting_follows_rfc_order() {
             "https://e.com/a?x?y#z?u",
         )
         .unwrap_or_else(|_defect| panic!("resolve"));
-    assert!(matches!(row, Resolution::External(ExternalReference::Url)));
+    assert!(matches!(
+        row,
+        Resolution::External {
+            reason: ExternalReference::Url
+        }
+    ));
     assert_eq!(intent.kind, IntentKind::ExternalUrl);
     assert_eq!(intent.external_scheme.as_deref(), Some("https"));
     assert_eq!(intent.query.as_deref(), Some("x?y"));
@@ -37,7 +42,12 @@ fn schemes_classify_external_and_uris_validate() {
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
-            matches!(&row, Resolution::External(ExternalReference::Url)),
+            matches!(
+                &row,
+                Resolution::External {
+                    reason: ExternalReference::Url
+                }
+            ),
             "{destination}: {row:?}"
         );
     }
@@ -53,7 +63,12 @@ fn schemes_classify_external_and_uris_validate() {
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
-            matches!(&row, Resolution::Invalid(InvalidReference::Uri)),
+            matches!(
+                &row,
+                Resolution::Invalid {
+                    reason: InvalidReference::Uri
+                }
+            ),
             "{destination}: {row:?}"
         );
     }
@@ -107,7 +122,7 @@ fn native_paths_decode_once_and_stay_contained() {
             .run_as(Adapter::Markdown, None, "docs/guide.md", false, destination)
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
-        assert_eq!(row, Resolution::Invalid(reason), "{destination}");
+        assert_eq!(row, Resolution::Invalid { reason }, "{destination}");
     }
     for destination in ["guide.md", "./guide.md", "%2E%2E/README"] {
         let row = bed
@@ -180,7 +195,12 @@ fn terminal_slashes_author_trees_and_break_images() {
     let (_intent, image) = bed
         .run_as(Adapter::Markdown, None, "docs/guide.md", true, "sub/")
         .unwrap_or_else(|_d| panic!());
-    assert_eq!(image, Resolution::Invalid(InvalidReference::Syntax));
+    assert_eq!(
+        image,
+        Resolution::Invalid {
+            reason: InvalidReference::Syntax
+        }
+    );
 
     let (intent, mismatch) = bed
         .run_as(Adapter::Markdown, None, "docs/guide.md", false, "guide.md/")
@@ -372,7 +392,12 @@ fn query_and_fragment_semantics_follow_the_precedence() {
         )
         .unwrap_or_else(|_defect| panic!("resolve invalid fragment"))
         .1;
-    assert_eq!(row, Resolution::Invalid(InvalidReference::FragmentEncoding));
+    assert_eq!(
+        row,
+        Resolution::Invalid {
+            reason: InvalidReference::FragmentEncoding
+        }
+    );
 
     let (_i, retained) = bed
         .run_as(
@@ -491,7 +516,7 @@ fn an_authority_is_judged_by_its_exact_grammar() {
             .unwrap_or_else(|_defect| panic!("resolve {accepted}"))
             .1;
         assert!(
-            matches!(row, Resolution::External(_)),
+            matches!(row, Resolution::External { .. }),
             "{accepted}: {row:?}"
         );
     }
@@ -505,7 +530,12 @@ fn an_authority_is_judged_by_its_exact_grammar() {
             .unwrap_or_else(|_defect| panic!("resolve {refused}"))
             .1;
         assert!(
-            matches!(row, Resolution::Invalid(InvalidReference::Uri)),
+            matches!(
+                row,
+                Resolution::Invalid {
+                    reason: InvalidReference::Uri
+                }
+            ),
             "{refused}: {row:?}"
         );
     }

@@ -57,12 +57,16 @@ pub(super) fn normalized_native_path(
     path_part: &str,
 ) -> Result<(RepoPath, TargetKind), Resolution> {
     if path_part.contains('\\') {
-        return Err(Resolution::Invalid(InvalidReference::BackslashSeparator));
+        return Err(Resolution::Invalid {
+            reason: InvalidReference::BackslashSeparator,
+        });
     }
     let trailing_slash = path_part.len() > 1 && path_part.ends_with('/');
     let path = path_part.strip_suffix('/').unwrap_or(path_part);
     if path.split('/').any(str::is_empty) || (trailing_slash && is_image) {
-        return Err(Resolution::Invalid(InvalidReference::Syntax));
+        return Err(Resolution::Invalid {
+            reason: InvalidReference::Syntax,
+        });
     }
     let target_kind = if trailing_slash {
         TargetKind::Tree
@@ -87,13 +91,16 @@ pub(super) fn normalized_native_path(
             resolved.push(b'/');
         }
         let decoded = resolved.len();
-        decode_component(segment, &mut resolved, invalid_path_byte).map_err(Resolution::Invalid)?;
+        decode_component(segment, &mut resolved, invalid_path_byte)
+            .map_err(|reason| Resolution::Invalid { reason })?;
         match resolved.get(decoded..).unwrap_or_default() {
             b"." => resolved.truncate(prior),
             b".." => {
                 resolved.truncate(prior);
                 if resolved.is_empty() {
-                    return Err(Resolution::Invalid(InvalidReference::PathTraversal));
+                    return Err(Resolution::Invalid {
+                        reason: InvalidReference::PathTraversal,
+                    });
                 }
                 match resolved.iter().rposition(|byte| *byte == b'/') {
                     Some(separator) => resolved.truncate(separator),
@@ -104,7 +111,9 @@ pub(super) fn normalized_native_path(
         }
     }
     let Some(joined) = RepoPath::from_bytes(resolved) else {
-        return Err(Resolution::Invalid(InvalidReference::Syntax));
+        return Err(Resolution::Invalid {
+            reason: InvalidReference::Syntax,
+        });
     };
     Ok((joined, target_kind))
 }

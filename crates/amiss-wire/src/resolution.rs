@@ -224,7 +224,8 @@ pub enum ExternalReference {
 /// The total outcome of resolving one authored reference. The outer variants
 /// are the semantic partitions used by evaluation, correlation, and summary
 /// reporting; leaf enums retain the exact diagnostic and its required data.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 #[strum_discriminants(name(ResolutionTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
@@ -235,9 +236,9 @@ pub enum Resolution<P> {
     TypeMismatch { target: Target<P> },
     UnsupportedTarget(UnsupportedTarget<P>),
     UnsupportedSemantics(UnsupportedSemantics<P>),
-    UnsupportedVersion(VersionScope<P>),
-    Invalid(InvalidReference),
-    External(ExternalReference),
+    UnsupportedVersion { scope: VersionScope<P> },
+    Invalid { reason: InvalidReference },
+    External { reason: ExternalReference },
 }
 
 impl<P> Resolution<P> {
@@ -249,9 +250,9 @@ impl<P> Resolution<P> {
             Self::Missing(_)
             | Self::DeclaredUntracked(_)
             | Self::UnsupportedTarget(_)
-            | Self::UnsupportedVersion(_)
-            | Self::Invalid(_)
-            | Self::External(_) => false,
+            | Self::UnsupportedVersion { .. }
+            | Self::Invalid { .. }
+            | Self::External { .. } => false,
         }
     }
 }

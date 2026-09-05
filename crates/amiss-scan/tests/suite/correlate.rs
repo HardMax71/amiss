@@ -339,7 +339,9 @@ fn the_derivation_table_is_total() {
         query: None,
         fragment: None,
     };
-    external.resolution = Resolution::External(ExternalReference::Url);
+    external.resolution = Resolution::External {
+        reason: ExternalReference::Url,
+    };
     let got = run(
         &side(vec![observation(&external)]),
         &side(vec![observation(&external)]),

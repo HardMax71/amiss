@@ -230,7 +230,7 @@ fn assert_split_outcome(intent: &Intent, row: &Resolution, expected: &Value, id:
             );
         }
         "unsupported-version-scope" => {
-            let Resolution::UnsupportedVersion(scope) = &row else {
+            let Resolution::UnsupportedVersion { scope } = &row else {
                 panic!("{id}: unexpected version-scoped outcome: {row:?}");
             };
             match scope {
@@ -250,7 +250,7 @@ fn assert_split_outcome(intent: &Intent, row: &Resolution, expected: &Value, id:
         }
         "invalid" => {
             assert!(
-                matches!(&row, Resolution::Invalid(_)),
+                matches!(&row, Resolution::Invalid { .. }),
                 "{id}: expected an invalid outcome, got {row:?}"
             );
             assert_eq!(expected_path, None, "{id}");
@@ -397,13 +397,20 @@ fn identity_case(bed: &mut Bed, case: &Value, id: &str) {
         "foreign" => assert!(
             matches!(
                 &row,
-                Resolution::External(ExternalReference::ForeignRepository)
+                Resolution::External {
+                    reason: ExternalReference::ForeignRepository
+                }
             ),
             "{id}: expected a foreign repository, got {row:?}"
         ),
         "external" => {
             assert!(
-                matches!(&row, Resolution::External(ExternalReference::Url)),
+                matches!(
+                    &row,
+                    Resolution::External {
+                        reason: ExternalReference::Url
+                    }
+                ),
                 "{id}: expected an external URL, got {row:?}"
             );
             assert_eq!(intent.kind, IntentKind::ExternalUrl, "{id}");
@@ -435,12 +442,14 @@ fn forge_form_case(bed: &mut Bed, case: &Value, id: &str) {
         "foreign" => assert!(
             matches!(
                 &row,
-                Resolution::External(ExternalReference::ForeignRepository)
+                Resolution::External {
+                    reason: ExternalReference::ForeignRepository
+                }
             ),
             "{id}: expected a foreign repository, got {row:?}"
         ),
         "unsupported-version-scope" => assert!(
-            matches!(&row, Resolution::UnsupportedVersion(_)),
+            matches!(&row, Resolution::UnsupportedVersion { .. }),
             "{id}: expected an unsupported version, got {row:?}"
         ),
         expected => assert_eq!(intent.target_kind.map(Into::into), Some(expected), "{id}"),
@@ -535,9 +544,9 @@ fn boundary_case(bed: &mut Bed, case: &Value, id: &str) {
         | Resolution::DeclaredUntracked(_)
         | Resolution::TypeMismatch { .. }
         | Resolution::UnsupportedTarget(_)
-        | Resolution::UnsupportedVersion(_)
-        | Resolution::Invalid(_)
-        | Resolution::External(_) => panic!("{id}: unexpected boundary outcome: {row:?}"),
+        | Resolution::UnsupportedVersion { .. }
+        | Resolution::Invalid { .. }
+        | Resolution::External { .. } => panic!("{id}: unexpected boundary outcome: {row:?}"),
     }
 }
 
@@ -670,28 +679,24 @@ fn dispatch(bed: &mut Bed, case: &Value) {
         "uri-components" => {
             let (intent, _row) = bed.run(None, "README.md", false, text(case, "value"));
             let expected = case.get("expected").unwrap();
-            assert_eq!(
+            let actual = [
                 intent.repository_path.as_ref().and_then(RepoPath::as_str),
-                expected.get("path").and_then(Value::as_str),
-                "{id}"
-            );
-            assert_eq!(
                 intent.query.as_deref(),
-                expected.get("query").and_then(Value::as_str),
-                "{id}"
-            );
-            assert_eq!(
                 intent.fragment.as_deref(),
-                expected.get("fragment").and_then(Value::as_str),
-                "{id}"
-            );
+            ];
+            let expected = ["path", "query", "fragment"]
+                .map(|field| expected.get(field).and_then(Value::as_str));
+            assert_eq!(actual, expected, "{id}");
         }
         "native-trailing-slash" => {
             let is_image = text(case, "construct").contains("image");
             let (_intent, row) = bed.run(None, "README.md", is_image, "docs/");
             let expected = case.get("expected").unwrap();
             assert_eq!(row.discriminant().as_ref(), text(expected, "kind"), "{id}");
-            let Resolution::Invalid(invalid @ InvalidReference::Syntax) = &row else {
+            let Resolution::Invalid {
+                reason: invalid @ InvalidReference::Syntax,
+            } = &row
+            else {
                 panic!("{id}: unexpected trailing-slash outcome: {row:?}");
             };
             assert_eq!(invalid.as_ref(), text(expected, "reason"), "{id}");
