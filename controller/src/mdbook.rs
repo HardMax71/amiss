@@ -137,11 +137,6 @@ pub fn mdbook_site_evidence(
     })
     .map(|canonical| hb(INPUT_DOMAIN, &canonical))
     .map_err(|_defect| MdBookEvidenceError::Evidence)?;
-    let observations = observations
-        .into_iter()
-        .map(serde_json::to_value)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_defect| MdBookEvidenceError::Evidence)?;
     amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {

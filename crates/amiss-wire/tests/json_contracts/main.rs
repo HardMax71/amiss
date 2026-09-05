@@ -301,7 +301,11 @@ fn sidecar_examples_match_their_typed_sources() {
         replayed,
         json::canonical(&json::parse(&locale_assessment_bytes).unwrap())
     );
+}
 
+#[test]
+fn semantic_examples_match_the_actual_typed_producers() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let record_input_bytes = fs::read(examples.join("scanner-record-set-input.json")).unwrap();
     let record_input = semantic::record::parse_input(&record_input_bytes).unwrap();
     assert_eq!(
@@ -312,17 +316,26 @@ fn sidecar_examples_match_their_typed_sources() {
     let semantic_evidence_bytes =
         fs::read(examples.join("scanner-semantic-evidence.json")).unwrap();
     let semantic_evidence = semantic::parse(&semantic_evidence_bytes).unwrap();
+    let typed: semantic::SemanticEvidenceEnvelope<semantic::observation::SiteBuildObservation> =
+        serde_json::from_slice(&semantic_evidence_bytes).unwrap();
     assert_eq!(
-        serde_json_canonicalizer::to_vec(&semantic_evidence).unwrap(),
+        semantic::envelope(typed.payload).unwrap(),
         json::canonical(&json::parse(&semantic_evidence_bytes).unwrap())
     );
+    assert_eq!(typed.payload_digest, semantic_evidence.payload_digest);
 
     let semantic_template_bytes =
         fs::read(examples.join("scanner-semantic-template.json")).unwrap();
-    let semantic_template = semantic::parse_template(&semantic_template_bytes).unwrap();
+    let semantic_template: semantic::SemanticEvidenceTemplate<semantic::record::Observation> =
+        serde_json::from_slice(&semantic_template_bytes).unwrap();
+    let generated_template = semantic::template(semantic_template).unwrap();
     assert_eq!(
-        serde_json_canonicalizer::to_vec(&semantic_template).unwrap(),
+        generated_template,
         json::canonical(&json::parse(&semantic_template_bytes).unwrap())
+    );
+    assert_eq!(
+        semantic::record::template(record_input).unwrap(),
+        generated_template
     );
 }
 

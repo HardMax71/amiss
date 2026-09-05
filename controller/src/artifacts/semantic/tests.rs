@@ -13,7 +13,7 @@ use crate::{ArtifactError, SemanticEvidenceTemplate};
 #[test]
 fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), ArtifactError> {
     let candidate = hb("amiss/test-candidate", b"candidate");
-    let template = SemanticEvidenceTemplate {
+    let template: SemanticEvidenceTemplate = SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
             kind: ArtifactId::new("record-set".to_owned()).ok_or(ArtifactError::Corrupt)?,
