@@ -23,10 +23,11 @@ mod waiver;
 pub(crate) use claims::source_multiplicities;
 pub use claims::{ClaimGroup, claim_groups};
 pub use control::GovernedSeed;
+pub(crate) use finding::key_value;
 use model::FindingKeyScope;
 pub use model::{
     Attribution, DebtApplied, DocumentInput, DocumentSide, Finding, FindingFact, FindingFix,
-    FindingKey, Location, LocationSide, PolicyStep, WaiverApplied,
+    Location, LocationSide, PolicyStep, WaiverApplied,
 };
 pub use references::structural_facts;
 pub(crate) use run::{GovernedInputs, evaluate_with_site};

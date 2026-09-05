@@ -1,10 +1,11 @@
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
+use amiss_wire::report::model::FindingKeyInput;
 pub use amiss_wire::report::model::{Attribution, LocationSide, PolicyStep};
-use amiss_wire::report::{Disposition, FindingKind, FixKind};
+use amiss_wire::report::{Disposition, FixKind};
 
-use super::finding::{key_digest, key_value};
+use super::finding::key_value;
 use super::{FACT_DOMAIN, FACT_SCHEMA};
 use crate::scan::SpanDisplay;
 
@@ -39,40 +40,6 @@ pub struct Location {
 
 pub(super) type FindingKeyScope = amiss_wire::report::model::FindingKeyScope<RepoPath>;
 
-/// A finding's typed identity and its canonical digest. Construction owns the
-/// key projection, so a digest cannot be paired with another key input.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct FindingKey {
-    kind: FindingKind,
-    scope: FindingKeyScope,
-    digest: Digest,
-}
-
-impl FindingKey {
-    pub(super) fn new(kind: FindingKind, scope: FindingKeyScope) -> Self {
-        let digest = key_digest(&key_value(kind, &scope));
-        Self {
-            kind,
-            scope,
-            digest,
-        }
-    }
-
-    #[must_use]
-    pub const fn kind(&self) -> FindingKind {
-        self.kind
-    }
-
-    #[must_use]
-    pub const fn digest(&self) -> Digest {
-        self.digest
-    }
-
-    pub(crate) fn to_value(&self) -> Value {
-        key_value(self.kind, &self.scope)
-    }
-}
-
 /// One canonical fact and the digest computed from those exact bytes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FindingFact {
@@ -81,14 +48,14 @@ pub struct FindingFact {
 }
 
 impl FindingFact {
-    pub(crate) fn new(key: &FindingKey, evidence: Value) -> Self {
+    pub(crate) fn new(key: &FindingKeyInput<RepoPath>, evidence: Value) -> Self {
         let value = Value::object(vec![
             ("schema".to_owned(), Value::string(FACT_SCHEMA.to_owned())),
             (
                 "finding_kind".to_owned(),
-                Value::string(key.kind().as_ref().to_owned()),
+                Value::string(key.finding_kind.as_ref().to_owned()),
             ),
-            ("key_input".to_owned(), key.to_value()),
+            ("key_input".to_owned(), key_value(key)),
             ("evidence".to_owned(), evidence),
         ]);
         let digest = hj(FACT_DOMAIN, &value);
@@ -119,10 +86,11 @@ pub struct FindingFix {
 /// steps beyond the built-in table live with the control layer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Finding {
-    pub(super) key: FindingKey,
+    pub key_input: FindingKeyInput<RepoPath>,
+    pub finding_key: Digest,
     pub attribution: Attribution,
-    pub(super) base_fact: Option<FindingFact>,
-    pub(super) candidate_fact: Option<FindingFact>,
+    pub base_fact: Option<FindingFact>,
+    pub candidate_fact: Option<FindingFact>,
     pub member_count: u64,
     pub observation_ids: Vec<Digest>,
     pub location: Location,
@@ -131,33 +99,7 @@ pub struct Finding {
     pub steps: Vec<PolicyStep>,
     pub debt: Option<DebtApplied>,
     pub waiver: Option<WaiverApplied>,
-    pub(super) fix: Option<FindingFix>,
-}
-
-impl Finding {
-    #[must_use]
-    pub const fn kind(&self) -> FindingKind {
-        self.key.kind()
-    }
-
-    #[must_use]
-    pub const fn key(&self) -> &FindingKey {
-        &self.key
-    }
-
-    #[must_use]
-    pub const fn base_fact(&self) -> Option<&FindingFact> {
-        self.base_fact.as_ref()
-    }
-
-    #[must_use]
-    pub const fn candidate_fact(&self) -> Option<&FindingFact> {
-        self.candidate_fact.as_ref()
-    }
-
-    pub(crate) const fn fix(&self) -> Option<&FindingFix> {
-        self.fix.as_ref()
-    }
+    pub(crate) fix: Option<FindingFix>,
 }
 
 /// A valid active debt item applied to this finding, retained as adoption

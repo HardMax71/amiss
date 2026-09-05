@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
-use amiss_wire::controls::{Profile, TargetKind};
-use amiss_wire::digest::Digest;
+use amiss_wire::controls::{FindingKeyInputSchema, Profile, TargetKind};
+use amiss_wire::digest::{Digest, hj};
+use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
-    EmptyRepositoryPath, ObservationFindingKeyScopeKind, PolicySource,
+    EmptyRepositoryPath, FindingKeyInput, ObservationFindingKeyScopeKind, PolicySource,
     ReferenceFindingKeyScopeKind, ReferenceOccurrence, ReferenceOccurrenceKind,
     RepositoryIntentKind, RepositoryIntentPath, RepositoryTargetIntent,
 };
@@ -14,8 +15,8 @@ use crate::observe;
 
 use super::finding::{built_in_step, missing_fix, observation_location, reference_fact, simple};
 use super::{
-    Attribution, Finding, FindingKey, FindingKeyScope, Location, LocationSide, PolicyStep,
-    resolution_kinds,
+    Attribution, FINDING_KEY_DOMAIN, Finding, FindingKeyScope, Location, LocationSide, PolicyStep,
+    key_value, resolution_kinds,
 };
 
 /// The adoption-reproduction projection: every structural key among the
@@ -40,7 +41,7 @@ pub fn structural_facts(observations: &[Observation]) -> BTreeMap<Digest, (u64, 
 }
 
 struct KeyGroup<'a> {
-    key: FindingKey,
+    key: FindingKeyInput<RepoPath>,
     base: Vec<&'a Observation>,
     candidate: Vec<&'a Observation>,
 }
@@ -54,9 +55,10 @@ fn collect_structural<'a>(
         return;
     };
     let intent = &observation.intent;
-    let key = FindingKey::new(
-        kind,
-        FindingKeyScope::Reference {
+    let key = FindingKeyInput {
+        finding_kind: kind,
+        schema: FindingKeyInputSchema::Current,
+        scope: FindingKeyScope::Reference {
             document: observation.document.clone(),
             kind: ReferenceFindingKeyScopeKind::Reference,
             normalized_target_intent: RepositoryTargetIntent {
@@ -76,8 +78,8 @@ fn collect_structural<'a>(
             },
             source_construct: observation.construct,
         },
-    );
-    let digest = key.digest();
+    };
+    let digest = hj(FINDING_KEY_DOMAIN, &key_value(&key));
     let group = groups.entry(digest).or_insert_with(|| KeyGroup {
         key,
         base: Vec::new(),
@@ -115,8 +117,8 @@ pub(super) fn structural_findings(
         collect_structural(&mut groups, observation, true);
     }
 
-    for (_digest, group) in groups {
-        let kind = group.key.kind();
+    for (digest, group) in groups {
+        let kind = group.key.finding_kind;
         let base_fact = group.base.first().map(|observation| {
             reference_fact(
                 &group.key,
@@ -176,9 +178,9 @@ pub(super) fn structural_findings(
         } else {
             kind.built_in_disposition(profile)
         };
-        let fix = missing_fix(&group.candidate);
         findings.push(Finding {
-            key: group.key,
+            key_input: group.key,
+            finding_key: digest,
             attribution,
             base_fact,
             candidate_fact,
@@ -187,7 +189,7 @@ pub(super) fn structural_findings(
             location,
             configured_disposition: configured,
             effective_disposition: configured,
-            fix,
+            fix: missing_fix(&group.candidate),
             debt: None,
             waiver: None,
             steps: if attribution == Attribution::Resolved {

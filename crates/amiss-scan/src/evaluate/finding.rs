@@ -1,8 +1,8 @@
-use amiss_wire::controls::Profile;
+use amiss_wire::controls::{FindingKeyInputSchema, Profile};
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
-use amiss_wire::report::model::{PolicySource, RepositoryIntentPath};
+use amiss_wire::report::model::{FindingKeyInput, PolicySource, RepositoryIntentPath};
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 use amiss_wire::resolution::{Missing, Resolution};
 
@@ -10,18 +10,14 @@ use crate::correlate::Observation;
 
 use super::{
     Attribution, FINDING_KEY_DOMAIN, FINDING_KEY_SCHEMA, Finding, FindingFact, FindingFix,
-    FindingKey, FindingKeyScope, Location, LocationSide, PolicyStep, resolution_value,
+    FindingKeyScope, Location, LocationSide, PolicyStep, resolution_value,
 };
 
 pub(super) fn nullable_path(path: Option<&RepoPath>) -> Value {
     path.map_or(Value::Null, RepoPath::to_value)
 }
 
-pub(super) fn key_digest(input: &Value) -> Digest {
-    hj(FINDING_KEY_DOMAIN, input)
-}
-
-pub(super) fn key_value(kind: FindingKind, scope: &FindingKeyScope) -> Value {
+pub(crate) fn key_value(input: &FindingKeyInput<RepoPath>) -> Value {
     Value::object(vec![
         (
             "schema".to_owned(),
@@ -29,9 +25,9 @@ pub(super) fn key_value(kind: FindingKind, scope: &FindingKeyScope) -> Value {
         ),
         (
             "finding_kind".to_owned(),
-            Value::string(kind.as_ref().to_owned()),
+            Value::string(input.finding_kind.as_ref().to_owned()),
         ),
-        ("scope".to_owned(), scope_value(scope)),
+        ("scope".to_owned(), scope_value(&input.scope)),
     ])
 }
 
@@ -137,7 +133,7 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
 }
 
 pub(super) fn reference_fact(
-    key: &FindingKey,
+    key: &FindingKeyInput<RepoPath>,
     observation: &Observation,
     multiplicity: u64,
 ) -> FindingFact {
@@ -233,24 +229,17 @@ pub(super) fn candidate_fact_finding(
     location: Location,
     profile: Profile,
 ) -> Finding {
-    let key = FindingKey::new(kind, scope);
-    let fact = FindingFact::new(&key, evidence);
-    let configured = kind.built_in_disposition(profile);
-    Finding {
-        key,
-        attribution: Attribution::NotApplicable,
-        base_fact: None,
-        candidate_fact: Some(fact),
-        member_count,
-        observation_ids: Vec::new(),
+    let mut finding = simple(
+        kind,
+        scope,
+        Attribution::NotApplicable,
+        Vec::new(),
         location,
-        configured_disposition: configured,
-        effective_disposition: configured,
-        debt: None,
-        waiver: None,
-        fix: None,
-        steps: vec![built_in_step(kind, profile)],
-    }
+        profile,
+    );
+    finding.candidate_fact = Some(FindingFact::new(&finding.key_input, evidence));
+    finding.member_count = member_count;
+    finding
 }
 
 pub(super) fn simple(
@@ -261,10 +250,16 @@ pub(super) fn simple(
     location: Location,
     profile: Profile,
 ) -> Finding {
-    let key = FindingKey::new(kind, scope);
+    let key_input = FindingKeyInput {
+        finding_kind: kind,
+        schema: FindingKeyInputSchema::Current,
+        scope,
+    };
+    let finding_key = hj(FINDING_KEY_DOMAIN, &key_value(&key_input));
     let configured = kind.built_in_disposition(profile);
     Finding {
-        key,
+        key_input,
+        finding_key,
         attribution,
         base_fact: None,
         candidate_fact: None,

@@ -118,15 +118,15 @@ pub(super) fn finding_value(
     comparison_runs: [&[(Option<Digest>, Value)]; 2],
     document_rows: &[(RepoPath, Value)],
 ) -> Value {
-    let kind = finding.kind();
+    let kind = finding.key_input.finding_kind;
     let metadata = kind.metadata();
     let coverage = match metadata.scope {
         FindingScope::Control => "control-plane",
         FindingScope::Reference | FindingScope::Observation | FindingScope::Document => "none",
     };
     let candidate_fact = finding
-        .candidate_fact()
-        .cloned()
+        .candidate_fact
+        .clone()
         .or_else(|| nonreference_fact(finding, comparison_runs, document_rows));
     let fact_pair = |fact: Option<&FindingFact>| {
         (
@@ -134,7 +134,7 @@ pub(super) fn finding_value(
             fact.map_or(Value::Null, |fact| fact.value().clone()),
         )
     };
-    let (base_digest, base_fact) = fact_pair(finding.base_fact());
+    let (base_digest, base_fact) = fact_pair(finding.base_fact.as_ref());
     let (candidate_digest, candidate_fact_value) = fact_pair(candidate_fact.as_ref());
     let location_span = finding.location.span.map_or(Value::Null, |span| {
         let display = finding.location.display.unwrap_or(SpanDisplay {
@@ -147,11 +147,11 @@ pub(super) fn finding_value(
     });
     let (debt, waiver) = application_values(finding);
     object(vec![
-        ("key_input", finding.key().to_value()),
-        ("finding_key", digest_value(finding.key().digest())),
+        ("key_input", crate::evaluate::key_value(&finding.key_input)),
+        ("finding_key", digest_value(finding.finding_key)),
         ("kind", string(kind.as_ref())),
         ("description", string(kind.meaning())),
-        ("fix", finding.fix().map_or(Value::Null, fix_value)),
+        ("fix", finding.fix.as_ref().map_or(Value::Null, fix_value)),
         ("coverage_requirement", string(coverage)),
         ("evidence_class", string(metadata.evidence_class)),
         ("invariant_class", string(metadata.invariant_class)),
@@ -372,7 +372,7 @@ fn nonreference_fact(
     comparison_runs: [&[(Option<Digest>, Value)]; 2],
     document_rows: &[(RepoPath, Value)],
 ) -> Option<FindingFact> {
-    let evidence = match finding.kind().metadata().scope {
+    let evidence = match finding.key_input.finding_kind.metadata().scope {
         FindingScope::Reference | FindingScope::Control => return None,
         FindingScope::Observation => {
             let id = finding.observation_ids.first()?;
@@ -394,5 +394,5 @@ fn nonreference_fact(
             object(vec![("kind", string("document")), ("document_result", row)])
         }
     };
-    Some(FindingFact::new(finding.key(), evidence))
+    Some(FindingFact::new(&finding.key_input, evidence))
 }

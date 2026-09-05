@@ -176,13 +176,16 @@ fn comparisons(base: Vec<Observation>, candidate: Vec<Observation>) -> Vec<Compa
 }
 
 fn kinds(findings: &[Finding]) -> Vec<FindingKind> {
-    findings.iter().map(Finding::kind).collect()
+    findings
+        .iter()
+        .map(|finding| finding.key_input.finding_kind)
+        .collect()
 }
 
 fn only(findings: Vec<Finding>, kind: FindingKind) -> Finding {
     let mut matching: Vec<Finding> = findings
         .into_iter()
-        .filter(|finding| finding.kind() == kind)
+        .filter(|finding| finding.key_input.finding_kind == kind)
         .collect();
     assert_eq!(matching.len(), 1, "exactly one {kind:?}");
     matching.remove(0)
@@ -308,7 +311,7 @@ fn structural_findings_aggregate_and_attribute() {
     assert_eq!(finding.attribution, Attribution::Introduced);
     assert_eq!(finding.member_count, 2, "duplicates share one key");
     assert_eq!(finding.observation_ids.len(), 2);
-    assert!(finding.base_fact().is_none() && finding.candidate_fact().is_some());
+    assert!(finding.base_fact.as_ref().is_none() && finding.candidate_fact.as_ref().is_some());
     assert_eq!(finding.configured_disposition, Disposition::Warn);
 
     let pre_existing = evaluate(
@@ -328,7 +331,7 @@ fn structural_findings_aggregate_and_attribute() {
     let finding = only(
         removal_and_projection
             .iter()
-            .filter(|finding| finding.kind() == FindingKind::ExplicitTargetMissing)
+            .filter(|finding| finding.key_input.finding_kind == FindingKind::ExplicitTargetMissing)
             .cloned()
             .collect(),
         FindingKind::ExplicitTargetMissing,
@@ -403,7 +406,7 @@ fn immutable_commits_keep_separate_structural_finding_keys() {
     assert_eq!(
         findings
             .iter()
-            .filter(|finding| finding.kind() == FindingKind::ExplicitTargetMissing)
+            .filter(|finding| finding.key_input.finding_kind == FindingKind::ExplicitTargetMissing)
             .count(),
         2
     );
@@ -485,10 +488,7 @@ fn findings_sort_by_canonical_key() {
         &comparisons(Vec::new(), vec![observation(&one), observation(&two)]),
         Profile::Observe,
     );
-    let keys: Vec<_> = findings
-        .iter()
-        .map(|finding| finding.key().digest())
-        .collect();
+    let keys: Vec<_> = findings.iter().map(|finding| finding.finding_key).collect();
     let mut sorted = keys.clone();
     sorted.sort_unstable();
     assert_eq!(keys, sorted);
@@ -558,7 +558,7 @@ fn introduced_only_demotes_pre_existing_failures_alone() {
 
     let mut demoted: Vec<(Attribution, Disposition)> = findings
         .iter()
-        .filter(|finding| finding.kind() == FindingKind::ExplicitTargetMissing)
+        .filter(|finding| finding.key_input.finding_kind == FindingKind::ExplicitTargetMissing)
         .map(|finding| (finding.attribution, finding.effective_disposition))
         .collect();
     demoted.sort_by_key(|(attribution, _)| format!("{attribution:?}"));

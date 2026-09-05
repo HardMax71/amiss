@@ -208,10 +208,11 @@ pub(super) fn summary_counts(
             .waived
             .saturating_add(u64::from(finding.waiver.is_some()));
         counts.unsupported_capabilities = counts.unsupported_capabilities.saturating_add(
-            u64::from(finding.kind() == FindingKind::UnsupportedCapability),
+            u64::from(finding.key_input.finding_kind == FindingKind::UnsupportedCapability),
         );
-        unlinked_documents = unlinked_documents
-            .saturating_add(u64::from(finding.kind() == FindingKind::UnlinkedDocument));
+        unlinked_documents = unlinked_documents.saturating_add(u64::from(
+            finding.key_input.finding_kind == FindingKind::UnlinkedDocument,
+        ));
     }
     let documents = document_counts(
         paired.iter().filter_map(|pair| pair.candidate),
