@@ -65,6 +65,10 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         )
         .unwrap();
         assert_eq!(
+            serde_json::to_vec(&parsed.items[0].accepted_fact.key_input).unwrap(),
+            json::canonical(&json::parse(key_input.as_bytes()).unwrap()),
+        );
+        assert_eq!(
             parsed.items[0]
                 .accepted_fact
                 .key_input
@@ -188,6 +192,12 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
     let mut digests = std::collections::BTreeSet::new();
     for snapshot in [omitted, explicit_null, path_missing] {
         let item = &snapshot.items[0];
+        assert_eq!(
+            serde_json::to_vec(&item.accepted_fact.key_input).unwrap(),
+            json::canonical(
+                &json::parse(key_input_json("explicit-target-missing").as_bytes()).unwrap()
+            ),
+        );
         let (bytes, digest) = canonical_fact(&item.accepted_fact).unwrap();
         assert_eq!(digest, item.accepted_fact_digest);
         assert_eq!(parse_fact(&bytes).unwrap(), item.accepted_fact);
