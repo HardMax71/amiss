@@ -395,7 +395,7 @@ fn a_statement_issued_for_another_repository_is_refused() {
         panic!("statement digest is text")
     };
     if let Some(sealed) = expectations.sealed.as_mut() {
-        sealed.trusted_time_digest = digest.into_string();
+        sealed.trusted_time_digest = digest.parse().unwrap();
     }
     assert_eq!(
         accept(&foreign, &expectations),
@@ -430,7 +430,7 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
     let mut wire = canonical(&envelope);
     wire.push(b'\n');
     expectations.sealed = Some(SealedExpectations {
-        profile: "observe".to_owned(),
+        profile: amiss_wire::controls::Profile::Observe,
         candidate_ref: "refs/heads/feature/docs".to_owned(),
         target_ref: "refs/heads/main".to_owned(),
         repository: RepositoryIdentity::new(
@@ -442,18 +442,18 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
         provider: "gitlab".to_owned(),
         provider_run_id: "pipeline/42".to_owned(),
         provider_run_attempt: 2,
-        candidate_identity_digest,
+        candidate_identity_digest: candidate_identity_digest.parse().unwrap(),
         organization_floor: Some(SealedControlExpectation {
-            digest: FLOOR_DIGEST.to_owned(),
-            trust_source: "organization-policy".to_owned(),
+            digest: FLOOR_DIGEST.parse().unwrap(),
+            trust_source: amiss_wire::requests::RequestTrust::OrganizationPolicy,
         }),
         debt_snapshot: None,
         waiver_bundle: None,
         execution_constraint: SealedControlExpectation {
-            digest: constraint_digest,
-            trust_source: "external-required-check".to_owned(),
+            digest: constraint_digest.parse().unwrap(),
+            trust_source: amiss_wire::requests::RequestTrust::ExternalRequiredCheck,
         },
-        trusted_time_digest: time_digest,
+        trusted_time_digest: time_digest.parse().unwrap(),
         semantic_evidence: Vec::new(),
     });
     (wire, expectations)

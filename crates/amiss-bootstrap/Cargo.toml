@@ -11,7 +11,7 @@ exclude.workspace = true
 amiss-git = { path = "../amiss-git", version = "0.27.0" }
 amiss-wire = { path = "../amiss-wire", version = "0.27.0" }
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["unbounded_depth"] }
 tempfile.workspace = true
 thiserror.workspace = true
 
