@@ -348,13 +348,15 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
         ("/book/items/0/Chapter/sub_items", json!(null)),
         ("/config/book/src", json!(null)),
         ("/config/book/src", json!(false)),
-        ("/config/output/html", json!([])),
     ] {
         let mut changed = original.clone();
         *changed.pointer_mut(path).unwrap() = invalid;
         let bytes = serde_json::to_vec(&changed).unwrap();
         assert!(
-            mdbook_site_evidence(candidate, &site, &bytes, &output(&root)).is_err(),
+            matches!(
+                mdbook_site_evidence(candidate, &site, &bytes, &output(&root)),
+                Err(MdBookEvidenceError::ContextShape)
+            ),
             "{path}: {changed}"
         );
     }
@@ -441,6 +443,18 @@ fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth
 fn version_renderer_and_route_ownership_must_be_exact() {
     let root = tempfile::tempdir().unwrap();
     let ordinary = [chapter(Some("chapter.md"), Some("chapter.md"), &[])];
+    let mut invalid_renderer: serde_json::Value =
+        serde_json::from_slice(&context("0.5.4", true, &ordinary)).unwrap();
+    invalid_renderer["config"]["output"]["html"] = json!([]);
+    assert!(matches!(
+        mdbook_site_evidence(
+            hb("amiss/test", b"candidate"),
+            &site("book.toml", "/"),
+            &serde_json::to_vec(&invalid_renderer).unwrap(),
+            &output(&root),
+        ),
+        Err(MdBookEvidenceError::UnsupportedBuild)
+    ));
     assert!(matches!(
         mdbook_site_evidence(
             hb("amiss/test", b"candidate"),
