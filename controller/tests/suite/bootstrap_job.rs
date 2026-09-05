@@ -197,7 +197,7 @@ fn candidate_identity(run: &RunRequest) -> Digest {
 }
 
 fn semantic_template(context_digest: Digest) -> Vec<u8> {
-    amiss_wire::semantic::template(SemanticEvidenceTemplate {
+    amiss_wire::semantic::template(SemanticEvidenceTemplate::<serde_json::Value> {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
             kind: ArtifactId::new("site-build".to_owned()).unwrap(),
