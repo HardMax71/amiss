@@ -145,19 +145,18 @@ fn report_examples_match_their_typed_source() {
 }
 
 #[test]
-fn optional_report_members_have_one_rust_state() {
-    let omitted: report::model::MissingResolution =
-        serde_json::from_str(r#"{"reason":"path-not-found","near":null,"path":"docs/missing.md"}"#)
-            .unwrap();
-    let explicit_null: report::model::MissingResolution = serde_json::from_str(
+fn optional_report_members_preserve_digest_bound_presence() {
+    for document in [
+        r#"{"reason":"path-not-found","near":null,"path":"docs/missing.md"}"#,
         r#"{"reason":"path-not-found","near":null,"path":"docs/missing.md","same_object_at":null}"#,
-    )
-    .unwrap();
-    assert_eq!(omitted, explicit_null);
-    assert_eq!(
-        serde_json::to_value(omitted).unwrap().get("same_object_at"),
-        None,
-    );
+        r#"{"reason":"path-not-found","near":null,"path":"docs/missing.md","same_object_at":"docs/moved.md"}"#,
+    ] {
+        let resolution: report::model::MissingResolution = serde_json::from_str(document).unwrap();
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&resolution).unwrap(),
+            json::canonical(&json::parse(document.as_bytes()).unwrap()),
+        );
+    }
 }
 
 #[test]

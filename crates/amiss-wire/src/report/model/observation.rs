@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::assessment::Nullable;
 use crate::controls::{SourceConstruct, TargetKind};
 use crate::digest::Digest;
 use crate::extraction::BlockKind;
@@ -170,8 +171,12 @@ pub enum MissingResolution {
         near: Option<RepoPath>,
         path: RepoPath,
         reason: PathNotFoundResolutionReason,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        same_object_at: Option<RepoPath>,
+        #[serde(
+            default,
+            deserialize_with = "json_serde::deserialize_some",
+            skip_serializing_if = "Option::is_none"
+        )]
+        same_object_at: Option<Nullable<RepoPath>>,
     },
 }
 

@@ -7,7 +7,6 @@ mod input;
 mod invocation;
 mod junit;
 mod output;
-mod payload;
 mod policy_include;
 mod record_set;
 mod references;

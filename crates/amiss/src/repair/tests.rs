@@ -2,6 +2,32 @@
 
 use super::{Fix, splice};
 
+#[test]
+fn typed_fixes_keep_their_exact_spans_and_count_absent_repairs() {
+    use amiss_wire::model::RepoPathText;
+    use amiss_wire::report::model::{ByteSpan, FindingFix, ReportEnvelope};
+
+    let mut report: ReportEnvelope =
+        serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+    report.payload.findings[0].fix = Some(FindingFix {
+        path: RepoPathText::new("docs/guide.md".to_owned()).unwrap(),
+        span: ByteSpan {
+            start_byte: 3,
+            end_byte: 7,
+        },
+        replacement: "new target".to_owned(),
+        description: "repair".to_owned(),
+    });
+    report.payload.findings[1].fix = None;
+    let (fixes, bare) = super::collect(&report.payload).unwrap();
+    assert_eq!(bare, 1);
+    assert_eq!(fixes.len(), 1);
+    let rows = &fixes["docs/guide.md"];
+    assert_eq!(rows.len(), 1);
+    assert_eq!((rows[0].start, rows[0].end), (3, 7));
+    assert_eq!(rows[0].replacement, "new target");
+}
+
 /// Touching spans are lawful: the overlap refusal begins strictly past the
 /// boundary, so an edit ending where the next begins still applies.
 #[test]
