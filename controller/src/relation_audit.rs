@@ -1,5 +1,4 @@
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::json;
 use amiss_wire::relation::{
     self, RELATION_DOCUMENT_BYTES, RelationVerdict, assess, parse_assessment, parse_evidence,
     parse_plan,
@@ -37,9 +36,7 @@ pub fn relation_audit_plan(
     report: &[u8],
 ) -> Result<Vec<u8>, ArtifactError> {
     let plan = checked_relation_plan(transition, report)?.0;
-    relation::plan(&plan)
-        .map(|value| json::canonical(&value))
-        .map_err(|_defect| ArtifactError::Corrupt)
+    relation::plan(&plan).map_err(|_defect| ArtifactError::Corrupt)
 }
 
 /// Validates one complete relation audit against its accepted trigger report
@@ -81,7 +78,8 @@ pub fn validate_relation_audit(
         assessment.payload.engine.engine_digest,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    if replayed.text("payload_digest") != Some(&assessment.payload_digest.to_string()) {
+    let replayed = parse_assessment(&replayed).map_err(|_defect| ArtifactError::Corrupt)?;
+    if replayed.payload_digest != assessment.payload_digest {
         return Err(ArtifactError::Corrupt);
     }
     Ok(RelationAuditDigests {

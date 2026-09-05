@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::controls::{ProjectionKind, ProjectionSource, check_projection_source};
 use crate::de::{Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
-use crate::json::{self, Value};
+use crate::json;
 use crate::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 mod assessment;
@@ -117,7 +117,7 @@ pub fn parse_plan(bytes: &[u8]) -> Result<RelationPlanEnvelope, Error> {
 ///
 /// Fails when a public field violates the same closed grammar [`parse_plan`]
 /// enforces or the encoded document exceeds its byte ceiling.
-pub fn plan(input: &RelationPlan) -> Result<Value, Error> {
+pub fn plan(input: &RelationPlan) -> Result<Vec<u8>, Error> {
     let payload_digest = plan_payload_digest(input)?;
     let document = PlanEnvelope::Current {
         payload: PlanPayload::Current(input),
@@ -128,7 +128,8 @@ pub fn plan(input: &RelationPlan) -> Result<Value, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    Ok(canonical)
 }
 
 pub(super) fn plan_payload_digest(input: &RelationPlan) -> Result<Digest, Error> {
