@@ -60,6 +60,14 @@ pub struct BlobTarget<P> {
     pub content: BlobContent,
 }
 
+#[derive(Serialize)]
+#[serde(remote = "BlobTarget", tag = "kind", rename = "blob")]
+struct TaggedBlobTarget<P> {
+    path: P,
+    mode: BlobMode,
+    content: BlobContent,
+}
+
 /// A located target. A tree has no blob content; a blob always carries a
 /// valid blob mode and one exact content-evidence shape.
 #[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
@@ -92,7 +100,8 @@ impl<P> Target<P> {
 
 /// A target that was absent at a known repository path. Each diagnostic owns
 /// the path required by its wire row.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize)]
+#[serde(tag = "reason", rename_all = "kebab-case")]
 #[strum_discriminants(name(MissingTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
@@ -115,7 +124,7 @@ pub enum Missing<P> {
 /// A target absent from the tree at a path the repository's own ignore rules
 /// name literally. The declaring file travels with the resolution so a report
 /// carries the claim rather than only its effect.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct DeclaredUntracked<P> {
     pub path: P,
     pub declared_by: P,
@@ -123,7 +132,8 @@ pub struct DeclaredUntracked<P> {
 
 /// A special Git entry that is present but cannot be followed as an ordinary
 /// repository target. Each diagnostic owns the affected path.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize)]
+#[serde(tag = "reason", rename_all = "kebab-case")]
 #[strum_discriminants(name(UnsupportedTargetTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter, Serialize, Deserialize))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
@@ -135,13 +145,14 @@ pub enum UnsupportedTarget<P> {
 
 /// Reference syntax whose target may be located but whose meaning is outside
 /// the scanner's current evaluator.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize)]
+#[serde(tag = "reason", content = "target", rename_all = "kebab-case")]
 #[strum_discriminants(name(UnsupportedSemanticsTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub enum UnsupportedSemantics<P> {
     Query(Target<P>),
-    Fragment(BlobTarget<P>),
+    Fragment(#[serde(serialize_with = "TaggedBlobTarget::serialize")] BlobTarget<P>),
     CodeFragment(Target<P>),
     SiteRoute,
     NetworkPath,
@@ -167,7 +178,8 @@ impl<P> UnsupportedSemantics<P> {
 
 /// Version-scoped forge references identify a contained path under a named
 /// ref, a full immutable commit and path, or no trustworthy path at all.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 #[strum_discriminants(name(VersionScopeTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
