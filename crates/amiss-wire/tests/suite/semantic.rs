@@ -181,6 +181,7 @@ fn observation_headers_are_deserialized_without_closing_unknown_fact_fields() {
     for row in [
         serde_json::json!(null),
         serde_json::json!([]),
+        serde_json::json!(["future-fact"]),
         serde_json::json!({}),
         serde_json::json!({ "kind": null }),
         serde_json::json!({ "kind": 1 }),
