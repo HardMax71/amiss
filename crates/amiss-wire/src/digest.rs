@@ -137,6 +137,20 @@ pub fn hj_stream(domain: &str, emit: impl FnOnce(&mut dyn Sink)) -> Digest {
     })
 }
 
+/// Hashes serde's compact JSON directly, without buffering the encoded bytes.
+/// The input must already serialize in canonical key order with integer numbers.
+///
+/// # Errors
+///
+/// Returns the serialization error without producing a partial digest.
+pub fn hj_ordered(domain: &str, value: &impl serde::Serialize) -> serde_json::Result<Digest> {
+    let mut writer = digest_io::IoWrapper(Sha256::new());
+    writer.0.update(domain.as_bytes());
+    writer.0.update([0_u8]);
+    serde_json::to_writer(&mut writer, value)?;
+    Ok(Digest(writer.0.finalize().into()))
+}
+
 #[must_use]
 pub fn hj_with_length(domain: &str, value: &Value) -> (Digest, u64) {
     let mut length = 0_u64;
