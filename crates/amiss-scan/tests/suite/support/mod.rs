@@ -41,20 +41,22 @@ fn assert_valid(validator: &jsonschema::Validator, value: &serde_json::Value, la
     );
 }
 
-#[track_caller]
-pub(crate) fn generated_report(bytes: &[u8]) -> serde_json::Value {
+pub(crate) fn generated_report(
+    bytes: &[u8],
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     {
-        let strict =
-            amiss_wire::json::parse(bytes).expect("the generated report meets the wire profile");
-        amiss_wire::report::validate_envelope(&strict)
-            .expect("the generated report passes the real reader and digest checks");
+        let strict = amiss_wire::json::parse(bytes)?;
+        amiss_wire::report::validate_envelope(&strict)?;
     }
-    let value = serde_json::from_slice(bytes).expect("the generated report is JSON");
-    assert_valid(&REPORT_VALIDATOR, &value, "generated report");
-    let canonical = serde_json_canonicalizer::to_vec(&value)
-        .expect("the generated report has canonical JSON bytes");
-    assert_eq!(bytes.strip_suffix(b"\n"), Some(canonical.as_slice()));
-    value
+    let value = serde_json::from_slice(bytes)?;
+    REPORT_VALIDATOR
+        .validate(&value)
+        .map_err(|error| format!("{}: {error}", error.instance_path()))?;
+    let canonical = serde_json_canonicalizer::to_vec(&value)?;
+    if bytes.strip_suffix(b"\n") != Some(canonical.as_slice()) {
+        return Err("the generated report must be canonical JSON followed by one newline".into());
+    }
+    Ok(value)
 }
 
 pub(crate) struct ReportSchemaFragment {

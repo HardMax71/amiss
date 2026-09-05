@@ -97,7 +97,11 @@ fn two_commits(root: &Path) -> (Repository, Oid, Oid) {
     )
 }
 
-#[expect(clippy::indexing_slicing, reason = "test fixture helper")]
+#[expect(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "test fixture helper"
+)]
 fn payload(
     setup: &SetupShell,
     repo: &Repository,
@@ -105,7 +109,7 @@ fn payload(
     candidate: &Oid,
 ) -> serde_json::Value {
     let built = commit_pair(repo, &engine(), None, setup, base, candidate);
-    let envelope: serde_json::Value = crate::support::generated_report(&built.wire());
+    let envelope: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
     let mut value = envelope["payload"].clone();
     value["exit_code"] = serde_json::Value::from(built.exit_code);
     value

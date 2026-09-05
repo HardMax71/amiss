@@ -357,8 +357,8 @@ fn assert_report(
     let candidate = discovery(candidate_scanned, candidate_source, '2');
     let built = construct(&setup(), &base, &candidate, Vec::new(), &[]);
     let wire = built.wire();
-    parse(&wire).expect("the emitted report clears the strict JSON reader");
-    let envelope = support::generated_report(&wire);
+    let envelope = support::generated_report(&wire)
+        .unwrap_or_else(|error| panic!("{id}: generated report violates its contract: {error}"));
     let result = envelope
         .pointer("/payload/result")
         .expect("the report payload carries a result");
@@ -520,7 +520,7 @@ fn a_recognized_claim_without_an_answer_keeps_the_boundary() {
     let base = discovery(scanned(base_source), base_source, '1');
     let candidate = discovery(scanned(source), source, '2');
     let built = construct(&setup(), &base, &candidate, Vec::new(), &[]);
-    let envelope = support::generated_report(&built.wire());
+    let envelope = support::generated_report(&built.wire()).unwrap();
     assert_eq!(built.exit_code, 2, "an unanswered claim is a boundary");
     let findings = envelope
         .pointer("/payload/findings")
