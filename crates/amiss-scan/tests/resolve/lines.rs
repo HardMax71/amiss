@@ -17,7 +17,12 @@ fn line_fragments_have_a_hard_grammar() {
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
-            matches!(&row, Resolution::Resolved(Target::Blob(_))),
+            matches!(
+                &row,
+                Resolution::Resolved {
+                    target: Target::Blob(_)
+                }
+            ),
             "{destination}: {row:?}"
         );
     }
@@ -97,7 +102,10 @@ fn line_selections_digest_the_exact_raw_inclusive_slice() {
             )
             .unwrap_or_else(|_defect| panic!("resolve {fragment}"))
             .1;
-        let Resolution::Resolved(Target::Blob(blob)) = row else {
+        let Resolution::Resolved {
+            target: Target::Blob(blob),
+        } = row
+        else {
             panic!("unexpected resolution for {fragment}: {row:?}");
         };
         let BlobContent::Available {
@@ -139,10 +147,16 @@ fn line_selections_digest_the_exact_raw_inclusive_slice() {
         )
         .unwrap_or_else(|_defect| panic!("resolve all lines"))
         .1;
-    let Resolution::Resolved(Target::Blob(complete)) = complete else {
+    let Resolution::Resolved {
+        target: Target::Blob(complete),
+    } = complete
+    else {
         panic!("unexpected complete-target resolution: {complete:?}");
     };
-    let Resolution::Resolved(Target::Blob(all_lines)) = all_lines else {
+    let Resolution::Resolved {
+        target: Target::Blob(all_lines),
+    } = all_lines
+    else {
         panic!("unexpected all-lines resolution: {all_lines:?}");
     };
     assert_ne!(
@@ -179,10 +193,16 @@ fn line_projection_ignores_bytes_outside_the_selected_slice() {
         )
         .unwrap_or_else(|_defect| panic!("resolve outside-changed"))
         .1;
-    let Resolution::Resolved(Target::Blob(original)) = original else {
+    let Resolution::Resolved {
+        target: Target::Blob(original),
+    } = original
+    else {
         panic!("unexpected original resolution: {original:?}");
     };
-    let Resolution::Resolved(Target::Blob(outside_changed)) = outside_changed else {
+    let Resolution::Resolved {
+        target: Target::Blob(outside_changed),
+    } = outside_changed
+    else {
         panic!("unexpected outside-changed resolution: {outside_changed:?}");
     };
     let BlobContent::Available {
@@ -222,7 +242,10 @@ fn executable_line_selections_bind_the_executable_mode() {
         )
         .unwrap_or_else(|_defect| panic!("resolve executable line"))
         .1;
-    let Resolution::Resolved(Target::Blob(blob)) = row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = row
+    else {
         panic!("unexpected executable resolution: {row:?}");
     };
     assert_eq!(blob.mode, BlobMode::Executable);
@@ -291,43 +314,67 @@ fn line_selection_bounds_are_structural_missing_outcomes() {
 #[test]
 fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
     let mut bed = bed();
-    let contexts = [
-        forge_context(ForgeDialect::Github),
-        forge_context(ForgeDialect::Gitlab),
-        forge_context(ForgeDialect::Gitea),
-        forge_context(ForgeDialect::BitbucketDataCenter),
-    ];
-    let native_cases = [
-        (&contexts[0], "L2-L3", "L2-3", "L5"),
-        (&contexts[1], "L2-3", "L2-L3", "L5"),
-        (&contexts[2], "L2-L3", "L2-3", "L5"),
-        (&contexts[3], "2-3", "L2-L3", "5"),
+    let cases = [
+        (
+            ForgeDialect::Github,
+            "L2-L3",
+            "L2-3",
+            "L5",
+            "https://github.com/acme/widgets/blob/feature/x/src/lines.rs#L2-L3",
+        ),
+        (
+            ForgeDialect::Gitlab,
+            "L2-3",
+            "L2-L3",
+            "L5",
+            "https://gitlab.com/acme/widgets/-/blob/feature/x/src/lines.rs#L2-3",
+        ),
+        (
+            ForgeDialect::Gitea,
+            "L2-L3",
+            "L2-3",
+            "L5",
+            "https://codeberg.org/acme/widgets/src/branch/feature/x/src/lines.rs#L2-L3",
+        ),
+        (
+            ForgeDialect::BitbucketDataCenter,
+            "2-3",
+            "L2-L3",
+            "5",
+            "https://bitbucket.example/projects/ACME/repos/widgets/browse/src/lines.rs?at=refs%2Fheads%2Ffeature%2Fx#2-3",
+        ),
     ];
     let expected = Some(expected_line_projection(
         GitMode::RegularFile,
         b"two\nthree\r",
     ));
 
-    for (context, accepted, rejected, out_of_range) in native_cases {
-        let row = bed
-            .run_as(
-                Adapter::Markdown,
-                Some(context),
-                "docs/guide.md",
-                false,
-                &format!("../src/lines.rs#{accepted}"),
-            )
-            .unwrap_or_else(|_defect| panic!("resolve {accepted}"))
-            .1;
-        let Resolution::Resolved(Target::Blob(blob)) = row else {
-            panic!("unexpected resolution for {accepted}: {row:?}");
-        };
-        assert_eq!(blob.content.projection_digest(), expected, "{accepted}");
+    for (dialect, accepted, rejected, out_of_range, absolute) in cases {
+        let context = forge_context(dialect);
+        for destination in [format!("../src/lines.rs#{accepted}"), absolute.to_owned()] {
+            let row = bed
+                .run_as(
+                    Adapter::Markdown,
+                    Some(&context),
+                    "docs/guide.md",
+                    false,
+                    &destination,
+                )
+                .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+                .1;
+            let Resolution::Resolved {
+                target: Target::Blob(blob),
+            } = row
+            else {
+                panic!("unexpected resolution for {destination}: {row:?}");
+            };
+            assert_eq!(blob.content.projection_digest(), expected, "{destination}");
+        }
 
         let row = bed
             .run_as(
                 Adapter::Markdown,
-                Some(context),
+                Some(&context),
                 "docs/guide.md",
                 false,
                 &format!("../src/lines.rs#{rejected}"),
@@ -345,7 +392,7 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
         let out_of_range = bed
             .run_as(
                 Adapter::Markdown,
-                Some(context),
+                Some(&context),
                 "docs/guide.md",
                 false,
                 &format!("../src/lines.rs#{out_of_range}"),
@@ -356,41 +403,6 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
             out_of_range,
             Resolution::Missing(Missing::LineFragmentOutOfRange { .. })
         ));
-    }
-
-    let absolute_cases = [
-        (
-            &contexts[0],
-            "https://github.com/acme/widgets/blob/feature/x/src/lines.rs#L2-L3",
-        ),
-        (
-            &contexts[1],
-            "https://gitlab.com/acme/widgets/-/blob/feature/x/src/lines.rs#L2-3",
-        ),
-        (
-            &contexts[2],
-            "https://codeberg.org/acme/widgets/src/branch/feature/x/src/lines.rs#L2-L3",
-        ),
-        (
-            &contexts[3],
-            "https://bitbucket.example/projects/ACME/repos/widgets/browse/src/lines.rs?at=refs%2Fheads%2Ffeature%2Fx#2-3",
-        ),
-    ];
-    for (context, destination) in absolute_cases {
-        let row = bed
-            .run_as(
-                Adapter::Markdown,
-                Some(context),
-                "docs/guide.md",
-                false,
-                destination,
-            )
-            .unwrap_or_else(|_defect| panic!("resolve {destination}"))
-            .1;
-        let Resolution::Resolved(Target::Blob(blob)) = row else {
-            panic!("unexpected resolution for {destination}: {row:?}");
-        };
-        assert_eq!(blob.content.projection_digest(), expected, "{destination}");
     }
 }
 

@@ -245,7 +245,14 @@ fn derive(
     };
 
     match (left, right) {
-        (WireResolution::Resolved(left_target), WireResolution::Resolved(right_target)) => {
+        (
+            WireResolution::Resolved {
+                target: left_target,
+            },
+            WireResolution::Resolved {
+                target: right_target,
+            },
+        ) => {
             let (Some(left_projection), Some(right_projection)) = (
                 left_target.projection_digest(),
                 right_target.projection_digest(),
@@ -279,7 +286,14 @@ fn derive(
                 (TargetChange::NotComparable, Impact::NotApplicable)
             }
         }
-        (WireResolution::TypeMismatch(left_target), WireResolution::TypeMismatch(right_target)) => {
+        (
+            WireResolution::TypeMismatch {
+                target: left_target,
+            },
+            WireResolution::TypeMismatch {
+                target: right_target,
+            },
+        ) => {
             if left_target == right_target {
                 (TargetChange::Equal, equal_impact)
             } else {
@@ -287,26 +301,26 @@ fn derive(
             }
         }
         (
-            WireResolution::Missing(_) | WireResolution::TypeMismatch(_),
-            WireResolution::Resolved(_),
+            WireResolution::Missing(_) | WireResolution::TypeMismatch { .. },
+            WireResolution::Resolved { .. },
         ) => (TargetChange::NewlyResolved, Impact::ReferenceResolved),
         (
-            WireResolution::Resolved(_),
-            WireResolution::Missing(_) | WireResolution::TypeMismatch(_),
+            WireResolution::Resolved { .. },
+            WireResolution::Missing(_) | WireResolution::TypeMismatch { .. },
         ) => (TargetChange::BecameMissing, Impact::NotApplicable),
         (
-            WireResolution::Resolved(_)
+            WireResolution::Resolved { .. }
             | WireResolution::Missing(_)
-            | WireResolution::TypeMismatch(_)
+            | WireResolution::TypeMismatch { .. }
             | WireResolution::DeclaredUntracked(_)
             | WireResolution::UnsupportedTarget(_)
             | WireResolution::UnsupportedSemantics(_)
             | WireResolution::UnsupportedVersion(_)
             | WireResolution::Invalid(_)
             | WireResolution::External(_),
-            WireResolution::Resolved(_)
+            WireResolution::Resolved { .. }
             | WireResolution::Missing(_)
-            | WireResolution::TypeMismatch(_)
+            | WireResolution::TypeMismatch { .. }
             | WireResolution::DeclaredUntracked(_)
             | WireResolution::UnsupportedTarget(_)
             | WireResolution::UnsupportedSemantics(_)

@@ -164,9 +164,9 @@ pub(super) fn missing_fix(candidates: &[&Observation]) -> Option<FindingFix> {
             near: Some(near), ..
         }) => path_fix(observation, near),
         Resolution::Missing(_)
-        | Resolution::Resolved(_)
+        | Resolution::Resolved { .. }
         | Resolution::DeclaredUntracked(_)
-        | Resolution::TypeMismatch(_)
+        | Resolution::TypeMismatch { .. }
         | Resolution::UnsupportedTarget(_)
         | Resolution::UnsupportedSemantics(_)
         | Resolution::UnsupportedVersion(_)

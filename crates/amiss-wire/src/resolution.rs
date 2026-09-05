@@ -229,10 +229,10 @@ pub enum ExternalReference {
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub enum Resolution<P> {
-    Resolved(Target<P>),
+    Resolved { target: Target<P> },
     Missing(Missing<P>),
     DeclaredUntracked(DeclaredUntracked<P>),
-    TypeMismatch(Target<P>),
+    TypeMismatch { target: Target<P> },
     UnsupportedTarget(UnsupportedTarget<P>),
     UnsupportedSemantics(UnsupportedSemantics<P>),
     UnsupportedVersion(VersionScope<P>),
@@ -244,7 +244,7 @@ impl<P> Resolution<P> {
     #[must_use]
     pub const fn is_lfs_pointer(&self) -> bool {
         match self {
-            Self::Resolved(target) | Self::TypeMismatch(target) => target.is_lfs_pointer(),
+            Self::Resolved { target } | Self::TypeMismatch { target } => target.is_lfs_pointer(),
             Self::UnsupportedSemantics(semantics) => semantics.is_lfs_pointer(),
             Self::Missing(_)
             | Self::DeclaredUntracked(_)

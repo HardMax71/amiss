@@ -115,7 +115,7 @@ fn native_paths_decode_once_and_stay_contained() {
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
-            matches!(&row, Resolution::Resolved(_)),
+            matches!(&row, Resolution::Resolved { .. }),
             "{destination}: {row:?}"
         );
     }
@@ -129,7 +129,10 @@ fn native_paths_decode_once_and_stay_contained() {
         )
         .unwrap_or_else(|_defect| panic!("resolve a normalized deep path"))
         .1;
-    let Resolution::Resolved(Target::Blob(blob)) = row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("src/lib.rs"));
@@ -166,7 +169,10 @@ fn terminal_slashes_author_trees_and_break_images() {
         .run_as(Adapter::Markdown, None, "docs/guide.md", false, "sub/")
         .unwrap_or_else(|_d| panic!());
     assert_eq!(intent.target_kind, Some(TargetKind::Tree));
-    let Resolution::Resolved(Target::Tree { path }) = row else {
+    let Resolution::Resolved {
+        target: Target::Tree { path },
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(path.as_str(), Some("docs/sub"));
@@ -180,7 +186,10 @@ fn terminal_slashes_author_trees_and_break_images() {
         .run_as(Adapter::Markdown, None, "docs/guide.md", false, "guide.md/")
         .unwrap_or_else(|_d| panic!());
     assert_eq!(intent.target_kind, Some(TargetKind::Tree));
-    let Resolution::TypeMismatch(Target::Blob(blob)) = mismatch else {
+    let Resolution::TypeMismatch {
+        target: Target::Blob(blob),
+    } = mismatch
+    else {
         panic!("unexpected resolution: {mismatch:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
@@ -226,7 +235,10 @@ fn empty_destinations_target_the_source_document() {
                     destination,
                 )
                 .unwrap_or_else(|_defect| panic!("resolve {destination}"));
-            let Resolution::Resolved(Target::Blob(blob)) = row else {
+            let Resolution::Resolved {
+                target: Target::Blob(blob),
+            } = row
+            else {
                 panic!("unexpected resolution for {destination}: {row:?}");
             };
             assert_eq!(
@@ -247,7 +259,10 @@ fn empty_destinations_target_the_source_document() {
         .run_as(Adapter::Markdown, None, "docs/guide.md", false, "#guide")
         .unwrap_or_else(|_defect| panic!("resolve self anchor"))
         .1;
-    let Resolution::Resolved(Target::Blob(blob)) = row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
@@ -265,7 +280,10 @@ fn empty_destinations_target_the_source_document() {
         .run_as(Adapter::Markdown, None, "docs/guide.md", false, "#L1")
         .unwrap_or_else(|_defect| panic!("resolve line fragment"))
         .1;
-    let Resolution::Resolved(Target::Blob(blob)) = row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));
@@ -327,7 +345,7 @@ fn query_and_fragment_semantics_follow_the_precedence() {
         )
         .unwrap_or_else(|_defect| panic!("resolve ignored query"))
         .1;
-    assert!(matches!(row, Resolution::Resolved(_)));
+    assert!(matches!(row, Resolution::Resolved { .. }));
 
     let row = bed
         .run_as(
@@ -394,7 +412,7 @@ fn paths_are_bytes_and_the_resolver_neither_folds_case_nor_normalizes_them() {
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
         assert!(
-            matches!(&row, Resolution::Resolved(_)),
+            matches!(&row, Resolution::Resolved { .. }),
             "{destination}: {row:?}"
         );
     }
@@ -420,7 +438,7 @@ fn paths_are_bytes_and_the_resolver_neither_folds_case_nor_normalizes_them() {
         )
         .unwrap_or_else(|_defect| panic!("resolve precomposed path"))
         .1;
-    assert!(matches!(row, Resolution::Resolved(_)));
+    assert!(matches!(row, Resolution::Resolved { .. }));
     // The same two accents decomposed into e + U+0301: the same text, other bytes.
     let row = bed
         .run_as(
@@ -451,7 +469,10 @@ fn a_lowercase_hex_escape_decodes_like_its_uppercase_twin() {
         )
         .unwrap_or_else(|_defect| panic!("resolve lowercase escape"))
         .1;
-    let Resolution::Resolved(Target::Blob(blob)) = &row else {
+    let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = &row
+    else {
         panic!("%6d spells m in either case: {row:?}");
     };
     assert_eq!(blob.path.as_str(), Some("docs/guide.md"));

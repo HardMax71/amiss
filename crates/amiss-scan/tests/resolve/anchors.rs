@@ -38,7 +38,10 @@ fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
             )
             .unwrap_or_else(|_defect| panic!("resolve {destination}"))
             .1;
-        let Resolution::Resolved(Target::Blob(blob)) = &row else {
+        let Resolution::Resolved {
+            target: Target::Blob(blob),
+        } = &row
+        else {
             panic!("{fragment} is published by a known renderer: {row:?}");
         };
         assert_eq!(blob.path.as_str(), Some("docs/anchors.md"));
@@ -201,24 +204,27 @@ fn transcluded(resolver: &mut Resolver<'_>, destination: &str) -> Resolution {
 
 fn assert_transclusion_matrix(resolver: &mut Resolver<'_>) {
     let held = transcluded(resolver, "docs/host.rst#present");
-    assert!(matches!(held, Resolution::Resolved(_)), "{held:?}");
+    assert!(matches!(held, Resolution::Resolved { .. }), "{held:?}");
 
     let spliced = transcluded(resolver, "docs/host.rst#spliced");
-    assert!(matches!(spliced, Resolution::Resolved(_)), "{spliced:?}");
+    assert!(
+        matches!(spliced, Resolution::Resolved { .. }),
+        "{spliced:?}"
+    );
     let whitespace = transcluded(resolver, "docs/host.rst#hidden");
     assert!(
-        matches!(whitespace, Resolution::Resolved(_)),
+        matches!(whitespace, Resolution::Resolved { .. }),
         "directive names ignore case and their final path accepts whitespace: {whitespace:?}"
     );
 
     let nested = transcluded(resolver, "docs/host.adoc#_deep");
     assert!(
-        matches!(nested, Resolution::Resolved(_)),
+        matches!(nested, Resolution::Resolved { .. }),
         "nested paths are relative to the including file: {nested:?}"
     );
     let ordered = transcluded(resolver, "docs/host.adoc#_repeat_2_2");
     assert!(
-        matches!(ordered, Resolution::Resolved(_)),
+        matches!(ordered, Resolution::Resolved { .. }),
         "included headings occupy identities at the directive position: {ordered:?}"
     );
     let asciidoc_absent = transcluded(resolver, "docs/host.adoc#_absent");
@@ -244,7 +250,7 @@ fn assert_transclusion_matrix(resolver: &mut Resolver<'_>) {
 
     let before_cycle = transcluded(resolver, "docs/cycle-a.rst#b");
     assert!(
-        matches!(before_cycle, Resolution::Resolved(_)),
+        matches!(before_cycle, Resolution::Resolved { .. }),
         "known identities before a cycle remain evidence: {before_cycle:?}"
     );
     let beyond_cycle = transcluded(resolver, "docs/cycle-a.rst#absent");
@@ -314,7 +320,7 @@ fn bounded_local_includes_publish_only_proven_heading_anchors() {
     );
     let before_ceiling = transcluded(&mut limited, "docs/host.adoc#_repeat_2");
     assert!(
-        matches!(before_ceiling, Resolution::Resolved(_)),
+        matches!(before_ceiling, Resolution::Resolved { .. }),
         "known identities before the edge ceiling remain evidence: {before_ceiling:?}"
     );
     let beyond_ceiling = transcluded(&mut limited, "docs/host.adoc#_deep");

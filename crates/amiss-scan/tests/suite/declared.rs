@@ -87,9 +87,9 @@ fn declared_by(resolution: &Resolution) -> Option<String> {
             String::from_utf8_lossy(declared.path.as_bytes()),
             String::from_utf8_lossy(declared.declared_by.as_bytes()),
         )),
-        Resolution::Resolved(_)
+        Resolution::Resolved { .. }
         | Resolution::Missing(_)
-        | Resolution::TypeMismatch(_)
+        | Resolution::TypeMismatch { .. }
         | Resolution::UnsupportedTarget(_)
         | Resolution::UnsupportedSemantics(_)
         | Resolution::UnsupportedVersion(_)
@@ -194,7 +194,7 @@ fn nothing_a_declaration_cannot_name_stops_being_missing() {
 fn a_tracked_target_resolves_though_an_ignore_file_names_it() {
     let mut bed = bed();
     assert!(
-        matches!(bed.resolve("tracked.md"), Resolution::Resolved(_)),
+        matches!(bed.resolve("tracked.md"), Resolution::Resolved { .. }),
         "an ignore line must not answer for a path the tree holds",
     );
 }

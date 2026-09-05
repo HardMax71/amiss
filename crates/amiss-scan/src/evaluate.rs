@@ -45,7 +45,7 @@ fn resolution_value(observation: &Observation) -> Value {
 
 pub(crate) fn resolution_row(resolution: &crate::resolve::Resolution) -> Value {
     match resolution {
-        Resolution::Resolved(target) | Resolution::TypeMismatch(target) => resolution_object(
+        Resolution::Resolved { target } | Resolution::TypeMismatch { target } => resolution_object(
             resolution.discriminant().as_ref(),
             vec![("target", target_value(target))],
         ),
@@ -266,7 +266,7 @@ pub(super) const fn resolution_kinds(resolution: &crate::resolve::Resolution) ->
             structural: Some(FindingKind::ExplicitTargetMissing),
             boundary: None,
         },
-        Resolution::TypeMismatch(_) => ResolutionKinds {
+        Resolution::TypeMismatch { .. } => ResolutionKinds {
             structural: Some(FindingKind::ExplicitTargetTypeMismatch),
             boundary: None,
         },
@@ -290,7 +290,7 @@ pub(super) const fn resolution_kinds(resolution: &crate::resolve::Resolution) ->
             structural: None,
             boundary: Some(FindingKind::TargetDeclaredUntracked),
         },
-        Resolution::Resolved(_) | Resolution::External(_) => ResolutionKinds {
+        Resolution::Resolved { .. } | Resolution::External(_) => ResolutionKinds {
             structural: None,
             boundary: None,
         },

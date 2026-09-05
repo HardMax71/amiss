@@ -63,7 +63,7 @@ pub(super) fn resolve(
                 return Ok(None);
             }
             let resolution = lookup(resolver, source, TargetKind::Blob, None, None, None)?;
-            Ok(matches!(&resolution, Resolution::Resolved(_)).then_some(resolution))
+            Ok(matches!(&resolution, Resolution::Resolved { .. }).then_some(resolution))
         }
         SitePageBacking::Generated => Ok(source
             .as_ref()
