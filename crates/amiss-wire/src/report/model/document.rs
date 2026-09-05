@@ -81,7 +81,7 @@ pub enum DocumentGitMode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DocumentSide {
+pub struct DocumentSide<M = DocumentGitMode> {
     #[serde(deserialize_with = "Option::deserialize")]
     pub adapter_id: Option<Adapter>,
     pub byte_count: u64,
@@ -91,7 +91,7 @@ pub struct DocumentSide {
     pub extracted_references: u64,
     pub frontmatter_bytes: u64,
     pub frontmatter_regions: u64,
-    pub git_mode: DocumentGitMode,
+    pub git_mode: M,
     pub opaque_html_bytes: u64,
     pub opaque_html_regions: u64,
     pub opaque_mdx_bytes: u64,
@@ -113,11 +113,12 @@ pub enum DocumentChange {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DocumentResult<P = RepoPath> {
+#[serde(bound(deserialize = "P: Deserialize<'de>, S: Deserialize<'de>"))]
+pub struct DocumentResult<P = RepoPath, S = DocumentSide> {
     #[serde(deserialize_with = "Option::deserialize")]
-    pub base: Option<DocumentSide>,
+    pub base: Option<S>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub candidate: Option<DocumentSide>,
+    pub candidate: Option<S>,
     pub change: DocumentChange,
     pub classification: DocumentClassification,
     pub path: P,

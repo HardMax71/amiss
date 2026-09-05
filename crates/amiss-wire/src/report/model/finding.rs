@@ -8,7 +8,10 @@ use crate::digest::Digest;
 use crate::model::{ArtifactId, Oid, OwnerId, RepoPathText, TreeIdentity, UtcInstant};
 
 use super::super::{Disposition, FindingKind};
-use super::{DocumentResult, ObservationComparison, RepoPath, Resolution, SourceSpan};
+use super::{
+    DocumentGitMode, DocumentResult, DocumentSide, ObservationComparison, Occurrence, RepoPath,
+    Resolution, SourceSpan,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ReferenceOccurrenceKind {
@@ -410,8 +413,19 @@ pub struct ReferenceFactEvidence<R = Resolution> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum FindingFactEvidence<P = RepoPath> {
+#[serde(
+    untagged,
+    bound(
+        deserialize = "P: Deserialize<'de>, R: Deserialize<'de>, S: Deserialize<'de>, D: Deserialize<'de>, M: Deserialize<'de>"
+    )
+)]
+pub enum FindingFactEvidence<
+    P = RepoPath,
+    R = Resolution<P>,
+    S = ProjectionSource,
+    D = ProjectionDifference,
+    M = DocumentGitMode,
+> {
     BrokenRedirect {
         claim_digest: Digest,
         destination: String,
@@ -449,7 +463,7 @@ pub enum FindingFactEvidence<P = RepoPath> {
         rule_id: String,
     },
     Document {
-        document_result: DocumentResult<P>,
+        document_result: DocumentResult<P, DocumentSide<M>>,
         kind: DocumentFactEvidenceKind,
     },
     DuplicateRoute {
@@ -459,7 +473,7 @@ pub enum FindingFactEvidence<P = RepoPath> {
         sources: Vec<P>,
     },
     Observation {
-        comparison: Box<ObservationComparison<P>>,
+        comparison: Box<ObservationComparison<Occurrence<P, R>>>,
         kind: ObservationFactEvidenceKind,
     },
     Projection {
@@ -468,7 +482,7 @@ pub enum FindingFactEvidence<P = RepoPath> {
             deserialize_with = "json_serde::deserialize_some",
             skip_serializing_if = "Option::is_none"
         )]
-        difference: Option<ProjectionDifference>,
+        difference: Option<D>,
         #[serde(deserialize_with = "Option::deserialize")]
         expected_bytes: Option<u64>,
         #[serde(deserialize_with = "Option::deserialize")]
@@ -482,10 +496,10 @@ pub enum FindingFactEvidence<P = RepoPath> {
         observed_digest: Option<Digest>,
         projection: ProjectionKind,
         sink: ProjectionSink,
-        source: ProjectionSource,
+        source: S,
         sources: Vec<ControlStateSource>,
     },
-    Reference(ReferenceFactEvidence<Resolution<P>>),
+    Reference(ReferenceFactEvidence<R>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -641,15 +655,16 @@ pub struct WaiverApplication {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Finding<P = RepoPath> {
+#[serde(bound(deserialize = "P: Deserialize<'de>, E: Deserialize<'de>"))]
+pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
     pub aggregation: FindingAggregation,
     pub attribution: Attribution,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub base_fact: Option<FindingFactInput<FindingKeyInput<P>, FindingFactEvidence<P>>>,
+    pub base_fact: Option<FindingFactInput<FindingKeyInput<P>, E>>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub base_fact_digest: Option<Digest>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub candidate_fact: Option<FindingFactInput<FindingKeyInput<P>, FindingFactEvidence<P>>>,
+    pub candidate_fact: Option<FindingFactInput<FindingKeyInput<P>, E>>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_fact_digest: Option<Digest>,
     pub configured_disposition: Disposition,
