@@ -54,7 +54,8 @@ pub struct SourceSpan {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct TargetIntent {
+#[serde(bound(deserialize = "P: Deserialize<'de>"))]
+pub struct TargetIntent<P = RepoPath> {
     #[serde(
         default,
         deserialize_with = "json_serde::deserialize_some",
@@ -70,17 +71,17 @@ pub struct TargetIntent {
     pub query_digest: Option<Digest>,
     pub raw_destination_digest: Digest,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub repository_path: Option<RepoPath>,
+    pub repository_path: Option<P>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub target_kind: Option<TargetKind>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ObservationIdInput {
+pub struct ObservationIdInput<P = RepoPath> {
     pub adapter_contract_digest: Digest,
     pub adapter_id: Adapter,
-    pub document: RepoPath,
-    pub extracted_intent: TargetIntent,
+    pub document: P,
+    pub extracted_intent: TargetIntent<P>,
     pub schema: ObservationIdInputSchema,
     pub source_construct: SourceConstruct,
     pub source_projection_digest: Digest,
@@ -113,16 +114,16 @@ pub enum TreeResolutionTargetKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum ResolutionTarget {
+pub enum ResolutionTarget<P = RepoPath> {
     Blob {
         content: ResolutionContent,
         kind: BlobResolutionTargetKind,
         mode: BlobMode,
-        path: RepoPath,
+        path: P,
     },
     Tree {
         kind: TreeResolutionTargetKind,
-        path: RepoPath,
+        path: P,
     },
 }
 
@@ -151,45 +152,45 @@ pub enum PathNotFoundResolutionReason {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum MissingResolution {
+#[serde(untagged, bound(deserialize = "P: Deserialize<'de>"))]
+pub enum MissingResolution<P = RepoPath> {
     HeadingAnchorNotFound {
         #[serde(deserialize_with = "Option::deserialize")]
         near: Option<String>,
-        path: RepoPath,
+        path: P,
         reason: HeadingAnchorNotFoundResolutionReason,
     },
     LabelNotDeclared {
         reason: LabelNotDeclaredResolutionReason,
     },
     LineFragmentOutOfRange {
-        path: RepoPath,
+        path: P,
         reason: LineFragmentOutOfRangeResolutionReason,
     },
     PathNotFound {
         #[serde(deserialize_with = "Option::deserialize")]
-        near: Option<RepoPath>,
-        path: RepoPath,
+        near: Option<P>,
+        path: P,
         reason: PathNotFoundResolutionReason,
         #[serde(
             default,
             deserialize_with = "json_serde::deserialize_some",
             skip_serializing_if = "Option::is_none"
         )]
-        same_object_at: Option<Nullable<RepoPath>>,
+        same_object_at: Option<Nullable<P>>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "kebab-case")]
-pub enum UnsupportedSemanticsResolution {
+pub enum UnsupportedSemanticsResolution<P = RepoPath> {
     AttributeDependent,
-    CodeFragment { target: ResolutionTarget },
+    CodeFragment { target: ResolutionTarget<P> },
     DuplicateLabel,
     ExternalInventory,
-    Fragment { target: ResolutionTarget },
+    Fragment { target: ResolutionTarget<P> },
     NetworkPath,
-    Query { target: ResolutionTarget },
+    Query { target: ResolutionTarget<P> },
     SiteRoute,
 }
 
@@ -213,15 +214,15 @@ pub enum UnknownPathVersionScopeKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum VersionScope {
+pub enum VersionScope<P = RepoPath> {
     KnownCommit {
         commit_oid: Oid,
         kind: KnownCommitVersionScopeKind,
-        path: RepoPath,
+        path: P,
     },
     KnownPath {
         kind: KnownPathVersionScopeKind,
-        path: RepoPath,
+        path: P,
     },
     UnknownPath {
         kind: UnknownPathVersionScopeKind,
@@ -284,11 +285,11 @@ pub enum UnsupportedVersionResolutionKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum Resolution {
+pub enum Resolution<P = RepoPath> {
     DeclaredUntracked {
-        declared_by: RepoPath,
+        declared_by: P,
         kind: DeclaredUntrackedResolutionKind,
-        path: RepoPath,
+        path: P,
     },
     External {
         kind: ExternalResolutionKind,
@@ -301,56 +302,56 @@ pub enum Resolution {
     Missing {
         kind: MissingResolutionKind,
         #[serde(flatten)]
-        detail: MissingResolution,
+        detail: MissingResolution<P>,
     },
     Resolved {
         kind: ResolvedResolutionKind,
-        target: ResolutionTarget,
+        target: ResolutionTarget<P>,
     },
     TypeMismatch {
         kind: TypeMismatchResolutionKind,
-        target: ResolutionTarget,
+        target: ResolutionTarget<P>,
     },
     UnsupportedSemantics {
         kind: UnsupportedSemanticsResolutionKind,
         #[serde(flatten)]
-        detail: UnsupportedSemanticsResolution,
+        detail: UnsupportedSemanticsResolution<P>,
     },
     UnsupportedTarget {
         kind: UnsupportedTargetResolutionKind,
-        path: RepoPath,
+        path: P,
         reason: UnsupportedTargetReason,
     },
     UnsupportedVersion {
         kind: UnsupportedVersionResolutionKind,
-        scope: VersionScope,
+        scope: VersionScope<P>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Occurrence {
+pub struct Occurrence<P = RepoPath> {
     pub adapter_id: Adapter,
     pub block_kind: BlockKind,
-    pub document: RepoPath,
+    pub document: P,
     #[serde(
         default,
         deserialize_with = "json_serde::deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
     pub external_destination: Option<String>,
-    pub intent: TargetIntent,
+    pub intent: TargetIntent<P>,
     pub observation_id: Digest,
-    pub observation_id_input: ObservationIdInput,
-    pub resolution: Resolution,
+    pub observation_id_input: ObservationIdInput<P>,
+    pub resolution: Resolution<P>,
     pub source_construct: SourceConstruct,
     pub source_projection_digest: Digest,
     pub source_span: SourceSpan,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CorrelationAlternatives {
-    pub base: Vec<Occurrence>,
-    pub candidate: Vec<Occurrence>,
+pub struct CorrelationAlternatives<P = RepoPath> {
+    pub base: Vec<Occurrence<P>>,
+    pub candidate: Vec<Occurrence<P>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
@@ -414,12 +415,12 @@ pub enum Impact {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ObservationComparison {
-    pub alternatives: CorrelationAlternatives,
+pub struct ObservationComparison<P = RepoPath> {
+    pub alternatives: CorrelationAlternatives<P>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub base: Option<Occurrence>,
+    pub base: Option<Occurrence<P>>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub candidate: Option<Occurrence>,
+    pub candidate: Option<Occurrence<P>>,
     pub correlation: Correlation,
     pub correlation_reason: CorrelationReason,
     pub impact: Impact,

@@ -113,12 +113,12 @@ pub enum DocumentChange {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DocumentResult {
+pub struct DocumentResult<P = RepoPath> {
     #[serde(deserialize_with = "Option::deserialize")]
     pub base: Option<DocumentSide>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub candidate: Option<DocumentSide>,
     pub change: DocumentChange,
     pub classification: DocumentClassification,
-    pub path: RepoPath,
+    pub path: P,
 }

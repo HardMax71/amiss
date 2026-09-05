@@ -1,3 +1,5 @@
+mod producer_paths;
+
 use amiss_wire::report::model::{
     AnalysisError, BaseSnapshot, Controls, DocumentResult, Engine, Evaluation, ExceptionDiagnostic,
     Feedback, Finding, FindingFactEvidence, FindingKeyScope, MissingResolution,

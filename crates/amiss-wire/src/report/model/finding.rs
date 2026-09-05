@@ -36,13 +36,13 @@ pub enum EmptyRepositoryPath {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum RepositoryIntentPath {
+pub enum RepositoryIntentPath<P = RepoPath> {
     Empty(EmptyRepositoryPath),
-    Path(RepoPath),
+    Path(P),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct RepositoryTargetIntent {
+pub struct RepositoryTargetIntent<P = RepoPath> {
     #[serde(
         default,
         deserialize_with = "json_serde::deserialize_some",
@@ -52,7 +52,7 @@ pub struct RepositoryTargetIntent {
     #[serde(deserialize_with = "Option::deserialize")]
     pub fragment_digest: Option<Digest>,
     pub kind: RepositoryIntentKind,
-    pub path: RepositoryIntentPath,
+    pub path: RepositoryIntentPath<P>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub query_digest: Option<Digest>,
     pub target_kind: TargetKind,
@@ -84,15 +84,15 @@ pub enum ReferenceFindingKeyScopeKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum FindingKeyScope {
+pub enum FindingKeyScope<P = RepoPath> {
     Control {
         #[serde(deserialize_with = "Option::deserialize")]
-        control_path: Option<RepoPath>,
+        control_path: Option<P>,
         kind: ControlFindingKeyScopeKind,
         rule_id: String,
     },
     Document {
-        document: RepoPath,
+        document: P,
         kind: DocumentFindingKeyScopeKind,
     },
     Observation {
@@ -100,19 +100,19 @@ pub enum FindingKeyScope {
         observation_id: Digest,
     },
     Reference {
-        document: RepoPath,
+        document: P,
         kind: ReferenceFindingKeyScopeKind,
-        normalized_target_intent: RepositoryTargetIntent,
+        normalized_target_intent: RepositoryTargetIntent<P>,
         occurrence: ReferenceOccurrence,
         source_construct: SourceConstruct,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FindingKeyInput {
+pub struct FindingKeyInput<P = RepoPath> {
     pub finding_kind: FindingKind,
     pub schema: FindingKeyInputSchema,
-    pub scope: FindingKeyScope,
+    pub scope: FindingKeyScope<P>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -398,14 +398,14 @@ pub enum ReferenceFactEvidenceKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum FindingFactEvidence {
+pub enum FindingFactEvidence<P = RepoPath> {
     BrokenRedirect {
         claim_digest: Digest,
         destination: String,
         kind: BrokenRedirectFactEvidenceKind,
         reason: BrokenRedirectReason,
         route: String,
-        source: RepoPath,
+        source: P,
     },
     Claim {
         claim_kind: ClaimKind,
@@ -429,24 +429,24 @@ pub enum FindingFactEvidence {
         #[serde(deserialize_with = "Option::deserialize")]
         candidate_control_state: Option<ControlStateInput>,
         #[serde(deserialize_with = "Option::deserialize")]
-        control_path: Option<RepoPath>,
+        control_path: Option<P>,
         #[serde(deserialize_with = "Option::deserialize")]
         exception: Option<Box<ExceptionDiagnostic>>,
         kind: ControlFactEvidenceKind,
         rule_id: String,
     },
     Document {
-        document_result: DocumentResult,
+        document_result: DocumentResult<P>,
         kind: DocumentFactEvidenceKind,
     },
     DuplicateRoute {
         claim_digests: Vec<Digest>,
         kind: DuplicateRouteFactEvidenceKind,
         route: String,
-        sources: Vec<RepoPath>,
+        sources: Vec<P>,
     },
     Observation {
-        comparison: Box<ObservationComparison>,
+        comparison: Box<ObservationComparison<P>>,
         kind: ObservationFactEvidenceKind,
     },
     Projection {
@@ -475,15 +475,15 @@ pub enum FindingFactEvidence {
     Reference {
         kind: ReferenceFactEvidenceKind,
         occurrence_multiplicity: u64,
-        resolution: Resolution,
+        resolution: Resolution<P>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FindingFactInput {
-    pub evidence: FindingFactEvidence,
+pub struct FindingFactInput<P = RepoPath> {
+    pub evidence: FindingFactEvidence<P>,
     pub finding_kind: FindingKind,
-    pub key_input: FindingKeyInput,
+    pub key_input: FindingKeyInput<P>,
     pub schema: FactSchema,
 }
 
@@ -559,9 +559,10 @@ pub enum LocationSide {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FindingLocation {
+#[serde(bound(deserialize = "P: Deserialize<'de>"))]
+pub struct FindingLocation<P = RepoPath> {
     #[serde(deserialize_with = "Option::deserialize")]
-    pub path: Option<RepoPath>,
+    pub path: Option<P>,
     pub side: LocationSide,
     #[serde(deserialize_with = "Option::deserialize")]
     pub span: Option<SourceSpan>,
@@ -631,15 +632,15 @@ pub struct WaiverApplication {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Finding {
+pub struct Finding<P = RepoPath> {
     pub aggregation: FindingAggregation,
     pub attribution: Attribution,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub base_fact: Option<FindingFactInput>,
+    pub base_fact: Option<FindingFactInput<P>>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub base_fact_digest: Option<Digest>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub candidate_fact: Option<FindingFactInput>,
+    pub candidate_fact: Option<FindingFactInput<P>>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_fact_digest: Option<Digest>,
     pub configured_disposition: Disposition,
@@ -653,9 +654,9 @@ pub struct Finding {
     #[serde(deserialize_with = "Option::deserialize")]
     pub fix: Option<FindingFix>,
     pub invariant_class: InvariantClass,
-    pub key_input: FindingKeyInput,
+    pub key_input: FindingKeyInput<P>,
     pub kind: FindingKind,
-    pub location: FindingLocation,
+    pub location: FindingLocation<P>,
     pub observation_ids: Vec<Digest>,
     pub policy_trace: Vec<PolicyStep>,
     #[serde(deserialize_with = "Option::deserialize")]
