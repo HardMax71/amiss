@@ -217,9 +217,15 @@ struct ObservationHeader {
     kind: ArtifactId,
 }
 
+#[expect(
+    clippy::zero_sized_map_values,
+    reason = "Serde structs also accept arrays; observations must be objects"
+)]
 fn observation_key<O: Serialize>(path: &str, observation: &O) -> Result<Vec<u8>, Error> {
     let encoded = serde_json_canonicalizer::to_vec(observation)
         .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
+    serde_json::from_slice::<std::collections::BTreeMap<String, serde::de::IgnoredAny>>(&encoded)
+        .map_err(|_defect| Error::new(path, ErrorKind::WrongType))?;
     let ObservationHeader { kind: _kind } =
         de::deserialize_json(&encoded).map_err(|mut defect| {
             defect.path = defect.path.replacen('$', path, 1);
