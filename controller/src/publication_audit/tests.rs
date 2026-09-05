@@ -200,8 +200,7 @@ fn rebuilt(
     plan: &PublicationPlanEnvelope,
     evidence_bytes: Option<&[u8]>,
 ) -> Result<PublicationAuditFixture, ArtifactError> {
-    let plan_value = write_plan(&plan.payload).map_err(|_defect| ArtifactError::Corrupt)?;
-    let plan_bytes = json::canonical(&plan_value);
+    let plan_bytes = write_plan(&plan.payload).map_err(|_defect| ArtifactError::Corrupt)?;
     let plan = parse_plan(&plan_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
     let evidence = evidence_bytes.map(<[u8]>::to_vec);
     let parsed_evidence = evidence
@@ -220,7 +219,7 @@ fn rebuilt(
         report: fixture.report.clone(),
         plan: plan_bytes,
         evidence,
-        assessment: json::canonical(&assessment),
+        assessment,
     })
 }
 

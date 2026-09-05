@@ -43,7 +43,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
             "sha256:8c8f4c8087edf216675ffbfc5a75a6c67dc48103be696b74174758a3e5db187a",
         )?,
     };
-    let plan_bytes = json::canonical(&plan(&plan_envelope.payload).ok()?);
+    let plan_bytes = plan(&plan_envelope.payload).ok()?;
     let plan_envelope = parse_plan(&plan_bytes).ok()?;
     let evidence_envelope = if with_evidence {
         Some(publication_evidence(&plan_envelope)?)
@@ -59,14 +59,14 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
     .ok()?;
     let evidence = evidence_envelope
         .as_ref()
-        .map(|envelope| evidence(&envelope.payload).map(|value| json::canonical(&value)))
+        .map(|envelope| evidence(&envelope.payload))
         .transpose()
         .ok()?;
     Some(PublicationAuditFixture {
         report,
         plan: plan_bytes,
         evidence,
-        assessment: json::canonical(&assessment),
+        assessment,
     })
 }
 
@@ -81,5 +81,5 @@ fn publication_evidence(
     evidence_envelope.payload.site = plan.payload.site.clone();
     evidence_envelope.payload.product = plan.payload.product.clone();
     let value = evidence(&evidence_envelope.payload).ok()?;
-    parse_evidence(&json::canonical(&value)).ok()
+    parse_evidence(&value).ok()
 }

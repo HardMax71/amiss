@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
-use crate::json::{self, Value};
+use crate::json;
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 
 mod assessment;
@@ -27,9 +27,9 @@ pub const PUBLICATION_URI_BYTES: usize = 16_384;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PublicationPlanEnvelope {
+pub struct PublicationPlanEnvelope<T = PublicationPlan> {
     pub schema: PlanEnvelopeSchema,
-    pub payload: PublicationPlan,
+    pub payload: T,
     pub payload_digest: Digest,
 }
 
@@ -133,11 +133,11 @@ pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
 ///
 /// Fails when a public field violates the same closed grammar [`parse_plan`]
 /// enforces or the encoded document exceeds its byte ceiling.
-pub fn plan(input: &PublicationPlan) -> Result<Value, Error> {
+pub fn plan(input: &PublicationPlan) -> Result<Vec<u8>, Error> {
     let payload_digest = plan_payload_digest(input)?;
     let document = PublicationPlanEnvelope {
         schema: PlanEnvelopeSchema::Current,
-        payload: input.clone(),
+        payload: input,
         payload_digest,
     };
     let canonical = serde_json_canonicalizer::to_vec(&document)
@@ -145,7 +145,8 @@ pub fn plan(input: &PublicationPlan) -> Result<Value, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    Ok(canonical)
 }
 
 pub(super) fn plan_payload_digest(input: &PublicationPlan) -> Result<Digest, Error> {

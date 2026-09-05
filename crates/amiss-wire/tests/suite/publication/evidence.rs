@@ -13,7 +13,7 @@ use amiss_wire::publication::{
 pub(super) fn publication_evidence() -> PublicationEvidence {
     let planned = publication_plan();
     let planned_value = plan(&planned).unwrap();
-    let planned = parse_plan(&json::canonical(&planned_value)).unwrap();
+    let planned = parse_plan(&planned_value).unwrap();
     PublicationEvidence {
         schema: EvidencePayloadSchema::Current,
         plan_payload_digest: planned.payload_digest,
@@ -41,7 +41,7 @@ pub(super) fn publication_evidence() -> PublicationEvidence {
 fn publication_evidence_round_trips_with_its_plan_and_payload_digests() {
     let expected = publication_evidence();
     let value = evidence(&expected).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = value;
     let parsed = parse_evidence(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
@@ -60,7 +60,7 @@ fn publication_evidence_round_trips_with_its_plan_and_payload_digests() {
     assert_eq!(example.payload.plan_payload_digest, planned.payload_digest);
     let written = evidence(&example.payload).unwrap();
     assert_eq!(
-        json::canonical(&written),
+        written,
         json::canonical(&json::parse(&example_bytes).unwrap())
     );
 }
@@ -81,13 +81,13 @@ fn publication_evidence_refuses_non_success_and_unsafe_attempts() {
     }
 
     let value = evidence(&publication_evidence()).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let failed = String::from_utf8(json::canonical(&value))
+    let recorded = parse_evidence(&value).unwrap().payload_digest.to_string();
+    let failed = String::from_utf8(value)
         .unwrap()
         .replace("\"succeeded\"", "\"failed\"");
     let failed_value = json::parse(failed.as_bytes()).unwrap();
     let rebound = failed.replace(
-        recorded,
+        &recorded,
         &hj(
             EVIDENCE_PAYLOAD_SCHEMA,
             failed_value.member("payload").unwrap(),

@@ -78,8 +78,8 @@ fn publication_plan() -> PublicationPlan {
 #[test]
 fn publication_plan_round_trips_with_its_payload_digest() {
     let expected = publication_plan();
-    let value = plan(&expected).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = plan(&expected).unwrap();
+    let value = json::parse(&bytes).unwrap();
     let parsed = parse_plan(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
@@ -96,7 +96,7 @@ fn publication_plan_round_trips_with_its_payload_digest() {
     let example = parse_plan(&example_bytes).unwrap();
     let written = plan(&example.payload).unwrap();
     assert_eq!(
-        json::canonical(&written),
+        written,
         json::canonical(&json::parse(&example_bytes).unwrap())
     );
 }
@@ -137,7 +137,7 @@ fn publication_plan_refuses_ambiguous_resources_and_git_objects() {
 #[test]
 fn publication_plan_refuses_repository_values_that_bypass_construction() {
     let value = plan(&publication_plan()).unwrap();
-    let mut document: serde_json::Value = serde_json::from_slice(&json::canonical(&value)).unwrap();
+    let mut document: serde_json::Value = serde_json::from_slice(&value).unwrap();
     document["payload"]["docs"]["repository"]["host"] = serde_json::json!("invalid/host");
     let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
     document["payload_digest"] = serde_json::json!(hb(PLAN_PAYLOAD_SCHEMA, &payload).to_string());
@@ -149,8 +149,7 @@ fn publication_plan_refuses_repository_values_that_bypass_construction() {
 
 #[test]
 fn publication_plan_reports_derived_shape_errors_at_their_fields() {
-    let value = plan(&publication_plan()).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = plan(&publication_plan()).unwrap();
     for (pointer, replacement, expected_path, expected_kind) in [
         (
             "/payload/report_payload_digest",
@@ -208,28 +207,23 @@ fn publication_plan_reports_derived_shape_errors_at_their_fields() {
 
 #[test]
 fn publication_plan_refuses_tampering_and_open_shapes() {
-    let value = plan(&publication_plan()).unwrap();
-    let bytes = json::canonical(&value);
+    let bytes = plan(&publication_plan()).unwrap();
     let parsed = parse_plan(&bytes).unwrap();
-    let tampered = String::from_utf8(bytes)
-        .unwrap()
-        .replace(&parsed.payload_digest.to_string(), &digest('f').to_string());
+    let recorded = parsed.payload_digest.to_string();
+    let document = String::from_utf8(bytes).unwrap();
+    let tampered = document.replace(&recorded, &digest('f').to_string());
     let error = parse_plan(tampered.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload_digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
-    let value = plan(&publication_plan()).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let open = String::from_utf8(json::canonical(&value))
-        .unwrap()
-        .replacen(
-            "\"report_payload_digest\":",
-            "\"unknown\":true,\"report_payload_digest\":",
-            1,
-        );
+    let open = document.replacen(
+        "\"report_payload_digest\":",
+        "\"unknown\":true,\"report_payload_digest\":",
+        1,
+    );
     let open_value = json::parse(open.as_bytes()).unwrap();
     let rebound = open.replace(
-        recorded,
+        &recorded,
         &hj(PLAN_PAYLOAD_SCHEMA, open_value.member("payload").unwrap()).to_string(),
     );
     let error = parse_plan(rebound.as_bytes()).unwrap_err();
