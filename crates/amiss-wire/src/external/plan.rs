@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb, hj};
-use crate::json::{self, Value};
+use crate::json;
 use crate::model::ForgeDialect;
 use crate::report::model::{
     Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath, Resolution,
@@ -107,11 +107,11 @@ struct Entry {
 ///
 /// # Errors
 ///
-/// Returns the first [`PlanDefect`] when the value is not a report envelope,
+/// Returns the first [`PlanDefect`] when the bytes are not a report envelope,
 /// its digest does not hold, it is incomplete, or a delegated occurrence
 /// lacks a field the exactly-when contract promises.
 pub fn plan(
-    envelope: &Value,
+    envelope: &[u8],
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, PlanDefect> {

@@ -20,7 +20,7 @@ pub(crate) fn run(invocation: &RenderInvocation, reserve: &mut BufWriter<Stdout>
             return failure;
         }
     };
-    let (payload, payload_digest, verdict) = match validate_envelope(&input.value) {
+    let (payload, payload_digest, verdict) = match validate_envelope(&input.bytes) {
         Ok(validated) => validated,
         Err(defect) => {
             eprintln!("amiss render: {defect}");

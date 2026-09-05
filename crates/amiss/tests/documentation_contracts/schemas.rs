@@ -80,10 +80,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         }
         "scanner-external-evidence" => parse_defect(amiss_wire::external::parse_evidence(bytes)),
         "scanner-external-plan" => parse_defect(amiss_wire::external::parse_plan(bytes)),
-        "scanner-report" => match amiss_wire::json::parse(bytes) {
-            Ok(value) => parse_defect(amiss_wire::report::validate_envelope(&value)),
-            Err(error) => Some(format!("{error:?}")),
-        },
+        "scanner-report" => parse_defect(amiss_wire::report::validate_envelope(bytes)),
         "scanner-record-set-input" => {
             parse_defect(amiss_wire::semantic::record::parse_input(bytes))
         }
@@ -524,7 +521,6 @@ fn external_examples_replay_from_the_report_and_evidence() {
     let root = repository_root();
     let report_bytes = fs::read(root.join("spec/examples/scanner-report.json"))
         .expect("the report example is readable");
-    let report = amiss_wire::json::parse(&report_bytes).expect("the report example is strict JSON");
     let plan_bytes = fs::read(root.join("spec/examples/scanner-external-plan.json"))
         .expect("the plan example is readable");
     let plan_example =
@@ -532,7 +528,7 @@ fn external_examples_replay_from_the_report_and_evidence() {
     let example: serde_json::Value =
         serde_json::from_slice(&plan_bytes).expect("the plan example is JSON");
     let (version, digest) = external_engine(&example);
-    let plan = amiss_wire::external::plan(&report, version, digest)
+    let plan = amiss_wire::external::plan(&report_bytes, version, digest)
         .expect("the report example yields a plan");
     assert_eq!(
         plan,

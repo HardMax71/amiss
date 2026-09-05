@@ -73,7 +73,7 @@ pub fn external_plan(destinations: &[&str]) -> Option<Vec<u8>> {
     let parsed = amiss_wire::json::parse(&report).ok()?;
     let engine = parsed.member("payload")?.member("engine")?;
     amiss_wire::external::plan(
-        &parsed,
+        &report,
         engine.text("engine_version")?,
         amiss_wire::digest::Digest::from_wire(engine.text("engine_digest")?)?,
     )

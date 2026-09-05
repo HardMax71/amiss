@@ -17,7 +17,7 @@ hex = { workspace = true, features = ["serde"] }
 hex_fmt.workspace = true
 json-serde.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["unbounded_depth"] }
 serde_json_canonicalizer.workspace = true
 serde_path_to_error.workspace = true
 serde_with.workspace = true

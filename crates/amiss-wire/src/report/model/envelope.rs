@@ -8,21 +8,51 @@ use super::{
     ProjectionSource, RepoPath, Resolution, Summary,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+)]
 pub enum ReportEnvelopeSchema {
-    #[serde(rename = "amiss/scanner-report-envelope")]
+    #[strum(serialize = "amiss/scanner-report-envelope")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+)]
 pub enum ReportPayloadSchema {
-    #[serde(rename = "amiss/scanner-report-payload")]
+    #[strum(serialize = "amiss/scanner-report-payload")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+)]
 pub enum ReportCompatibility {
-    #[serde(rename = "1")]
+    #[strum(serialize = "1")]
     One,
 }
 
@@ -54,8 +84,18 @@ pub struct ReportPayload<
     pub summary: Summary,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum ReportStatus {
     Fail,

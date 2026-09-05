@@ -8,6 +8,8 @@ use strum::IntoEnumIterator;
 #[path = "../support/relation.rs"]
 mod relation_fixture;
 
+mod report_reader;
+
 #[test]
 fn document_classifications_match_the_report_schema() {
     let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
@@ -121,7 +123,7 @@ fn report_examples_match_their_typed_source() {
             serde_json::from_slice(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
         let value = json::parse(&bytes).unwrap();
         let (payload, payload_digest, _verdict) =
-            report::validate_envelope(&value).unwrap_or_else(|error| panic!("{name}: {error}"));
+            report::validate_envelope(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
         let envelope = report::model::ReportEnvelope {
             payload,
             payload_digest,
@@ -139,8 +141,7 @@ fn report_examples_match_their_typed_source() {
         "scanner-report.last-released.json",
     ] {
         let bytes = fs::read(examples.join(name)).unwrap();
-        let value = json::parse(&bytes).unwrap();
-        report::validate_envelope(&value).unwrap_or_else(|error| panic!("{name}: {error}"));
+        report::validate_envelope(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
     }
 }
 
@@ -157,22 +158,6 @@ fn optional_report_members_preserve_digest_bound_presence() {
             json::canonical(&json::parse(document.as_bytes()).unwrap()),
         );
     }
-}
-
-#[test]
-fn additive_report_fields_are_digest_bound_but_inert() {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../spec/examples/scanner-report.canonical.json");
-    let mut document: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
-    document["payload"]["engine"]["future_provenance"] = serde_json::Value::Bool(true);
-    let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
-    document["payload_digest"] = serde_json::Value::String(
-        amiss_wire::digest::hb(report::PAYLOAD_SCHEMA, &payload).to_string(),
-    );
-    let bytes = serde_json_canonicalizer::to_vec(&document).unwrap();
-    let strict = json::parse(&bytes).unwrap();
-    let (payload, _digest, _verdict) = report::validate_envelope(&strict).unwrap();
-    assert!(!payload.engine.engine_version.is_empty());
 }
 
 #[test]

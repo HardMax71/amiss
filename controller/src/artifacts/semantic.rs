@@ -4,7 +4,6 @@ use std::collections::BTreeSet;
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::json;
 use base64::Engine as _;
 
 use crate::semantic_artifact::InputArtifact;
@@ -78,9 +77,8 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
 }
 
 fn report_digests(report: &[u8]) -> Result<Vec<Digest>, ArtifactError> {
-    let envelope = json::parse(report).map_err(|_defect| ArtifactError::Corrupt)?;
-    let (payload, _digest, _verdict) = amiss_wire::report::validate_envelope(&envelope)
-        .map_err(|_defect| ArtifactError::Corrupt)?;
+    let (payload, _digest, _verdict) =
+        amiss_wire::report::validate_envelope(report).map_err(|_defect| ArtifactError::Corrupt)?;
     let amiss_wire::report::model::Controls::Resolved(controls) = payload.controls else {
         return Ok(Vec::new());
     };
