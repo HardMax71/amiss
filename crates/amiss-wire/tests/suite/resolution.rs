@@ -7,6 +7,8 @@ use amiss_wire::resolution::{
 };
 use strum::IntoDiscriminant;
 
+mod serialization;
+
 #[test]
 fn payload_variant_names_are_generated_in_kebab_case() {
     let missing = Missing::LineFragmentOutOfRange { path: () };
