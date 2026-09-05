@@ -125,7 +125,8 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
         });
     assert_eq!(verdict_count, Some(16_384));
 
-    let bytes = canonical_length(&plan).saturating_add(canonical_length(&evidence));
+    let bytes =
+        canonical_length(&plan).saturating_add(u64::try_from(evidence.len()).unwrap_or(u64::MAX));
     bencher.counter(BytesCount::new(bytes)).bench_local(|| {
         assess(
             black_box(&plan),
@@ -136,7 +137,7 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     });
 }
 
-fn assessment_fixture(count: usize) -> (Value, Value) {
+fn assessment_fixture(count: usize) -> (Value, Vec<u8>) {
     let destinations: Vec<String> = (0..count)
         .map(|index| format!("https://example.com/resource-{index:05}"))
         .collect();
@@ -203,6 +204,12 @@ fn assessment_fixture(count: usize) -> (Value, Value) {
         rows,
     })
     .unwrap_or_else(|defect| panic!("benchmark evidence is malformed: {defect}"));
-    assert_eq!(evidence.text("schema"), Some(EVIDENCE_SCHEMA));
+    assert_eq!(
+        parse(&evidence)
+            .ok()
+            .as_ref()
+            .and_then(|value| value.text("schema")),
+        Some(EVIDENCE_SCHEMA)
+    );
     (plan, evidence)
 }

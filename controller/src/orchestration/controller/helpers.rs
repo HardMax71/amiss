@@ -377,7 +377,6 @@ fn prepare_external(
         Ok(Some(evidence)) => {
             match amiss_wire::external::assess(&plan, &evidence, version, engine_digest) {
                 Ok(assessment) => {
-                    let evidence = amiss_wire::json::canonical(&evidence);
                     let assessment = amiss_wire::json::canonical(&assessment);
                     let Ok(parsed) = amiss_wire::external::parse_assessment(&assessment) else {
                         return PreparedExternal {
@@ -411,7 +410,7 @@ fn prepare_external(
                 }
                 Err(_defect) => PreparedExternal {
                     plan: Some(plan_bytes),
-                    evidence: Some(amiss_wire::json::canonical(&evidence)),
+                    evidence: Some(evidence),
                     incomplete: true,
                     ..PreparedExternal::default()
                 },

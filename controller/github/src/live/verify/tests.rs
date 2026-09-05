@@ -212,14 +212,10 @@ fn every_visibility_and_resolution_becomes_its_fact() {
             "https://github.com/acme/widgets/tree/feature/x/docs/ readable resolved".to_owned(),
         ],
     );
+    let document = amiss_wire::external::parse_evidence(&evidence).expect("the evidence is valid");
+    assert_eq!(document.producer.name, PRODUCER_NAME);
     assert_eq!(
-        evidence
-            .member("producer")
-            .and_then(|producer| producer.text("name")),
-        Some(PRODUCER_NAME)
-    );
-    assert_eq!(
-        evidence.text("plan_payload_digest"),
+        Some(document.plan_payload_digest.to_string()).as_deref(),
         plan.text("payload_digest"),
         "the evidence binds the exact plan"
     );

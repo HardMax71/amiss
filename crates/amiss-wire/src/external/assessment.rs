@@ -191,13 +191,17 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
 /// the assessment contract.
 pub fn assess(
     plan: &Value,
-    evidence: &Value,
+    evidence_bytes: &[u8],
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Value, AssessDefect> {
     let plan = parse_plan(&json::canonical(plan))?;
-    let evidence_digest = hj(EVIDENCE_SCHEMA, evidence);
-    let evidence = parse_evidence(&json::canonical(evidence))?;
+    let evidence = parse_evidence(evidence_bytes)?;
+    let evidence_digest = hj(
+        EVIDENCE_SCHEMA,
+        &json::parse(evidence_bytes)
+            .map_err(|defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::Json(defect))))?,
+    );
     if evidence.plan_payload_digest != plan.payload_digest {
         return Err(AssessDefect::UnboundEvidence);
     }

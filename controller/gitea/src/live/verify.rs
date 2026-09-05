@@ -22,7 +22,7 @@ pub(super) fn verify_external<R: GiteaVerification>(
     host: &str,
     producer_version: &str,
     checked_at: &str,
-) -> Result<Value, ProviderError> {
+) -> Result<Vec<u8>, ProviderError> {
     forge_evidence(
         plan,
         ForgeProducer {
