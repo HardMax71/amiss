@@ -1,7 +1,9 @@
 mod tests;
 
 use amiss_wire::human::{atom, atom_bytes, decode_hex};
-use amiss_wire::json::{self, Value};
+use amiss_wire::json;
+use amiss_wire::report::model::{AvailableFeedback, FeedbackAction, FeedbackItem, RepoPath};
+use serde::Deserialize;
 
 use crate::ArtifactReference;
 
@@ -13,6 +15,18 @@ const OPTIONAL_PROJECTION_PREFIXES: [&str; 4] = [
     "assessment-artifact: ",
     "external-assessment: ",
 ];
+
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(serde::Serialize))]
+struct ReportFeedback {
+    payload: FeedbackPayload,
+}
+
+#[derive(Deserialize)]
+#[cfg_attr(test, derive(serde::Serialize))]
+struct FeedbackPayload {
+    feedback: AvailableFeedback,
+}
 
 /// Every repository-derived value passes the human-atom law before it
 /// reaches provider markdown.
@@ -78,29 +92,23 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     let Some(bytes) = report else {
         return Vec::new();
     };
-    let Ok(envelope) = json::parse(bytes) else {
-        return Vec::new();
-    };
-    let Some(feedback) =
-        member(&envelope, "payload").and_then(|payload| member(payload, "feedback"))
-    else {
-        return Vec::new();
-    };
-    if member(feedback, "status").and_then(as_text) != Some("available") {
+    if json::parse(bytes).is_err() {
         return Vec::new();
     }
-    let items = match member(feedback, "items") {
-        Some(Value::Array(rows)) => rows.as_ref(),
-        Some(
-            Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Object(_),
-        )
-        | None => &[],
+    let Ok(report) = serde_json::from_slice::<ReportFeedback>(bytes) else {
+        return Vec::new();
     };
-    let fixes = items.iter().filter(|item| action_is(item, "fix")).count();
-    let checks = items.iter().filter(|item| action_is(item, "check")).count();
-    let existing = member(feedback, "existing_count")
-        .and_then(as_integer)
-        .unwrap_or(0);
+    let feedback = report.payload.feedback;
+    let items = &feedback.items;
+    let fixes = items
+        .iter()
+        .filter(|item| item.action == FeedbackAction::Fix)
+        .count();
+    let checks = items
+        .iter()
+        .filter(|item| item.action == FeedbackAction::Check)
+        .count();
+    let existing = feedback.existing_count;
     let mut lines = vec![format!(
         "findings: fix {fixes}, check {checks}, existing {existing}"
     )];
@@ -122,69 +130,18 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     lines
 }
 
-fn item_line(item: &Value) -> String {
-    let mut action = member(item, "action")
-        .and_then(as_text)
-        .unwrap_or_default()
-        .to_owned();
-    action.retain(|symbol| symbol.is_ascii_alphanumeric() || symbol == '-');
+fn item_line(item: &FeedbackItem) -> String {
+    let mut action = item.action.as_ref().to_owned();
     if let Some(first) = action.get_mut(0..1) {
         first.make_ascii_uppercase();
     }
-    let places = member(item, "location_count")
-        .and_then(as_integer)
-        .unwrap_or(0);
+    let target = match &item.target {
+        Some(RepoPath::Text(path)) => atom(path.as_str()),
+        Some(RepoPath::Bytes(path)) => atom_bytes(&decode_hex(&path.bytes_hex)),
+        None => "-".to_owned(),
+    };
     format!(
-        "- {action} target {} affected places {places}",
-        target_atom(item)
+        "- {action} target {target} affected places {}",
+        item.location_count
     )
-}
-
-fn target_atom(item: &Value) -> String {
-    match member(item, "target") {
-        Some(Value::String(path)) => atom(path),
-        Some(Value::Object(members)) => {
-            if let [(key, Value::String(hex))] = members.as_ref()
-                && key == "bytes_hex"
-            {
-                atom_bytes(&decode_hex(hex))
-            } else {
-                "-".to_owned()
-            }
-        }
-        Some(Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_)) | None => {
-            "-".to_owned()
-        }
-    }
-}
-
-fn action_is(item: &Value, action: &str) -> bool {
-    member(item, "action").and_then(as_text) == Some(action)
-}
-
-fn member<'a>(value: &'a Value, name: &str) -> Option<&'a Value> {
-    if let Value::Object(members) = value {
-        members
-            .iter()
-            .find(|(key, _value)| key == name)
-            .map(|(_key, value)| value)
-    } else {
-        None
-    }
-}
-
-fn as_text(value: &Value) -> Option<&str> {
-    if let Value::String(text) = value {
-        Some(text)
-    } else {
-        None
-    }
-}
-
-fn as_integer(value: &Value) -> Option<i64> {
-    if let Value::Integer(number) = value {
-        Some(*number)
-    } else {
-        None
-    }
 }
