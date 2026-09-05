@@ -138,6 +138,64 @@ fn projection_difference<'a>(
 }
 
 #[test]
+fn resolved_commit_identities_survive_discovery_failures() {
+    use amiss_wire::report::AnalysisErrorCode;
+    use amiss_wire::report::model::{BaseSnapshot, Evaluation, Snapshot};
+    use amiss_wire::requests::CandidateSnapshot;
+
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    let original = base_commit(root);
+    let valid_tree = git(root, &["rev-parse", &format!("{original}^{{tree}}")])
+        .trim()
+        .to_owned();
+    let broken_tree =
+        amiss_fixtures::tree_object(root, &[("40000", b"docs", &"9".repeat(40))]).unwrap();
+
+    for (base_broken, candidate_broken) in [(true, false), (false, true), (true, true)] {
+        let snapshots =
+            [(base_broken, "base"), (candidate_broken, "candidate")].map(|(broken, label)| {
+                let tree = if broken { &broken_tree } else { &valid_tree };
+                let commit = amiss_fixtures::commit_object(root, tree, &[], label).unwrap();
+                (oid(&commit), oid(tree))
+            });
+        let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+        let built = commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &snapshots[0].0,
+            &snapshots[1].0,
+        )
+        .unwrap();
+        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
+        let payload = &built.envelope.payload;
+        assert!(!payload.result.complete);
+        assert!(
+            payload
+                .errors
+                .iter()
+                .any(|error| error.code == AnalysisErrorCode::GitObjectMissing),
+            "{:?}",
+            payload.errors
+        );
+        let Evaluation::Resolved(evaluation) = &payload.evaluation else {
+            panic!("the resolved evaluation must survive a discovery failure");
+        };
+        let (BaseSnapshot::Git(base), Snapshot::Available(CandidateSnapshot::Git(candidate))) =
+            (&evaluation.base, &evaluation.candidate)
+        else {
+            panic!("both commit identities were resolved before discovery");
+        };
+        for (actual, (commit, tree)) in [base, candidate].into_iter().zip(&snapshots) {
+            assert_eq!(&actual.commit_oid, commit);
+            assert_eq!(&actual.tree_oid, tree);
+        }
+    }
+}
+
+#[test]
 fn exact_relocation_evidence_requires_one_removed_and_one_added_identity() {
     let dir = TempDir::new().unwrap();
     let root = dir.path();

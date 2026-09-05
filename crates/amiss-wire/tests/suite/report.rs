@@ -43,6 +43,13 @@ fn engine() -> EngineProvenance {
 
 #[test]
 fn builds_the_fatal_incomplete_envelope() {
+    let (descriptor, descriptor_digest) = amiss_wire::report::sandbox_descriptor().unwrap();
+    let descriptor_bytes = serde_json_canonicalizer::to_vec(&descriptor).unwrap();
+    assert_eq!(serde_json::to_vec(&descriptor).unwrap(), descriptor_bytes);
+    assert_eq!(
+        descriptor_digest,
+        hb(amiss_wire::report::SANDBOX_SCHEMA, &descriptor_bytes)
+    );
     let codes: BTreeSet<AnalysisErrorCode> = BTreeSet::from([
         AnalysisErrorCode::InvalidProfile,
         AnalysisErrorCode::InvalidEvent,
