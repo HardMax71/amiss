@@ -23,8 +23,6 @@ use serde_json::{Map, Value};
 
 use crate::support;
 
-use support::assert_report as assert_schema_clean;
-
 const DOCUMENT_PATH: &str = "docs/governed.md";
 const EXPECTED_IDS: [&str; 17] = [
     "GD-001-canonical-candidate",
@@ -360,8 +358,7 @@ fn assert_report(
     let built = construct(&setup(), &base, &candidate, Vec::new(), &[]);
     let wire = built.wire();
     parse(&wire).expect("the emitted report clears the strict JSON reader");
-    let envelope: Value = serde_json::from_slice(&wire).expect("the emitted report is JSON");
-    assert_schema_clean(&envelope, id);
+    let envelope = support::generated_report(&wire);
     let result = envelope
         .pointer("/payload/result")
         .expect("the report payload carries a result");
@@ -523,7 +520,7 @@ fn a_recognized_claim_without_an_answer_keeps_the_boundary() {
     let base = discovery(scanned(base_source), base_source, '1');
     let candidate = discovery(scanned(source), source, '2');
     let built = construct(&setup(), &base, &candidate, Vec::new(), &[]);
-    let envelope: Value = serde_json::from_slice(&built.wire()).expect("the report is JSON");
+    let envelope = support::generated_report(&built.wire());
     assert_eq!(built.exit_code, 2, "an unanswered claim is a boundary");
     let findings = envelope
         .pointer("/payload/findings")

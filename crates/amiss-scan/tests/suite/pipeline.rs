@@ -44,13 +44,9 @@ fn shell() -> SetupShell {
     }
 }
 
-#[expect(
-    clippy::unwrap_used,
-    clippy::indexing_slicing,
-    reason = "test assertion helper"
-)]
+#[expect(clippy::indexing_slicing, reason = "test assertion helper")]
 fn payload(built: &Built) -> serde_json::Value {
-    let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+    let wire: serde_json::Value = crate::support::generated_report(&built.wire());
     wire["payload"].clone()
 }
 
@@ -289,8 +285,7 @@ fn a_historical_absence_never_borrows_candidate_relocation_evidence() {
         &oid(&base),
         &oid(&candidate),
     );
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
-    crate::support::assert_report(&envelope, "historical missing path");
+    let envelope: serde_json::Value = crate::support::generated_report(&built.wire());
     let report = &envelope["payload"];
     let observation = report["observations"]
         .as_array()
@@ -740,8 +735,6 @@ fn a_changed_projection_reports_the_exact_relation_and_visible_sink() {
         &oid(&base),
         &oid(&candidate),
     );
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
-    crate::support::assert_report(&envelope, "projection-drift report");
     let payload = payload(&built);
     assert_eq!(built.exit_code, 1, "{payload}");
     let row = payload["findings"]
@@ -974,8 +967,6 @@ fn a_named_region_mismatch_carries_the_exact_selector() {
         &oid(&base),
         &oid(&candidate),
     );
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
-    crate::support::assert_report(&envelope, "named projection report");
     let payload = payload(&built);
     let row = payload["findings"]
         .as_array()
@@ -1127,8 +1118,6 @@ fn a_tree_inventory_is_root_relative_and_reuses_the_staged_snapshot() {
     }
     git(root, &["add", "examples"]);
     let built = staged_index(&repo, &engine(), None, &shell(), &oid(&candidate));
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
-    crate::support::assert_report(&envelope, "staged tree inventory");
     let staged = payload(&built);
     let evidence = &staged["findings"]
         .as_array()

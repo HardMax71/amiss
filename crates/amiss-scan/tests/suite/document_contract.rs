@@ -74,7 +74,6 @@ fn unparsed_documents_survive_the_report_contract() {
                 assert_eq!(side.extracted_references, 0);
             }
         }
-        let wire: serde_json::Value = serde_json::from_slice(&report.wire()).unwrap();
-        super::support::assert_report(&wire, "unparsed documents");
+        crate::support::generated_report(&report.wire());
     }
 }

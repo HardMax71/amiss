@@ -97,11 +97,7 @@ fn two_commits(root: &Path) -> (Repository, Oid, Oid) {
     )
 }
 
-#[expect(
-    clippy::unwrap_used,
-    clippy::indexing_slicing,
-    reason = "test fixture helper"
-)]
+#[expect(clippy::indexing_slicing, reason = "test fixture helper")]
 fn payload(
     setup: &SetupShell,
     repo: &Repository,
@@ -109,18 +105,7 @@ fn payload(
     candidate: &Oid,
 ) -> serde_json::Value {
     let built = commit_pair(repo, &engine(), None, setup, base, candidate);
-    let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
-    let schema_text = fs::read_to_string(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
-    )
-    .unwrap();
-    let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
-    let validator = jsonschema::validator_for(&schema_json).unwrap();
-    let defects: Vec<String> = validator
-        .iter_errors(&envelope)
-        .map(|error| format!("{}: {error}", error.instance_path()))
-        .collect();
-    assert_eq!(defects, Vec::<String>::new(), "schema-clean report");
+    let envelope: serde_json::Value = crate::support::generated_report(&built.wire());
     let mut value = envelope["payload"].clone();
     value["exit_code"] = serde_json::Value::from(built.exit_code);
     value
