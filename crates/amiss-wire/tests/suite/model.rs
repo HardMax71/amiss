@@ -130,7 +130,12 @@ fn the_adapter_tables_are_populated_and_distinct() {
             .collect(),
         adapters
             .iter()
-            .map(|adapter| adapter.metadata().structural_address)
+            .map(|adapter| {
+                adapter
+                    .metadata()
+                    .structural_address
+                    .map_or("none", Into::into)
+            })
             .collect(),
     ];
     for values in projections {

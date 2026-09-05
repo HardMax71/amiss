@@ -3,7 +3,7 @@ use core::{fmt, str::FromStr};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use sha2::{Digest as _, Sha256};
 
-use crate::json::{Callback, Sink, Value, stream};
+use crate::json::{Callback, Value, stream};
 
 /// The domain for a digest over exact raw bytes taken as evidence: a resolved
 /// target's blob, or one build lockfile as the release manifest records it.
@@ -123,18 +123,6 @@ pub fn hb_stream(domain: &str, emit: impl FnOnce(&mut dyn FnMut(&[u8]))) -> Dige
 #[must_use]
 pub fn hj(domain: &str, value: &Value) -> Digest {
     canonical_hash(domain, value, |_| {})
-}
-
-/// Hashes canonical JSON pieces directly into its domain-separated hasher.
-///
-/// The emitter must write exactly one canonical JSON value.
-#[must_use]
-pub fn hj_stream(domain: &str, emit: impl FnOnce(&mut dyn Sink)) -> Digest {
-    hash(domain, |hasher| {
-        emit(&mut Callback(|piece: &str| {
-            hasher.update(piece.as_bytes());
-        }));
-    })
 }
 
 /// Hashes serde's compact JSON directly, without buffering the encoded bytes.

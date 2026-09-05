@@ -5,7 +5,7 @@
 )]
 
 use amiss_scan::observe::{
-    OBSERVATION_ID_DOMAIN, ObservationIdentity, intent_value, observation_digest, observation_input,
+    OBSERVATION_ID_DOMAIN, ObservationIdentity, intent_value, observation_input,
 };
 use amiss_scan::report::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, Setup,
@@ -13,11 +13,12 @@ use amiss_scan::report::{
 };
 use amiss_scan::resolve::Intent;
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
-use amiss_wire::digest::{Digest, hb, hj};
+use amiss_wire::digest::{Digest, hb, hj, hj_ordered};
 use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::{
     Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
 };
+use amiss_wire::report::model::ObservationIdInput;
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 use strum::IntoEnumIterator;
 
@@ -126,6 +127,14 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
         RepoPath::new("docs/quoted-\"β.md".to_owned()).expect("the text fixture path is canonical");
     let byte_path = RepoPath::from_bytes(b"docs/byte-\xff.md".to_vec())
         .expect("the byte fixture path is canonical");
+    let boundary_path = RepoPath::from_bytes(
+        b"docs/"
+            .iter()
+            .copied()
+            .chain(std::iter::repeat_n(0xff, 4091))
+            .collect(),
+    )
+    .unwrap();
     let intents = [
         Intent {
             kind: IntentKind::ExternalUrl,
@@ -166,30 +175,39 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
     ReportSchemaFragment::new("TargetIntent")
         .assert_value(&historical_intent, "historical target intent");
     for adapter in Adapter::iter() {
+        if adapter.metadata().structural_address.is_none() {
+            assert_eq!(adapter, Adapter::PlainAdvisory);
+            continue;
+        }
         let contract_digest = adapter_contract(&engine, adapter).1;
         for (document, intent) in [
             (&text_path, &intents[0]),
             (&byte_path, &intents[1]),
             (&text_path, &intents[2]),
+            (&boundary_path, &intents[1]),
         ] {
-            let identity = ObservationIdentity {
-                adapter,
-                contract_digest,
-                document,
-                construct: SourceConstruct::InlineLink,
-                node_path: &node_path,
-                projection_digest,
-                intent,
-                raw_destination_digest,
-            };
-            let input = observation_input(&identity);
-            let digest = observation_digest(&identity);
-            assert_eq!(
-                digest,
-                hj(OBSERVATION_ID_DOMAIN, &input),
-                "{} {document:?}",
-                adapter.as_ref()
-            );
+            for kind in IntentKind::iter() {
+                let mut intent = intent.clone();
+                intent.kind = kind;
+                let identity = ObservationIdentity {
+                    adapter,
+                    contract_digest,
+                    document,
+                    construct: SourceConstruct::InlineLink,
+                    node_path: &node_path,
+                    projection_digest,
+                    intent: &intent,
+                    raw_destination_digest,
+                };
+                let input = observation_input(&identity);
+                let typed: ObservationIdInput = serde_json::from_slice(&canonical(&input)).unwrap();
+                assert_eq!(
+                    hj_ordered(OBSERVATION_ID_DOMAIN, &typed).unwrap(),
+                    hj(OBSERVATION_ID_DOMAIN, &input),
+                    "{} {document:?} {kind:?}",
+                    adapter.as_ref()
+                );
+            }
         }
     }
 }

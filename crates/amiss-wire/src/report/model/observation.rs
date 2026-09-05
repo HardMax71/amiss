@@ -25,8 +25,9 @@ pub enum StructuralAddressSchema {
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::IntoStaticStr)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum AddressKind {
     AsciidocBlockPath,
     MarkdownAstNodePath,
