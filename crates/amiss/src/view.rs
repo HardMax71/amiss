@@ -40,10 +40,6 @@ impl<'value> View<'value> {
         }
     }
 
-    pub(crate) fn flag(self, name: &str) -> bool {
-        matches!(self.field(name), Some(Value::Bool(true)))
-    }
-
     pub(crate) fn atom_or_dash(self, name: &str) -> String {
         match self.field(name) {
             Some(Value::String(value)) => amiss_wire::human::atom(value),

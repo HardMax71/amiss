@@ -44,50 +44,40 @@ fn only_the_bytes_atom_is_read_as_bytes() {
     assert_eq!(view.atom_or_dash("absent"), "-");
 }
 
-fn measurement_report(finding_count: usize) -> Value {
-    let findings = (0..finding_count)
+fn measurement_report(finding_count: usize) -> amiss_wire::report::model::ReportPayload {
+    use amiss_wire::model::RepoPathText;
+    use amiss_wire::report::model::{RepoPath, ReportEnvelope};
+
+    let report: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+    let mut payload = report.payload;
+    let template = payload.findings[0].clone();
+    payload.findings = (0..finding_count)
         .map(|index| {
-            object(&[
-                (
-                    "description",
-                    Value::string("the referenced target is absent from the candidate tree"),
-                ),
-                ("effective_disposition", Value::string("fail")),
-                ("finding_key", Value::string(format!("sha256:{index:064x}"))),
-                ("fix", Value::Null),
-                ("kind", Value::string("explicit-target-missing")),
-                (
-                    "location",
-                    object(&[
-                        ("path", Value::string(format!("docs/guide-{index:05}.md"))),
-                        (
-                            "span",
-                            object(&[
-                                ("end_column", Value::Integer(20)),
-                                ("end_line", Value::Integer(1)),
-                                ("start_column", Value::Integer(1)),
-                                ("start_line", Value::Integer(1)),
-                            ]),
-                        ),
-                    ]),
-                ),
-            ])
+            let mut finding = template.clone();
+            finding.description =
+                "the referenced target is absent from the candidate tree".to_owned();
+            finding.effective_disposition = amiss_wire::report::Disposition::Fail;
+            finding.finding_key = format!("sha256:{index:064x}").parse().unwrap();
+            finding.fix = None;
+            finding.kind = amiss_wire::report::FindingKind::ExplicitTargetMissing;
+            finding.location.path = Some(RepoPath::Text(
+                RepoPathText::new(format!("docs/guide-{index:05}.md")).unwrap(),
+            ));
+            finding.location.span = Some(amiss_wire::report::model::SourceSpan {
+                end_byte: 19,
+                start_byte: 0,
+                end_column: 20,
+                end_line: 1,
+                start_column: 1,
+                start_line: 1,
+            });
+            finding
         })
         .collect();
-    object(&[(
-        "payload",
-        object(&[
-            ("errors", Value::array(Vec::new())),
-            ("findings", Value::array(findings)),
-            (
-                "result",
-                object(&[
-                    ("complete", Value::Bool(true)),
-                    ("exit_code", Value::Integer(1)),
-                ]),
-            ),
-        ]),
-    )])
+    payload.errors.clear();
+    payload.result.complete = true;
+    payload.result.exit_code = 1;
+    payload
 }
 
 fn measure<T, F: Fn() -> T>(label: &str, project: F) {

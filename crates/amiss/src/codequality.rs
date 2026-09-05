@@ -1,15 +1,15 @@
 mod tests;
 
-use amiss_wire::json::Value;
+use amiss_wire::digest::Digest;
+use amiss_wire::report::model::{RepoPath, ReportPayload};
+use amiss_wire::report::{Disposition, FindingKind};
 use serde::Serialize;
-
-use crate::view::View;
 
 #[derive(Serialize)]
 pub(crate) struct Issue<'report> {
-    check_name: &'report str,
+    check_name: FindingKind,
     description: &'report str,
-    fingerprint: &'report str,
+    fingerprint: Digest,
     location: Location<'report>,
     severity: Severity,
 }
@@ -22,7 +22,7 @@ struct Location<'report> {
 
 #[derive(Serialize)]
 struct Lines {
-    begin: i64,
+    begin: u64,
 }
 
 #[derive(Serialize)]
@@ -39,30 +39,30 @@ enum Severity {
 /// shape for analysis errors or refusals, so those stay on the exit class and
 /// the other lanes, and like every projection it cannot change facts,
 /// ordering, totals, or exit.
-pub(crate) fn issues(envelope: &Value) -> Vec<Issue<'_>> {
-    View::of(envelope)
-        .view("payload")
-        .rows("findings")
+pub(crate) fn issues(payload: &ReportPayload) -> Vec<Issue<'_>> {
+    payload
+        .findings
+        .iter()
         .map(|row| {
-            let location = row.view("location");
+            let location = &row.location;
             Issue {
-                check_name: row.text("kind"),
-                description: row.text("description"),
-                fingerprint: row.text("finding_key"),
+                check_name: row.kind,
+                description: &row.description,
+                fingerprint: row.finding_key,
                 location: Location {
                     lines: Lines {
-                        begin: location.view("span").number("start_line").max(1),
+                        begin: location.span.map_or(1, |span| span.start_line.max(1)),
                     },
-                    path: match location.field("path") {
-                        Some(Value::String(path)) => path,
-                        Some(Value::Object(_)) => location.view("path").text("bytes_hex"),
-                        _ => "(global)",
+                    path: match &location.path {
+                        Some(RepoPath::Text(path)) => path.as_str(),
+                        Some(RepoPath::Bytes(path)) => &path.bytes_hex,
+                        None => "(global)",
                     },
                 },
-                severity: match row.text("effective_disposition") {
-                    "fail" => Severity::Major,
-                    "warn" => Severity::Minor,
-                    _ => Severity::Info,
+                severity: match row.effective_disposition {
+                    Disposition::Fail => Severity::Major,
+                    Disposition::Warn => Severity::Minor,
+                    Disposition::Record => Severity::Info,
                 },
             }
         })
