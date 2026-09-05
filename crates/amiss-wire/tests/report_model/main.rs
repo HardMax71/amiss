@@ -1,5 +1,6 @@
 mod producer_facts;
 mod producer_paths;
+mod projection;
 
 use amiss_wire::report::model::{
     AnalysisError, BaseSnapshot, Controls, DocumentResult, Engine, Evaluation, ExceptionDiagnostic,

@@ -2,11 +2,12 @@ use amiss_md::lines::scan;
 use amiss_wire::controls::{GitMode, NamedRegionSelection, ProjectionSource};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{ForgeDialect, RepoPath};
+use amiss_wire::report::model::ProjectionObserved;
 use amiss_wire::resolution::{BlobContent, BlobTarget, Missing, Target, UnsupportedSemantics};
 use memchr::memmem::Finder;
 
 use crate::Error;
-use crate::projection::{DriftReason, Verdict, normalized_line_endings, unavailable};
+use crate::projection::{Verdict, normalized_line_endings, unavailable};
 use crate::resources::Aggregate;
 use crate::scan::SemanticCodeSink;
 
@@ -114,14 +115,14 @@ impl Resolver<'_> {
             .get(path.as_bytes())
             .map(|(mode, oid)| (*mode, oid.clone()))
         else {
-            return Ok(unavailable(DriftReason::SourceAbsent, sink));
+            return Ok(unavailable(ProjectionObserved::SourceAbsent, sink));
         };
         if matches!(mode, GitMode::Tree | GitMode::Gitlink | GitMode::Symlink) {
-            return Ok(unavailable(DriftReason::SourceNotABlob, sink));
+            return Ok(unavailable(ProjectionObserved::SourceNotABlob, sink));
         }
         let evidence = read_target(self, &path, mode, &oid)?;
         if matches!(evidence, BlobContent::LfsPointer { .. }) {
-            return Ok(unavailable(DriftReason::SourceLfsPointer, sink));
+            return Ok(unavailable(ProjectionObserved::SourceLfsPointer, sink));
         }
         let Some(cached) = content_cache(self.cache, self.commit_oid.as_ref()).get_mut(&path)
         else {
@@ -159,7 +160,7 @@ impl Resolver<'_> {
                         )
                     }));
                 }
-                selected_line_bytes(body, range).ok_or(DriftReason::SourceLinesOutOfRange)
+                selected_line_bytes(body, range).ok_or(ProjectionObserved::SourceLinesOutOfRange)
             }
             NamedRegion(selection) => {
                 self.scan.charge(
@@ -191,7 +192,7 @@ impl Resolver<'_> {
             return Ok(Verdict::Attested);
         }
         Ok(Verdict::Drift {
-            reason: DriftReason::ContentDiffers,
+            reason: ProjectionObserved::ContentDiffers,
             expected_digest: Some(hb(crate::projection::CODE_TEXT_SOURCE_DOMAIN, expected)),
             observed_digest: Some(sink.digest),
             expected_bytes: Some(u64::try_from(expected.len()).unwrap_or(u64::MAX)),
@@ -209,9 +210,9 @@ struct MarkerLine {
 fn unique_marker_line(
     body: &[u8],
     marker: &[u8],
-    absent: DriftReason,
-    ambiguous: DriftReason,
-) -> Result<MarkerLine, DriftReason> {
+    absent: ProjectionObserved,
+    ambiguous: ProjectionObserved,
+) -> Result<MarkerLine, ProjectionObserved> {
     let finder = Finder::new(marker);
     let mut unique = None;
     for marker_at in finder.find_iter(body) {
@@ -241,26 +242,26 @@ fn unique_marker_line(
 pub(crate) fn named_region_bytes<'a>(
     body: &'a [u8],
     selection: &NamedRegionSelection,
-) -> Result<&'a [u8], DriftReason> {
+) -> Result<&'a [u8], ProjectionObserved> {
     let start_line = unique_marker_line(
         body,
         selection.start_marker.as_bytes(),
-        DriftReason::SourceStartMarkerAbsent,
-        DriftReason::SourceStartMarkerAmbiguous,
+        ProjectionObserved::SourceStartMarkerAbsent,
+        ProjectionObserved::SourceStartMarkerAmbiguous,
     )?;
     let end_line = unique_marker_line(
         body,
         selection.end_marker.as_bytes(),
-        DriftReason::SourceEndMarkerAbsent,
-        DriftReason::SourceEndMarkerAmbiguous,
+        ProjectionObserved::SourceEndMarkerAbsent,
+        ProjectionObserved::SourceEndMarkerAmbiguous,
     )?;
     if start_line.start >= end_line.start || start_line.after > end_line.start {
-        return Err(DriftReason::SourceRegionOrderInvalid);
+        return Err(ProjectionObserved::SourceRegionOrderInvalid);
     }
     let selected = body
         .get(start_line.after..end_line.start)
-        .ok_or(DriftReason::SourceRegionOrderInvalid)?;
-    std::str::from_utf8(selected).map_err(|_invalid| DriftReason::SourceRegionNotUtf8)?;
+        .ok_or(ProjectionObserved::SourceRegionOrderInvalid)?;
+    std::str::from_utf8(selected).map_err(|_invalid| ProjectionObserved::SourceRegionNotUtf8)?;
     Ok(selected)
 }
 

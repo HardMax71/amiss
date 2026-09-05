@@ -4,13 +4,14 @@ use std::ops::Bound;
 use amiss_wire::controls::{GitMode, ProjectionKind, TreePathSelection};
 use amiss_wire::digest::{Digest, hb, hb_stream};
 use amiss_wire::model::RepoPath;
+use amiss_wire::report::model::ProjectionObserved;
 
 use crate::Error;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::resources::{Aggregate, ScanResources};
 use crate::scan::SemanticCodeSink;
 
-use super::{Difference, DriftReason, RowDifference, Verdict, unavailable};
+use super::{Difference, RowDifference, Verdict, unavailable};
 
 const SOURCE_DOMAIN: &str = "amiss/scanner-sorted-rows-source";
 const COUNT_SOURCE_DOMAIN: &str = "amiss/scanner-decimal-count-source";
@@ -48,16 +49,16 @@ fn preview_row(
 pub(super) fn selected_paths<'a>(
     discovery: &'a SnapshotDiscovery,
     selection: &'a TreePathSelection,
-) -> Result<impl Iterator<Item = &'a [u8]> + 'a, DriftReason> {
+) -> Result<impl Iterator<Item = &'a [u8]> + 'a, ProjectionObserved> {
     let root = RepoPath::from(&selection.root);
     let root_bytes = root.as_bytes();
     match discovery.locate(&root) {
         Some(Located::Entry(GitMode::Tree, _) | Located::ImpliedTree) => {}
-        None => return Err(DriftReason::SourceTreeRootAbsent),
+        None => return Err(ProjectionObserved::SourceTreeRootAbsent),
         Some(Located::Entry(
             GitMode::RegularFile | GitMode::ExecutableFile | GitMode::Symlink | GitMode::Gitlink,
             _,
-        )) => return Err(DriftReason::SourceTreeRootNotATree),
+        )) => return Err(ProjectionObserved::SourceTreeRootNotATree),
     }
 
     let mut prefix = root_bytes.to_vec();
@@ -210,7 +211,7 @@ fn mismatch(
     difference: Difference,
 ) -> Verdict {
     Verdict::Drift {
-        reason: DriftReason::ContentDiffers,
+        reason: ProjectionObserved::ContentDiffers,
         expected_digest: Some(expected_digest),
         observed_digest: Some(sink.digest),
         expected_bytes: Some(expected_bytes),
@@ -239,10 +240,10 @@ pub(super) fn evaluate(
                     u64::try_from(path.len()).unwrap_or(u64::MAX),
                 )?;
                 let Ok(row) = std::str::from_utf8(path) else {
-                    return Ok(unavailable(DriftReason::SourceTreePathNotUtf8, sink));
+                    return Ok(unavailable(ProjectionObserved::SourceTreePathNotUtf8, sink));
                 };
                 if row.chars().any(char::is_control) {
-                    return Ok(unavailable(DriftReason::SourceTreePathNotARow, sink));
+                    return Ok(unavailable(ProjectionObserved::SourceTreePathNotARow, sink));
                 }
                 rows.push(row);
             }
