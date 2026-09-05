@@ -7,10 +7,9 @@ use std::process::ExitCode;
 
 use amiss_git::{GitLimits, GitResources, Repository, parse_index_file};
 use amiss_scan::report::Built;
-use amiss_wire::json::Value;
 use amiss_wire::model::ObjectFormat;
-
-use crate::payload::{byte_offset, member, text};
+use amiss_wire::report::model::ReportPayload;
+use amiss_wire::report::validate_envelope;
 
 struct Fix {
     start: usize,
@@ -39,7 +38,14 @@ pub(crate) fn run(
         println!("amiss fix: the evaluation could not be trusted; nothing applied");
         return ExitCode::from(2);
     }
-    let (fixes, bare) = collect(&built.envelope);
+    let Ok((payload, _digest, _verdict)) = validate_envelope(&built.envelope) else {
+        println!("amiss fix: the evaluation could not be trusted; nothing applied");
+        return ExitCode::from(2);
+    };
+    let Ok((fixes, bare)) = collect(&payload) else {
+        println!("amiss fix: a fix carries an unrepresentable byte span; nothing applied");
+        return ExitCode::from(2);
+    };
     if fixes.is_empty() {
         println!("amiss fix: no fixes to apply; {bare} findings carry none");
         return ExitCode::SUCCESS;
@@ -94,43 +100,27 @@ pub(crate) fn run(
     }
 }
 
-fn collect(envelope: &Value) -> (BTreeMap<String, Vec<Fix>>, usize) {
+fn collect(
+    payload: &ReportPayload,
+) -> Result<(BTreeMap<String, Vec<Fix>>, usize), std::num::TryFromIntError> {
     let mut fixes: BTreeMap<String, Vec<Fix>> = BTreeMap::new();
     let mut bare = 0_usize;
-    let rows = member(envelope, "payload")
-        .and_then(|payload| member(payload, "findings"))
-        .and_then(|findings| {
-            if let Value::Array(rows) = findings {
-                Some(rows)
-            } else {
-                None
-            }
-        });
-    for row in rows.into_iter().flatten() {
-        let Some(fix) = member(row, "fix") else {
-            continue;
-        };
-        let parsed = member(fix, "path").and_then(text).zip(
-            member(fix, "span")
-                .and_then(|span| {
-                    member(span, "start_byte")
-                        .and_then(byte_offset)
-                        .zip(member(span, "end_byte").and_then(byte_offset))
-                })
-                .zip(member(fix, "replacement").and_then(text)),
-        );
-        match parsed {
-            Some((document, ((start, end), replacement))) => {
-                fixes.entry(document.to_owned()).or_default().push(Fix {
-                    start,
-                    end,
-                    replacement: replacement.to_owned(),
-                });
+    for row in &payload.findings {
+        match &row.fix {
+            Some(fix) => {
+                fixes
+                    .entry(fix.path.as_str().to_owned())
+                    .or_default()
+                    .push(Fix {
+                        start: usize::try_from(fix.span.start_byte)?,
+                        end: usize::try_from(fix.span.end_byte)?,
+                        replacement: fix.replacement.clone(),
+                    });
             }
             None => bare = bare.saturating_add(1),
         }
     }
-    (fixes, bare)
+    Ok((fixes, bare))
 }
 
 fn staged_blobs(
