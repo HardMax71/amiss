@@ -88,15 +88,37 @@ pub struct SandboxDescriptor {
     pub workspace: ReadOnly,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum SandboxAssurance {
     ProviderVerified,
     SelfAsserted,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+    strum::AsRefStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum SandboxEnforcementSource {
     ExternalRequiredCheck,
     LocalProcess,

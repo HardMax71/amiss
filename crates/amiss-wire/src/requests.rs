@@ -154,14 +154,14 @@ pub struct SuppliedControl {
     Debug,
     PartialEq,
     Eq,
-    Serialize,
-    Deserialize,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
     strum::AsRefStr,
     strum::EnumString,
     strum::IntoStaticStr,
+    strum::Display,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum RequestTrust {
     ExternalRequiredCheck,
     OrganizationPolicy,
