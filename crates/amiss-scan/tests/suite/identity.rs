@@ -118,6 +118,19 @@ fn setup(candidate: CandidateBlock) -> Setup {
 }
 
 #[test]
+fn an_unavailable_snapshot_cannot_mint_a_candidate_identity() {
+    use amiss_wire::report::model::SnapshotUnavailableReason;
+
+    for reason in SnapshotUnavailableReason::iter() {
+        let setup = setup(CandidateBlock::Unavailable(vec![reason]));
+        assert!(matches!(
+            candidate_identity_digest(&setup),
+            Err(amiss_scan::Error::Internal)
+        ));
+    }
+}
+
+#[test]
 fn streamed_observation_digests_match_text_and_byte_path_values() {
     let engine = EngineProvenance {
         version: "quoted \"version\"\nβ".to_owned(),
