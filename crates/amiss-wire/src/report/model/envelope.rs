@@ -3,8 +3,9 @@ use serde::{Deserialize, Serialize};
 use crate::digest::Digest;
 
 use super::{
-    AnalysisError, Controls, DocumentResult, Engine, Evaluation, Feedback, Finding,
-    ObservationComparison, Occurrence, RepoPath, Summary,
+    AnalysisError, Controls, DocumentGitMode, DocumentResult, DocumentSide, Engine, Evaluation,
+    Feedback, Finding, FindingFactEvidence, ObservationComparison, Occurrence,
+    ProjectionDifference, ProjectionSource, RepoPath, Resolution, Summary,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -35,19 +36,19 @@ pub struct ReportEnvelope<P = ReportPayload> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ReportPayload<
     P = RepoPath,
-    D = DocumentResult<P>,
-    O = ObservationComparison<Occurrence<P>>,
-    F = Finding<P>,
+    R = Resolution<P>,
+    M = DocumentGitMode,
+    E = FindingFactEvidence<P, R, ProjectionSource, ProjectionDifference, M>,
 > {
     pub compatibility: ReportCompatibility,
     pub controls: Controls,
-    pub documents: Vec<D>,
+    pub documents: Vec<DocumentResult<P, DocumentSide<M>>>,
     pub engine: Engine,
     pub errors: Vec<AnalysisError<P>>,
     pub evaluation: Evaluation,
     pub feedback: Feedback<P>,
-    pub findings: Vec<F>,
-    pub observations: Vec<O>,
+    pub findings: Vec<Finding<P, E>>,
+    pub observations: Vec<ObservationComparison<Occurrence<P, R>>>,
     pub result: ReportResult,
     pub schema: ReportPayloadSchema,
     pub summary: Summary,

@@ -5,13 +5,6 @@ use amiss_wire::model::RepoPath;
 use amiss_wire::report::model as report;
 use amiss_wire::report::{FindingKind, PAYLOAD_SCHEMA};
 
-type ProducerPayload<'a, R> = report::ReportPayload<
-    &'a RepoPath,
-    report::DocumentResult<&'a RepoPath>,
-    report::ObservationComparison<report::Occurrence<&'a RepoPath>>,
-    report::Finding<&'a RepoPath, report::FindingFactEvidence<&'a RepoPath, R>>,
->;
-
 #[test]
 fn report_producers_can_borrow_validated_text_and_byte_paths() {
     for raw in [
@@ -92,7 +85,7 @@ fn report_producers_can_borrow_validated_text_and_byte_paths() {
 fn producer_payload<R>(
     path: &RepoPath,
     resolution: R,
-) -> Result<ProducerPayload<'_, R>, serde_json::Error> {
+) -> Result<report::ReportPayload<&RepoPath, R>, serde_json::Error> {
     let template: report::ReportEnvelope = serde_json::from_slice(super::REPORT)?;
     let mut template = template.payload;
     let finding = template.findings.remove(0);
@@ -179,7 +172,7 @@ fn producer_payload<R>(
             policy_trace: finding.policy_trace,
             waiver: None,
         }],
-        observations: Vec::<report::ObservationComparison<report::Occurrence<&RepoPath>>>::new(),
+        observations: Vec::new(),
         result: template.result,
         schema: template.schema,
         summary: template.summary,
