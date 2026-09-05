@@ -57,6 +57,7 @@ pub enum ReportCompatibility {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReportEnvelope<P = ReportPayload> {
     pub payload: P,
     pub payload_digest: Digest,

@@ -115,6 +115,35 @@ fn the_request_examples_parse_to_what_they_say() {
 }
 
 #[test]
+fn control_readers_keep_the_default_serde_depth_limit() {
+    let mut request =
+        ControlsRequest::parse(&request_example("scanner-controls-request.json")).unwrap();
+    for depth in [124, 125] {
+        let mut nested = serde_json::Value::Null;
+        for _ in 0..depth {
+            nested = serde_json::json!([nested]);
+        }
+        request.organization_floor.as_mut().unwrap().value = serde_json::json!({"future": nested});
+        let bytes = request.canonical_bytes().unwrap();
+        assert!(amiss_wire::json::parse(&bytes).is_ok());
+        let direct = serde_json::from_slice::<ControlsRequest>(&bytes);
+        let parsed = ControlsRequest::parse(&bytes);
+        if depth == 124 {
+            direct.unwrap();
+            parsed.unwrap();
+        } else {
+            assert!(
+                direct
+                    .unwrap_err()
+                    .to_string()
+                    .contains("recursion limit exceeded")
+            );
+            assert_eq!(parsed.unwrap_err().kind, ErrorKind::InvalidValue);
+        }
+    }
+}
+
+#[test]
 fn commit_identity_construction_matches_the_published_preimage() {
     let mut evaluation =
         EvaluationRequest::commit_pair(Profile::Enforce, ObjectFormat::Sha1, oid('1'), oid('3'));
