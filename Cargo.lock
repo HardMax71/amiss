@@ -138,6 +138,7 @@ dependencies = [
  "hex",
  "hmac",
  "html5gum",
+ "json-serde",
  "percent-encoding",
  "processkit",
  "same-file",

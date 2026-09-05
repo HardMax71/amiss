@@ -28,12 +28,13 @@ getrandom.workspace = true
 hex.workspace = true
 hmac.workspace = true
 html5gum.workspace = true
+json-serde.workspace = true
 percent-encoding.workspace = true
 processkit = { version = "=3.3.4", features = ["stats"] }
 same-file = "1"
 secrecy.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["unbounded_depth"] }
 serde_json_canonicalizer.workspace = true
 sha2.workspace = true
 sphinx_inv.workspace = true
