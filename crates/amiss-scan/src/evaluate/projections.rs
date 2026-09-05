@@ -2,14 +2,17 @@ use amiss_wire::controls::{PREVIOUS_CODE_SINK, Profile, projection_source_value}
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
+use amiss_wire::report::model::{ProjectionDifference, RowsProjectionDifference};
 
-use crate::projection::{Difference, Outcome, Verdict};
+use crate::projection::{Outcome, Verdict};
 
 use super::Finding;
 use super::claims::{source_multiplicities, sources_value};
 use super::control::control_fact_finding;
 
-fn difference_value(difference: &Difference) -> Value {
+mod tests;
+
+fn difference_value(difference: &ProjectionDifference<Box<RowsProjectionDifference>>) -> Value {
     let integer = |value| Value::Integer(i64::try_from(value).unwrap_or(i64::MAX));
     let rows = |values: &[String]| {
         Value::array(
@@ -21,7 +24,7 @@ fn difference_value(difference: &Difference) -> Value {
         )
     };
     match difference {
-        Difference::Rows(difference) => Value::object(vec![
+        ProjectionDifference::Rows(difference) => Value::object(vec![
             ("kind".to_owned(), Value::string("rows".to_owned())),
             (
                 "ordering_only".to_owned(),
@@ -57,9 +60,10 @@ fn difference_value(difference: &Difference) -> Value {
                 integer(difference.extra_omitted),
             ),
         ]),
-        Difference::Count {
+        ProjectionDifference::Count {
             expected_count,
             observed_count,
+            ..
         } => Value::object(vec![
             ("kind".to_owned(), Value::string("count".to_owned())),
             ("expected_count".to_owned(), integer(*expected_count)),

@@ -4,7 +4,9 @@ use std::collections::BTreeMap;
 use amiss_wire::controls::{ProjectionAssertion, ProjectionKind, ProjectionSource};
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{ArtifactId, RepoPath};
-use amiss_wire::report::model::ProjectionObserved;
+use amiss_wire::report::model::{
+    ProjectionDifference, ProjectionObserved, RowsProjectionDifference,
+};
 
 use crate::Error;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
@@ -43,28 +45,6 @@ pub(crate) fn normalized_line_endings(selected: &[u8]) -> Cow<'_, [u8]> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct RowDifference {
-    pub ordering_only: bool,
-    pub expected_records: u64,
-    pub observed_records: u64,
-    pub missing_records: u64,
-    pub extra_records: u64,
-    pub missing_preview: Vec<String>,
-    pub extra_preview: Vec<String>,
-    pub missing_omitted: u64,
-    pub extra_omitted: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Difference {
-    Rows(Box<RowDifference>),
-    Count {
-        expected_count: u64,
-        observed_count: Option<u64>,
-    },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Verdict {
     Attested,
     Drift {
@@ -73,7 +53,7 @@ pub(crate) enum Verdict {
         observed_digest: Option<Digest>,
         expected_bytes: Option<u64>,
         observed_bytes: Option<u64>,
-        difference: Option<Difference>,
+        difference: Option<ProjectionDifference<Box<RowsProjectionDifference>>>,
     },
 }
 

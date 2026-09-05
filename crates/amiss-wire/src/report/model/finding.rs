@@ -283,26 +283,29 @@ pub enum RowsProjectionDifferenceKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RowsProjectionDifference {
+    pub expected_records: u64,
+    pub extra_omitted: u64,
+    pub extra_preview: Vec<String>,
+    pub extra_records: u64,
+    pub kind: RowsProjectionDifferenceKind,
+    pub missing_omitted: u64,
+    pub missing_preview: Vec<String>,
+    pub missing_records: u64,
+    pub observed_records: u64,
+    pub ordering_only: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum ProjectionDifference {
+pub enum ProjectionDifference<R = RowsProjectionDifference> {
     Count {
         expected_count: u64,
         kind: CountProjectionDifferenceKind,
         #[serde(deserialize_with = "Option::deserialize")]
         observed_count: Option<u64>,
     },
-    Rows {
-        expected_records: u64,
-        extra_omitted: u64,
-        extra_preview: Vec<String>,
-        extra_records: u64,
-        kind: RowsProjectionDifferenceKind,
-        missing_omitted: u64,
-        missing_preview: Vec<String>,
-        missing_records: u64,
-        observed_records: u64,
-        ordering_only: bool,
-    },
+    Rows(R),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
