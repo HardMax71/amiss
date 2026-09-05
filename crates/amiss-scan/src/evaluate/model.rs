@@ -1,6 +1,6 @@
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
-use amiss_wire::model::{Oid, RepoPath, RepoPathText};
+use amiss_wire::model::{RepoPath, RepoPathText};
 pub use amiss_wire::report::model::{Attribution, LocationSide, PolicyStep};
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 
@@ -37,25 +37,7 @@ pub struct Location {
     pub display: Option<SpanDisplay>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum FindingKeyScope {
-    Document(RepoPath),
-    Observation(Digest),
-    Reference {
-        document: RepoPath,
-        source_construct: amiss_wire::controls::SourceConstruct,
-        commit_oid: Option<Oid>,
-        repository_path: Option<RepoPath>,
-        target_kind: Option<amiss_wire::controls::TargetKind>,
-        query_digest: Option<Digest>,
-        fragment_digest: Option<Digest>,
-        source_projection_digest: Digest,
-    },
-    Control {
-        path: Option<RepoPath>,
-        rule_id: String,
-    },
-}
+pub(super) type FindingKeyScope = amiss_wire::report::model::FindingKeyScope<RepoPath>;
 
 /// A finding's typed identity and its canonical digest. Construction owns the
 /// key projection, so a digest cannot be paired with another key input.

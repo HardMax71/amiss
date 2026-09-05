@@ -11,7 +11,7 @@ use super::claims::{ClaimGroup, claim_finding};
 use super::control::{GovernedSeed, control_finding, governed_finding};
 use super::debt::debt_pass;
 use super::documents::document_findings;
-use super::finding::{candidate_fact_finding, observation_location, observation_scope, simple};
+use super::finding::{candidate_fact_finding, observation_location, simple};
 use super::projections::projection_finding;
 use super::references::{comparison_findings, structural_findings};
 use super::waiver::waiver_pass;
@@ -362,7 +362,10 @@ fn ordinary(
     for defect in site.defects.iter() {
         findings.push(candidate_fact_finding(
             FindingKind::SiteBuildDefect,
-            observation_scope(defect.id),
+            super::FindingKeyScope::Observation {
+                kind: amiss_wire::report::model::ObservationFindingKeyScopeKind::Observation,
+                observation_id: defect.id,
+            },
             defect.evidence.clone(),
             defect.member_count,
             Location {
@@ -393,7 +396,10 @@ fn ordinary(
         let mut emit = |kind: FindingKind| {
             findings.push(simple(
                 kind,
-                observation_scope(observation.id),
+                super::FindingKeyScope::Observation {
+                    kind: amiss_wire::report::model::ObservationFindingKeyScopeKind::Observation,
+                    observation_id: observation.id,
+                },
                 attribution,
                 vec![observation.id],
                 observation_location(observation, LocationSide::Candidate),

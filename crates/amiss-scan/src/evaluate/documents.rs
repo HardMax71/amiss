@@ -1,8 +1,11 @@
 use amiss_wire::controls::Profile;
 use amiss_wire::report::FindingKind;
+use amiss_wire::report::model::DocumentFindingKeyScopeKind;
 
-use super::finding::{document_scope, simple};
-use super::{Attribution, DocumentInput, DocumentSide, Finding, Location, LocationSide};
+use super::finding::simple;
+use super::{
+    Attribution, DocumentInput, DocumentSide, Finding, FindingKeyScope, Location, LocationSide,
+};
 
 pub(super) fn document_findings(
     document: &DocumentInput,
@@ -14,7 +17,10 @@ pub(super) fn document_findings(
     if document.base.is_some() && document.candidate.is_none() {
         findings.push(simple(
             FindingKind::DocumentRemoved,
-            document_scope(path),
+            FindingKeyScope::Document {
+                document: path.clone(),
+                kind: DocumentFindingKeyScopeKind::Document,
+            },
             Attribution::NotApplicable,
             Vec::new(),
             Location {
@@ -38,7 +44,10 @@ pub(super) fn document_findings(
         Some(DocumentSide::Unsupported) => {
             findings.push(simple(
                 FindingKind::UnsupportedDocumentFormat,
-                document_scope(path),
+                FindingKeyScope::Document {
+                    document: path.clone(),
+                    kind: DocumentFindingKeyScopeKind::Document,
+                },
                 Attribution::NotApplicable,
                 Vec::new(),
                 candidate_location(),
@@ -53,7 +62,10 @@ pub(super) fn document_findings(
             if mdx_regions > 0 {
                 findings.push(simple(
                     FindingKind::OpaqueMdxRegion,
-                    document_scope(path),
+                    FindingKeyScope::Document {
+                        document: path.clone(),
+                        kind: DocumentFindingKeyScopeKind::Document,
+                    },
                     Attribution::NotApplicable,
                     Vec::new(),
                     candidate_location(),
@@ -63,7 +75,10 @@ pub(super) fn document_findings(
             if html_regions > 0 {
                 findings.push(simple(
                     FindingKind::OpaqueHtmlRegion,
-                    document_scope(path),
+                    FindingKeyScope::Document {
+                        document: path.clone(),
+                        kind: DocumentFindingKeyScopeKind::Document,
+                    },
                     Attribution::NotApplicable,
                     Vec::new(),
                     candidate_location(),
@@ -77,7 +92,10 @@ pub(super) fn document_findings(
             }) {
                 findings.push(simple(
                     FindingKind::UnlinkedDocument,
-                    document_scope(path),
+                    FindingKeyScope::Document {
+                        document: path.clone(),
+                        kind: DocumentFindingKeyScopeKind::Document,
+                    },
                     Attribution::NotApplicable,
                     Vec::new(),
                     candidate_location(),
