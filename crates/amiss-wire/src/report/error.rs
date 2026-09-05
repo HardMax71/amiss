@@ -3,56 +3,57 @@ use strum::{AsRefStr, EnumIter, IntoEnumIterator, IntoStaticStr};
 
 use crate::json::Value;
 
+use super::model::{AnalysisPhase, EvaluationUnavailableReason};
 use super::{object, string};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct AnalysisRoute {
-    pub phase: &'static str,
-    pub evaluation_reason: Option<&'static str>,
+    pub phase: AnalysisPhase,
+    pub evaluation_reason: Option<EvaluationUnavailableReason>,
 }
 
 const INVALID_INVOCATION: AnalysisRoute = AnalysisRoute {
-    phase: "invocation",
-    evaluation_reason: Some("invalid-invocation"),
+    phase: AnalysisPhase::Invocation,
+    evaluation_reason: Some(EvaluationUnavailableReason::InvalidInvocation),
 };
 const INVALID_EVENT: AnalysisRoute = AnalysisRoute {
-    phase: "invocation",
-    evaluation_reason: Some("invalid-event"),
+    phase: AnalysisPhase::Invocation,
+    evaluation_reason: Some(EvaluationUnavailableReason::InvalidEvent),
 };
 const INVALID_PROFILE: AnalysisRoute = AnalysisRoute {
-    phase: "invocation",
-    evaluation_reason: Some("invalid-profile"),
+    phase: AnalysisPhase::Invocation,
+    evaluation_reason: Some(EvaluationUnavailableReason::InvalidProfile),
 };
 const REQUEST_UNREADABLE: AnalysisRoute = AnalysisRoute {
-    phase: "invocation",
-    evaluation_reason: Some("request-unreadable"),
+    phase: AnalysisPhase::Invocation,
+    evaluation_reason: Some(EvaluationUnavailableReason::RequestUnreadable),
 };
 const CONFIGURATION: AnalysisRoute = AnalysisRoute {
-    phase: "configuration",
+    phase: AnalysisPhase::Configuration,
     evaluation_reason: None,
 };
 const GIT: AnalysisRoute = AnalysisRoute {
-    phase: "git",
+    phase: AnalysisPhase::Git,
     evaluation_reason: None,
 };
 const PARSE: AnalysisRoute = AnalysisRoute {
-    phase: "parse",
+    phase: AnalysisPhase::Parse,
     evaluation_reason: None,
 };
 const RESOLUTION: AnalysisRoute = AnalysisRoute {
-    phase: "resolution",
+    phase: AnalysisPhase::Resolution,
     evaluation_reason: None,
 };
 const POLICY: AnalysisRoute = AnalysisRoute {
-    phase: "policy",
+    phase: AnalysisPhase::Policy,
     evaluation_reason: None,
 };
 const OUTPUT: AnalysisRoute = AnalysisRoute {
-    phase: "output",
+    phase: AnalysisPhase::Output,
     evaluation_reason: None,
 };
 const INTERNAL: AnalysisRoute = AnalysisRoute {
-    phase: "internal",
+    phase: AnalysisPhase::Internal,
     evaluation_reason: None,
 };
 
@@ -222,23 +223,18 @@ pub struct ErrorDetail {
     pub resource: Option<(crate::controls::ResourceName, u64, u64)>,
 }
 
-impl ErrorDetail {
-    #[must_use]
-    pub fn phase(&self) -> &'static str {
-        self.resource.map_or_else(
-            || self.code.route().map_or("internal", |route| route.phase),
-            |(name, _limit, _observed)| name.phase(),
-        )
-    }
-}
-
 /// One wire error row with its partition phase.
 #[must_use]
 pub fn error_row_value(detail: &ErrorDetail) -> Value {
-    error_row(detail, detail.phase())
-}
-
-pub(super) fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
+    let phase = detail.resource.map_or_else(
+        || {
+            detail
+                .code
+                .route()
+                .map_or(AnalysisPhase::Internal, |route| route.phase)
+        },
+        |(name, _limit, _observed)| name.phase(),
+    );
     let (resource, limit, observed) = detail.resource.map_or(
         (Value::Null, Value::Null, Value::Null),
         |(name, limit, observed)| {
@@ -250,7 +246,7 @@ pub(super) fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
         },
     );
     object(vec![
-        ("phase", string(phase)),
+        ("phase", string(phase.as_ref())),
         ("code", string(detail.code.as_ref())),
         ("description", string(detail.code.meaning())),
         (

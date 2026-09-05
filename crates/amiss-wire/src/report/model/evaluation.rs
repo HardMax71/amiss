@@ -91,8 +91,9 @@ pub enum UnavailableStatus {
     Unavailable,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum EvaluationUnavailableReason {
     InvalidEvent,
     InvalidInvocation,

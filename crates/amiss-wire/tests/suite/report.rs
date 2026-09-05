@@ -185,6 +185,42 @@ fn refuses_inputs_outside_the_invocation_phase() {
 }
 
 #[test]
+fn error_routes_preserve_the_canonical_wire() {
+    use amiss_wire::controls::ResourceName;
+    use amiss_wire::report::{ErrorDetail, error_row_value};
+
+    let ordinary = AnalysisErrorCode::all().map(|code| ErrorDetail {
+        code,
+        path: None,
+        path_bytes: None,
+        resource: None,
+    });
+    let resources = ResourceName::all().map(|name| ErrorDetail {
+        code: AnalysisErrorCode::ResourceLimitExceeded,
+        path: None,
+        path_bytes: None,
+        resource: Some((name, 1, 2)),
+    });
+    let rows = Value::array(
+        ordinary
+            .chain(resources)
+            .map(|detail| {
+                let row = error_row_value(&detail);
+                let typed: amiss_wire::report::model::AnalysisError =
+                    serde_json::from_slice(&amiss_wire::json::canonical(&row)).unwrap();
+                assert_eq!(typed.code, detail.code);
+                assert_eq!(typed.description, detail.code.meaning());
+                row
+            })
+            .collect(),
+    );
+    assert_eq!(
+        hj("amiss/test-error-routes", &rows).to_string(),
+        "sha256:25a99d8043b027e8da184a3a0458e984e2180da5399bc96957e9a9d86c590274",
+    );
+}
+
+#[test]
 fn removed_references_are_recorded_facts() {
     let kind = FindingKind::ExplicitReferenceRemoved;
     assert_eq!(
@@ -201,33 +237,14 @@ fn removed_references_are_recorded_facts() {
     );
 }
 
-/// Every closed string projection produces a distinct, non-empty name; the
-/// class projections repeat legitimately, so they are held to non-emptiness
-/// and to naming more than one class across the table.
 #[test]
-fn the_string_projections_are_populated_and_distinct() {
+fn the_error_meanings_are_populated_and_distinct() {
     use std::collections::BTreeSet;
-
-    use amiss_wire::report::ErrorDetail;
 
     let error_codes: Vec<AnalysisErrorCode> = AnalysisErrorCode::all().collect();
     let meanings: BTreeSet<&str> = error_codes.iter().map(|code| code.meaning()).collect();
     assert_eq!(meanings.len(), error_codes.len(), "meanings are distinct");
     assert!(meanings.iter().all(|text| !text.is_empty()));
-    let phases: BTreeSet<&str> = error_codes
-        .iter()
-        .map(|code| {
-            ErrorDetail {
-                code: *code,
-                path: None,
-                path_bytes: None,
-                resource: None,
-            }
-            .phase()
-        })
-        .collect();
-    assert!(phases.len() > 1, "phases name more than one partition");
-    assert!(phases.iter().all(|text| !text.is_empty()));
 }
 
 /// The kind and intent tables, held to the same distinctness law.

@@ -5,10 +5,10 @@ use crate::json::{Value, canonical};
 use crate::model::Adapter;
 use strum::IntoEnumIterator;
 
-use super::error::error_row;
+use super::model::ControlsUnavailableReason;
 use super::{
     ADAPTER_CONTRACT_SCHEMA, AnalysisErrorCode, BUILT_IN_POLICY, COMPATIBILITY, ENGINE_CONTRACT,
-    ENVELOPE_SCHEMA, ErrorDetail, PAYLOAD_SCHEMA, object, string,
+    ENVELOPE_SCHEMA, ErrorDetail, PAYLOAD_SCHEMA, error_row_value, object, string,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -77,25 +77,22 @@ pub fn unavailable_evaluation_envelope(
         return None;
     }
     let mut reasons = Vec::new();
-    let mut errors: Vec<(AnalysisErrorCode, &'static str)> = Vec::new();
+    let mut errors = Vec::new();
     for code in codes {
         let route = code.route()?;
-        reasons.push(Value::String(route.evaluation_reason?.into()));
-        errors.push((*code, route.phase));
+        reasons.push(string(route.evaluation_reason?.as_ref()));
+        errors.push(*code);
     }
-    errors.sort_by(|a, b| a.0.as_ref().cmp(b.0.as_ref()));
+    errors.sort_by(|a, b| a.as_ref().cmp(b.as_ref()));
     let error_rows: Vec<Value> = errors
         .iter()
-        .map(|(code, phase)| {
-            error_row(
-                &ErrorDetail {
-                    code: *code,
-                    path: None,
-                    path_bytes: None,
-                    resource: None,
-                },
-                phase,
-            )
+        .map(|code| {
+            error_row_value(&ErrorDetail {
+                code: *code,
+                path: None,
+                path_bytes: None,
+                resource: None,
+            })
         })
         .collect();
     let error_count = i64::try_from(error_rows.len()).ok()?;
@@ -125,7 +122,12 @@ pub fn unavailable_evaluation_envelope(
                     controls_request_digest
                         .map_or(Value::Null, |digest| string(&digest.to_string())),
                 ),
-                ("reasons", Value::Array(Box::new([string("not-parsed")]))),
+                (
+                    "reasons",
+                    Value::Array(Box::new([string(
+                        ControlsUnavailableReason::NotParsed.as_ref(),
+                    )])),
+                ),
             ]),
         ),
         ("feedback", object(vec![("status", string("unavailable"))])),

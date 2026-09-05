@@ -55,7 +55,9 @@ fn availability_states_project_distinct_nonempty_spellings() {
 
 #[test]
 fn resource_phases_are_a_nonempty_partition_with_more_than_one_class() {
-    let phases: BTreeSet<&str> = ResourceName::iter().map(ResourceName::phase).collect();
+    let phases: BTreeSet<String> = ResourceName::iter()
+        .map(|name| name.phase().as_ref().to_owned())
+        .collect();
     assert!(phases.iter().all(|phase| !phase.is_empty()));
     assert!(phases.len() > 1);
 }
