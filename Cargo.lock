@@ -114,6 +114,7 @@ dependencies = [
  "amiss-fixtures",
  "amiss-git",
  "amiss-wire",
+ "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.20",

@@ -7,13 +7,14 @@ use amiss_bootstrap::supervise::{
 };
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository};
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_trusted_time,
-    parse_execution_constraint, parse_trusted_time,
+    ExecutionConstraintDescriptor, TrustedTimeStatement, canonical_execution_constraint,
+    canonical_trusted_time,
 };
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestMode, RequestStreams,
     SnapshotMaterialization, SnapshotRequest,
 };
+use serde::Deserialize;
 
 use super::{Args, Execution, Failure, SealedRun, tampered, unavailable};
 
@@ -75,9 +76,10 @@ pub(super) fn capture_requests(
         .execution_constraint
         .as_ref()
         .ok_or_else(|| tampered("execution-constraint-absent"))?;
-    let constraint_bytes = serde_json::to_vec(&supplied_constraint.value)
-        .map_err(|_defect| tampered("execution-constraint-invalid"))?;
-    let embedded_constraint = parse_execution_constraint(&constraint_bytes)
+    let embedded_constraint =
+        ExecutionConstraintDescriptor::deserialize(&supplied_constraint.value)
+            .map_err(|_defect| tampered("execution-constraint-invalid"))?;
+    canonical_execution_constraint(&embedded_constraint)
         .map_err(|_defect| tampered("execution-constraint-invalid"))?;
     if constraint_digest != supplied_constraint.expected_digest
         || embedded_constraint != *constraint
@@ -88,10 +90,8 @@ pub(super) fn capture_requests(
         .trusted_time
         .as_ref()
         .ok_or_else(|| tampered("trusted-time-absent"))?;
-    let time_bytes = serde_json::to_vec(&supplied_time.value)
+    let statement = TrustedTimeStatement::deserialize(&supplied_time.value)
         .map_err(|_defect| tampered("trusted-time-invalid"))?;
-    let statement =
-        parse_trusted_time(&time_bytes).map_err(|_defect| tampered("trusted-time-invalid"))?;
     let (_, statement_digest) =
         canonical_trusted_time(&statement).map_err(|_defect| tampered("trusted-time-invalid"))?;
     if statement_digest != supplied_time.expected_digest
@@ -102,12 +102,7 @@ pub(super) fn capture_requests(
         return Err(tampered("trusted-time-mismatch"));
     }
     let expected = SealedExpectations {
-        profile: match evaluation.profile {
-            amiss_wire::controls::Profile::Observe => "observe",
-            amiss_wire::controls::Profile::EnforceIntroduced => "enforce-introduced",
-            amiss_wire::controls::Profile::Enforce => "enforce",
-        }
-        .to_owned(),
+        profile: evaluation.profile.as_ref().to_owned(),
         candidate_ref: evaluation
             .candidate_ref
             .as_ref()
