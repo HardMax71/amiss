@@ -59,6 +59,7 @@ fn main() -> ExitCode {
     silent_engine(&staged);
     garbage_engine(&staged);
     identity_absent(&refused);
+    invalid_supplied_controls(&staged);
     wrong_result_name(&refused);
     #[cfg(unix)]
     symlinked_scratch(&refused);
@@ -558,6 +559,34 @@ fn identity_absent(staged: &Release) {
     let invocation = invoke(staged, &run, "result", false);
     assert_eq!(settled(&invocation), Some(BootstrapResult::TamperedRuntime));
     stderr_names(&invocation, "evaluation-identity-absent", "absent forge");
+}
+
+fn invalid_supplied_controls(staged: &Release) {
+    for (constraint, field, value, diagnostic) in [
+        (
+            true,
+            "required_status_name",
+            " bad",
+            "execution-constraint-invalid",
+        ),
+        (false, "provider", "bad provider!", "trusted-time-invalid"),
+        (false, "valid_until", INSTANT, "trusted-time-invalid"),
+    ] {
+        let mut run = sealed_run(staged);
+        let controls = &mut run.requests.controls;
+        let supplied = if constraint {
+            &mut controls.execution_constraint.as_mut().unwrap().value
+        } else {
+            &mut controls.trusted_time.as_mut().unwrap().value
+        };
+        supplied[field] = serde_json::json!(value);
+        plant(&run, &run.wire, "0");
+        let invocation = invoke(staged, &run, "result", false);
+        assert_eq!(invocation.output.status.code(), Some(2), "{field}");
+        assert_eq!(settled(&invocation), Some(BootstrapResult::TamperedRuntime));
+        assert!(fs::read(&invocation.report).unwrap().is_empty(), "{field}");
+        stderr_names(&invocation, diagnostic, field);
+    }
 }
 
 fn invalid_invocation_writes_nothing(
