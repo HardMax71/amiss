@@ -2,12 +2,11 @@ use amiss_wire::controls::Profile;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
-use amiss_wire::report::model::PolicySource;
+use amiss_wire::report::model::{PolicySource, RepositoryIntentPath};
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 use amiss_wire::resolution::{Missing, Resolution};
 
 use crate::correlate::Observation;
-use crate::observe;
 
 use super::{
     Attribution, FINDING_KEY_DOMAIN, FINDING_KEY_SCHEMA, Finding, FindingFact, FindingFix,
@@ -36,51 +35,25 @@ pub(super) fn key_value(kind: FindingKind, scope: &FindingKeyScope) -> Value {
     ])
 }
 
-pub(super) fn document_scope(path: &RepoPath) -> FindingKeyScope {
-    FindingKeyScope::Document(path.clone())
-}
-
-pub(super) const fn observation_scope(id: Digest) -> FindingKeyScope {
-    FindingKeyScope::Observation(id)
-}
-
-/// The structural reference scope: document, construct, the repository
-/// projection of the intent, and the containing source projection. Line and
-/// column are excluded, so moving a construct keeps its key, while changing
-/// the broken target resolves the old key and introduces a new one.
-pub(super) fn reference_scope(observation: &Observation) -> FindingKeyScope {
-    let intent = &observation.intent;
-    FindingKeyScope::Reference {
-        document: observation.document.clone(),
-        source_construct: observation.construct,
-        commit_oid: intent.commit_oid.clone(),
-        repository_path: intent.repository_path.clone(),
-        target_kind: intent.target_kind,
-        query_digest: observe::query_digest(intent),
-        fragment_digest: observe::fragment_digest(intent),
-        source_projection_digest: observation.projection_digest,
-    }
-}
-
 fn scope_value(scope: &FindingKeyScope) -> Value {
     match scope {
-        FindingKeyScope::Document(path) => Value::object(vec![
+        FindingKeyScope::Document { document, .. } => Value::object(vec![
             ("kind".to_owned(), Value::string("document".to_owned())),
-            ("document".to_owned(), path.to_value()),
+            ("document".to_owned(), document.to_value()),
         ]),
-        FindingKeyScope::Observation(id) => Value::object(vec![
+        FindingKeyScope::Observation { observation_id, .. } => Value::object(vec![
             ("kind".to_owned(), Value::string("observation".to_owned())),
-            ("observation_id".to_owned(), Value::string(id.to_string())),
+            (
+                "observation_id".to_owned(),
+                Value::string(observation_id.to_string()),
+            ),
         ]),
         FindingKeyScope::Reference {
             document,
             source_construct,
-            commit_oid,
-            repository_path,
-            target_kind,
-            query_digest,
-            fragment_digest,
-            source_projection_digest,
+            normalized_target_intent: intent,
+            occurrence,
+            ..
         } => Value::object(vec![
             ("kind".to_owned(), Value::string("reference".to_owned())),
             ("document".to_owned(), document.to_value()),
@@ -91,7 +64,8 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
             (
                 "normalized_target_intent".to_owned(),
                 Value::object(
-                    commit_oid
+                    intent
+                        .commit_oid
                         .iter()
                         .map(|oid| {
                             (
@@ -106,24 +80,26 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
                             ),
                             (
                                 "path".to_owned(),
-                                repository_path.as_ref().map_or_else(
-                                    || Value::string(String::new()),
-                                    RepoPath::to_value,
-                                ),
+                                match &intent.path {
+                                    RepositoryIntentPath::Empty(_) => Value::string(String::new()),
+                                    RepositoryIntentPath::Path(path) => path.to_value(),
+                                },
                             ),
                             (
                                 "target_kind".to_owned(),
-                                Value::string(target_kind.map_or("either", Into::into).to_owned()),
+                                Value::string(
+                                    Into::<&'static str>::into(intent.target_kind).to_owned(),
+                                ),
                             ),
                             (
                                 "query_digest".to_owned(),
-                                query_digest.map_or(Value::Null, |digest| {
+                                intent.query_digest.map_or(Value::Null, |digest| {
                                     Value::string(digest.to_string())
                                 }),
                             ),
                             (
                                 "fragment_digest".to_owned(),
-                                fragment_digest.map_or(Value::Null, |digest| {
+                                intent.fragment_digest.map_or(Value::Null, |digest| {
                                     Value::string(digest.to_string())
                                 }),
                             ),
@@ -140,14 +116,21 @@ fn scope_value(scope: &FindingKeyScope) -> Value {
                     ),
                     (
                         "source_projection_digest".to_owned(),
-                        Value::string(source_projection_digest.to_string()),
+                        Value::string(occurrence.source_projection_digest.to_string()),
                     ),
                 ]),
             ),
         ]),
-        FindingKeyScope::Control { path, rule_id } => Value::object(vec![
+        FindingKeyScope::Control {
+            control_path,
+            rule_id,
+            ..
+        } => Value::object(vec![
             ("kind".to_owned(), Value::string("control".to_owned())),
-            ("control_path".to_owned(), nullable_path(path.as_ref())),
+            (
+                "control_path".to_owned(),
+                nullable_path(control_path.as_ref()),
+            ),
             ("rule_id".to_owned(), Value::string(rule_id.clone())),
         ]),
     }

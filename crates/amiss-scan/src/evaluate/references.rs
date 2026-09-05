@@ -1,18 +1,21 @@
 use std::collections::BTreeMap;
 
-use amiss_wire::controls::Profile;
+use amiss_wire::controls::{Profile, TargetKind};
 use amiss_wire::digest::Digest;
-use amiss_wire::report::model::PolicySource;
+use amiss_wire::report::model::{
+    EmptyRepositoryPath, ObservationFindingKeyScopeKind, PolicySource,
+    ReferenceFindingKeyScopeKind, ReferenceOccurrence, ReferenceOccurrenceKind,
+    RepositoryIntentKind, RepositoryIntentPath, RepositoryTargetIntent,
+};
 use amiss_wire::report::{Disposition, FindingKind};
 
 use crate::correlate::{Comparison, Impact, Observation, Outcome};
+use crate::observe;
 
-use super::finding::{
-    built_in_step, missing_fix, observation_location, observation_scope, reference_fact,
-    reference_scope, simple,
-};
+use super::finding::{built_in_step, missing_fix, observation_location, reference_fact, simple};
 use super::{
-    Attribution, Finding, FindingKey, Location, LocationSide, PolicyStep, resolution_kinds,
+    Attribution, Finding, FindingKey, FindingKeyScope, Location, LocationSide, PolicyStep,
+    resolution_kinds,
 };
 
 /// The adoption-reproduction projection: every structural key among the
@@ -50,7 +53,30 @@ fn collect_structural<'a>(
     let Some(kind) = resolution_kinds(&observation.resolution).structural else {
         return;
     };
-    let key = FindingKey::new(kind, reference_scope(observation));
+    let intent = &observation.intent;
+    let key = FindingKey::new(
+        kind,
+        FindingKeyScope::Reference {
+            document: observation.document.clone(),
+            kind: ReferenceFindingKeyScopeKind::Reference,
+            normalized_target_intent: RepositoryTargetIntent {
+                commit_oid: intent.commit_oid.clone(),
+                fragment_digest: observe::fragment_digest(intent),
+                kind: RepositoryIntentKind::RepositoryPath,
+                path: intent.repository_path.clone().map_or(
+                    RepositoryIntentPath::Empty(EmptyRepositoryPath::Empty),
+                    RepositoryIntentPath::Path,
+                ),
+                query_digest: observe::query_digest(intent),
+                target_kind: intent.target_kind.unwrap_or(TargetKind::Either),
+            },
+            occurrence: ReferenceOccurrence {
+                kind: ReferenceOccurrenceKind::SourceProjection,
+                source_projection_digest: observation.projection_digest,
+            },
+            source_construct: observation.construct,
+        },
+    );
     let digest = key.digest();
     let group = groups.entry(digest).or_insert_with(|| KeyGroup {
         key,
@@ -192,7 +218,10 @@ pub(super) fn comparison_findings(
         if let Some(base) = &comparison.base {
             findings.push(simple(
                 FindingKind::ExplicitReferenceRemoved,
-                observation_scope(base.id),
+                FindingKeyScope::Observation {
+                    kind: ObservationFindingKeyScopeKind::Observation,
+                    observation_id: base.id,
+                },
                 Attribution::NotApplicable,
                 vec![base.id],
                 observation_location(base, LocationSide::Base),
@@ -217,7 +246,10 @@ pub(super) fn comparison_findings(
     if comparison.outcome == Outcome::Ambiguous {
         findings.push(simple(
             FindingKind::ObservationCorrelationAmbiguous,
-            observation_scope(primary.id),
+            FindingKeyScope::Observation {
+                kind: ObservationFindingKeyScopeKind::Observation,
+                observation_id: primary.id,
+            },
             Attribution::NotApplicable,
             vec![primary.id],
             observation_location(primary, side),
@@ -241,7 +273,10 @@ pub(super) fn comparison_findings(
     if let Some(kind) = impact_kind {
         findings.push(simple(
             kind,
-            observation_scope(primary.id),
+            FindingKeyScope::Observation {
+                kind: ObservationFindingKeyScopeKind::Observation,
+                observation_id: primary.id,
+            },
             Attribution::NotApplicable,
             vec![primary.id],
             observation_location(primary, side),

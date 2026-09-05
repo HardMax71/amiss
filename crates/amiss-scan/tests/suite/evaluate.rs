@@ -21,6 +21,8 @@ use amiss_wire::resolution::{
     UnsupportedTarget, VersionScope,
 };
 
+mod key_contract;
+
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),

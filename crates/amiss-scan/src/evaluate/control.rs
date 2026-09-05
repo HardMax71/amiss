@@ -3,6 +3,7 @@ use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
+use amiss_wire::report::model::ControlFindingKeyScopeKind;
 
 use crate::scan::SpanDisplay;
 
@@ -36,7 +37,8 @@ pub(super) fn control_fact_finding(
     candidate_fact_finding(
         kind,
         FindingKeyScope::Control {
-            path: Some(document.clone()),
+            control_path: Some(document.clone()),
+            kind: ControlFindingKeyScopeKind::Control,
             rule_id: rule_id.to_owned(),
         },
         evidence,
@@ -125,7 +127,8 @@ pub(super) fn control_row(
         value.map_or(Value::Null, |digest| Value::string(digest.to_string()))
     };
     let scope = FindingKeyScope::Control {
-        path: control_path.clone(),
+        control_path: control_path.clone(),
+        kind: ControlFindingKeyScopeKind::Control,
         rule_id: rule_id.clone(),
     };
     let evidence = Value::object(vec![
