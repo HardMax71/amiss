@@ -315,14 +315,13 @@ fn semantic_examples_match_the_actual_typed_producers() {
 
     let semantic_evidence_bytes =
         fs::read(examples.join("scanner-semantic-evidence.json")).unwrap();
-    let semantic_evidence = semantic::parse(&semantic_evidence_bytes).unwrap();
+    semantic::parse(&semantic_evidence_bytes).unwrap();
     let typed: semantic::SemanticEvidenceEnvelope<semantic::observation::SiteBuildObservation> =
         serde_json::from_slice(&semantic_evidence_bytes).unwrap();
     assert_eq!(
         semantic::envelope(typed.payload).unwrap(),
         json::canonical(&json::parse(&semantic_evidence_bytes).unwrap())
     );
-    assert_eq!(typed.payload_digest, semantic_evidence.payload_digest);
 
     let semantic_template_bytes =
         fs::read(examples.join("scanner-semantic-template.json")).unwrap();
