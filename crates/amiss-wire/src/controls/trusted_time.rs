@@ -32,16 +32,16 @@ pub enum TrustedTimeController {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TrustedTimeStatement {
-    pub schema: TrustedTimeSchema,
+    pub candidate_identity_digest: Digest,
     pub controller: TrustedTimeController,
-    pub repository: RepositoryIdentity,
+    pub evaluation_instant: UtcInstant,
+    pub provider: String,
+    pub provider_run_attempt: u64,
+    pub provider_run_id: String,
     #[serde(rename = "ref")]
     pub ref_name: BranchRef,
-    pub candidate_identity_digest: Digest,
-    pub provider: String,
-    pub provider_run_id: String,
-    pub provider_run_attempt: u64,
-    pub evaluation_instant: UtcInstant,
+    pub repository: RepositoryIdentity,
+    pub schema: TrustedTimeSchema,
     pub valid_until: UtcInstant,
 }
 

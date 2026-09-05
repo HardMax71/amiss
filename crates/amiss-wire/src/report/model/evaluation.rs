@@ -103,9 +103,9 @@ pub enum EvaluationUnavailableReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnavailableEvaluation {
+    pub reasons: Vec<EvaluationUnavailableReason>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub request_digest: Option<Digest>,
-    pub reasons: Vec<EvaluationUnavailableReason>,
     pub status: UnavailableStatus,
 }
 

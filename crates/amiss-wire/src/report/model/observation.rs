@@ -350,9 +350,9 @@ pub struct Occurrence<P = RepoPath, R = Resolution<P>> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CorrelationAlternatives<O = Occurrence> {
-    pub base: Vec<O>,
-    pub candidate: Vec<O>,
+pub struct CorrelationAlternatives<P = RepoPath, R = Resolution<P>> {
+    pub base: Vec<Occurrence<P, R>>,
+    pub candidate: Vec<Occurrence<P, R>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
@@ -416,12 +416,12 @@ pub enum Impact {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ObservationComparison<O = Occurrence> {
-    pub alternatives: CorrelationAlternatives<O>,
+pub struct ObservationComparison<P = RepoPath, R = Resolution<P>> {
+    pub alternatives: CorrelationAlternatives<P, R>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub base: Option<O>,
+    pub base: Option<Occurrence<P, R>>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub candidate: Option<O>,
+    pub candidate: Option<Occurrence<P, R>>,
     pub correlation: Correlation,
     pub correlation_reason: CorrelationReason,
     pub impact: Impact,
