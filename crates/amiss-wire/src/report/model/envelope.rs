@@ -4,8 +4,8 @@ use crate::digest::Digest;
 
 use super::{
     AnalysisError, Controls, DocumentGitMode, DocumentResult, DocumentSide, Engine, Evaluation,
-    Feedback, Finding, FindingFactEvidence, ObservationComparison, Occurrence,
-    ProjectionDifference, ProjectionSource, RepoPath, Resolution, Summary,
+    Feedback, Finding, FindingFactEvidence, ObservationComparison, ProjectionDifference,
+    ProjectionSource, RepoPath, Resolution, Summary,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,7 +48,7 @@ pub struct ReportPayload<
     pub evaluation: Evaluation,
     pub feedback: Feedback<P>,
     pub findings: Vec<Finding<P, E>>,
-    pub observations: Vec<ObservationComparison<Occurrence<P, R>>>,
+    pub observations: Vec<ObservationComparison<P, R>>,
     pub result: ReportResult,
     pub schema: ReportPayloadSchema,
     pub summary: Summary,

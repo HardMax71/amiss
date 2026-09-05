@@ -9,8 +9,8 @@ use crate::model::{ArtifactId, Oid, OwnerId, RepoPathText, TreeIdentity, UtcInst
 
 use super::super::{Disposition, FindingKind};
 use super::{
-    DocumentGitMode, DocumentResult, DocumentSide, ObservationComparison, Occurrence, RepoPath,
-    Resolution, SourceSpan,
+    DocumentGitMode, DocumentResult, DocumentSide, ObservationComparison, RepoPath, Resolution,
+    SourceSpan,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -473,7 +473,7 @@ pub enum FindingFactEvidence<
         sources: Vec<P>,
     },
     Observation {
-        comparison: Box<ObservationComparison<Occurrence<P, R>>>,
+        comparison: Box<ObservationComparison<P, R>>,
         kind: ObservationFactEvidenceKind,
     },
     Projection {

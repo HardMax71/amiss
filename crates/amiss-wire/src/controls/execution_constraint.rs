@@ -59,17 +59,17 @@ pub enum ConstraintPlatform {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionConstraintDescriptor {
-    pub schema: ExecutionConstraintSchema,
-    pub action_repository: RepositoryIdentity,
-    pub action_object_format: ObjectFormat,
     pub action_commit_oid: Oid,
+    pub action_object_format: ObjectFormat,
+    pub action_repository: RepositoryIdentity,
     pub action_tree_oid: Oid,
-    pub manifest_path: RepoPathText,
-    pub release_manifest_digest: Digest,
-    pub selected_platform: ConstraintPlatform,
-    pub required_status_name: String,
     pub bootstrap_contract: ActionBootstrapContract,
     pub bootstrap_digest: Digest,
+    pub manifest_path: RepoPathText,
+    pub release_manifest_digest: Digest,
+    pub required_status_name: String,
+    pub schema: ExecutionConstraintSchema,
+    pub selected_platform: ConstraintPlatform,
 }
 
 #[must_use]

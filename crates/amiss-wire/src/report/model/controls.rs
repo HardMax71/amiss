@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::controls::{ExecutionConstraintDescriptor, Profile, TrustedTimeStatement};
 use crate::digest::Digest;
 use crate::model::ArtifactId;
+use crate::requests::RequestTrust;
 
 use super::{SandboxProvenance, UnavailableStatus};
 
@@ -46,19 +47,12 @@ pub enum VerifiedControlStatus {
     Verified,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum VerifiedControlTrustSource {
-    ExternalRequiredCheck,
-    OrganizationPolicy,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VerifiedExecutionConstraint {
     pub descriptor: ExecutionConstraintDescriptor,
     pub descriptor_digest: Digest,
     pub status: VerifiedControlStatus,
-    pub trust_source: VerifiedControlTrustSource,
+    pub trust_source: RequestTrust,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,9 +138,9 @@ pub enum ControlsUnavailableReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UnavailableControls {
+    pub reasons: Vec<ControlsUnavailableReason>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub request_digest: Option<Digest>,
-    pub reasons: Vec<ControlsUnavailableReason>,
     pub status: UnavailableStatus,
 }
 

@@ -37,10 +37,10 @@ pub enum EnvironmentContract {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuntimeFile {
+    pub file_sha256: Digest,
+    pub git_mode: GitMode,
     pub path: RepoPathText,
     pub role: RuntimeRole,
-    pub git_mode: GitMode,
-    pub file_sha256: Digest,
 }
 
 #[derive(
@@ -67,14 +67,14 @@ pub enum RuntimeRole {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReleaseArtifact {
-    pub platform: ConstraintPlatform,
     pub artifact_name: ArtifactId,
-    pub tree_path: RepoPathText,
     pub binary_sha256: Digest,
     pub engine_digest: Digest,
-    pub runtime_contract: RuntimeContract,
     pub environment_contract: EnvironmentContract,
+    pub platform: ConstraintPlatform,
+    pub runtime_contract: RuntimeContract,
     pub runtime_files: Vec<RuntimeFile>,
+    pub tree_path: RepoPathText,
 }
 
 /// The build namespace: the repository and exact commit the release was
@@ -82,9 +82,9 @@ pub struct ReleaseArtifact {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct BuildSource {
-    pub repository: RepositoryIdentity,
-    pub object_format: ObjectFormat,
     pub commit_oid: Oid,
+    pub object_format: ObjectFormat,
+    pub repository: RepositoryIdentity,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,8 +98,8 @@ pub struct DependencyLockFile {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DependencyLockInput {
-    pub schema: DependencyLockSchema,
     pub files: Vec<DependencyLockFile>,
+    pub schema: DependencyLockSchema,
 }
 
 /// The strict release manifest: the reviewed release label, its build
@@ -108,12 +108,12 @@ pub struct DependencyLockInput {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReleaseManifest {
-    pub schema: ReleaseManifestSchema,
-    pub engine_version: String,
+    pub artifacts: Vec<ReleaseArtifact>,
     pub build_source: BuildSource,
     pub dependency_lock: DependencyLockInput,
     pub dependency_lock_digest: Digest,
-    pub artifacts: Vec<ReleaseArtifact>,
+    pub engine_version: String,
+    pub schema: ReleaseManifestSchema,
 }
 
 /// Parses and validates one release manifest.

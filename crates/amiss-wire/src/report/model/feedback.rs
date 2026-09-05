@@ -7,13 +7,15 @@ use crate::model::RepoPathText;
 use super::super::{Disposition, FindingKind};
 use super::{RepoPath, SourceSpan, UnavailableStatus};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, strum::AsRefStr,
+)]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum FeedbackAction {
+    Fix,
     Check,
     Existing,
-    Fix,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
