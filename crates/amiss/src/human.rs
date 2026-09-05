@@ -3,7 +3,6 @@ use std::collections::BTreeSet;
 use amiss_wire::human::{atom, atom_bytes};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPath;
-use amiss_wire::report::model::RepoPath as ReportPath;
 use amiss_wire::report::model::{
     Evaluation, Feedback, FeedbackAction, FeedbackItem, ReportPayload,
 };
@@ -28,7 +27,12 @@ macro_rules! say {
     };
 }
 
-pub(crate) fn report(payload: &ReportPayload, explain_scope: bool, full_feedback: bool) {
+pub(crate) fn report<P, R, M, E>(
+    payload: &ReportPayload<P, R, M, E>,
+    explain_scope: bool,
+    full_feedback: bool,
+    path_atom: impl Fn(Option<&P>) -> String + Copy,
+) {
     let mut out = Channel {
         out: std::io::stdout(),
         open: true,
@@ -100,6 +104,7 @@ pub(crate) fn report(payload: &ReportPayload, explain_scope: bool, full_feedback
             .filter(|item| item.action != FeedbackAction::Existing),
         "feedback",
         full_feedback,
+        path_atom,
     );
     windowed(
         &mut out,
@@ -108,19 +113,10 @@ pub(crate) fn report(payload: &ReportPayload, explain_scope: bool, full_feedback
             .filter(|item| item.action == FeedbackAction::Existing),
         "existing",
         full_feedback,
+        path_atom,
     );
     notes(&mut out, payload);
     totals(&mut out, payload);
-}
-
-fn path_atom(path: Option<&ReportPath>) -> String {
-    match path {
-        Some(ReportPath::Text(path)) => atom(path.as_str()),
-        Some(ReportPath::Bytes(path)) => {
-            atom_bytes(&amiss_wire::human::decode_hex(&path.bytes_hex))
-        }
-        None => "-".to_owned(),
-    }
 }
 
 pub(crate) fn references(target: &RepoPath, occurrences: &[&Value]) {
@@ -152,11 +148,12 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[&Value]) {
     }
 }
 
-fn windowed<'report>(
+fn windowed<'report, P: 'report>(
     out: &mut Channel,
-    items: impl Iterator<Item = &'report FeedbackItem> + Clone,
+    items: impl Iterator<Item = &'report FeedbackItem<P>> + Clone,
     label: &str,
     full: bool,
+    path_atom: impl Fn(Option<&P>) -> String,
 ) {
     let count = items.clone().count();
     let limit = if full { count } else { 10 };
@@ -179,7 +176,7 @@ fn windowed<'report>(
     }
 }
 
-fn notes(out: &mut Channel, payload: &ReportPayload) {
+fn notes<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
     let mut seen = BTreeSet::new();
     for row in &payload.errors {
         if !row.description.is_empty() && seen.insert(row.code) {
@@ -188,7 +185,7 @@ fn notes(out: &mut Channel, payload: &ReportPayload) {
     }
 }
 
-fn totals(out: &mut Channel, payload: &ReportPayload) {
+fn totals<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
     let summary = &payload.summary;
     let documents = &summary.documents;
     say!(
@@ -229,7 +226,7 @@ fn totals(out: &mut Channel, payload: &ReportPayload) {
     );
 }
 
-fn explain(out: &mut Channel, payload: &ReportPayload) {
+fn explain<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
     say!(
         out,
         "scope: built-in documents are *.md, *.mdx, *.markdown, *.adoc, *.asciidoc,"

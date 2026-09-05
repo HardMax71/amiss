@@ -107,6 +107,18 @@ fn measure<T, F: Fn() -> T>(label: &str, project: F) {
 #[ignore = "promotion evidence, run explicitly in release"]
 fn large_projection_latency_and_memory() {
     let envelope = measurement_report(10_000);
-    measure("sarif", || crate::sarif::log(&envelope));
-    measure("code-quality", || crate::codequality::issues(&envelope));
+    measure("sarif", || {
+        crate::sarif::log(&envelope, |path| match path {
+            amiss_wire::report::model::RepoPath::Text(text) => Some(text.as_str()),
+            amiss_wire::report::model::RepoPath::Bytes(_) => None,
+        })
+    });
+    measure("code-quality", || {
+        crate::codequality::issues(&envelope, |path| {
+            std::borrow::Cow::Borrowed(match path {
+                amiss_wire::report::model::RepoPath::Text(text) => text.as_str(),
+                amiss_wire::report::model::RepoPath::Bytes(bytes) => &bytes.bytes_hex,
+            })
+        })
+    });
 }

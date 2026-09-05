@@ -3,7 +3,7 @@ mod tests;
 use std::borrow::Cow;
 
 use amiss_wire::report::Disposition;
-use amiss_wire::report::model::{RepoPath, ReportPayload, ReportStatus};
+use amiss_wire::report::model::{ReportPayload, ReportStatus};
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
 
@@ -17,9 +17,10 @@ enum CaseStatus<'value> {
     },
 }
 
-pub(crate) fn write(
-    payload: &ReportPayload,
+pub(crate) fn write<P, R, M, E>(
+    payload: &ReportPayload<P, R, M, E>,
     output: &mut dyn std::io::Write,
+    path_text: impl Fn(&P) -> Option<&str>,
 ) -> std::io::Result<()> {
     let result = &payload.result;
     let findings = payload.findings.iter();
@@ -93,10 +94,7 @@ pub(crate) fn write(
                 &mut writer,
                 "amiss.finding",
                 &name,
-                row.location.path.as_ref().and_then(|path| match path {
-                    RepoPath::Text(path) => Some(path.as_str()),
-                    RepoPath::Bytes(_) => None,
-                }),
+                row.location.path.as_ref().and_then(&path_text),
                 status,
             )?;
         }
@@ -106,10 +104,7 @@ pub(crate) fn write(
                 &mut writer,
                 "amiss.analysis-error",
                 &name,
-                row.path.as_ref().and_then(|path| match path {
-                    RepoPath::Text(path) => Some(path.as_str()),
-                    RepoPath::Bytes(_) => None,
-                }),
+                row.path.as_ref().and_then(&path_text),
                 CaseStatus::Problem {
                     element: "error",
                     kind: row.code.as_ref(),

@@ -12,7 +12,11 @@ use super::write;
 
 fn render(value: &ReportPayload) -> String {
     let mut bytes = Vec::new();
-    write(value, &mut bytes).expect("write JUnit");
+    write(value, &mut bytes, |path| match path {
+        RepoPath::Text(text) => Some(text.as_str()),
+        RepoPath::Bytes(_) => None,
+    })
+    .expect("write JUnit");
     let mut reader = Reader::from_reader(bytes.as_slice());
     loop {
         match reader.read_event().expect("read produced XML") {
