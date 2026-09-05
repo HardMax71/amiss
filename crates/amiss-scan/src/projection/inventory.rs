@@ -4,14 +4,17 @@ use std::ops::Bound;
 use amiss_wire::controls::{GitMode, ProjectionKind, TreePathSelection};
 use amiss_wire::digest::{Digest, hb, hb_stream};
 use amiss_wire::model::RepoPath;
-use amiss_wire::report::model::ProjectionObserved;
+use amiss_wire::report::model::{
+    CountProjectionDifferenceKind, ProjectionDifference, ProjectionObserved,
+    RowsProjectionDifference, RowsProjectionDifferenceKind,
+};
 
 use crate::Error;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::resources::{Aggregate, ScanResources};
 use crate::scan::SemanticCodeSink;
 
-use super::{Difference, RowDifference, Verdict, unavailable};
+use super::{Verdict, unavailable};
 
 const SOURCE_DOMAIN: &str = "amiss/scanner-sorted-rows-source";
 const COUNT_SOURCE_DOMAIN: &str = "amiss/scanner-decimal-count-source";
@@ -120,7 +123,7 @@ fn difference(
     rows: &[&str],
     observed: &str,
     resources: &mut ScanResources,
-) -> Result<RowDifference, Error> {
+) -> Result<RowsProjectionDifference, Error> {
     let mut observed_rows: Vec<&str> = if observed.is_empty() {
         Vec::new()
     } else {
@@ -170,7 +173,8 @@ fn difference(
         extra_records = extra_records.saturating_add(1);
         preview_row(&mut extra, row, resources)?;
     }
-    Ok(RowDifference {
+    Ok(RowsProjectionDifference {
+        kind: RowsProjectionDifferenceKind::Rows,
         ordering_only: missing_records == 0 && extra_records == 0,
         expected_records: u64::try_from(rows.len()).unwrap_or(u64::MAX),
         observed_records: u64::try_from(observed_rows.len()).unwrap_or(u64::MAX),
@@ -208,7 +212,7 @@ fn mismatch(
     sink: &SemanticCodeSink,
     expected_digest: Digest,
     expected_bytes: u64,
-    difference: Difference,
+    difference: ProjectionDifference<Box<RowsProjectionDifference>>,
 ) -> Verdict {
     Verdict::Drift {
         reason: ProjectionObserved::ContentDiffers,
@@ -288,7 +292,7 @@ pub(super) fn compare_rows(
         sink,
         projected_digest(rows),
         expected_bytes,
-        Difference::Rows(Box::new(difference(rows, &sink.value, resources)?)),
+        ProjectionDifference::Rows(Box::new(difference(rows, &sink.value, resources)?)),
     ))
 }
 
@@ -310,7 +314,8 @@ pub(super) fn compare_count(
         sink,
         hb(COUNT_SOURCE_DOMAIN, expected.as_bytes()),
         u64::try_from(expected.len()).unwrap_or(u64::MAX),
-        Difference::Count {
+        ProjectionDifference::Count {
+            kind: CountProjectionDifferenceKind::Count,
             expected_count,
             observed_count: canonical_count(&sink.value),
         },
