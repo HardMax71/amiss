@@ -124,7 +124,7 @@ fn run(pair: &Pair) -> Vec<u8> {
         &pair.candidate,
     )
     .wire();
-    crate::support::generated_report(&wire);
+    crate::support::generated_report(&wire).unwrap();
     wire
 }
 
@@ -198,8 +198,8 @@ fn index_and_commit_modes_agree_on_every_fact_and_disclose_their_mode() {
     );
     let from_index = staged_index(&repo, &engine(), None, &bare_shell(), &fixture.base);
 
-    let commit: serde_json::Value = crate::support::generated_report(&from_commit.wire());
-    let index: serde_json::Value = crate::support::generated_report(&from_index.wire());
+    let commit: serde_json::Value = crate::support::generated_report(&from_commit.wire()).unwrap();
+    let index: serde_json::Value = crate::support::generated_report(&from_index.wire()).unwrap();
     let (commit, index) = (&commit["payload"], &index["payload"]);
 
     for fact in ["documents", "observations", "findings", "summary", "result"] {

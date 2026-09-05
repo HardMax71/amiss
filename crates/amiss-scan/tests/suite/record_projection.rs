@@ -134,7 +134,7 @@ fn run(
     let base = Oid::new(ObjectFormat::Sha1, pair.base.clone()).unwrap();
     let candidate = Oid::new(ObjectFormat::Sha1, pair.candidate.clone()).unwrap();
     let built = commit_pair(&repo, &engine(), None, &shell, &base, &candidate);
-    let envelope: serde_json::Value = crate::support::generated_report(&built.wire());
+    let envelope: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
     envelope["payload"].clone()
 }
 

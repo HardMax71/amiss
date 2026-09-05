@@ -44,9 +44,13 @@ fn shell() -> SetupShell {
     }
 }
 
-#[expect(clippy::indexing_slicing, reason = "test assertion helper")]
+#[expect(
+    clippy::indexing_slicing,
+    clippy::unwrap_used,
+    reason = "test assertion helper"
+)]
 fn payload(built: &Built) -> serde_json::Value {
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire());
+    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
     wire["payload"].clone()
 }
 
@@ -285,7 +289,7 @@ fn a_historical_absence_never_borrows_candidate_relocation_evidence() {
         &oid(&base),
         &oid(&candidate),
     );
-    let envelope: serde_json::Value = crate::support::generated_report(&built.wire());
+    let envelope: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
     let report = &envelope["payload"];
     let observation = report["observations"]
         .as_array()

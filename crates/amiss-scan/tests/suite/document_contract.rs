@@ -74,6 +74,6 @@ fn unparsed_documents_survive_the_report_contract() {
                 assert_eq!(side.extracted_references, 0);
             }
         }
-        crate::support::generated_report(&report.wire());
+        crate::support::generated_report(&report.wire()).unwrap();
     }
 }

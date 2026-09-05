@@ -110,7 +110,7 @@ fn run(
         &base,
         &candidate,
     );
-    crate::support::generated_report(&built.wire())["payload"].take()
+    crate::support::generated_report(&built.wire()).unwrap()["payload"].take()
 }
 
 fn kinds(payload: &serde_json::Value) -> Vec<&str> {

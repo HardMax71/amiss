@@ -161,7 +161,7 @@ fn payload(fixture: &Recorded, profile: Profile) -> (i64, serde_json::Value) {
         &fixture.base,
         &fixture.candidate,
     );
-    let wire: serde_json::Value = crate::support::generated_report(&built.wire());
+    let wire: serde_json::Value = crate::support::generated_report(&built.wire()).unwrap();
     (built.exit_code, wire["payload"].clone())
 }
 
