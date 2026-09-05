@@ -2,6 +2,70 @@ use std::fs;
 
 use crate::support;
 
+#[test]
+fn malformed_artifact_refusals_name_the_input_file() {
+    let directory = tempfile::tempdir().unwrap();
+    let plan = directory.path().join("plan with spaces.json");
+    let evidence = directory.path().join("evidence with spaces.json");
+    let inputs = [
+        (
+            &plan,
+            include_bytes!("../../../../spec/examples/scanner-external-plan.json").as_slice(),
+        ),
+        (
+            &evidence,
+            include_bytes!("../../../../spec/examples/scanner-external-evidence.json").as_slice(),
+        ),
+    ];
+    for (path, valid) in inputs {
+        fs::write(path, valid).unwrap();
+    }
+    for (path, valid) in inputs {
+        for malformed in [
+            b"not json".as_slice(),
+            br#"{"nested":{"duplicate":1,"duplicate":2}}"#,
+            b"{} trailing content",
+            b"9007199254740992",
+            b"\xff",
+        ] {
+            fs::write(path, malformed).unwrap();
+            for format in ["human", "json"] {
+                let (code, stdout, stderr) = support::amiss(&[
+                    "external-assess",
+                    "--plan",
+                    plan.to_str().unwrap(),
+                    "--evidence",
+                    evidence.to_str().unwrap(),
+                    "--format",
+                    format,
+                ]);
+                assert_eq!(code, 2);
+                assert!(stdout.is_empty());
+                assert_eq!(
+                    stderr,
+                    format!(
+                        "amiss external-assess: {} is not the scanner's strict JSON\n",
+                        path.display()
+                    ),
+                    "{malformed:?} with {format} output"
+                );
+            }
+        }
+        fs::write(path, valid).unwrap();
+    }
+    let (code, stdout, stderr) = support::amiss(&[
+        "external-assess",
+        "--plan",
+        plan.to_str().unwrap(),
+        "--evidence",
+        evidence.to_str().unwrap(),
+        "--format",
+        "json",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    assert!(amiss_wire::external::parse_assessment(&stdout).is_ok());
+}
+
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn planned_pair() -> (amiss_fixtures::CommitPair, String, serde_json::Value) {
     let pair = amiss_fixtures::commit_pair(

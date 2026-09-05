@@ -8,8 +8,8 @@ use crate::invocation::RenderInvocation;
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
 pub(crate) fn run(invocation: &RenderInvocation, reserve: &mut FatalSerializer) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
-    let envelope = match crate::input::strict_value(&invocation.report) {
-        Ok(envelope) => envelope,
+    let envelope = match crate::input::strict_json(&invocation.report) {
+        Ok(input) => input.value,
         Err(defect) => {
             eprintln!("amiss render: {defect}");
             return failure;
