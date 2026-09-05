@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
-use amiss_wire::digest::{Digest, hb, hj};
-use amiss_wire::json::Value;
+use amiss_wire::digest::{Digest, hb, hj_serde};
 use amiss_wire::model::{ArtifactId, RepoPathText};
 use amiss_wire::semantic::observation::{SITE_BUILD_PRODUCER, SITE_BUILD_VERSION};
+use serde::Deserialize as _;
 use url::Url;
 
+use super::model::{BookItem, Config, HtmlOutput, RenderContext};
 use super::{MDBOOK_VERSION, MdBookEvidenceError, SiteBuildContext};
 
 const ROUTE_BYTES: usize = 16_384;
@@ -68,42 +69,31 @@ pub(super) fn site_build_context(
 }
 
 pub(super) fn render_context(
-    context: &Value,
-) -> Result<(PathBuf, &[Value], Digest), MdBookEvidenceError> {
-    if context.text("version") != Some(MDBOOK_VERSION) {
+    context: &RenderContext,
+) -> Result<(PathBuf, &[BookItem], Digest), MdBookEvidenceError> {
+    if context.version != MDBOOK_VERSION {
         return Err(MdBookEvidenceError::UnsupportedBuild);
     }
-    let config = context
-        .member("config")
-        .ok_or(MdBookEvidenceError::ContextShape)?;
-    let config_digest = hj(CONFIG_DOMAIN, config);
-    let book_config = config
-        .member("book")
-        .ok_or(MdBookEvidenceError::ContextShape)?;
-    let source_directory = match book_config.member("src") {
-        None => PathBuf::from("src"),
-        Some(Value::String(path)) => relative_path(path, true)?,
-        Some(
-            Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_),
-        ) => return Err(MdBookEvidenceError::ContextShape),
-    };
-    if !matches!(
-        config
-            .member("output")
-            .and_then(|output| output.member("html")),
-        Some(Value::Object(_))
-    ) {
-        return Err(MdBookEvidenceError::UnsupportedBuild);
-    }
-    let Some(Value::Array(items)) = context.member("book").and_then(|book| book.member("items"))
-    else {
-        return Err(MdBookEvidenceError::ContextShape);
-    };
-    Ok((source_directory, items, config_digest))
+    let config = Config::deserialize(&context.config)
+        .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
+    let source_directory = config
+        .book
+        .src
+        .as_deref()
+        .map(|path| relative_path(path, true))
+        .transpose()?
+        .unwrap_or_else(|| PathBuf::from("src"));
+    let HtmlOutput { html: _html } = HtmlOutput::deserialize(&config.output)
+        .map_err(|_defect| MdBookEvidenceError::UnsupportedBuild)?;
+    let config_digest = hj_serde(CONFIG_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&context.config, &mut writer)
+    })
+    .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
+    Ok((source_directory, &context.book.items, config_digest))
 }
 
 pub(super) fn pages(
-    items: &[Value],
+    items: &[BookItem],
     source_directory: &Path,
     repository_book_root: Option<&str>,
     base: &Url,
@@ -111,37 +101,18 @@ pub(super) fn pages(
     let source_root = repository_path(repository_book_root, source_directory)?;
     let manifest = repository_path(source_root.as_deref(), Path::new("SUMMARY.md"))?
         .ok_or(MdBookEvidenceError::Path)?;
-    let mut pending: Vec<&Value> = items.iter().rev().collect();
+    let mut pending: Vec<&BookItem> = items.iter().rev().collect();
     let mut pages = BTreeMap::new();
     let mut entrypoint = None;
     while let Some(item) = pending.pop() {
         let chapter = match item {
-            Value::String(separator) if separator.as_ref() == "Separator" => continue,
-            Value::Object(members) => {
-                let Some((kind, value)) = members.first() else {
-                    return Err(MdBookEvidenceError::ContextShape);
-                };
-                if members.len() != 1 {
-                    return Err(MdBookEvidenceError::ContextShape);
-                }
-                match (kind.as_str(), value) {
-                    ("Chapter", Value::Object(_)) => value,
-                    ("PartTitle", Value::String(_)) => continue,
-                    _ => return Err(MdBookEvidenceError::ContextShape),
-                }
-            }
-            Value::Null
-            | Value::Bool(_)
-            | Value::Integer(_)
-            | Value::String(_)
-            | Value::Array(_) => return Err(MdBookEvidenceError::ContextShape),
+            BookItem::Chapter(chapter) => chapter,
+            BookItem::Separator => continue,
+            BookItem::PartTitle(_title) => continue,
         };
-        let Some(Value::Array(sub_items)) = chapter.member("sub_items") else {
-            return Err(MdBookEvidenceError::ContextShape);
-        };
-        pending.extend(sub_items.iter().rev());
-        let path = optional_text(chapter, "path")?;
-        let source_path = optional_text(chapter, "source_path")?;
+        pending.extend(chapter.sub_items.iter().rev());
+        let path = chapter.path.as_deref();
+        let source_path = chapter.source_path.as_deref();
         let Some(path) = path else {
             if source_path.is_none() {
                 continue;
@@ -188,19 +159,6 @@ pub(super) fn pages(
         manifest,
         entrypoint: entrypoint.ok_or(MdBookEvidenceError::UnsupportedBuild)?,
     })
-}
-
-fn optional_text<'a>(
-    object: &'a Value,
-    name: &str,
-) -> Result<Option<&'a str>, MdBookEvidenceError> {
-    match object.member(name) {
-        Some(Value::Null) => Ok(None),
-        Some(Value::String(value)) => Ok(Some(value)),
-        None | Some(Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_)) => {
-            Err(MdBookEvidenceError::ContextShape)
-        }
-    }
 }
 
 fn insert_page(

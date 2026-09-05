@@ -322,6 +322,122 @@ fn resolved_renderer_configuration_is_part_of_the_input_identity() {
 }
 
 #[test]
+fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("chapter.html"), "<h1 id=\"chapter\"></h1>").unwrap();
+    fs::write(root.path().join("index.html"), "<p>index</p>").unwrap();
+    let ordinary = context(
+        "0.5.4",
+        true,
+        &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
+    );
+    let original: serde_json::Value = serde_json::from_slice(&ordinary).unwrap();
+    let candidate = hb("amiss/test", b"candidate");
+    let site = site("book.toml", "/");
+    for (path, invalid) in [
+        ("/book/items", json!(null)),
+        ("/book/items/0", json!("Unknown")),
+        ("/book/items/0", json!({ "Chapter": null })),
+        ("/book/items/0", json!({ "PartTitle": 1 })),
+        (
+            "/book/items/0",
+            json!({ "PartTitle": "title", "other": null }),
+        ),
+        ("/book/items/0/Chapter/path", json!(false)),
+        ("/book/items/0/Chapter/source_path", json!([])),
+        ("/book/items/0/Chapter/sub_items", json!(null)),
+        ("/config/book/src", json!(null)),
+        ("/config/book/src", json!(false)),
+        ("/config/output/html", json!([])),
+    ] {
+        let mut changed = original.clone();
+        *changed.pointer_mut(path).unwrap() = invalid;
+        let bytes = serde_json::to_vec(&changed).unwrap();
+        assert!(
+            mdbook_site_evidence(candidate, &site, &bytes, &output(&root)).is_err(),
+            "{path}: {changed}"
+        );
+    }
+    for required in ["path", "source_path", "sub_items"] {
+        let mut changed = original.clone();
+        changed["book"]["items"][0]["Chapter"]
+            .as_object_mut()
+            .unwrap()
+            .remove(required);
+        let bytes = serde_json::to_vec(&changed).unwrap();
+        assert!(
+            matches!(
+                mdbook_site_evidence(candidate, &site, &bytes, &output(&root)),
+                Err(MdBookEvidenceError::ContextShape)
+            ),
+            "{required}"
+        );
+    }
+    let mut defaulted = original;
+    defaulted["config"]["book"]
+        .as_object_mut()
+        .unwrap()
+        .remove("src");
+    defaulted["book"]["items"]
+        .as_array_mut()
+        .unwrap()
+        .insert(0, json!({ "PartTitle": "Part one" }));
+    let bytes = serde_json::to_vec(&defaulted).unwrap();
+    let evidence = mdbook_site_evidence(candidate, &site, &bytes, &output(&root)).unwrap();
+    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
+    assert_eq!(
+        observation(&parsed.payload.observations, "/chapter.html")["source"],
+        "src/chapter.md"
+    );
+}
+
+#[test]
+fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth_limit() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("chapter.html"), "<h1 id=\"chapter\"></h1>").unwrap();
+    fs::write(root.path().join("index.html"), "<p>index</p>").unwrap();
+    let ordinary = context(
+        "0.5.4",
+        true,
+        &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
+    );
+    let mut changed: serde_json::Value = serde_json::from_slice(&ordinary).unwrap();
+    let candidate = hb("amiss/test", b"candidate");
+    let site = site("book.toml", "/");
+    let baseline = mdbook_site_evidence(candidate, &site, &ordinary, &output(&root)).unwrap();
+    let baseline = amiss_wire::semantic::parse(&baseline).unwrap();
+    let mut nested = json!({ "\u{1f600}": 1, "\u{e000}": 2 });
+    for _ in 0..256 {
+        nested = json!([nested]);
+    }
+    changed["config"]["future-renderer-options"] = nested.clone();
+    changed["book"]["items"][0]["Chapter"]["future-metadata"] = nested;
+    let compact = serde_json::to_vec(&changed).unwrap();
+    let pretty = serde_json::to_vec_pretty(&changed).unwrap();
+    let evidence = mdbook_site_evidence(candidate, &site, &compact, &output(&root)).unwrap();
+    assert_eq!(
+        evidence,
+        mdbook_site_evidence(candidate, &site, &pretty, &output(&root)).unwrap()
+    );
+    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
+    assert_eq!(baseline.payload.observations, parsed.payload.observations);
+    assert_ne!(
+        baseline.payload.producer.input_digest,
+        parsed.payload.producer.input_digest
+    );
+    let mut nested = json!(null);
+    for _ in 0..513 {
+        nested = json!([nested]);
+    }
+    changed["config"]["future-renderer-options"] = nested;
+    let bytes = serde_json::to_vec(&changed).unwrap();
+    assert!(matches!(
+        mdbook_site_evidence(candidate, &site, &bytes, &output(&root)),
+        Err(MdBookEvidenceError::Context(_))
+    ));
+}
+
+#[test]
 fn version_renderer_and_route_ownership_must_be_exact() {
     let root = tempfile::tempdir().unwrap();
     let ordinary = [chapter(Some("chapter.md"), Some("chapter.md"), &[])];
