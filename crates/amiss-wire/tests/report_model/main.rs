@@ -1,3 +1,4 @@
+mod producer_facts;
 mod producer_paths;
 
 use amiss_wire::report::model::{

@@ -397,6 +397,13 @@ pub enum ReferenceFactEvidenceKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReferenceFactEvidence<R = Resolution> {
+    pub kind: ReferenceFactEvidenceKind,
+    pub occurrence_multiplicity: u64,
+    pub resolution: R,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum FindingFactEvidence<P = RepoPath> {
     BrokenRedirect {
@@ -472,18 +479,14 @@ pub enum FindingFactEvidence<P = RepoPath> {
         source: ProjectionSource,
         sources: Vec<ControlStateSource>,
     },
-    Reference {
-        kind: ReferenceFactEvidenceKind,
-        occurrence_multiplicity: u64,
-        resolution: Resolution<P>,
-    },
+    Reference(ReferenceFactEvidence<Resolution<P>>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FindingFactInput<P = RepoPath> {
-    pub evidence: FindingFactEvidence<P>,
+pub struct FindingFactInput<K = FindingKeyInput, E = FindingFactEvidence> {
+    pub evidence: E,
     pub finding_kind: FindingKind,
-    pub key_input: FindingKeyInput<P>,
+    pub key_input: K,
     pub schema: FactSchema,
 }
 
@@ -636,11 +639,11 @@ pub struct Finding<P = RepoPath> {
     pub aggregation: FindingAggregation,
     pub attribution: Attribution,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub base_fact: Option<FindingFactInput<P>>,
+    pub base_fact: Option<FindingFactInput<FindingKeyInput<P>, FindingFactEvidence<P>>>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub base_fact_digest: Option<Digest>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub candidate_fact: Option<FindingFactInput<P>>,
+    pub candidate_fact: Option<FindingFactInput<FindingKeyInput<P>, FindingFactEvidence<P>>>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_fact_digest: Option<Digest>,
     pub configured_disposition: Disposition,

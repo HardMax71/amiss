@@ -129,11 +129,11 @@ fn producer_payload<'a>(
             base_fact: None,
             base_fact_digest: None,
             candidate_fact: Some(report::FindingFactInput {
-                evidence: report::FindingFactEvidence::Reference {
+                evidence: report::FindingFactEvidence::Reference(report::ReferenceFactEvidence {
                     kind: report::ReferenceFactEvidenceKind::Reference,
                     occurrence_multiplicity: 1,
                     resolution,
-                },
+                }),
                 finding_kind: key_input.finding_kind,
                 key_input: key_input.clone(),
                 schema: FactSchema::Current,
