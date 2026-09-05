@@ -1,4 +1,5 @@
 use amiss_wire::model::BranchRef;
+use amiss_wire::report::model::ControlsUnavailableReason;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 
 use crate::report::Setup;
@@ -45,23 +46,23 @@ pub(super) fn external_gate(
     scan_limits: ScanLimits,
     provisional: &Setup,
     candidate_tree: Option<amiss_wire::model::TreeIdentity>,
-) -> Result<ExternalVerified, (&'static str, ErrorDetail)> {
+) -> Result<ExternalVerified, (ControlsUnavailableReason, ErrorDetail)> {
     let repository = setup_shell.repository.as_ref();
     let target_ref = setup_shell.target_ref.as_ref().map(BranchRef::as_str);
     let identity = crate::report::candidate_identity_digest(provisional)
-        .map_err(|error| ("not-parsed", detail(&error, None)))?;
+        .map_err(|error| (ControlsUnavailableReason::NotParsed, detail(&error, None)))?;
     let time = setup_shell
         .time
         .as_ref()
         .map(|input| crate::policy::verify_time(input, repository, target_ref, &identity))
         .transpose()
-        .map_err(|row| ("invalid-external-control", row))?;
+        .map_err(|row| (ControlsUnavailableReason::InvalidExternalControl, row))?;
     let constraint = setup_shell
         .constraint
         .as_ref()
         .map(crate::policy::verify_constraint)
         .transpose()
-        .map_err(|row| ("invalid-external-control", row))?;
+        .map_err(|row| (ControlsUnavailableReason::InvalidExternalControl, row))?;
     let semantic = crate::semantic::bind(&setup_shell.semantic, identity)
         .map_err(|row| (external_reason(&row), row))?;
     let Some(tree) = candidate_tree else {
@@ -69,7 +70,7 @@ pub(super) fn external_gate(
         // complete Git candidate snapshot; the staged mode rejects them.
         if setup_shell.debt.is_some() || setup_shell.waiver.is_some() {
             return Err((
-                "control-binding-mismatch",
+                ControlsUnavailableReason::ControlBindingMismatch,
                 ErrorDetail {
                     code: AnalysisErrorCode::ControlBindingMismatch,
                     path: None,
@@ -88,7 +89,7 @@ pub(super) fn external_gate(
     };
     if (setup_shell.debt.is_some() || setup_shell.waiver.is_some()) && time.is_none() {
         return Err((
-            "invalid-external-control",
+            ControlsUnavailableReason::InvalidExternalControl,
             crate::policy::trusted_time_invalid_row(),
         ));
     }
@@ -164,13 +165,13 @@ fn waiver_authority(
 /// The controls-unavailable reason a rejected external control anchors:
 /// binding mismatches and invalid controls name themselves, and any other
 /// defect leaves the stage merely not parsed.
-pub(super) fn external_reason(row: &ErrorDetail) -> &'static str {
+pub(super) fn external_reason(row: &ErrorDetail) -> ControlsUnavailableReason {
     use amiss_wire::report::AnalysisErrorCode as Code;
     if row.code == Code::ControlBindingMismatch {
-        "control-binding-mismatch"
+        ControlsUnavailableReason::ControlBindingMismatch
     } else if row.code == Code::TrustedTimeInvalid || row.code == Code::ConfigurationInvalid {
-        "invalid-external-control"
+        ControlsUnavailableReason::InvalidExternalControl
     } else {
-        "not-parsed"
+        ControlsUnavailableReason::NotParsed
     }
 }

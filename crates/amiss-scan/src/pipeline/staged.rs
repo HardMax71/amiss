@@ -1,5 +1,6 @@
 use amiss_git::{GitResources, Repository};
 use amiss_wire::model::{Oid, RepoPath};
+use amiss_wire::report::model::SnapshotUnavailableReason;
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail};
 
 use crate::Error;
@@ -106,7 +107,7 @@ fn not_evaluated(
     PipelineFailure::one(
         setup_shell.with(
             base.clone(),
-            CandidateBlock::Unavailable(vec!["not-evaluated"]),
+            CandidateBlock::Unavailable(vec![SnapshotUnavailableReason::NotEvaluated]),
         ),
         detail,
     )
@@ -133,7 +134,7 @@ fn staged_policy(
     let bail = |details: Vec<ErrorDetail>| {
         let mut setup = setup_shell.with(
             base_placeholder.clone(),
-            CandidateBlock::Unavailable(vec!["not-evaluated"]),
+            CandidateBlock::Unavailable(vec![SnapshotUnavailableReason::NotEvaluated]),
         );
         setup.controls_unavailable = Some(policy_unavailable_reason(&details));
         PipelineFailure::new(setup, details)
@@ -168,7 +169,7 @@ fn index_candidate_block(
     base_oid: &Oid,
     index: &amiss_git::LogicalIndex,
     skip_worktree_paths: u64,
-) -> Result<CandidateBlock, (Vec<ErrorDetail>, &'static str)> {
+) -> Result<CandidateBlock, (Vec<ErrorDetail>, SnapshotUnavailableReason)> {
     let disclosure_cap = amiss_git::GitLimits::CONTRACT.raw_path_bytes;
     let mut entries: Vec<(RepoPath, amiss_wire::controls::GitMode, Oid, bool)> =
         Vec::with_capacity(index.entries.len());
@@ -187,7 +188,7 @@ fn index_candidate_block(
         entries.push((path, entry.mode, entry.oid.clone(), entry.skip_worktree));
     }
     if !failures.is_empty() {
-        return Err((failures, "unrepresentable-path"));
+        return Err((failures, SnapshotUnavailableReason::UnrepresentablePath));
     }
     synthetic_candidate(
         repo.object_format(),
@@ -196,7 +197,12 @@ fn index_candidate_block(
         skip_worktree_paths,
     )
     .map(CandidateBlock::Index)
-    .map_err(|defect| (vec![detail(&defect, None)], "not-evaluated"))
+    .map_err(|defect| {
+        (
+            vec![detail(&defect, None)],
+            SnapshotUnavailableReason::NotEvaluated,
+        )
+    })
 }
 
 /// The staged run's candidate identity, or its refusals folded into the
@@ -247,7 +253,7 @@ fn staged_gate(
             controls_failure(
                 setup_shell,
                 base_tree.1.clone(),
-                CandidateBlock::Unavailable(vec!["not-evaluated"]),
+                CandidateBlock::Unavailable(vec![SnapshotUnavailableReason::NotEvaluated]),
                 reason,
                 row,
             )
@@ -276,18 +282,20 @@ fn recheck_index(
     built
 }
 
-const fn unavailable_reason(defect: &Error) -> &'static str {
+const fn unavailable_reason(defect: &Error) -> SnapshotUnavailableReason {
     match defect {
-        Error::Git(crate::GitDefect::ObjectMissing) => "missing-object",
-        Error::Git(crate::GitDefect::ObjectWrongKind) => "wrong-object-kind",
-        Error::Git(crate::GitDefect::ObjectUnreadable) => "unreadable-object",
-        Error::Git(crate::GitDefect::IndexInvalid) => "index-invalid",
-        Error::Git(crate::GitDefect::IndexUnmerged) => "index-unmerged",
-        Error::Git(crate::GitDefect::IntentToAdd) => "intent-to-add",
-        Error::Git(crate::GitDefect::SnapshotChanged) => "snapshot-changed",
-        Error::UnrepresentablePath => "unrepresentable-path",
-        Error::ResourceLimit { .. } => "resource-limit",
-        Error::Parse(_) | Error::Internal => "not-evaluated",
+        Error::Git(crate::GitDefect::ObjectMissing) => SnapshotUnavailableReason::MissingObject,
+        Error::Git(crate::GitDefect::ObjectWrongKind) => SnapshotUnavailableReason::WrongObjectKind,
+        Error::Git(crate::GitDefect::ObjectUnreadable) => {
+            SnapshotUnavailableReason::UnreadableObject
+        }
+        Error::Git(crate::GitDefect::IndexInvalid) => SnapshotUnavailableReason::IndexInvalid,
+        Error::Git(crate::GitDefect::IndexUnmerged) => SnapshotUnavailableReason::IndexUnmerged,
+        Error::Git(crate::GitDefect::IntentToAdd) => SnapshotUnavailableReason::IntentToAdd,
+        Error::Git(crate::GitDefect::SnapshotChanged) => SnapshotUnavailableReason::SnapshotChanged,
+        Error::UnrepresentablePath => SnapshotUnavailableReason::UnrepresentablePath,
+        Error::ResourceLimit { .. } => SnapshotUnavailableReason::ResourceLimit,
+        Error::Parse(_) | Error::Internal => SnapshotUnavailableReason::NotEvaluated,
     }
 }
 
@@ -330,7 +338,7 @@ fn staged_open(
         return Err(binding_mismatch(
             setup_shell,
             base_tree.1,
-            CandidateBlock::Unavailable(vec!["not-evaluated"]),
+            CandidateBlock::Unavailable(vec![SnapshotUnavailableReason::NotEvaluated]),
             row,
         ));
     }
@@ -338,8 +346,8 @@ fn staged_open(
         return Err(controls_failure(
             setup_shell,
             base_tree.1,
-            CandidateBlock::Unavailable(vec!["not-evaluated"]),
-            reason,
+            CandidateBlock::Unavailable(vec![SnapshotUnavailableReason::NotEvaluated]),
+            *reason,
             row.clone(),
         ));
     }

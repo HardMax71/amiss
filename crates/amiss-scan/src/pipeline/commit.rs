@@ -1,5 +1,6 @@
 use amiss_git::{GitResources, Repository};
 use amiss_wire::model::Oid;
+use amiss_wire::report::model::ControlsUnavailableReason;
 use amiss_wire::report::{EngineProvenance, ErrorDetail};
 
 use crate::Error;
@@ -68,7 +69,7 @@ fn pair_trees(
             setup_shell,
             base_tree.1,
             CandidateBlock::Commit(candidate_tree.1),
-            reason,
+            *reason,
             row.clone(),
         ));
     }
@@ -92,7 +93,7 @@ fn commit_controls(
     base_tree: &ResolvedTree,
     candidate_tree: &ResolvedTree,
 ) -> PipelineResult<ExternalVerified> {
-    let failure = |reason: &'static str, row: ErrorDetail| {
+    let failure = |reason: ControlsUnavailableReason, row: ErrorDetail| {
         controls_failure(
             setup_shell,
             base_tree.1.clone(),
@@ -107,7 +108,10 @@ fn commit_controls(
     );
     let object_format = repo.object_format();
     let Some(tree_oid) = Oid::new(object_format, candidate_tree.0.as_str().to_owned()) else {
-        return Err(failure("not-parsed", detail(&Error::Internal, None)));
+        return Err(failure(
+            ControlsUnavailableReason::NotParsed,
+            detail(&Error::Internal, None),
+        ));
     };
     let tree_identity = amiss_wire::model::TreeIdentity {
         object_format,

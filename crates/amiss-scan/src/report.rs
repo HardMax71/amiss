@@ -15,6 +15,7 @@ use amiss_wire::digest::Digest;
 use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::{BranchRef, RepoPath};
 use amiss_wire::report::EngineProvenance;
+use amiss_wire::report::model::{ControlsUnavailableReason, SnapshotUnavailableReason};
 pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 pub use amiss_wire::requests::GitSnapshotIdentity as SnapshotIdentity;
 
@@ -27,7 +28,7 @@ pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 pub enum CandidateBlock {
     Commit(SnapshotIdentity),
     Index(IndexCandidate),
-    Unavailable(Vec<&'static str>),
+    Unavailable(Vec<SnapshotUnavailableReason>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,7 +62,7 @@ pub struct Setup {
     pub base: SnapshotIdentity,
     pub candidate: CandidateBlock,
     pub policy: crate::policy::Effects,
-    pub controls_unavailable: Option<&'static str>,
+    pub controls_unavailable: Option<ControlsUnavailableReason>,
     pub requests: RequestDigests,
 }
 

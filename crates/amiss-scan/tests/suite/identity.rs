@@ -25,6 +25,59 @@ use crate::support;
 
 use support::{ReportSchemaFragment, fixture_bytes};
 
+#[test]
+fn unavailable_report_blocks_match_the_shared_models() {
+    use amiss_wire::report::model::{
+        ControlsUnavailableReason, SnapshotUnavailableReason, UnavailableControls,
+        UnavailableSnapshot, UnavailableSnapshotKind, UnavailableStatus,
+    };
+
+    let snapshot_schema = ReportSchemaFragment::new("UnavailableSnapshot");
+    let controls_schema = ReportSchemaFragment::new("UnavailableControls");
+    for request in [None, Some(hb("amiss/test-request", b"unavailable"))] {
+        for snapshot_reason in SnapshotUnavailableReason::iter() {
+            for controls_reason in ControlsUnavailableReason::iter() {
+                let mut setup = setup(CandidateBlock::Unavailable(vec![snapshot_reason]));
+                setup.controls_unavailable = Some(controls_reason);
+                setup.requests.snapshot = request;
+                setup.requests.controls = request;
+                let built = amiss_scan::report::construct_incomplete(
+                    &setup,
+                    &[amiss_wire::report::ErrorDetail {
+                        code: amiss_wire::report::AnalysisErrorCode::InternalError,
+                        path: None,
+                        path_bytes: None,
+                        resource: None,
+                    }],
+                );
+                let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
+                let candidate = &envelope["payload"]["evaluation"]["candidate"];
+                let controls = &envelope["payload"]["controls"];
+                snapshot_schema.assert_value(candidate, snapshot_reason.as_ref());
+                controls_schema.assert_value(controls, controls_reason.as_ref());
+                assert_eq!(
+                    candidate,
+                    &serde_json::to_value(UnavailableSnapshot {
+                        kind: UnavailableSnapshotKind::Unavailable,
+                        reasons: vec![snapshot_reason],
+                        request_digest: request,
+                    })
+                    .unwrap(),
+                );
+                assert_eq!(
+                    controls,
+                    &serde_json::to_value(UnavailableControls {
+                        request_digest: request,
+                        reasons: vec![controls_reason],
+                        status: UnavailableStatus::Unavailable,
+                    })
+                    .unwrap(),
+                );
+            }
+        }
+    }
+}
+
 fn fixture_digest(name: &str, definition: &str, domain: &str) -> Digest {
     let bytes = fixture_bytes(name);
     let schema_value: serde_json::Value =

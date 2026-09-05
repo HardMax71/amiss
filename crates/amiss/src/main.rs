@@ -23,6 +23,7 @@ use std::process::ExitCode;
 use amiss_wire::ExitClass;
 use amiss_wire::digest::hb;
 use amiss_wire::model::Oid;
+use amiss_wire::report::model::{ControlsUnavailableReason, SnapshotUnavailableReason};
 use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail, FatalSerializer};
 use amiss_wire::requests::{
     CONTROLS_REQUEST_SCHEMA, ControlsRequest, EVALUATION_REQUEST_SCHEMA, EvaluationRequest,
@@ -251,7 +252,8 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
         constraint: inputs.constraint,
         semantic: amiss_scan::semantic::Input::Bound(inputs.semantic),
         requests,
-        external_defect: external_defect.map(|detail| ("invalid-external-control", detail)),
+        external_defect: external_defect
+            .map(|detail| (ControlsUnavailableReason::InvalidExternalControl, detail)),
         errors_retained: 64,
     };
     let built = evaluate_snapshots(
@@ -436,9 +438,9 @@ fn fatal(
     };
     let candidate = match &invocation.candidate {
         CandidateSelector::Commit(oid) => amiss_scan::report::CandidateBlock::Commit(identity(oid)),
-        CandidateSelector::Index => {
-            amiss_scan::report::CandidateBlock::Unavailable(vec!["not-evaluated"])
-        }
+        CandidateSelector::Index => amiss_scan::report::CandidateBlock::Unavailable(vec![
+            SnapshotUnavailableReason::NotEvaluated,
+        ]),
     };
     let setup = Setup {
         engine: engine.clone(),
