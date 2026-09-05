@@ -16,9 +16,9 @@ use crate::report::validate_envelope;
 use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalPlanEnvelope {
+pub struct ExternalPlanEnvelope<B = BTreeMap<String, serde_json::Value>, C = B> {
     pub schema: ExternalPlanEnvelopeSchema,
-    pub payload: ExternalPlan,
+    pub payload: ExternalPlan<B, C>,
     pub payload_digest: Digest,
 }
 
@@ -29,10 +29,10 @@ pub enum ExternalPlanEnvelopeSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalPlan {
+pub struct ExternalPlan<B = BTreeMap<String, serde_json::Value>, C = B> {
     pub schema: ExternalPlanPayloadSchema,
     pub engine: ExternalEngine,
-    pub report: ExternalPlanReport,
+    pub report: ExternalPlanReport<B, C>,
     pub introduced: Vec<ExternalDestination>,
     pub removed: Vec<ExternalDestination>,
     pub retained_count: u64,
@@ -52,10 +52,10 @@ pub struct ExternalEngine {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalPlanReport {
+pub struct ExternalPlanReport<B = BTreeMap<String, serde_json::Value>, C = B> {
     pub payload_digest: Digest,
-    pub base: serde_json::Value,
-    pub candidate: serde_json::Value,
+    pub base: B,
+    pub candidate: C,
     pub mode: String,
 }
 
@@ -114,7 +114,7 @@ pub fn plan(
     envelope: &Value,
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Value, PlanDefect> {
+) -> Result<Vec<u8>, PlanDefect> {
     let (payload, recorded, _verdict) = validate_envelope(envelope)?;
     if !payload.result.complete {
         return Err(PlanDefect::Incomplete);
@@ -122,10 +122,6 @@ pub fn plan(
     let Evaluation::Resolved(evaluation) = &payload.evaluation else {
         return Err(PlanDefect::NotAReport);
     };
-    let base_identity =
-        serde_json::to_value(&evaluation.base).map_err(|_defect| PlanDefect::MalformedExternal)?;
-    let candidate_identity = serde_json::to_value(&evaluation.candidate)
-        .map_err(|_defect| PlanDefect::MalformedExternal)?;
 
     let base = collect(&payload.observations, |comparison| comparison.base.as_ref())?;
     let candidate = collect(&payload.observations, |comparison| {
@@ -148,8 +144,8 @@ pub fn plan(
         },
         report: ExternalPlanReport {
             payload_digest: recorded,
-            base: base_identity,
-            candidate: candidate_identity,
+            base: &evaluation.base,
+            candidate: &evaluation.candidate,
             mode: evaluation.mode.as_ref().to_owned(),
         },
         introduced: rows(&candidate, &base, declared),
@@ -165,7 +161,11 @@ pub fn plan(
     };
     let canonical = serde_json_canonicalizer::to_vec(&document)
         .map_err(|_defect| PlanDefect::MalformedExternal)?;
-    json::parse(&canonical).map_err(|_defect| PlanDefect::MalformedExternal)
+    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
+        return Err(PlanDefect::MalformedExternal);
+    }
+    json::parse(&canonical).map_err(|_defect| PlanDefect::MalformedExternal)?;
+    Ok(canonical)
 }
 
 /// Parses one strict, digest-bound external plan while ignoring additive fields.
@@ -194,22 +194,18 @@ pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
     Ok(document)
 }
 
-fn plan_payload_digest(plan: &ExternalPlan) -> Result<Digest, Error> {
+fn plan_payload_digest<B: Serialize, C: Serialize>(
+    plan: &ExternalPlan<B, C>,
+) -> Result<Digest, Error> {
     validate_plan(plan)?;
     serde_json_canonicalizer::to_vec(plan)
         .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
-fn validate_plan(plan: &ExternalPlan) -> Result<(), Error> {
+fn validate_plan<B, C>(plan: &ExternalPlan<B, C>) -> Result<(), Error> {
     if plan.engine.engine_version.is_empty() {
         return fail("$.payload.engine.engine_version", ErrorKind::InvalidValue);
-    }
-    if !plan.report.base.is_object() {
-        return fail("$.payload.report.base", ErrorKind::WrongType);
-    }
-    if !plan.report.candidate.is_object() {
-        return fail("$.payload.report.candidate", ErrorKind::WrongType);
     }
     if plan.report.mode.is_empty() {
         return fail("$.payload.report.mode", ErrorKind::InvalidValue);

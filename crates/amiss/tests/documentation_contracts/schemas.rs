@@ -519,52 +519,41 @@ fn external_engine(example: &serde_json::Value) -> (&str, amiss_wire::digest::Di
     (version, digest)
 }
 
-/// The plan example is not authored, it is derived: feeding the report
-/// example through the real derivation, with the engine values the plan
-/// example itself carries, must reproduce it byte-equal at the value level.
-/// A drift in either example, the derivation, or the digest fails here.
 #[test]
-fn the_external_plan_example_derives_from_the_report_example() {
+fn external_examples_replay_from_the_report_and_evidence() {
     let root = repository_root();
     let report_bytes = fs::read(root.join("spec/examples/scanner-report.json"))
         .expect("the report example is readable");
     let report = amiss_wire::json::parse(&report_bytes).expect("the report example is strict JSON");
     let plan_bytes = fs::read(root.join("spec/examples/scanner-external-plan.json"))
         .expect("the plan example is readable");
-    let plan = amiss_wire::json::parse(&plan_bytes).expect("the plan example is strict JSON");
+    let plan_example =
+        amiss_wire::json::parse(&plan_bytes).expect("the plan example is strict JSON");
     let example: serde_json::Value =
         serde_json::from_slice(&plan_bytes).expect("the plan example is JSON");
     let (version, digest) = external_engine(&example);
-    let derived = amiss_wire::external::plan(&report, version, digest)
+    let plan = amiss_wire::external::plan(&report, version, digest)
         .expect("the report example yields a plan");
     assert_eq!(
-        derived, plan,
+        plan,
+        amiss_wire::json::canonical(&plan_example),
         "the plan example drifted from its own derivation"
     );
-}
 
-/// The assessment example is not authored either: judging the plan example
-/// against the evidence example through the real code path, with the engine
-/// values the assessment example itself carries, must reproduce it exactly.
-#[test]
-fn the_assessment_example_derives_from_the_plan_and_evidence_examples() {
-    let root = repository_root();
-    let plan_bytes = fs::read(root.join("spec/examples/scanner-external-plan.json"))
-        .expect("the plan example is readable");
-    let plan = amiss_wire::json::parse(&plan_bytes).expect("the plan example is strict JSON");
     let evidence_bytes = fs::read(root.join("spec/examples/scanner-external-evidence.json"))
         .expect("the evidence example is readable");
     let assessment_bytes = fs::read(root.join("spec/examples/scanner-external-assessment.json"))
         .expect("the assessment example is readable");
-    let assessment =
+    let assessment_example =
         amiss_wire::json::parse(&assessment_bytes).expect("the assessment example is strict JSON");
     let example: serde_json::Value =
         serde_json::from_slice(&assessment_bytes).expect("the assessment example is JSON");
     let (version, digest) = external_engine(&example);
-    let derived = amiss_wire::external::assess(&plan, &evidence_bytes, version, digest)
-        .expect("the plan and evidence examples yield an assessment");
+    let assessment = amiss_wire::external::assess(&plan, &evidence_bytes, version, digest)
+        .expect("the derived plan and evidence example yield an assessment");
     assert_eq!(
-        derived, assessment,
+        assessment,
+        amiss_wire::json::canonical(&assessment_example),
         "the assessment example drifted from its own derivation"
     );
 }

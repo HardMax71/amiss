@@ -62,13 +62,4 @@ impl<'value> View<'value> {
             0
         }
     }
-
-    pub(crate) fn rows(self, name: &str) -> impl ExactSizeIterator<Item = Self> + Clone + 'value {
-        let rows: &'value [Value] = if let Some(Value::Array(rows)) = self.field(name) {
-            rows
-        } else {
-            &[]
-        };
-        rows.iter().map(Self::of)
-    }
 }

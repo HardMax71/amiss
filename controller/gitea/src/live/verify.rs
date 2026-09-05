@@ -4,7 +4,6 @@ use amiss_controller::{
     ForgeProducer, ForgeTail, ProviderError, forge_evidence, forge_repository_evidence, ref_span,
     spelled_segments,
 };
-use amiss_wire::json::Value;
 use amiss_wire::model::ForgeDialect;
 
 use super::rest::{GiteaVerification, Presence, RefFamily};
@@ -18,7 +17,7 @@ pub(super) const PRODUCER_NAME: &str = "amiss-controller-gitea";
 /// learned, since a skipped destination stays unproven downstream.
 pub(super) fn verify_external<R: GiteaVerification>(
     rest: &R,
-    plan: &Value,
+    plan: &[u8],
     host: &str,
     producer_version: &str,
     checked_at: &str,

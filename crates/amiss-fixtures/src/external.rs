@@ -68,7 +68,7 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
 
 /// Derives the external plan from the shared digest-true report fixture.
 #[must_use]
-pub fn external_plan(destinations: &[&str]) -> Option<Value> {
+pub fn external_plan(destinations: &[&str]) -> Option<Vec<u8>> {
     let report = external_report(destinations)?;
     let parsed = amiss_wire::json::parse(&report).ok()?;
     let engine = parsed.member("payload")?.member("engine")?;

@@ -193,7 +193,9 @@ fn expand_occurrence(
 }
 
 fn planned(observations: Vec<Value>) -> Value {
-    plan(&report(observations), "0.0.0", sample_digest()).expect("the report yields a plan")
+    let bytes =
+        plan(&report(observations), "0.0.0", sample_digest()).expect("the report yields a plan");
+    amiss_wire::json::parse(&bytes).expect("the plan is strict JSON")
 }
 
 fn sample_digest() -> Digest {
@@ -383,6 +385,7 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
 fn the_envelope_binds_the_source_digest_and_its_own() {
     let source = report(Vec::new());
     let derived = plan(&source, "0.0.0", sample_digest()).expect("an empty report yields a plan");
+    let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
     assert_eq!(field(&derived, "schema"), &string(PLAN_ENVELOPE_SCHEMA));
     let payload = field(&derived, "payload");
     let recomputed = hj(PLAN_PAYLOAD_SCHEMA, payload).to_string();
@@ -408,6 +411,37 @@ fn the_plan_model_reads_the_checked_writer() {
         serde_json_canonicalizer::to_vec(&parsed).expect("the model is serializable"),
         bytes,
     );
+}
+
+#[test]
+fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
+    let written = plan(&report(Vec::new()), "0.0.0", sample_digest()).expect("valid report");
+    let document: serde_json::Value = serde_json::from_slice(&written).expect("valid plan");
+    for side in ["base", "candidate"] {
+        let mut extended = document.clone();
+        extended["payload"]["report"][side] = serde_json::json!({
+            "future_kind": {"😀": "quoted \" \\ \n", "\u{e000}": [null, true, 42]}
+        });
+        let bytes = refresh_payload_digest(&mut extended, PLAN_PAYLOAD_SCHEMA);
+        let parsed = parse_plan(&bytes).expect("snapshot objects are an open contract");
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&parsed).expect("canonical plan"),
+            bytes
+        );
+        for value in [
+            serde_json::Value::Null,
+            serde_json::json!(true),
+            serde_json::json!(42),
+            serde_json::json!("snapshot"),
+            serde_json::json!([]),
+        ] {
+            extended["payload"]["report"][side] = value;
+            let bytes = refresh_payload_digest(&mut extended, PLAN_PAYLOAD_SCHEMA);
+            let error = parse_plan(&bytes).expect_err("a snapshot must be an object");
+            assert_eq!(error.kind, ErrorKind::WrongType);
+            assert_eq!(error.path, format!("$.payload.report.{side}"));
+        }
+    }
 }
 
 #[test]
@@ -652,6 +686,7 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
                 .expect("the declared-host report is strict JSON");
         let derived = plan(&envelope, "0.0.0", sample_digest())
             .expect("the declared-host report yields a plan");
+        let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
         let repository = repository_of(&derived, destination).expect("the declared host is shaped");
         assert_eq!(
             String::from_utf8(amiss_wire::json::canonical(&repository)).expect("canonical utf-8"),
@@ -768,7 +803,14 @@ fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
     document["future_field"] = serde_json::json!({"😀": "\t", "\u{e000}": null});
     let canonical = serde_json_canonicalizer::to_vec(&document).expect("canonical evidence");
     let pretty = serde_json::to_vec_pretty(&document).expect("formatted evidence");
-    let assessment = assess(&plan, &pretty, "0.0.0", sample_digest()).expect("valid evidence");
+    let assessment = assess(
+        &amiss_wire::json::canonical(&plan),
+        &pretty,
+        "0.0.0",
+        sample_digest(),
+    )
+    .expect("valid evidence");
+    let assessment = amiss_wire::json::parse(&assessment).expect("the assessment is strict JSON");
     let subject = field(field(&assessment, "payload"), "subject");
     assert_eq!(
         text(field(subject, "evidence_digest")),
@@ -785,7 +827,12 @@ fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
     let mut trailing = pretty;
     trailing.extend_from_slice(b" null");
     assert!(matches!(
-        assess(&plan, &trailing, "0.0.0", sample_digest()),
+        assess(
+            &amiss_wire::json::canonical(&plan),
+            &trailing,
+            "0.0.0",
+            sample_digest()
+        ),
         Err(AssessDefect::Evidence(_)),
     ));
 }
@@ -892,8 +939,9 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
     ));
 }
 
-fn verdicts_of(assessment: &Value) -> Vec<(String, String, String)> {
-    array(field(field(assessment, "payload"), "verdicts"))
+fn verdicts_of(assessment: &[u8]) -> Vec<(String, String, String)> {
+    let assessment = amiss_wire::json::parse(assessment).expect("the assessment is strict JSON");
+    array(field(field(&assessment, "payload"), "verdicts"))
         .iter()
         .map(|row| {
             let reason = if let Value::Object(members) = row {
@@ -951,8 +999,13 @@ fn the_judgment_policy_is_conservative() {
         &plan,
         destinations.iter().map(|(_, row)| row.clone()).collect(),
     );
-    let assessment =
-        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
+    let assessment = assess(
+        &amiss_wire::json::canonical(&plan),
+        &evidence,
+        "0.0.0",
+        sample_digest(),
+    )
+    .expect("the pair yields an assessment");
     assert_eq!(
         verdicts_of(&assessment),
         vec![
@@ -1022,8 +1075,14 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
             ]),
         ],
     );
-    let assessment =
-        assess(&plan, &observed, "0.0.0", sample_digest()).expect("the redirects are evidence");
+    let assessment = assess(
+        &amiss_wire::json::canonical(&plan),
+        &observed,
+        "0.0.0",
+        sample_digest(),
+    )
+    .expect("the redirects are evidence");
+    let assessment = amiss_wire::json::parse(&assessment).expect("the assessment is strict JSON");
     let verdicts = array(field(field(&assessment, "payload"), "verdicts"));
     let verdict = |destination: &str| {
         verdicts
@@ -1055,7 +1114,7 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
     ] {
         assert!(matches!(
             assess(
-                &plan,
+                &amiss_wire::json::canonical(&plan),
                 &evidence(&plan, vec![malformed]),
                 "0.0.0",
                 sample_digest()
@@ -1081,8 +1140,13 @@ fn forge_facts_refute_only_after_visibility_and_resolution() {
             forge_row(&shaped("three"), "readable", None),
         ],
     );
-    let assessment =
-        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
+    let assessment = assess(
+        &amiss_wire::json::canonical(&plan),
+        &evidence,
+        "0.0.0",
+        sample_digest(),
+    )
+    .expect("the pair yields an assessment");
     assert_eq!(
         verdicts_of(&assessment),
         vec![
@@ -1105,7 +1169,12 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
         vec![forge_row("https://a.example/x", "readable", None)],
     ] {
         assert!(matches!(
-            assess(&plan, &evidence(&plan, rows), "0.0.0", sample_digest(),),
+            assess(
+                &amiss_wire::json::canonical(&plan),
+                &evidence(&plan, rows),
+                "0.0.0",
+                sample_digest(),
+            ),
             Err(AssessDefect::UnboundEvidence)
         ));
     }
@@ -1123,7 +1192,12 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
     members.sort_by(|left, right| left.0.cmp(&right.0));
     let foreign = amiss_wire::json::canonical(&Value::object(members));
     assert!(matches!(
-        assess(&plan, &foreign, "0.0.0", sample_digest()),
+        assess(
+            &amiss_wire::json::canonical(&plan),
+            &foreign,
+            "0.0.0",
+            sample_digest()
+        ),
         Err(AssessDefect::UnboundEvidence)
     ));
 }
@@ -1149,7 +1223,12 @@ fn malformed_evidence_rows_are_refused() {
     let above = probe("https://a.example/x", "get", 1000);
     for bad in [both, neither, below, above] {
         assert!(matches!(
-            assess(&plan, &evidence(&plan, vec![bad]), "0.0.0", sample_digest()),
+            assess(
+                &amiss_wire::json::canonical(&plan),
+                &evidence(&plan, vec![bad]),
+                "0.0.0",
+                sample_digest()
+            ),
             Err(AssessDefect::Evidence(_))
         ));
     }
@@ -1174,7 +1253,7 @@ fn the_judge_is_no_laxer_than_its_contracts() {
     }
     assert!(matches!(
         assess(
-            &plan,
+            &amiss_wire::json::canonical(&plan),
             &amiss_wire::json::canonical(&Value::object(unnamed)),
             "0.0.0",
             sample_digest(),
@@ -1207,7 +1286,12 @@ fn the_judge_is_no_laxer_than_its_contracts() {
     ]);
     let empty = evidence(&handcrafted, Vec::new());
     assert!(matches!(
-        assess(&handcrafted, &empty, "0.0.0", sample_digest(),),
+        assess(
+            &amiss_wire::json::canonical(&handcrafted),
+            &empty,
+            "0.0.0",
+            sample_digest(),
+        ),
         Err(AssessDefect::Plan(_))
     ));
 }
@@ -1220,7 +1304,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
     let plan = planned(introduced(bare));
     assert!(matches!(
         assess(
-            &plan,
+            &amiss_wire::json::canonical(&plan),
             &evidence(&plan, vec![forge_row(bare, "readable", Some("resolved"))]),
             "0.0.0",
             sample_digest()
@@ -1228,7 +1312,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
         Err(AssessDefect::UnboundEvidence)
     ));
     let visibility_only = assess(
-        &plan,
+        &amiss_wire::json::canonical(&plan),
         &evidence(&plan, vec![forge_row(bare, "readable", None)]),
         "0.0.0",
         sample_digest(),
@@ -1245,8 +1329,14 @@ fn the_assessment_binds_the_whole_chain() {
     let plan = planned(introduced("https://a.example/x"));
     let rows = vec![probe("https://a.example/x", "get", 200)];
     let evidence = evidence(&plan, rows);
-    let assessment =
-        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
+    let assessment = assess(
+        &amiss_wire::json::canonical(&plan),
+        &evidence,
+        "0.0.0",
+        sample_digest(),
+    )
+    .expect("the pair yields an assessment");
+    let assessment = amiss_wire::json::parse(&assessment).expect("the assessment is strict JSON");
     let subject = field(field(&assessment, "payload"), "subject");
     assert_eq!(
         field(subject, "plan_payload_digest"),

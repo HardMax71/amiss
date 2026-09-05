@@ -53,10 +53,9 @@ fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Ve
     .unwrap();
     evidence(&ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
-        plan_payload_digest: amiss_wire::digest::Digest::from_wire(
-            plan.text("payload_digest").unwrap(),
-        )
-        .unwrap(),
+        plan_payload_digest: amiss_wire::external::parse_plan(&plan)
+            .unwrap()
+            .payload_digest,
         producer: ExternalEvidenceProducer {
             name: "scripted".to_owned(),
             version: "0".to_owned(),

@@ -5,7 +5,6 @@ use amiss_controller::{
     ForgeRefFamily as RefFamily, ForgeTail, ForgeVisibility as Visibility, ProviderError,
     forge_evidence, forge_repository_evidence, ref_span, spelled_segments,
 };
-use amiss_wire::json::Value;
 use amiss_wire::model::ForgeDialect;
 use serde::Deserialize;
 
@@ -68,7 +67,7 @@ pub(super) trait GitLabVerification: Send + Sync {
 /// destination stays unproven downstream.
 pub(super) fn verify_external<R: GitLabVerification>(
     rest: &R,
-    plan: &Value,
+    plan: &[u8],
     host: &str,
     producer_version: &str,
     checked_at: &str,
