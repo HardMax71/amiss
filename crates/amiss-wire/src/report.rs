@@ -71,6 +71,7 @@ mod failure;
 mod fatal;
 mod finding;
 pub mod model;
+mod output;
 mod sandbox;
 
 use crate::digest::hj;
@@ -83,6 +84,7 @@ pub use failure::{
 };
 pub use fatal::FatalSerializer;
 pub use finding::{Disposition, FindingKind, FindingMetadata, FindingScope, FixKind, IntentKind};
+pub use output::emit_report;
 pub use sandbox::sandbox_descriptor;
 
 pub const ENGINE_CONTRACT: &str = "amiss/scanner";
