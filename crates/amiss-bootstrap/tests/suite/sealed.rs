@@ -23,6 +23,8 @@ use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA};
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
+mod controls;
+
 const CANDIDATE_REF: &str = "refs/heads/topic";
 const TARGET_REF: &str = "refs/heads/main";
 const INSTANT: &str = "2026-07-12T10:00:00Z";
@@ -270,7 +272,8 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
     let mut wire = canonical(&envelope);
     wire.push(b'\n');
 
-    let mut sealed = sealed_expectations(repository, identity, constraint_digest, statement_digest);
+    let mut sealed =
+        sealed_expectations(repository, &identity, &constraint_digest, &statement_digest);
     if let Some(patch) = expect {
         patch(&mut sealed);
     }
@@ -321,30 +324,30 @@ fn seal_controls(
 
 fn sealed_expectations(
     repository: RepositoryIdentity,
-    identity: String,
-    constraint_digest: String,
-    statement_digest: String,
+    identity: &str,
+    constraint_digest: &str,
+    statement_digest: &str,
 ) -> SealedExpectations {
     SealedExpectations {
-        profile: "observe".to_owned(),
+        profile: amiss_wire::controls::Profile::Observe,
         candidate_ref: CANDIDATE_REF.to_owned(),
         target_ref: TARGET_REF.to_owned(),
         repository,
         provider: PROVIDER.to_owned(),
         provider_run_id: RUN_ID.to_owned(),
         provider_run_attempt: ATTEMPT,
-        candidate_identity_digest: identity,
+        candidate_identity_digest: identity.parse().unwrap(),
         organization_floor: Some(SealedControlExpectation {
-            digest: FLOOR_DIGEST.to_owned(),
-            trust_source: TRUST_SOURCE.to_owned(),
+            digest: FLOOR_DIGEST.parse().unwrap(),
+            trust_source: amiss_wire::requests::RequestTrust::ExternalRequiredCheck,
         }),
         debt_snapshot: None,
         waiver_bundle: None,
         execution_constraint: SealedControlExpectation {
-            digest: constraint_digest,
-            trust_source: TRUST_SOURCE.to_owned(),
+            digest: constraint_digest.parse().unwrap(),
+            trust_source: amiss_wire::requests::RequestTrust::ExternalRequiredCheck,
         },
-        trusted_time_digest: statement_digest,
+        trusted_time_digest: statement_digest.parse().unwrap(),
         semantic_evidence: Vec::new(),
     }
 }
@@ -487,7 +490,7 @@ fn the_time_echo_binds_every_statement_fact() {
         set(trusted, "statement_digest", string(FOREIGN_DIGEST));
     });
     agree_on_wrong.expect = Some(Box::new(|sealed| {
-        sealed.trusted_time_digest = FOREIGN_DIGEST.to_owned();
+        sealed.trusted_time_digest = FOREIGN_DIGEST.parse().unwrap();
     }));
     assert_eq!(
         refused(agree_on_wrong),

@@ -92,8 +92,8 @@ pub enum VerifiedControlStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VerifiedExecutionConstraint {
-    pub descriptor: ExecutionConstraintDescriptor,
+pub struct VerifiedExecutionConstraint<D = ExecutionConstraintDescriptor> {
+    pub descriptor: D,
     pub descriptor_digest: Digest,
     pub status: VerifiedControlStatus,
     pub trust_source: RequestTrust,
@@ -129,8 +129,8 @@ pub enum TrustedTimeTrustSource {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct VerifiedTrustedTime {
-    pub statement: TrustedTimeStatement,
+pub struct VerifiedTrustedTime<S = TrustedTimeStatement> {
+    pub statement: S,
     pub statement_digest: Digest,
     pub status: VerifiedControlStatus,
     pub trust_source: TrustedTimeTrustSource,
@@ -152,9 +152,9 @@ pub struct SemanticEvidenceProducer {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SemanticEvidenceProvenance {
+pub struct SemanticEvidenceProvenance<P = SemanticEvidenceProducer> {
     pub payload_digest: Digest,
-    pub producer: SemanticEvidenceProducer,
+    pub producer: P,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -2,14 +2,13 @@ use std::fs::File;
 use std::io::Read as _;
 use std::path::Path;
 
-use amiss_bootstrap::supervise::{
-    SealedControlExpectation, SealedExpectations, SealedSemanticExpectation,
-};
+use amiss_bootstrap::supervise::{SealedControlExpectation, SealedExpectations};
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository};
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, TrustedTimeStatement, canonical_execution_constraint,
     canonical_trusted_time,
 };
+use amiss_wire::report::model::{SemanticEvidenceProducer, SemanticEvidenceProvenance};
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestMode, RequestStreams,
     SnapshotMaterialization, SnapshotRequest,
@@ -102,7 +101,7 @@ pub(super) fn capture_requests(
         return Err(tampered("trusted-time-mismatch"));
     }
     let expected = SealedExpectations {
-        profile: evaluation.profile.as_ref().to_owned(),
+        profile: evaluation.profile,
         candidate_ref: evaluation
             .candidate_ref
             .as_ref()
@@ -115,15 +114,15 @@ pub(super) fn capture_requests(
         provider: supplied_time.provider.clone(),
         provider_run_id: supplied_time.provider_run_id.clone(),
         provider_run_attempt: supplied_time.provider_run_attempt,
-        candidate_identity_digest: statement.candidate_identity_digest.to_string(),
+        candidate_identity_digest: statement.candidate_identity_digest,
         organization_floor: control_expectation(controls.organization_floor.as_ref()),
         debt_snapshot: control_expectation(controls.debt_snapshot.as_ref()),
         waiver_bundle: control_expectation(controls.waiver_bundle.as_ref()),
         execution_constraint: SealedControlExpectation {
-            digest: constraint_digest.to_string(),
-            trust_source: supplied_constraint.trust_source.as_ref().to_owned(),
+            digest: constraint_digest,
+            trust_source: supplied_constraint.trust_source,
         },
-        trusted_time_digest: statement_digest.to_string(),
+        trusted_time_digest: statement_digest,
         semantic_evidence: semantic_expectations(&controls.semantic_evidence)?,
     };
     let mut evaluation = evaluation;
@@ -137,7 +136,7 @@ pub(super) fn capture_requests(
 
 fn semantic_expectations(
     values: &[amiss_wire::requests::SuppliedSemanticEvidence],
-) -> Execution<Vec<SealedSemanticExpectation>> {
+) -> Execution<Vec<SemanticEvidenceProvenance>> {
     values
         .iter()
         .map(|supplied| {
@@ -148,12 +147,14 @@ fn semantic_expectations(
             if envelope.payload.producer.context_digest != supplied.expected_context_digest {
                 return Err(tampered("semantic-evidence-invalid"));
             }
-            Ok(SealedSemanticExpectation {
-                payload_digest: envelope.payload_digest.to_string(),
-                producer_kind: envelope.payload.producer.kind.as_str().to_owned(),
-                producer_identity: envelope.payload.producer.identity.as_str().to_owned(),
-                producer_version: envelope.payload.producer.version,
-                input_digest: envelope.payload.producer.input_digest.to_string(),
+            Ok(SemanticEvidenceProvenance {
+                payload_digest: envelope.payload_digest,
+                producer: SemanticEvidenceProducer {
+                    identity: envelope.payload.producer.identity,
+                    input_digest: envelope.payload.producer.input_digest,
+                    kind: envelope.payload.producer.kind,
+                    version: envelope.payload.producer.version,
+                },
             })
         })
         .collect()
@@ -199,8 +200,8 @@ fn control_expectation(
     supplied: Option<&amiss_wire::requests::SuppliedControl>,
 ) -> Option<SealedControlExpectation> {
     supplied.map(|control| SealedControlExpectation {
-        digest: control.expected_digest.to_string(),
-        trust_source: control.trust_source.as_ref().to_owned(),
+        digest: control.expected_digest,
+        trust_source: control.trust_source,
     })
 }
 
