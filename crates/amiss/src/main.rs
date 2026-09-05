@@ -88,7 +88,12 @@ fn main() -> ExitCode {
             codes,
         } => {
             match machine_refusal(&codes) {
-                Ok(envelope) => project(&envelope, format, false, false, &mut reserve),
+                Ok(envelope) => {
+                    return projection_exit(
+                        project(&envelope, format, false, false, &mut reserve),
+                        failure,
+                    );
+                }
                 Err(code) => {
                     if format == OutputFormat::CodeQuality {
                         emit(&mut reserve, &amiss_wire::json::Value::array(Vec::new()));
@@ -128,17 +133,34 @@ fn project(
     explain_scope: bool,
     full_feedback: bool,
     reserve: &mut FatalSerializer,
-) {
+) -> Result<(), report::ReportDefect> {
+    if format == OutputFormat::Json {
+        emit(reserve, envelope);
+        return Ok(());
+    }
+    let (payload, _digest, _verdict) = report::validate_envelope(envelope)?;
     match format {
-        OutputFormat::Json => emit(reserve, envelope),
+        OutputFormat::Json => {}
         OutputFormat::Sarif => {
-            diagnose_emission(output::write_serialized(&sarif::log(envelope)));
+            diagnose_emission(output::write_serialized(&sarif::log(&payload)));
         }
         OutputFormat::CodeQuality => {
-            diagnose_emission(output::write_serialized(&codequality::issues(envelope)));
+            diagnose_emission(output::write_serialized(&codequality::issues(&payload)));
         }
         OutputFormat::Junit => emit_junit(envelope),
         OutputFormat::Human => human::report(envelope, explain_scope, full_feedback),
+    }
+    Ok(())
+}
+
+#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
+fn projection_exit(result: Result<(), report::ReportDefect>, verdict: ExitCode) -> ExitCode {
+    match result {
+        Ok(()) => verdict,
+        Err(defect) => {
+            eprintln!("amiss: {defect}");
+            ExitCode::from(ExitClass::Failure.code())
+        }
     }
 }
 
@@ -357,14 +379,16 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
     if let (Verb::Adopt, Some(adoption)) = (invocation.verb, &invocation.adoption) {
         return adopt::run(invocation, adoption, &built);
     }
-    project(
-        &built.envelope,
-        invocation.format,
-        invocation.explain_scope,
-        false,
-        reserve,
-    );
-    exit_class(built.exit_code)
+    projection_exit(
+        project(
+            &built.envelope,
+            invocation.format,
+            invocation.explain_scope,
+            false,
+            reserve,
+        ),
+        exit_class(built.exit_code),
+    )
 }
 
 fn semantic_input(
@@ -432,14 +456,16 @@ fn fatal(
         requests: amiss_scan::report::RequestDigests::default(),
     };
     let built = construct_incomplete(&setup, details);
-    project(
-        &built.envelope,
-        invocation.format,
-        invocation.explain_scope,
-        false,
-        reserve,
-    );
-    ExitCode::from(ExitClass::Failure.code())
+    projection_exit(
+        project(
+            &built.envelope,
+            invocation.format,
+            invocation.explain_scope,
+            false,
+            reserve,
+        ),
+        ExitCode::from(ExitClass::Failure.code()),
+    )
 }
 
 fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {

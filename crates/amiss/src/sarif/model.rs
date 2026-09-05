@@ -1,6 +1,7 @@
 use serde::Serialize;
 
-use amiss_wire::report::FindingKind;
+use amiss_wire::digest::Digest;
+use amiss_wire::report::{AnalysisErrorCode, FindingKind};
 
 #[derive(Serialize)]
 pub(crate) struct Log<'report> {
@@ -21,20 +22,20 @@ pub(super) struct Run<'report> {
 #[serde(rename_all = "camelCase")]
 pub(super) struct Invocation<'report> {
     pub(super) execution_successful: bool,
-    pub(super) exit_code: i64,
+    pub(super) exit_code: u8,
     pub(super) tool_execution_notifications: Vec<Notification<'report>>,
 }
 
 #[derive(Serialize)]
 pub(super) struct Notification<'report> {
-    pub(super) descriptor: Descriptor<'report>,
+    pub(super) descriptor: Descriptor,
     pub(super) level: Level,
     pub(super) message: Message<'report>,
 }
 
 #[derive(Serialize)]
-pub(super) struct Descriptor<'report> {
-    pub(super) id: &'report str,
+pub(super) struct Descriptor {
+    pub(super) id: AnalysisErrorCode,
 }
 
 #[derive(Serialize)]
@@ -72,16 +73,16 @@ pub(super) struct FindingResult<'report> {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) locations: Option<[Location; 1]>,
     pub(super) message: Message<'report>,
-    pub(super) partial_fingerprints: Fingerprints<'report>,
-    pub(super) rule_id: &'report str,
+    pub(super) partial_fingerprints: Fingerprints,
+    pub(super) rule_id: FindingKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(super) rule_index: Option<usize>,
 }
 
 #[derive(Serialize)]
-pub(super) struct Fingerprints<'report> {
+pub(super) struct Fingerprints {
     #[serde(rename = "amissFindingKey/v1")]
-    pub(super) finding_key: &'report str,
+    pub(super) finding_key: Digest,
 }
 
 #[derive(Serialize)]
@@ -108,8 +109,8 @@ pub(super) struct Replacement<'report> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct ByteRegion {
-    pub(super) byte_length: i64,
-    pub(super) byte_offset: i64,
+    pub(super) byte_length: u64,
+    pub(super) byte_offset: u64,
 }
 
 #[derive(Serialize)]
@@ -134,10 +135,10 @@ pub(super) struct ArtifactLocation {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct Region {
-    pub(super) end_column: i64,
-    pub(super) end_line: i64,
-    pub(super) start_column: i64,
-    pub(super) start_line: i64,
+    pub(super) end_column: u64,
+    pub(super) end_line: u64,
+    pub(super) start_column: u64,
+    pub(super) start_line: u64,
 }
 
 #[derive(Serialize)]

@@ -19,6 +19,10 @@ use amiss_wire::controls::ConstraintPlatform;
 use amiss_wire::model::{ObjectFormat, Oid};
 use sha1_checked::Digest as _;
 
+/// The published report used to seed typed consumer fixtures.
+pub const SCANNER_REPORT: &[u8] =
+    include_bytes!("../../../spec/examples/scanner-report.canonical.json");
+
 /// Repository-local variables Git exports to hooks. They must not select the
 /// repository, index, object store, or configuration for a fixture command.
 /// Keep this list in sync with `git rev-parse --local-env-vars`; the integration
