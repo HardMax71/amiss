@@ -330,7 +330,7 @@ pub enum Resolution<P = RepoPath> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Occurrence<P = RepoPath> {
+pub struct Occurrence<P = RepoPath, R = Resolution<P>> {
     pub adapter_id: Adapter,
     pub block_kind: BlockKind,
     pub document: P,
@@ -343,16 +343,16 @@ pub struct Occurrence<P = RepoPath> {
     pub intent: TargetIntent<P>,
     pub observation_id: Digest,
     pub observation_id_input: ObservationIdInput<P>,
-    pub resolution: Resolution<P>,
+    pub resolution: R,
     pub source_construct: SourceConstruct,
     pub source_projection_digest: Digest,
     pub source_span: SourceSpan,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct CorrelationAlternatives<P = RepoPath> {
-    pub base: Vec<Occurrence<P>>,
-    pub candidate: Vec<Occurrence<P>>,
+pub struct CorrelationAlternatives<O = Occurrence> {
+    pub base: Vec<O>,
+    pub candidate: Vec<O>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
@@ -416,12 +416,12 @@ pub enum Impact {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ObservationComparison<P = RepoPath> {
-    pub alternatives: CorrelationAlternatives<P>,
+pub struct ObservationComparison<O = Occurrence> {
+    pub alternatives: CorrelationAlternatives<O>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub base: Option<Occurrence<P>>,
+    pub base: Option<O>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub candidate: Option<Occurrence<P>>,
+    pub candidate: Option<O>,
     pub correlation: Correlation,
     pub correlation_reason: CorrelationReason,
     pub impact: Impact,

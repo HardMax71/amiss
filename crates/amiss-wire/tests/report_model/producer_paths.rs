@@ -5,6 +5,13 @@ use amiss_wire::model::RepoPath;
 use amiss_wire::report::model as report;
 use amiss_wire::report::{FindingKind, PAYLOAD_SCHEMA};
 
+type ProducerPayload<'a, R> = report::ReportPayload<
+    &'a RepoPath,
+    report::DocumentResult<&'a RepoPath>,
+    report::ObservationComparison<report::Occurrence<&'a RepoPath>>,
+    report::Finding<&'a RepoPath, report::FindingFactEvidence<&'a RepoPath, R>>,
+>;
+
 #[test]
 fn report_producers_can_borrow_validated_text_and_byte_paths() {
     for raw in [
@@ -66,13 +73,26 @@ fn report_producers_can_borrow_validated_text_and_byte_paths() {
                     .is_none()
             );
         }
+        for relocation in [None, Some(&path)] {
+            let resolution = amiss_wire::resolution::Resolution::Missing(
+                amiss_wire::resolution::Missing::PathNotFound {
+                    path: &path,
+                    near: Some(&path),
+                    same_object_at: relocation,
+                },
+            );
+            let payload = producer_payload(&path, resolution).unwrap();
+            let wire = serde_json_canonicalizer::to_vec(&payload).unwrap();
+            let decoded: report::ReportPayload = serde_json::from_slice(&wire).unwrap();
+            assert_eq!(serde_json_canonicalizer::to_vec(&decoded).unwrap(), wire);
+        }
     }
 }
 
-fn producer_payload<'a>(
-    path: &'a RepoPath,
-    resolution: report::Resolution<&'a RepoPath>,
-) -> Result<report::ReportPayload<&'a RepoPath>, serde_json::Error> {
+fn producer_payload<R>(
+    path: &RepoPath,
+    resolution: R,
+) -> Result<ProducerPayload<'_, R>, serde_json::Error> {
     let template: report::ReportEnvelope = serde_json::from_slice(super::REPORT)?;
     let mut template = template.payload;
     let finding = template.findings.remove(0);
@@ -159,7 +179,7 @@ fn producer_payload<'a>(
             policy_trace: finding.policy_trace,
             waiver: None,
         }],
-        observations: Vec::<report::ObservationComparison<&RepoPath>>::new(),
+        observations: Vec::<report::ObservationComparison<report::Occurrence<&RepoPath>>>::new(),
         result: template.result,
         schema: template.schema,
         summary: template.summary,

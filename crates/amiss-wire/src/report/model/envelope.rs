@@ -4,7 +4,7 @@ use crate::digest::Digest;
 
 use super::{
     AnalysisError, Controls, DocumentResult, Engine, Evaluation, Feedback, Finding,
-    ObservationComparison, RepoPath, Summary,
+    ObservationComparison, Occurrence, RepoPath, Summary,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -26,23 +26,28 @@ pub enum ReportCompatibility {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReportEnvelope<P = RepoPath> {
-    pub payload: ReportPayload<P>,
+pub struct ReportEnvelope<P = ReportPayload> {
+    pub payload: P,
     pub payload_digest: Digest,
     pub schema: ReportEnvelopeSchema,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReportPayload<P = RepoPath> {
+pub struct ReportPayload<
+    P = RepoPath,
+    D = DocumentResult<P>,
+    O = ObservationComparison<Occurrence<P>>,
+    F = Finding<P>,
+> {
     pub compatibility: ReportCompatibility,
     pub controls: Controls,
-    pub documents: Vec<DocumentResult<P>>,
+    pub documents: Vec<D>,
     pub engine: Engine,
     pub errors: Vec<AnalysisError<P>>,
     pub evaluation: Evaluation,
     pub feedback: Feedback<P>,
-    pub findings: Vec<Finding<P>>,
-    pub observations: Vec<ObservationComparison<P>>,
+    pub findings: Vec<F>,
+    pub observations: Vec<O>,
     pub result: ReportResult,
     pub schema: ReportPayloadSchema,
     pub summary: Summary,
