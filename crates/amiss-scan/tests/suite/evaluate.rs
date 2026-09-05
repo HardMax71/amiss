@@ -21,6 +21,7 @@ use amiss_wire::resolution::{
     UnsupportedTarget, VersionScope,
 };
 
+mod fact_contract;
 mod key_contract;
 
 fn engine() -> EngineProvenance {
