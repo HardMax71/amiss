@@ -138,6 +138,68 @@ fn construction_sorts_observations_and_binds_the_payload() {
 }
 
 #[test]
+fn typed_templates_borrow_nonclone_observations_through_sorting_and_binding() {
+    #[derive(serde::Serialize)]
+    struct Fact {
+        kind: ArtifactId,
+        value: &'static str,
+    }
+
+    let input = SemanticEvidenceTemplate {
+        schema: TemplateSchema::Current,
+        producer: template_producer(),
+        complete: true,
+        observations: vec![
+            Fact {
+                kind: id("future-fact"),
+                value: "z",
+            },
+            Fact {
+                kind: id("future-fact"),
+                value: "a",
+            },
+        ]
+        .into(),
+    };
+    let first = bind_template(&input, digest(A)).unwrap();
+    let second = bind_template(&input, digest(B)).unwrap();
+    let first = parse(&first).unwrap();
+    let second = parse(&second).unwrap();
+    assert_eq!(input.observations[0].value, "z");
+    assert_eq!(first.payload.observations[0]["value"], "a");
+    assert_eq!(first.payload.observations, second.payload.observations);
+    assert_ne!(first.payload_digest, second.payload_digest);
+    let written = template(input).unwrap();
+    assert_eq!(
+        parse_template(&written).unwrap().observations.as_ref(),
+        first.payload.observations
+    );
+}
+
+#[test]
+fn observation_headers_are_deserialized_without_closing_unknown_fact_fields() {
+    for row in [
+        serde_json::json!(null),
+        serde_json::json!([]),
+        serde_json::json!(["future-fact"]),
+        serde_json::json!({}),
+        serde_json::json!({ "kind": null }),
+        serde_json::json!({ "kind": 1 }),
+        serde_json::json!({ "kind": "../bad" }),
+    ] {
+        assert!(envelope(evidence(vec![row.clone()])).is_err(), "{row}");
+    }
+    let row = serde_json::json!({ "kind": "future-fact", "arbitrary": { "new": [true, null] } });
+    assert_eq!(
+        parse(&envelope(evidence(vec![row.clone()])).unwrap())
+            .unwrap()
+            .payload
+            .observations,
+        vec![row]
+    );
+}
+
+#[test]
 fn candidate_free_templates_bind_only_when_the_candidate_is_known() {
     let row = observation(vec![
         ("kind", serde_json::json!("record-set")),

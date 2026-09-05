@@ -75,12 +75,11 @@ pub fn template(input: Input) -> Result<Vec<u8>, Error> {
     validate_records("$.records", &input.records)?;
     let producer_kind = ArtifactId::new(PRODUCER_KIND.to_owned())
         .ok_or_else(|| Error::new("$.producer.kind", ErrorKind::InvalidValue))?;
-    let observation = serde_json::to_value(Observation {
+    let observation = Observation {
         kind: ObservationKind::Current,
         name: input.name,
         records: input.records,
-    })
-    .map_err(|_defect| Error::new("$.observations[0]", ErrorKind::InvalidValue))?;
+    };
     super::template(SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
