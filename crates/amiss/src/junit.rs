@@ -2,11 +2,10 @@ mod tests;
 
 use std::borrow::Cow;
 
-use amiss_wire::json::Value;
+use amiss_wire::report::Disposition;
+use amiss_wire::report::model::{RepoPath, ReportPayload, ReportStatus};
 use quick_xml::Writer;
 use quick_xml::events::{BytesDecl, BytesEnd, BytesStart, BytesText, Event};
-
-use crate::view::View;
 
 enum CaseStatus<'value> {
     Pass,
@@ -18,18 +17,20 @@ enum CaseStatus<'value> {
     },
 }
 
-pub(crate) fn write(envelope: &Value, output: &mut dyn std::io::Write) -> std::io::Result<()> {
-    let payload = View::of(envelope).view("payload");
-    let result = payload.view("result");
-    let findings = payload.rows("findings");
-    let errors = payload.rows("errors");
+pub(crate) fn write(
+    payload: &ReportPayload,
+    output: &mut dyn std::io::Write,
+) -> std::io::Result<()> {
+    let result = &payload.result;
+    let findings = payload.findings.iter();
+    let errors = payload.errors.iter();
     let rows = findings.len().saturating_add(errors.len());
-    let empty_failure = rows == 0 && result.text("status") == "fail";
-    let empty_error = rows == 0 && result.text("status") == "incomplete";
+    let empty_failure = rows == 0 && result.status == ReportStatus::Fail;
+    let empty_error = rows == 0 && result.status == ReportStatus::Incomplete;
     let tests = rows.max(1).to_string();
     let failures = findings
         .clone()
-        .filter(|row| row.text("effective_disposition") == "fail")
+        .filter(|row| row.effective_disposition == Disposition::Fail)
         .count()
         .saturating_add(usize::from(empty_failure))
         .to_string();
@@ -58,55 +59,61 @@ pub(crate) fn write(envelope: &Value, output: &mut dyn std::io::Write) -> std::i
     writer.write_event(Event::Start(suite))?;
 
     if rows == 0 {
-        let status = match result.text("status") {
-            status @ "fail" => CaseStatus::Problem {
+        let status = match result.status {
+            ReportStatus::Fail => CaseStatus::Problem {
                 element: "failure",
                 kind: "amiss-result",
-                description: status,
+                description: "fail",
             },
-            status @ "incomplete" => CaseStatus::Problem {
+            ReportStatus::Incomplete => CaseStatus::Problem {
                 element: "error",
                 kind: "amiss-result",
-                description: status,
+                description: "incomplete",
             },
-            _ => CaseStatus::Pass,
+            ReportStatus::Pass => CaseStatus::Pass,
         };
         write_case(&mut writer, "amiss.result", "report", None, status)?;
     } else {
         for row in findings {
-            let name = format!("{}:{}", row.text("kind"), row.text("finding_key"));
-            let disposition = row.text("effective_disposition");
-            let status = if disposition == "fail" {
+            let name = format!("{}:{}", row.kind.as_ref(), row.finding_key);
+            let disposition = row.effective_disposition.as_ref();
+            let status = if row.effective_disposition == Disposition::Fail {
                 CaseStatus::Problem {
                     element: "failure",
-                    kind: row.text("kind"),
-                    description: row.text("description"),
+                    kind: row.kind.as_ref(),
+                    description: &row.description,
                 }
             } else {
                 CaseStatus::Note(format!(
                     "effective disposition: {disposition}\n{}",
-                    row.text("description")
+                    row.description
                 ))
             };
             write_case(
                 &mut writer,
                 "amiss.finding",
                 &name,
-                text_path(row.view("location")),
+                row.location.path.as_ref().and_then(|path| match path {
+                    RepoPath::Text(path) => Some(path.as_str()),
+                    RepoPath::Bytes(_) => None,
+                }),
                 status,
             )?;
         }
         for (index, row) in errors.enumerate() {
-            let name = format!("{}:{index}", row.text("code"));
+            let name = format!("{}:{index}", row.code.as_ref());
             write_case(
                 &mut writer,
                 "amiss.analysis-error",
                 &name,
-                text_path(row),
+                row.path.as_ref().and_then(|path| match path {
+                    RepoPath::Text(path) => Some(path.as_str()),
+                    RepoPath::Bytes(_) => None,
+                }),
                 CaseStatus::Problem {
                     element: "error",
-                    kind: row.text("code"),
-                    description: row.text("description"),
+                    kind: row.code.as_ref(),
+                    description: &row.description,
                 },
             )?;
         }
@@ -117,16 +124,6 @@ pub(crate) fn write(envelope: &Value, output: &mut dyn std::io::Write) -> std::i
     let output = writer.into_inner();
     output.write_all(b"\n")?;
     output.flush()
-}
-
-fn text_path(holder: View<'_>) -> Option<&str> {
-    match holder.field("path") {
-        Some(Value::String(path)) => Some(path),
-        Some(
-            Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Object(_) | Value::Array(_),
-        )
-        | None => None,
-    }
 }
 
 fn write_case(

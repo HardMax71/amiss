@@ -147,8 +147,8 @@ fn project(
         OutputFormat::CodeQuality => {
             diagnose_emission(output::write_serialized(&codequality::issues(&payload)));
         }
-        OutputFormat::Junit => emit_junit(envelope),
-        OutputFormat::Human => human::report(envelope, explain_scope, full_feedback),
+        OutputFormat::Junit => emit_junit(&payload),
+        OutputFormat::Human => human::report(&payload, explain_scope, full_feedback),
     }
     Ok(())
 }
@@ -476,10 +476,10 @@ fn emit(reserve: &mut FatalSerializer, envelope: &amiss_wire::json::Value) {
     );
 }
 
-fn emit_junit(envelope: &amiss_wire::json::Value) {
+fn emit_junit(payload: &report::model::ReportPayload) {
     let stdout = std::io::stdout();
     let mut output = std::io::BufWriter::new(stdout.lock());
-    diagnose_emission(junit::write(envelope, &mut output));
+    diagnose_emission(junit::write(payload, &mut output));
 }
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
