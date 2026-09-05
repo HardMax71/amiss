@@ -39,6 +39,20 @@ fn malformed_json_and_failed_reads_keep_distinct_error_classes() {
         decode_bounded_json::<Body>(FailedReader, None, 32),
         Err(ProviderError::Unavailable)
     );
+    let mut nested = serde_json::Value::Null;
+    for _ in 0..127 {
+        nested = serde_json::json!([nested]);
+    }
+    let bytes = serde_json::to_vec(&nested).unwrap();
+    assert_eq!(
+        decode_bounded_json::<serde_json::Value>(Cursor::new(&bytes), None, bytes.len()),
+        Ok((nested.clone(), bytes.len()))
+    );
+    let bytes = serde_json::to_vec(&serde_json::json!([nested])).unwrap();
+    assert_eq!(
+        decode_bounded_json::<serde_json::Value>(Cursor::new(&bytes), None, bytes.len()),
+        Err(ProviderError::InvalidResponse)
+    );
 }
 
 struct FailedReader;
