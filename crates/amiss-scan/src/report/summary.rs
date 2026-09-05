@@ -131,10 +131,11 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
         }
         match &observation.resolution {
             Resolution::Resolved { .. }
-            | Resolution::External(
-                amiss_wire::resolution::ExternalReference::IntersphinxInventory
-                | amiss_wire::resolution::ExternalReference::SiteBuild,
-            ) => {
+            | Resolution::External {
+                reason:
+                    amiss_wire::resolution::ExternalReference::IntersphinxInventory
+                    | amiss_wire::resolution::ExternalReference::SiteBuild,
+            } => {
                 counts.resolved = counts.resolved.saturating_add(1);
             }
             Resolution::Missing(_) => {
@@ -144,12 +145,13 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             | Resolution::DeclaredUntracked(_)
             | Resolution::UnsupportedTarget(_)
             | Resolution::UnsupportedSemantics(_)
-            | Resolution::UnsupportedVersion(_)
-            | Resolution::Invalid(_)
-            | Resolution::External(
-                amiss_wire::resolution::ExternalReference::Url
-                | amiss_wire::resolution::ExternalReference::ForeignRepository,
-            ) => {}
+            | Resolution::UnsupportedVersion { .. }
+            | Resolution::Invalid { .. }
+            | Resolution::External {
+                reason:
+                    amiss_wire::resolution::ExternalReference::Url
+                    | amiss_wire::resolution::ExternalReference::ForeignRepository,
+            } => {}
         }
     }
     object(vec![

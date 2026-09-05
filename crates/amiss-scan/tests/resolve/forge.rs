@@ -157,7 +157,9 @@ fn a_full_local_commit_resolves_only_in_the_declared_object_format() {
         .unwrap_or_else(|_defect| panic!());
     assert_eq!(
         resolution,
-        Resolution::UnsupportedVersion(VersionScope::UnknownPath)
+        Resolution::UnsupportedVersion {
+            scope: VersionScope::UnknownPath
+        }
     );
 
     let full_sha256 = "a".repeat(64);
@@ -170,7 +172,9 @@ fn a_full_local_commit_resolves_only_in_the_declared_object_format() {
             &format!("https://github.com/acme/widgets/blob/{full_sha256}/docs/guide.md"),
         )
         .unwrap_or_else(|_defect| panic!());
-    let Resolution::UnsupportedVersion(VersionScope::KnownCommit { commit_oid, path }) = resolution
+    let Resolution::UnsupportedVersion {
+        scope: VersionScope::KnownCommit { commit_oid, path },
+    } = resolution
     else {
         panic!("unexpected resolution: {resolution:?}");
     };
@@ -274,7 +278,9 @@ fn historical_absence_requires_a_complete_local_walk() {
     );
     assert!(matches!(
         missing_commit,
-        Resolution::UnsupportedVersion(VersionScope::KnownCommit { .. })
+        Resolution::UnsupportedVersion {
+            scope: VersionScope::KnownCommit { .. }
+        }
     ));
 }
 
@@ -345,7 +351,9 @@ fn a_ref_spelled_like_a_full_oid_is_ambiguous() {
     assert_eq!(intent.kind, IntentKind::Unsupported);
     assert_eq!(
         resolution,
-        Resolution::UnsupportedVersion(VersionScope::UnknownPath)
+        Resolution::UnsupportedVersion {
+            scope: VersionScope::UnknownPath
+        }
     );
 }
 
@@ -408,7 +416,9 @@ fn gitea_recognition_resolves_against_the_tree() {
         .unwrap_or_else(|_defect| panic!());
     assert_eq!(
         tag,
-        Resolution::UnsupportedVersion(VersionScope::UnknownPath),
+        Resolution::UnsupportedVersion {
+            scope: VersionScope::UnknownPath
+        },
         "a tag spelled like the candidate branch is still no trusted ref"
     );
 
@@ -423,7 +433,9 @@ fn gitea_recognition_resolves_against_the_tree() {
         .unwrap_or_else(|_defect| panic!());
     assert_eq!(
         untyped,
-        Resolution::External(ExternalReference::ForeignRepository)
+        Resolution::External {
+            reason: ExternalReference::ForeignRepository
+        }
     );
 }
 
@@ -476,7 +488,10 @@ fn bitbucket_cloud_recognizes_only_the_documented_source_contract() {
             "https://bitbucket.org/acme/widgets/src/feature/x/docs/guide.md",
         )
         .unwrap();
-    let Resolution::UnsupportedVersion(VersionScope::KnownPath { path }) = no_guessed_split else {
+    let Resolution::UnsupportedVersion {
+        scope: VersionScope::KnownPath { path },
+    } = no_guessed_split
+    else {
         panic!("unexpected resolution: {no_guessed_split:?}");
     };
     assert_eq!(path.as_str(), Some("x/docs/guide.md"));
@@ -534,7 +549,10 @@ fn bitbucket_data_center_keeps_unknown_revision_queries_scoped_out() {
             )
             .unwrap();
         assert_eq!(intent.kind, IntentKind::Unsupported, "{query}");
-        let Resolution::UnsupportedVersion(VersionScope::KnownPath { path }) = resolution else {
+        let Resolution::UnsupportedVersion {
+            scope: VersionScope::KnownPath { path },
+        } = resolution
+        else {
             panic!("unexpected resolution for {query}: {resolution:?}");
         };
         assert_eq!(path.as_str(), Some("docs/guide.md"), "{query}");
@@ -682,7 +700,9 @@ fn a_commit_selector_is_an_exact_oid() {
         assert_eq!(intent.kind, IntentKind::Unsupported, "{selector}");
         assert_eq!(
             row,
-            Resolution::UnsupportedVersion(VersionScope::UnknownPath),
+            Resolution::UnsupportedVersion {
+                scope: VersionScope::UnknownPath
+            },
             "{selector} belongs to the other object format"
         );
     }

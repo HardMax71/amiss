@@ -216,7 +216,9 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
             "amiss/test-correlation-vector-projection",
             projection.as_bytes(),
         ),
-        resolution: Resolution::External(ExternalReference::Url),
+        resolution: Resolution::External {
+            reason: ExternalReference::Url,
+        },
         fragment_span: None,
         path_span: None,
     }

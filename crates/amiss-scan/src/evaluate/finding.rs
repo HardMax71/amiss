@@ -169,9 +169,9 @@ pub(super) fn missing_fix(candidates: &[&Observation]) -> Option<FindingFix> {
         | Resolution::TypeMismatch { .. }
         | Resolution::UnsupportedTarget(_)
         | Resolution::UnsupportedSemantics(_)
-        | Resolution::UnsupportedVersion(_)
-        | Resolution::Invalid(_)
-        | Resolution::External(_) => None,
+        | Resolution::UnsupportedVersion { .. }
+        | Resolution::Invalid { .. }
+        | Resolution::External { .. } => None,
     }
 }
 

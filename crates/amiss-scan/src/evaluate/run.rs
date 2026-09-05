@@ -29,7 +29,7 @@ fn invalid_attributions(comparisons: &[Comparison]) -> BTreeMap<Digest, Attribut
     let mut rows = BTreeMap::new();
     for comparison in comparisons {
         if let Some(candidate) = &comparison.candidate
-            && matches!(candidate.resolution, Resolution::Invalid(_))
+            && matches!(candidate.resolution, Resolution::Invalid { .. })
         {
             let attribution = match comparison.outcome {
                 Outcome::Ambiguous => Attribution::Unknown,
@@ -37,7 +37,7 @@ fn invalid_attributions(comparisons: &[Comparison]) -> BTreeMap<Digest, Attribut
                     .base
                     .as_ref()
                     .filter(|base| {
-                        matches!(base.resolution, Resolution::Invalid(_))
+                        matches!(base.resolution, Resolution::Invalid { .. })
                             && base.raw_destination_digest == candidate.raw_destination_digest
                     })
                     .map_or(Attribution::Introduced, |_base| Attribution::PreExisting),
@@ -45,7 +45,7 @@ fn invalid_attributions(comparisons: &[Comparison]) -> BTreeMap<Digest, Attribut
             rows.insert(candidate.id, attribution);
         }
         for candidate in &comparison.alternatives_candidate {
-            if matches!(candidate.resolution, Resolution::Invalid(_)) {
+            if matches!(candidate.resolution, Resolution::Invalid { .. }) {
                 rows.insert(candidate.id, Attribution::Unknown);
             }
         }
@@ -389,7 +389,7 @@ fn ordinary(
             .iter()
             .chain(&comparison.alternatives_candidate)
     }) {
-        let attribution = if matches!(observation.resolution, Resolution::Invalid(_)) {
+        let attribution = if matches!(observation.resolution, Resolution::Invalid { .. }) {
             invalid
                 .get(&observation.id)
                 .copied()

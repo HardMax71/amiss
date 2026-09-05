@@ -79,7 +79,9 @@ fn nonreference_keys_preserve_document_observation_and_control_scopes() {
     let candidate = observation(&spec(
         "d.md",
         "t.md",
-        Resolution::Invalid(InvalidReference::PathTraversal),
+        Resolution::Invalid {
+            reason: InvalidReference::PathTraversal,
+        },
     ));
     let observation_id = candidate.id;
     assert!(

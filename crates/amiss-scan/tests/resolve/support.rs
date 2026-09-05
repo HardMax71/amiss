@@ -199,7 +199,10 @@ pub(crate) fn github_urls_need_the_whole_trusted_chain() {
     assert_eq!(intent.kind, IntentKind::SameRepositoryGithub);
     assert_eq!(intent.query.as_deref(), Some("plain=1"));
     assert_eq!(intent.fragment.as_deref(), Some("intro"));
-    let Resolution::UnsupportedVersion(VersionScope::KnownPath { path }) = row else {
+    let Resolution::UnsupportedVersion {
+        scope: VersionScope::KnownPath { path },
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(path.as_str(), Some("docs/guide.md"));
@@ -214,7 +217,10 @@ pub(crate) fn github_urls_need_the_whole_trusted_chain() {
             &format!("https://github.com/acme/widgets/blob/{commit}/docs/guide.md"),
         )
         .unwrap_or_else(|_d| panic!());
-    let Resolution::UnsupportedVersion(VersionScope::KnownCommit { commit_oid, path }) = row else {
+    let Resolution::UnsupportedVersion {
+        scope: VersionScope::KnownCommit { commit_oid, path },
+    } = row
+    else {
         panic!("unexpected resolution: {row:?}");
     };
     assert_eq!(commit_oid.as_str(), commit);
@@ -237,7 +243,9 @@ fn github_with_a_different_trusted_identity_is_foreign() {
     assert_eq!(intent.kind, IntentKind::ExternalUrl);
     assert_eq!(
         foreign,
-        Resolution::External(ExternalReference::ForeignRepository)
+        Resolution::External {
+            reason: ExternalReference::ForeignRepository
+        }
     );
 
     let row = bed
@@ -252,7 +260,9 @@ fn github_with_a_different_trusted_identity_is_foreign() {
         .1;
     assert_eq!(
         row,
-        Resolution::Invalid(InvalidReference::Syntax),
+        Resolution::Invalid {
+            reason: InvalidReference::Syntax
+        },
         "a ref consuming the complete suffix leaves no path"
     );
 
@@ -266,7 +276,12 @@ fn github_with_a_different_trusted_identity_is_foreign() {
         )
         .unwrap_or_else(|_d| panic!())
         .1;
-    assert_eq!(row, Resolution::Invalid(InvalidReference::PathTraversal));
+    assert_eq!(
+        row,
+        Resolution::Invalid {
+            reason: InvalidReference::PathTraversal
+        }
+    );
 
     let row = bed
         .run_as(
@@ -279,7 +294,7 @@ fn github_with_a_different_trusted_identity_is_foreign() {
         .unwrap_or_else(|_d| panic!())
         .1;
     assert!(
-        matches!(&row, Resolution::UnsupportedVersion(_)),
+        matches!(&row, Resolution::UnsupportedVersion { .. }),
         "unexpected resolution: {row:?}"
     );
 
@@ -293,7 +308,12 @@ fn github_with_a_different_trusted_identity_is_foreign() {
         )
         .unwrap_or_else(|_d| panic!())
         .1;
-    assert_eq!(row, Resolution::Invalid(InvalidReference::EncodedSlash));
+    assert_eq!(
+        row,
+        Resolution::Invalid {
+            reason: InvalidReference::EncodedSlash
+        }
+    );
 }
 
 #[test]
@@ -376,7 +396,9 @@ fn ambiguous_trusted_splits_have_unknown_version_scope() {
     assert_eq!(intent.kind, IntentKind::Unsupported);
     assert_eq!(
         row,
-        Resolution::UnsupportedVersion(VersionScope::UnknownPath)
+        Resolution::UnsupportedVersion {
+            scope: VersionScope::UnknownPath
+        }
     );
 }
 
@@ -396,7 +418,13 @@ fn forge_urls_without_a_declared_context_are_external() {
             .unwrap_or_else(|_defect| panic!());
         assert_eq!(intent.kind, IntentKind::ExternalUrl, "{url}");
         assert_eq!(intent.external_scheme.as_deref(), Some("https"), "{url}");
-        assert_eq!(row, Resolution::External(ExternalReference::Url), "{url}");
+        assert_eq!(
+            row,
+            Resolution::External {
+                reason: ExternalReference::Url
+            },
+            "{url}"
+        );
     }
 }
 
@@ -416,7 +444,12 @@ fn a_host_prefix_lookalike_authority_stays_external() {
             "https://github.com.evil.example/acme/widgets/blob/feature/x/docs/guide.md",
         )
         .unwrap_or_else(|_defect| panic!());
-    assert_eq!(row, Resolution::External(ExternalReference::Url));
+    assert_eq!(
+        row,
+        Resolution::External {
+            reason: ExternalReference::Url
+        }
+    );
     assert_eq!(intent.kind, IntentKind::ExternalUrl);
 }
 
@@ -456,7 +489,9 @@ pub(crate) fn gitlab_recognition_resolves_against_the_tree() {
         .unwrap_or_else(|_defect| panic!());
     assert_eq!(
         encoded,
-        Resolution::External(ExternalReference::ForeignRepository)
+        Resolution::External {
+            reason: ExternalReference::ForeignRepository
+        }
     );
 
     let (_intent, pinned) = bed
@@ -467,7 +502,9 @@ pub(crate) fn gitlab_recognition_resolves_against_the_tree() {
             "https://gitlab.com/acme/widgets/-/blob/0123456789012345678901234567890123456789/docs/guide.md",
         )
         .unwrap_or_else(|_defect| panic!());
-    let Resolution::UnsupportedVersion(VersionScope::KnownCommit { commit_oid, path }) = pinned
+    let Resolution::UnsupportedVersion {
+        scope: VersionScope::KnownCommit { commit_oid, path },
+    } = pinned
     else {
         panic!("unexpected resolution: {pinned:?}");
     };

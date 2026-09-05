@@ -112,7 +112,7 @@ fn snapshot(
                 construct: occurrence.occurrence.construct,
                 external_destination: matches!(
                     resolution,
-                    amiss_wire::resolution::Resolution::External(_)
+                    amiss_wire::resolution::Resolution::External { .. }
                 )
                 .then(|| occurrence.occurrence.semantic_destination.clone()),
                 intent,

@@ -147,5 +147,10 @@ fn the_pointer_answer_survives_every_wrapper() {
         Resolution::UnsupportedSemantics(fragment(pointer())).is_lfs_pointer(),
         "a wrapper does not lose the answer"
     );
-    assert!(!Resolution::<()>::Invalid(InvalidReference::PathTraversal).is_lfs_pointer());
+    assert!(
+        !Resolution::<()>::Invalid {
+            reason: InvalidReference::PathTraversal
+        }
+        .is_lfs_pointer()
+    );
 }

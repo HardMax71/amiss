@@ -245,7 +245,9 @@ fn document_findings_follow_step_one() {
 fn boundary_kinds_follow_the_mapping() {
     let rows = [
         (
-            Resolution::Invalid(InvalidReference::PathTraversal),
+            Resolution::Invalid {
+                reason: InvalidReference::PathTraversal,
+            },
             FindingKind::InvalidReference,
         ),
         (
@@ -259,9 +261,11 @@ fn boundary_kinds_follow_the_mapping() {
             FindingKind::UnsupportedReferenceSemantics,
         ),
         (
-            Resolution::UnsupportedVersion(VersionScope::KnownPath {
-                path: repo_path("t.md"),
-            }),
+            Resolution::UnsupportedVersion {
+                scope: VersionScope::KnownPath {
+                    path: repo_path("t.md"),
+                },
+            },
             FindingKind::UnsupportedVersionScope,
         ),
         (
@@ -511,19 +515,17 @@ fn findings_sort_by_canonical_key() {
     assert_eq!(keys, sorted);
 }
 
-fn invalid_spec(document: &str, target: &str) -> Spec {
-    spec(
-        document,
-        target,
-        Resolution::Invalid(InvalidReference::PathTraversal),
-    )
-}
-
 /// A pre-existing invalid reference is the same invalid destination, not
 /// merely another invalid one at the same place.
 #[test]
 fn an_invalid_attribution_needs_the_same_destination() {
-    let same = invalid_spec("d.md", "../out.md");
+    let same = spec(
+        "d.md",
+        "../out.md",
+        Resolution::Invalid {
+            reason: InvalidReference::PathTraversal,
+        },
+    );
     let paired = comparisons(vec![observation(&same)], vec![observation(&same)]);
     let finding = only(
         evaluate(&[], &paired, Profile::Observe).expect("finding evaluation"),

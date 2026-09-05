@@ -315,18 +315,18 @@ fn derive(
             | WireResolution::DeclaredUntracked(_)
             | WireResolution::UnsupportedTarget(_)
             | WireResolution::UnsupportedSemantics(_)
-            | WireResolution::UnsupportedVersion(_)
-            | WireResolution::Invalid(_)
-            | WireResolution::External(_),
+            | WireResolution::UnsupportedVersion { .. }
+            | WireResolution::Invalid { .. }
+            | WireResolution::External { .. },
             WireResolution::Resolved { .. }
             | WireResolution::Missing(_)
             | WireResolution::TypeMismatch { .. }
             | WireResolution::DeclaredUntracked(_)
             | WireResolution::UnsupportedTarget(_)
             | WireResolution::UnsupportedSemantics(_)
-            | WireResolution::UnsupportedVersion(_)
-            | WireResolution::Invalid(_)
-            | WireResolution::External(_),
+            | WireResolution::UnsupportedVersion { .. }
+            | WireResolution::Invalid { .. }
+            | WireResolution::External { .. },
         ) => (TargetChange::NotComparable, Impact::NotApplicable),
     }
 }

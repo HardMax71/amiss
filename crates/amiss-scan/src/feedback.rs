@@ -162,8 +162,8 @@ fn classify(finding: &Finding, candidates: &BTreeMap<Digest, Candidate<'_>>) -> 
         .observation_ids
         .iter()
         .find_map(|id| candidates.get(id));
-    let invalid =
-        candidate.is_some_and(|item| matches!(item.observation.resolution, Resolution::Invalid(_)));
+    let invalid = candidate
+        .is_some_and(|item| matches!(item.observation.resolution, Resolution::Invalid { .. }));
     let (subject, target) = if invalid {
         (Subject::Untargeted, None)
     } else {

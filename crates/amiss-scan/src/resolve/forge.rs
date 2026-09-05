@@ -55,7 +55,9 @@ pub(super) fn resolve(
                 ),
                 ForgeVersion::OtherNamedRef => (
                     None,
-                    Resolution::UnsupportedVersion(VersionScope::KnownPath { path: path.clone() }),
+                    Resolution::UnsupportedVersion {
+                        scope: VersionScope::KnownPath { path: path.clone() },
+                    },
                 ),
                 ForgeVersion::Commit(oid) => {
                     let resolution = super::history::lookup(
@@ -67,11 +69,11 @@ pub(super) fn resolve(
                         fragment.as_deref(),
                         context.dialect,
                     )?
-                    .unwrap_or_else(|| {
-                        Resolution::UnsupportedVersion(VersionScope::KnownCommit {
+                    .unwrap_or_else(|| Resolution::UnsupportedVersion {
+                        scope: VersionScope::KnownCommit {
                             commit_oid: oid.clone(),
                             path: path.clone(),
-                        })
+                        },
                     });
                     (Some(oid), resolution)
                 }
@@ -130,7 +132,9 @@ fn foreign_row(query: Option<String>, fragment: Option<String>) -> (Intent, Reso
             query,
             fragment,
         },
-        Resolution::External(ExternalReference::ForeignRepository),
+        Resolution::External {
+            reason: ExternalReference::ForeignRepository,
+        },
     )
 }
 
@@ -256,15 +260,17 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
                 return ForgeRoute::Foreign;
             };
             if commit_oid.object_format() != identity.object_format {
-                return ForgeRoute::Unsupported(Resolution::UnsupportedVersion(
-                    VersionScope::UnknownPath,
-                ));
+                return ForgeRoute::Unsupported(Resolution::UnsupportedVersion {
+                    scope: VersionScope::UnknownPath,
+                });
             }
             decoded_tail(directory_hint, raw_tail).and_then(|decoded| {
                 contained_path(&decoded).map(|path| (ForgeVersion::Commit(commit_oid), path))
             })
         }
-        "tag" => Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath)),
+        "tag" => Err(Resolution::UnsupportedVersion {
+            scope: VersionScope::UnknownPath,
+        }),
         _ => return ForgeRoute::Foreign,
     };
     same_route(IntentKind::SameRepositoryGitea, target_kind, split)
@@ -297,9 +303,9 @@ fn bitbucket_cloud_split(
     raw_tail: &[&str],
 ) -> Result<(ForgeVersion, RepoPath), Resolution> {
     let decoded = decoded_tail(directory_hint, raw_tail)?;
-    let version = decoded
-        .first()
-        .ok_or(Resolution::Invalid(InvalidReference::Syntax))?;
+    let version = decoded.first().ok_or(Resolution::Invalid {
+        reason: InvalidReference::Syntax,
+    })?;
     let candidate = identity
         .candidate_ref
         .strip_prefix("refs/heads/")
@@ -318,7 +324,9 @@ fn bitbucket_cloud_split(
         .is_some_and(|oid| oid.object_format() != identity.object_format)
         || commit_oid.is_some() && (candidate_matches || default_matches)
     {
-        return Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath));
+        return Err(Resolution::UnsupportedVersion {
+            scope: VersionScope::UnknownPath,
+        });
     }
     let literal_oid = raw_tail
         .first()
@@ -391,8 +399,9 @@ fn bitbucket_data_center_version(
     query: Option<&str>,
     path: &RepoPath,
 ) -> Result<ForgeVersion, Resolution> {
-    let unsupported =
-        || Resolution::UnsupportedVersion(VersionScope::KnownPath { path: path.clone() });
+    let unsupported = || Resolution::UnsupportedVersion {
+        scope: VersionScope::KnownPath { path: path.clone() },
+    };
     let decode = |value: &str| {
         let mut decoded = Vec::with_capacity(value.len());
         decode_component(value, &mut decoded, |byte| match byte {
@@ -401,7 +410,7 @@ fn bitbucket_data_center_version(
             _ => None,
         })
         .map(|()| decoded)
-        .map_err(Resolution::Invalid)
+        .map_err(|reason| Resolution::Invalid { reason })
     };
     let Some(query) = query else {
         return Ok(if identity.default_ref == identity.candidate_ref {
@@ -527,7 +536,9 @@ fn versioned_split(
         .and_then(|segment| Oid::new(identity.object_format, segment.to_owned()));
 
     if decoded_oid.is_some() && (candidate_split.is_some() || default_split.is_some()) {
-        return Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath));
+        return Err(Resolution::UnsupportedVersion {
+            scope: VersionScope::UnknownPath,
+        });
     }
     let literal_oid = raw_tail
         .first()
@@ -543,9 +554,9 @@ fn versioned_split(
         }
         (Some(after), None) => Ok((ForgeVersion::Candidate, contained_path(after)?)),
         (None, Some(after)) => Ok((ForgeVersion::OtherNamedRef, contained_path(after)?)),
-        (Some(_), Some(_)) | (None, None) => {
-            Err(Resolution::UnsupportedVersion(VersionScope::UnknownPath))
-        }
+        (Some(_), Some(_)) | (None, None) => Err(Resolution::UnsupportedVersion {
+            scope: VersionScope::UnknownPath,
+        }),
     }
 }
 
@@ -565,10 +576,13 @@ fn decoded_tail(
     let mut decoded: Vec<Vec<u8>> = Vec::with_capacity(tail.len());
     for segment in tail {
         if segment.is_empty() {
-            return Err(Resolution::Invalid(InvalidReference::Syntax));
+            return Err(Resolution::Invalid {
+                reason: InvalidReference::Syntax,
+            });
         }
         let mut bytes = Vec::with_capacity(segment.len());
-        decode_component(segment, &mut bytes, invalid_path_byte).map_err(Resolution::Invalid)?;
+        decode_component(segment, &mut bytes, invalid_path_byte)
+            .map_err(|reason| Resolution::Invalid { reason })?;
         decoded.push(bytes);
     }
     Ok(decoded)
@@ -578,15 +592,21 @@ fn decoded_tail(
 /// segments, and inside the frozen byte grammar.
 fn contained_path(remaining: &[Vec<u8>]) -> Result<RepoPath, Resolution> {
     if remaining.is_empty() {
-        return Err(Resolution::Invalid(InvalidReference::Syntax));
+        return Err(Resolution::Invalid {
+            reason: InvalidReference::Syntax,
+        });
     }
     if remaining
         .iter()
         .any(|segment| segment == b"." || segment == b"..")
     {
-        return Err(Resolution::Invalid(InvalidReference::PathTraversal));
+        return Err(Resolution::Invalid {
+            reason: InvalidReference::PathTraversal,
+        });
     }
-    RepoPath::from_bytes(remaining.join(&b'/')).ok_or(Resolution::Invalid(InvalidReference::Syntax))
+    RepoPath::from_bytes(remaining.join(&b'/')).ok_or(Resolution::Invalid {
+        reason: InvalidReference::Syntax,
+    })
 }
 
 fn split_after<'a>(decoded: &'a [Vec<u8>], reference: &str) -> Option<&'a [Vec<u8>]> {

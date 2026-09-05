@@ -76,6 +76,8 @@ pub(super) fn resolve(
                     ))
                 )
             })
-            .then_some(Resolution::External(ExternalReference::SiteBuild))),
+            .then_some(Resolution::External {
+                reason: ExternalReference::SiteBuild,
+            })),
     }
 }

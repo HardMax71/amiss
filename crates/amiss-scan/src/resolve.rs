@@ -166,7 +166,9 @@ impl<'a> Resolver<'a> {
             };
             return Ok((
                 intent,
-                Resolution::Invalid(InvalidReference::FragmentEncoding),
+                Resolution::Invalid {
+                    reason: InvalidReference::FragmentEncoding,
+                },
             ));
         }
 
@@ -233,7 +235,9 @@ impl<'a> Resolver<'a> {
             && matches!(
                 resolution,
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute)
-                    | Resolution::Invalid(InvalidReference::FragmentEncoding)
+                    | Resolution::Invalid {
+                        reason: InvalidReference::FragmentEncoding
+                    }
             )
             && let Some(evidence) = site::resolve(
                 self,
@@ -246,8 +250,11 @@ impl<'a> Resolver<'a> {
         }
         let destination = matches!(
             resolution,
-            Resolution::External(ExternalReference::Url | ExternalReference::ForeignRepository)
-                | Resolution::UnsupportedVersion(VersionScope::KnownCommit { .. })
+            Resolution::External {
+                reason: ExternalReference::Url | ExternalReference::ForeignRepository
+            } | Resolution::UnsupportedVersion {
+                scope: VersionScope::KnownCommit { .. }
+            }
         )
         .then(|| occurrence.occurrence.semantic_destination.clone());
         Ok((intent, resolution, destination))
@@ -271,7 +278,9 @@ fn absolute(
     let invalid = |query: Option<String>, fragment: Option<String>| {
         (
             unsupported_intent(query, fragment),
-            Resolution::Invalid(InvalidReference::Uri),
+            Resolution::Invalid {
+                reason: InvalidReference::Uri,
+            },
         )
     };
     if !absolute_valid(path_part, scheme, query.as_deref()) {
@@ -292,7 +301,9 @@ fn absolute(
             query,
             fragment,
         },
-        Resolution::External(ExternalReference::Url),
+        Resolution::External {
+            reason: ExternalReference::Url,
+        },
     ))
 }
 

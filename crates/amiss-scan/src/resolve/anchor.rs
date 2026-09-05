@@ -242,9 +242,9 @@ impl Resolver<'_> {
             None => match semantic.labels.get(&normalized) {
                 Some(crate::semantic::InventoryLabel::Unique(destination)) => {
                     external_destination = Some(destination.clone());
-                    Resolution::External(
-                        amiss_wire::resolution::ExternalReference::IntersphinxInventory,
-                    )
+                    Resolution::External {
+                        reason: amiss_wire::resolution::ExternalReference::IntersphinxInventory,
+                    }
                 }
                 Some(crate::semantic::InventoryLabel::Ambiguous) => {
                     Resolution::UnsupportedSemantics(UnsupportedSemantics::ExternalInventory)

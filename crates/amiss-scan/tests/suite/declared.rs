@@ -92,9 +92,9 @@ fn declared_by(resolution: &Resolution) -> Option<String> {
         | Resolution::TypeMismatch { .. }
         | Resolution::UnsupportedTarget(_)
         | Resolution::UnsupportedSemantics(_)
-        | Resolution::UnsupportedVersion(_)
-        | Resolution::Invalid(_)
-        | Resolution::External(_) => None,
+        | Resolution::UnsupportedVersion { .. }
+        | Resolution::Invalid { .. }
+        | Resolution::External { .. } => None,
     }
 }
 
