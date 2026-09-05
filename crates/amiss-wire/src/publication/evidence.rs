@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
-use crate::json::{self, Value};
+use crate::json;
 
 use super::{
     CompletedSite, DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationProducer,
@@ -15,9 +15,9 @@ pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/publication-evidence-payload";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PublicationEvidenceEnvelope {
+pub struct PublicationEvidenceEnvelope<T = PublicationEvidence> {
     pub schema: EvidenceEnvelopeSchema,
-    pub payload: PublicationEvidence,
+    pub payload: T,
     pub payload_digest: Digest,
 }
 
@@ -86,11 +86,11 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error
 ///
 /// Fails when a public field violates the same closed grammar [`parse_evidence`]
 /// enforces or the encoded document exceeds its byte ceiling.
-pub fn evidence(input: &PublicationEvidence) -> Result<Value, Error> {
+pub fn evidence(input: &PublicationEvidence) -> Result<Vec<u8>, Error> {
     let payload_digest = evidence_payload_digest(input)?;
     let document = PublicationEvidenceEnvelope {
         schema: EvidenceEnvelopeSchema::Current,
-        payload: input.clone(),
+        payload: input,
         payload_digest,
     };
     let canonical = serde_json_canonicalizer::to_vec(&document)
@@ -98,7 +98,8 @@ pub fn evidence(input: &PublicationEvidence) -> Result<Value, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    Ok(canonical)
 }
 
 pub(super) fn evidence_payload_digest(input: &PublicationEvidence) -> Result<Digest, Error> {

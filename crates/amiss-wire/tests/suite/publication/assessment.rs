@@ -13,14 +13,14 @@ use amiss_wire::publication::{
 
 fn plan_envelope() -> amiss_wire::publication::PublicationPlanEnvelope {
     let value = plan(&publication_plan()).unwrap();
-    parse_plan(&json::canonical(&value)).unwrap()
+    parse_plan(&value).unwrap()
 }
 
 fn evidence_envelope(
     evidence_value: &amiss_wire::publication::PublicationEvidence,
 ) -> amiss_wire::publication::PublicationEvidenceEnvelope {
     let value = evidence(evidence_value).unwrap();
-    parse_evidence(&json::canonical(&value)).unwrap()
+    parse_evidence(&value).unwrap()
 }
 
 fn assessed(
@@ -28,7 +28,7 @@ fn assessed(
     evidence: Option<&amiss_wire::publication::PublicationEvidenceEnvelope>,
 ) -> amiss_wire::publication::PublicationAssessmentEnvelope {
     let value = assess(plan, evidence, "0.26.0", digest('a')).unwrap();
-    parse_assessment(&json::canonical(&value)).unwrap()
+    parse_assessment(&value).unwrap()
 }
 
 #[test]
@@ -120,13 +120,13 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
 
     let valid_plan = plan_envelope();
     let value = assess(&valid_plan, None, "0.26.0", digest('a')).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let inconsistent = String::from_utf8(json::canonical(&value))
+    let recorded = parse_assessment(&value).unwrap().payload_digest.to_string();
+    let inconsistent = String::from_utf8(value)
         .unwrap()
         .replace("\"unproven\"", "\"matched\"");
     let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
-        recorded,
+        &recorded,
         &hj(
             ASSESSMENT_PAYLOAD_SCHEMA,
             inconsistent_value.member("payload").unwrap(),
@@ -142,14 +142,14 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     mismatched.target.canonical_url = "https://preview.example.com/widget/".to_owned();
     let evidence = evidence_envelope(&mismatched);
     let value = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let unsorted = String::from_utf8(json::canonical(&value)).unwrap().replace(
+    let recorded = parse_assessment(&value).unwrap().payload_digest.to_string();
+    let unsorted = String::from_utf8(value).unwrap().replace(
         "[\"docs-mismatch\",\"target-mismatch\"]",
         "[\"target-mismatch\",\"docs-mismatch\"]",
     );
     let unsorted_value = json::parse(unsorted.as_bytes()).unwrap();
     let rebound = unsorted.replace(
-        recorded,
+        &recorded,
         &hj(
             ASSESSMENT_PAYLOAD_SCHEMA,
             unsorted_value.member("payload").unwrap(),

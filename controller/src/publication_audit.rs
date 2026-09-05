@@ -75,7 +75,8 @@ pub fn validate_publication_audit(
         assessment.payload.engine.engine_digest,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    if replayed.text("payload_digest") != Some(&assessment.payload_digest.to_string()) {
+    let replayed = parse_assessment(&replayed).map_err(|_defect| ArtifactError::Corrupt)?;
+    if replayed.payload_digest != assessment.payload_digest {
         return Err(ArtifactError::Corrupt);
     }
     Ok(PublicationAuditDigests {

@@ -246,14 +246,14 @@ fn sidecar_examples_match_their_typed_sources() {
     let publication_plan_bytes = fs::read(examples.join("publication-plan.json")).unwrap();
     let publication_plan = publication::parse_plan(&publication_plan_bytes).unwrap();
     assert_eq!(
-        json::canonical(&publication::plan(&publication_plan.payload).unwrap()),
+        publication::plan(&publication_plan.payload).unwrap(),
         json::canonical(&json::parse(&publication_plan_bytes).unwrap())
     );
 
     let publication_evidence_bytes = fs::read(examples.join("publication-evidence.json")).unwrap();
     let publication_evidence = publication::parse_evidence(&publication_evidence_bytes).unwrap();
     assert_eq!(
-        json::canonical(&publication::evidence(&publication_evidence.payload).unwrap()),
+        publication::evidence(&publication_evidence.payload).unwrap(),
         json::canonical(&json::parse(&publication_evidence_bytes).unwrap())
     );
 
@@ -269,7 +269,7 @@ fn sidecar_examples_match_their_typed_sources() {
     )
     .unwrap();
     assert_eq!(
-        json::canonical(&replayed),
+        replayed,
         json::canonical(&json::parse(&publication_assessment_bytes).unwrap())
     );
 
