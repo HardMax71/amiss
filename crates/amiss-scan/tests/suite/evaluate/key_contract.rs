@@ -1,4 +1,4 @@
-use amiss_scan::evaluate::FINDING_KEY_DOMAIN;
+use amiss_scan::evaluate::{FINDING_KEY_DOMAIN, structural_facts};
 use amiss_scan::policy::ControlSeed;
 use amiss_wire::json;
 
@@ -43,12 +43,26 @@ fn reference_keys_preserve_normalization_and_optional_identity_fields() {
                     hb("amiss/scanner-link-query", b"mode=raw"),
                     candidate.projection_digest,
                 );
+                let reproduced =
+                    structural_facts(std::slice::from_ref(&candidate)).expect("adoption keys");
                 let findings = evaluate(
                     &[],
                     &comparisons(Vec::new(), vec![candidate]),
                     Profile::Observe,
-                );
+                )
+                .expect("finding evaluation");
                 let finding = only(findings, FindingKind::ExplicitTargetMissing);
+                assert_eq!(
+                    reproduced.get(&finding.finding_key),
+                    Some(&(
+                        1,
+                        finding
+                            .candidate_fact
+                            .as_ref()
+                            .expect("reference fact")
+                            .digest()
+                    ))
+                );
                 let expected = json::parse(expected.as_bytes()).expect("key fixture");
                 assert_eq!(finding.finding_key, hj(FINDING_KEY_DOMAIN, &expected));
                 assert_eq!(
@@ -68,6 +82,11 @@ fn nonreference_keys_preserve_document_observation_and_control_scopes() {
         Resolution::Invalid(InvalidReference::PathTraversal),
     ));
     let observation_id = candidate.id;
+    assert!(
+        structural_facts(std::slice::from_ref(&candidate))
+            .expect("nonstructural observation")
+            .is_empty()
+    );
     let policy = Effects {
         controls: vec![
             ControlSeed {
@@ -94,7 +113,8 @@ fn nonreference_keys_preserve_document_observation_and_control_scopes() {
         &policy,
         &[],
         &[],
-    );
+    )
+    .expect("finding evaluation");
     assert!(errors.is_empty());
     let mut expected = [
         ("document-removed", r#"{"document":"gone.md","kind":"document"}"#.to_owned()),

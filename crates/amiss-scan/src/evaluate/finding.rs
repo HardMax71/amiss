@@ -1,5 +1,5 @@
 use amiss_wire::controls::{FindingKeyInputSchema, Profile};
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::{Digest, hj_ordered};
 use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::model::{FindingKeyInput, PolicySource, RepositoryIntentPath};
@@ -228,7 +228,7 @@ pub(super) fn candidate_fact_finding(
     member_count: u64,
     location: Location,
     profile: Profile,
-) -> Finding {
+) -> Result<Finding, crate::Error> {
     let mut finding = simple(
         kind,
         scope,
@@ -236,10 +236,10 @@ pub(super) fn candidate_fact_finding(
         Vec::new(),
         location,
         profile,
-    );
+    )?;
     finding.candidate_fact = Some(FindingFact::new(&finding.key_input, evidence));
     finding.member_count = member_count;
-    finding
+    Ok(finding)
 }
 
 pub(super) fn simple(
@@ -249,15 +249,16 @@ pub(super) fn simple(
     ids: Vec<Digest>,
     location: Location,
     profile: Profile,
-) -> Finding {
+) -> Result<Finding, crate::Error> {
     let key_input = FindingKeyInput {
         finding_kind: kind,
         schema: FindingKeyInputSchema::Current,
         scope,
     };
-    let finding_key = hj(FINDING_KEY_DOMAIN, &key_value(&key_input));
+    let finding_key =
+        hj_ordered(FINDING_KEY_DOMAIN, &key_input).map_err(|_defect| crate::Error::Internal)?;
     let configured = kind.built_in_disposition(profile);
-    Finding {
+    Ok(Finding {
         key_input,
         finding_key,
         attribution,
@@ -272,7 +273,7 @@ pub(super) fn simple(
         waiver: None,
         fix: None,
         steps: vec![built_in_step(kind, profile)],
-    }
+    })
 }
 
 /// Step one: built-in always starts from `record` and applies the defaults

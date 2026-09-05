@@ -78,10 +78,10 @@ pub(super) fn waiver_pass(
     profile: Profile,
     instant: &UtcInstant,
     extra: &mut Vec<Finding>,
-) -> BTreeMap<Digest, usize> {
+) -> Result<BTreeMap<Digest, usize>, crate::Error> {
     let mut waiver_valid: BTreeMap<Digest, usize> = BTreeMap::new();
     let Some(context) = &policy.waiver else {
-        return waiver_valid;
+        return Ok(waiver_valid);
     };
     for (index, item) in context.items.iter().enumerate() {
         if item.candidate_tree != context.candidate_tree {
@@ -127,11 +127,11 @@ pub(super) fn waiver_pass(
                 (None, Some(context.digest)),
                 waiver_diagnostic(item, context.digest, current),
                 profile,
-            ));
+            )?);
         }
         if defects.is_empty() && target.is_some() {
             waiver_valid.insert(item.finding_key, index);
         }
     }
-    waiver_valid
+    Ok(waiver_valid)
 }
