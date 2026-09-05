@@ -1,5 +1,5 @@
 use amiss_wire::assessment::Nullable;
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::digest::{Digest, hj_ordered};
 use amiss_wire::json::Value;
 use amiss_wire::model::BranchRef;
 use amiss_wire::report::sandbox_descriptor;
@@ -182,9 +182,7 @@ pub fn candidate_identity_digest(setup: &Setup) -> Result<Digest, crate::Error> 
         index_only_materialized_paths: 0,
         forge: setup.forge.map_or(Nullable::Null, Nullable::Value),
     };
-    serde_json::to_vec(&identity)
-        .map(|bytes| hb(CANDIDATE_IDENTITY_DOMAIN, &bytes))
-        .map_err(|_defect| crate::Error::Internal)
+    hj_ordered(CANDIDATE_IDENTITY_DOMAIN, &identity).map_err(|_defect| crate::Error::Internal)
 }
 
 pub(super) fn evaluation_value(setup: &Setup) -> Value {
