@@ -36,6 +36,7 @@ secrecy.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["unbounded_depth"] }
 serde_json_canonicalizer.workspace = true
+serde_with.workspace = true
 sha2.workspace = true
 sphinx_inv.workspace = true
 strum.workspace = true
