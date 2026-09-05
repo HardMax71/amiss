@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 
-use amiss_wire::controls::{FindingKeyInputSchema, Profile, TargetKind};
+use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, Profile, TargetKind};
 use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
-    EmptyRepositoryPath, FindingKeyInput, ObservationFindingKeyScopeKind, PolicySource,
-    ReferenceFindingKeyScopeKind, ReferenceOccurrence, ReferenceOccurrenceKind,
-    RepositoryIntentKind, RepositoryIntentPath, RepositoryTargetIntent,
+    EmptyRepositoryPath, FindingFactInput, FindingKeyInput, ObservationFindingKeyScopeKind,
+    PolicySource, ReferenceFactEvidence, ReferenceFactEvidenceKind, ReferenceFindingKeyScopeKind,
+    ReferenceOccurrence, ReferenceOccurrenceKind, RepositoryIntentKind, RepositoryIntentPath,
+    RepositoryTargetIntent,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 
@@ -15,8 +16,8 @@ use crate::observe;
 
 use super::finding::{built_in_step, missing_fix, observation_location, reference_fact, simple};
 use super::{
-    Attribution, FINDING_KEY_DOMAIN, Finding, FindingKeyScope, Location, LocationSide, PolicyStep,
-    resolution_kinds,
+    Attribution, FACT_DOMAIN, FINDING_KEY_DOMAIN, Finding, FindingKeyScope, Location, LocationSide,
+    PolicyStep, resolution_kinds,
 };
 
 /// The adoption-reproduction projection: every structural key among the
@@ -25,7 +26,7 @@ use super::{
 /// reproduction requirement.
 ///
 /// # Errors
-/// Returns [`crate::Error::Internal`] if a finding key cannot be serialized.
+/// Returns [`crate::Error::Internal`] if a finding key or fact cannot be serialized.
 pub fn structural_facts(
     observations: &[Observation],
 ) -> Result<BTreeMap<Digest, (u64, Digest)>, crate::Error> {
@@ -33,15 +34,28 @@ pub fn structural_facts(
     for observation in observations {
         collect_structural(&mut groups, observation, false)?;
     }
-    Ok(groups
+    groups
         .into_iter()
-        .filter_map(|(digest, group)| {
-            let first = group.candidate.first()?;
+        .map(|(digest, group)| {
+            let first = group.candidate.first().ok_or(crate::Error::Internal)?;
             let multiplicity = u64::try_from(group.candidate.len()).unwrap_or(u64::MAX);
-            let fact = reference_fact(&group.key, first, multiplicity);
-            Some((digest, (multiplicity, fact.digest())))
+            let input = FindingFactInput {
+                evidence: ReferenceFactEvidence {
+                    kind: ReferenceFactEvidenceKind::Reference,
+                    occurrence_multiplicity: multiplicity,
+                    resolution: &first.resolution,
+                },
+                finding_kind: group.key.finding_kind,
+                key_input: &group.key,
+                schema: FactSchema::Current,
+            };
+            let fact_digest = hj_serde(FACT_DOMAIN, |mut writer| {
+                serde_json_canonicalizer::to_writer(&input, &mut writer)
+            })
+            .map_err(|_defect| crate::Error::Internal)?;
+            Ok((digest, (multiplicity, fact_digest)))
         })
-        .collect())
+        .collect()
 }
 
 struct KeyGroup<'a> {
