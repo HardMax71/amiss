@@ -7,9 +7,11 @@ use amiss_wire::model::RepoPathText;
 use amiss_wire::semantic::observation::SiteBuildObservation;
 use amiss_wire::semantic::{PayloadSchema, SemanticProducer, SemanticSubject};
 use cap_std::fs::Dir;
+use serde::Deserialize as _;
 
 mod context;
 mod html;
+mod model;
 
 use context::{BuildPages, pages, render_context, site_build_context};
 use html::{page_facts, reachable_sources};
@@ -99,7 +101,12 @@ pub fn mdbook_site_evidence(
     if u64::try_from(context_bytes.len()).unwrap_or(u64::MAX) > MDBOOK_RENDER_CONTEXT_BYTES {
         return Err(MdBookEvidenceError::ContextBytes);
     }
-    let context = amiss_wire::json::parse(context_bytes).map_err(MdBookEvidenceError::Context)?;
+    amiss_wire::json::parse(context_bytes).map_err(MdBookEvidenceError::Context)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(context_bytes);
+    // The strict JSON gate has already enforced the document depth ceiling.
+    deserializer.disable_recursion_limit();
+    let context = model::RenderContext::deserialize(&mut deserializer)
+        .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
     let (expectation, base, repository_book_root) = site_build_context(site)?;
     let (source_directory, items, config_digest) = render_context(&context)?;
     let build = pages(
