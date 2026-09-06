@@ -126,7 +126,11 @@ pub struct ProjectionAssertion {
 pub struct ScannerPolicy {
     pub schema: ScannerPolicySchema,
     pub document_includes: Vec<DocumentInclude>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "json_serde::deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub projection_assertions: Option<Vec<ProjectionAssertion>>,
     pub protected_inventory: Vec<RepoPathText>,
     pub finding_dispositions: Vec<FindingDisposition>,
@@ -139,10 +143,7 @@ pub struct ScannerPolicy {
 /// Fails on strict-JSON defects, schema-shape violations, unknown fields,
 /// invalid grammar values, and unsorted or duplicate set members.
 pub fn parse_scanner_policy(bytes: &[u8]) -> Result<ScannerPolicy, Error> {
-    let strict = root(bytes)?;
-    if matches!(strict.member("projection_assertions"), Some(Value::Null)) {
-        return fail("$.projection_assertions", ErrorKind::WrongType);
-    }
+    root(bytes)?;
     let policy = de::deserialize_json(bytes)?;
     validate_scanner_policy(&policy)?;
     Ok(policy)
