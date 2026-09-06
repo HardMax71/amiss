@@ -9,8 +9,11 @@ use amiss_controller::{
     MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, SiteBuildContext,
     mdbook_site_evidence, mdbook_site_expectation,
 };
+use amiss_fixtures::{SiteObservation, site_observation};
+use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::hb;
 use amiss_wire::model::RepoPathText;
+use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use serde_json::json;
@@ -62,23 +65,6 @@ fn site(configuration: &str, route_prefix: &str) -> SiteBuildContext {
     }
 }
 
-fn observation<'a>(observations: &'a [serde_json::Value], route: &str) -> &'a serde_json::Value {
-    observations
-        .iter()
-        .find(|row| row.get("route").and_then(serde_json::Value::as_str) == Some(route))
-        .unwrap()
-}
-
-fn texts<'a>(observation: &'a serde_json::Value, name: &str) -> Vec<&'a str> {
-    let Some(values) = observation.get(name).and_then(serde_json::Value::as_array) else {
-        return Vec::new();
-    };
-    values
-        .iter()
-        .filter_map(serde_json::Value::as_str)
-        .collect()
-}
-
 #[test]
 fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     let root = tempfile::tempdir().unwrap();
@@ -125,34 +111,40 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     );
     assert!(parsed.payload.complete);
     assert_eq!(parsed.payload.observations.len(), 4);
-    let intro = observation(&parsed.payload.observations, "/manual/intro.html");
-    assert_eq!(intro["source"], "docs/guide/README.md");
-    assert_eq!(
-        texts(intro, "anchors"),
-        ["both", "entity&anchor", "intro", "legacy", "named"]
-    );
-    let index = observation(&parsed.payload.observations, "/manual/index.html");
-    assert_eq!(index["source"], "docs/guide/README.md");
-    assert_eq!(texts(index, "anchors"), ["home"]);
-    let nested = observation(
-        &parsed.payload.observations,
-        "/manual/nested/%C3%BCber%20view.html",
-    );
-    assert_eq!(nested["source"], "docs/guide/nested/chapter.md");
-    assert_eq!(texts(nested, "anchors"), ["über-view"]);
-    let navigation = parsed
-        .payload
-        .observations
-        .iter()
-        .find(|row| row.get("kind").and_then(serde_json::Value::as_str) == Some("site-navigation"))
-        .unwrap();
-    assert_eq!(navigation["root"], "docs/guide");
-    assert_eq!(navigation["manifest"], "docs/guide/SUMMARY.md");
-    assert_eq!(texts(navigation, "entrypoints"), ["/manual/index.html"]);
-    assert_eq!(
-        texts(navigation, "reachable"),
-        ["docs/guide/README.md", "docs/guide/nested/chapter.md"]
-    );
+    for expected in [
+        site_observation(
+            "/manual/intro.html",
+            SiteObservation::Page(
+                "docs/guide/README.md",
+                &["both", "entity&anchor", "intro", "legacy", "named"],
+            ),
+        )
+        .unwrap(),
+        site_observation(
+            "/manual/index.html",
+            SiteObservation::Page("docs/guide/README.md", &["home"]),
+        )
+        .unwrap(),
+        site_observation(
+            "/manual/nested/%C3%BCber%20view.html",
+            SiteObservation::Page("docs/guide/nested/chapter.md", &["über-view"]),
+        )
+        .unwrap(),
+        Observation::Site(SiteBuildObservation::Navigation {
+            root: Nullable::Value("docs/guide".parse().unwrap()),
+            manifest: "docs/guide/SUMMARY.md".parse().unwrap(),
+            entrypoints: vec!["/manual/index.html".to_owned()],
+            reachable: vec![
+                "docs/guide/README.md".parse().unwrap(),
+                "docs/guide/nested/chapter.md".parse().unwrap(),
+            ],
+        }),
+    ] {
+        assert!(
+            parsed.payload.observations.contains(&expected),
+            "{expected:?}"
+        );
+    }
 
     let repeated = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
     assert_eq!(evidence, repeated);
@@ -177,30 +169,26 @@ fn generated_chapters_need_no_repository_attribution() {
     )
     .unwrap();
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
-    let routes: Vec<&serde_json::Value> = parsed
-        .payload
-        .observations
-        .iter()
-        .filter(|row| {
-            row.get("kind").and_then(serde_json::Value::as_str) == Some("site-generated-route")
-        })
-        .collect();
-    assert_eq!(routes.len(), 2);
-    assert!(
-        routes
-            .iter()
-            .all(|route| route.get("source").is_some_and(serde_json::Value::is_null))
-    );
-    let generated = observation(&parsed.payload.observations, "/manual/generated.html");
-    assert_eq!(texts(generated, "anchors"), ["generated"]);
-    let navigation = parsed
-        .payload
-        .observations
-        .iter()
-        .find(|row| row.get("kind").and_then(serde_json::Value::as_str) == Some("site-navigation"))
-        .unwrap();
-    assert_eq!(texts(navigation, "entrypoints"), ["/manual/index.html"]);
-    assert!(texts(navigation, "reachable").is_empty());
+    assert_eq!(parsed.payload.observations.len(), 3);
+    for expected in [
+        site_observation(
+            "/manual/generated.html",
+            SiteObservation::Generated(None, &["generated"]),
+        )
+        .unwrap(),
+        site_observation("/manual/index.html", SiteObservation::Generated(None, &[])).unwrap(),
+        Observation::Site(SiteBuildObservation::Navigation {
+            root: Nullable::Value("guide".parse().unwrap()),
+            manifest: "guide/SUMMARY.md".parse().unwrap(),
+            entrypoints: vec!["/manual/index.html".to_owned()],
+            reachable: vec![],
+        }),
+    ] {
+        assert!(
+            parsed.payload.observations.contains(&expected),
+            "{expected:?}"
+        );
+    }
 }
 
 #[test]
@@ -241,16 +229,17 @@ fn completed_links_not_chapter_membership_define_navigation() {
     )
     .unwrap();
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
-    let navigation = parsed
-        .payload
-        .observations
-        .iter()
-        .find(|row| row.get("kind").and_then(serde_json::Value::as_str) == Some("site-navigation"))
-        .unwrap();
-    assert_eq!(
-        texts(navigation, "reachable"),
-        ["guide/first.md", "guide/nested/second.md"]
-    );
+    assert!(parsed.payload.observations.contains(&Observation::Site(
+        SiteBuildObservation::Navigation {
+            root: Nullable::Value("guide".parse().unwrap()),
+            manifest: "guide/SUMMARY.md".parse().unwrap(),
+            entrypoints: vec!["/manual/index.html".to_owned()],
+            reachable: vec![
+                "guide/first.md".parse().unwrap(),
+                "guide/nested/second.md".parse().unwrap()
+            ],
+        }
+    )));
 }
 
 #[test]
@@ -390,9 +379,14 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
     let bytes = serde_json::to_vec(&defaulted).unwrap();
     let evidence = mdbook_site_evidence(candidate, &site, &bytes, &output(&root)).unwrap();
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
-    assert_eq!(
-        observation(&parsed.payload.observations, "/chapter.html")["source"],
-        "src/chapter.md"
+    assert!(
+        parsed.payload.observations.contains(
+            &site_observation(
+                "/chapter.html",
+                SiteObservation::Page("src/chapter.md", &["chapter"]),
+            )
+            .unwrap()
+        )
     );
 }
 

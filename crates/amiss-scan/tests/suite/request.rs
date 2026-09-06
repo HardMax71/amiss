@@ -3,7 +3,7 @@
     reason = "integration assertions over the external-control request gate"
 )]
 
-use amiss_fixtures::{SiteObservation, record_set, site_navigation, site_observation};
+use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_scan::request::controls;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, hb};
@@ -15,6 +15,8 @@ use amiss_wire::requests::{
 };
 use amiss_wire::semantic::{
     PayloadSchema, SemanticEvidence, SemanticProducer, SemanticProducerKind, SemanticSubject,
+    observation::{Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
+    record,
 };
 
 const FLOOR: &str = r#"{
@@ -84,7 +86,7 @@ fn semantic_evidence(
     producer_version: &str,
     input_digest: Digest,
     source_report_payload_digest: Option<Digest>,
-    observations: Vec<serde_json::Value>,
+    observations: Vec<Observation>,
 ) -> SemanticEvidence {
     SemanticEvidence {
         schema: PayloadSchema::Current,
@@ -109,7 +111,7 @@ fn semantic_evidence(
 fn supplied_semantic(evidence: SemanticEvidence) -> SuppliedSemanticEvidence {
     let expected_context_digest = evidence.producer.context_digest;
     let (_document, bytes) = amiss_wire::semantic::envelope(evidence)
-        .expect("the generic envelope admits producer-defined semantics");
+        .expect("the envelope contains known observation models");
     SuppliedSemanticEvidence {
         value: serde_json::from_slice(&bytes).expect("the envelope is JSON"),
         expected_context_digest,
@@ -232,11 +234,11 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
         "1",
         hb("test/inventory", b"inventory"),
         None,
-        vec![serde_json::json!({
-            "kind": "sphinx-label",
-            "inventory": "python",
-            "name": "except_star",
-            "destination": "https://docs.python.org/3/reference/",
+        vec![Observation::Sphinx(SphinxLabelObservation {
+            kind: SphinxLabelKind::Current,
+            inventory: "python".parse().unwrap(),
+            name: "except_star".to_owned(),
+            destination: "https://docs.python.org/3/reference/".to_owned(),
         })],
     );
     let mut incomplete = valid.clone();
@@ -244,11 +246,11 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
     let mut unsupported = valid.clone();
     unsupported.producer.version = "2".to_owned();
     let mut malformed = valid;
-    malformed.observations[0] = serde_json::json!({
-        "kind": "sphinx-label",
-        "inventory": "python",
-        "name": "except_star",
-        "destination": "https:///missing-authority",
+    malformed.observations[0] = Observation::Sphinx(SphinxLabelObservation {
+        kind: SphinxLabelKind::Current,
+        inventory: "python".parse().unwrap(),
+        name: "except_star".to_owned(),
+        destination: "https:///missing-authority".to_owned(),
     });
 
     for evidence in [incomplete, unsupported, malformed] {
@@ -271,7 +273,17 @@ fn record_sets_accept_complete_empty_and_partial_typed_rows() {
             "1",
             hb("test/records", b"rust public api"),
             None,
-            vec![record_set("rust/public-api", &records)],
+            vec![Observation::Record(record::Observation {
+                kind: record::ObservationKind::Current,
+                name: "rust/public-api".parse().unwrap(),
+                records: records
+                    .iter()
+                    .map(|(key, value)| record::Record {
+                        key: (*key).to_owned(),
+                        value: (*value).to_owned(),
+                    })
+                    .collect(),
+            })],
         );
         evidence.complete = complete;
         let mut request = empty();
@@ -287,10 +299,14 @@ fn malformed_record_sets_fail_closed() {
         "1",
         hb("test/records", b"rust public api"),
         None,
-        vec![record_set(
-            "rust/public-api",
-            &[("amiss::check", "pub fn check()")],
-        )],
+        vec![Observation::Record(record::Observation {
+            kind: record::ObservationKind::Current,
+            name: "rust/public-api".parse().unwrap(),
+            records: vec![record::Record {
+                key: "amiss::check".to_owned(),
+                value: "pub fn check()".to_owned(),
+            }],
+        })],
     );
     let mut wrong_version = valid.clone();
     wrong_version.producer.version = "2".to_owned();
@@ -300,25 +316,34 @@ fn malformed_record_sets_fail_closed() {
     let mut multiple_sets = valid.clone();
     multiple_sets
         .observations
-        .push(record_set("rust/other", &[]));
-    let mut unsorted = valid.clone();
-    unsorted.observations = vec![record_set("rust/public-api", &[("b", "B"), ("a", "A")])];
-    let mut duplicate = valid.clone();
-    duplicate.observations = vec![record_set("rust/public-api", &[("a", "A"), ("a", "B")])];
-    let mut control_value = valid.clone();
-    control_value.observations = vec![record_set("rust/public-api", &[("a", "line\nbreak")])];
-    let mut empty_value = valid;
-    empty_value.observations = vec![record_set("rust/public-api", &[("a", "")])];
-
-    for evidence in [
-        wrong_version,
-        report_derived,
-        multiple_sets,
-        unsorted,
-        duplicate,
-        control_value,
-        empty_value,
+        .push(Observation::Record(record::Observation {
+            kind: record::ObservationKind::Current,
+            name: "rust/other".parse().unwrap(),
+            records: Vec::new(),
+        }));
+    let mut invalid = vec![wrong_version, report_derived, multiple_sets];
+    for rows in [
+        &[("b", "B"), ("a", "A")][..],
+        &[("a", "A"), ("a", "B")][..],
+        &[("a", "line\nbreak")][..],
+        &[("a", "")][..],
     ] {
+        let mut evidence = valid.clone();
+        evidence.observations = vec![Observation::Record(record::Observation {
+            kind: record::ObservationKind::Current,
+            name: "rust/public-api".parse().unwrap(),
+            records: rows
+                .iter()
+                .map(|(key, value)| record::Record {
+                    key: (*key).to_owned(),
+                    value: (*value).to_owned(),
+                })
+                .collect(),
+        })];
+        invalid.push(evidence);
+    }
+
+    for evidence in invalid {
         let mut request = empty();
         request.semantic_evidence = vec![supplied_semantic(evidence)];
         let error = controls(&request).expect_err("malformed record evidence stays unavailable");
@@ -331,23 +356,27 @@ fn malformed_record_sets_fail_closed() {
 
 #[test]
 fn two_envelopes_cannot_claim_the_same_record_set() {
-    let mut left = semantic_evidence(
-        SemanticProducerKind::RecordSet,
-        "1",
-        hb("test/records", b"left"),
-        None,
-        vec![record_set("rust/public-api", &[("a", "A")])],
-    );
-    left.producer.context_digest = hb("test/record-context", b"left");
-    let mut right = semantic_evidence(
-        SemanticProducerKind::RecordSet,
-        "1",
-        hb("test/records", b"right"),
-        None,
-        vec![record_set("rust/public-api", &[("b", "B")])],
-    );
-    right.producer.context_digest = hb("test/record-context", b"right");
-    let mut supplied = vec![supplied_semantic(left), supplied_semantic(right)];
+    let mut supplied = [("left", "a", "A"), ("right", "b", "B")]
+        .into_iter()
+        .map(|(lane, key, value)| {
+            let mut evidence = semantic_evidence(
+                SemanticProducerKind::RecordSet,
+                "1",
+                hb("test/records", lane.as_bytes()),
+                None,
+                vec![Observation::Record(record::Observation {
+                    kind: record::ObservationKind::Current,
+                    name: "rust/public-api".parse().unwrap(),
+                    records: vec![record::Record {
+                        key: key.to_owned(),
+                        value: value.to_owned(),
+                    }],
+                })],
+            );
+            evidence.producer.context_digest = hb("test/record-context", lane.as_bytes());
+            supplied_semantic(evidence)
+        })
+        .collect::<Vec<_>>();
     supplied.sort_by_key(|item| {
         amiss_wire::semantic::parse(&serde_json::to_vec(&item.value).expect("envelope JSON"))
             .expect("the generic envelopes are valid")
@@ -391,13 +420,14 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
             site_observation(
                 "/guide/",
                 SiteObservation::Page("docs/guide.md", &["details", "intro"]),
-            ),
-            site_navigation(
-                Some("docs"),
-                "docs/SUMMARY.md",
-                &["/guide/"],
-                &["docs/guide.md"],
-            ),
+            )
+            .unwrap(),
+            Observation::Site(SiteBuildObservation::Navigation {
+                root: Nullable::Value("docs".parse().unwrap()),
+                manifest: "docs/SUMMARY.md".parse().unwrap(),
+                entrypoints: vec!["/guide/".to_owned()],
+                reachable: vec!["docs/guide.md".parse().unwrap()],
+            }),
         ],
     );
     let mut incomplete = valid.clone();
@@ -405,64 +435,72 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let mut unsupported = valid.clone();
     unsupported.producer.version = "0.2.0".to_owned();
     let mut invalid_route = valid.clone();
-    invalid_route.observations = vec![site_observation(
-        "//other.example/guide",
-        SiteObservation::Page("docs/guide.md", &["intro"]),
-    )];
-    let mut invalid_source = valid.clone();
-    invalid_source.observations = vec![site_observation(
-        "/guide/",
-        SiteObservation::Page("../guide.md", &["intro"]),
-    )];
+    invalid_route.observations = vec![
+        site_observation(
+            "//other.example/guide",
+            SiteObservation::Page("docs/guide.md", &["intro"]),
+        )
+        .unwrap(),
+    ];
     let mut unsorted_anchors = valid.clone();
-    unsorted_anchors.observations = vec![site_observation(
-        "/guide/",
-        SiteObservation::Page("docs/guide.md", &["intro", "details"]),
-    )];
+    unsorted_anchors.observations = vec![
+        site_observation(
+            "/guide/",
+            SiteObservation::Page("docs/guide.md", &["intro", "details"]),
+        )
+        .unwrap(),
+    ];
     let mut duplicate_anchors = valid;
-    duplicate_anchors.observations = vec![site_observation(
-        "/guide/",
-        SiteObservation::Page("docs/guide.md", &["intro", "intro"]),
-    )];
+    duplicate_anchors.observations = vec![
+        site_observation(
+            "/guide/",
+            SiteObservation::Page("docs/guide.md", &["intro", "intro"]),
+        )
+        .unwrap(),
+    ];
     let malformed_fragment_redirect = semantic_evidence(
         SemanticProducerKind::SiteBuild,
         "0.5.1",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
-        vec![site_observation(
-            "/legacy/",
-            SiteObservation::Redirect("docs/redirects.toml", "/guide/#bad%fragment"),
-        )],
+        vec![
+            site_observation(
+                "/legacy/",
+                SiteObservation::Redirect("docs/redirects.toml", "/guide/#bad%fragment"),
+            )
+            .unwrap(),
+        ],
     );
-    let mut query_redirect = malformed_fragment_redirect.clone();
-    let mut foreign_redirect = malformed_fragment_redirect.clone();
-    let mut self_redirect = malformed_fragment_redirect.clone();
+    for destination in [
+        "/guide/?language=en",
+        "//other.example/guide/",
+        "/legacy/#intro",
+    ] {
+        let mut invalid = malformed_fragment_redirect.clone();
+        invalid.observations = vec![
+            site_observation(
+                "/legacy/",
+                SiteObservation::Redirect("docs/redirects.toml", destination),
+            )
+            .unwrap(),
+        ];
+        let mut request = empty();
+        request.semantic_evidence = vec![supplied_semantic(invalid)];
+        assert_eq!(
+            controls(&request).unwrap_err().code,
+            AnalysisErrorCode::ConfigurationInvalid
+        );
+    }
     let mut accepted = empty();
     accepted.semantic_evidence = vec![supplied_semantic(malformed_fragment_redirect)];
     controls(&accepted).expect("a literal percent sign remains a valid redirect fragment");
-    query_redirect.observations = vec![site_observation(
-        "/legacy/",
-        SiteObservation::Redirect("docs/redirects.toml", "/guide/?language=en"),
-    )];
-    foreign_redirect.observations = vec![site_observation(
-        "/legacy/",
-        SiteObservation::Redirect("docs/redirects.toml", "//other.example/guide/"),
-    )];
-    self_redirect.observations = vec![site_observation(
-        "/legacy/",
-        SiteObservation::Redirect("docs/redirects.toml", "/legacy/#intro"),
-    )];
 
     for (evidence, expected) in [
         (incomplete, AnalysisErrorCode::ConfigurationInvalid),
         (unsupported, AnalysisErrorCode::ConfigurationInvalid),
         (invalid_route, AnalysisErrorCode::ConfigurationInvalid),
-        (invalid_source, AnalysisErrorCode::ConfigurationInvalid),
         (unsorted_anchors, AnalysisErrorCode::NoncanonicalArray),
         (duplicate_anchors, AnalysisErrorCode::NoncanonicalArray),
-        (query_redirect, AnalysisErrorCode::ConfigurationInvalid),
-        (foreign_redirect, AnalysisErrorCode::ConfigurationInvalid),
-        (self_redirect, AnalysisErrorCode::ConfigurationInvalid),
     ] {
         let mut request = empty();
         request.semantic_evidence = vec![supplied_semantic(evidence)];
@@ -472,40 +510,36 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
 }
 
 #[test]
-fn site_claims_require_explicit_source_attribution() {
+fn site_claims_require_valid_explicit_source_attribution() {
     for observation in [
-        serde_json::json!({
-            "kind": "site-redirect",
-            "route": "/legacy/",
-            "destination": "/guide/",
-        }),
-        serde_json::json!({
-            "kind": "site-route",
-            "route": "/guide/",
-            "source": null,
-            "anchors": [],
-        }),
-        serde_json::json!({
-            "kind": "site-redirect",
-            "route": "/legacy/",
-            "source": null,
-            "destination": "/guide/",
-        }),
-        serde_json::json!({
-            "kind": "site-generated-route",
-            "route": "/generated/",
-            "anchors": [],
-        }),
+        r#"{"destination":"/guide/","kind":"site-redirect","route":"/legacy/"}"#,
+        r#"{"anchors":[],"kind":"site-route","route":"/guide/","source":null}"#,
+        r#"{"destination":"/guide/","kind":"site-redirect","route":"/legacy/","source":null}"#,
+        r#"{"anchors":[],"kind":"site-generated-route","route":"/generated/"}"#,
+        r#"{"anchors":["intro"],"kind":"site-route","route":"/guide/","source":"../guide.md"}"#,
     ] {
         let evidence = semantic_evidence(
             SemanticProducerKind::SiteBuild,
             "0.5.1",
             hb("test/site-output", b"site output"),
             Some(hb("test/report", b"source report")),
-            vec![observation],
+            Vec::new(),
+        );
+        let payload = String::from_utf8(serde_json_canonicalizer::to_vec(&evidence).unwrap())
+            .unwrap()
+            .replace(
+                r#""observations":[]"#,
+                &format!(r#""observations":[{observation}]"#),
+            );
+        let digest = hb(amiss_wire::semantic::PAYLOAD_SCHEMA, payload.as_bytes());
+        let envelope = format!(
+            r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{payload},"payload_digest":"{digest}"}}"#
         );
         let mut request = empty();
-        request.semantic_evidence = vec![supplied_semantic(evidence)];
+        request.semantic_evidence = vec![SuppliedSemanticEvidence {
+            value: serde_json::from_str(&envelope).unwrap(),
+            expected_context_digest: evidence.producer.context_digest,
+        }];
         let error = controls(&request).expect_err("a claim without its source fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }
@@ -519,8 +553,13 @@ fn generated_site_claims_admit_absent_repository_attribution() {
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
         vec![
-            site_observation("/generated/", SiteObservation::Generated(None, &["intro"])),
-            site_navigation(Some("docs"), "docs/SUMMARY.md", &["/generated/"], &[]),
+            site_observation("/generated/", SiteObservation::Generated(None, &["intro"])).unwrap(),
+            Observation::Site(SiteBuildObservation::Navigation {
+                root: Nullable::Value("docs".parse().unwrap()),
+                manifest: "docs/SUMMARY.md".parse().unwrap(),
+                entrypoints: vec!["/generated/".to_owned()],
+                reachable: vec![],
+            }),
         ],
     );
     let mut request = empty();
@@ -534,26 +573,27 @@ fn inconsistent_site_navigation_never_becomes_input() {
     let page = site_observation(
         "/guide/",
         SiteObservation::Page("docs/guide.md", &["intro"]),
-    );
+    )
+    .unwrap();
     let cases = [
-        site_navigation(
-            Some("docs"),
-            "other/SUMMARY.md",
-            &["/guide/"],
-            &["docs/guide.md"],
-        ),
-        site_navigation(
-            Some("docs"),
-            "docs/SUMMARY.md",
-            &["/missing/"],
-            &["docs/guide.md"],
-        ),
-        site_navigation(
-            Some("docs"),
-            "docs/SUMMARY.md",
-            &["/guide/"],
-            &["docs/missing.md"],
-        ),
+        Observation::Site(SiteBuildObservation::Navigation {
+            root: Nullable::Value("docs".parse().unwrap()),
+            manifest: "other/SUMMARY.md".parse().unwrap(),
+            entrypoints: vec!["/guide/".to_owned()],
+            reachable: vec!["docs/guide.md".parse().unwrap()],
+        }),
+        Observation::Site(SiteBuildObservation::Navigation {
+            root: Nullable::Value("docs".parse().unwrap()),
+            manifest: "docs/SUMMARY.md".parse().unwrap(),
+            entrypoints: vec!["/missing/".to_owned()],
+            reachable: vec!["docs/guide.md".parse().unwrap()],
+        }),
+        Observation::Site(SiteBuildObservation::Navigation {
+            root: Nullable::Value("docs".parse().unwrap()),
+            manifest: "docs/SUMMARY.md".parse().unwrap(),
+            entrypoints: vec!["/guide/".to_owned()],
+            reachable: vec!["docs/missing.md".parse().unwrap()],
+        }),
     ];
     for navigation in cases {
         let evidence = semantic_evidence(

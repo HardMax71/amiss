@@ -10,6 +10,7 @@ use amiss_controller::{
     intersphinx_evidence,
 };
 use amiss_wire::digest::hb;
+use amiss_wire::semantic::observation::Observation;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 
@@ -53,14 +54,12 @@ fn a_bounded_inventory_becomes_only_complete_label_evidence() {
     assert!(parsed.payload.complete);
     assert_eq!(parsed.payload.observations.len(), 2);
     assert!(parsed.payload.observations.iter().any(|row| {
-        row.get("name").and_then(serde_json::Value::as_str) == Some("except_star")
-            && row.get("destination").and_then(serde_json::Value::as_str)
-                == Some("https://docs.python.org/3/reference/compound_stmts.html#except-star")
+        matches!(row, Observation::Sphinx(label) if label.name == "except_star"
+            && label.destination == "https://docs.python.org/3/reference/compound_stmts.html#except-star")
     }));
     assert!(parsed.payload.observations.iter().any(|row| {
-        row.get("name").and_then(serde_json::Value::as_str) == Some("testcase-objects")
-            && row.get("destination").and_then(serde_json::Value::as_str)
-                == Some("https://docs.python.org/3/library/unittest.html#testcase-objects")
+        matches!(row, Observation::Sphinx(label) if label.name == "testcase-objects"
+            && label.destination == "https://docs.python.org/3/library/unittest.html#testcase-objects")
     }));
 }
 

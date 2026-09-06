@@ -244,7 +244,7 @@ fn artifact_page(run: &WorkflowRunRecord, name: &str, archive: &[u8]) -> Workflo
 }
 
 fn template(context_digest: amiss_wire::digest::Digest) -> Vec<u8> {
-    amiss_wire::semantic::template(SemanticEvidenceTemplate::<serde_json::Value> {
+    amiss_wire::semantic::template(SemanticEvidenceTemplate {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,

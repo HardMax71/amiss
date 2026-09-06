@@ -4,7 +4,7 @@ use std::sync::Arc;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::observation::{
-    SPHINX_INVENTORY_VERSION, SphinxLabelKind, SphinxLabelObservation,
+    Observation, SPHINX_INVENTORY_VERSION, SphinxLabelKind, SphinxLabelObservation,
 };
 use amiss_wire::semantic::{SemanticProducer, SemanticProducerKind, TemplateSchema};
 use flate2::{Decompress, FlushDecompress, Status};
@@ -118,9 +118,8 @@ pub fn intersphinx_evidence(
         .map_err(|_defect| IntersphinxError::Evidence)?;
     let observations = observations
         .into_iter()
-        .map(serde_json::to_value)
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_defect| IntersphinxError::Evidence)?;
+        .map(Observation::Sphinx)
+        .collect::<Vec<_>>();
     let evidence = vec![SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
