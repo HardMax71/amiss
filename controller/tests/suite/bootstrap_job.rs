@@ -8,17 +8,18 @@ use std::path::Path;
 use std::sync::Arc;
 
 use amiss_controller::{
-    AcquiredControl, AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput,
-    ChangeId, ChangeLocator, CheckPlan, ControllerEvaluationId, DeliveryId, DeliveryIdentity,
-    ExternalPolicy, IntegrationId, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
-    MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair, OpaqueId, PolicyControls, ProviderIdentity,
-    ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
-    RunIdentity, RunRefs, RunRequest, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
-    WorkflowArtifactExpectation, bootstrap_job, check_binding, check_plan,
+    AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput, ChangeId,
+    ChangeLocator, CheckPlan, ControllerEvaluationId, DeliveryId, DeliveryIdentity, ExternalPolicy,
+    IntegrationId, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair,
+    OpaqueId, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
+    SemanticEvidenceExpectation, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
+    bootstrap_job, check_binding, check_plan,
 };
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, Profile, canonical_execution_constraint,
-    parse_execution_constraint,
+    ExecutionConstraintDescriptor, OrganizationFloor, Profile, canonical_debt_snapshot,
+    canonical_execution_constraint, canonical_organization_floor, canonical_waiver_bundle,
+    parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_waiver_bundle,
 };
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{self, Value};
@@ -28,7 +29,7 @@ use amiss_wire::model::{
 };
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestTrust, SnapshotRequest,
-    commit_candidate_identity_digest,
+    SuppliedControl, commit_candidate_identity_digest,
 };
 use base64::Engine as _;
 
@@ -54,30 +55,22 @@ fn inventory_path(index: usize, length: usize) -> String {
     )
 }
 
-fn maximal_floor() -> Vec<u8> {
-    let inventory = (0..LARGE_INVENTORY_ENTRIES)
-        .map(|index| format!("\"{}\"", inventory_path(index, MAX_PATH_BYTES)))
-        .collect::<Vec<_>>()
-        .join(",");
-    let source = String::from_utf8(example("organization-floor.json"))
-        .unwrap()
-        .replacen("\"README.md\"", &inventory, 1);
-    serde_json_canonicalizer::to_vec(&json::parse(source.as_bytes()).unwrap()).unwrap()
-}
-
-fn near_ceiling_floor() -> Vec<u8> {
+fn near_ceiling_floor() -> OrganizationFloor {
     let ceiling = usize::try_from(REQUEST_STREAM_BYTES).unwrap();
-    let maximal = maximal_floor();
+    let mut floor = parse_organization_floor(&example("organization-floor.json")).unwrap();
+    floor.protected_inventory = (0..LARGE_INVENTORY_ENTRIES)
+        .map(|index| RepoPathText::new(inventory_path(index, MAX_PATH_BYTES)).unwrap())
+        .collect();
+    let maximal = canonical_organization_floor(&floor).unwrap().0;
     let floor_length = ceiling.checked_sub(1).unwrap();
     let excess = maximal.len().checked_sub(floor_length).unwrap();
     let last = LARGE_INVENTORY_ENTRIES.checked_sub(1).unwrap();
-    let maximal_path = inventory_path(last, MAX_PATH_BYTES);
     let shorter_path = inventory_path(last, MAX_PATH_BYTES.checked_sub(excess).unwrap());
-    let floor = String::from_utf8(maximal)
-        .unwrap()
-        .replacen(&maximal_path, &shorter_path, 1)
-        .into_bytes();
-    assert_eq!(floor.len(), floor_length);
+    *floor.protected_inventory.last_mut().unwrap() = RepoPathText::new(shorter_path).unwrap();
+    assert_eq!(
+        canonical_organization_floor(&floor).unwrap().0.len(),
+        floor_length
+    );
     floor
 }
 
@@ -156,18 +149,34 @@ fn instant(value: &str) -> UtcInstant {
 }
 
 fn policy() -> PolicyControls {
-    let acquired = |name| AcquiredControl {
-        bytes: example(name),
-        trust_source: RequestTrust::OrganizationPolicy,
-    };
     PolicyControls {
         external_policy: ExternalPolicy::Advisory,
-        organization_floor: Some(acquired("organization-floor.json")),
-        debt_snapshot: Some(acquired("debt-snapshot.json")),
-        waiver_bundle: Some(acquired("waiver-bundle.json")),
+        organization_floor: Some(supplied(
+            parse_organization_floor(&example("organization-floor.json")).unwrap(),
+            canonical_organization_floor,
+        )),
+        debt_snapshot: Some(supplied(
+            parse_debt_snapshot(&example("debt-snapshot.json")).unwrap(),
+            canonical_debt_snapshot,
+        )),
+        waiver_bundle: Some(supplied(
+            parse_waiver_bundle(&example("waiver-bundle.json")).unwrap(),
+            canonical_waiver_bundle,
+        )),
         semantic_evidence: super::intersphinx::evidence(),
         semantic_acquisitions: Vec::new(),
         workflow_artifacts: Vec::new(),
+    }
+}
+
+fn supplied<T, E: std::fmt::Debug>(
+    value: T,
+    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), E>,
+) -> SuppliedControl<T> {
+    SuppliedControl {
+        expected_digest: canonical(&value).unwrap().1,
+        value,
+        trust_source: RequestTrust::OrganizationPolicy,
     }
 }
 
@@ -574,16 +583,16 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         BootstrapJobError::RunIdentity
     );
 
-    let wrong_floor = String::from_utf8(example("organization-floor.json"))
-        .unwrap()
-        .replace(r#""name": "docs""#, r#""name": "other""#)
-        .into_bytes();
+    let mut wrong_floor = parse_organization_floor(&example("organization-floor.json")).unwrap();
+    wrong_floor.repository = RepositoryIdentity::new(
+        "gitlab.example.internal".to_owned(),
+        "platform/security".to_owned(),
+        "other".to_owned(),
+    )
+    .unwrap();
     let wrong_policy = PolicyControls {
         external_policy: ExternalPolicy::Advisory,
-        organization_floor: Some(AcquiredControl {
-            bytes: wrong_floor,
-            trust_source: RequestTrust::OrganizationPolicy,
-        }),
+        organization_floor: Some(supplied(wrong_floor, canonical_organization_floor)),
         debt_snapshot: None,
         waiver_bundle: None,
         semantic_evidence: Vec::new(),
@@ -620,10 +629,7 @@ fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
     let floor = near_ceiling_floor();
     let policy = PolicyControls {
         external_policy: ExternalPolicy::Advisory,
-        organization_floor: Some(AcquiredControl {
-            bytes: floor,
-            trust_source: RequestTrust::OrganizationPolicy,
-        }),
+        organization_floor: Some(supplied(floor, canonical_organization_floor)),
         debt_snapshot: None,
         waiver_bundle: None,
         semantic_evidence: Vec::new(),
@@ -634,6 +640,70 @@ fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
         check_plan(Profile::Enforce, policy, execution(),).unwrap_err(),
         BootstrapJobError::RequestEncoding
     );
+}
+
+#[test]
+fn typed_policy_controls_remain_bound_to_the_target_and_the_supplied_floor() {
+    let changes: [fn(&mut PolicyControls); 5] = [
+        |policy| {
+            policy.organization_floor.as_mut().unwrap().value.ref_name =
+                BranchRef::new("refs/heads/other".to_owned()).unwrap();
+        },
+        |policy| {
+            policy.debt_snapshot.as_mut().unwrap().value.ref_name =
+                BranchRef::new("refs/heads/other".to_owned()).unwrap();
+        },
+        |policy| {
+            policy.waiver_bundle.as_mut().unwrap().value.ref_name =
+                BranchRef::new("refs/heads/other".to_owned()).unwrap();
+        },
+        |policy| {
+            policy
+                .debt_snapshot
+                .as_mut()
+                .unwrap()
+                .value
+                .organization_floor_digest = hb("amiss/test-floor", b"other");
+        },
+        |policy| {
+            policy
+                .waiver_bundle
+                .as_mut()
+                .unwrap()
+                .value
+                .organization_floor_digest = hb("amiss/test-floor", b"other");
+        },
+    ];
+    for mutate in changes {
+        let mut policy = policy();
+        mutate(&mut policy);
+        let floor = policy.organization_floor.as_mut().unwrap();
+        floor.expected_digest = canonical_organization_floor(&floor.value).unwrap().1;
+        let debt = policy.debt_snapshot.as_mut().unwrap();
+        debt.expected_digest = canonical_debt_snapshot(&debt.value).unwrap().1;
+        let waiver = policy.waiver_bundle.as_mut().unwrap();
+        waiver.expected_digest = canonical_waiver_bundle(&waiver.value).unwrap().1;
+        assert_eq!(
+            bootstrap(&run_request(policy), &[]).unwrap_err(),
+            BootstrapJobError::ControlBinding,
+        );
+    }
+    let supplied = policy();
+    for policy in [
+        PolicyControls {
+            debt_snapshot: supplied.debt_snapshot,
+            ..PolicyControls::default()
+        },
+        PolicyControls {
+            waiver_bundle: supplied.waiver_bundle,
+            ..PolicyControls::default()
+        },
+    ] {
+        assert_eq!(
+            bootstrap(&run_request(policy), &[]).unwrap_err(),
+            BootstrapJobError::ControlBinding,
+        );
+    }
 }
 
 #[test]

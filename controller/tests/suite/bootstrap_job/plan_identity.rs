@@ -2,9 +2,12 @@ use amiss_controller::{
     BootstrapJobError, OpaqueId, PolicyControls, ProviderInstance, ProviderNamespace,
     SemanticEvidenceTemplate, WorkflowArtifactExpectation, check_binding, check_plan,
 };
-use amiss_wire::controls::Profile;
-use amiss_wire::digest::hb;
+use amiss_wire::controls::{
+    Profile, canonical_debt_snapshot, canonical_organization_floor, canonical_waiver_bundle,
+};
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
+use amiss_wire::requests::RequestTrust;
 
 use super::{execution, site_acquisition, workflow_acquisition};
 
@@ -63,6 +66,55 @@ fn check_plan_v6_digests_keep_existing_bindings() {
         let plan = check_plan(profile, policy, execution()).unwrap();
         assert_eq!(plan.digest.to_string(), digest);
     }
+}
+
+#[test]
+fn retained_control_digests_are_verified_before_a_plan_is_used() {
+    let fields: [fn(&mut PolicyControls) -> &mut Digest; 3] = [
+        |policy| &mut policy.organization_floor.as_mut().unwrap().expected_digest,
+        |policy| &mut policy.debt_snapshot.as_mut().unwrap().expected_digest,
+        |policy| &mut policy.waiver_bundle.as_mut().unwrap().expected_digest,
+    ];
+    let original = check_plan(Profile::Enforce, full_policy(), execution()).unwrap();
+    for select in fields {
+        let mut changed = original.clone();
+        *select(&mut changed.policy) = hb("amiss/test-control", b"changed");
+        assert!(check_binding(&changed).is_err());
+    }
+}
+
+#[test]
+fn changing_a_typed_control_and_its_digest_cannot_preserve_a_frozen_plan() {
+    let changes: [fn(&mut PolicyControls); 6] = [
+        |policy| {
+            let floor = policy.organization_floor.as_mut().unwrap();
+            floor.value.floor_id = ArtifactId::new("other-floor".to_owned()).unwrap();
+            floor.expected_digest = canonical_organization_floor(&floor.value).unwrap().1;
+        },
+        |policy| {
+            let debt = policy.debt_snapshot.as_mut().unwrap();
+            debt.value.organization_floor_digest = hb("amiss/test-floor", b"changed");
+            debt.expected_digest = canonical_debt_snapshot(&debt.value).unwrap().1;
+        },
+        |policy| {
+            let waiver = policy.waiver_bundle.as_mut().unwrap();
+            waiver.value.organization_floor_digest = hb("amiss/test-floor", b"changed");
+            waiver.expected_digest = canonical_waiver_bundle(&waiver.value).unwrap().1;
+        },
+        |policy| {
+            policy.organization_floor.as_mut().unwrap().trust_source =
+                RequestTrust::ExternalRequiredCheck;
+        },
+        |policy| {
+            policy.debt_snapshot.as_mut().unwrap().trust_source =
+                RequestTrust::ExternalRequiredCheck;
+        },
+        |policy| {
+            policy.waiver_bundle.as_mut().unwrap().trust_source =
+                RequestTrust::ExternalRequiredCheck;
+        },
+    ];
+    assert_frozen_binding_changes(&changes, |policy| policy);
 }
 
 #[test]
