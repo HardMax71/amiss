@@ -17,6 +17,7 @@ mod report_identity;
 mod report_reader;
 mod semantic_reader;
 mod string_tags;
+mod trusted_time;
 
 #[test]
 fn document_classifications_match_the_report_schema() {

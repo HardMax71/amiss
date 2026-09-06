@@ -1,8 +1,7 @@
 use amiss_wire::controls::{
     FloorDefect, ResourceName, canonical_debt_snapshot, canonical_execution_constraint,
     canonical_organization_floor, canonical_trusted_time, canonical_waiver_bundle,
-    parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_trusted_time,
-    parse_waiver_bundle,
+    parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_waiver_bundle,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::Digest;
@@ -82,17 +81,13 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .trusted_time
         .as_ref()
         .map(|supplied| {
-            let bytes = serde_json::to_vec(&supplied.value)
-                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
-            let statement =
-                parse_trusted_time(&bytes).map_err(|error| configuration_detail(&error))?;
-            let (_, digest) =
-                canonical_trusted_time(&statement).map_err(|error| configuration_detail(&error))?;
+            let (_, digest) = canonical_trusted_time(&supplied.value)
+                .map_err(|error| configuration_detail(&error))?;
             if digest != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
             Ok(TimeInput {
-                statement,
+                statement: supplied.value.clone(),
                 provider: supplied.provider.clone(),
                 provider_run_id: supplied.provider_run_id.clone(),
                 provider_run_attempt: supplied.provider_run_attempt,

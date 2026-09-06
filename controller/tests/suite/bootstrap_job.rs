@@ -18,7 +18,7 @@ use amiss_controller::{
 };
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, canonical_execution_constraint,
-    parse_execution_constraint, parse_trusted_time,
+    parse_execution_constraint,
 };
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::{self, Value};
@@ -191,9 +191,7 @@ fn candidate_identity(run: &RunRequest) -> Digest {
     let job = bootstrap(run, &[]).unwrap();
     let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
     let supplied_time = controls.trusted_time.unwrap();
-    parse_trusted_time(&serde_json::to_vec(&supplied_time.value).unwrap())
-        .unwrap()
-        .candidate_identity_digest
+    supplied_time.value.candidate_identity_digest
 }
 
 fn semantic_template(context_digest: Digest) -> Vec<u8> {
@@ -290,7 +288,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
 
     let controls = ControlsRequest::parse(&job.streams.controls).unwrap();
     let supplied_time = controls.trusted_time.as_ref().unwrap();
-    let statement = parse_trusted_time(&serde_json::to_vec(&supplied_time.value).unwrap()).unwrap();
+    let statement = &supplied_time.value;
     assert_eq!(statement.provider, "gitlab");
     assert_eq!(statement.provider_run_id, "pipeline/987654321:job-42");
     assert_eq!(statement.provider_run_attempt, 2);

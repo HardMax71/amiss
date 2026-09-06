@@ -207,12 +207,10 @@ fn maximal_trusted_time(
         evaluation_instant,
         valid_until,
     };
-    let (bytes, expected_digest) =
+    let (_, expected_digest) =
         canonical_trusted_time(&statement).map_err(|_defect| BootstrapJobError::RequestEncoding)?;
-    let value =
-        serde_json::from_slice(&bytes).map_err(|_defect| BootstrapJobError::RequestEncoding)?;
     Ok(SuppliedTime {
-        value,
+        value: statement,
         expected_digest,
         provider,
         provider_run_id,
