@@ -18,8 +18,8 @@ use amiss_wire::controls::{
     canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
     parse_trusted_time,
 };
-use amiss_wire::digest::hj;
-use amiss_wire::json::{Value, canonical, parse};
+
+use amiss_wire::json::{Value, parse};
 use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
@@ -246,7 +246,7 @@ fn the_contract_golden_is_the_canonicalization_of_its_indented_value() {
     let indented = dossier_example("scanner-report.json");
     let golden = dossier_example("scanner-report.canonical.json");
     let parsed = parse(&indented).unwrap();
-    let mut recanonicalized = canonical(&parsed);
+    let mut recanonicalized = serde_json_canonicalizer::to_vec(&parsed).unwrap();
     recanonicalized.push(b'\n');
     assert_eq!(
         recanonicalized, golden,
@@ -383,9 +383,9 @@ fn a_statement_issued_for_another_repository_is_refused() {
             let repository = member_mut(statement, "repository");
             set_member(repository, "name", Value::string("other".to_owned()));
         }
-        let digest = hj(
+        let digest = amiss_wire::digest::hb(
             "amiss/scanner-trusted-time-statement",
-            member(trusted, "statement").unwrap(),
+            &serde_json_canonicalizer::to_vec(member(trusted, "statement").unwrap()).unwrap(),
         )
         .to_string();
         set_member(trusted, "statement_digest", Value::string(digest));
@@ -412,7 +412,9 @@ const FLOOR_DIGEST: &str =
 fn sealed_report() -> (Vec<u8>, Expectations) {
     let (wire, mut expectations) = accepted_report();
     let descriptor = parse(&dossier_example("scanner-execution-constraint.json")).unwrap();
-    let constraint = parse_execution_constraint(&canonical(&descriptor)).unwrap();
+    let constraint =
+        parse_execution_constraint(&serde_json_canonicalizer::to_vec(&descriptor).unwrap())
+            .unwrap();
     let constraint_digest = canonical_execution_constraint(&constraint)
         .unwrap()
         .1
@@ -430,7 +432,7 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
         &time_digest,
     );
     refresh_digest(&mut envelope);
-    let mut wire = canonical(&envelope);
+    let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     wire.push(b'\n');
     expectations.sealed = Some(SealedExpectations {
         profile: amiss_wire::controls::Profile::Observe,
@@ -490,7 +492,11 @@ fn seal_evaluation(evaluation: &mut Value) -> String {
         "schema".to_owned(),
         Value::string(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
     ));
-    hj(CANDIDATE_IDENTITY_DOMAIN, &Value::object(identity)).to_string()
+    amiss_wire::digest::hb(
+        CANDIDATE_IDENTITY_DOMAIN,
+        &serde_json_canonicalizer::to_vec(&Value::object(identity)).unwrap(),
+    )
+    .to_string()
 }
 
 fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String) {
@@ -524,7 +530,8 @@ fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String
             Value::string("2026-07-12T10:09:00Z".to_owned()),
         ),
     ]);
-    let parsed = parse_trusted_time(&canonical(&statement)).unwrap();
+    let parsed =
+        parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap()).unwrap();
     let digest = canonical_trusted_time(&parsed).unwrap().1.to_string();
     (statement, digest)
 }
@@ -584,13 +591,17 @@ fn rewrite(wire: &[u8], edit: impl FnOnce(&mut Value)) -> Vec<u8> {
     let mut envelope = parse(wire).unwrap();
     edit(member_mut(&mut envelope, "payload"));
     refresh_digest(&mut envelope);
-    let mut rewritten = canonical(&envelope);
+    let mut rewritten = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     rewritten.push(b'\n');
     rewritten
 }
 
 fn refresh_digest(envelope: &mut Value) {
-    let digest = hj(PAYLOAD_SCHEMA, member(envelope, "payload").unwrap()).to_string();
+    let digest = amiss_wire::digest::hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(member(envelope, "payload").unwrap()).unwrap(),
+    )
+    .to_string();
     set_member(envelope, "payload_digest", Value::string(digest));
 }
 

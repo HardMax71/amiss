@@ -1,5 +1,5 @@
 use amiss_bootstrap::supervise::{AcceptanceDefect, accept};
-use amiss_wire::json::{Value, canonical, parse};
+use amiss_wire::json::{Value, parse};
 
 use super::{Deviation, FLOOR_DIGEST, FOREIGN_DIGEST, Patch, entry, golden, refused, set, string};
 
@@ -63,7 +63,7 @@ fn sealed_reports_use_the_closed_wire_envelope() {
     let (wire, expectations) = golden(Deviation::default());
     let mut envelope = parse(&wire).unwrap();
     set(&mut envelope, "future", Value::Bool(true));
-    let mut wire = canonical(&envelope);
+    let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     wire.push(b'\n');
     assert_eq!(accept(&wire, &expectations), Err(AcceptanceDefect::Shape));
 }

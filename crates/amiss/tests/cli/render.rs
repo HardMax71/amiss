@@ -1,7 +1,6 @@
 use std::fs;
 use std::process::{Command, Stdio};
 
-use amiss_wire::digest::hj;
 use amiss_wire::json::{self, Value};
 use amiss_wire::report::PAYLOAD_SCHEMA;
 
@@ -42,15 +41,20 @@ fn member_mut<'value>(value: &'value mut Value, name: &str) -> &'value mut Value
         .map_or_else(|| panic!("missing {name}"), |(_key, value)| value)
 }
 
-fn bind_digest(envelope: &mut Value) {
-    let digest = hj(PAYLOAD_SCHEMA, member_mut(envelope, "payload")).to_string();
+fn bind_digest(envelope: &mut Value) -> serde_json::Result<()> {
+    let digest = amiss_wire::digest::hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(member_mut(envelope, "payload"))?,
+    )
+    .to_string();
     *member_mut(envelope, "payload_digest") = Value::string(digest);
+    Ok(())
 }
 
-fn write_value(path: &str, value: &Value) {
-    let mut bytes = json::canonical(value);
+fn write_value(path: &str, value: &Value) -> Result<(), Box<dyn std::error::Error>> {
+    let mut bytes = serde_json_canonicalizer::to_vec(value)?;
     bytes.push(b'\n');
-    assert!(fs::write(path, bytes).is_ok(), "write report fixture");
+    Ok(fs::write(path, bytes)?)
 }
 
 #[test]
@@ -103,22 +107,22 @@ fn untrusted_reports_are_refused_before_projection() {
     let result = member_mut(payload, "result");
     *member_mut(result, "status") = Value::string("fail");
     let mismatch_path = format!("{}/mismatch.json", fx.repo);
-    write_value(&mismatch_path, &digest_mismatch);
+    write_value(&mismatch_path, &digest_mismatch).unwrap();
 
     let mut unsupported = report.clone();
     let payload = member_mut(&mut unsupported, "payload");
     *member_mut(payload, "compatibility") = Value::string("2");
-    bind_digest(&mut unsupported);
+    bind_digest(&mut unsupported).unwrap();
     let unsupported_path = format!("{}/unsupported.json", fx.repo);
-    write_value(&unsupported_path, &unsupported);
+    write_value(&unsupported_path, &unsupported).unwrap();
 
     let mut invalid_result = report;
     let payload = member_mut(&mut invalid_result, "payload");
     let result = member_mut(payload, "result");
     *member_mut(result, "status") = Value::string("fail");
-    bind_digest(&mut invalid_result);
+    bind_digest(&mut invalid_result).unwrap();
     let result_path = format!("{}/result.json", fx.repo);
-    write_value(&result_path, &invalid_result);
+    write_value(&result_path, &invalid_result).unwrap();
 
     for (path, reason) in [
         (mismatch_path.as_str(), "does not match its recorded digest"),

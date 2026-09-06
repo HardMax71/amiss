@@ -18,7 +18,7 @@ use amiss_wire::controls::{
     ConstraintPlatform, ExecutionConstraintDescriptor, parse_execution_constraint,
 };
 use amiss_wire::digest::{Digest, hb, sha256};
-use amiss_wire::json::{Value, canonical, parse as parse_json};
+use amiss_wire::json::{Value, parse as parse_json};
 use amiss_wire::manifest::{RuntimeRole, canonical_release_manifest, parse_release_manifest};
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::requests::SnapshotMaterialization;
@@ -59,7 +59,8 @@ fn constraint(release: &Release) -> ExecutionConstraintDescriptor {
             string(&hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, BOOTSTRAP).to_string()),
         ),
     ]);
-    parse_execution_constraint(&canonical(&value)).expect("the constraint parses")
+    parse_execution_constraint(&serde_json_canonicalizer::to_vec(&value).unwrap())
+        .expect("the constraint parses")
 }
 
 fn attempt(release: &Release, bootstrap: &[u8]) -> Result<amiss_bootstrap::Validated, Refusal> {
@@ -117,7 +118,10 @@ fn the_generated_manifest_reparses_to_its_pinned_digest() {
         release.manifest_digest
     );
     assert_eq!(
-        canonical(&amiss_wire::json::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap()),
+        serde_json_canonicalizer::to_vec(
+            &amiss_wire::json::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap()
+        )
+        .unwrap(),
         bytes.strip_suffix(b"\n").unwrap(),
         "the manifest blob is exactly its own canonicalization"
     );
@@ -180,11 +184,11 @@ fn with_rewritten_manifest(transform: impl Fn(&mut Value), also: impl FnOnce(&Pa
         let mut value = parse_json(bytes.strip_suffix(b"\n").expect("the manifest ends in LF"))
             .expect("the manifest parses");
         transform(&mut value);
-        digested = Some(amiss_wire::digest::hj(
+        digested = Some(hb(
             amiss_wire::manifest::MANIFEST_DOMAIN,
-            &value,
+            &serde_json_canonicalizer::to_vec(&value).unwrap(),
         ));
-        let mut out = canonical(&value);
+        let mut out = serde_json_canonicalizer::to_vec(&value).unwrap();
         out.push(b'\n');
         fs::write(&path, out).unwrap();
         also(root);
@@ -432,7 +436,7 @@ fn named_constraint(staged: &Release, status: &str) -> ExecutionConstraintDescri
         .as_bytes(),
     )
     .unwrap();
-    parse_execution_constraint(&canonical(&value)).unwrap()
+    parse_execution_constraint(&serde_json_canonicalizer::to_vec(&value).unwrap()).unwrap()
 }
 
 /// Runs the wrapper over one request triple and reports what it settled to.
