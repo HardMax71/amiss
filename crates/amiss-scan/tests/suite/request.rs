@@ -69,7 +69,7 @@ const fn empty() -> ControlsRequest {
     }
 }
 
-fn supplied(doc: &str, expected: Digest) -> SuppliedControl {
+fn supplied<T: serde::de::DeserializeOwned>(doc: &str, expected: Digest) -> SuppliedControl<T> {
     SuppliedControl {
         value: serde_json::from_str(doc).expect("the fixture is JSON"),
         expected_digest: expected,

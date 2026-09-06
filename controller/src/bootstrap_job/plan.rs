@@ -40,9 +40,9 @@ pub fn check_plan(
         return Err(BootstrapJobError::SemanticEvidence);
     }
     let policy_identity = controls::identity(&policy)?;
-    let (constraint, execution_digest) = canonical_execution_constraint(&execution)
+    let (_, execution_digest) = canonical_execution_constraint(&execution)
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    controls::validate_request_size(&policy, &policy_identity, execution_digest, &constraint)?;
+    controls::validate_request_size(&policy, &policy_identity, execution_digest, &execution)?;
     let identity = PlanIdentity {
         debt_snapshot: policy_identity.debt_snapshot,
         execution_constraint_digest: execution_digest,

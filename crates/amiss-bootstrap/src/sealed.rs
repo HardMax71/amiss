@@ -74,13 +74,10 @@ pub(super) fn capture_requests(
         .execution_constraint
         .as_ref()
         .ok_or_else(|| tampered("execution-constraint-absent"))?;
-    let embedded_constraint =
-        ExecutionConstraintDescriptor::deserialize(&supplied_constraint.value)
-            .map_err(|_defect| tampered("execution-constraint-invalid"))?;
-    canonical_execution_constraint(&embedded_constraint)
+    let embedded_constraint = &supplied_constraint.value;
+    canonical_execution_constraint(embedded_constraint)
         .map_err(|_defect| tampered("execution-constraint-invalid"))?;
-    if constraint_digest != supplied_constraint.expected_digest
-        || embedded_constraint != *constraint
+    if constraint_digest != supplied_constraint.expected_digest || embedded_constraint != constraint
     {
         return Err(tampered("execution-constraint-mismatch"));
     }
@@ -196,8 +193,8 @@ fn sealed_identity(
     Ok(repository)
 }
 
-fn control_expectation(
-    supplied: Option<&amiss_wire::requests::SuppliedControl>,
+fn control_expectation<T>(
+    supplied: Option<&amiss_wire::requests::SuppliedControl<T>>,
 ) -> Option<SealedControlExpectation> {
     supplied.map(|control| SealedControlExpectation {
         digest: control.expected_digest,
