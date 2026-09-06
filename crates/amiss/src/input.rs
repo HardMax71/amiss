@@ -31,13 +31,17 @@ pub(crate) fn bounded_bytes(path: &Path, limit: u64) -> Result<Vec<u8>, ReadErro
 
 /// The writer caps an envelope at `MACHINE_JSON_BYTES`, so a larger input
 /// cannot be one of the scanner's artifacts.
-pub(crate) fn strict_json(path: &Path) -> Result<StrictJson, String> {
+pub(crate) fn report_bytes(path: &Path) -> Result<Vec<u8>, String> {
     let shown = path.display();
-    let bytes = bounded_bytes(path, MACHINE_JSON_BYTES).map_err(|error| match error {
+    bounded_bytes(path, MACHINE_JSON_BYTES).map_err(|error| match error {
         ReadError::Unreadable => format!("{shown} is unreadable"),
         ReadError::TooLarge => format!("{shown} is larger than a scanner report can be"),
-    })?;
+    })
+}
+
+pub(crate) fn strict_json(path: &Path) -> Result<StrictJson, String> {
+    let bytes = report_bytes(path)?;
     let value = json::parse(&bytes)
-        .map_err(|_error| format!("{shown} is not the scanner's strict JSON"))?;
+        .map_err(|_error| format!("{} is not the scanner's strict JSON", path.display()))?;
     Ok(StrictJson { bytes, value })
 }

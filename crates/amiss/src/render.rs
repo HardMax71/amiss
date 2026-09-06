@@ -13,14 +13,14 @@ use crate::invocation::RenderInvocation;
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
 pub(crate) fn run(invocation: &RenderInvocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
-    let input = match crate::input::strict_json(&invocation.report) {
+    let input = match crate::input::report_bytes(&invocation.report) {
         Ok(input) => input,
         Err(defect) => {
             eprintln!("amiss render: {defect}");
             return failure;
         }
     };
-    let (payload, payload_digest, verdict) = match validate_envelope(&input.bytes) {
+    let (payload, payload_digest, verdict) = match validate_envelope(&input) {
         Ok(validated) => validated,
         Err(defect) => {
             eprintln!("amiss render: {defect}");

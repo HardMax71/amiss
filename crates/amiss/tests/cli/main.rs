@@ -9,6 +9,7 @@ mod forge;
 mod formats;
 mod grammar;
 mod human;
+mod input;
 mod junit;
 mod policy;
 mod profiles;
