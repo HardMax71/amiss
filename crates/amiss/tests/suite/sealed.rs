@@ -225,8 +225,8 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
     let floor = parse_organization_floor(floor_bytes).unwrap();
     let controls = ControlsRequest {
         organization_floor: Some(SuppliedControl {
-            value: serde_json::from_slice(floor_bytes).unwrap(),
             expected_digest: canonical_organization_floor(&floor).unwrap().1,
+            value: floor,
             trust_source: RequestTrust::OrganizationPolicy,
         }),
         ..ControlsRequest::default()

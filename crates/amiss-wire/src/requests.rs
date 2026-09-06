@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::controls::{TrustedTimeStatement, provider_run_id_valid, root};
+use crate::controls::{
+    DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeStatement,
+    WaiverBundle, provider_run_id_valid, root,
+};
 use crate::de::{self, Error, ErrorKind};
 use crate::digest::Digest;
 use crate::model::ArtifactId;
@@ -143,13 +146,17 @@ fn validate_snapshot(request: &SnapshotRequest) -> Result<(), Error> {
         .ok_or_else(|| Error::new("$.pre_acquired", ErrorKind::InvalidValue))
 }
 
-/// One supplied external control: the exact embedded JSON value, the
+/// One supplied external control: its concrete typed payload, the
 /// independently acquired expected semantic digest, and the external trust
 /// source that authorized it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SuppliedControl {
-    pub value: serde_json::Value,
+pub struct SuppliedControl<T> {
+    #[serde(
+        deserialize_with = "object::deserialize",
+        bound(deserialize = "T: Deserialize<'de>")
+    )]
+    pub value: T,
     pub expected_digest: Digest,
     pub trust_source: RequestTrust,
 }
@@ -223,15 +230,15 @@ pub enum ControlsRequestSchema {
 pub struct ControlsRequest {
     pub schema: ControlsRequestSchema,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub organization_floor: Option<SuppliedControl>,
+    pub organization_floor: Option<SuppliedControl<OrganizationFloor>>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub debt_snapshot: Option<SuppliedControl>,
+    pub debt_snapshot: Option<SuppliedControl<DebtSnapshot>>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub waiver_bundle: Option<SuppliedControl>,
+    pub waiver_bundle: Option<SuppliedControl<WaiverBundle>>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub trusted_time: Option<SuppliedTime>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub execution_constraint: Option<SuppliedControl>,
+    pub execution_constraint: Option<SuppliedControl<ExecutionConstraintDescriptor>>,
     pub semantic_evidence: Vec<SuppliedSemanticEvidence>,
 }
 
@@ -239,8 +246,8 @@ impl ControlsRequest {
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
-    /// grammar values. Trusted time is decoded under its closed schema;
-    /// the other embedded controls are shape-checked as objects only.
+    /// grammar values. Controls are decoded under their closed schemas;
+    /// semantic evidence is still shape-checked as an object only.
     /// Consumers verify semantic constraints and independent digests.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
         root(bytes)?;
@@ -264,19 +271,6 @@ impl ControlsRequest {
 }
 
 fn validate_controls(request: &ControlsRequest) -> Result<(), Error> {
-    [
-        ("$.organization_floor.value", &request.organization_floor),
-        ("$.debt_snapshot.value", &request.debt_snapshot),
-        ("$.waiver_bundle.value", &request.waiver_bundle),
-        (
-            "$.execution_constraint.value",
-            &request.execution_constraint,
-        ),
-    ]
-    .into_iter()
-    .filter_map(|(path, supplied)| supplied.as_ref().map(|value| (path, &value.value)))
-    .try_for_each(|(path, value)| require_object(path, value))?;
-
     if let Some(time) = &request.trusted_time {
         ArtifactId::new(time.provider.clone())
             .is_some()
