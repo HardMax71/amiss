@@ -18,7 +18,7 @@ use amiss_wire::requests::{
 use crate::{OpaqueId, ProviderIdentity, RunRequest};
 
 pub use amiss_wire::semantic::SemanticEvidenceTemplate;
-pub use controls::{AcquiredControl, PolicyControls};
+pub use controls::PolicyControls;
 pub use plan::{check_binding, check_plan};
 pub use semantic::bind_semantic_evidence;
 
@@ -201,7 +201,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         candidate_identity,
     )?;
     let controls = controls::request(
-        &checked_plan.policy,
+        checked_plan.policy,
         run,
         SuppliedTime {
             value: statement,

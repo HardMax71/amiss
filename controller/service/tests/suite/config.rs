@@ -742,7 +742,14 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
         .organization_floor
         .as_ref()
         .expect("the named floor file lands in the plan");
-    assert_eq!(floor.bytes, floor_bytes);
+    let expected = amiss_wire::controls::parse_organization_floor(floor_bytes).unwrap();
+    assert_eq!(floor.value, expected);
+    assert_eq!(
+        floor.expected_digest,
+        amiss_wire::controls::canonical_organization_floor(&expected)
+            .unwrap()
+            .1
+    );
     let advisory = load_plan(&files("enforce", false, None), None).unwrap();
     assert_eq!(advisory.profile, Profile::Enforce);
     assert_eq!(advisory.policy.external_policy, ExternalPolicy::Advisory);

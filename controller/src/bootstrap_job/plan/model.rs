@@ -3,7 +3,13 @@ use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText};
 use serde::Serialize;
 
-use super::super::{ExternalPolicy, SemanticEvidenceExpectation, controls::ControlIdentity};
+use super::super::{ExternalPolicy, SemanticEvidenceExpectation};
+
+#[derive(Clone, Copy, Serialize)]
+pub(super) struct ControlIdentity {
+    pub(super) digest: Digest,
+    pub(super) trust_source: amiss_wire::requests::RequestTrust,
+}
 
 #[derive(Serialize)]
 pub(super) struct PlanIdentity<'a> {
