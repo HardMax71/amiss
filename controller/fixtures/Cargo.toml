@@ -16,6 +16,7 @@ amiss-wire = { path = "../../crates/amiss-wire" }
 aws-lc-rs.workspace = true
 pem.workspace = true
 serde_json.workspace = true
+serde_json_canonicalizer.workspace = true
 tempfile.workspace = true
 thiserror.workspace = true
 

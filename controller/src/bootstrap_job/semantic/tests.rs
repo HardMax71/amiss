@@ -40,7 +40,7 @@ fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
         u64::try_from(artifact.len()).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     let parsed = json::parse(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
 
-    assert_eq!(json::canonical(&parsed), artifact);
+    assert_eq!(serde_json_canonicalizer::to_vec(&parsed).unwrap(), artifact);
     assert_eq!(
         input_artifact(std::slice::from_ref(&input), exact)?,
         artifact

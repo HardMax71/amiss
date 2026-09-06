@@ -30,16 +30,18 @@ fn produced_templates_keep_the_context_and_rustdoc_digest_preimages() {
         target_triple: "x86_64-unknown-linux-gnu".to_owned(),
     };
     let context_bytes = serde_json::to_vec(&context).unwrap();
-    let context_digest = amiss_wire::digest::hj(
+    let context_digest = amiss_wire::digest::hb(
         "amiss/rust-public-api-context-v1",
-        &amiss_wire::json::parse(&context_bytes).unwrap(),
+        &serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(&context_bytes).unwrap())
+            .unwrap(),
     );
     let rustdoc_digest = amiss_wire::digest::hb("amiss/rust-public-api-rustdoc-v1", &rustdoc);
     let identity =
         format!(r#"{{"context_digest":"{context_digest}","rustdoc_digest":"{rustdoc_digest}"}}"#);
-    let input_digest = amiss_wire::digest::hj(
+    let input_digest = amiss_wire::digest::hb(
         "amiss/rust-public-api-input-v1",
-        &amiss_wire::json::parse(identity.as_bytes()).unwrap(),
+        &serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(identity.as_bytes()).unwrap())
+            .unwrap(),
     );
     let bytes = crate::produce(&context_bytes, &rustdoc).unwrap();
     let template = amiss_wire::semantic::parse_template(&bytes).unwrap();

@@ -2,8 +2,7 @@ use amiss_controller::{
     ArtifactError, RelationAuditBundle, relation_audit_plan, validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
-use amiss_wire::digest::{hj, sha256};
-use amiss_wire::json::{self, Value};
+use amiss_wire::digest::sha256;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::relation::{RelationVerdict, assess, parse_assessment, parse_plan, plan};
 
@@ -133,34 +132,22 @@ fn with_null_report_target(
 ) -> Result<RelationAuditFixture, ArtifactError> {
     let recorded =
         parse_assessment(&fixture.assessment).map_err(|_defect| ArtifactError::Corrupt)?;
-    let mut report = json::parse(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
-    let Value::Object(envelope) = &mut report else {
+    let mut report: amiss_wire::report::model::ReportEnvelope =
+        serde_json::from_slice(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
+    let amiss_wire::report::model::Evaluation::Resolved(evaluation) =
+        &mut report.payload.evaluation
+    else {
         return Err(ArtifactError::Corrupt);
     };
-    let payload = envelope
-        .iter_mut()
-        .find_map(|(key, value)| (key == "payload").then_some(value))
-        .ok_or(ArtifactError::Corrupt)?;
-    let Value::Object(payload_members) = payload else {
-        return Err(ArtifactError::Corrupt);
-    };
-    let evaluation = payload_members
-        .iter_mut()
-        .find_map(|(key, value)| (key == "evaluation").then_some(value))
-        .ok_or(ArtifactError::Corrupt)?;
-    let Value::Object(evaluation_members) = evaluation else {
-        return Err(ArtifactError::Corrupt);
-    };
-    *evaluation_members
-        .iter_mut()
-        .find_map(|(key, value)| (key == "target_ref").then_some(value))
-        .ok_or(ArtifactError::Corrupt)? = Value::Null;
-    let report_payload_digest = hj(amiss_wire::report::PAYLOAD_SCHEMA, payload);
-    *envelope
-        .iter_mut()
-        .find_map(|(key, value)| (key == "payload_digest").then_some(value))
-        .ok_or(ArtifactError::Corrupt)? = Value::string(report_payload_digest.to_string());
-    fixture.report = json::canonical(&report);
+    evaluation.target_ref = None;
+    let report_payload_digest = amiss_wire::digest::hb(
+        amiss_wire::report::PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&report.payload)
+            .map_err(|_defect| ArtifactError::Corrupt)?,
+    );
+    report.payload_digest = report_payload_digest;
+    fixture.report =
+        serde_json_canonicalizer::to_vec(&report).map_err(|_defect| ArtifactError::Corrupt)?;
 
     let mut rebound = parse_plan(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     rebound.payload.report_payload_digest = report_payload_digest;

@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use amiss_controller::ProviderError;
 use amiss_fixtures::{external_facts, external_plan};
-use amiss_wire::digest::hj;
+
 use amiss_wire::external::{ExternalReason, ExternalVerdict, assess};
 use amiss_wire::json::Value;
 
@@ -333,8 +333,16 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
     };
     let evidence =
         verify_external(&rest, &plan, "github.com", "0.0.0", "t0").expect("evidence is produced");
-    let assessment = assess(&plan, &evidence, "0.0.0", hj("t", &Value::Null))
-        .expect("the engine judges the evidence");
+    let assessment = assess(
+        &plan,
+        &evidence,
+        "0.0.0",
+        amiss_wire::digest::hb(
+            "t",
+            &serde_json_canonicalizer::to_vec(&Value::Null).unwrap(),
+        ),
+    )
+    .expect("the engine judges the evidence");
     let document =
         amiss_wire::external::parse_assessment(&assessment).expect("the assessment is valid");
     let verdicts: Vec<_> = document
