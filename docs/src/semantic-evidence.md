@@ -30,9 +30,11 @@ consumer and a corresponding contract update.
 Observation vocabularies do not share a synthetic universal graph. An Intersphinx producer needs
 domain, role, object name, inventory identity, and URI. A site-output producer needs routes,
 anchors, redirects, navigation edges, and source attribution. The envelope requires only a bounded
-`kind` on every observation; a compiled consumer owns the closed grammar and judgment for kinds it
-recognizes. An unknown kind therefore remains inert data. Parsing the envelope never turns it into
-a pass, a block, or a suppression.
+`kind` on every observation; the scanner decodes observations into the closed site, Sphinx label,
+or record-set models before interpretation. Unknown kinds or fields, positional observation arrays,
+and observations belonging to another producer family reject the evidence. The generic envelope
+grammar alone is not proof that the scanner can consume a payload. Parsing an envelope never
+turns it into a pass, a block, or a suppression.
 
 This contract authenticates nothing by itself. Provider-enforced use must acquire it outside the
 repository. Each sealed value carries an independently planned expected context digest; the engine
@@ -97,7 +99,7 @@ is repository-user-selected and its context is not independently planned, so the
 The offline `amiss record-set` authoring form accepts one closed
 [normalized record-set input](https://github.com/HardMax71/amiss/blob/main/spec/scanner-record-set-input.schema.json)
 and emits that template shape with the fixed `record-set@1` producer contract. Its rows pass the
-same decoder the scanner uses: keys are sorted and unique, and keys and display values are
+same record validation the scanner uses: keys are sorted and unique, and keys and display values are
 nonempty, control-free, and bounded. The specialist still owns extraction, its stable identity,
 both supplied digests, and whether the set is complete. Amiss neither executes a language tool nor
 recomputes or authenticates those claims; the command only validates and canonicalizes their

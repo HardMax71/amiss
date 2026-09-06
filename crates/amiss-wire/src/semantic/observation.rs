@@ -6,12 +6,17 @@ use crate::assessment::Nullable;
 use crate::model::{ArtifactId, RepoPathText};
 
 pub const SPHINX_INVENTORY_VERSION: &str = "1";
-pub const SPHINX_LABEL: &str = "sphinx-label";
 pub const SITE_BUILD_VERSION: &str = "0.5.1";
-pub const SITE_ROUTE: &str = "site-route";
-pub const SITE_GENERATED_ROUTE: &str = "site-generated-route";
-pub const SITE_REDIRECT: &str = "site-redirect";
-pub const SITE_NAVIGATION: &str = "site-navigation";
+
+serde_with::with_prefix!(object "");
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Observation {
+    Site(SiteBuildObservation),
+    Sphinx(#[serde(with = "object")] SphinxLabelObservation),
+    Record(#[serde(with = "object")] super::record::Observation),
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", deny_unknown_fields)]
