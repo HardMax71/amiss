@@ -9,6 +9,7 @@ use strum::IntoEnumIterator;
 mod relation_fixture;
 
 mod control_tags;
+mod report_identity;
 mod report_reader;
 
 #[test]
