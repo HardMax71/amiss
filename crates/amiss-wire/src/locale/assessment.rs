@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
 use crate::de::{self, Error, ErrorKind, fail};
@@ -23,8 +25,20 @@ pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/locale-coverage-assessment-pa
 pub const ASSESSMENT_DOCUMENT_BYTES: u64 = EVIDENCE_DOCUMENT_BYTES;
 pub const ASSESSMENT_PAGE_ITEMS_LIMIT: usize = 200_000;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum LocaleCoverageReason {
     EvidenceAbsent,
     EvidenceUnbound,
@@ -47,8 +61,10 @@ pub enum LocaleCoverageReason {
     TargetProductMismatch,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum LocaleFallbackStatus {
     Allowed,
     Unauthorized,
@@ -56,8 +72,10 @@ pub enum LocaleFallbackStatus {
     SourceUnproven,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum LocaleLineageStatus {
     Current,
     Stale,
@@ -72,9 +90,11 @@ pub struct LocaleCoverageAssessmentEnvelope {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum AssessmentEnvelopeSchema {
-    #[serde(rename = "amiss/locale-coverage-assessment-envelope")]
+    #[strum(serialize = "amiss/locale-coverage-assessment-envelope")]
     Current,
 }
 
@@ -90,9 +110,11 @@ pub struct LocaleCoverageAssessment {
     pub product: Nullable<LocaleProductResult>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum AssessmentPayloadSchema {
-    #[serde(rename = "amiss/locale-coverage-assessment-payload")]
+    #[strum(serialize = "amiss/locale-coverage-assessment-payload")]
     Current,
 }
 

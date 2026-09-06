@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
@@ -33,9 +35,11 @@ pub struct PublicationPlanEnvelope<T = PublicationPlan> {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum PlanEnvelopeSchema {
-    #[serde(rename = "amiss/publication-plan-envelope")]
+    #[strum(serialize = "amiss/publication-plan-envelope")]
     Current,
 }
 
@@ -52,9 +56,11 @@ pub struct PublicationPlan {
     pub relation: PublicationRelation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum PlanPayloadSchema {
-    #[serde(rename = "amiss/publication-plan-payload")]
+    #[strum(serialize = "amiss/publication-plan-payload")]
     Current,
 }
 

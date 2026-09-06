@@ -1,11 +1,22 @@
 use serde::{Deserialize, Serialize};
-use strum::{AsRefStr, EnumString};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{AsRefStr, Display, EnumString};
 
 use crate::digest::Digest;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    AsRefStr,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
 #[strum(serialize_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
 pub enum AssessmentVerdict {
     Matched,
     Refuted,
