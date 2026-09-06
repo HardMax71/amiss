@@ -14,6 +14,8 @@ use amiss_wire::{
     resolution::{BlobContent, Resolution, Target},
 };
 
+mod site;
+
 #[test]
 fn blob_and_protected_control_digests_keep_their_canonical_preimages() {
     let body = b"one\r\ntwo\n";
