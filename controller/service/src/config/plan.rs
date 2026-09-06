@@ -1,17 +1,22 @@
 use std::path::{Path, PathBuf};
 
 use amiss_controller::{
-    AcquiredControl, CheckPlan, ExternalPolicy, INTERSPHINX_INVENTORY_BYTES, IntersphinxInventory,
-    OpaqueId, PolicyControls, ProviderIdentity, SemanticEvidenceExpectation,
+    BootstrapJobError, CheckPlan, ExternalPolicy, INTERSPHINX_INVENTORY_BYTES,
+    IntersphinxInventory, OpaqueId, PolicyControls, ProviderIdentity, SemanticEvidenceExpectation,
     WorkflowArtifactExpectation, check_plan, intersphinx_evidence,
 };
-use amiss_wire::controls::{Profile, parse_execution_constraint};
+use amiss_wire::controls::{
+    Profile, canonical_debt_snapshot, canonical_organization_floor, canonical_waiver_bundle,
+    parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_waiver_bundle,
+};
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
-use amiss_wire::requests::{REQUEST_STREAM_BYTES, RequestTrust};
+use amiss_wire::requests::{REQUEST_STREAM_BYTES, RequestTrust, SuppliedControl};
 use serde::Deserialize;
 
 use super::{ConfigError, read_regular};
+
+mod tests;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -84,9 +89,24 @@ pub fn load_plan(
     let workflow_artifacts = load_workflow_artifacts(&raw.workflow_artifacts, workflow_scope)?;
     let policy = PolicyControls {
         external_policy: raw.external_policy,
-        organization_floor: load_control(raw.organization_floor_file.as_deref())?,
-        debt_snapshot: load_control(raw.debt_snapshot_file.as_deref())?,
-        waiver_bundle: load_control(raw.waiver_bundle_file.as_deref())?,
+        organization_floor: load_control(
+            raw.organization_floor_file.as_deref(),
+            parse_organization_floor,
+            canonical_organization_floor,
+            BootstrapJobError::OrganizationFloor,
+        )?,
+        debt_snapshot: load_control(
+            raw.debt_snapshot_file.as_deref(),
+            parse_debt_snapshot,
+            canonical_debt_snapshot,
+            BootstrapJobError::DebtSnapshot,
+        )?,
+        waiver_bundle: load_control(
+            raw.waiver_bundle_file.as_deref(),
+            parse_waiver_bundle,
+            canonical_waiver_bundle,
+            BootstrapJobError::WaiverBundle,
+        )?,
         semantic_evidence,
         semantic_acquisitions: Vec::new(),
         workflow_artifacts,
@@ -164,10 +184,20 @@ fn load_intersphinx(
         .map(|(loaded, _remaining)| loaded)
 }
 
-fn load_control(path: Option<&Path>) -> Result<Option<AcquiredControl>, ConfigError> {
+fn load_control<T, E>(
+    path: Option<&Path>,
+    parse: impl FnOnce(&[u8]) -> Result<T, E>,
+    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), E>,
+    error: BootstrapJobError,
+) -> Result<Option<SuppliedControl<T>>, ConfigError> {
     path.map(|path| {
-        read_regular(path, REQUEST_STREAM_BYTES).map(|bytes| AcquiredControl {
-            bytes,
+        let bytes = read_regular(path, REQUEST_STREAM_BYTES)?;
+        let invalid = |_defect| ConfigError::caused_by("check plan is invalid", error);
+        let value = parse(&bytes).map_err(invalid)?;
+        let expected_digest = canonical(&value).map_err(invalid)?.1;
+        Ok(SuppliedControl {
+            value,
+            expected_digest,
             trust_source: RequestTrust::OrganizationPolicy,
         })
     })

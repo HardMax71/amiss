@@ -1,11 +1,13 @@
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, Profile, canonical_execution_constraint,
+    ExecutionConstraintDescriptor, Profile, canonical_debt_snapshot,
+    canonical_execution_constraint, canonical_organization_floor, canonical_waiver_bundle,
 };
-use amiss_wire::digest::hb;
+use amiss_wire::digest::{Digest, hb};
+use amiss_wire::requests::{REQUEST_STREAM_BYTES, SuppliedControl};
 
 mod model;
 
-use model::{PlanIdentity, SemanticIdentity, WorkflowArtifactIdentity};
+use model::{ControlIdentity, PlanIdentity, SemanticIdentity, WorkflowArtifactIdentity};
 
 use super::controls;
 use super::{
@@ -39,15 +41,29 @@ pub fn check_plan(
     {
         return Err(BootstrapJobError::SemanticEvidence);
     }
-    let policy_identity = controls::identity(&policy)?;
+    let organization_floor = control_identity(
+        policy.organization_floor.as_ref(),
+        canonical_organization_floor,
+        BootstrapJobError::OrganizationFloor,
+    )?;
+    let debt_snapshot = control_identity(
+        policy.debt_snapshot.as_ref(),
+        canonical_debt_snapshot,
+        BootstrapJobError::DebtSnapshot,
+    )?;
+    let waiver_bundle = control_identity(
+        policy.waiver_bundle.as_ref(),
+        canonical_waiver_bundle,
+        BootstrapJobError::WaiverBundle,
+    )?;
     let (_, execution_digest) = canonical_execution_constraint(&execution)
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    controls::validate_request_size(&policy, &policy_identity, execution_digest, &execution)?;
+    controls::validate_request_size(&policy, execution_digest, &execution)?;
     let identity = PlanIdentity {
-        debt_snapshot: policy_identity.debt_snapshot,
+        debt_snapshot,
         execution_constraint_digest: execution_digest,
         external_policy: policy.external_policy,
-        organization_floor: policy_identity.organization_floor,
+        organization_floor,
         profile,
         required_status_name: &execution.required_status_name,
         schema: CHECK_PLAN_DOMAIN,
@@ -64,7 +80,7 @@ pub fn check_plan(
                 producer_version: &template.producer.version,
             })
             .collect(),
-        waiver_bundle: policy_identity.waiver_bundle,
+        waiver_bundle,
         workflow_artifacts: policy
             .workflow_artifacts
             .iter()
@@ -119,6 +135,25 @@ pub(super) fn validated_plan(plan: &CheckPlan) -> Result<CheckPlan, BootstrapJob
     (checked.digest == plan.digest)
         .then_some(checked)
         .ok_or(BootstrapJobError::CheckPlan)
+}
+
+fn control_identity<T, E>(
+    control: Option<&SuppliedControl<T>>,
+    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), E>,
+    error: BootstrapJobError,
+) -> Result<Option<ControlIdentity>, BootstrapJobError> {
+    control
+        .map(|control| {
+            let (bytes, digest) = canonical(&control.value).map_err(|_defect| error)?;
+            (digest == control.expected_digest
+                && u64::try_from(bytes.len()).is_ok_and(|length| length <= REQUEST_STREAM_BYTES))
+            .then_some(ControlIdentity {
+                digest,
+                trust_source: control.trust_source,
+            })
+            .ok_or(error)
+        })
+        .transpose()
 }
 
 pub(super) fn semantic_acquisition_expectations(

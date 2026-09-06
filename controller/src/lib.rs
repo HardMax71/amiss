@@ -38,7 +38,7 @@ pub use artifacts::{
     MAX_ARTIFACT_RETENTION, artifact_route,
 };
 pub use bootstrap_job::{
-    AcquiredControl, AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput,
+    AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput,
     BoundSemanticEvidence, CheckBinding, CheckPlan, ExternalPolicy,
     MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, PolicyControls,
     SEMANTIC_INPUT_ARTIFACT_BYTES, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
