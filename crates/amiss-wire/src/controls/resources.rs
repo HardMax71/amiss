@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
-use strum::{AsRefStr, EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{AsRefStr, Display, EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
 use crate::report::model::AnalysisPhase;
 
@@ -17,11 +17,11 @@ macro_rules! resource_names {
             EnumString,
             EnumIter,
             IntoStaticStr,
-            Serialize,
-            Deserialize,
+            Display,
+            SerializeDisplay,
+            DeserializeFromStr,
         )]
         #[strum(serialize_all = "kebab-case")]
-        #[serde(rename_all = "kebab-case")]
         pub enum ResourceName {
             $($variant),+
         }

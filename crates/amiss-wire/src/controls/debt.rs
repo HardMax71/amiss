@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
@@ -12,9 +14,11 @@ use super::{
     validate_repository, validate_tree,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum DebtSnapshotSchema {
-    #[serde(rename = "amiss/debt-snapshot")]
+    #[strum(serialize = "amiss/debt-snapshot")]
     Current,
 }
 

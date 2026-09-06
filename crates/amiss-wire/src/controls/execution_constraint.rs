@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
@@ -9,15 +11,19 @@ use super::{root, validate_repository};
 pub const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint";
 pub const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ExecutionConstraintSchema {
-    #[serde(rename = "amiss/scanner-execution-constraint")]
+    #[strum(serialize = "amiss/scanner-execution-constraint")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ActionBootstrapContract {
-    #[serde(rename = "amiss-action-bootstrap")]
+    #[strum(serialize = "amiss-action-bootstrap")]
     Current,
 }
 
@@ -27,29 +33,24 @@ pub enum ActionBootstrapContract {
     Debug,
     PartialEq,
     Eq,
-    Serialize,
-    Deserialize,
+    Display,
+    SerializeDisplay,
+    DeserializeFromStr,
     strum::AsRefStr,
-    strum::EnumString,
+    EnumString,
     strum::IntoStaticStr,
 )]
 pub enum ConstraintPlatform {
-    #[serde(rename = "linux-x86_64")]
     #[strum(serialize = "linux-x86_64")]
     LinuxX8664,
-    #[serde(rename = "linux-aarch64")]
     #[strum(serialize = "linux-aarch64")]
     LinuxAarch64,
-    #[serde(rename = "macos-x86_64")]
     #[strum(serialize = "macos-x86_64")]
     MacosX8664,
-    #[serde(rename = "macos-aarch64")]
     #[strum(serialize = "macos-aarch64")]
     MacosAarch64,
-    #[serde(rename = "windows-x86_64")]
     #[strum(serialize = "windows-x86_64")]
     WindowsX8664,
-    #[serde(rename = "windows-aarch64")]
     #[strum(serialize = "windows-aarch64")]
     WindowsAarch64,
 }

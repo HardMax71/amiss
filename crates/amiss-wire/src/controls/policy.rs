@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
@@ -20,16 +22,27 @@ pub const RECORD_VALUE_SOURCE: &str = "record-value";
 pub const RECORD_SET_SOURCE: &str = "record-set";
 pub const SOURCE_MARKER_BYTES: usize = 256;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ScannerPolicySchema {
-    #[serde(rename = "amiss/scanner-policy")]
+    #[strum(serialize = "amiss/scanner-policy")]
     Current,
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, Serialize, Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    strum::AsRefStr,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
-#[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum ProjectionKind {
     #[strum(serialize = "code-text-v1")]
     CodeTextV1,
@@ -39,9 +52,11 @@ pub enum ProjectionKind {
     DecimalCountV1,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ProjectionSink {
-    #[serde(rename = "previous-code")]
+    #[strum(serialize = "previous-code")]
     PreviousCode,
 }
 
