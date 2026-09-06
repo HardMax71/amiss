@@ -13,7 +13,6 @@ mod references;
 mod render;
 mod repair;
 mod sarif;
-mod view;
 
 use std::borrow::Cow;
 use std::collections::BTreeSet;

@@ -26,8 +26,8 @@ pub(crate) fn run_assess(invocation: &AssessInvocation) -> ExitCode {
         invocation.format,
         || {
             Ok((
-                crate::input::strict_json(&invocation.plan)?.bytes,
-                crate::input::strict_json(&invocation.evidence)?.bytes,
+                crate::input::strict_json(&invocation.plan)?,
+                crate::input::strict_json(&invocation.evidence)?,
             ))
         },
         |(plan, evidence), version, digest| {

@@ -1,25 +1,23 @@
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
-use amiss_wire::json::{self, Value};
 use amiss_wire::model::RepoPath;
-use amiss_wire::report::{MACHINE_JSON_BYTES, ReportDefect, validate_envelope};
+use amiss_wire::report::model::{Occurrence, ReportEnvelope};
+use amiss_wire::report::{ReportDefect, validate_envelope};
+use serde::Deserialize;
 
 use crate::invocation::{OutputFormat, RefsInvocation};
 
-const MALFORMED: &str = "the report carries a malformed candidate occurrence";
+pub(crate) mod model;
+
+use model::{Reference, ReferencePayload, ReferenceResolution};
 
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
 pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
-    let input = match crate::input::strict_json(&invocation.report) {
-        Ok(input) => input,
-        Err(defect) => {
-            eprintln!("amiss refs: {defect}");
-            return failure;
-        }
-    };
-    let occurrences = match matching_occurrences(&input, &invocation.target) {
+    let occurrences = match crate::input::report_bytes(&invocation.report)
+        .and_then(|bytes| matching_occurrences(&bytes, &invocation.target))
+    {
         Ok(occurrences) => occurrences,
         Err(defect) => {
             eprintln!("amiss refs: {defect}");
@@ -29,13 +27,13 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
     match invocation.format {
         OutputFormat::Human => crate::human::references(&invocation.target, &occurrences),
         OutputFormat::Json => {
-            if projected_bytes(&occurrences) > MACHINE_JSON_BYTES {
-                eprintln!("amiss refs: the projection is larger than a scanner report can be");
-                return failure;
-            }
-            if let Err(defect) = crate::output::write_json_array(&occurrences, |occurrence| {
-                json::canonical(occurrence)
-            }) && defect.kind() != std::io::ErrorKind::BrokenPipe
+            // Each retained object occurs once in the bounded input.
+            let original: Vec<_> = occurrences
+                .iter()
+                .map(|reference| &reference.original)
+                .collect();
+            if let Err(defect) = crate::output::write_json_array(&original)
+                && defect.kind() != std::io::ErrorKind::BrokenPipe
             {
                 eprintln!("amiss refs: the projection could not be written");
                 return failure;
@@ -46,87 +44,64 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
     ExitCode::from(ExitClass::Success.code())
 }
 
-fn matching_occurrences<'report>(
-    input: &'report crate::input::StrictJson,
-    target: &RepoPath,
-) -> Result<Vec<&'report Value>, String> {
-    let (_payload, _digest, _verdict) =
-        validate_envelope(&input.bytes).map_err(|error| error.to_string())?;
-    let payload = input
-        .value
-        .member("payload")
-        .ok_or_else(|| ReportDefect::NotAReport.to_string())?;
-    if payload
-        .member("result")
-        .and_then(|result| result.member("complete"))
-        != Some(&Value::Bool(true))
-    {
+fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Reference>, String> {
+    let (payload, _digest, _verdict) =
+        validate_envelope(bytes).map_err(|error| error.to_string())?;
+    if !payload.result.complete {
         return Err(ReportDefect::Incomplete.to_string());
     }
-    let Some(Value::Array(comparisons)) = payload.member("observations") else {
-        return Err(ReportDefect::NotAReport.to_string());
-    };
-    let target = target.to_value();
-    let mut matched = Vec::new();
-    for comparison in comparisons {
-        let Some(candidate) = comparison.member("candidate") else {
-            return Err(MALFORMED.to_owned());
-        };
-        match candidate {
-            Value::Null => {}
-            Value::Object(_) => retain(candidate, &target, &mut matched)?,
-            Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Array(_) => {
-                return Err(MALFORMED.to_owned());
-            }
-        }
-        let Some(Value::Array(alternatives)) = comparison
-            .member("alternatives")
-            .and_then(|alternatives| alternatives.member("candidate"))
-        else {
-            return Err(MALFORMED.to_owned());
-        };
-        for alternative in alternatives {
-            retain(alternative, &target, &mut matched)?;
-        }
-    }
-    Ok(matched)
-}
-
-fn retain<'report>(
-    occurrence: &'report Value,
-    target: &Value,
-    matched: &mut Vec<&'report Value>,
-) -> Result<(), String> {
-    if occurrence_matches(occurrence, target).map_err(str::to_owned)? {
-        matched.push(occurrence);
-    }
-    Ok(())
-}
-
-fn occurrence_matches(occurrence: &Value, target: &Value) -> Result<bool, &'static str> {
-    let intent = occurrence.member("intent").ok_or(MALFORMED)?;
-    let resolution = occurrence.member("resolution").ok_or(MALFORMED)?;
-    let repository_path = intent.member("repository_path").ok_or(MALFORMED)?;
-    Ok([
-        Some(repository_path),
-        resolution.member("path"),
-        resolution
-            .member("target")
-            .and_then(|value| value.member("path")),
-        resolution
-            .member("scope")
-            .and_then(|value| value.member("path")),
-    ]
-    .into_iter()
-    .flatten()
-    .any(|path| path == target))
-}
-
-fn projected_bytes(occurrences: &[&Value]) -> u64 {
-    let separators = u64::try_from(occurrences.len().saturating_sub(1)).unwrap_or(u64::MAX);
-    occurrences
-        .iter()
-        .fold(3_u64.saturating_add(separators), |total, occurrence| {
-            total.saturating_add(json::canonical_length(occurrence))
+    drop(payload);
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    // The shared report validator has already enforced the depth ceiling.
+    deserializer.disable_recursion_limit();
+    let envelope = ReportEnvelope::<ReferencePayload>::deserialize(&mut deserializer)
+        .map_err(|defect| defect.to_string())?;
+    let target_hex = hex::encode(target.as_bytes());
+    envelope
+        .payload
+        .observations
+        .into_iter()
+        .flat_map(|comparison| {
+            comparison
+                .candidate
+                .into_iter()
+                .chain(comparison.alternatives.candidate)
         })
+        .filter_map(|original| {
+            Occurrence::<amiss_wire::report::model::RepoPath, ReferenceResolution>::deserialize(
+                &original,
+            )
+            .map(|occurrence| {
+                let resolution = &occurrence.resolution;
+                let matches = [
+                    occurrence.intent.repository_path.as_ref(),
+                    resolution.path.as_ref(),
+                    resolution
+                        .target
+                        .as_ref()
+                        .and_then(|target| target.path.as_ref()),
+                    resolution
+                        .scope
+                        .as_ref()
+                        .and_then(|scope| scope.path.as_ref()),
+                ]
+                .into_iter()
+                .flatten()
+                .any(|path| match path {
+                    amiss_wire::report::model::RepoPath::Text(path) => {
+                        Some(path.as_str()) == target.as_str()
+                    }
+                    amiss_wire::report::model::RepoPath::Bytes(path) => {
+                        target.as_str().is_none() && path.bytes_hex == target_hex
+                    }
+                });
+                matches.then_some(Reference {
+                    occurrence,
+                    original,
+                })
+            })
+            .transpose()
+        })
+        .collect::<Result<_, _>>()
+        .map_err(|defect| defect.to_string())
 }

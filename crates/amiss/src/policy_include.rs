@@ -2,7 +2,6 @@ use std::process::ExitCode;
 
 use amiss_git::{GitLimits, GitResources, Repository, parse_index_file};
 use amiss_scan::policy::{Includes, PolicySide};
-use amiss_wire::json;
 use amiss_wire::model::RepoPath;
 
 use crate::invocation::{PolicyIncludeInvocation, PolicyIncludePreview};
@@ -21,7 +20,7 @@ pub(crate) fn run(invocation: &PolicyIncludeInvocation) -> ExitCode {
             let Some(paths) = staged_paths(invocation, preview) else {
                 return ExitCode::FAILURE;
             };
-            crate::output::write_json_array(&paths, |path| json::canonical(&path.to_value()))
+            crate::output::write_json_array(&paths)
         }
     };
     match result {
