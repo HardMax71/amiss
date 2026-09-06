@@ -22,7 +22,6 @@ use amiss_controller_service::{
 };
 use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
 use amiss_wire::digest::sha256;
-use amiss_wire::json;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict, parse_assessment};
 
@@ -432,17 +431,14 @@ fn report_for(
     let payload = report
         .pointer("/payload")
         .ok_or_else(|| std::io::Error::other("fixture report has no payload"))?;
-    let payload = json::parse(&serde_json::to_vec(payload)?)?;
+    let payload_digest = amiss_wire::digest::hb(
+        amiss_wire::report::PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(payload)?,
+    );
     *report
         .pointer_mut("/payload_digest")
         .ok_or_else(|| std::io::Error::other("fixture report has no payload digest"))? =
-        serde_json::Value::String(
-            amiss_wire::digest::hb(
-                amiss_wire::report::PAYLOAD_SCHEMA,
-                &serde_json_canonicalizer::to_vec(&payload)?,
-            )
-            .to_string(),
-        );
+        serde_json::Value::String(payload_digest.to_string());
     Ok(serde_json_canonicalizer::to_vec(&report)?)
 }
 

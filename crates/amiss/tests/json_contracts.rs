@@ -1,6 +1,6 @@
 use std::{fs, process::Command};
 
-use amiss_wire::{digest::hb, json, report::PAYLOAD_SCHEMA};
+use amiss_wire::{digest::hb, report::PAYLOAD_SCHEMA};
 use serde_json::{Value, json};
 
 #[test]
@@ -39,10 +39,7 @@ fn refs_preserve_original_occurrences_and_nested_extensions_in_canonical_order()
         .unwrap();
     assert_eq!(output.status.code(), Some(0));
     assert!(output.stderr.is_empty(), "{:?}", output.stderr);
-    let mut expected_bytes = serde_json_canonicalizer::to_vec(
-        &json::parse(&serde_json::to_vec(&expected).unwrap()).unwrap(),
-    )
-    .unwrap();
+    let mut expected_bytes = serde_json_canonicalizer::to_vec(&expected).unwrap();
     expected_bytes.push(b'\n');
     assert_eq!(output.stdout, expected_bytes);
 
@@ -70,10 +67,7 @@ fn refs_preserve_original_occurrences_and_nested_extensions_in_canonical_order()
         .output()
         .unwrap();
     assert_eq!(output.status.code(), Some(0));
-    let mut expected_bytes = serde_json_canonicalizer::to_vec(
-        &json::parse(&serde_json::to_vec(&json!([alternative])).unwrap()).unwrap(),
-    )
-    .unwrap();
+    let mut expected_bytes = serde_json_canonicalizer::to_vec(&[alternative]).unwrap();
     expected_bytes.push(b'\n');
     assert_eq!(output.stdout, expected_bytes);
 }

@@ -16,24 +16,26 @@ pub fn json(bytes: &[u8]) {
     let Ok(value) = amiss_wire::json::parse(bytes) else {
         return;
     };
-    let canonical = amiss_wire::json::canonical(&value);
+    let canonical = serde_json_canonicalizer::to_vec(&value).expect("strict values serialize");
     let reparsed = amiss_wire::json::parse(&canonical).expect("canonical bytes reparse");
     assert_eq!(reparsed, value, "canonicalization preserves the value");
     assert_eq!(
-        amiss_wire::json::canonical(&reparsed),
+        serde_json_canonicalizer::to_vec(&reparsed).expect("reparsed values serialize"),
         canonical,
         "canonicalization is idempotent"
     );
-    let mut streamed = String::new();
-    amiss_wire::json::stream(&value, &mut streamed);
+    let mut streamed = Vec::new();
+    serde_json_canonicalizer::to_writer(&value, &mut streamed).expect("strict values stream");
     assert_eq!(
-        streamed.as_bytes(),
+        streamed.as_slice(),
         canonical.as_slice(),
         "streaming equals materialization"
     );
+    let mut counter = countio::Counter::new(std::io::sink());
+    serde_json_canonicalizer::to_writer(&value, &mut counter).expect("strict values count");
     assert_eq!(
-        amiss_wire::json::canonical_length(&value),
-        u64::try_from(canonical.len()).unwrap_or(u64::MAX),
+        counter.writer_bytes(),
+        canonical.len(),
         "the counting pass reports the exact length"
     );
 }

@@ -238,8 +238,7 @@ fn bind_statement(
         .expect("a valid statement fixture");
     let (_, digest) = canonical_trusted_time(&parsed).unwrap();
     time.expected_digest = digest;
-    time.value = serde_json::from_slice(&serde_json_canonicalizer::to_vec(&statement).unwrap())
-        .expect("a JSON statement");
+    time.value = serde_json::to_value(&statement).expect("a JSON statement");
     (statement, digest.to_string())
 }
 

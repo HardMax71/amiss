@@ -3,8 +3,6 @@ use core::{fmt, str::FromStr};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use sha2::{Digest as _, Sha256};
 
-use crate::json::{Callback, Value, stream};
-
 /// The domain for a digest over exact raw bytes taken as evidence: a resolved
 /// target's blob, or one build lockfile as the release manifest records it.
 pub const RAW_EVIDENCE_DOMAIN: &str = "amiss/raw-evidence";
@@ -120,11 +118,6 @@ pub fn hb_stream(domain: &str, emit: impl FnOnce(&mut dyn FnMut(&[u8]))) -> Dige
     })
 }
 
-#[must_use]
-pub fn hj(domain: &str, value: &Value) -> Digest {
-    canonical_hash(domain, value, |_| {})
-}
-
 /// Hashes bytes from the selected serde writer without a separate output buffer.
 /// The selected serializer may still buffer internally.
 /// The caller must select canonical serialization when key order is not already fixed.
@@ -141,27 +134,6 @@ pub fn hj_serde(
     writer.0.update([0_u8]);
     serialize(&mut writer)?;
     Ok(Digest(writer.0.finalize().into()))
-}
-
-#[must_use]
-pub fn hj_with_length(domain: &str, value: &Value) -> (Digest, u64) {
-    let mut length = 0_u64;
-    let digest = canonical_hash(domain, value, |piece| {
-        length = length.saturating_add(u64::try_from(piece.len()).unwrap_or(u64::MAX));
-    });
-    (digest, length)
-}
-
-fn canonical_hash(domain: &str, value: &Value, mut observe: impl FnMut(&str)) -> Digest {
-    hash(domain, |hasher| {
-        stream(
-            value,
-            &mut Callback(|piece: &str| {
-                hasher.update(piece.as_bytes());
-                observe(piece);
-            }),
-        );
-    })
 }
 
 fn hash(domain: &str, update: impl FnOnce(&mut Sha256)) -> Digest {
