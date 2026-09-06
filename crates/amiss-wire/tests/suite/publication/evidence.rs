@@ -3,7 +3,7 @@ use super::{digest, publication_plan};
 use std::{fs, path::Path};
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::json::{self, MAX_SAFE_INTEGER};
 use amiss_wire::publication::{
     EVIDENCE_PAYLOAD_SCHEMA, EvidencePayloadSchema, PublicationDeployment, PublicationEvidence,
@@ -61,7 +61,7 @@ fn publication_evidence_round_trips_with_its_plan_and_payload_digests() {
     let written = evidence(&example.payload).unwrap();
     assert_eq!(
         written,
-        json::canonical(&json::parse(&example_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&example_bytes).unwrap()).unwrap()
     );
 }
 
@@ -88,9 +88,9 @@ fn publication_evidence_refuses_non_success_and_unsafe_attempts() {
     let failed_value = json::parse(failed.as_bytes()).unwrap();
     let rebound = failed.replace(
         &recorded,
-        &hj(
+        &hb(
             EVIDENCE_PAYLOAD_SCHEMA,
-            failed_value.member("payload").unwrap(),
+            &serde_json_canonicalizer::to_vec(failed_value.member("payload").unwrap()).unwrap(),
         )
         .to_string(),
     );

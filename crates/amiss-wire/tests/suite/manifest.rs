@@ -1,6 +1,6 @@
 use amiss_wire::controls::{ConstraintPlatform, GitMode};
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::Digest;
 use amiss_wire::json;
 use amiss_wire::manifest::{
     BuildSource, DEPENDENCY_LOCK_DOMAIN, DependencyLockFile, DependencyLockInput,
@@ -211,9 +211,12 @@ const LOCK: &str = r#"{"schema":"amiss/scanner-dependency-lock-input","files":[{
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn manifest_raw(object_format: &str, commit_oid: &str, lock: &str, artifacts: &str) -> String {
-    let lock_digest = hj(
+    let lock_digest = amiss_wire::digest::hb(
         DEPENDENCY_LOCK_DOMAIN,
-        &json::parse(lock.as_bytes()).expect("the lock template parses"),
+        &serde_json_canonicalizer::to_vec(
+            &json::parse(lock.as_bytes()).expect("the lock template parses"),
+        )
+        .expect("fixture JSON"),
     );
     format!(
         concat!(

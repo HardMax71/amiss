@@ -121,7 +121,7 @@ fn serde_paths_preserve_the_canonical_text_and_byte_forms() {
         let bytes = serde_json::to_vec(&path).unwrap();
         assert_eq!(
             bytes,
-            amiss_wire::json::canonical(&path.to_value()),
+            serde_json_canonicalizer::to_vec(&path.to_value()).unwrap(),
             "{raw:?}"
         );
         assert_eq!(bytes, serde_json_canonicalizer::to_vec(&path).unwrap());

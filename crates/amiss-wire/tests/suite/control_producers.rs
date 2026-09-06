@@ -87,7 +87,10 @@ fn trusted_time_model_and_writer_share_the_parser_contract() {
     let (bytes, _) = canonical_trusted_time(&statement).unwrap();
 
     assert_eq!(parse_trusted_time(&bytes).unwrap(), statement);
-    assert_eq!(json::canonical(&json::parse(&bytes).unwrap()), bytes);
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap(),
+        bytes
+    );
 
     for attempt in [0, 9_007_199_254_740_992, u64::MAX] {
         let mut invalid = trusted_time_statement();
@@ -109,7 +112,10 @@ fn execution_constraint_model_and_writer_share_the_parser_contract() {
     let (bytes, _) = canonical_execution_constraint(&descriptor).unwrap();
 
     assert_eq!(parse_execution_constraint(&bytes).unwrap(), descriptor);
-    assert_eq!(json::canonical(&json::parse(&bytes).unwrap()), bytes);
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap(),
+        bytes
+    );
 
     let mut invalid = execution_constraint();
     invalid.action_object_format = ObjectFormat::Sha256;
@@ -161,13 +167,13 @@ fn producer_writers_preserve_the_published_contract_examples() {
     let statement = parse_trusted_time(&trusted_time).unwrap();
     assert_eq!(
         canonical_trusted_time(&statement).unwrap().0,
-        json::canonical(&json::parse(&trusted_time).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&trusted_time).unwrap()).unwrap()
     );
 
     let execution_constraint = example("scanner-execution-constraint.json");
     let descriptor = parse_execution_constraint(&execution_constraint).unwrap();
     assert_eq!(
         canonical_execution_constraint(&descriptor).unwrap().0,
-        json::canonical(&json::parse(&execution_constraint).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&execution_constraint).unwrap()).unwrap()
     );
 }

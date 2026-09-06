@@ -3,7 +3,7 @@ use super::{digest, oid, publication_plan};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hj;
+
 use amiss_wire::json;
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::publication::{
@@ -127,9 +127,10 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
         &recorded,
-        &hj(
+        &amiss_wire::digest::hb(
             ASSESSMENT_PAYLOAD_SCHEMA,
-            inconsistent_value.member("payload").unwrap(),
+            &serde_json_canonicalizer::to_vec(inconsistent_value.member("payload").unwrap())
+                .unwrap(),
         )
         .to_string(),
     );
@@ -150,9 +151,9 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     let unsorted_value = json::parse(unsorted.as_bytes()).unwrap();
     let rebound = unsorted.replace(
         &recorded,
-        &hj(
+        &amiss_wire::digest::hb(
             ASSESSMENT_PAYLOAD_SCHEMA,
-            unsorted_value.member("payload").unwrap(),
+            &serde_json_canonicalizer::to_vec(unsorted_value.member("payload").unwrap()).unwrap(),
         )
         .to_string(),
     );

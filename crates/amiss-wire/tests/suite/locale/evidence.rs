@@ -8,7 +8,7 @@ use std::{fs, path::Path};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hj;
+
 use amiss_wire::json::{self, Value};
 use amiss_wire::locale::{
     EVIDENCE_PAYLOAD_SCHEMA, EvidencePayloadSchema, LocaleCoverageEvidence, LocalePageInventory,
@@ -110,15 +110,18 @@ fn locale_evidence_round_trips_with_independent_inventories_and_example() {
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        hj(EVIDENCE_PAYLOAD_SCHEMA, value.member("payload").unwrap())
+        amiss_wire::digest::hb(
+            EVIDENCE_PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap()
+        )
     );
 
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let example_bytes = fs::read(examples.join("locale-coverage-evidence.json")).unwrap();
     let example_value = json::parse(&example_bytes).unwrap();
-    let expected_digest = hj(
+    let expected_digest = amiss_wire::digest::hb(
         EVIDENCE_PAYLOAD_SCHEMA,
-        example_value.member("payload").unwrap(),
+        &serde_json_canonicalizer::to_vec(example_value.member("payload").unwrap()).unwrap(),
     )
     .to_string();
     assert_eq!(
@@ -134,7 +137,7 @@ fn locale_evidence_round_trips_with_independent_inventories_and_example() {
     assert_eq!(example.payload.producer, planned.payload.producer);
     assert_eq!(
         evidence(&example.payload).unwrap(),
-        json::canonical(&example_value)
+        serde_json_canonicalizer::to_vec(&example_value).unwrap()
     );
 }
 
@@ -313,9 +316,12 @@ fn pages_mut(value: &mut Value) -> &mut [Value] {
 }
 
 fn sealed(mut value: Value) -> Vec<u8> {
-    let digest = hj(EVIDENCE_PAYLOAD_SCHEMA, value.member("payload").unwrap());
+    let digest = amiss_wire::digest::hb(
+        EVIDENCE_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap(),
+    );
     *member_mut(&mut value, "payload_digest") = Value::string(digest.to_string());
-    json::canonical(&value)
+    serde_json_canonicalizer::to_vec(&value).unwrap()
 }
 
 fn member_mut<'a>(value: &'a mut Value, name: &str) -> &'a mut Value {

@@ -7,7 +7,7 @@ use std::{fs, path::Path};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::Digest;
 use amiss_wire::json;
 use amiss_wire::locale::{
     LOCALE_DOCUMENT_BYTES, LocaleCoveragePlan, LocaleCoveragePolicy, LocaleCoverageScope,
@@ -93,18 +93,24 @@ fn locale_plan_round_trips_with_its_payload_digest_and_example() {
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        hj(PLAN_PAYLOAD_SCHEMA, value.member("payload").unwrap())
+        amiss_wire::digest::hb(
+            PLAN_PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap()
+        )
     );
-    assert_eq!(json::canonical(&json::parse(&bytes).unwrap()), bytes);
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap(),
+        bytes
+    );
 
     let example_bytes = fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/locale-coverage-plan.json"),
     )
     .unwrap();
     let example_value = json::parse(&example_bytes).unwrap();
-    let expected_digest = hj(
+    let expected_digest = amiss_wire::digest::hb(
         PLAN_PAYLOAD_SCHEMA,
-        example_value.member("payload").unwrap(),
+        &serde_json_canonicalizer::to_vec(example_value.member("payload").unwrap()).unwrap(),
     )
     .to_string();
     assert_eq!(
@@ -114,7 +120,7 @@ fn locale_plan_round_trips_with_its_payload_digest_and_example() {
     let example = parse_plan(&example_bytes).unwrap();
     assert_eq!(
         plan(&example.payload).unwrap(),
-        json::canonical(&json::parse(&example_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&example_bytes).unwrap()).unwrap()
     );
 }
 
@@ -264,7 +270,11 @@ fn locale_plan_refuses_tampering_open_shapes_and_oversized_documents() {
     let open_value = json::parse(open.as_bytes()).unwrap();
     let rebound = open.replace(
         &recorded,
-        &hj(PLAN_PAYLOAD_SCHEMA, open_value.member("payload").unwrap()).to_string(),
+        &amiss_wire::digest::hb(
+            PLAN_PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(open_value.member("payload").unwrap()).unwrap(),
+        )
+        .to_string(),
     );
     let error = parse_plan(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.unknown");

@@ -11,7 +11,7 @@ use amiss_wire::controls::{
     parse_trusted_time,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hj;
+
 use amiss_wire::json::Value;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::requests::{
@@ -161,7 +161,10 @@ fn commit_identity_construction_matches_the_published_preimage() {
         .expect("the candidate identity example is strict JSON");
     assert_eq!(
         commit_candidate_identity_digest(&evaluation, &oid('2'), &oid('4')),
-        Some(hj(CANDIDATE_IDENTITY_DOMAIN, &published))
+        Some(amiss_wire::digest::hb(
+            CANDIDATE_IDENTITY_DOMAIN,
+            &serde_json_canonicalizer::to_vec(&published).expect("fixture JSON")
+        ))
     );
 
     let index = EvaluationRequest::index(Profile::Enforce, ObjectFormat::Sha1, oid('1'));
@@ -272,7 +275,7 @@ fn request_writers_are_canonical_and_the_sealed_frame_is_exact() {
     };
     for bytes in [&streams.evaluation, &streams.snapshot, &streams.controls] {
         assert_eq!(
-            amiss_wire::json::canonical(&amiss_wire::json::parse(bytes).unwrap()),
+            serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(bytes).unwrap()).unwrap(),
             *bytes
         );
     }
@@ -453,7 +456,10 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
 fn semantic_evidence_is_a_bounded_set_of_envelopes() {
     let supplied = |value| SuppliedSemanticEvidence {
         value,
-        expected_context_digest: hj("amiss/test-context", &Value::Null),
+        expected_context_digest: amiss_wire::digest::hb(
+            "amiss/test-context",
+            &serde_json_canonicalizer::to_vec(&Value::Null).expect("fixture JSON"),
+        ),
     };
     let mut wrong_shape = ControlsRequest::default();
     wrong_shape

@@ -1,5 +1,5 @@
-use amiss_wire::digest::{hj, hj_with_length};
-use amiss_wire::json::{ErrorKind, Value, canonical, canonical_length, parse};
+use amiss_wire::digest::hj_with_length;
+use amiss_wire::json::{ErrorKind, Value, canonical_length, parse};
 
 #[test]
 fn serde_hashing_binds_the_selected_writer_and_propagates_errors() {
@@ -98,7 +98,13 @@ fn digest_counting_matches_the_independent_operations() {
         ),
     ]);
     let (digest, length) = hj_with_length("amiss/test", &value);
-    assert_eq!(digest, hj("amiss/test", &value));
+    assert_eq!(
+        digest,
+        amiss_wire::digest::hb(
+            "amiss/test",
+            &serde_json_canonicalizer::to_vec(&value).unwrap()
+        )
+    );
     assert_eq!(length, canonical_length(&value));
 }
 
@@ -108,7 +114,7 @@ fn digest_counting_matches_the_independent_operations() {
 fn every_escape_survives_a_round_trip() {
     let text = "q\" b\\ s\u{8} t\t n\n f\u{c} r\r e\u{1} done";
     let value = Value::string(text.to_owned());
-    let wire = canonical(&value);
+    let wire = serde_json_canonicalizer::to_vec(&value).unwrap();
     assert_eq!(
         String::from_utf8(wire.clone()).unwrap(),
         "\"q\\\" b\\\\ s\\b t\\t n\\n f\\f r\\r e\\u0001 done\"",

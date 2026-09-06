@@ -6,7 +6,7 @@
 use std::{fs, path::Path};
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hb, hj};
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{
@@ -85,9 +85,15 @@ fn publication_plan_round_trips_with_its_payload_digest() {
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        hj(PLAN_PAYLOAD_SCHEMA, value.member("payload").unwrap())
+        hb(
+            PLAN_PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap()
+        )
     );
-    assert_eq!(json::canonical(&json::parse(&bytes).unwrap()), bytes);
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap(),
+        bytes
+    );
 
     let example_bytes = fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/publication-plan.json"),
@@ -97,7 +103,7 @@ fn publication_plan_round_trips_with_its_payload_digest() {
     let written = plan(&example.payload).unwrap();
     assert_eq!(
         written,
-        json::canonical(&json::parse(&example_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&example_bytes).unwrap()).unwrap()
     );
 }
 
@@ -224,7 +230,11 @@ fn publication_plan_refuses_tampering_and_open_shapes() {
     let open_value = json::parse(open.as_bytes()).unwrap();
     let rebound = open.replace(
         &recorded,
-        &hj(PLAN_PAYLOAD_SCHEMA, open_value.member("payload").unwrap()).to_string(),
+        &hb(
+            PLAN_PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(open_value.member("payload").unwrap()).unwrap(),
+        )
+        .to_string(),
     );
     let error = parse_plan(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.unknown");
