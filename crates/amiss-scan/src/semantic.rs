@@ -16,7 +16,7 @@ use amiss_wire::model::{ArtifactId, RepoPath};
 pub use amiss_wire::report::model::SemanticEvidenceProvenance as Provenance;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 
-pub(crate) use parse::parse;
+pub(crate) use parse::{parse, validated_envelope};
 pub(crate) use site::{fragment_target, navigation_contains};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -132,20 +132,21 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
         Input::None => return Ok(Context::default()),
         Input::Bound(inputs) => inputs,
         Input::Template(template) => {
-            let (_document, bytes) = amiss_wire::semantic::bind_template(template, candidate)
+            let (envelope, _bytes) = amiss_wire::semantic::bind_template(template, candidate)
                 .map_err(|error| crate::request::configuration_detail(&error))?;
-            let value = serde_json::from_slice(&bytes).map_err(|_defect| {
-                crate::request::configuration_detail(&amiss_wire::de::Error::new(
-                    "$.semantic_evidence",
-                    amiss_wire::de::ErrorKind::InvalidValue,
-                ))
-            })?;
-            let supplied = [amiss_wire::requests::SuppliedSemanticEvidence {
-                value,
-                expected_context_digest: template.producer.context_digest,
-            }];
-            parsed =
-                parse(&supplied).map_err(|error| crate::request::configuration_detail(&error))?;
+            let payload = envelope.payload;
+            parsed = parse([Ok(amiss_wire::semantic::SemanticEvidenceEnvelope {
+                schema: envelope.schema,
+                payload: amiss_wire::semantic::SemanticEvidence {
+                    schema: payload.schema,
+                    subject: payload.subject,
+                    producer: payload.producer,
+                    complete: payload.complete,
+                    observations: payload.observations.into_iter().cloned().collect(),
+                },
+                payload_digest: envelope.payload_digest,
+            })])
+            .map_err(|error| crate::request::configuration_detail(&error))?;
             &parsed
         }
     };

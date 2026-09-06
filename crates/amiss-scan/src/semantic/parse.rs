@@ -19,15 +19,24 @@ use super::{Inputs, InventoryLabel, Provenance};
 const LABEL_BYTES: usize = 4_096;
 const DESTINATION_BYTES: usize = 16_384;
 
-pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error> {
+pub(crate) fn parse(
+    values: impl IntoIterator<Item = Result<SemanticEvidenceEnvelope, Error>>,
+) -> Result<Inputs, Error> {
     let mut inputs = Inputs::default();
-    let mut previous = None;
+    let mut previous: Option<Digest> = None;
     let mut intersphinx = false;
     let mut site_build = false;
     let mut site_items = 0_usize;
-    for (index, supplied) in values.iter().enumerate() {
+    for (index, envelope) in values.into_iter().enumerate() {
         let path = format!("$.semantic_evidence[{index}]");
-        let envelope = validated_envelope(supplied, &path, &mut previous)?;
+        let envelope = envelope?;
+        match previous.map(|digest| digest.cmp(&envelope.payload_digest)) {
+            Some(Ordering::Equal) => {
+                return fail("$.semantic_evidence", ErrorKind::DuplicateMember);
+            }
+            Some(Ordering::Greater) => return fail("$.semantic_evidence", ErrorKind::UnsortedSet),
+            None | Some(Ordering::Less) => previous = Some(envelope.payload_digest),
+        }
         let amiss_wire::semantic::SemanticEvidence {
             schema: _schema,
             subject,
@@ -113,10 +122,9 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
     Ok(inputs)
 }
 
-fn validated_envelope(
+pub(crate) fn validated_envelope(
     supplied: &SuppliedSemanticEvidence,
     path: &str,
-    previous: &mut Option<Digest>,
 ) -> Result<SemanticEvidenceEnvelope, Error> {
     let bytes = serde_json::to_vec(&supplied.value)
         .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
@@ -127,14 +135,7 @@ fn validated_envelope(
             ErrorKind::DigestMismatch,
         );
     }
-    match previous.map(|digest| digest.cmp(&envelope.payload_digest)) {
-        Some(Ordering::Equal) => fail("$.semantic_evidence", ErrorKind::DuplicateMember),
-        Some(Ordering::Greater) => fail("$.semantic_evidence", ErrorKind::UnsortedSet),
-        None | Some(Ordering::Less) => {
-            *previous = Some(envelope.payload_digest);
-            Ok(envelope)
-        }
-    }
+    Ok(envelope)
 }
 
 fn insert_label(

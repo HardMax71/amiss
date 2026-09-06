@@ -14,6 +14,7 @@ use amiss_wire::{
     resolution::{BlobContent, Resolution, Target},
 };
 
+mod semantic;
 mod site;
 
 #[test]

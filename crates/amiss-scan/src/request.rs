@@ -118,8 +118,12 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
             })
         })
         .transpose()?;
-    let semantic = crate::semantic::parse(&request.semantic_evidence)
-        .map_err(|error| configuration_detail(&error))?;
+    let semantic = crate::semantic::parse(request.semantic_evidence.iter().enumerate().map(
+        |(index, supplied)| {
+            crate::semantic::validated_envelope(supplied, &format!("$.semantic_evidence[{index}]"))
+        },
+    ))
+    .map_err(|error| configuration_detail(&error))?;
     Ok(ControlInputs {
         floor,
         debt,
