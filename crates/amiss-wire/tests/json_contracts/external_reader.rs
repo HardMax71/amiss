@@ -37,7 +37,7 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
 
         let mut extended = original.clone();
         let mut nested = Value::Null;
-        for _ in 0..256 {
+        for _ in 0..510 {
             nested = json!([nested]);
         }
         extended["payload"]["future"] = nested;
@@ -47,11 +47,8 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
         ));
         let bytes = serde_json::to_vec(&extended).unwrap();
         assert!(read(&bytes));
-        let mut nested = Value::Null;
-        for _ in 0..513 {
-            nested = json!([nested]);
-        }
-        extended["future"] = nested;
+        let nested = extended["payload"]["future"].take();
+        extended["payload"]["future"] = json!([nested]);
         assert!(!read(&serde_json::to_vec(&extended).unwrap()));
 
         let text = String::from_utf8(serde_json::to_vec(&original).unwrap()).unwrap();
