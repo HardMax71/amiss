@@ -3,7 +3,7 @@ use std::fs;
 use crate::support;
 
 #[test]
-fn malformed_artifact_refusals_name_the_input_file() {
+fn external_assessment_uses_shared_artifact_refusals_and_bounded_file_reads() {
     let directory = tempfile::tempdir().unwrap();
     let plan = directory.path().join("plan with spaces.json");
     let evidence = directory.path().join("evidence with spaces.json");
@@ -24,6 +24,7 @@ fn malformed_artifact_refusals_name_the_input_file() {
         for malformed in [
             b"not json".as_slice(),
             br#"{"nested":{"duplicate":1,"duplicate":2}}"#,
+            br#"{"nested":{"duplicate":1,"\u0064uplicate":2}}"#,
             b"{} trailing content",
             b"9007199254740992",
             b"\xff",
@@ -41,17 +42,43 @@ fn malformed_artifact_refusals_name_the_input_file() {
                 ]);
                 assert_eq!(code, 2);
                 assert!(stdout.is_empty());
-                assert_eq!(
-                    stderr,
-                    format!(
-                        "amiss external-assess: {} is not the scanner's strict JSON\n",
-                        path.display()
-                    ),
-                    "{malformed:?} with {format} output"
+                let artifact = if path == &plan { "plan" } else { "evidence" };
+                assert!(
+                    stderr.starts_with(&format!(
+                        "amiss external-assess: external {artifact} is invalid: "
+                    )),
+                    "{malformed:?} with {format} output: {stderr}"
                 );
             }
         }
-        fs::write(path, valid).unwrap();
+        for (size, reason) in [
+            (None, "is unreadable"),
+            (
+                Some(amiss_wire::external::EXTERNAL_DOCUMENT_BYTES + 1),
+                "is larger than a scanner report can be",
+            ),
+        ] {
+            fs::remove_file(path).unwrap();
+            if let Some(size) = size {
+                fs::File::create(path).unwrap().set_len(size).unwrap();
+            }
+            let (code, stdout, stderr) = support::amiss(&[
+                "external-assess",
+                "--plan",
+                plan.to_str().unwrap(),
+                "--evidence",
+                evidence.to_str().unwrap(),
+                "--format",
+                "json",
+            ]);
+            assert_eq!(code, 2);
+            assert!(stdout.is_empty());
+            assert_eq!(
+                stderr,
+                format!("amiss external-assess: {} {reason}\n", path.display())
+            );
+            fs::write(path, valid).unwrap();
+        }
     }
     let (code, stdout, stderr) = support::amiss(&[
         "external-assess",

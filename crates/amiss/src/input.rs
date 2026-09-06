@@ -2,7 +2,6 @@ use std::fs;
 use std::io::Read as _;
 use std::path::Path;
 
-use amiss_wire::json;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -32,11 +31,4 @@ pub(crate) fn report_bytes(path: &Path) -> Result<Vec<u8>, String> {
         ReadError::Unreadable => format!("{shown} is unreadable"),
         ReadError::TooLarge => format!("{shown} is larger than a scanner report can be"),
     })
-}
-
-pub(crate) fn strict_json(path: &Path) -> Result<Vec<u8>, String> {
-    let bytes = report_bytes(path)?;
-    json::parse(&bytes)
-        .map_err(|_error| format!("{} is not the scanner's strict JSON", path.display()))?;
-    Ok(bytes)
 }
