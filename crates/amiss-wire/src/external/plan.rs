@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb, hj};
+use crate::digest::{Digest, hb, hj_serde};
 use crate::json;
 use crate::model::ForgeDialect;
 use crate::report::model::{
@@ -16,9 +16,9 @@ use crate::report::validate_envelope;
 use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalPlanEnvelope<B = BTreeMap<String, serde_json::Value>, C = B> {
+pub struct ExternalPlanEnvelope<P = ExternalPlan> {
     pub schema: ExternalPlanEnvelopeSchema,
-    pub payload: ExternalPlan<B, C>,
+    pub payload: P,
     pub payload_digest: Digest,
 }
 
@@ -175,18 +175,16 @@ pub fn plan(
 /// Fails on oversized or malformed strict JSON, a malformed known field, a
 /// violated plan law, or a payload digest mismatch.
 pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let payload_digest = {
-        let strict =
-            json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-        let Some(payload) = strict.member("payload") else {
-            return fail("$.payload", ErrorKind::MissingField);
-        };
-        hj(PLAN_PAYLOAD_SCHEMA, payload)
+    let envelope: ExternalPlanEnvelope<serde_json::Value> = super::read(bytes)?;
+    let payload_digest = hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    let document = ExternalPlanEnvelope {
+        schema: envelope.schema,
+        payload: de::deserialize_value("$.payload", envelope.payload)?,
+        payload_digest: envelope.payload_digest,
     };
-    let document: ExternalPlanEnvelope = de::deserialize_json(bytes)?;
     if payload_digest != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }

@@ -67,7 +67,7 @@ pub fn deserialize_value<T: serde::de::DeserializeOwned>(
     serde_path_to_error::deserialize(value).map_err(|defect| deserialize_error(path, &defect))
 }
 
-fn deserialize_error<E: std::fmt::Display>(
+pub(crate) fn deserialize_error<E: std::fmt::Display>(
     base: &str,
     defect: &serde_path_to_error::Error<E>,
 ) -> Error {

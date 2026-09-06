@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use wary::Validate;
 
 use crate::de::{self, Error, ErrorKind};
-use crate::digest::{Digest, hb, hj};
+use crate::digest::{Digest, hb, hj, hj_serde};
 use crate::json;
 
 use super::evidence::{
@@ -32,9 +32,9 @@ pub enum AssessDefect {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalAssessmentEnvelope {
+pub struct ExternalAssessmentEnvelope<P = ExternalAssessment> {
     pub schema: ExternalAssessmentEnvelopeSchema,
-    pub payload: ExternalAssessment,
+    pub payload: P,
     pub payload_digest: Digest,
 }
 
@@ -152,22 +152,18 @@ pub enum AssessmentDefect {
 /// Fails on an oversized or malformed strict document, a malformed known
 /// field, a schema law reported by the derived validator, or a digest mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, AssessmentDefect> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return Err(AssessmentDefect::Wire(Error::new(
-            "$",
-            ErrorKind::LimitExceeded,
-        )));
-    }
-    let payload_digest = {
-        let strict = json::parse(bytes)
-            .map_err(|defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::Json(defect))))?;
-        let payload = strict.member("payload").ok_or_else(|| {
-            AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::MissingField))
-        })?;
-        hj(ASSESSMENT_PAYLOAD_SCHEMA, payload)
+    let envelope: ExternalAssessmentEnvelope<serde_json::Value> =
+        super::read(bytes).map_err(AssessmentDefect::Wire)?;
+    let payload_digest = hj_serde(ASSESSMENT_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
+    })
+    .map_err(|_defect| AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::InvalidValue)))?;
+    let document: ExternalAssessmentEnvelope = ExternalAssessmentEnvelope {
+        schema: envelope.schema,
+        payload: de::deserialize_value("$.payload", envelope.payload)
+            .map_err(AssessmentDefect::Wire)?,
+        payload_digest: envelope.payload_digest,
     };
-    let document: ExternalAssessmentEnvelope =
-        de::deserialize_json(bytes).map_err(AssessmentDefect::Wire)?;
     document
         .payload
         .validate(&())
