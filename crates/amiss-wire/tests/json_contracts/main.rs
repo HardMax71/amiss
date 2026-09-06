@@ -11,6 +11,7 @@ mod relation_fixture;
 mod control_tags;
 mod report_identity;
 mod report_reader;
+mod semantic_reader;
 
 #[test]
 fn document_classifications_match_the_report_schema() {

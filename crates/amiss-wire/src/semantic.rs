@@ -90,12 +90,22 @@ pub enum TemplateSchema {
 /// invalid producer identity, or observations that are not bounded sorted objects with kinds.
 pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope, Error> {
     let document: SemanticEvidenceEnvelope = parse_document(bytes)?;
+    validate(&document)?;
+    Ok(document)
+}
+
+/// Checks the digest and semantic laws of a decoded evidence envelope.
+/// Readers enforce byte limits and strict JSON before decoding.
+///
+/// # Errors
+///
+/// Fails on a digest mismatch, invalid producer identity, or invalid observation set.
+pub fn validate(document: &SemanticEvidenceEnvelope) -> Result<(), Error> {
     if payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
     validate_producer("$.payload.producer", &document.payload.producer)?;
-    validate_observations("$.payload.observations", &document.payload.observations)?;
-    Ok(document)
+    validate_observations("$.payload.observations", &document.payload.observations)
 }
 
 /// Parses one candidate-independent semantic evidence template.
