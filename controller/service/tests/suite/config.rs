@@ -259,6 +259,63 @@ fn relation_files_reject_ambiguous_shape_and_invalid_complete_registries()
     Ok(())
 }
 
+#[test]
+fn relation_input_types_reject_unknown_and_incompatible_data()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = TempDir::new()?;
+    load_relation_fixture(&directory)?;
+    let path = directory.path().join("relations.json");
+    let original = fs::read_to_string(&path)?;
+    for (name, field, replacement) in [
+        (
+            "unknown source variant",
+            r#""kind":"record-set""#,
+            r#""kind":"future-source""#,
+        ),
+        (
+            "unknown source member",
+            r#""kind":"record-set""#,
+            r#""kind":"record-set","future":true"#,
+        ),
+        (
+            "null set identity",
+            r#""set":"rust/public-api""#,
+            r#""set":null"#,
+        ),
+        (
+            "unknown destination member",
+            r#""subject_role":"documentation""#,
+            r#""subject_role":"documentation","future":true"#,
+        ),
+        (
+            "invalid role identity",
+            r#""role":"source""#,
+            r#""role":"invalid role""#,
+        ),
+        (
+            "invalid target ref",
+            r#""target":"refs/heads/main""#,
+            r#""target":"main""#,
+        ),
+        (
+            "unknown object format",
+            r#""object_format":"sha1""#,
+            r#""object_format":"future-format""#,
+        ),
+        (
+            "incompatible projection",
+            r#""projection":"sorted-rows-v1""#,
+            r#""projection":"code-text-v1""#,
+        ),
+    ] {
+        let invalid = original.replace(field, replacement);
+        assert_ne!(invalid, original, "{name} must change the captured input");
+        fs::write(&path, invalid)?;
+        assert!(load_relation_registry(&path).is_err(), "{name}");
+    }
+    Ok(())
+}
+
 fn sphinx_inventory(body: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
     encoder.write_all(body)?;

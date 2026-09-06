@@ -57,7 +57,8 @@ pub struct RelationSubject {
     pub limits: RelationLimits,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationStatusDestination {
     pub subject_role: ArtifactId,
     pub required_status_name: String,
