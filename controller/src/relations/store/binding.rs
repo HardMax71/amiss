@@ -1,5 +1,4 @@
-use amiss_wire::controls::projection_source_value;
-use amiss_wire::digest::{Digest, hb, hj};
+use amiss_wire::digest::{Digest, hb, hj_serde};
 use amiss_wire::model::ArtifactId;
 use serde::Serialize;
 
@@ -41,7 +40,7 @@ struct BoundPlanSubject<'a> {
     target: &'a str,
     object_format: &'a str,
     credential: &'a str,
-    source: String,
+    source: Digest,
     limits: BoundLimits,
 }
 
@@ -152,23 +151,25 @@ pub(super) fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationSchedu
         projection_records: limits.projection_records,
         projection_bytes: limits.projection_bytes,
     };
-    let subjects = plan.subjects.each_ref().map(|subject| BoundPlanSubject {
-        role: subject.role.as_str(),
-        provider_namespace: subject.scope.provider.namespace.as_str(),
-        provider_instance: subject.scope.provider.instance.as_str(),
-        integration: subject.scope.integration.as_str(),
-        repository_host: subject.scope.repository.host(),
-        repository_owner: subject.scope.repository.owner(),
-        repository_name: subject.scope.repository.name(),
-        target: subject.target.as_str(),
-        object_format: subject.object_format.as_ref(),
-        credential: subject.credential.as_str(),
-        source: hj(
-            SOURCE_BINDING_SCHEMA,
-            &projection_source_value(&subject.source),
-        )
-        .to_string(),
-        limits: limits(subject.limits),
+    let [left, right] = plan.subjects.each_ref().map(|subject| {
+        let source = hj_serde(SOURCE_BINDING_SCHEMA, |mut writer| {
+            serde_json_canonicalizer::to_writer(&subject.source, &mut writer)
+        })
+        .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+        Ok::<_, RelationScheduleStoreError>(BoundPlanSubject {
+            role: subject.role.as_str(),
+            provider_namespace: subject.scope.provider.namespace.as_str(),
+            provider_instance: subject.scope.provider.instance.as_str(),
+            integration: subject.scope.integration.as_str(),
+            repository_host: subject.scope.repository.host(),
+            repository_owner: subject.scope.repository.owner(),
+            repository_name: subject.scope.repository.name(),
+            target: subject.target.as_str(),
+            object_format: subject.object_format.as_ref(),
+            credential: subject.credential.as_str(),
+            source,
+            limits: limits(subject.limits),
+        })
     });
     let status_destinations = plan
         .status_destinations
@@ -182,7 +183,7 @@ pub(super) fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationSchedu
         identity: plan.identity.as_str(),
         context_digest: plan.context_digest.to_string(),
         projection: plan.projection.as_ref(),
-        subjects,
+        subjects: [left?, right?],
         aggregate_limits: limits(plan.aggregate_limits),
         status_destinations,
     })

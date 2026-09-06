@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
 use crate::extraction::governed_name_valid;
-use crate::json::{self, Value};
+use crate::json;
 use crate::model::{Adapter, ArtifactId, RepoPathText};
 
 use super::{
@@ -342,64 +342,5 @@ fn projection_source_compatible(projection: ProjectionKind, source: &ProjectionS
             projection,
             ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1
         ),
-    }
-}
-
-#[must_use]
-pub fn projection_source_value(source: &ProjectionSource) -> Value {
-    match source {
-        ProjectionSource::BlobLines(selection) => Value::Object(Box::new([
-            ("kind".into(), Value::String(BLOB_LINES_SOURCE.into())),
-            ("path".into(), Value::String(selection.path.as_str().into())),
-            (
-                "first_line".into(),
-                Value::Integer(i64::try_from(selection.first_line).unwrap_or(i64::MAX)),
-            ),
-            (
-                "last_line".into(),
-                Value::Integer(i64::try_from(selection.last_line).unwrap_or(i64::MAX)),
-            ),
-        ])),
-        ProjectionSource::NamedRegion(selection) => Value::Object(Box::new([
-            ("kind".into(), Value::String(NAMED_REGION_SOURCE.into())),
-            ("path".into(), Value::String(selection.path.as_str().into())),
-            (
-                "start_marker".into(),
-                Value::String(selection.start_marker.clone().into()),
-            ),
-            (
-                "end_marker".into(),
-                Value::String(selection.end_marker.clone().into()),
-            ),
-        ])),
-        ProjectionSource::TreePaths(selection) => {
-            let mut fields = vec![
-                ("kind".into(), Value::String(TREE_PATHS_SOURCE.into())),
-                ("root".into(), Value::String(selection.root.as_str().into())),
-                (
-                    "maximum_depth".into(),
-                    Value::Integer(i64::try_from(selection.maximum_depth).unwrap_or(i64::MAX)),
-                ),
-            ];
-            if let Some(suffix) = &selection.suffix {
-                fields.push(("suffix".into(), Value::String(suffix.clone().into())));
-            }
-            Value::Object(fields.into_boxed_slice())
-        }
-        ProjectionSource::RecordValue(selection) => Value::Object(Box::new([
-            ("kind".into(), Value::String(RECORD_VALUE_SOURCE.into())),
-            (
-                "set".into(),
-                Value::String(selection.set.as_str().to_owned().into()),
-            ),
-            ("key".into(), Value::String(selection.key.clone().into())),
-        ])),
-        ProjectionSource::RecordSet(selection) => Value::Object(Box::new([
-            ("kind".into(), Value::String(RECORD_SET_SOURCE.into())),
-            (
-                "set".into(),
-                Value::String(selection.set.as_str().to_owned().into()),
-            ),
-        ])),
     }
 }

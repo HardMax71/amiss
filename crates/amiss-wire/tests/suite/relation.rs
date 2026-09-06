@@ -7,7 +7,7 @@ use std::{fs, path::Path};
 
 use amiss_wire::controls::{
     BlobLineSelection, NamedRegionSelection, ProjectionKind, ProjectionSource, RecordSetSelection,
-    RecordValueSelection, TreePathSelection, projection_source_value,
+    RecordValueSelection, TreePathSelection,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{hb, hj};
@@ -133,10 +133,6 @@ fn relation_plan_preserves_every_projection_source_shape() {
     ];
 
     for (projection, source) in cases {
-        assert_eq!(
-            serde_json_canonicalizer::to_vec(&source).unwrap(),
-            json::canonical(&projection_source_value(&source))
-        );
         let mut input = relation_contract().plan;
         input.projection = projection;
         for subject in &mut input.subjects {

@@ -43,7 +43,7 @@ pub use policy::{
     RECORD_VALUE_SOURCE, RecordSetSelection, RecordValueSelection, SOURCE_MARKER_BYTES,
     ScannerPolicy, ScannerPolicySchema, TREE_PATHS_SOURCE, TreePathSelection,
     canonical_scanner_policy, check_projection_source, parse_projection_source,
-    parse_scanner_policy, projection_source_value,
+    parse_scanner_policy,
 };
 pub use resources::{ResourceName, ResourceNameIter};
 pub use taxonomy::{
