@@ -1,7 +1,7 @@
 use amiss_scan::resolve::{RAW_EVIDENCE_DOMAIN, TARGET_LINE_PROJECTION_DOMAIN};
 use amiss_scan::{Error, Resolution, ScanLimits};
 use amiss_wire::controls::{GitMode, ResourceName};
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::json::Value;
 use amiss_wire::model::{Adapter, ForgeDialect};
 use amiss_wire::resolution::{BlobContent, BlobMode, Missing, Target, UnsupportedSemantics};
@@ -63,11 +63,14 @@ fn line_fragments_have_a_hard_grammar() {
     }
 }
 
-fn expected_line_projection(mode: GitMode, selected: &[u8]) -> amiss_wire::digest::Digest {
+fn expected_line_projection(
+    mode: GitMode,
+    selected: &[u8],
+) -> Result<amiss_wire::digest::Digest, Box<dyn std::error::Error>> {
     let selected_raw = hb(RAW_EVIDENCE_DOMAIN, selected);
-    hj(
+    Ok(hb(
         TARGET_LINE_PROJECTION_DOMAIN,
-        &Value::object(vec![
+        &serde_json_canonicalizer::to_vec(&Value::object(vec![
             (
                 "git_mode".to_owned(),
                 Value::string(mode.as_ref().to_owned()),
@@ -76,8 +79,8 @@ fn expected_line_projection(mode: GitMode, selected: &[u8]) -> amiss_wire::diges
                 "raw_digest".to_owned(),
                 Value::string(selected_raw.to_string()),
             ),
-        ]),
-    )
+        ]))?,
+    ))
 }
 
 #[test]
@@ -122,7 +125,7 @@ fn line_selections_digest_the_exact_raw_inclusive_slice() {
         );
         assert_eq!(
             projection_digest,
-            expected_line_projection(GitMode::RegularFile, selected),
+            expected_line_projection(GitMode::RegularFile, selected).unwrap(),
             "the target projection is the exact selected bytes for {fragment}"
         );
     }
@@ -166,7 +169,7 @@ fn line_selections_digest_the_exact_raw_inclusive_slice() {
     );
     assert_eq!(
         all_lines.content.projection_digest(),
-        Some(expected_line_projection(GitMode::RegularFile, MIXED_LINES))
+        Some(expected_line_projection(GitMode::RegularFile, MIXED_LINES).unwrap())
     );
 }
 
@@ -251,7 +254,7 @@ fn executable_line_selections_bind_the_executable_mode() {
     assert_eq!(blob.mode, BlobMode::Executable);
     assert_eq!(
         blob.content.projection_digest(),
-        Some(expected_line_projection(GitMode::ExecutableFile, b"two\n"))
+        Some(expected_line_projection(GitMode::ExecutableFile, b"two\n").unwrap())
     );
 }
 
@@ -344,10 +347,7 @@ fn native_and_absolute_line_ranges_follow_the_declared_forge_dialect() {
             "https://bitbucket.example/projects/ACME/repos/widgets/browse/src/lines.rs?at=refs%2Fheads%2Ffeature%2Fx#2-3",
         ),
     ];
-    let expected = Some(expected_line_projection(
-        GitMode::RegularFile,
-        b"two\nthree\r",
-    ));
+    let expected = Some(expected_line_projection(GitMode::RegularFile, b"two\nthree\r").unwrap());
 
     for (dialect, accepted, rejected, out_of_range, absolute) in cases {
         let context = forge_context(dialect);

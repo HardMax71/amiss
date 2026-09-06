@@ -103,7 +103,7 @@ pub(crate) fn github_pairs() -> Vec<(String, String, String)> {
         .collect();
     files.sort();
     assert_eq!(
-        corpus::directory_digest(&files),
+        corpus::directory_digest(&files).unwrap(),
         corpus::GITHUB_FOOTNOTE_PIN,
         "the footnote fixture directory drifted from its pin"
     );

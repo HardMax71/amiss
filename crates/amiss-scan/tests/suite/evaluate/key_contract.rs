@@ -64,10 +64,16 @@ fn reference_keys_preserve_normalization_and_optional_identity_fields() {
                     ))
                 );
                 let expected = json::parse(expected.as_bytes()).expect("key fixture");
-                assert_eq!(finding.finding_key, hj(FINDING_KEY_DOMAIN, &expected));
+                assert_eq!(
+                    finding.finding_key,
+                    hb(
+                        FINDING_KEY_DOMAIN,
+                        &serde_json_canonicalizer::to_vec(&expected).unwrap()
+                    )
+                );
                 assert_eq!(
                     serde_json::to_vec(&finding.key_input).expect("typed key"),
-                    json::canonical(&expected)
+                    serde_json_canonicalizer::to_vec(&expected).unwrap()
                 );
             }
         }
@@ -125,8 +131,7 @@ fn nonreference_keys_preserve_document_observation_and_control_scopes() {
         ("policy-weakened", r#"{"control_path":"config.json","kind":"control","rule_id":"rule"}"#.to_owned()),
     ].map(|(kind, scope)| {
         let input = format!(r#"{{"finding_kind":"{kind}","schema":"amiss/scanner-finding-key-input","scope":{scope}}}"#);
-        let input = json::parse(input.as_bytes()).expect("key fixture");
-        (hj(FINDING_KEY_DOMAIN, &input), json::canonical(&input))
+        (hb(FINDING_KEY_DOMAIN, input.as_bytes()), input.into_bytes())
     });
     expected.sort_unstable();
     assert_eq!(

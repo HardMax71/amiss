@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::json::Value;
 use amiss_wire::report::model::{ReportEnvelope, ReportPayload};
 use amiss_wire::report::{
@@ -278,7 +278,10 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
         "error_count",
         Value::Integer(64),
     );
-    let payload_digest = hj(PAYLOAD_SCHEMA, payload);
+    let payload_digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(payload).unwrap(),
+    );
 
     let mut maximal = Value::Object(envelope_members);
     set_member(
@@ -286,7 +289,7 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
         "payload_digest",
         string(&payload_digest.to_string()),
     );
-    let mut wire = amiss_wire::json::canonical(&maximal);
+    let mut wire = serde_json_canonicalizer::to_vec(&maximal).unwrap();
     wire.push(b'\n');
 
     assert_schema_valid(&wire);

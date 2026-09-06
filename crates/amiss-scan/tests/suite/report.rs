@@ -13,7 +13,7 @@ use amiss_scan::{
     discover,
 };
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::json::parse;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::{DocumentCounts, FindingCounts, ReferenceCounts, Summary};
@@ -576,7 +576,11 @@ fn an_observation_row_hashes_the_identity_input_it_renders() {
     let row = &envelope["payload"]["observations"][0]["candidate"];
     let input_bytes = serde_json::to_vec(&row["observation_id_input"]).unwrap();
     let input = parse(&input_bytes).unwrap();
-    let expected = hj(OBSERVATION_ID_DOMAIN, &input).to_string();
+    let expected = hb(
+        OBSERVATION_ID_DOMAIN,
+        &serde_json_canonicalizer::to_vec(&input).unwrap(),
+    )
+    .to_string();
 
     assert_ne!(row["observation_id"], wrong.to_string());
     assert_eq!(row["observation_id"], expected);

@@ -446,6 +446,7 @@ version = "0.27.0"
 dependencies = [
  "amiss-wire",
  "markdown",
+ "serde_json_canonicalizer",
  "sha2",
 ]
 
