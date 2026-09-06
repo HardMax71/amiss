@@ -4,7 +4,7 @@ use amiss_wire::controls::{
     parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hj;
+
 use amiss_wire::json;
 use amiss_wire::model::BranchRef;
 
@@ -31,7 +31,10 @@ fn parses_the_floor_fixture() {
     assert_eq!(floor.schema, OrganizationFloorSchema::Current);
     assert_eq!(
         canonical_organization_floor(&floor).unwrap().1,
-        hj("amiss/organization-floor", &json::parse(FLOOR).unwrap())
+        amiss_wire::digest::hb(
+            "amiss/organization-floor",
+            &serde_json_canonicalizer::to_vec(&json::parse(FLOOR).unwrap()).unwrap()
+        )
     );
     assert_eq!(floor.floor_id.as_str(), "platform/scanner-floor-2026-07");
     assert_eq!(floor.ref_name.as_str(), "refs/heads/main");

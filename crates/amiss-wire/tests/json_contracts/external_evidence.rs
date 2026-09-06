@@ -1,6 +1,6 @@
 use amiss_wire::{
     de::ErrorKind,
-    digest::{hb, hj},
+    digest::hb,
     external::{self, EvidenceDefect},
     json,
 };
@@ -21,7 +21,10 @@ fn assessments_use_the_digest_of_all_evidence_fields() {
         assert_ne!(digest, original_digest);
         assert_eq!(
             digest,
-            hj(external::EVIDENCE_SCHEMA, &json::parse(&bytes).unwrap())
+            hb(
+                external::EVIDENCE_SCHEMA,
+                &serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap()
+            )
         );
         assert_eq!(
             external::parse_evidence(&serde_json::to_vec(&extended).unwrap())

@@ -138,7 +138,7 @@ fn report_examples_match_their_typed_source() {
         };
         assert_eq!(
             serde_json_canonicalizer::to_vec(&envelope).unwrap(),
-            json::canonical(&value),
+            serde_json_canonicalizer::to_vec(&value).unwrap(),
             "{name}",
         );
     }
@@ -162,7 +162,7 @@ fn optional_report_members_preserve_digest_bound_presence() {
         let resolution: report::model::MissingResolution = serde_json::from_str(document).unwrap();
         assert_eq!(
             serde_json_canonicalizer::to_vec(&resolution).unwrap(),
-            json::canonical(&json::parse(document.as_bytes()).unwrap()),
+            serde_json_canonicalizer::to_vec(&json::parse(document.as_bytes()).unwrap()).unwrap(),
         );
     }
 }
@@ -175,10 +175,16 @@ fn the_release_manifest_example_matches_its_typed_source() {
     let parsed_json = json::parse(&committed).unwrap();
     let release_manifest = manifest::parse_release_manifest(&committed).unwrap();
     let (generated, digest) = manifest::canonical_release_manifest(&release_manifest).unwrap();
-    assert_eq!(generated, json::canonical(&parsed_json));
+    assert_eq!(
+        generated,
+        serde_json_canonicalizer::to_vec(&parsed_json).unwrap()
+    );
     assert_eq!(
         digest,
-        amiss_wire::digest::hj(manifest::MANIFEST_DOMAIN, &parsed_json)
+        amiss_wire::digest::hb(
+            manifest::MANIFEST_DOMAIN,
+            &serde_json_canonicalizer::to_vec(&parsed_json).unwrap()
+        )
     );
 }
 
@@ -189,7 +195,7 @@ fn the_external_examples_match_their_typed_sources() {
     let external_plan = external::parse_plan(&external_plan_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&external_plan).unwrap(),
-        json::canonical(&json::parse(&external_plan_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&external_plan_bytes).unwrap()).unwrap()
     );
     let external_evidence_bytes =
         fs::read(examples.join("scanner-external-evidence.json")).unwrap();
@@ -197,21 +203,23 @@ fn the_external_examples_match_their_typed_sources() {
         external::parse_evidence(&external_evidence_bytes).unwrap();
     assert_eq!(
         evidence_digest,
-        amiss_wire::digest::hj(
+        amiss_wire::digest::hb(
             external::EVIDENCE_SCHEMA,
-            &json::parse(&external_evidence_bytes).unwrap()
+            &serde_json_canonicalizer::to_vec(&json::parse(&external_evidence_bytes).unwrap())
+                .unwrap()
         )
     );
     assert_eq!(
         external::evidence(&external_evidence).unwrap(),
-        json::canonical(&json::parse(&external_evidence_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&external_evidence_bytes).unwrap()).unwrap()
     );
     let external_assessment_bytes =
         fs::read(examples.join("scanner-external-assessment.json")).unwrap();
     let external_assessment = external::parse_assessment(&external_assessment_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&external_assessment).unwrap(),
-        json::canonical(&json::parse(&external_assessment_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&external_assessment_bytes).unwrap())
+            .unwrap()
     );
 }
 
@@ -227,7 +235,7 @@ fn sidecar_examples_match_their_typed_sources() {
     );
     assert_eq!(
         generated_plan,
-        json::canonical(&json::parse(&committed_plan).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&committed_plan).unwrap()).unwrap()
     );
 
     let generated_evidence = relation::evidence(&contract.evidence).unwrap();
@@ -240,21 +248,22 @@ fn sidecar_examples_match_their_typed_sources() {
     );
     assert_eq!(
         generated_evidence,
-        json::canonical(&json::parse(&committed_evidence).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&committed_evidence).unwrap()).unwrap()
     );
 
     let publication_plan_bytes = fs::read(examples.join("publication-plan.json")).unwrap();
     let publication_plan = publication::parse_plan(&publication_plan_bytes).unwrap();
     assert_eq!(
         publication::plan(&publication_plan.payload).unwrap(),
-        json::canonical(&json::parse(&publication_plan_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&publication_plan_bytes).unwrap()).unwrap()
     );
 
     let publication_evidence_bytes = fs::read(examples.join("publication-evidence.json")).unwrap();
     let publication_evidence = publication::parse_evidence(&publication_evidence_bytes).unwrap();
     assert_eq!(
         publication::evidence(&publication_evidence.payload).unwrap(),
-        json::canonical(&json::parse(&publication_evidence_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&publication_evidence_bytes).unwrap())
+            .unwrap()
     );
 
     let publication_assessment_bytes =
@@ -270,21 +279,22 @@ fn sidecar_examples_match_their_typed_sources() {
     .unwrap();
     assert_eq!(
         replayed,
-        json::canonical(&json::parse(&publication_assessment_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&publication_assessment_bytes).unwrap())
+            .unwrap()
     );
 
     let locale_plan_bytes = fs::read(examples.join("locale-coverage-plan.json")).unwrap();
     let locale_plan = locale::parse_plan(&locale_plan_bytes).unwrap();
     assert_eq!(
         locale::plan(&locale_plan.payload).unwrap(),
-        json::canonical(&json::parse(&locale_plan_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&locale_plan_bytes).unwrap()).unwrap()
     );
 
     let locale_evidence_bytes = fs::read(examples.join("locale-coverage-evidence.json")).unwrap();
     let locale_evidence = locale::parse_evidence(&locale_evidence_bytes).unwrap();
     assert_eq!(
         locale::evidence(&locale_evidence.payload).unwrap(),
-        json::canonical(&json::parse(&locale_evidence_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&locale_evidence_bytes).unwrap()).unwrap()
     );
 
     let locale_assessment_bytes =
@@ -299,7 +309,7 @@ fn sidecar_examples_match_their_typed_sources() {
     .unwrap();
     assert_eq!(
         replayed,
-        json::canonical(&json::parse(&locale_assessment_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&locale_assessment_bytes).unwrap()).unwrap()
     );
 }
 
@@ -310,7 +320,7 @@ fn semantic_examples_match_the_actual_typed_producers() {
     let record_input = semantic::record::parse_input(&record_input_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&record_input).unwrap(),
-        json::canonical(&json::parse(&record_input_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&record_input_bytes).unwrap()).unwrap()
     );
 
     let semantic_evidence_bytes =
@@ -322,7 +332,7 @@ fn semantic_examples_match_the_actual_typed_producers() {
     assert_eq!(generated, typed);
     assert_eq!(
         canonical,
-        json::canonical(&json::parse(&semantic_evidence_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&semantic_evidence_bytes).unwrap()).unwrap()
     );
 
     let semantic_template_bytes =
@@ -332,7 +342,7 @@ fn semantic_examples_match_the_actual_typed_producers() {
     let generated_template = semantic::template(semantic_template).unwrap();
     assert_eq!(
         generated_template,
-        json::canonical(&json::parse(&semantic_template_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&semantic_template_bytes).unwrap()).unwrap()
     );
     assert_eq!(
         semantic::record::template(record_input).unwrap(),
@@ -347,25 +357,25 @@ fn sealed_request_examples_match_their_typed_sources() {
     let evaluation = requests::EvaluationRequest::parse(&evaluation_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
-        json::canonical(&json::parse(&evaluation_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&evaluation_bytes).unwrap()).unwrap()
     );
     let snapshot_bytes = fs::read(examples.join("scanner-snapshot-request.json")).unwrap();
     let snapshot = requests::SnapshotRequest::parse(&snapshot_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&snapshot).unwrap(),
-        json::canonical(&json::parse(&snapshot_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&snapshot_bytes).unwrap()).unwrap()
     );
     let bytes = fs::read(examples.join("scanner-controls-request.json")).unwrap();
     let request = requests::ControlsRequest::parse(&bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&request).unwrap(),
-        json::canonical(&json::parse(&bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap()
     );
     let time_bytes = fs::read(examples.join("scanner-trusted-time-statement.json")).unwrap();
     let statement = controls::parse_trusted_time(&time_bytes).unwrap();
     assert_eq!(
         controls::canonical_trusted_time(&statement).unwrap().0,
-        json::canonical(&json::parse(&time_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&time_bytes).unwrap()).unwrap()
     );
     let constraint_bytes = fs::read(examples.join("scanner-execution-constraint.json")).unwrap();
     let constraint = controls::parse_execution_constraint(&constraint_bytes).unwrap();
@@ -373,7 +383,7 @@ fn sealed_request_examples_match_their_typed_sources() {
         controls::canonical_execution_constraint(&constraint)
             .unwrap()
             .0,
-        json::canonical(&json::parse(&constraint_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&constraint_bytes).unwrap()).unwrap()
     );
 }
 
@@ -384,28 +394,28 @@ fn control_examples_match_their_typed_sources() {
     let policy = controls::parse_scanner_policy(&policy_bytes).unwrap();
     assert_eq!(
         controls::canonical_scanner_policy(&policy).unwrap().0,
-        json::canonical(&json::parse(&policy_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&policy_bytes).unwrap()).unwrap()
     );
 
     let floor_bytes = fs::read(examples.join("organization-floor.json")).unwrap();
     let floor = controls::parse_organization_floor(&floor_bytes).unwrap();
     assert_eq!(
         controls::canonical_organization_floor(&floor).unwrap().0,
-        json::canonical(&json::parse(&floor_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&floor_bytes).unwrap()).unwrap()
     );
 
     let debt_bytes = fs::read(examples.join("debt-snapshot.json")).unwrap();
     let debt = controls::parse_debt_snapshot(&debt_bytes).unwrap();
     assert_eq!(
         controls::canonical_debt_snapshot(&debt).unwrap().0,
-        json::canonical(&json::parse(&debt_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&debt_bytes).unwrap()).unwrap()
     );
 
     let waiver_bytes = fs::read(examples.join("waiver-bundle.json")).unwrap();
     let waiver = controls::parse_waiver_bundle(&waiver_bytes).unwrap();
     assert_eq!(
         controls::canonical_waiver_bundle(&waiver).unwrap().0,
-        json::canonical(&json::parse(&waiver_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&waiver_bytes).unwrap()).unwrap()
     );
 }
 
@@ -417,7 +427,7 @@ fn candidate_identity_examples_match_their_typed_source() {
         let identity: requests::CandidateIdentity = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(
             serde_json::to_vec(&identity).unwrap(),
-            json::canonical(&json::parse(&bytes).unwrap())
+            serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap()
         );
     }
 }

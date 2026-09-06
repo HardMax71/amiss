@@ -319,11 +319,11 @@ fn optional_projection_assertions_preserve_presence_and_reject_null() {
     assert_eq!(present_policy.projection_assertions, Some(Vec::new()));
     assert_eq!(
         canonical_scanner_policy(&absent_policy).unwrap().0,
-        json::canonical(&json::parse(absent).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(absent).unwrap()).unwrap()
     );
     assert_eq!(
         canonical_scanner_policy(&present_policy).unwrap().0,
-        json::canonical(&json::parse(present).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(present).unwrap()).unwrap()
     );
     assert_ne!(
         canonical_scanner_policy(&absent_policy).unwrap().1,

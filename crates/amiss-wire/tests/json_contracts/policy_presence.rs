@@ -20,7 +20,10 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
     assert_eq!(parse_scanner_policy(&absent).unwrap(), direct);
     assert_eq!(direct.projection_assertions, None);
     let (canonical, absent_digest) = canonical_scanner_policy(&direct).unwrap();
-    assert_eq!(canonical, json::canonical(&json::parse(&absent).unwrap()));
+    assert_eq!(
+        canonical,
+        serde_json_canonicalizer::to_vec(&json::parse(&absent).unwrap()).unwrap()
+    );
 
     document["projection_assertions"] = json!([]);
     let present = serde_json::to_vec(&document).unwrap();
@@ -28,7 +31,10 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
     assert_eq!(parse_scanner_policy(&present).unwrap(), direct);
     assert_eq!(direct.projection_assertions, Some(Vec::new()));
     let (canonical, present_digest) = canonical_scanner_policy(&direct).unwrap();
-    assert_eq!(canonical, json::canonical(&json::parse(&present).unwrap()));
+    assert_eq!(
+        canonical,
+        serde_json_canonicalizer::to_vec(&json::parse(&present).unwrap()).unwrap()
+    );
     assert_ne!(absent_digest, present_digest);
 
     for invalid in [Value::Null, json!(false), json!(42), json!(""), json!({})] {

@@ -27,7 +27,10 @@ fn generated_semantic_digests_keep_the_exact_payload_preimage() {
             amiss_wire::json::parse(&serde_json::to_vec(&document.payload).unwrap()).unwrap();
         assert_eq!(
             document.payload_digest,
-            amiss_wire::digest::hj(semantic::PAYLOAD_SCHEMA, &preimage)
+            hb(
+                semantic::PAYLOAD_SCHEMA,
+                &serde_json_canonicalizer::to_vec(&preimage).unwrap()
+            )
         );
         assert_eq!(semantic::validate(&document), Ok(()));
         assert_eq!(semantic::parse(&bytes).unwrap(), document);
