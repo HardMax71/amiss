@@ -1,56 +1,74 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::ConstraintPlatform;
 use crate::digest::Digest;
 use crate::model::ArtifactId;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum SandboxDescriptorSchema {
-    #[serde(rename = "amiss/scanner-sandbox-profile")]
+    #[strum(serialize = "amiss/scanner-sandbox-profile")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum SandboxProfile {
-    #[serde(rename = "scanner-zero-capability")]
+    #[strum(serialize = "scanner-zero-capability")]
     ZeroCapability,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum SandboxIsolation {
     Container,
     Process,
     VirtualMachine,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum Denied {
-    #[serde(rename = "denied")]
+    #[strum(serialize = "denied")]
     Denied,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum Absent {
-    #[serde(rename = "absent")]
+    #[strum(serialize = "absent")]
     Absent,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ReadOnly {
-    #[serde(rename = "read-only")]
+    #[strum(serialize = "read-only")]
     ReadOnly,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ScannerProcessEnvironment {
-    #[serde(rename = "scanner-process-env")]
+    #[strum(serialize = "scanner-process-env")]
     ScannerProcessEnvironment,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum PrivateBoundedStorage {
-    #[serde(rename = "private-bounded")]
+    #[strum(serialize = "private-bounded")]
     PrivateBounded,
 }
 
@@ -94,10 +112,10 @@ pub struct SandboxDescriptor {
     Debug,
     PartialEq,
     Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
-    strum::EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    Display,
+    EnumString,
     strum::AsRefStr,
 )]
 #[strum(serialize_all = "kebab-case")]
@@ -112,10 +130,10 @@ pub enum SandboxAssurance {
     Debug,
     PartialEq,
     Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
-    strum::EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    Display,
+    EnumString,
     strum::AsRefStr,
 )]
 #[strum(serialize_all = "kebab-case")]
@@ -124,20 +142,26 @@ pub enum SandboxEnforcementSource {
     LocalProcess,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum SandboxVerificationSchema {
-    #[serde(rename = "amiss/scanner-sandbox-verification")]
+    #[strum(serialize = "amiss/scanner-sandbox-verification")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum SandboxVerifier {
-    #[serde(rename = "external-required-check")]
+    #[strum(serialize = "external-required-check")]
     ExternalRequiredCheck,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum SandboxMechanism {
     MicrovmSandbox,
     OciRootlessSandbox,
