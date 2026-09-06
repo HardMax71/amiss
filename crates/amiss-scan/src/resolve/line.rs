@@ -71,13 +71,15 @@ impl Resolver<'_> {
                 Aggregate::LineFragmentBytes,
                 u64::try_from(body.len()).unwrap_or(u64::MAX),
             )?;
-            let projection = selected_line_bytes(body, range).map(|selected| {
-                target_projection(
-                    TARGET_LINE_PROJECTION_DOMAIN,
-                    mode,
-                    hb(RAW_EVIDENCE_DOMAIN, selected),
-                )
-            });
+            let projection = selected_line_bytes(body, range)
+                .map(|selected| {
+                    target_projection(
+                        TARGET_LINE_PROJECTION_DOMAIN,
+                        mode,
+                        hb(RAW_EVIDENCE_DOMAIN, selected),
+                    )
+                })
+                .transpose()?;
             slot.insert(projection);
         }
         let Some(selected) = selected_line_bytes(body, range) else {
@@ -124,10 +126,9 @@ impl Resolver<'_> {
         if matches!(evidence, BlobContent::LfsPointer { .. }) {
             return Ok(unavailable(ProjectionObserved::SourceLfsPointer, sink));
         }
-        let Some(cached) = content_cache(self.cache, self.commit_oid.as_ref()).get_mut(&path)
-        else {
-            return Err(Error::Internal);
-        };
+        let cached = content_cache(self.cache, self.commit_oid.as_ref())
+            .get_mut(&path)
+            .ok_or(Error::Internal)?;
         if cached.mode != mode || cached.content.evidence() != evidence {
             return Err(Error::Internal);
         }
@@ -152,13 +153,17 @@ impl Resolver<'_> {
                         Aggregate::LineFragmentBytes,
                         u64::try_from(body.len()).unwrap_or(u64::MAX),
                     )?;
-                    slot.insert(selected_line_bytes(body, range).map(|selected| {
-                        target_projection(
-                            TARGET_LINE_PROJECTION_DOMAIN,
-                            mode,
-                            hb(RAW_EVIDENCE_DOMAIN, selected),
-                        )
-                    }));
+                    slot.insert(
+                        selected_line_bytes(body, range)
+                            .map(|selected| {
+                                target_projection(
+                                    TARGET_LINE_PROJECTION_DOMAIN,
+                                    mode,
+                                    hb(RAW_EVIDENCE_DOMAIN, selected),
+                                )
+                            })
+                            .transpose()?,
+                    );
                 }
                 selected_line_bytes(body, range).ok_or(ProjectionObserved::SourceLinesOutOfRange)
             }
@@ -313,13 +318,15 @@ pub(super) fn line_resolution(
             Aggregate::LineFragmentBytes,
             u64::try_from(body.len()).unwrap_or(u64::MAX),
         )?;
-        let projection = selected_line_bytes(body, range).map(|selected| {
-            target_projection(
-                TARGET_LINE_PROJECTION_DOMAIN,
-                mode,
-                hb(RAW_EVIDENCE_DOMAIN, selected),
-            )
-        });
+        let projection = selected_line_bytes(body, range)
+            .map(|selected| {
+                target_projection(
+                    TARGET_LINE_PROJECTION_DOMAIN,
+                    mode,
+                    hb(RAW_EVIDENCE_DOMAIN, selected),
+                )
+            })
+            .transpose()?;
         line_projections.insert(range, projection);
         projection
     };
