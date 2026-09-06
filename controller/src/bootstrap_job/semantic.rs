@@ -111,8 +111,9 @@ fn bind_input(
     template_bytes: Arc<[u8]>,
     candidate_identity_digest: Digest,
 ) -> Result<BoundInput, BootstrapJobError> {
-    let envelope_bytes = amiss_wire::semantic::bind_template(template, candidate_identity_digest)
-        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let (_document, envelope_bytes) =
+        amiss_wire::semantic::bind_template(template, candidate_identity_digest)
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     let envelope = amiss_wire::semantic::parse(&envelope_bytes)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     if envelope.payload.subject.candidate_identity_digest != candidate_identity_digest

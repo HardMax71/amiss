@@ -129,7 +129,7 @@ fn parse_document<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Err
     de::deserialize_json(bytes)
 }
 
-/// Binds a candidate-independent template to one exact scanner candidate.
+/// Binds a template to one candidate, retaining the envelope and its canonical bytes.
 ///
 /// # Errors
 ///
@@ -138,7 +138,7 @@ fn parse_document<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Err
 pub fn bind_template<O: Serialize>(
     template: &SemanticEvidenceTemplate<O>,
     candidate_identity_digest: Digest,
-) -> Result<Vec<u8>, Error> {
+) -> Result<(SemanticEvidenceEnvelope<&O>, Vec<u8>), Error> {
     envelope(SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
@@ -169,22 +169,26 @@ pub fn template<O: Serialize>(input: SemanticEvidenceTemplate<O>) -> Result<Vec<
     })
 }
 
-/// Writes the canonical bytes of one digest-bound semantic evidence payload.
+/// Returns one digest-bound envelope together with its canonical bytes.
 /// Observation order is canonicalized, so traversal order cannot change its identity.
 ///
 /// # Errors
 ///
 /// Fails when producer metadata or an observation violates the same bounds [`parse`] enforces,
 /// when observations repeat, or when the resulting envelope exceeds the byte ceiling.
-pub fn envelope<O: Serialize>(mut evidence: SemanticEvidence<O>) -> Result<Vec<u8>, Error> {
+pub fn envelope<O: Serialize>(
+    mut evidence: SemanticEvidence<O>,
+) -> Result<(SemanticEvidenceEnvelope<O>, Vec<u8>), Error> {
     validate_producer("$.payload.producer", &evidence.producer)?;
     evidence.observations = ordered_observations("$.payload.observations", evidence.observations)?;
     let payload_digest = payload_digest(&evidence)?;
-    canonical_bytes(&SemanticEvidenceEnvelope {
+    let document = SemanticEvidenceEnvelope {
         schema: EnvelopeSchema::Current,
         payload: evidence,
         payload_digest,
-    })
+    };
+    let bytes = canonical_bytes(&document)?;
+    Ok((document, bytes))
 }
 
 fn validate_producer(path: &str, producer: &SemanticProducer) -> Result<(), Error> {

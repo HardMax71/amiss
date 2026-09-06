@@ -329,7 +329,7 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     let run = run_request(policy);
     let source = acquisition.template;
     let template = amiss_wire::semantic::parse_template(&source.bytes).unwrap();
-    let evidence = amiss_wire::semantic::bind_template(&template, candidate).unwrap();
+    let (_document, evidence) = amiss_wire::semantic::bind_template(&template, candidate).unwrap();
     let evidence_digest = amiss_wire::semantic::parse(&evidence)
         .unwrap()
         .payload_digest;

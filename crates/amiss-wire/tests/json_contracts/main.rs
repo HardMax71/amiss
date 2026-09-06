@@ -317,8 +317,10 @@ fn semantic_examples_match_the_actual_typed_producers() {
     semantic::parse(&semantic_evidence_bytes).unwrap();
     let typed: semantic::SemanticEvidenceEnvelope<semantic::observation::SiteBuildObservation> =
         serde_json::from_slice(&semantic_evidence_bytes).unwrap();
+    let (generated, canonical) = semantic::envelope(typed.payload.clone()).unwrap();
+    assert_eq!(generated, typed);
     assert_eq!(
-        semantic::envelope(typed.payload).unwrap(),
+        canonical,
         json::canonical(&json::parse(&semantic_evidence_bytes).unwrap())
     );
 
