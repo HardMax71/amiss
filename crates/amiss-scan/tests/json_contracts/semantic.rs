@@ -2,16 +2,29 @@ use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_git::Repository;
 use amiss_scan::{SetupShell, pipeline::commit_pair, report::RequestDigests, semantic::Input};
 use amiss_wire::{
+    assessment::Nullable,
     controls::Profile,
     digest::hb,
     model::{ObjectFormat, Oid},
-    report::{EngineProvenance, FindingKind},
+    report::{AnalysisErrorCode, EngineProvenance, FindingKind},
     requests::{
         ControlsRequest, EvaluationRequest, SuppliedSemanticEvidence,
         commit_candidate_identity_digest,
     },
-    semantic::{SemanticEvidenceTemplate, SemanticProducer, TemplateSchema, bind_template},
+    semantic::{
+        self, SemanticEvidenceEnvelope, SemanticEvidenceTemplate, SemanticProducer,
+        SemanticProducerKind, TemplateSchema, bind_template,
+        observation::{Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
+        record,
+    },
 };
+
+#[derive(serde::Serialize)]
+struct ExtendedObservation<'a> {
+    #[serde(flatten)]
+    observation: &'a Observation,
+    unexpected: bool,
+}
 
 #[test]
 fn template_and_captured_evidence_produce_identical_scanner_reports() {
@@ -37,9 +50,9 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
     let template = SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
-            kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
+            kind: SemanticProducerKind::SiteBuild,
             identity: "fixture".parse().unwrap(),
-            version: amiss_wire::semantic::observation::SITE_BUILD_VERSION.to_owned(),
+            version: semantic::observation::SITE_BUILD_VERSION.to_owned(),
             context_digest: hb("test", b"context"),
             input_digest: hb("test", b"input"),
         },
@@ -49,7 +62,7 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
                 "/broken/",
                 SiteObservation::Redirect("README.md", "/absent/"),
             ),
-            serde_json::json!({"kind": "future-fact", "extra": {"é": [null, true, "\"\n"]}}),
+            site_observation("/generated/", SiteObservation::Generated(None, &["intro"])),
         ]
         .into(),
     };
@@ -107,4 +120,94 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
         reports.push(bytes);
     }
     assert_eq!(reports[0], reports[1]);
+}
+
+#[test]
+fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digests() {
+    let original: SemanticEvidenceEnvelope<Observation> = serde_json::from_slice(include_bytes!(
+        "../../../../spec/examples/scanner-semantic-evidence.json"
+    ))
+    .unwrap();
+    let cases = [
+        (
+            SemanticProducerKind::SiteBuild,
+            semantic::observation::SITE_BUILD_VERSION,
+            Observation::Site(SiteBuildObservation::GeneratedRoute {
+                route: "/index".to_owned(),
+                source: Nullable::Null,
+                anchors: Vec::new(),
+            }),
+        ),
+        (
+            SemanticProducerKind::SphinxInventorySet,
+            semantic::observation::SPHINX_INVENTORY_VERSION,
+            Observation::Sphinx(SphinxLabelObservation {
+                kind: SphinxLabelKind::Current,
+                inventory: "python".parse().unwrap(),
+                name: "context managers".to_owned(),
+                destination: "https://docs.python.org/reference/datamodel.html".to_owned(),
+            }),
+        ),
+        (
+            SemanticProducerKind::RecordSet,
+            record::PRODUCER_VERSION,
+            Observation::Record(record::Observation {
+                kind: record::ObservationKind::Current,
+                name: "rust/api".parse().unwrap(),
+                records: Vec::new(),
+            }),
+        ),
+    ];
+    for (kind, version, observation) in &cases {
+        let mut payload = original.payload.clone();
+        payload.producer.kind = *kind;
+        payload.producer.version = (*version).to_owned();
+        payload.subject.source_report_payload_digest = Nullable::Null;
+        payload.observations = vec![observation.clone()];
+        let (document, bytes) = semantic::envelope(payload).unwrap();
+        let mut request = ControlsRequest {
+            semantic_evidence: vec![SuppliedSemanticEvidence {
+                value: serde_json::from_slice(&bytes).unwrap(),
+                expected_context_digest: document.payload.producer.context_digest,
+            }],
+            ..ControlsRequest::default()
+        };
+        assert!(amiss_scan::request::controls(&request).is_ok(), "{kind}");
+        let extended = ExtendedObservation {
+            observation,
+            unexpected: true,
+        };
+        let observation =
+            String::from_utf8(serde_json_canonicalizer::to_vec(observation).unwrap()).unwrap();
+        let payload =
+            String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
+                .unwrap();
+        let envelope = String::from_utf8(bytes).unwrap();
+        let mut invalids = vec![
+            br#"{"kind":"future-fact"}"#.to_vec(),
+            serde_json_canonicalizer::to_vec(&extended).unwrap(),
+        ];
+        invalids.extend(
+            cases
+                .iter()
+                .filter(|(other_kind, _, _)| other_kind != kind)
+                .map(|(_, _, other)| serde_json_canonicalizer::to_vec(other).unwrap()),
+        );
+        for invalid in invalids {
+            let invalid = String::from_utf8(invalid).unwrap();
+            let changed = payload.replace(&observation, &invalid);
+            assert_ne!(payload, changed);
+            let digest = hb(semantic::PAYLOAD_SCHEMA, changed.as_bytes());
+            let encoded = envelope
+                .replace(&payload, &changed)
+                .replace(&document.payload_digest.to_string(), &digest.to_string());
+            request.semantic_evidence[0].value = serde_json::from_str(&encoded).unwrap();
+            let error = amiss_scan::request::controls(&request).unwrap_err();
+            assert_eq!(
+                error.code,
+                AnalysisErrorCode::ConfigurationInvalid,
+                "{kind}: {invalid}"
+            );
+        }
+    }
 }

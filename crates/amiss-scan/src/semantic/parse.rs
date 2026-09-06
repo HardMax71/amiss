@@ -2,12 +2,12 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use amiss_wire::de::{Error, ErrorKind, fail};
+use amiss_wire::de::{Error, ErrorKind, deserialize_value, fail};
 use amiss_wire::digest::Digest;
 use amiss_wire::report::model::SemanticEvidenceProducer;
 use amiss_wire::requests::SuppliedSemanticEvidence;
 use amiss_wire::semantic::observation::{
-    SITE_BUILD_VERSION, SPHINX_INVENTORY_VERSION, SPHINX_LABEL, SphinxLabelObservation,
+    Observation, SITE_BUILD_VERSION, SPHINX_INVENTORY_VERSION, SphinxLabelObservation,
 };
 use amiss_wire::semantic::{SemanticEvidenceEnvelope, SemanticProducerKind};
 
@@ -47,6 +47,16 @@ pub(crate) fn parse(
             candidate_identity_digest,
             source_report_payload_digest,
         } = subject;
+        let observations = observations
+            .into_iter()
+            .enumerate()
+            .map(|(index, observation)| {
+                deserialize_value::<Observation>(
+                    &format!("{path}.payload.observations[{index}]"),
+                    observation,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         match producer.kind {
             SemanticProducerKind::SphinxInventorySet => {
                 if producer.version != SPHINX_INVENTORY_VERSION {
@@ -62,19 +72,7 @@ pub(crate) fn parse(
                     return fail(&path, ErrorKind::Inconsistent);
                 }
                 intersphinx = true;
-                for (observation_index, observation) in observations.into_iter().enumerate() {
-                    let observation_path =
-                        format!("{path}.payload.observations[{observation_index}]");
-                    if observation.get("kind").and_then(serde_json::Value::as_str)
-                        == Some(SPHINX_LABEL)
-                    {
-                        insert_label(
-                            Arc::make_mut(&mut inputs.labels),
-                            &observation_path,
-                            observation,
-                        )?;
-                    }
-                }
+                insert_labels(Arc::make_mut(&mut inputs.labels), &path, observations)?;
             }
             SemanticProducerKind::SiteBuild => {
                 if producer.version != SITE_BUILD_VERSION {
@@ -136,33 +134,39 @@ pub(crate) fn validated_envelope(
     Ok(envelope)
 }
 
-fn insert_label(
+fn insert_labels(
     labels: &mut BTreeMap<String, InventoryLabel>,
     path: &str,
-    observation: serde_json::Value,
+    observations: Vec<Observation>,
 ) -> Result<(), Error> {
-    let SphinxLabelObservation {
-        kind: _kind,
-        inventory: _inventory,
-        name,
-        destination,
-    } = amiss_wire::de::deserialize_value(path, observation)?;
-    let normalized = amiss_rst::normalized_label(&name);
-    if name.is_empty()
-        || name.len() > LABEL_BYTES
-        || name.chars().any(char::is_control)
-        || normalized.is_empty()
-    {
-        return fail(&format!("{path}.name"), ErrorKind::InvalidValue);
+    for (index, observation) in observations.into_iter().enumerate() {
+        let path = format!("{path}.payload.observations[{index}]");
+        let Observation::Sphinx(SphinxLabelObservation {
+            kind: _kind,
+            inventory: _inventory,
+            name,
+            destination,
+        }) = observation
+        else {
+            return fail(&path, ErrorKind::Inconsistent);
+        };
+        let normalized = amiss_rst::normalized_label(&name);
+        if name.is_empty()
+            || name.len() > LABEL_BYTES
+            || name.chars().any(char::is_control)
+            || normalized.is_empty()
+        {
+            return fail(&format!("{path}.name"), ErrorKind::InvalidValue);
+        }
+        if destination.len() > DESTINATION_BYTES
+            || !amiss_wire::uri::http_destination_valid(&destination)
+        {
+            return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
+        }
+        labels
+            .entry(normalized)
+            .and_modify(|label| *label = InventoryLabel::Ambiguous)
+            .or_insert(InventoryLabel::Unique(destination));
     }
-    if destination.len() > DESTINATION_BYTES
-        || !amiss_wire::uri::http_destination_valid(&destination)
-    {
-        return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
-    }
-    labels
-        .entry(normalized)
-        .and_modify(|label| *label = InventoryLabel::Ambiguous)
-        .or_insert(InventoryLabel::Unique(destination));
     Ok(())
 }

@@ -94,22 +94,16 @@ pub fn template(input: Input) -> Result<Vec<u8>, Error> {
             input_digest: input.input_digest,
         },
         complete: input.complete,
-        observations: vec![observation].into(),
+        observations: vec![super::observation::Observation::Record(observation)].into(),
     })
 }
 
-/// Decodes the closed record-set observation grammar shared by producers and the scanner.
+/// Checks the bounded, sorted, unique record rows retained by a typed consumer.
 ///
 /// # Errors
 ///
-/// Fails on an incorrect kind, unknown fields, an invalid set name, or invalid record rows.
-pub fn decode_observation(path: &str, value: serde_json::Value) -> Result<Observation, Error> {
-    let observation: Observation = de::deserialize_value(path, value)?;
-    validate_records(&format!("{path}.records"), &observation.records)?;
-    Ok(observation)
-}
-
-fn validate_records(path: &str, records: &[Record]) -> Result<(), Error> {
+/// Fails when records exceed their count or text bounds, contain controls, repeat or are unsorted.
+pub fn validate_records(path: &str, records: &[Record]) -> Result<(), Error> {
     (records.len() <= SEMANTIC_OBSERVATIONS_LIMIT)
         .then_some(())
         .ok_or_else(|| Error::new(path, ErrorKind::LimitExceeded))?;

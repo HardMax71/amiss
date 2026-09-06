@@ -16,6 +16,7 @@ mod external_reader;
 mod policy_presence;
 mod report_identity;
 mod report_reader;
+mod semantic_observations;
 mod semantic_producers;
 mod semantic_reader;
 mod string_tags;

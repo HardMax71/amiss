@@ -4,7 +4,7 @@ use amiss_controller_files::read_bounded_at;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::RepoPathText;
-use amiss_wire::semantic::observation::SiteBuildObservation;
+use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 use amiss_wire::semantic::{PayloadSchema, SemanticProducer, SemanticSubject};
 use cap_std::fs::Dir;
 use serde::Deserialize as _;
@@ -158,7 +158,7 @@ pub fn mdbook_site_evidence(
             input_digest,
         },
         complete: true,
-        observations,
+        observations: observations.into_iter().map(Observation::Site).collect(),
     })
     .map(|(_document, bytes)| bytes)
     .map_err(|_defect| MdBookEvidenceError::Evidence)
