@@ -140,9 +140,11 @@ fn semantic_expectations(
     values
         .iter()
         .map(|supplied| {
-            let bytes = serde_json::to_vec(&supplied.value)
-                .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
-            let envelope = amiss_wire::semantic::parse(&bytes)
+            // ControlsRequest already bounded and checked the containing strict JSON.
+            let envelope =
+                amiss_wire::semantic::SemanticEvidenceEnvelope::deserialize(&supplied.value)
+                    .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
+            amiss_wire::semantic::validate(&envelope)
                 .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
             if envelope.payload.producer.context_digest != supplied.expected_context_digest {
                 return Err(tampered("semantic-evidence-invalid"));

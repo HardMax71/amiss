@@ -5,6 +5,8 @@
     reason = "end-to-end harness over asserted fixture shapes"
 )]
 
+#[path = "wrapper/semantic.rs"]
+mod semantic;
 mod support;
 
 use std::ffi::OsStr;
@@ -60,6 +62,7 @@ fn main() -> ExitCode {
     garbage_engine(&staged);
     identity_absent(&refused);
     invalid_supplied_controls(&staged);
+    semantic::capture(&staged);
     wrong_result_name(&refused);
     #[cfg(unix)]
     symlinked_scratch(&refused);
