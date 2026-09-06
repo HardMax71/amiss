@@ -9,7 +9,6 @@ use std::path::Path;
 use amiss_wire::controls::{Profile, canonical_organization_floor, canonical_trusted_time};
 use amiss_wire::de::ErrorKind;
 
-use amiss_wire::json::Value;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::requests::{
     CANDIDATE_IDENTITY_DOMAIN, ControlsRequest, EvaluationRequest, EvaluationRequestSchema,
@@ -441,26 +440,16 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
 
 #[test]
 fn semantic_evidence_is_a_bounded_set_of_envelopes() {
-    let supplied = |value| SuppliedSemanticEvidence {
+    let value = amiss_wire::semantic::parse(include_bytes!(
+        "../../../../spec/examples/scanner-semantic-evidence.json"
+    ))
+    .unwrap();
+    let supplied = SuppliedSemanticEvidence {
+        expected_context_digest: value.payload.producer.context_digest,
         value,
-        expected_context_digest: amiss_wire::digest::hb(
-            "amiss/test-context",
-            &serde_json_canonicalizer::to_vec(&Value::Null).expect("fixture JSON"),
-        ),
     };
-    let mut wrong_shape = ControlsRequest::default();
-    wrong_shape
-        .semantic_evidence
-        .push(supplied(serde_json::Value::Null));
-    let error = wrong_shape.canonical_bytes().unwrap_err();
-    assert_eq!(error.path, "$.semantic_evidence[0].value");
-    assert_eq!(error.kind, ErrorKind::WrongType);
-
     let oversized = ControlsRequest {
-        semantic_evidence: vec![
-            supplied(serde_json::json!({}));
-            SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)
-        ],
+        semantic_evidence: vec![supplied; SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)],
         ..ControlsRequest::default()
     };
     let error = oversized.canonical_bytes().unwrap_err();

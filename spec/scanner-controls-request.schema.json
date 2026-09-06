@@ -67,6 +67,188 @@
     }
   },
   "$defs": {
+    "SemanticEvidenceEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["payload", "payload_digest", "schema"],
+      "properties": {
+        "schema": {
+          "const": "amiss/semantic-evidence-envelope"
+        },
+        "payload": {
+          "$ref": "#/$defs/Payload"
+        },
+        "payload_digest": {
+          "description": "The domain-separated digest of the canonical payload under its schema identity.",
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["complete", "observations", "producer", "schema", "subject"],
+      "properties": {
+        "schema": {
+          "const": "amiss/semantic-evidence-payload"
+        },
+        "subject": {
+          "$ref": "#/$defs/Subject"
+        },
+        "producer": {
+          "$ref": "#/$defs/Producer"
+        },
+        "complete": {
+          "description": "Whether the producer completed the exact input its input digest names. A consumer may use absence only when its own kind contract requires a complete set and this value is true.",
+          "type": "boolean"
+        },
+        "observations": {
+          "description": "Canonical-JSON-sorted unique observations using the closed site, Sphinx label, and record-set models. Unknown kinds and fields are rejected; compiled consumers additionally enforce their producer-specific semantic laws.",
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/Observation"
+          }
+        }
+      }
+    },
+    "Subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["candidate_identity_digest", "source_report_payload_digest"],
+      "properties": {
+        "candidate_identity_digest": {
+          "description": "The scanner candidate-identity digest, which already binds repository identity, refs, base and candidate materialization, and forge semantics.",
+          "$ref": "#/$defs/Digest"
+        },
+        "source_report_payload_digest": {
+          "description": "The verified report payload this evidence derives from, or null when a producer ran before report construction.",
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "Producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["context_digest", "identity", "input_digest", "kind", "version"],
+      "properties": {
+        "kind": {
+          "description": "One of the compiled semantic producer families.",
+          "enum": ["sphinx-inventory-set", "site-build", "record-set"]
+        },
+        "identity": {
+          "description": "The stable producer implementation identity within that class.",
+          "$ref": "#/$defs/ArtifactId"
+        },
+        "version": {
+          "description": "The producer implementation version.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._+-]*$"
+        },
+        "context_digest": {
+          "description": "The producer-kind-defined semantic context selected independently of runtime evidence, such as a configuration path, publication prefix, locale, and version.",
+          "$ref": "#/$defs/Digest"
+        },
+        "input_digest": {
+          "description": "The producer-kind-defined digest of every inventory or completed runtime input needed to interpret completeness and observations.",
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "Observation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["anchors", "kind", "route", "source"],
+          "properties": {
+            "kind": { "const": "site-route" },
+            "route": { "type": "string" },
+            "source": { "$ref": "#/$defs/RepoPath" },
+            "anchors": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["anchors", "kind", "route", "source"],
+          "properties": {
+            "kind": { "const": "site-generated-route" },
+            "route": { "type": "string" },
+            "source": {
+              "oneOf": [{ "$ref": "#/$defs/RepoPath" }, { "type": "null" }]
+            },
+            "anchors": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["destination", "kind", "route", "source"],
+          "properties": {
+            "kind": { "const": "site-redirect" },
+            "route": { "type": "string" },
+            "source": { "$ref": "#/$defs/RepoPath" },
+            "destination": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["entrypoints", "kind", "manifest", "reachable", "root"],
+          "properties": {
+            "kind": { "const": "site-navigation" },
+            "root": {
+              "oneOf": [{ "$ref": "#/$defs/RepoPath" }, { "type": "null" }]
+            },
+            "manifest": { "$ref": "#/$defs/RepoPath" },
+            "entrypoints": { "type": "array", "items": { "type": "string" } },
+            "reachable": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/RepoPath" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["destination", "inventory", "kind", "name"],
+          "properties": {
+            "kind": { "const": "sphinx-label" },
+            "inventory": { "$ref": "#/$defs/ArtifactId" },
+            "name": { "type": "string" },
+            "destination": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "records"],
+          "properties": {
+            "kind": { "const": "record-set" },
+            "name": { "$ref": "#/$defs/ArtifactId" },
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["key", "value"],
+                "properties": {
+                  "key": { "type": "string" },
+                  "value": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "SuppliedSemanticEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -74,7 +256,7 @@
       "properties": {
         "value": {
           "description": "The exact semantic-evidence envelope under its own schema.",
-          "type": "object"
+          "$ref": "#/$defs/SemanticEvidenceEnvelope"
         },
         "expected_context_digest": {
           "description": "The controller-plan-owned context identity the embedded producer must reproduce.",
