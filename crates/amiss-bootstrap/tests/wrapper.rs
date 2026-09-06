@@ -19,12 +19,12 @@ use amiss_bootstrap::result::{BootstrapResult, parse_result};
 use amiss_fixtures::CommitChain;
 use amiss_fixtures::requests::SealedRequests;
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_trusted_time,
-    parse_execution_constraint, parse_trusted_time,
+    ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_organization_floor,
+    canonical_trusted_time, parse_execution_constraint, parse_trusted_time,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::json::{Value, parse};
-use amiss_wire::model::Oid;
+use amiss_wire::model::{Oid, RepoPathText};
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::requests::{
     REQUEST_STREAM_BYTES, SEALED_ENGINE_ARGUMENT, commit_candidate_identity_digest,
@@ -572,13 +572,14 @@ fn identity_absent(staged: &Release) {
 fn invalid_supplied_controls(staged: &Release) {
     let mut constraint = sealed_run(staged);
     let controls = &mut constraint.requests.controls;
-    *controls
-        .execution_constraint
-        .as_mut()
-        .unwrap()
-        .value
-        .get_mut("required_status_name")
-        .unwrap() = serde_json::json!(" bad");
+    " bad".clone_into(
+        &mut controls
+            .execution_constraint
+            .as_mut()
+            .unwrap()
+            .value
+            .required_status_name,
+    );
     let mut provider = sealed_run(staged);
     let controls = &mut provider.requests.controls;
     "bad provider!".clone_into(&mut controls.trusted_time.as_mut().unwrap().value.provider);
@@ -634,33 +635,53 @@ fn symlinked_scratch(staged: &Release) {
     invalid_invocation_writes_nothing(staged, "result", true, "symlinked scratch");
 }
 
-/// Grows the opaque organization-floor value until the canonical controls
-/// request is exactly `target` bytes long.
-fn inflate_controls(run: &mut Run, target: u64) {
-    let padded = |length: usize| serde_json::json!({ "padding": "x".repeat(length) });
+/// Grows valid protected paths until the canonical request is exactly `target` bytes long.
+fn inflate_controls(staged: &Release, run: &mut Run, target: u64) {
     let floor = run
         .requests
         .controls
         .organization_floor
         .as_mut()
         .expect("a floor");
-    floor.value = padded(1024);
-    let measured = u64::try_from(
-        run.requests
-            .controls
-            .canonical_bytes()
-            .expect("controls serialize")
-            .len(),
-    )
-    .unwrap();
-    let grow = usize::try_from(target.checked_sub(measured).expect("a growable request")).unwrap();
+    floor.value.protected_inventory.clear();
+    let measured = run
+        .requests
+        .controls
+        .canonical_bytes()
+        .expect("controls serialize")
+        .len();
+    let grow = usize::try_from(target)
+        .unwrap()
+        .checked_sub(measured)
+        .expect("a growable request");
+    let count = grow.div_ceil(1024);
+    let text_bytes = grow
+        .checked_add(1)
+        .unwrap()
+        .checked_sub(count.checked_mul(3).unwrap())
+        .unwrap();
+    let path_length = text_bytes.checked_div(count).unwrap();
+    let longer_paths = text_bytes.checked_rem(count).unwrap();
     let floor = run
         .requests
         .controls
         .organization_floor
         .as_mut()
         .expect("a floor");
-    floor.value = padded(grow.checked_add(1024).expect("a bounded pad"));
+    floor.value.protected_inventory = (0..count)
+        .map(|index| {
+            let length = path_length
+                .checked_add(usize::from(index < longer_paths))
+                .unwrap();
+            RepoPathText::new(format!(
+                "{index:06}{}",
+                "x".repeat(length.checked_sub(6).unwrap())
+            ))
+            .unwrap()
+        })
+        .collect();
+    floor.expected_digest = canonical_organization_floor(&floor.value).unwrap().1;
+    run.wire = bind_envelope(staged, &mut run.requests, &chain_trees(&run.repository), 0);
     let sized = run
         .requests
         .controls
@@ -671,7 +692,7 @@ fn inflate_controls(run: &mut Run, target: u64) {
 
 fn request_ceiling(staged: &Release) {
     let mut run = sealed_run(staged);
-    inflate_controls(&mut run, REQUEST_STREAM_BYTES);
+    inflate_controls(staged, &mut run, REQUEST_STREAM_BYTES);
     plant(&run, &run.wire, "0");
     let invocation = invoke(staged, &run, "result", false);
     assert_eq!(
@@ -681,7 +702,7 @@ fn request_ceiling(staged: &Release) {
     );
 
     let mut over = sealed_run(staged);
-    inflate_controls(&mut over, REQUEST_STREAM_BYTES + 1);
+    inflate_controls(staged, &mut over, REQUEST_STREAM_BYTES + 1);
     plant(&over, &over.wire, "0");
     let invocation = invoke(staged, &over, "result", false);
     assert_eq!(settled(&invocation), Some(BootstrapResult::TamperedRuntime));
@@ -693,7 +714,7 @@ fn request_ceiling(staged: &Release) {
 /// that failure forgiven.
 fn unread_requests(staged: &Release) {
     let mut run = sealed_run(staged);
-    inflate_controls(&mut run, REQUEST_STREAM_BYTES);
+    inflate_controls(staged, &mut run, REQUEST_STREAM_BYTES);
     plant(&run, &run.wire, "0");
     fs::write(run.repository.root().join("engine-skip-stdin"), b"").unwrap();
     let invocation = invoke(staged, &run, "result", false);

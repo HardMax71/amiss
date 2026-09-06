@@ -9,6 +9,7 @@ use strum::IntoEnumIterator;
 mod relation_fixture;
 
 mod canonical;
+mod control_inputs;
 mod control_tags;
 mod external_evidence;
 mod external_reader;

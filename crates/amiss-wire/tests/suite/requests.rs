@@ -6,9 +6,7 @@
 use std::fs;
 use std::path::Path;
 
-use amiss_wire::controls::{
-    Profile, canonical_organization_floor, canonical_trusted_time, parse_organization_floor,
-};
+use amiss_wire::controls::{Profile, canonical_organization_floor, canonical_trusted_time};
 use amiss_wire::de::ErrorKind;
 
 use amiss_wire::json::Value;
@@ -83,11 +81,9 @@ fn the_request_examples_parse_to_what_they_say() {
         .as_ref()
         .expect("the example supplies one");
     assert_eq!(floor.trust_source, RequestTrust::OrganizationPolicy);
-    let parsed_floor = parse_organization_floor(&serde_json::to_vec(&floor.value).unwrap())
-        .expect("the embedded organization floor is valid");
     assert_eq!(
         floor.expected_digest,
-        canonical_organization_floor(&parsed_floor).unwrap().1,
+        canonical_organization_floor(&floor.value).unwrap().1,
         "the request carries the floor's independently reproducible semantic digest"
     );
     let time = controls
@@ -112,31 +108,25 @@ fn the_request_examples_parse_to_what_they_say() {
 }
 
 #[test]
-fn control_readers_keep_the_default_serde_depth_limit() {
-    let mut request =
-        ControlsRequest::parse(&request_example("scanner-controls-request.json")).unwrap();
-    for depth in [124, 125] {
-        let mut nested = serde_json::Value::Null;
-        for _ in 0..depth {
-            nested = serde_json::json!([nested]);
-        }
-        request.organization_floor.as_mut().unwrap().value = serde_json::json!({"future": nested});
-        let bytes = request.canonical_bytes().unwrap();
-        assert!(amiss_wire::json::parse(&bytes).is_ok());
-        let direct = serde_json::from_slice::<ControlsRequest>(&bytes);
-        let parsed = ControlsRequest::parse(&bytes);
-        if depth == 124 {
-            direct.unwrap();
-            parsed.unwrap();
-        } else {
-            assert!(
-                direct
-                    .unwrap_err()
-                    .to_string()
-                    .contains("recursion limit exceeded")
-            );
-            assert_eq!(parsed.unwrap_err().kind, ErrorKind::InvalidValue);
-        }
+fn control_readers_reject_unknown_payloads_within_the_json_depth_limit() {
+    let example = String::from_utf8(request_example("scanner-controls-request.json")).unwrap();
+    for depth in [0, 124, 125] {
+        let invalid = example.replacen(
+            "\"floor_id\":",
+            &format!(
+                "\"future\": {}null{}, \"floor_id\":",
+                "[".repeat(depth),
+                "]".repeat(depth)
+            ),
+            1,
+        );
+        assert_ne!(invalid, example);
+        assert!(amiss_wire::json::parse(invalid.as_bytes()).is_ok());
+        assert!(serde_json::from_str::<ControlsRequest>(&invalid).is_err());
+        assert_eq!(
+            ControlsRequest::parse(invalid.as_bytes()).unwrap_err().kind,
+            ErrorKind::UnknownField
+        );
     }
 }
 

@@ -193,8 +193,6 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     let (constraint, constraint_digest) =
         canonical_execution_constraint(&checked_plan.execution)
             .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    let constraint_value = serde_json::from_slice(&constraint)
-        .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
     let semantic_expectations = plan::semantic_acquisition_expectations(&checked_plan.policy);
     let semantic = bind_semantic_evidence(
         &checked_plan.policy.semantic_evidence,
@@ -213,7 +211,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
             provider_run_attempt: input.run.provider_run.attempt.get(),
         },
         SuppliedControl {
-            value: constraint_value,
+            value: checked_plan.execution.clone(),
             expected_digest: constraint_digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         },

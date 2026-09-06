@@ -1,7 +1,7 @@
 use amiss_wire::controls::{
-    TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement, canonical_debt_snapshot,
-    canonical_organization_floor, canonical_trusted_time, canonical_waiver_bundle,
-    parse_debt_snapshot, parse_organization_floor, parse_waiver_bundle,
+    ExecutionConstraintDescriptor, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
+    canonical_debt_snapshot, canonical_organization_floor, canonical_trusted_time,
+    canonical_waiver_bundle, parse_debt_snapshot, parse_organization_floor, parse_waiver_bundle,
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{BranchRef, RepositoryIdentity, UtcInstant};
@@ -43,7 +43,8 @@ pub(super) struct PolicyIdentity {
     pub(super) waiver_bundle: Option<ControlIdentity>,
 }
 
-struct ControlBinding {
+struct ControlBinding<T> {
+    value: T,
     digest: Digest,
     repository: RepositoryIdentity,
     ref_name: BranchRef,
@@ -122,7 +123,7 @@ pub(super) fn validate_request_size(
     policy: &PolicyControls,
     identity: &PolicyIdentity,
     execution_digest: Digest,
-    execution_bytes: &[u8],
+    execution: &ExecutionConstraintDescriptor,
 ) -> Result<(), BootstrapJobError> {
     let request = ControlsRequest {
         schema: ControlsRequestSchema::Current,
@@ -143,8 +144,7 @@ pub(super) fn validate_request_size(
         )?,
         trusted_time: Some(maximal_trusted_time(execution_digest)?),
         execution_constraint: Some(SuppliedControl {
-            value: serde_json::from_slice(execution_bytes)
-                .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?,
+            value: execution.clone(),
             expected_digest: execution_digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         }),
@@ -159,11 +159,11 @@ pub(super) fn validate_request_size(
     canonical_request(&request).map(|_bytes| ())
 }
 
-fn plan_control(
+fn plan_control<T: serde::de::DeserializeOwned>(
     control: Option<&AcquiredControl>,
     identity: Option<ControlIdentity>,
     error: BootstrapJobError,
-) -> Result<Option<SuppliedControl>, BootstrapJobError> {
+) -> Result<Option<SuppliedControl<T>>, BootstrapJobError> {
     (control.is_some() == identity.is_some())
         .then_some(control.zip(identity))
         .ok_or(error)?
@@ -235,7 +235,7 @@ pub(super) fn request(
     policy: &PolicyControls,
     run: &RunIdentity,
     trusted_time: SuppliedTime,
-    execution_constraint: SuppliedControl,
+    execution_constraint: SuppliedControl<ExecutionConstraintDescriptor>,
     semantic_evidence: Vec<amiss_wire::requests::SuppliedSemanticEvidence>,
 ) -> Result<ControlsRequest, BootstrapJobError> {
     let organization_floor = policy
@@ -251,9 +251,10 @@ pub(super) fn request(
                         let digest = canonical_organization_floor(&floor)?.1;
                         Ok(ControlBinding {
                             digest,
-                            repository: floor.repository,
-                            ref_name: floor.ref_name,
+                            repository: floor.repository.clone(),
+                            ref_name: floor.ref_name.clone(),
                             organization_floor_digest: None,
+                            value: floor,
                         })
                     })
                 },
@@ -277,9 +278,10 @@ pub(super) fn request(
                         let digest = canonical_debt_snapshot(&snapshot)?.1;
                         Ok(ControlBinding {
                             digest,
-                            repository: snapshot.repository,
-                            ref_name: snapshot.ref_name,
+                            repository: snapshot.repository.clone(),
+                            ref_name: snapshot.ref_name.clone(),
                             organization_floor_digest: Some(snapshot.organization_floor_digest),
+                            value: snapshot,
                         })
                     })
                 },
@@ -300,9 +302,10 @@ pub(super) fn request(
                         let digest = canonical_waiver_bundle(&bundle)?.1;
                         Ok(ControlBinding {
                             digest,
-                            repository: bundle.repository,
-                            ref_name: bundle.ref_name,
+                            repository: bundle.repository.clone(),
+                            ref_name: bundle.ref_name.clone(),
                             organization_floor_digest: Some(bundle.organization_floor_digest),
+                            value: bundle,
                         })
                     })
                 },
@@ -336,22 +339,21 @@ fn within_stream_ceiling(length: usize) -> bool {
     u64::try_from(length).is_ok_and(|length| length <= REQUEST_STREAM_BYTES)
 }
 
-fn bound_control<E>(
+fn bound_control<T, E>(
     control: &AcquiredControl,
     run: &RunIdentity,
     organization_floor_digest: Option<Digest>,
-    parse: impl FnOnce(&[u8]) -> Result<ControlBinding, E>,
+    parse: impl FnOnce(&[u8]) -> Result<ControlBinding<T>, E>,
     error: BootstrapJobError,
-) -> Result<SuppliedControl, BootstrapJobError> {
+) -> Result<SuppliedControl<T>, BootstrapJobError> {
     let binding = parse(&control.bytes).map_err(|_defect| error)?;
     (binding.repository == run.change.repository
         && binding.ref_name == run.refs.target
         && binding.organization_floor_digest == organization_floor_digest)
         .then_some(())
         .ok_or(BootstrapJobError::ControlBinding)?;
-    let value = serde_json::from_slice(&control.bytes).map_err(|_defect| error)?;
     Ok(SuppliedControl {
-        value,
+        value: binding.value,
         expected_digest: binding.digest,
         trust_source: control.trust_source,
     })

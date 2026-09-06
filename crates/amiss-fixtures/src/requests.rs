@@ -52,10 +52,10 @@ impl SealedRequests {
         );
         let mut controls = ControlsRequest::parse(&example("scanner-controls-request.json"))
             .expect("the published controls request parses");
-        let (constraint_bytes, constraint_digest) =
+        let (_, constraint_digest) =
             canonical_execution_constraint(&constraint).expect("the constraint serializes");
         controls.execution_constraint = Some(SuppliedControl {
-            value: serde_json::from_slice(&constraint_bytes).expect("canonical bytes parse"),
+            value: constraint.clone(),
             expected_digest: constraint_digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         });
