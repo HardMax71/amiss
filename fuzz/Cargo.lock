@@ -31,7 +31,9 @@ dependencies = [
  "amiss-git",
  "amiss-scan",
  "amiss-wire",
+ "countio",
  "libfuzzer-sys",
+ "serde_json_canonicalizer",
 ]
 
 [[package]]

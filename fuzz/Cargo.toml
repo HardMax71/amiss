@@ -13,7 +13,9 @@ cargo-fuzz = true
 amiss-git = { path = "../crates/amiss-git" }
 amiss-scan = { path = "../crates/amiss-scan" }
 amiss-wire = { path = "../crates/amiss-wire" }
+countio = "0.3.0"
 libfuzzer-sys = { version = "0.4", optional = true }
+serde_json_canonicalizer = "0.3.2"
 
 [features]
 harness = ["dep:libfuzzer-sys"]

@@ -28,6 +28,9 @@ fn strict_values_serialize_as_json_without_enum_or_pair_wrappers() {
         let bytes = serde_json_canonicalizer::to_vec(&value).unwrap();
         assert_eq!(bytes, expected.as_bytes(), "{input}");
         assert_eq!(parse(&bytes).unwrap(), value);
+        let mut counter = countio::Counter::new(std::io::sink());
+        serde_json_canonicalizer::to_writer(&value, &mut counter).unwrap();
+        assert_eq!(counter.writer_bytes(), expected.len());
         let digest = amiss_wire::digest::hj_serde("amiss/test-json", |mut writer| {
             serde_json_canonicalizer::to_writer(&value, &mut writer)
         })

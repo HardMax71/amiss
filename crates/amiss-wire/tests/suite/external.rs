@@ -472,9 +472,7 @@ fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
 #[test]
 fn additive_plan_fields_are_digest_bound_but_inert() {
     let written = planned(Vec::new());
-    let mut document: serde_json::Value =
-        serde_json::from_slice(&serde_json_canonicalizer::to_vec(&written).unwrap())
-            .expect("the written plan is JSON");
+    let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
     document
         .get_mut("payload")
         .and_then(serde_json::Value::as_object_mut)
@@ -488,9 +486,7 @@ fn additive_plan_fields_are_digest_bound_but_inert() {
 #[test]
 fn known_optional_plan_fields_do_not_accept_null() {
     let written = planned(introduced("https://github.com/acme/widgets/blob/main/a.md"));
-    let mut document: serde_json::Value =
-        serde_json::from_slice(&serde_json_canonicalizer::to_vec(&written).unwrap())
-            .expect("the written plan is JSON");
+    let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
     let repository = document
         .pointer_mut("/payload/introduced/0/repository")
         .and_then(serde_json::Value::as_object_mut)
@@ -505,9 +501,7 @@ fn known_optional_plan_fields_do_not_accept_null() {
 #[test]
 fn malformed_known_plan_fields_are_refused_after_binding() {
     let written = planned(introduced("https://example.com/manual"));
-    let mut document: serde_json::Value =
-        serde_json::from_slice(&serde_json_canonicalizer::to_vec(&written).unwrap())
-            .expect("the written plan is JSON");
+    let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
     let destination = document
         .pointer_mut("/payload/introduced/0/destination")
         .expect("the introduced row holds a destination");
@@ -545,20 +539,14 @@ fn a_tampered_payload_is_refused() {
 
 #[test]
 fn an_incomplete_report_is_refused() {
-    let mut document: serde_json::Value =
-        serde_json::from_slice(&serde_json_canonicalizer::to_vec(&report(Vec::new())).unwrap())
-            .expect("the complete report is JSON");
+    let mut document =
+        serde_json::to_value(report(Vec::new())).expect("the complete report is JSON");
     document["payload"]["result"]["complete"] = serde_json::Value::Bool(false);
     document["payload"]["result"]["status"] = serde_json::Value::String("incomplete".to_owned());
     document["payload"]["result"]["exit_code"] = serde_json::Value::Number(2.into());
-    let envelope = amiss_wire::json::parse(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
-        .expect("the incomplete report is strict JSON");
+    let envelope = refresh_payload_digest(&mut document, PAYLOAD_SCHEMA);
     assert_eq!(
-        plan(
-            &serde_json_canonicalizer::to_vec(&envelope).unwrap(),
-            "0.0.0",
-            sample_digest()
-        ),
+        plan(&envelope, "0.0.0", sample_digest()),
         Err(PlanDefect::Incomplete)
     );
 }

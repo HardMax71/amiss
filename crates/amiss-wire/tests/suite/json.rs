@@ -1,5 +1,4 @@
-use amiss_wire::digest::hj_with_length;
-use amiss_wire::json::{ErrorKind, Value, canonical_length, parse};
+use amiss_wire::json::{ErrorKind, Value, parse};
 
 #[test]
 fn serde_hashing_binds_the_selected_writer_and_propagates_errors() {
@@ -86,31 +85,6 @@ fn an_owned_value_uses_three_machine_words() {
 }
 
 #[test]
-fn digest_counting_matches_the_independent_operations() {
-    let value = Value::object(vec![
-        (
-            "escaped".to_owned(),
-            Value::string("q\" b\\ n\n scalar \u{1f600}".to_owned()),
-        ),
-        (
-            "nested".to_owned(),
-            Value::array(vec![Value::Integer(42), Value::Bool(true), Value::Null]),
-        ),
-    ]);
-    let (digest, length) = hj_with_length("amiss/test", &value);
-    assert_eq!(
-        digest,
-        amiss_wire::digest::hb(
-            "amiss/test",
-            &serde_json_canonicalizer::to_vec(&value).unwrap()
-        )
-    );
-    assert_eq!(length, canonical_length(&value));
-}
-
-/// Every short escape on the write side, byte for byte, and back through the
-/// parser; the counting sink must agree with the materialized bytes.
-#[test]
 fn every_escape_survives_a_round_trip() {
     let text = "q\" b\\ s\u{8} t\t n\n f\u{c} r\r e\u{1} done";
     let value = Value::string(text.to_owned());
@@ -120,7 +94,6 @@ fn every_escape_survives_a_round_trip() {
         "\"q\\\" b\\\\ s\\b t\\t n\\n f\\f r\\r e\\u0001 done\"",
     );
     assert_eq!(parse(&wire).unwrap(), value);
-    assert_eq!(canonical_length(&value), u64::try_from(wire.len()).unwrap());
 }
 
 /// Surrogate pairs combine to the exact scalar at both ends of the plane,
