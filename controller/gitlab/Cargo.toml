@@ -20,6 +20,7 @@ thiserror.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+serde_json_canonicalizer.workspace = true
 amiss-controller-fixtures.workspace = true
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 

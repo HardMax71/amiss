@@ -21,7 +21,7 @@ use amiss_controller_service::{
     RelationOutboxError, drain_relation_outbox, execute_relation_audit, freeze_relation_transition,
 };
 use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
-use amiss_wire::digest::{hj, sha256};
+use amiss_wire::digest::sha256;
 use amiss_wire::json;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict, parse_assessment};
@@ -436,10 +436,14 @@ fn report_for(
     *report
         .pointer_mut("/payload_digest")
         .ok_or_else(|| std::io::Error::other("fixture report has no payload digest"))? =
-        serde_json::Value::String(hj(amiss_wire::report::PAYLOAD_SCHEMA, &payload).to_string());
-    Ok(json::canonical(&json::parse(&serde_json::to_vec(
-        &report,
-    )?)?))
+        serde_json::Value::String(
+            amiss_wire::digest::hb(
+                amiss_wire::report::PAYLOAD_SCHEMA,
+                &serde_json_canonicalizer::to_vec(&payload)?,
+            )
+            .to_string(),
+        );
+    Ok(serde_json_canonicalizer::to_vec(&report)?)
 }
 
 fn relation_stores(max_bindings: u64) -> Result<RelationStores, Box<dyn std::error::Error>> {

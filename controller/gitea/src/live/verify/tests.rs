@@ -251,7 +251,10 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
         &plan,
         &evidence,
         "0.0.0",
-        amiss_wire::digest::hj("t", &Value::Null),
+        amiss_wire::digest::hb(
+            "t",
+            &serde_json_canonicalizer::to_vec(&Value::Null).unwrap(),
+        ),
     )
     .expect("the engine judges the evidence");
     let document =

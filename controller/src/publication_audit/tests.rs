@@ -1,7 +1,7 @@
 #![cfg(test)]
 
 use amiss_fixtures::{PublicationAuditFixture, publication_audit};
-use amiss_wire::digest::{Digest, hj, sha256};
+use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::json::{self, Value};
 use amiss_wire::publication::{
     PublicationPlanEnvelope, PublicationVerdict, assess, parse_evidence, parse_plan,
@@ -82,14 +82,17 @@ fn null_target_is_distinct_from_an_absent_target_key() -> Result<(), ArtifactErr
     let mut without_target = std::mem::take(members).into_vec();
     without_target.remove(target);
     *members = without_target.into_boxed_slice();
-    let payload_digest = hj(amiss_wire::report::PAYLOAD_SCHEMA, payload);
+    let payload_digest = amiss_wire::digest::hb(
+        amiss_wire::report::PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(payload).unwrap(),
+    );
     *envelope
         .iter_mut()
         .find_map(|(key, value)| (key == "payload_digest").then_some(value))
         .ok_or(ArtifactError::Corrupt)? = Value::string(payload_digest.to_string());
 
     assert!(matches!(
-        accepted_report(&json::canonical(&report)),
+        accepted_report(&serde_json_canonicalizer::to_vec(&report).unwrap()),
         Err(ArtifactError::Corrupt)
     ));
     Ok(())
@@ -164,13 +167,16 @@ fn incomplete_reports_and_oversized_publication_documents_are_refused() -> Resul
         ("exit_code".to_owned(), Value::Integer(2)),
         ("status".to_owned(), Value::string("incomplete".to_owned())),
     ]);
-    let digest = hj(amiss_wire::report::PAYLOAD_SCHEMA, payload);
+    let digest = amiss_wire::digest::hb(
+        amiss_wire::report::PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(payload).unwrap(),
+    );
     let digest_value = envelope
         .iter_mut()
         .find_map(|(key, value)| (key == "payload_digest").then_some(value))
         .ok_or(ArtifactError::Corrupt)?;
     *digest_value = Value::string(digest.to_string());
-    let incomplete = json::canonical(&report);
+    let incomplete = serde_json_canonicalizer::to_vec(&report).unwrap();
     assert!(matches!(
         validate_publication_audit(PublicationAuditBundle {
             report: &incomplete,

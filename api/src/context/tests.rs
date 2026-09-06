@@ -57,11 +57,14 @@ fn typed_context_preserves_canonical_bytes_and_every_digest_input() {
     let strict = amiss_wire::json::parse(&bytes).unwrap();
     assert_eq!(
         serde_json::to_vec(&parsed).unwrap(),
-        amiss_wire::json::canonical(&strict)
+        serde_json_canonicalizer::to_vec(&strict).unwrap()
     );
     assert_eq!(
         digest,
-        amiss_wire::digest::hj(super::DIGEST_DOMAIN, &strict)
+        amiss_wire::digest::hb(
+            super::DIGEST_DOMAIN,
+            &serde_json_canonicalizer::to_vec(&strict).unwrap()
+        )
     );
     assert_eq!(
         parse(&serde_json::to_vec_pretty(&parsed).unwrap()).unwrap(),
@@ -96,7 +99,10 @@ fn typed_context_preserves_canonical_bytes_and_every_digest_input() {
         let strict = amiss_wire::json::parse(&bytes).unwrap();
         assert_eq!(
             changed_digest,
-            amiss_wire::digest::hj(super::DIGEST_DOMAIN, &strict),
+            amiss_wire::digest::hb(
+                super::DIGEST_DOMAIN,
+                &serde_json_canonicalizer::to_vec(&strict).unwrap()
+            ),
             "{field}"
         );
     }

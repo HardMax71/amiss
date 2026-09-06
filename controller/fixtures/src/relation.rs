@@ -7,8 +7,7 @@ use amiss_controller::{
     relation_transition,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
-use amiss_wire::digest::{hj, sha256};
-use amiss_wire::json::{self, Value};
+use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
     RelationEvidence, RelationEvidenceSubject, RelationProjectedValue, RelationProjectionSlot,
@@ -131,32 +130,19 @@ fn registered_relation() -> Option<Arc<RelationPlan>> {
 }
 
 fn report() -> Option<Vec<u8>> {
-    let mut report = json::parse(REPORT).ok()?;
-    let Value::Object(envelope) = &mut report else {
+    let mut report: amiss_wire::report::model::ReportEnvelope =
+        serde_json::from_slice(REPORT).ok()?;
+    let amiss_wire::report::model::Evaluation::Resolved(evaluation) =
+        &mut report.payload.evaluation
+    else {
         return None;
     };
-    let payload = envelope
-        .iter_mut()
-        .find_map(|(key, value)| (key == "payload").then_some(value))?;
-    let Value::Object(payload_members) = payload else {
-        return None;
-    };
-    let evaluation = payload_members
-        .iter_mut()
-        .find_map(|(key, value)| (key == "evaluation").then_some(value))?;
-    let Value::Object(evaluation_members) = evaluation else {
-        return None;
-    };
-    *evaluation_members
-        .iter_mut()
-        .find_map(|(key, value)| (key == "target_ref").then_some(value))? =
-        Value::string("refs/heads/main".to_owned());
-    let payload_digest = hj(amiss_wire::report::PAYLOAD_SCHEMA, payload);
-    *envelope
-        .iter_mut()
-        .find_map(|(key, value)| (key == "payload_digest").then_some(value))? =
-        Value::string(payload_digest.to_string());
-    Some(json::canonical(&report))
+    evaluation.target_ref = Some("refs/heads/main".parse().ok()?);
+    report.payload_digest = amiss_wire::digest::hb(
+        amiss_wire::report::PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&report.payload).ok()?,
+    );
+    serde_json_canonicalizer::to_vec(&report).ok()
 }
 
 fn subject(

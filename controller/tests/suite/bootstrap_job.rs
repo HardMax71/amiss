@@ -62,7 +62,7 @@ fn maximal_floor() -> Vec<u8> {
     let source = String::from_utf8(example("organization-floor.json"))
         .unwrap()
         .replacen("\"README.md\"", &inventory, 1);
-    json::canonical(&json::parse(source.as_bytes()).unwrap())
+    serde_json_canonicalizer::to_vec(&json::parse(source.as_bytes()).unwrap()).unwrap()
 }
 
 fn near_ceiling_floor() -> Vec<u8> {
