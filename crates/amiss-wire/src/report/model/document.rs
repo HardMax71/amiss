@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::ContentAvailability;
 use crate::digest::Digest;
@@ -22,19 +24,19 @@ pub enum RepoPath {
     Debug,
     PartialEq,
     Eq,
-    Serialize,
-    Deserialize,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
     strum::AsRefStr,
     strum::IntoStaticStr,
     strum::EnumIter,
 )]
-#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum DocumentClassification {
     ExtensionlessMarkdown,
     PlainAdvisory,
     PolicyIncluded,
-    #[serde(rename = "structured-asciidoc")]
     #[strum(serialize = "structured-asciidoc")]
     StructuredAsciiDoc,
     StructuredMarkdown,
@@ -43,24 +45,30 @@ pub enum DocumentClassification {
     UnparsedMarkup,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum DocumentEntryKind {
     Blob,
     Gitlink,
     Symlink,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum DocumentStatus {
     ExcludedBuiltIn,
     Scanned,
     Unsupported,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum UnsupportedReason {
     GitlinkDocument,
     LfsPointer,
@@ -68,15 +76,17 @@ pub enum UnsupportedReason {
     UnsupportedDocumentFormat,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum DocumentGitMode {
-    #[serde(rename = "100644")]
+    #[strum(serialize = "100644")]
     RegularFile,
-    #[serde(rename = "100755")]
+    #[strum(serialize = "100755")]
     ExecutableFile,
-    #[serde(rename = "120000")]
+    #[strum(serialize = "120000")]
     Symlink,
-    #[serde(rename = "160000")]
+    #[strum(serialize = "160000")]
     Gitlink,
 }
 
@@ -103,8 +113,10 @@ pub struct DocumentSide<M = DocumentGitMode> {
     pub unsupported_reason: Option<UnsupportedReason>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum DocumentChange {
     Added,
     Changed,

@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::digest::Digest;
 use crate::model::{BranchRef, ForgeDialect, RepositoryIdentity, UtcInstant};
@@ -12,16 +14,27 @@ pub use crate::requests::{
     IndexSnapshotKind as SyntheticSnapshotKind, IndexSnapshotSchema as SyntheticSnapshotSchema,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum UnavailableSnapshotKind {
-    #[serde(rename = "unavailable")]
+    #[strum(serialize = "unavailable")]
     Unavailable,
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr, strum::EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+    strum::EnumIter,
 )]
-#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum SnapshotUnavailableReason {
     IndexInvalid,
@@ -86,23 +99,25 @@ pub struct ResolvedEvaluation {
 }
 
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
-    strum::EnumString,
+    Clone, Copy, Debug, PartialEq, Eq, SerializeDisplay, DeserializeFromStr, Display, EnumString,
 )]
 pub enum UnavailableStatus {
     #[strum(serialize = "unavailable")]
     Unavailable,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum EvaluationUnavailableReason {
     InvalidEvent,

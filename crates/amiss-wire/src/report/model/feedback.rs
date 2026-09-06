@@ -1,6 +1,8 @@
 use std::num::NonZeroU64;
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::model::RepoPathText;
 
@@ -8,9 +10,19 @@ use super::super::{Disposition, FindingKind};
 use super::{RepoPath, SourceSpan, UnavailableStatus};
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, strum::AsRefStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
 )]
-#[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum FeedbackAction {
     Fix,
@@ -37,9 +49,11 @@ pub struct FeedbackItem<P = RepoPath> {
     pub target: Option<P>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum AvailableFeedbackStatus {
-    #[serde(rename = "available")]
+    #[strum(serialize = "available")]
     Available,
 }
 

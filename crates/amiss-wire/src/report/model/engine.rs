@@ -1,32 +1,42 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::ConstraintPlatform;
 use crate::digest::Digest;
 use crate::manifest::ReleaseManifest;
 use crate::model::{Adapter, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum AdapterContractSchema {
-    #[serde(rename = "amiss/scanner-adapter-contract")]
+    #[strum(serialize = "amiss/scanner-adapter-contract")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum FrontmatterContract {
     Frontmatter,
     None,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum SourceProjection {
     None,
     SourceProjection,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum StructuralAddressKind {
     AsciidocBlockPath,
     MarkdownAstNodePath,
@@ -54,9 +64,11 @@ pub struct ReportAdapter {
     pub contract_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum LocalActionKind {
-    #[serde(rename = "local")]
+    #[strum(serialize = "local")]
     Local,
 }
 
@@ -65,9 +77,11 @@ pub struct LocalActionProvenance {
     pub kind: LocalActionKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ForgeActionKind {
-    #[serde(rename = "forge-action")]
+    #[strum(serialize = "forge-action")]
     ForgeAction,
 }
 
@@ -93,15 +107,19 @@ pub enum ActionProvenance {
     Local(LocalActionProvenance),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum EngineContract {
-    #[serde(rename = "amiss/scanner")]
+    #[strum(serialize = "amiss/scanner")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum BuiltInPolicy {
-    #[serde(rename = "scanner-policy-defaults")]
+    #[strum(serialize = "scanner-policy-defaults")]
     Current,
 }
 

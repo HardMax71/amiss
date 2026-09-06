@@ -1,12 +1,24 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::ResourceName;
 
 use super::super::AnalysisErrorCode;
 use super::RepoPath;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "lowercase")]
 pub enum AnalysisPhase {
     Configuration,

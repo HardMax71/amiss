@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::{ExecutionConstraintDescriptor, Profile, TrustedTimeStatement};
 use crate::digest::Digest;
@@ -13,10 +15,10 @@ use super::{SandboxProvenance, UnavailableStatus};
     Debug,
     PartialEq,
     Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
-    strum::EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    Display,
+    EnumString,
     strum::AsRefStr,
 )]
 #[strum(serialize_all = "kebab-case")]
@@ -31,10 +33,10 @@ pub enum ControlStatus {
     Debug,
     PartialEq,
     Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
-    strum::EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    Display,
+    EnumString,
     strum::AsRefStr,
 )]
 #[strum(serialize_all = "kebab-case")]
@@ -58,10 +60,10 @@ pub struct ControlProvenance {
     Debug,
     PartialEq,
     Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
-    strum::EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    Display,
+    EnumString,
     strum::AsRefStr,
 )]
 pub enum NoControlStatus {
@@ -80,10 +82,10 @@ pub struct NoExecutionConstraint {
     Debug,
     PartialEq,
     Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
-    strum::EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    Display,
+    EnumString,
     strum::AsRefStr,
 )]
 pub enum VerifiedControlStatus {
@@ -117,10 +119,10 @@ pub struct NoTrustedTime {
     Debug,
     PartialEq,
     Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
-    strum::EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    Display,
+    EnumString,
     strum::AsRefStr,
 )]
 pub enum TrustedTimeTrustSource {
@@ -179,9 +181,18 @@ pub struct ResolvedControls {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr, strum::EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+    strum::EnumIter,
 )]
-#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum ControlsUnavailableReason {
     ControlBindingMismatch,
