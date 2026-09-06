@@ -3,7 +3,6 @@ mod tests;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::requests::SuppliedSemanticEvidence;
@@ -111,17 +110,9 @@ fn bind_input(
     template_bytes: Arc<[u8]>,
     candidate_identity_digest: Digest,
 ) -> Result<BoundInput, BootstrapJobError> {
-    let (_document, envelope_bytes) =
+    let (envelope, envelope_bytes) =
         amiss_wire::semantic::bind_template(template, candidate_identity_digest)
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    let envelope = amiss_wire::semantic::parse(&envelope_bytes)
-        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    if envelope.payload.subject.candidate_identity_digest != candidate_identity_digest
-        || envelope.payload.subject.source_report_payload_digest != Nullable::Null
-        || envelope.payload.producer.context_digest != template.producer.context_digest
-    {
-        return Err(BootstrapJobError::SemanticEvidence);
-    }
     Ok(BoundInput {
         payload_digest: envelope.payload_digest,
         supplied: SuppliedSemanticEvidence {
