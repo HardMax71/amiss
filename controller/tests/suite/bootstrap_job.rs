@@ -207,7 +207,7 @@ fn semantic_template(context_digest: Digest) -> Vec<u8> {
     amiss_wire::semantic::template(SemanticEvidenceTemplate::<serde_json::Value> {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
-            kind: ArtifactId::new("site-build".to_owned()).unwrap(),
+            kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
             identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
             version: "0.5.1".to_owned(),
             context_digest,
@@ -231,7 +231,7 @@ fn site_acquisition(context_digest: Digest) -> SiteAcquisition {
     SiteAcquisition {
         expectation: SemanticEvidenceExpectation {
             acquisition_identity: acquisition_identity.clone(),
-            producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
+            producer_kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
             producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
             producer_version: "0.5.1".to_owned(),
             context_digest,

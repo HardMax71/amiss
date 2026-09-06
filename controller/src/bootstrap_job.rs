@@ -91,7 +91,7 @@ pub struct BoundSemanticEvidence {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
 pub struct SemanticEvidenceExpectation {
     pub acquisition_identity: ArtifactId,
-    pub producer_kind: ArtifactId,
+    pub producer_kind: amiss_wire::semantic::SemanticProducerKind,
     pub producer_identity: ArtifactId,
     pub producer_version: String,
     pub context_digest: Digest,

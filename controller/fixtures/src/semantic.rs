@@ -20,8 +20,7 @@ pub fn semantic_input_artifact() -> Result<SemanticInputArtifact, BootstrapJobEr
         &[SemanticEvidenceTemplate {
             schema: TemplateSchema::Current,
             producer: SemanticProducer {
-                kind: ArtifactId::new("record-set".to_owned())
-                    .ok_or(BootstrapJobError::SemanticEvidence)?,
+                kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
                 identity: ArtifactId::new("test-records".to_owned())
                     .ok_or(BootstrapJobError::SemanticEvidence)?,
                 version: "1".to_owned(),

@@ -66,11 +66,32 @@ pub struct SemanticSubject {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SemanticProducer {
-    pub kind: ArtifactId,
+    pub kind: SemanticProducerKind,
     pub identity: ArtifactId,
     pub version: String,
     pub context_digest: Digest,
     pub input_digest: Digest,
+}
+
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::EnumIter,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum SemanticProducerKind {
+    SphinxInventorySet,
+    SiteBuild,
+    RecordSet,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

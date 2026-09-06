@@ -76,7 +76,7 @@ pub fn check_plan(
                 context_digest: template.producer.context_digest,
                 input_digest: template.producer.input_digest,
                 producer_identity: &template.producer.identity,
-                producer_kind: &template.producer.kind,
+                producer_kind: template.producer.kind,
                 producer_version: &template.producer.version,
             })
             .collect(),

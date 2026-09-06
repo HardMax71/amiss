@@ -14,7 +14,6 @@ pub fn semantic_report(payload_digests: &[Digest]) -> Option<Vec<u8>> {
     let Controls::Resolved(controls) = &mut report.payload.controls else {
         return None;
     };
-    let kind = ArtifactId::new("record-set".to_owned())?;
     let identity = ArtifactId::new("fixture".to_owned())?;
     controls.semantic_evidence = Some(
         payload_digests
@@ -25,7 +24,7 @@ pub fn semantic_report(payload_digests: &[Digest]) -> Option<Vec<u8>> {
                 producer: SemanticEvidenceProducer {
                     identity: identity.clone(),
                     input_digest: payload_digest,
-                    kind: kind.clone(),
+                    kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
                     version: "1".to_owned(),
                 },
             })

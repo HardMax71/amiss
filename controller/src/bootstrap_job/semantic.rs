@@ -69,7 +69,7 @@ pub fn bind_semantic_evidence(
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
         let actual = SemanticEvidenceExpectation {
             acquisition_identity: source.acquisition_identity.clone(),
-            producer_kind: template.producer.kind.clone(),
+            producer_kind: template.producer.kind,
             producer_identity: template.producer.identity.clone(),
             producer_version: template.producer.version.clone(),
             context_digest: template.producer.context_digest,

@@ -5,10 +5,8 @@ use strum::{Display, EnumString};
 use crate::assessment::Nullable;
 use crate::model::{ArtifactId, RepoPathText};
 
-pub const SPHINX_INVENTORY_PRODUCER: &str = "sphinx-inventory-set";
 pub const SPHINX_INVENTORY_VERSION: &str = "1";
 pub const SPHINX_LABEL: &str = "sphinx-label";
-pub const SITE_BUILD_PRODUCER: &str = "site-build";
 pub const SITE_BUILD_VERSION: &str = "0.5.1";
 pub const SITE_ROUTE: &str = "site-route";
 pub const SITE_GENERATED_ROUTE: &str = "site-generated-route";

@@ -12,8 +12,8 @@ use amiss_wire::json::{ErrorKind as JsonErrorKind, Value as WireValue};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{
     PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
-    SemanticEvidenceTemplate, SemanticProducer, SemanticSubject, TEMPLATE_SCHEMA, TemplateSchema,
-    bind_template, envelope, parse, parse_template, template,
+    SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind, SemanticSubject,
+    TEMPLATE_SCHEMA, TemplateSchema, bind_template, envelope, parse, parse_template, template,
 };
 
 const A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -44,7 +44,7 @@ fn evidence(observations: Vec<serde_json::Value>) -> SemanticEvidence {
             source_report_payload_digest: Nullable::Value(digest(B)),
         },
         producer: SemanticProducer {
-            kind: id("sphinx-inventory"),
+            kind: SemanticProducerKind::SphinxInventorySet,
             identity: id("amiss-intersphinx"),
             version: "0.1.0".to_owned(),
             context_digest: digest(C),
@@ -57,7 +57,7 @@ fn evidence(observations: Vec<serde_json::Value>) -> SemanticEvidence {
 
 fn template_producer() -> SemanticProducer {
     SemanticProducer {
-        kind: id("record-set"),
+        kind: SemanticProducerKind::RecordSet,
         identity: id("test-public-api"),
         version: "1".to_owned(),
         context_digest: digest(B),
@@ -99,7 +99,7 @@ fn real_inventory_and_site_shapes_share_an_envelope_without_sharing_vocabularies
 
     let first = parse(&envelope(evidence(vec![inventory])).unwrap().1).unwrap();
     let mut site = evidence(vec![route]);
-    site.producer.kind = id("site-build");
+    site.producer.kind = SemanticProducerKind::SiteBuild;
     site.producer.identity = id("amiss-site-output");
     let second = parse(&envelope(site).unwrap().1).unwrap();
 

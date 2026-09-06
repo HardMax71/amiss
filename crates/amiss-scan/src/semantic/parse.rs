@@ -6,11 +6,10 @@ use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::digest::Digest;
 use amiss_wire::report::model::SemanticEvidenceProducer;
 use amiss_wire::requests::SuppliedSemanticEvidence;
-use amiss_wire::semantic::SemanticEvidenceEnvelope;
 use amiss_wire::semantic::observation::{
-    SITE_BUILD_PRODUCER, SITE_BUILD_VERSION, SPHINX_INVENTORY_PRODUCER, SPHINX_INVENTORY_VERSION,
-    SPHINX_LABEL, SphinxLabelObservation,
+    SITE_BUILD_VERSION, SPHINX_INVENTORY_VERSION, SPHINX_LABEL, SphinxLabelObservation,
 };
+use amiss_wire::semantic::{SemanticEvidenceEnvelope, SemanticProducerKind};
 
 use super::record::insert_record_set;
 use super::site::site_build_inputs;
@@ -48,8 +47,8 @@ pub(crate) fn parse(
             candidate_identity_digest,
             source_report_payload_digest,
         } = subject;
-        match producer.kind.as_str() {
-            SPHINX_INVENTORY_PRODUCER => {
+        match producer.kind {
+            SemanticProducerKind::SphinxInventorySet => {
                 if producer.version != SPHINX_INVENTORY_VERSION {
                     return fail(
                         &format!("{path}.payload.producer.version"),
@@ -77,7 +76,7 @@ pub(crate) fn parse(
                     }
                 }
             }
-            SITE_BUILD_PRODUCER => {
+            SemanticProducerKind::SiteBuild => {
                 if producer.version != SITE_BUILD_VERSION {
                     return fail(
                         &format!("{path}.payload.producer.version"),
@@ -91,7 +90,7 @@ pub(crate) fn parse(
                 inputs.site =
                     site_build_inputs(&mut inputs.routes, &path, observations, &mut site_items)?;
             }
-            amiss_wire::semantic::record::PRODUCER_KIND => {
+            SemanticProducerKind::RecordSet => {
                 if producer.version != amiss_wire::semantic::record::PRODUCER_VERSION {
                     return fail(
                         &format!("{path}.payload.producer.version"),
@@ -106,7 +105,6 @@ pub(crate) fn parse(
                     observations,
                 )?;
             }
-            _ => {}
         }
         inputs.candidate_bindings.push(candidate_identity_digest);
         inputs.provenance.push(Provenance {

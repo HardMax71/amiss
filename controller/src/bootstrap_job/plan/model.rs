@@ -32,7 +32,7 @@ pub(super) struct SemanticIdentity<'a> {
     pub(super) context_digest: Digest,
     pub(super) input_digest: Digest,
     pub(super) producer_identity: &'a ArtifactId,
-    pub(super) producer_kind: &'a ArtifactId,
+    pub(super) producer_kind: amiss_wire::semantic::SemanticProducerKind,
     pub(super) producer_version: &'a str,
 }
 

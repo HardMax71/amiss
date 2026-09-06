@@ -65,7 +65,7 @@ fn semantic_inputs(
             source_report_payload_digest: Nullable::Null,
         },
         producer: SemanticProducer {
-            kind: ArtifactId::new("record-set".to_owned()).unwrap(),
+            kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
             identity: ArtifactId::new("test-rust-public-api".to_owned()).unwrap(),
             version: "1".to_owned(),
             context_digest,

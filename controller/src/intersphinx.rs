@@ -4,9 +4,9 @@ use std::sync::Arc;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::observation::{
-    SPHINX_INVENTORY_PRODUCER, SPHINX_INVENTORY_VERSION, SphinxLabelKind, SphinxLabelObservation,
+    SPHINX_INVENTORY_VERSION, SphinxLabelKind, SphinxLabelObservation,
 };
-use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
+use amiss_wire::semantic::{SemanticProducer, SemanticProducerKind, TemplateSchema};
 use flate2::{Decompress, FlushDecompress, Status};
 use sphinx_inv::{SphinxInventoryReader, SphinxType, StdRole};
 use url::Url;
@@ -124,8 +124,7 @@ pub fn intersphinx_evidence(
     let evidence = vec![SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
-            kind: ArtifactId::new(SPHINX_INVENTORY_PRODUCER.to_owned())
-                .ok_or(IntersphinxError::Identity)?,
+            kind: SemanticProducerKind::SphinxInventorySet,
             identity: ArtifactId::new("amiss-controller-intersphinx".to_owned())
                 .ok_or(IntersphinxError::Identity)?,
             version: SPHINX_INVENTORY_VERSION.to_owned(),

@@ -149,7 +149,7 @@ pub enum TrustedTimeProvenance {
 pub struct SemanticEvidenceProducer {
     pub identity: ArtifactId,
     pub input_digest: Digest,
-    pub kind: ArtifactId,
+    pub kind: crate::semantic::SemanticProducerKind,
     pub version: String,
 }
 

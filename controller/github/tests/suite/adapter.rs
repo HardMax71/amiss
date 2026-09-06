@@ -724,7 +724,7 @@ fn workflow_artifact(workflow_identity: &str) -> WorkflowArtifactExpectation {
         file_byte_limit: 524_288,
         semantic: SemanticEvidenceExpectation {
             acquisition_identity: ArtifactId::new("github-docs-evidence".to_owned()).unwrap(),
-            producer_kind: ArtifactId::new("site-build".to_owned()).unwrap(),
+            producer_kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
             producer_identity: ArtifactId::new("docs-site".to_owned()).unwrap(),
             producer_version: "0.5.1".to_owned(),
             context_digest: hb("amiss/test-workflow-completion", b"context"),
