@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde};
 use crate::json;
 use crate::model::ArtifactId;
 
@@ -270,9 +270,10 @@ fn ordered_observations<O: Serialize>(path: &str, observations: Vec<O>) -> Resul
 }
 
 fn payload_digest<O: Serialize>(payload: &SemanticEvidence<O>) -> Result<Digest, Error> {
-    serde_json_canonicalizer::to_vec(payload)
-        .map(|canonical| hb(PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(payload, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn canonical_bytes<T: Serialize>(document: &T) -> Result<Vec<u8>, Error> {
