@@ -1,7 +1,7 @@
 use amiss_wire::digest::hj_serde;
 use amiss_wire::json;
 use amiss_wire::report::PAYLOAD_SCHEMA;
-use amiss_wire::report::model::{IdentityPayload, ReportEnvelope};
+use amiss_wire::report::model::{IdentityPayload, ReportEnvelope, Snapshot};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -75,6 +75,9 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
             if candidate.evaluation.candidate.fields.commit_oid != *expected {
                 return Err(AcceptanceDefect::CandidateIdentity);
             }
+        } else {
+            IdentityPayload::<CandidateEvaluation<Object<Snapshot>>>::deserialize(&payload)
+                .map_err(|_defect| AcceptanceDefect::Shape)?;
         }
         if let Some(sealed) = &expectations.sealed {
             identity::accept(&payload, sealed)?;
