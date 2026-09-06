@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind};
 use crate::digest::{Digest, hb};
@@ -14,15 +16,19 @@ pub const TRUSTED_TIME_CONTROLLER: &str = "external-required-check-clock";
 /// valid_until <= evaluation_instant + 600` whole seconds.
 pub const STATEMENT_TTL_MAX_SECONDS: i64 = 600;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum TrustedTimeSchema {
-    #[serde(rename = "amiss/scanner-trusted-time-statement")]
+    #[strum(serialize = "amiss/scanner-trusted-time-statement")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum TrustedTimeController {
-    #[serde(rename = "external-required-check-clock")]
+    #[strum(serialize = "external-required-check-clock")]
     ExternalRequiredCheckClock,
 }
 

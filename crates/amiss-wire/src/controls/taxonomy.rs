@@ -1,4 +1,3 @@
-use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
 
@@ -55,9 +54,9 @@ pub enum Disposition {
     AsRefStr,
     EnumString,
     IntoStaticStr,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
+    SerializeDisplay,
+    DeserializeFromStr,
+    Display,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum Profile {
@@ -117,15 +116,15 @@ pub enum PromotableFindingKind {
     Eq,
     PartialOrd,
     Ord,
+    Display,
     AsRefStr,
     EnumIter,
     EnumString,
     IntoStaticStr,
-    Serialize,
-    Deserialize,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum EligibleFindingKind {
     ExplicitTargetMissing,
     ExplicitTargetTypeMismatch,
@@ -227,15 +226,15 @@ impl SourceConstruct {
     Eq,
     PartialOrd,
     Ord,
+    Display,
     AsRefStr,
     EnumIter,
     EnumString,
     IntoStaticStr,
-    Serialize,
-    Deserialize,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum TargetKind {
     Blob,
     Tree,
@@ -259,35 +258,42 @@ pub enum EntryKind {
     Eq,
     PartialOrd,
     Ord,
+    Display,
+    EnumString,
     AsRefStr,
     EnumIter,
     IntoStaticStr,
-    Serialize,
-    Deserialize,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum GitMode {
-    #[serde(rename = "100644")]
     #[strum(serialize = "100644")]
     RegularFile,
-    #[serde(rename = "100755")]
     #[strum(serialize = "100755")]
     ExecutableFile,
-    #[serde(rename = "040000")]
     #[strum(serialize = "040000")]
     Tree,
-    #[serde(rename = "120000")]
     #[strum(serialize = "120000")]
     Symlink,
-    #[serde(rename = "160000")]
     #[strum(serialize = "160000")]
     Gitlink,
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumIter, IntoStaticStr, Serialize, Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    AsRefStr,
+    EnumIter,
+    IntoStaticStr,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum ContentAvailability {
     Available,
     NotRead,

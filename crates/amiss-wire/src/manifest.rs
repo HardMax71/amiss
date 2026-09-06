@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::{ConstraintPlatform, GitMode, root, sorted_set, validate_repository};
 use crate::de::{self, Error, ErrorKind, fail};
@@ -8,27 +10,35 @@ use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdenti
 pub const MANIFEST_DOMAIN: &str = "amiss/scanner-release-manifest";
 pub const DEPENDENCY_LOCK_DOMAIN: &str = "amiss/scanner-dependency-lock";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ReleaseManifestSchema {
-    #[serde(rename = "amiss/scanner-release-manifest")]
+    #[strum(serialize = "amiss/scanner-release-manifest")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum DependencyLockSchema {
-    #[serde(rename = "amiss/scanner-dependency-lock-input")]
+    #[strum(serialize = "amiss/scanner-dependency-lock-input")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum RuntimeContract {
-    #[serde(rename = "manifest-closed")]
+    #[strum(serialize = "manifest-closed")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum EnvironmentContract {
-    #[serde(rename = "scanner-process-env")]
+    #[strum(serialize = "scanner-process-env")]
     Current,
 }
 
@@ -49,14 +59,14 @@ pub struct RuntimeFile {
     Debug,
     PartialEq,
     Eq,
+    Display,
     strum::AsRefStr,
-    strum::EnumString,
+    EnumString,
     strum::IntoStaticStr,
-    Serialize,
-    Deserialize,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum RuntimeRole {
     Executable,
     DynamicLibrary,

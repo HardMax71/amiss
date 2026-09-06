@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
@@ -9,9 +11,11 @@ use super::{
     root, sorted_set, validate_owner, validate_repository,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum OrganizationFloorSchema {
-    #[serde(rename = "amiss/organization-floor")]
+    #[strum(serialize = "amiss/organization-floor")]
     Current,
 }
 
