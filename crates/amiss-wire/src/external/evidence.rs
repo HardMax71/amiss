@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 use wary::Validate;
 
 use crate::de::{self, Error, ErrorKind};
@@ -24,9 +26,11 @@ pub struct ExternalEvidence {
     pub rows: Vec<ExternalEvidenceRow>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ExternalEvidenceSchema {
-    #[serde(rename = "amiss/external-evidence")]
+    #[strum(serialize = "amiss/external-evidence")]
     Current,
 }
 
@@ -111,15 +115,39 @@ pub enum ExternalEvidenceRow {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
+#[strum(serialize_all = "lowercase")]
 pub enum ProbeMethod {
     Head,
     Get,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
+#[strum(serialize_all = "lowercase")]
 pub enum ProbeFailure {
     Dns,
     Tls,
@@ -127,16 +155,40 @@ pub enum ProbeFailure {
     Refused,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
+#[strum(serialize_all = "lowercase")]
 pub enum ForgeRepository {
     Readable,
     Missing,
     Denied,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ForgeTail {
     Resolved,
     PathMissing,

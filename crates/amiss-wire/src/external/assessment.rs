@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 use wary::Validate;
 
 use crate::de::{self, Error, ErrorKind};
@@ -38,9 +40,11 @@ pub struct ExternalAssessmentEnvelope<P = ExternalAssessment> {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ExternalAssessmentEnvelopeSchema {
-    #[serde(rename = "amiss/external-assessment-envelope")]
+    #[strum(serialize = "amiss/external-assessment-envelope")]
     Current,
 }
 
@@ -67,9 +71,11 @@ pub struct ExternalAssessment {
     pub verdicts: Vec<ExternalVerdictRow>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ExternalAssessmentPayloadSchema {
-    #[serde(rename = "amiss/external-assessment-payload")]
+    #[strum(serialize = "amiss/external-assessment-payload")]
     Current,
 }
 
@@ -111,8 +117,20 @@ pub struct ExternalVerdictRow {
     pub retarget: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
+#[strum(serialize_all = "lowercase")]
 pub enum ExternalVerdict {
     Reachable,
     Refuted,
@@ -120,9 +138,19 @@ pub enum ExternalVerdict {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, strum::AsRefStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
 )]
-#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum ExternalReason {
     Gone,

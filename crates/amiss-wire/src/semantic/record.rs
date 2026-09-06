@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind};
 use crate::digest::Digest;
@@ -26,9 +28,11 @@ pub struct Input {
     pub records: Vec<Record>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum InputSchema {
-    #[serde(rename = "amiss/record-set-input")]
+    #[strum(serialize = "amiss/record-set-input")]
     Current,
 }
 
@@ -47,9 +51,11 @@ pub struct Observation {
     pub records: Vec<Record>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ObservationKind {
-    #[serde(rename = "record-set")]
+    #[strum(serialize = "record-set")]
     Current,
 }
 

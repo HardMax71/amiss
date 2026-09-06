@@ -2,6 +2,8 @@ use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb, hj_serde};
@@ -22,9 +24,11 @@ pub struct ExternalPlanEnvelope<P = ExternalPlan> {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ExternalPlanEnvelopeSchema {
-    #[serde(rename = "amiss/external-plan-envelope")]
+    #[strum(serialize = "amiss/external-plan-envelope")]
     Current,
 }
 
@@ -38,9 +42,11 @@ pub struct ExternalPlan<B = BTreeMap<String, serde_json::Value>, C = B> {
     pub retained_count: u64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ExternalPlanPayloadSchema {
-    #[serde(rename = "amiss/external-plan-payload")]
+    #[strum(serialize = "amiss/external-plan-payload")]
     Current,
 }
 
