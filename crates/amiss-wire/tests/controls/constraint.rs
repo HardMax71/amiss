@@ -6,7 +6,7 @@ use amiss_wire::controls::{
     parse_waiver_bundle,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hj;
+
 use amiss_wire::json;
 
 use crate::support::{
@@ -37,7 +37,10 @@ fn controls_accept_open_forge_identities() {
     assert_eq!(debt.repository.owner(), "platform/security");
     assert_eq!(
         canonical_debt_snapshot(&debt).unwrap().1,
-        hj("amiss/debt-snapshot", &debt_value)
+        amiss_wire::digest::hb(
+            "amiss/debt-snapshot",
+            &serde_json_canonicalizer::to_vec(&debt_value).unwrap()
+        )
     );
 
     let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
@@ -50,7 +53,10 @@ fn controls_accept_open_forge_identities() {
     assert_eq!(waiver.repository.owner(), "platform/security");
     assert_eq!(
         canonical_waiver_bundle(&waiver).unwrap().1,
-        hj("amiss/waiver-bundle", &waiver_value)
+        amiss_wire::digest::hb(
+            "amiss/waiver-bundle",
+            &serde_json_canonicalizer::to_vec(&waiver_value).unwrap()
+        )
     );
 
     let time = parse_trusted_time(TIME_STATEMENT.as_bytes()).unwrap();
@@ -93,9 +99,10 @@ fn parses_an_execution_constraint_descriptor() {
     );
     assert_eq!(
         canonical_execution_constraint(&descriptor).unwrap().1,
-        hj(
+        amiss_wire::digest::hb(
             "amiss/scanner-execution-constraint",
-            &json::parse(CONSTRAINT.as_bytes()).unwrap()
+            &serde_json_canonicalizer::to_vec(&json::parse(CONSTRAINT.as_bytes()).unwrap())
+                .unwrap()
         )
     );
 

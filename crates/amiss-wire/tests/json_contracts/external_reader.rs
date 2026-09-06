@@ -1,6 +1,6 @@
 use amiss_wire::{
     de::ErrorKind,
-    digest::{hb, hj},
+    digest::hb,
     external::{self, AssessmentDefect},
     json,
 };
@@ -29,7 +29,10 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
             let mut extended = original.clone();
             extended.pointer_mut(path).unwrap()["future"] = json!({"😀": 1, "\u{e000}": 2});
             let payload = serde_json::to_vec(&extended["payload"]).unwrap();
-            extended["payload_digest"] = json!(hj(domain, &json::parse(&payload).unwrap()));
+            extended["payload_digest"] = json!(hb(
+                domain,
+                &serde_json_canonicalizer::to_vec(&json::parse(&payload).unwrap()).unwrap()
+            ));
             assert!(read(&serde_json::to_vec(&extended).unwrap()));
             extended.pointer_mut(path).unwrap()["future"] = json!({"😀": 2, "\u{e000}": 1});
             assert!(!read(&serde_json::to_vec(&extended).unwrap()));

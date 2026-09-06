@@ -1,5 +1,5 @@
 use amiss_wire::controls::{FACT_DOMAIN, FINDING_KEY_DOMAIN};
-use amiss_wire::digest::hj;
+
 use amiss_wire::json;
 
 pub(crate) const POLICY: &[u8] = include_bytes!("../fixtures/scanner-policy.json");
@@ -70,12 +70,16 @@ pub(crate) fn fact_json() -> String {
 #[expect(clippy::unwrap_used, reason = "test helper on known-valid templates")]
 pub(crate) fn computed_digests() -> (String, String) {
     let key_input = key_input_json("explicit-target-missing");
-    let key = hj(
+    let key = amiss_wire::digest::hb(
         FINDING_KEY_DOMAIN,
-        &json::parse(key_input.as_bytes()).unwrap(),
+        &serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
     )
     .to_string();
-    let fact = hj(FACT_DOMAIN, &json::parse(fact_json().as_bytes()).unwrap()).to_string();
+    let fact = amiss_wire::digest::hb(
+        FACT_DOMAIN,
+        &serde_json_canonicalizer::to_vec(&json::parse(fact_json().as_bytes()).unwrap()).unwrap(),
+    )
+    .to_string();
     (key, fact)
 }
 

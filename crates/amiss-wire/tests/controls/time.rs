@@ -3,7 +3,7 @@ use amiss_wire::controls::{
     parse_trusted_time,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hj;
+
 use amiss_wire::json;
 use amiss_wire::model::UtcInstant;
 
@@ -79,9 +79,10 @@ fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
     assert_eq!(statement.provider, "gitlab-ci");
     assert_eq!(
         canonical_trusted_time(&statement).unwrap().1,
-        hj(
+        amiss_wire::digest::hb(
             "amiss/scanner-trusted-time-statement",
-            &json::parse(TIME_STATEMENT.as_bytes()).unwrap()
+            &serde_json_canonicalizer::to_vec(&json::parse(TIME_STATEMENT.as_bytes()).unwrap())
+                .unwrap()
         )
     );
     assert_eq!(statement.provider_run_id, "pipeline/01J2Z9-7");
