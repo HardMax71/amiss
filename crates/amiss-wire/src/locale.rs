@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
@@ -44,9 +46,11 @@ pub struct LocaleCoveragePlanEnvelope<T = LocaleCoveragePlan> {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum PlanEnvelopeSchema {
-    #[serde(rename = "amiss/locale-coverage-plan-envelope")]
+    #[strum(serialize = "amiss/locale-coverage-plan-envelope")]
     Current,
 }
 
@@ -62,9 +66,11 @@ pub struct LocaleCoveragePlan {
     pub policy: LocaleCoveragePolicy,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum PlanPayloadSchema {
-    #[serde(rename = "amiss/locale-coverage-plan-payload")]
+    #[strum(serialize = "amiss/locale-coverage-plan-payload")]
     Current,
 }
 

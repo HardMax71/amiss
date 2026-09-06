@@ -1,7 +1,8 @@
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
-use strum::{AsRefStr, EnumString};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{AsRefStr, Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
 use crate::de::{self, Error, ErrorKind, fail};
@@ -16,10 +17,20 @@ pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/publication-assessment-envel
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/publication-assessment-payload";
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumString, Serialize, Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    AsRefStr,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum PublicationReason {
     EvidenceAbsent,
     EvidenceUnbound,
@@ -38,9 +49,11 @@ pub struct PublicationAssessmentEnvelope {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum AssessmentEnvelopeSchema {
-    #[serde(rename = "amiss/publication-assessment-envelope")]
+    #[strum(serialize = "amiss/publication-assessment-envelope")]
     Current,
 }
 
@@ -54,9 +67,11 @@ pub struct PublicationAssessment {
     pub reasons: Vec<PublicationReason>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum AssessmentPayloadSchema {
-    #[serde(rename = "amiss/publication-assessment-payload")]
+    #[strum(serialize = "amiss/publication-assessment-payload")]
     Current,
 }
 

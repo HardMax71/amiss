@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use strum::{AsRefStr, EnumString};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{AsRefStr, Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, Nullable};
 use crate::de::{Error, ErrorKind, fail};
@@ -13,9 +14,19 @@ use super::{RELATION_DOCUMENT_BYTES, RelationPlanEnvelope, plan_payload_digest};
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/relation-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/relation-assessment-payload";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    AsRefStr,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum RelationVerdict {
     Aligned,
     IntroducedDrift,
@@ -24,9 +35,19 @@ pub enum RelationVerdict {
     Unproven,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    AsRefStr,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum RelationReason {
     EvidenceAbsent,
     EvidenceUnbound,

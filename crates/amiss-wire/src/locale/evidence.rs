@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
@@ -25,9 +27,11 @@ pub struct LocaleCoverageEvidenceEnvelope<T = LocaleCoverageEvidence> {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum EvidenceEnvelopeSchema {
-    #[serde(rename = "amiss/locale-coverage-evidence-envelope")]
+    #[strum(serialize = "amiss/locale-coverage-evidence-envelope")]
     Current,
 }
 
@@ -43,9 +47,11 @@ pub struct LocaleCoverageEvidence {
     pub target: LocaleTargetInventory,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum EvidencePayloadSchema {
-    #[serde(rename = "amiss/locale-coverage-evidence-payload")]
+    #[strum(serialize = "amiss/locale-coverage-evidence-payload")]
     Current,
 }
 

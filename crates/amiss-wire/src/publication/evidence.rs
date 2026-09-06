@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
@@ -21,9 +23,11 @@ pub struct PublicationEvidenceEnvelope<T = PublicationEvidence> {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum EvidenceEnvelopeSchema {
-    #[serde(rename = "amiss/publication-evidence-envelope")]
+    #[strum(serialize = "amiss/publication-evidence-envelope")]
     Current,
 }
 
@@ -40,9 +44,11 @@ pub struct PublicationEvidence {
     pub product: PublicationResource,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum EvidencePayloadSchema {
-    #[serde(rename = "amiss/publication-evidence-payload")]
+    #[strum(serialize = "amiss/publication-evidence-payload")]
     Current,
 }
 
@@ -55,9 +61,11 @@ pub struct PublicationDeployment {
     pub provider_run_attempt: u64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum PublicationOutcome {
-    #[serde(rename = "succeeded")]
+    #[strum(serialize = "succeeded")]
     Succeeded,
 }
 
