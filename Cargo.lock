@@ -63,7 +63,7 @@ checksum = "e9d4ee0d472d1cd2e28c97dfa124b3d8d992e10eb0a035f33f5d12e3a177ba3b"
 
 [[package]]
 name = "amiss"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-fixtures",
  "amiss-git",
@@ -86,14 +86,14 @@ dependencies = [
 
 [[package]]
 name = "amiss-adoc"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-wire",
 ]
 
 [[package]]
 name = "amiss-api"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-controller-files",
  "amiss-wire",
@@ -110,7 +110,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-bootstrap"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-fixtures",
  "amiss-git",
@@ -124,7 +124,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller-files",
@@ -161,7 +161,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-bootstrap-fixture"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-wire",
@@ -169,7 +169,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-constraint"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller-files",
@@ -183,7 +183,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-files"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -192,7 +192,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-fixtures"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-fuzz"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
@@ -226,7 +226,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-git"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-controller",
  "amiss-fixtures",
@@ -244,7 +244,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-gitea"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
@@ -265,7 +265,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-gitea-service"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
@@ -288,7 +288,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-github"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
@@ -314,7 +314,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-github-service"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
@@ -334,7 +334,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-gitlab"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-controller",
  "amiss-controller-fixtures",
@@ -352,7 +352,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-gitlab-service"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
@@ -376,7 +376,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-controller-service"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-controller",
@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-fixtures"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-wire",
  "flate2",
@@ -424,7 +424,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-git"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-fixtures",
  "amiss-wire",
@@ -442,7 +442,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-md"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-wire",
  "markdown",
@@ -452,7 +452,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-probe"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-fixtures",
  "amiss-wire",
@@ -462,7 +462,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-rst"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-wire",
  "divan",
@@ -470,7 +470,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-scan"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "amiss-adoc",
  "amiss-fixtures",
@@ -496,7 +496,7 @@ dependencies = [
 
 [[package]]
 name = "amiss-wire"
-version = "0.27.0"
+version = "0.28.0"
 dependencies = [
  "countio",
  "digest-io",
