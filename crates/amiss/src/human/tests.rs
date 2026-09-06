@@ -3,46 +3,8 @@
 use std::hint::black_box;
 use std::time::Instant;
 
-use amiss_wire::json::Value;
-
-use super::View;
-
 #[global_allocator]
 static ALLOC: dhat::Alloc = dhat::Alloc;
-
-fn object(members: &[(&str, Value)]) -> Value {
-    Value::object(
-        members
-            .iter()
-            .map(|(key, value)| ((*key).to_owned(), value.clone()))
-            .collect(),
-    )
-}
-
-/// The one object shape the projection reads is the wire's raw-bytes atom.
-/// Anything else is a dash, since guessing would print bytes the wire never
-/// said were bytes.
-#[test]
-fn only_the_bytes_atom_is_read_as_bytes() {
-    let hex = Value::string("646f6373");
-    let row = object(&[
-        ("path", object(&[("bytes_hex", hex.clone())])),
-        ("target", object(&[("hex", hex)])),
-        ("code", Value::string("plain")),
-        ("count", Value::Integer(3)),
-    ]);
-    let view = View::of(&row);
-
-    assert_eq!(view.atom_or_dash("path"), "\"docs\"");
-    assert_eq!(
-        view.atom_or_dash("target"),
-        "-",
-        "another single-member object is not the bytes atom"
-    );
-    assert_eq!(view.atom_or_dash("code"), "\"plain\"");
-    assert_eq!(view.atom_or_dash("count"), "-");
-    assert_eq!(view.atom_or_dash("absent"), "-");
-}
 
 fn measurement_report(finding_count: usize) -> amiss_wire::report::model::ReportPayload {
     use amiss_wire::model::RepoPathText;

@@ -2,18 +2,13 @@ use std::fs;
 use std::io::Read as _;
 use std::path::Path;
 
-use amiss_wire::json::{self, Value};
+use amiss_wire::json;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ReadError {
     Unreadable,
     TooLarge,
-}
-
-pub(crate) struct StrictJson {
-    pub bytes: Vec<u8>,
-    pub value: Value,
 }
 
 pub(crate) fn bounded_bytes(path: &Path, limit: u64) -> Result<Vec<u8>, ReadError> {
@@ -39,9 +34,9 @@ pub(crate) fn report_bytes(path: &Path) -> Result<Vec<u8>, String> {
     })
 }
 
-pub(crate) fn strict_json(path: &Path) -> Result<StrictJson, String> {
+pub(crate) fn strict_json(path: &Path) -> Result<Vec<u8>, String> {
     let bytes = report_bytes(path)?;
-    let value = json::parse(&bytes)
+    json::parse(&bytes)
         .map_err(|_error| format!("{} is not the scanner's strict JSON", path.display()))?;
-    Ok(StrictJson { bytes, value })
+    Ok(bytes)
 }
