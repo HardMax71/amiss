@@ -4,7 +4,7 @@ use amiss_wire::{
     report::model::SemanticEvidenceProducer,
     semantic::{
         self, SemanticEvidenceEnvelope, SemanticEvidenceTemplate, SemanticProducer,
-        SemanticProducerKind, observation::SiteBuildObservation, record,
+        SemanticProducerKind,
     },
 };
 use strum::IntoEnumIterator;
@@ -54,17 +54,20 @@ fn semantic_producer_kinds_are_closed_string_tags_through_provenance() {
 
 #[test]
 fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
-    let document: SemanticEvidenceEnvelope<SiteBuildObservation> = serde_json::from_slice(
-        include_bytes!("../../../../spec/examples/scanner-semantic-evidence.json"),
-    )
+    let document: SemanticEvidenceEnvelope = serde_json::from_slice(include_bytes!(
+        "../../../../spec/examples/scanner-semantic-evidence.json"
+    ))
     .unwrap();
-    let payload = serde_json_canonicalizer::to_string(&document.payload).unwrap();
-    let producer = serde_json_canonicalizer::to_string(&document.payload.producer).unwrap();
+    let payload =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap()).unwrap();
+    let producer =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload.producer).unwrap())
+            .unwrap();
     let unknown_producer = producer.replace("\"site-build\"", "\"future-producer\"");
     let unknown = payload.replace(&producer, &unknown_producer);
     assert_ne!(payload, unknown);
     let digest = hb(semantic::PAYLOAD_SCHEMA, unknown.as_bytes());
-    let encoded = serde_json_canonicalizer::to_string(&document)
+    let encoded = String::from_utf8(serde_json_canonicalizer::to_vec(&document).unwrap())
         .unwrap()
         .replace(&payload, &unknown)
         .replace(&document.payload_digest.to_string(), &digest.to_string());
@@ -73,12 +76,13 @@ fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
         ErrorKind::InvalidValue
     );
 
-    let template: SemanticEvidenceTemplate<record::Observation> = serde_json::from_slice(
-        include_bytes!("../../../../spec/examples/scanner-semantic-template.json"),
-    )
+    let template: SemanticEvidenceTemplate = serde_json::from_slice(include_bytes!(
+        "../../../../spec/examples/scanner-semantic-template.json"
+    ))
     .unwrap();
-    let original = serde_json_canonicalizer::to_string(&template).unwrap();
-    let producer = serde_json_canonicalizer::to_string(&template.producer).unwrap();
+    let original = String::from_utf8(serde_json_canonicalizer::to_vec(&template).unwrap()).unwrap();
+    let producer =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&template.producer).unwrap()).unwrap();
     let unknown_producer = producer.replace("\"record-set\"", "\"future-producer\"");
     let unknown = original.replace(&producer, &unknown_producer);
     assert_ne!(original, unknown);

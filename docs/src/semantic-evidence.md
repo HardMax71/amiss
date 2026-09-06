@@ -17,7 +17,7 @@ The semantic-evidence envelope is that boundary. Its payload binds:
 - at most 100,000 observation objects, sorted by canonical JSON and unique.
 
 The envelope carries the domain-separated payload digest and is limited to 16 MiB. Its strict
-reader refuses malformed JSON, unknown envelope fields or producer kinds, invalid identities,
+reader refuses malformed JSON, unknown fields or producer and observation kinds, invalid identities,
 duplicate or unsorted observations, oversized input, and a mismatched digest. Construction sorts
 observations once so a filesystem, inventory, or build traversal order cannot change the evidence
 identity.
@@ -29,12 +29,13 @@ consumer and a corresponding contract update.
 
 Observation vocabularies do not share a synthetic universal graph. An Intersphinx producer needs
 domain, role, object name, inventory identity, and URI. A site-output producer needs routes,
-anchors, redirects, navigation edges, and source attribution. The envelope requires only a bounded
-`kind` on every observation; the scanner decodes observations into the closed site, Sphinx label,
-or record-set models before interpretation. Unknown kinds or fields, positional observation arrays,
-and observations belonging to another producer family reject the evidence. The generic envelope
-grammar alone is not proof that the scanner can consume a payload. Parsing an envelope never
-turns it into a pass, a block, or a suppression.
+anchors, redirects, navigation edges, and source attribution. Envelope and template readers decode
+observations directly into the existing closed site, Sphinx label, or record-set models. Unknown
+kinds or fields and positional observation arrays are rejected at that boundary. Binding a template
+borrows its typed observations; the scanner consumes them without encoding and parsing each row
+again. Compiled consumers additionally check producer versions, family membership, and semantic
+laws such as valid routes or sorted record keys. Parsing an envelope never turns it into a pass,
+a block, or a suppression.
 
 This contract authenticates nothing by itself. Provider-enforced use must acquire it outside the
 repository. Each sealed value carries an independently planned expected context digest; the engine

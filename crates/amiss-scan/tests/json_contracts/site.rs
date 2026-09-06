@@ -30,12 +30,13 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
         digest: hb("test", b"engine"),
     };
     let observations = vec![
-        site_observation("/collision/", SiteObservation::Page("README.md", &[])),
-        site_observation("/collision/", SiteObservation::Page("other.md", &[])),
+        site_observation("/collision/", SiteObservation::Page("README.md", &[])).unwrap(),
+        site_observation("/collision/", SiteObservation::Page("other.md", &[])).unwrap(),
         site_observation(
             "/broken/",
             SiteObservation::Redirect("README.md", "/absent/"),
-        ),
+        )
+        .unwrap(),
     ];
     let setup = SetupShell {
         engine: engine.clone(),

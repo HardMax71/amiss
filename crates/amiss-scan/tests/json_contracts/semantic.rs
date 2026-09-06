@@ -61,8 +61,9 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
             site_observation(
                 "/broken/",
                 SiteObservation::Redirect("README.md", "/absent/"),
-            ),
-            site_observation("/generated/", SiteObservation::Generated(None, &["intro"])),
+            )
+            .unwrap(),
+            site_observation("/generated/", SiteObservation::Generated(None, &["intro"])).unwrap(),
         ]
         .into(),
     };
