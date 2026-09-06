@@ -8,8 +8,8 @@ repository.workspace = true
 exclude.workspace = true
 
 [dependencies]
-amiss-git = { path = "../amiss-git", version = "0.27.0" }
-amiss-wire = { path = "../amiss-wire", version = "0.27.0" }
+amiss-git = { path = "../amiss-git", version = "0.28.0" }
+amiss-wire = { path = "../amiss-wire", version = "0.28.0" }
 serde.workspace = true
 serde_json = { workspace = true, features = ["unbounded_depth"] }
 serde_json_canonicalizer.workspace = true
