@@ -13,7 +13,7 @@ use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::SpanDisplay;
 use amiss_wire::controls::{SourceConstruct, TargetKind};
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::{Value, canonical, parse};
+use amiss_wire::json::{Value, parse};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::ExternalReference;
@@ -300,7 +300,7 @@ fn the_published_vectors_execute_live_correlation() {
                 left_intent.repository_path.as_ref()
             ))
             .unwrap(),
-            canonical(left_value),
+            serde_json_canonicalizer::to_vec(left_value).unwrap(),
             "{id} left target-intent preimage"
         );
         assert_eq!(
@@ -310,7 +310,7 @@ fn the_published_vectors_execute_live_correlation() {
                 right_intent.repository_path.as_ref()
             ))
             .unwrap(),
-            canonical(right_value),
+            serde_json_canonicalizer::to_vec(right_value).unwrap(),
             "{id} right target-intent preimage"
         );
 

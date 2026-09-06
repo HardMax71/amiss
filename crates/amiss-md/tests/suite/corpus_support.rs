@@ -1,5 +1,5 @@
 use amiss_wire::digest::hb;
-use amiss_wire::json::{Value, canonical, parse};
+use amiss_wire::json::{Value, parse};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;
 
@@ -737,11 +737,16 @@ pub(crate) fn github_fixtures(pairs: &[(String, String, String)]) -> Vec<Case> {
 
 /// One digest over a whole directory, so a fixture cannot be edited, added, or
 /// dropped without the pin moving.
-#[must_use]
-pub(crate) fn directory_digest(files: &[(String, String)]) -> String {
+pub(crate) fn directory_digest(
+    files: &[(String, String)],
+) -> Result<String, Box<dyn std::error::Error>> {
     let members: Vec<(String, Value)> = files
         .iter()
         .map(|(name, body)| (name.clone(), Value::string(body.clone())))
         .collect();
-    hb(GITHUB_FOOTNOTE_FAMILY, &canonical(&Value::object(members))).to_string()
+    Ok(hb(
+        GITHUB_FOOTNOTE_FAMILY,
+        &serde_json_canonicalizer::to_vec(&Value::object(members))?,
+    )
+    .to_string())
 }

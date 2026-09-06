@@ -11,7 +11,7 @@ use amiss_wire::controls::{
     canonical_debt_snapshot, canonical_scanner_policy, canonical_waiver_bundle,
     parse_debt_snapshot, parse_waiver_bundle,
 };
-use amiss_wire::digest::hj;
+
 use amiss_wire::model::{RepoPath, RepoPathText, UtcInstant};
 use amiss_wire::report::AnalysisErrorCode;
 use amiss_wire::requests::RequestTrust;
@@ -343,25 +343,28 @@ fn debt_input(item_count: usize) -> DebtInput {
             "/accepted_fact/key_input/scope/occurrence/source_projection_digest",
             "sha256:8888888888888888888888888888888888888888888888888888888888888888".into(),
         );
-        let key_input = serde_json::to_vec(
+        let key_input = serde_json_canonicalizer::to_vec(
             second
                 .pointer("/accepted_fact/key_input")
                 .expect("key input"),
         )
         .expect("key input JSON");
-        let key_input = amiss_wire::json::parse(&key_input).expect("key input wire JSON");
         replace_json(
             &mut second,
             "/finding_key",
-            hj(FINDING_KEY_DOMAIN, &key_input).to_string().into(),
+            amiss_wire::digest::hb(FINDING_KEY_DOMAIN, &key_input)
+                .to_string()
+                .into(),
         );
         let fact =
-            serde_json::to_vec(second.pointer("/accepted_fact").expect("fact")).expect("fact JSON");
-        let fact = amiss_wire::json::parse(&fact).expect("fact wire JSON");
+            serde_json_canonicalizer::to_vec(second.pointer("/accepted_fact").expect("fact"))
+                .expect("fact JSON");
         replace_json(
             &mut second,
             "/accepted_fact_digest",
-            hj(FACT_DOMAIN, &fact).to_string().into(),
+            amiss_wire::digest::hb(FACT_DOMAIN, &fact)
+                .to_string()
+                .into(),
         );
         push_item(&mut document, second);
     }

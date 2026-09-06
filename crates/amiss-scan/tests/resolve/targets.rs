@@ -4,7 +4,7 @@ use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{RAW_EVIDENCE_DOMAIN, Resolver, TARGET_PROJECTION_DOMAIN, TargetCache};
 use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, discover, discover_index};
 use amiss_wire::controls::ResourceName;
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::json::Value;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::resolution::{BlobContent, BlobMode, Target, UnsupportedSemantics};
@@ -80,12 +80,13 @@ fn target_digests_recompute_exactly() {
     };
     let raw = hb(RAW_EVIDENCE_DOMAIN, b"{}\n");
     assert_eq!(raw_digest, raw);
-    let projection = hj(
+    let projection = hb(
         TARGET_PROJECTION_DOMAIN,
-        &Value::object(vec![
+        &serde_json_canonicalizer::to_vec(&Value::object(vec![
             ("git_mode".to_owned(), Value::string("100644".to_owned())),
             ("raw_digest".to_owned(), Value::string(raw.to_string())),
-        ]),
+        ]))
+        .unwrap(),
     );
     assert_eq!(projection_digest, projection);
 }

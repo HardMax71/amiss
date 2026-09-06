@@ -12,6 +12,7 @@ amiss-wire = { path = "../amiss-wire", version = "0.27.0" }
 markdown = "1"
 
 [dev-dependencies]
+serde_json_canonicalizer.workspace = true
 sha2.workspace = true
 
 [lints]
