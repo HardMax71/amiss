@@ -3,8 +3,7 @@ use std::sync::Arc;
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::{Error, ErrorKind, fail};
-use amiss_wire::digest::{Digest, hb, hj};
-use amiss_wire::json::Value;
+use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
     BrokenRedirectFactEvidenceKind, BrokenRedirectReason, DuplicateRouteFactEvidenceKind,
@@ -23,6 +22,12 @@ const DESTINATION_BYTES: usize = 16_384;
 const SITE_CLAIM_DOMAIN: &str = "amiss/scanner-site-claim";
 const SITE_DEFECT_DOMAIN: &str = "amiss/scanner-site-defect";
 
+#[derive(serde::Serialize)]
+struct SiteDefectIdentity<'a, K> {
+    kind: K,
+    route: &'a str,
+}
+
 pub(super) fn site_build_inputs(
     routes: &mut Arc<BTreeMap<String, SiteRoute>>,
     path: &str,
@@ -39,9 +44,10 @@ pub(super) fn site_build_inputs(
         ) {
             continue;
         }
-        let digest = serde_json_canonicalizer::to_vec(&observation)
-            .map(|canonical| hb(SITE_CLAIM_DOMAIN, &canonical))
-            .map_err(|_defect| Error::new(&observation_path, ErrorKind::InvalidValue))?;
+        let digest = hj_serde(SITE_CLAIM_DOMAIN, |mut writer| {
+            serde_json_canonicalizer::to_writer(&observation, &mut writer)
+        })
+        .map_err(|_defect| Error::new(&observation_path, ErrorKind::InvalidValue))?;
         match amiss_wire::de::deserialize_value(&observation_path, observation)? {
             SiteBuildObservation::Navigation {
                 root,
@@ -95,16 +101,17 @@ pub(super) fn site_build_inputs(
             }
         }
     }
-    let Some((navigation_path, navigation)) = navigation else {
-        return Ok(SiteEvaluation {
-            navigation: None,
-            defects: site_defects(routes).into(),
-        });
-    };
-    validate_navigation(routes, &navigation_path, &navigation)?;
+    let navigation = navigation
+        .map(|(navigation_path, navigation)| {
+            validate_navigation(routes, &navigation_path, &navigation)
+                .map(|()| Arc::new(navigation))
+        })
+        .transpose()?;
+    let defects =
+        site_defects(routes).map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
     Ok(SiteEvaluation {
-        navigation: Some(Arc::new(navigation)),
-        defects: site_defects(routes).into(),
+        navigation,
+        defects: defects.into(),
     })
 }
 
@@ -270,7 +277,7 @@ fn merge_site_claim(routes: &mut BTreeMap<String, SiteRoute>, route: String, cla
     }
 }
 
-fn site_defects(routes: &BTreeMap<String, SiteRoute>) -> Vec<SiteDefect> {
+fn site_defects(routes: &BTreeMap<String, SiteRoute>) -> serde_json::Result<Vec<SiteDefect>> {
     routes
         .iter()
         .filter_map(|(route, target)| match target {
@@ -282,26 +289,30 @@ fn site_defects(routes: &BTreeMap<String, SiteRoute>) -> Vec<SiteDefect> {
         .collect()
 }
 
-fn duplicate_route_defect(route: &str, sources: &[RepoPath], claims: &[Digest]) -> SiteDefect {
+fn duplicate_route_defect(
+    route: &str,
+    sources: &[RepoPath],
+    claims: &[Digest],
+) -> serde_json::Result<SiteDefect> {
     let evidence = FindingFactEvidence::DuplicateRoute {
         claim_digests: claims.to_vec(),
         kind: DuplicateRouteFactEvidenceKind::DuplicateRoute,
         route: route.to_owned(),
         sources: sources.to_vec(),
     };
-    SiteDefect {
-        id: site_defect_id("duplicate-route", route),
+    Ok(SiteDefect {
+        id: site_defect_id(DuplicateRouteFactEvidenceKind::DuplicateRoute, route)?,
         evidence,
         source: sources.first().cloned(),
         member_count: u64::try_from(claims.len()).unwrap_or(u64::MAX),
-    }
+    })
 }
 
 fn broken_redirect_defect(
     routes: &BTreeMap<String, SiteRoute>,
     route: &str,
     claim: &SiteClaim,
-) -> Option<SiteDefect> {
+) -> Option<serde_json::Result<SiteDefect>> {
     let SiteTarget::Redirect {
         destination,
         fragment,
@@ -343,12 +354,16 @@ fn broken_redirect_defect(
         route: route.to_owned(),
         source: source.clone(),
     };
-    Some(SiteDefect {
-        id: site_defect_id("broken-redirect", route),
-        evidence,
-        source: Some(source.clone()),
-        member_count: 1,
-    })
+    Some(
+        site_defect_id(BrokenRedirectFactEvidenceKind::BrokenRedirect, route).map(|id| {
+            SiteDefect {
+                id,
+                evidence,
+                source: Some(source.clone()),
+                member_count: 1,
+            }
+        }),
+    )
 }
 
 pub(crate) fn fragment_target(anchors: &[String], fragment: &str) -> bool {
@@ -367,14 +382,10 @@ pub(crate) fn fragment_target(anchors: &[String], fragment: &str) -> bool {
                 .is_some_and(published))
 }
 
-fn site_defect_id(kind: &str, route: &str) -> Digest {
-    hj(
-        SITE_DEFECT_DOMAIN,
-        &Value::object(vec![
-            ("kind".to_owned(), Value::string(kind.to_owned())),
-            ("route".to_owned(), Value::string(route.to_owned())),
-        ]),
-    )
+fn site_defect_id(kind: impl serde::Serialize, route: &str) -> serde_json::Result<Digest> {
+    hj_serde(SITE_DEFECT_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&SiteDefectIdentity { kind, route }, &mut writer)
+    })
 }
 
 fn validate_navigation(
