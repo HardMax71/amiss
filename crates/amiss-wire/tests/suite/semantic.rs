@@ -7,8 +7,8 @@
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hj};
-use amiss_wire::json::{ErrorKind as JsonErrorKind, Value as WireValue, canonical};
+use amiss_wire::digest::Digest;
+use amiss_wire::json::{ErrorKind as JsonErrorKind, Value as WireValue};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{
     PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
@@ -133,7 +133,11 @@ fn construction_sorts_observations_and_binds_the_payload() {
     assert_eq!(parsed.payload.observations[0]["route"], "/a");
     assert_eq!(
         parsed.payload_digest,
-        hj(PAYLOAD_SCHEMA, value.member("payload").unwrap())
+        amiss_wire::digest::hb(
+            PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap())
+                .expect("fixture JSON")
+        )
     );
 }
 
@@ -238,7 +242,7 @@ fn strict_templates_have_no_candidate_or_report_binding_surface() {
         ("observations".to_owned(), WireValue::array(Vec::new())),
     ]);
     assert_eq!(
-        parse_template(&canonical(&valid)).unwrap(),
+        parse_template(&serde_json_canonicalizer::to_vec(&valid).unwrap()).unwrap(),
         evidence_template(Vec::new())
     );
 
@@ -249,7 +253,8 @@ fn strict_templates_have_no_candidate_or_report_binding_surface() {
         let mut members = members.as_ref().to_vec();
         members.push((field.to_owned(), WireValue::string(A)));
         let invalid = WireValue::object(members);
-        let error = parse_template(&canonical(&invalid)).unwrap_err();
+        let error =
+            parse_template(&serde_json_canonicalizer::to_vec(&invalid).unwrap()).unwrap_err();
         assert_eq!(error.kind, ErrorKind::UnknownField);
     }
 }
@@ -279,10 +284,12 @@ fn template_observations_must_already_be_canonical_sets() {
     let mut reversed = template_value.clone();
     reverse_template_observations(&mut reversed);
     assert_eq!(
-        parse_template(&canonical(&reversed)).unwrap_err().kind,
+        parse_template(&serde_json_canonicalizer::to_vec(&reversed).unwrap())
+            .unwrap_err()
+            .kind,
         ErrorKind::UnsortedSet
     );
-    assert!(parse_template(&canonical(&template_value)).is_ok());
+    assert!(parse_template(&serde_json_canonicalizer::to_vec(&template_value).unwrap()).is_ok());
 }
 
 #[test]
@@ -330,7 +337,7 @@ fn serialized_semantic_bytes_preserve_unicode_order_and_escaping() {
         envelope(evidence(vec![row])).unwrap().1,
     ] {
         let value = amiss_wire::json::parse(&bytes).unwrap();
-        assert_eq!(bytes, canonical(&value));
+        assert_eq!(bytes, serde_json_canonicalizer::to_vec(&value).unwrap());
         assert!(!bytes.ends_with(b"\n"));
     }
 }
@@ -436,13 +443,17 @@ fn tampered_and_unsorted_payloads_are_refused() {
     let mut value = amiss_wire::json::parse(&bytes).unwrap();
     reverse_observations(&mut value);
     assert_eq!(
-        parse(&canonical(&value)).unwrap_err().kind,
+        parse(&serde_json_canonicalizer::to_vec(&value).unwrap())
+            .unwrap_err()
+            .kind,
         ErrorKind::DigestMismatch
     );
 
     rebind_payload(&mut value);
     assert_eq!(
-        parse(&canonical(&value)).unwrap_err().kind,
+        parse(&serde_json_canonicalizer::to_vec(&value).unwrap())
+            .unwrap_err()
+            .kind,
         ErrorKind::UnsortedSet
     );
 }
@@ -463,7 +474,10 @@ fn reverse_template_observations(value: &mut WireValue) {
 }
 
 fn rebind_payload(value: &mut WireValue) {
-    let payload_digest = hj(PAYLOAD_SCHEMA, value.member("payload").unwrap());
+    let payload_digest = amiss_wire::digest::hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).expect("fixture JSON"),
+    );
     *member_mut(value, "payload_digest") = WireValue::string(payload_digest.to_string());
 }
 

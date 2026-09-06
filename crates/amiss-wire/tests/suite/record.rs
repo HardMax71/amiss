@@ -1,5 +1,5 @@
 use amiss_wire::de::ErrorKind;
-use amiss_wire::json::{Value, canonical};
+use amiss_wire::json::Value;
 use amiss_wire::semantic::record::{decode_observation, parse_input, template};
 
 const B: &str = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -65,7 +65,9 @@ fn row_order_duplicates_and_closed_metadata_are_refused() {
     members.push(("producer_version".to_owned(), Value::string("2")));
     let value = Value::object(members);
     assert_eq!(
-        parse_input(&canonical(&value)).unwrap_err().kind,
+        parse_input(&serde_json_canonicalizer::to_vec(&value).unwrap())
+            .unwrap_err()
+            .kind,
         ErrorKind::UnknownField
     );
 }

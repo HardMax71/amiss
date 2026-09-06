@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::json::{Value, parse};
 use amiss_wire::report::{
     AnalysisErrorCode, Disposition, ENGINE_DOMAIN, ENVELOPE_SCHEMA, EngineProvenance, FindingKind,
@@ -71,9 +71,10 @@ fn builds_the_fatal_incomplete_envelope() {
     let Value::String(payload_digest) = member(&envelope, "payload_digest") else {
         panic!("payload_digest is not a string");
     };
+    let payload_bytes = serde_json_canonicalizer::to_vec(payload).unwrap();
     assert_eq!(
         payload_digest.as_ref(),
-        hj(PAYLOAD_SCHEMA, payload).to_string()
+        hb(PAYLOAD_SCHEMA, &payload_bytes).to_string()
     );
 
     let evaluation = member(payload, "evaluation");

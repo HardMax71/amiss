@@ -10,7 +10,7 @@ use amiss_wire::controls::{
     RecordValueSelection, TreePathSelection,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::json;
 use amiss_wire::model::{ObjectFormat, RepoPathText};
 use amiss_wire::relation::{
@@ -32,9 +32,15 @@ fn relation_plan_round_trips_all_four_exact_snapshots_and_example() {
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        hj(PLAN_PAYLOAD_SCHEMA, value.member("payload").unwrap())
+        hb(
+            PLAN_PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap()
+        )
     );
-    assert_eq!(json::canonical(&json::parse(&bytes).unwrap()), bytes);
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap(),
+        bytes
+    );
 
     let example_bytes = fs::read(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/relation-plan.json"),
@@ -43,7 +49,7 @@ fn relation_plan_round_trips_all_four_exact_snapshots_and_example() {
     let example = parse_plan(&example_bytes).unwrap();
     assert_eq!(
         plan(&example.payload).unwrap(),
-        json::canonical(&json::parse(&example_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&example_bytes).unwrap()).unwrap()
     );
 }
 
@@ -165,7 +171,10 @@ fn relation_evidence_round_trips_four_independent_slots() {
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        hj(EVIDENCE_PAYLOAD_SCHEMA, value.member("payload").unwrap())
+        hb(
+            EVIDENCE_PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap()
+        )
     );
 }
 
@@ -282,7 +291,11 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
         let open_value = json::parse(open.as_bytes()).unwrap();
         let rebound = open.replace(
             recorded,
-            &hj(payload_schema, open_value.member("payload").unwrap()).to_string(),
+            &hb(
+                payload_schema,
+                &serde_json_canonicalizer::to_vec(open_value.member("payload").unwrap()).unwrap(),
+            )
+            .to_string(),
         );
         let error = parse(rebound.as_bytes()).unwrap_err();
         assert_eq!((error.path.as_str(), error.kind), open_error);

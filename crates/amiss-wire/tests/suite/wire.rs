@@ -1,6 +1,6 @@
 use amiss_wire::ExitClass;
-use amiss_wire::digest::{hb, hb_stream, hj, sha256, sha256_stream};
-use amiss_wire::json::{Error, ErrorKind, MAX_SAFE_INTEGER, Value, canonical, parse};
+use amiss_wire::digest::{hb, hb_stream, sha256, sha256_stream};
+use amiss_wire::json::{Error, ErrorKind, MAX_SAFE_INTEGER, Value, parse};
 
 #[expect(clippy::unwrap_used, reason = "test helper on inputs that must fail")]
 fn kind(input: &[u8]) -> ErrorKind {
@@ -111,7 +111,10 @@ fn error_offsets_point_at_the_defect() {
 #[test]
 fn canonical_matches_the_gv003_bytes() {
     let value = parse("{ \"z\" : \"\u{e9}\", \"a\" : 1 }".as_bytes()).unwrap();
-    assert_eq!(canonical(&value), "{\"a\":1,\"z\":\"\u{e9}\"}".as_bytes());
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&value).unwrap(),
+        "{\"a\":1,\"z\":\"\u{e9}\"}".as_bytes()
+    );
 }
 
 #[test]
@@ -121,32 +124,50 @@ fn canonical_sorts_keys_by_utf16_code_units() {
     let input = format!("{{\"{bmp}\":2,\"{astral}\":1}}");
     let value = parse(input.as_bytes()).unwrap();
     let expected = format!("{{\"{astral}\":1,\"{bmp}\":2}}");
-    assert_eq!(canonical(&value), expected.into_bytes());
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&value).unwrap(),
+        expected.into_bytes()
+    );
 }
 
 #[test]
 fn canonical_escapes_match_jcs() {
     let value = parse(br#"["\u0007\b\/<\">"]"#).unwrap();
-    assert_eq!(canonical(&value), b"[\"\\u0007\\b/<\\\">\"]");
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&value).unwrap(),
+        b"[\"\\u0007\\b/<\\\">\"]"
+    );
 }
 
 #[test]
 fn reproduces_the_normative_seed_vectors() {
     let gv001 = parse(br#"{"claim_id":"docs.expr-precedence"}"#).unwrap();
     assert_eq!(
-        hj("assure/claim-key", &gv001).to_string(),
+        hb(
+            "assure/claim-key",
+            &serde_json_canonicalizer::to_vec(&gv001).unwrap()
+        )
+        .to_string(),
         "sha256:a283ff8a204bef21e06e1932774f08bfe1dc72546aded00e67a18c15cfa98e8a"
     );
 
     let gv002 = parse(br#"{"members":[]}"#).unwrap();
     assert_eq!(
-        hj("assure/path-set-projection", &gv002).to_string(),
+        hb(
+            "assure/path-set-projection",
+            &serde_json_canonicalizer::to_vec(&gv002).unwrap()
+        )
+        .to_string(),
         "sha256:434d3282c0603bde1304e3003f386c21c5ab6320ba1adc3e1e4db94ee14a39e2"
     );
 
     let gv003 = parse("{\"z\":\"\u{e9}\",\"a\":1}".as_bytes()).unwrap();
     assert_eq!(
-        hj("assure/test-json", &gv003).to_string(),
+        hb(
+            "assure/test-json",
+            &serde_json_canonicalizer::to_vec(&gv003).unwrap()
+        )
+        .to_string(),
         "sha256:1bf2a7df49e484b1539f9eb54bc3719ffd8a3383c594e7008d7d844fed89c4bb"
     );
 

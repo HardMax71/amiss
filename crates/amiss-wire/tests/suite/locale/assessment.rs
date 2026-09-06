@@ -10,7 +10,7 @@ use super::evidence::{fallback_page, locale_evidence, page_map, set_target_page,
 use super::{digest, locale_plan, oid, product_resource};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hj;
+
 use amiss_wire::json::{self, Value};
 use amiss_wire::locale::{
     ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessmentEnvelope, LocaleCoverageEvidence,
@@ -641,9 +641,10 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
     let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
         recorded,
-        &hj(
+        &amiss_wire::digest::hb(
             ASSESSMENT_PAYLOAD_SCHEMA,
-            inconsistent_value.member("payload").unwrap(),
+            &serde_json_canonicalizer::to_vec(inconsistent_value.member("payload").unwrap())
+                .unwrap(),
         )
         .to_string(),
     );
@@ -721,14 +722,17 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
 
     assert_eq!(
         replayed,
-        json::canonical(&json::parse(&published_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&published_bytes).unwrap()).unwrap()
     );
 }
 
 fn sealed(mut value: Value) -> Vec<u8> {
-    let digest = hj(ASSESSMENT_PAYLOAD_SCHEMA, value.member("payload").unwrap());
+    let digest = amiss_wire::digest::hb(
+        ASSESSMENT_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap(),
+    );
     *member_mut(&mut value, "payload_digest") = Value::string(digest.to_string());
-    json::canonical(&value)
+    serde_json_canonicalizer::to_vec(&value).unwrap()
 }
 
 fn member_mut<'a>(value: &'a mut Value, name: &str) -> &'a mut Value {

@@ -4,7 +4,7 @@
 )]
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hb, hj};
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::external::{
     ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, AssessmentDefect, EVIDENCE_SCHEMA, ExternalEvidence,
     ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema, ExternalVerdict,
@@ -108,9 +108,7 @@ fn report(observations: Vec<Value>) -> Value {
     let rows = observations
         .into_iter()
         .map(|row| {
-            let supplied: serde_json::Value =
-                serde_json::from_slice(&amiss_wire::json::canonical(&row))
-                    .expect("the test comparison is JSON");
+            let supplied = serde_json::to_value(&row).expect("the test comparison is JSON");
             let mut comparison = external.clone();
             for side in ["base", "candidate"] {
                 let expanded = expand_occurrence(
@@ -194,7 +192,7 @@ fn expand_occurrence(
 
 fn planned(observations: Vec<Value>) -> Value {
     let bytes = plan(
-        &amiss_wire::json::canonical(&report(observations)),
+        &serde_json_canonicalizer::to_vec(&report(observations)).expect("fixture JSON"),
         "0.0.0",
         sample_digest(),
     )
@@ -203,7 +201,10 @@ fn planned(observations: Vec<Value>) -> Value {
 }
 
 fn sample_digest() -> Digest {
-    hj(PAYLOAD_SCHEMA, &Value::Null)
+    hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&Value::Null).expect("fixture JSON"),
+    )
 }
 
 fn refresh_payload_digest(document: &mut serde_json::Value, domain: &str) -> Vec<u8> {
@@ -363,8 +364,10 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
     let introduced = &array(field(field(&introduced_plan, "payload"), "introduced"))[0];
     assert_eq!(text(field(introduced, "scheme")), "https");
     assert_eq!(
-        String::from_utf8(amiss_wire::json::canonical(field(introduced, "repository")))
-            .expect("canonical utf-8"),
+        String::from_utf8(
+            serde_json_canonicalizer::to_vec(field(introduced, "repository")).unwrap()
+        )
+        .expect("canonical utf-8"),
         r#"{"dialect":"github","form":"blob","host":"github.com","name":"widgets","owner":"acme","tail":"0123456789012345678901234567890123456789/docs/a.md"}"#
     );
 
@@ -381,7 +384,7 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
     let source = report(vec![row(Value::Null, Value::object(historical))]);
     assert_eq!(
         plan(
-            &amiss_wire::json::canonical(&source),
+            &serde_json_canonicalizer::to_vec(&source).unwrap(),
             "0.0.0",
             sample_digest()
         ),
@@ -393,7 +396,7 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
 fn the_envelope_binds_the_source_digest_and_its_own() {
     let source = report(Vec::new());
     let derived = plan(
-        &amiss_wire::json::canonical(&source),
+        &serde_json_canonicalizer::to_vec(&source).unwrap(),
         "0.0.0",
         sample_digest(),
     )
@@ -401,7 +404,11 @@ fn the_envelope_binds_the_source_digest_and_its_own() {
     let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
     assert_eq!(field(&derived, "schema"), &string(PLAN_ENVELOPE_SCHEMA));
     let payload = field(&derived, "payload");
-    let recomputed = hj(PLAN_PAYLOAD_SCHEMA, payload).to_string();
+    let recomputed = hb(
+        PLAN_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(payload).expect("fixture JSON"),
+    )
+    .to_string();
     assert_eq!(
         field(&derived, "payload_digest"),
         &string(&recomputed),
@@ -417,7 +424,7 @@ fn the_envelope_binds_the_source_digest_and_its_own() {
 #[test]
 fn the_plan_model_reads_the_checked_writer() {
     let written = planned(introduced("https://github.com/acme/widgets"));
-    let bytes = amiss_wire::json::canonical(&written);
+    let bytes = serde_json_canonicalizer::to_vec(&written).unwrap();
     let parsed = parse_plan(&bytes).expect("the written plan clears the typed reader");
     assert_eq!(parsed.payload.introduced.len(), 1);
     assert_eq!(
@@ -429,7 +436,7 @@ fn the_plan_model_reads_the_checked_writer() {
 #[test]
 fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
     let written = plan(
-        &amiss_wire::json::canonical(&report(Vec::new())),
+        &serde_json_canonicalizer::to_vec(&report(Vec::new())).unwrap(),
         "0.0.0",
         sample_digest(),
     )
@@ -466,7 +473,7 @@ fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
 fn additive_plan_fields_are_digest_bound_but_inert() {
     let written = planned(Vec::new());
     let mut document: serde_json::Value =
-        serde_json::from_slice(&amiss_wire::json::canonical(&written))
+        serde_json::from_slice(&serde_json_canonicalizer::to_vec(&written).unwrap())
             .expect("the written plan is JSON");
     document
         .get_mut("payload")
@@ -482,7 +489,7 @@ fn additive_plan_fields_are_digest_bound_but_inert() {
 fn known_optional_plan_fields_do_not_accept_null() {
     let written = planned(introduced("https://github.com/acme/widgets/blob/main/a.md"));
     let mut document: serde_json::Value =
-        serde_json::from_slice(&amiss_wire::json::canonical(&written))
+        serde_json::from_slice(&serde_json_canonicalizer::to_vec(&written).unwrap())
             .expect("the written plan is JSON");
     let repository = document
         .pointer_mut("/payload/introduced/0/repository")
@@ -499,7 +506,7 @@ fn known_optional_plan_fields_do_not_accept_null() {
 fn malformed_known_plan_fields_are_refused_after_binding() {
     let written = planned(introduced("https://example.com/manual"));
     let mut document: serde_json::Value =
-        serde_json::from_slice(&amiss_wire::json::canonical(&written))
+        serde_json::from_slice(&serde_json_canonicalizer::to_vec(&written).unwrap())
             .expect("the written plan is JSON");
     let destination = document
         .pointer_mut("/payload/introduced/0/destination")
@@ -528,7 +535,7 @@ fn a_tampered_payload_is_refused() {
     }
     assert_eq!(
         plan(
-            &amiss_wire::json::canonical(&Value::object(envelope)),
+            &serde_json_canonicalizer::to_vec(&Value::object(envelope)).unwrap(),
             "0.0.0",
             sample_digest()
         ),
@@ -539,7 +546,7 @@ fn a_tampered_payload_is_refused() {
 #[test]
 fn an_incomplete_report_is_refused() {
     let mut document: serde_json::Value =
-        serde_json::from_slice(&amiss_wire::json::canonical(&report(Vec::new())))
+        serde_json::from_slice(&serde_json_canonicalizer::to_vec(&report(Vec::new())).unwrap())
             .expect("the complete report is JSON");
     document["payload"]["result"]["complete"] = serde_json::Value::Bool(false);
     document["payload"]["result"]["status"] = serde_json::Value::String("incomplete".to_owned());
@@ -548,7 +555,7 @@ fn an_incomplete_report_is_refused() {
         .expect("the incomplete report is strict JSON");
     assert_eq!(
         plan(
-            &amiss_wire::json::canonical(&envelope),
+            &serde_json_canonicalizer::to_vec(&envelope).unwrap(),
             "0.0.0",
             sample_digest()
         ),
@@ -640,7 +647,8 @@ fn a_known_host_destination_carries_its_forge_shape() {
         let repository = repository_of(&plan, destination)
             .unwrap_or_else(|| panic!("{destination} carries no shape"));
         assert_eq!(
-            String::from_utf8(amiss_wire::json::canonical(&repository)).expect("canonical utf-8"),
+            String::from_utf8(serde_json_canonicalizer::to_vec(&repository).unwrap())
+                .expect("canonical utf-8"),
             expected,
             "{destination}"
         );
@@ -700,9 +708,9 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
         ),
     ];
     for (host, dialect, destination, expected) in cases {
-        let mut document: serde_json::Value = serde_json::from_slice(&amiss_wire::json::canonical(
-            &report(introduced(destination)),
-        ))
+        let mut document: serde_json::Value = serde_json::from_slice(
+            &serde_json_canonicalizer::to_vec(&report(introduced(destination))).unwrap(),
+        )
         .expect("the complete report is JSON");
         document["payload"]["evaluation"]["forge"] = serde_json::Value::String(dialect.to_owned());
         document["payload"]["evaluation"]["repository"]["host"] =
@@ -711,7 +719,7 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
             amiss_wire::json::parse(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
                 .expect("the declared-host report is strict JSON");
         let derived = plan(
-            &amiss_wire::json::canonical(&envelope),
+            &serde_json_canonicalizer::to_vec(&envelope).unwrap(),
             "0.0.0",
             sample_digest(),
         )
@@ -719,7 +727,8 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
         let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
         let repository = repository_of(&derived, destination).expect("the declared host is shaped");
         assert_eq!(
-            String::from_utf8(amiss_wire::json::canonical(&repository)).expect("canonical utf-8"),
+            String::from_utf8(serde_json_canonicalizer::to_vec(&repository).unwrap())
+                .expect("canonical utf-8"),
             expected,
             "{destination}"
         );
@@ -727,7 +736,7 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
 }
 
 fn evidence(plan: &Value, rows: Vec<Value>) -> Vec<u8> {
-    amiss_wire::json::canonical(&object(vec![
+    serde_json_canonicalizer::to_vec(&object(vec![
         ("schema", string(EVIDENCE_SCHEMA)),
         ("plan_payload_digest", field(plan, "payload_digest").clone()),
         (
@@ -739,6 +748,7 @@ fn evidence(plan: &Value, rows: Vec<Value>) -> Vec<u8> {
         ),
         ("rows", Value::array(rows)),
     ]))
+    .expect("fixture JSON")
 }
 
 fn probe(destination: &str, method: &str, status: i64) -> Value {
@@ -815,7 +825,8 @@ fn evidence_bytes_preserve_escaping_and_round_trip() {
     assert_eq!(parsed, document);
     assert_eq!(
         bytes,
-        amiss_wire::json::canonical(&amiss_wire::json::parse(&bytes).expect("strict JSON")),
+        serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(&bytes).expect("strict JSON"))
+            .unwrap(),
     );
     assert!(!bytes.ends_with(b"\n"));
 }
@@ -832,7 +843,7 @@ fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
     let canonical = serde_json_canonicalizer::to_vec(&document).expect("canonical evidence");
     let pretty = serde_json::to_vec_pretty(&document).expect("formatted evidence");
     let assessment = assess(
-        &amiss_wire::json::canonical(&plan),
+        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
         &pretty,
         "0.0.0",
         sample_digest(),
@@ -856,7 +867,7 @@ fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
     trailing.extend_from_slice(b" null");
     assert!(matches!(
         assess(
-            &amiss_wire::json::canonical(&plan),
+            &serde_json_canonicalizer::to_vec(&plan).unwrap(),
             &trailing,
             "0.0.0",
             sample_digest()
@@ -1028,7 +1039,7 @@ fn the_judgment_policy_is_conservative() {
         destinations.iter().map(|(_, row)| row.clone()).collect(),
     );
     let assessment = assess(
-        &amiss_wire::json::canonical(&plan),
+        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
         &evidence,
         "0.0.0",
         sample_digest(),
@@ -1104,7 +1115,7 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
         ],
     );
     let assessment = assess(
-        &amiss_wire::json::canonical(&plan),
+        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
         &observed,
         "0.0.0",
         sample_digest(),
@@ -1142,7 +1153,7 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
     ] {
         assert!(matches!(
             assess(
-                &amiss_wire::json::canonical(&plan),
+                &serde_json_canonicalizer::to_vec(&plan).unwrap(),
                 &evidence(&plan, vec![malformed]),
                 "0.0.0",
                 sample_digest()
@@ -1169,7 +1180,7 @@ fn forge_facts_refute_only_after_visibility_and_resolution() {
         ],
     );
     let assessment = assess(
-        &amiss_wire::json::canonical(&plan),
+        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
         &evidence,
         "0.0.0",
         sample_digest(),
@@ -1198,7 +1209,7 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
     ] {
         assert!(matches!(
             assess(
-                &amiss_wire::json::canonical(&plan),
+                &serde_json_canonicalizer::to_vec(&plan).unwrap(),
                 &evidence(&plan, rows),
                 "0.0.0",
                 sample_digest(),
@@ -1218,10 +1229,10 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
         string(&sample_digest().to_string()),
     ));
     members.sort_by(|left, right| left.0.cmp(&right.0));
-    let foreign = amiss_wire::json::canonical(&Value::object(members));
+    let foreign = serde_json_canonicalizer::to_vec(&Value::object(members)).unwrap();
     assert!(matches!(
         assess(
-            &amiss_wire::json::canonical(&plan),
+            &serde_json_canonicalizer::to_vec(&plan).unwrap(),
             &foreign,
             "0.0.0",
             sample_digest()
@@ -1252,7 +1263,7 @@ fn malformed_evidence_rows_are_refused() {
     for bad in [both, neither, below, above] {
         assert!(matches!(
             assess(
-                &amiss_wire::json::canonical(&plan),
+                &serde_json_canonicalizer::to_vec(&plan).unwrap(),
                 &evidence(&plan, vec![bad]),
                 "0.0.0",
                 sample_digest()
@@ -1281,8 +1292,8 @@ fn the_judge_is_no_laxer_than_its_contracts() {
     }
     assert!(matches!(
         assess(
-            &amiss_wire::json::canonical(&plan),
-            &amiss_wire::json::canonical(&Value::object(unnamed)),
+            &serde_json_canonicalizer::to_vec(&plan).unwrap(),
+            &serde_json_canonicalizer::to_vec(&Value::object(unnamed)).unwrap(),
             "0.0.0",
             sample_digest(),
         ),
@@ -1306,7 +1317,10 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         ("removed", Value::array(Vec::new())),
         ("retained_count", Value::Integer(0)),
     ]);
-    let digest = hj(PLAN_PAYLOAD_SCHEMA, &payload);
+    let digest = hb(
+        PLAN_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&payload).expect("fixture JSON"),
+    );
     let handcrafted = object(vec![
         ("schema", string(PLAN_ENVELOPE_SCHEMA)),
         ("payload", payload),
@@ -1315,7 +1329,7 @@ fn the_judge_is_no_laxer_than_its_contracts() {
     let empty = evidence(&handcrafted, Vec::new());
     assert!(matches!(
         assess(
-            &amiss_wire::json::canonical(&handcrafted),
+            &serde_json_canonicalizer::to_vec(&handcrafted).unwrap(),
             &empty,
             "0.0.0",
             sample_digest(),
@@ -1332,7 +1346,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
     let plan = planned(introduced(bare));
     assert!(matches!(
         assess(
-            &amiss_wire::json::canonical(&plan),
+            &serde_json_canonicalizer::to_vec(&plan).unwrap(),
             &evidence(&plan, vec![forge_row(bare, "readable", Some("resolved"))]),
             "0.0.0",
             sample_digest()
@@ -1340,7 +1354,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
         Err(AssessDefect::UnboundEvidence)
     ));
     let visibility_only = assess(
-        &amiss_wire::json::canonical(&plan),
+        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
         &evidence(&plan, vec![forge_row(bare, "readable", None)]),
         "0.0.0",
         sample_digest(),
@@ -1358,7 +1372,7 @@ fn the_assessment_binds_the_whole_chain() {
     let rows = vec![probe("https://a.example/x", "get", 200)];
     let evidence = evidence(&plan, rows);
     let assessment = assess(
-        &amiss_wire::json::canonical(&plan),
+        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
         &evidence,
         "0.0.0",
         sample_digest(),
@@ -1377,7 +1391,11 @@ fn the_assessment_binds_the_whole_chain() {
     let payload = field(&assessment, "payload");
     assert_eq!(
         text(field(&assessment, "payload_digest")),
-        hj("amiss/external-assessment-payload", payload).to_string()
+        hb(
+            "amiss/external-assessment-payload",
+            &serde_json_canonicalizer::to_vec(payload).expect("fixture JSON")
+        )
+        .to_string()
     );
 }
 
@@ -1391,7 +1409,7 @@ fn an_external_occurrence_missing_its_promise_is_refused() {
     let source = report(vec![row(Value::Null, Value::object(occurrence))]);
     assert_eq!(
         plan(
-            &amiss_wire::json::canonical(&source),
+            &serde_json_canonicalizer::to_vec(&source).unwrap(),
             "0.0.0",
             sample_digest()
         ),

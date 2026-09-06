@@ -4,7 +4,7 @@ use std::{fs, path::Path};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::json;
 use amiss_wire::relation::{
     ASSESSMENT_PAYLOAD_SCHEMA, RelationAssessmentEnvelope, RelationEvidence,
@@ -139,9 +139,10 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
     let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
         recorded,
-        &hj(
+        &hb(
             ASSESSMENT_PAYLOAD_SCHEMA,
-            inconsistent_value.member("payload").unwrap(),
+            &serde_json_canonicalizer::to_vec(inconsistent_value.member("payload").unwrap())
+                .unwrap(),
         )
         .to_string(),
     );
@@ -209,6 +210,6 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
 
     assert_eq!(
         replayed,
-        json::canonical(&json::parse(&published_bytes).unwrap())
+        serde_json_canonicalizer::to_vec(&json::parse(&published_bytes).unwrap()).unwrap()
     );
 }
