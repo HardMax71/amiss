@@ -1,7 +1,8 @@
 use amiss_wire::de::ErrorKind;
 use amiss_wire::json::Value;
 use amiss_wire::semantic::SemanticEvidenceTemplate;
-use amiss_wire::semantic::record::{Observation, parse_input, template, validate_records};
+use amiss_wire::semantic::observation::Observation;
+use amiss_wire::semantic::record::{parse_input, template, validate_records};
 
 const B: &str = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const C: &str = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
@@ -28,7 +29,7 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
     ))
     .unwrap();
     let bytes = template(source).unwrap();
-    let parsed: SemanticEvidenceTemplate<Observation> = serde_json::from_slice(&bytes).unwrap();
+    let parsed: SemanticEvidenceTemplate = serde_json::from_slice(&bytes).unwrap();
     assert!(amiss_wire::semantic::parse_template(&bytes).is_ok());
     assert_eq!(
         parsed.producer.kind,
@@ -37,7 +38,7 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
     assert_eq!(parsed.producer.identity.as_str(), "test-public-api");
     assert_eq!(parsed.producer.version, "1");
     assert!(parsed.complete);
-    let [decoded] = parsed.observations.as_ref() else {
+    let [Observation::Record(decoded)] = parsed.observations.as_ref() else {
         panic!("one normalized set becomes one observation")
     };
     validate_records("$.observations[0].records", &decoded.records).unwrap();

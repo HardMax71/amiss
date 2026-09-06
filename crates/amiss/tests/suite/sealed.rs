@@ -7,7 +7,7 @@
 use std::io::Write as _;
 use std::process::{Command, Stdio};
 
-use amiss_fixtures::{SiteObservation, site_navigation, site_observation};
+use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{Profile, canonical_organization_floor, parse_organization_floor};
 use amiss_wire::digest::{Digest, hb};
@@ -19,7 +19,9 @@ use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,
     SnapshotRequest, SuppliedControl, SuppliedSemanticEvidence, commit_candidate_identity_digest,
 };
-use amiss_wire::semantic::observation::{SphinxLabelKind, SphinxLabelObservation};
+use amiss_wire::semantic::observation::{
+    Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation,
+};
 use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
 
 fn supplied_semantic(bytes: &[u8], expected_context_digest: Digest) -> SuppliedSemanticEvidence {
@@ -258,14 +260,13 @@ fn id(value: &str) -> ArtifactId {
     ArtifactId::new(value.to_owned()).unwrap()
 }
 
-fn sphinx_label(inventory: &str, name: &str, destination: &str) -> serde_json::Value {
-    serde_json::to_value(SphinxLabelObservation {
+fn sphinx_label(inventory: &str, name: &str, destination: &str) -> Observation {
+    Observation::Sphinx(SphinxLabelObservation {
         kind: SphinxLabelKind::Current,
         inventory: id(inventory),
         name: name.to_owned(),
         destination: destination.to_owned(),
     })
-    .unwrap()
 }
 
 fn intersphinx_case() -> (
@@ -625,7 +626,7 @@ fn assert_site_defects(envelope: &serde_json::Value) {
     }
 }
 
-fn site_build_observations() -> Vec<serde_json::Value> {
+fn site_build_observations() -> Vec<Observation> {
     let pages = [
         site_observation(
             "/guide/",
@@ -704,19 +705,20 @@ fn site_build_observations() -> Vec<serde_json::Value> {
             SiteObservation::Generated(Some("missing.config.js"), &[]),
         ),
     ];
-    let navigation = [site_navigation(
-        Some("docs"),
-        "docs/SUMMARY.md",
-        &["/generated/"],
-        &["docs/guide.md"],
-    )];
+    let navigation = [Ok(Observation::Site(SiteBuildObservation::Navigation {
+        root: Nullable::Value("docs".parse().unwrap()),
+        manifest: "docs/SUMMARY.md".parse().unwrap(),
+        entrypoints: vec!["/generated/".to_owned()],
+        reachable: vec!["docs/guide.md".parse().unwrap()],
+    }))];
 
     pages
         .into_iter()
         .chain(redirects)
         .chain(generated)
         .chain(navigation)
-        .collect()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
 }
 
 fn assert_unlinked(envelope: &serde_json::Value, expected: &[&str]) {

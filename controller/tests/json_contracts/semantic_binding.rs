@@ -4,14 +4,19 @@ use amiss_wire::{
     digest::{hb, sha256},
     semantic::{
         SemanticEvidenceEnvelope, SemanticEvidenceTemplate, SemanticProducer, TemplateSchema,
+        observation::Observation, record,
     },
 };
 
 #[test]
-fn controller_binding_preserves_candidate_context_and_unknown_observation_fields() {
-    let observation = serde_json::json!({
-        "kind": "future-fact",
-        "data": {"é": [true, null, 2], "escaped": "quote\" and newline\n"}
+fn controller_binding_preserves_candidate_context_and_typed_observations() {
+    let observation = Observation::Record(record::Observation {
+        kind: record::ObservationKind::Current,
+        name: "rust/api".parse().unwrap(),
+        records: vec![record::Record {
+            key: "é".to_owned(),
+            value: "quote\" and newline\n".to_owned(),
+        }],
     });
     let template = SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,

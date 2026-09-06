@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, sync::Arc};
+use std::{borrow::Borrow, cmp::Ordering, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -13,6 +13,8 @@ use crate::model::ArtifactId;
 pub mod observation;
 pub mod record;
 
+use observation::Observation;
+
 pub const ENVELOPE_SCHEMA: &str = "amiss/semantic-evidence-envelope";
 pub const PAYLOAD_SCHEMA: &str = "amiss/semantic-evidence-payload";
 pub const TEMPLATE_SCHEMA: &str = "amiss/semantic-evidence-template";
@@ -24,7 +26,7 @@ pub const RECORD_VALUE_BYTES: usize = 65_536;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SemanticEvidenceEnvelope<O = serde_json::Value> {
+pub struct SemanticEvidenceEnvelope<O: Borrow<Observation> = Observation> {
     pub schema: EnvelopeSchema,
     pub payload: SemanticEvidence<O>,
     pub payload_digest: Digest,
@@ -40,7 +42,7 @@ pub enum EnvelopeSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SemanticEvidence<O = serde_json::Value> {
+pub struct SemanticEvidence<O: Borrow<Observation> = Observation> {
     pub schema: PayloadSchema,
     pub subject: SemanticSubject,
     pub producer: SemanticProducer,
@@ -96,7 +98,7 @@ pub enum SemanticProducerKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SemanticEvidenceTemplate<O = serde_json::Value> {
+pub struct SemanticEvidenceTemplate<O: Borrow<Observation> = Observation> {
     pub schema: TemplateSchema,
     pub producer: SemanticProducer,
     pub complete: bool,
@@ -116,7 +118,7 @@ pub enum TemplateSchema {
 /// # Errors
 ///
 /// Fails on an oversized stream, strict-JSON or shape defects, a payload digest mismatch,
-/// invalid producer identity, or observations that are not bounded sorted objects with kinds.
+/// invalid producer identity, or observations outside the closed, bounded, sorted contract.
 pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope, Error> {
     let document: SemanticEvidenceEnvelope = parse_document(bytes)?;
     validate(&document)?;
@@ -142,7 +144,7 @@ pub fn validate(document: &SemanticEvidenceEnvelope) -> Result<(), Error> {
 /// # Errors
 ///
 /// Fails on an oversized stream, strict-JSON or shape defect, invalid producer identity, or
-/// observations that are not bounded sorted objects with kinds.
+/// observations outside the closed, bounded, sorted contract.
 pub fn parse_template(bytes: &[u8]) -> Result<SemanticEvidenceTemplate, Error> {
     let document: SemanticEvidenceTemplate = parse_document(bytes)?;
     validate_producer("$.producer", &document.producer)?;
@@ -164,10 +166,10 @@ fn parse_document<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Err
 ///
 /// Fails when the template violates the same bounds [`envelope`] enforces or the resulting
 /// envelope exceeds the byte ceiling.
-pub fn bind_template<O: Serialize>(
-    template: &SemanticEvidenceTemplate<O>,
+pub fn bind_template(
+    template: &SemanticEvidenceTemplate,
     candidate_identity_digest: Digest,
-) -> Result<(SemanticEvidenceEnvelope<&O>, Vec<u8>), Error> {
+) -> Result<(SemanticEvidenceEnvelope<&Observation>, Vec<u8>), Error> {
     envelope(SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
@@ -187,7 +189,7 @@ pub fn bind_template<O: Serialize>(
 ///
 /// Fails when producer metadata or an observation violates the same bounds [`parse_template`]
 /// enforces, when observations repeat, or when the resulting template exceeds the byte ceiling.
-pub fn template<O: Serialize>(input: SemanticEvidenceTemplate<O>) -> Result<Vec<u8>, Error> {
+pub fn template(input: SemanticEvidenceTemplate) -> Result<Vec<u8>, Error> {
     validate_producer("$.producer", &input.producer)?;
     let observations = ordered_observations("$.observations", input.observations.iter().collect())?;
     canonical_bytes(&SemanticEvidenceTemplate {
@@ -205,7 +207,7 @@ pub fn template<O: Serialize>(input: SemanticEvidenceTemplate<O>) -> Result<Vec<
 ///
 /// Fails when producer metadata or an observation violates the same bounds [`parse`] enforces,
 /// when observations repeat, or when the resulting envelope exceeds the byte ceiling.
-pub fn envelope<O: Serialize>(
+pub fn envelope<O: Serialize + Borrow<Observation>>(
     mut evidence: SemanticEvidence<O>,
 ) -> Result<(SemanticEvidenceEnvelope<O>, Vec<u8>), Error> {
     validate_producer("$.payload.producer", &evidence.producer)?;
@@ -238,14 +240,15 @@ pub fn producer_version_valid(version: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'+' | b'-'))
 }
 
-fn validate_observations(path: &str, observations: &[serde_json::Value]) -> Result<(), Error> {
+fn validate_observations(path: &str, observations: &[Observation]) -> Result<(), Error> {
     if observations.len() > SEMANTIC_OBSERVATIONS_LIMIT {
         return fail(path, ErrorKind::LimitExceeded);
     }
     let mut previous: Option<Vec<u8>> = None;
     for (index, observation) in observations.iter().enumerate() {
         let item_path = format!("{path}[{index}]");
-        let current = observation_key(&item_path, observation)?;
+        let current = serde_json_canonicalizer::to_vec(observation)
+            .map_err(|_defect| Error::new(&item_path, ErrorKind::InvalidValue))?;
         match previous.as_deref().map(|value| value.cmp(&current)) {
             Some(Ordering::Equal) => return fail(path, ErrorKind::DuplicateMember),
             Some(Ordering::Greater) => return fail(path, ErrorKind::UnsortedSet),
@@ -255,37 +258,18 @@ fn validate_observations(path: &str, observations: &[serde_json::Value]) -> Resu
     Ok(())
 }
 
-#[derive(Deserialize)]
-struct ObservationHeader {
-    kind: ArtifactId,
-}
-
-#[expect(
-    clippy::zero_sized_map_values,
-    reason = "Serde structs also accept arrays; observations must be objects"
-)]
-fn observation_key<O: Serialize>(path: &str, observation: &O) -> Result<Vec<u8>, Error> {
-    let encoded = serde_json_canonicalizer::to_vec(observation)
-        .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
-    serde_json::from_slice::<std::collections::BTreeMap<String, serde::de::IgnoredAny>>(&encoded)
-        .map_err(|_defect| Error::new(path, ErrorKind::WrongType))?;
-    let ObservationHeader { kind: _kind } =
-        de::deserialize_json(&encoded).map_err(|mut defect| {
-            defect.path = defect.path.replacen('$', path, 1);
-            defect
-        })?;
-    Ok(encoded)
-}
-
-fn ordered_observations<O: Serialize>(path: &str, observations: Vec<O>) -> Result<Vec<O>, Error> {
+fn ordered_observations<O: Borrow<Observation>>(
+    path: &str,
+    observations: Vec<O>,
+) -> Result<Vec<O>, Error> {
     if observations.len() > SEMANTIC_OBSERVATIONS_LIMIT {
         return fail(path, ErrorKind::LimitExceeded);
     }
     let mut keyed = Vec::with_capacity(observations.len());
     for (index, observation) in observations.into_iter().enumerate() {
         let item_path = format!("{path}[{index}]");
-        let encoded = observation_key(&item_path, &observation)?;
-        json::parse(&encoded).map_err(|defect| Error::new(&item_path, ErrorKind::Json(defect)))?;
+        let encoded = serde_json_canonicalizer::to_vec(observation.borrow())
+            .map_err(|_defect| Error::new(&item_path, ErrorKind::InvalidValue))?;
         keyed.push((encoded, observation));
     }
     keyed.sort_by(|left, right| left.0.cmp(&right.0));
@@ -298,7 +282,9 @@ fn ordered_observations<O: Serialize>(path: &str, observations: Vec<O>) -> Resul
     Ok(keyed.into_iter().map(|(_, value)| value).collect())
 }
 
-fn payload_digest<O: Serialize>(payload: &SemanticEvidence<O>) -> Result<Digest, Error> {
+fn payload_digest<O: Serialize + Borrow<Observation>>(
+    payload: &SemanticEvidence<O>,
+) -> Result<Digest, Error> {
     hj_serde(PAYLOAD_SCHEMA, |mut writer| {
         serde_json_canonicalizer::to_writer(payload, &mut writer)
     })
@@ -311,6 +297,5 @@ fn canonical_bytes<T: Serialize>(document: &T) -> Result<Vec<u8>, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     Ok(canonical)
 }

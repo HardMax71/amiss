@@ -17,6 +17,7 @@ use amiss_wire::model::{ArtifactId, ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::{ControlsRequest, SuppliedSemanticEvidence};
 use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
+use amiss_wire::semantic::{observation::Observation, record};
 
 fn engine() -> EngineProvenance {
     EngineProvenance {
@@ -72,7 +73,17 @@ fn semantic_inputs(
             input_digest: hb("test/record-set-input", b"rust public api output"),
         },
         complete,
-        observations: vec![amiss_fixtures::record_set(set, records)],
+        observations: vec![Observation::Record(record::Observation {
+            kind: record::ObservationKind::Current,
+            name: set.parse().unwrap(),
+            records: records
+                .iter()
+                .map(|(key, value)| record::Record {
+                    key: (*key).to_owned(),
+                    value: (*value).to_owned(),
+                })
+                .collect(),
+        })],
     };
     let (_document, bytes) = amiss_wire::semantic::envelope(evidence).unwrap();
     let request = ControlsRequest {

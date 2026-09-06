@@ -48,7 +48,7 @@
           "type": "boolean"
         },
         "observations": {
-          "description": "Canonical-JSON-sorted unique facts. Each compiled consumer owns the closed grammar and judgment of the kinds it recognizes; unknown kinds remain inert data.",
+          "description": "Canonical-JSON-sorted unique observations using the closed site, Sphinx label, and record-set models. Unknown kinds and fields are rejected; compiled consumers additionally enforce their producer-specific semantic laws.",
           "type": "array",
           "maxItems": 100000,
           "uniqueItems": true,
@@ -107,13 +107,98 @@
       }
     },
     "Observation": {
-      "type": "object",
-      "required": ["kind"],
-      "properties": {
-        "kind": {
-          "$ref": "#/$defs/Identifier"
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["anchors", "kind", "route", "source"],
+          "properties": {
+            "kind": { "const": "site-route" },
+            "route": { "type": "string" },
+            "source": { "$ref": "#/$defs/RepoPathText" },
+            "anchors": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["anchors", "kind", "route", "source"],
+          "properties": {
+            "kind": { "const": "site-generated-route" },
+            "route": { "type": "string" },
+            "source": {
+              "oneOf": [{ "$ref": "#/$defs/RepoPathText" }, { "type": "null" }]
+            },
+            "anchors": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["destination", "kind", "route", "source"],
+          "properties": {
+            "kind": { "const": "site-redirect" },
+            "route": { "type": "string" },
+            "source": { "$ref": "#/$defs/RepoPathText" },
+            "destination": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["entrypoints", "kind", "manifest", "reachable", "root"],
+          "properties": {
+            "kind": { "const": "site-navigation" },
+            "root": {
+              "oneOf": [{ "$ref": "#/$defs/RepoPathText" }, { "type": "null" }]
+            },
+            "manifest": { "$ref": "#/$defs/RepoPathText" },
+            "entrypoints": { "type": "array", "items": { "type": "string" } },
+            "reachable": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/RepoPathText" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["destination", "inventory", "kind", "name"],
+          "properties": {
+            "kind": { "const": "sphinx-label" },
+            "inventory": { "$ref": "#/$defs/Identifier" },
+            "name": { "type": "string" },
+            "destination": { "type": "string" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name", "records"],
+          "properties": {
+            "kind": { "const": "record-set" },
+            "name": { "$ref": "#/$defs/Identifier" },
+            "records": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["key", "value"],
+                "properties": {
+                  "key": { "type": "string" },
+                  "value": { "type": "string" }
+                }
+              }
+            }
+          }
         }
-      }
+      ]
+    },
+    "RepoPathText": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?![\\s\\S]*//)(?![\\s\\S]*(?:^|/)(?:\\.{1,2})(?:/|$))(?![\\s\\S]*[\\\\\\u0000])[^/]+(?:/[^/]+)*$"
     }
   }
 }

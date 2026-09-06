@@ -331,7 +331,7 @@ fn semantic_examples_match_the_actual_typed_producers() {
     let semantic_evidence_bytes =
         fs::read(examples.join("scanner-semantic-evidence.json")).unwrap();
     semantic::parse(&semantic_evidence_bytes).unwrap();
-    let typed: semantic::SemanticEvidenceEnvelope<semantic::observation::SiteBuildObservation> =
+    let typed: semantic::SemanticEvidenceEnvelope =
         serde_json::from_slice(&semantic_evidence_bytes).unwrap();
     let (generated, canonical) = semantic::envelope(typed.payload.clone()).unwrap();
     assert_eq!(generated, typed);
@@ -342,7 +342,7 @@ fn semantic_examples_match_the_actual_typed_producers() {
 
     let semantic_template_bytes =
         fs::read(examples.join("scanner-semantic-template.json")).unwrap();
-    let semantic_template: semantic::SemanticEvidenceTemplate<semantic::record::Observation> =
+    let semantic_template: semantic::SemanticEvidenceTemplate =
         serde_json::from_slice(&semantic_template_bytes).unwrap();
     let generated_template = semantic::template(semantic_template).unwrap();
     assert_eq!(

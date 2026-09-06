@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use amiss_wire::de::{Error, ErrorKind, deserialize_value, fail};
+use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::digest::Digest;
 use amiss_wire::report::model::SemanticEvidenceProducer;
 use amiss_wire::requests::SuppliedSemanticEvidence;
@@ -47,16 +47,6 @@ pub(crate) fn parse(
             candidate_identity_digest,
             source_report_payload_digest,
         } = subject;
-        let observations = observations
-            .into_iter()
-            .enumerate()
-            .map(|(index, observation)| {
-                deserialize_value::<Observation>(
-                    &format!("{path}.payload.observations[{index}]"),
-                    observation,
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?;
         match producer.kind {
             SemanticProducerKind::SphinxInventorySet => {
                 if producer.version != SPHINX_INVENTORY_VERSION {

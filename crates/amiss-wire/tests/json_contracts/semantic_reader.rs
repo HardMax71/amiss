@@ -1,5 +1,6 @@
+use amiss_wire::assessment::Nullable;
+use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 use amiss_wire::{de::ErrorKind, digest::hb, semantic};
-use serde_json::json;
 
 #[test]
 fn generated_semantic_digests_keep_the_exact_payload_preimage() {
@@ -9,28 +10,30 @@ fn generated_semantic_digests_keep_the_exact_payload_preimage() {
     .unwrap();
     for observations in [
         vec![],
-        vec![json!({
-            "kind": "future-fact",
-            "extra": {"é": [true, null, 2], "escaped": "quote\" and newline\n"}
+        vec![Observation::Site(SiteBuildObservation::GeneratedRoute {
+            route: "/é".to_owned(),
+            source: Nullable::Null,
+            anchors: vec!["quote\" and newline\n".to_owned()],
         })],
-        vec![
-            json!({"kind": "future-fact", "value": "z".repeat(131_072)}),
-            json!({"kind": "future-fact", "value": "a"}),
-        ],
+        ["z".repeat(131_072), "a".to_owned()]
+            .map(|route| {
+                Observation::Site(SiteBuildObservation::GeneratedRoute {
+                    route,
+                    source: Nullable::Null,
+                    anchors: Vec::new(),
+                })
+            })
+            .to_vec(),
     ] {
         let (document, bytes) = semantic::envelope(semantic::SemanticEvidence {
             observations,
             ..original.payload.clone()
         })
         .unwrap();
-        let preimage =
-            amiss_wire::json::parse(&serde_json::to_vec(&document.payload).unwrap()).unwrap();
+        let preimage = serde_json_canonicalizer::to_vec(&document.payload).unwrap();
         assert_eq!(
             document.payload_digest,
-            hb(
-                semantic::PAYLOAD_SCHEMA,
-                &serde_json_canonicalizer::to_vec(&preimage).unwrap()
-            )
+            hb(semantic::PAYLOAD_SCHEMA, &preimage)
         );
         assert_eq!(semantic::validate(&document), Ok(()));
         assert_eq!(semantic::parse(&bytes).unwrap(), document);
@@ -52,21 +55,26 @@ fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
 
     for (observations, kind) in [
         (
-            vec![
-                json!({"kind": "future-fact", "value": 2}),
-                json!({"kind": "future-fact", "value": 1}),
-            ],
+            ["/z", "/a"]
+                .map(|route| {
+                    Observation::Site(SiteBuildObservation::GeneratedRoute {
+                        route: route.to_owned(),
+                        source: Nullable::Null,
+                        anchors: Vec::new(),
+                    })
+                })
+                .to_vec(),
             ErrorKind::UnsortedSet,
         ),
         (
-            vec![json!({"kind": "future-fact"}); 2],
+            vec![original.payload.observations[0].clone(); 2],
             ErrorKind::DuplicateMember,
         ),
-        (vec![json!(["future-fact"])], ErrorKind::WrongType),
-        (vec![json!({"kind": "../invalid"})], ErrorKind::InvalidValue),
-        (vec![json!({})], ErrorKind::MissingField),
         (
-            vec![json!({"kind": "future-fact"}); semantic::SEMANTIC_OBSERVATIONS_LIMIT + 1],
+            vec![
+                original.payload.observations[0].clone();
+                semantic::SEMANTIC_OBSERVATIONS_LIMIT + 1
+            ],
             ErrorKind::LimitExceeded,
         ),
     ] {

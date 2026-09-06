@@ -1,385 +1,297 @@
 #![expect(
-    clippy::expect_used,
-    clippy::panic,
     clippy::unwrap_used,
     reason = "integration assertions over values constructed in the same test"
 )]
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::Digest;
-use amiss_wire::json::{ErrorKind as JsonErrorKind, Value as WireValue};
-use amiss_wire::model::ArtifactId;
+use amiss_wire::digest::hb;
+use amiss_wire::json::ErrorKind as JsonErrorKind;
 use amiss_wire::semantic::{
     PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
     SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind, SemanticSubject,
-    TEMPLATE_SCHEMA, TemplateSchema, bind_template, envelope, parse, parse_template, template,
+    TemplateSchema, bind_template, envelope, observation::Observation, parse, parse_template,
+    record, template,
 };
 
 const A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const B: &str = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const C: &str = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
-fn digest(raw: &str) -> Digest {
-    Digest::from_wire(raw).unwrap()
+fn observation(name: &str) -> Observation {
+    Observation::Record(record::Observation {
+        kind: record::ObservationKind::Current,
+        name: name.parse().unwrap(),
+        records: Vec::new(),
+    })
 }
 
-fn id(raw: &str) -> ArtifactId {
-    ArtifactId::new(raw.to_owned()).unwrap()
-}
-
-fn observation(rows: Vec<(&str, serde_json::Value)>) -> serde_json::Value {
-    serde_json::Value::Object(
-        rows.into_iter()
-            .map(|(name, value)| (name.to_owned(), value))
-            .collect(),
-    )
-}
-
-fn evidence(observations: Vec<serde_json::Value>) -> SemanticEvidence {
+fn evidence(observations: Vec<Observation>) -> SemanticEvidence {
     SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
-            candidate_identity_digest: digest(A),
-            source_report_payload_digest: Nullable::Value(digest(B)),
+            candidate_identity_digest: A.parse().unwrap(),
+            source_report_payload_digest: Nullable::Value(B.parse().unwrap()),
         },
         producer: SemanticProducer {
-            kind: SemanticProducerKind::SphinxInventorySet,
-            identity: id("amiss-intersphinx"),
-            version: "0.1.0".to_owned(),
-            context_digest: digest(C),
-            input_digest: digest(C),
+            kind: SemanticProducerKind::RecordSet,
+            identity: "test-public-api".parse().unwrap(),
+            version: "1".to_owned(),
+            context_digest: B.parse().unwrap(),
+            input_digest: C.parse().unwrap(),
         },
         complete: true,
         observations,
     }
 }
 
-fn template_producer() -> SemanticProducer {
-    SemanticProducer {
-        kind: SemanticProducerKind::RecordSet,
-        identity: id("test-public-api"),
-        version: "1".to_owned(),
-        context_digest: digest(B),
-        input_digest: digest(C),
-    }
-}
-
-fn evidence_template(observations: Vec<serde_json::Value>) -> SemanticEvidenceTemplate {
+fn evidence_template(observations: Vec<Observation>) -> SemanticEvidenceTemplate {
     SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
-        producer: template_producer(),
+        producer: evidence(Vec::new()).producer,
         complete: true,
         observations: observations.into(),
     }
 }
 
 #[test]
-fn real_inventory_and_site_shapes_share_an_envelope_without_sharing_vocabularies() {
-    let inventory = observation(vec![
-        ("kind", serde_json::json!("sphinx-reference")),
-        ("inventory", serde_json::json!("python")),
-        ("domain", serde_json::json!("std")),
-        ("role", serde_json::json!("label")),
-        ("name", serde_json::json!("context-managers")),
-        (
-            "uri",
-            serde_json::json!("reference/datamodel.html#context-managers"),
-        ),
-    ]);
-    let route = observation(vec![
-        ("kind", serde_json::json!("site-route")),
-        ("route", serde_json::json!("/external-assessment.html")),
-        (
-            "source",
-            serde_json::json!("docs/src/external-assessment.md"),
-        ),
-        ("anchors", serde_json::json!(["the-external-assessment"])),
-    ]);
-
-    let first = parse(&envelope(evidence(vec![inventory])).unwrap().1).unwrap();
-    let mut site = evidence(vec![route]);
-    site.producer.kind = SemanticProducerKind::SiteBuild;
-    site.producer.identity = id("amiss-site-output");
-    let second = parse(&envelope(site).unwrap().1).unwrap();
-
-    assert_eq!(
-        first.payload.observations[0]
-            .get("kind")
-            .and_then(serde_json::Value::as_str),
-        Some("sphinx-reference")
-    );
-    assert_eq!(
-        second.payload.observations[0]
-            .get("kind")
-            .and_then(serde_json::Value::as_str),
-        Some("site-route")
-    );
-}
-
-#[test]
 fn construction_sorts_observations_and_binds_the_payload() {
-    let a = observation(vec![
-        ("kind", serde_json::json!("site-route")),
-        ("route", serde_json::json!("/a")),
-    ]);
-    let z = observation(vec![
-        ("kind", serde_json::json!("site-route")),
-        ("route", serde_json::json!("/z")),
-    ]);
-    let (_document, bytes) = envelope(evidence(vec![z, a])).unwrap();
+    let a = observation("a");
+    let z = observation("z");
+    let (document, bytes) = envelope(evidence(vec![z.clone(), a.clone()])).unwrap();
     let parsed = parse(&bytes).unwrap();
-    let value = amiss_wire::json::parse(&bytes).unwrap();
-    assert_eq!(parsed.payload.observations[0]["route"], "/a");
+    assert_eq!(parsed, document);
+    assert_eq!(parsed.payload.observations, [a, z]);
     assert_eq!(
         parsed.payload_digest,
-        amiss_wire::digest::hb(
+        hb(
             PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap())
-                .expect("fixture JSON")
+            &serde_json_canonicalizer::to_vec(&parsed.payload).unwrap()
         )
     );
 }
 
 #[test]
-fn typed_templates_borrow_nonclone_observations_through_sorting_and_binding() {
-    #[derive(serde::Serialize)]
-    struct Fact {
-        kind: ArtifactId,
-        value: &'static str,
+fn typed_templates_borrow_observations_through_sorting_and_binding() {
+    let input = evidence_template(vec![observation("z"), observation("a")]);
+    let (first_document, first) = bind_template(&input, A.parse().unwrap()).unwrap();
+    let (second_document, second) = bind_template(&input, B.parse().unwrap()).unwrap();
+    for (document, bytes) in [(&first_document, &first), (&second_document, &second)] {
+        for (bound, original) in document
+            .payload
+            .observations
+            .iter()
+            .zip(input.observations.iter().rev())
+        {
+            assert!(std::ptr::eq(*bound, original));
+        }
+        assert_eq!(
+            document.payload_digest,
+            parse(bytes).unwrap().payload_digest
+        );
     }
-
-    let input = SemanticEvidenceTemplate {
-        schema: TemplateSchema::Current,
-        producer: template_producer(),
-        complete: true,
-        observations: vec![
-            Fact {
-                kind: id("future-fact"),
-                value: "z",
-            },
-            Fact {
-                kind: id("future-fact"),
-                value: "a",
-            },
-        ]
-        .into(),
-    };
-    let (first_document, first) = bind_template(&input, digest(A)).unwrap();
-    let (second_document, second) = bind_template(&input, digest(B)).unwrap();
     let first = parse(&first).unwrap();
     let second = parse(&second).unwrap();
-    assert_eq!(input.observations[0].value, "z");
-    assert_eq!(first_document.payload.observations[0].value, "a");
-    assert_eq!(first_document.payload_digest, first.payload_digest);
-    assert_eq!(second_document.payload_digest, second.payload_digest);
-    assert_eq!(first.payload.observations[0]["value"], "a");
+    assert_eq!(input.observations[0], observation("z"));
     assert_eq!(first.payload.observations, second.payload.observations);
     assert_ne!(first.payload_digest, second.payload_digest);
-    let written = template(input).unwrap();
     assert_eq!(
-        parse_template(&written).unwrap().observations.as_ref(),
+        parse_template(&template(input).unwrap())
+            .unwrap()
+            .observations
+            .as_ref(),
         first.payload.observations
     );
 }
 
 #[test]
-fn observation_headers_are_deserialized_without_closing_unknown_fact_fields() {
-    for row in [
-        serde_json::json!(null),
-        serde_json::json!([]),
-        serde_json::json!(["future-fact"]),
-        serde_json::json!({}),
-        serde_json::json!({ "kind": null }),
-        serde_json::json!({ "kind": 1 }),
-        serde_json::json!({ "kind": "../bad" }),
-    ] {
-        assert!(envelope(evidence(vec![row.clone()])).is_err(), "{row}");
-    }
-    let row = serde_json::json!({ "kind": "future-fact", "arbitrary": { "new": [true, null] } });
-    assert_eq!(
-        parse(&envelope(evidence(vec![row.clone()])).unwrap().1)
-            .unwrap()
-            .payload
-            .observations,
-        vec![row]
-    );
-}
-
-#[test]
 fn candidate_free_templates_bind_only_when_the_candidate_is_known() {
-    let row = observation(vec![
-        ("kind", serde_json::json!("record-set")),
-        ("name", serde_json::json!("rust/public-api")),
-        ("records", serde_json::json!([])),
-    ]);
+    let row = observation("rust/public-api");
     let input = evidence_template(vec![row.clone()]);
-    let (_document, bytes) = bind_template(&input, digest(A)).unwrap();
+    let (_, bytes) = bind_template(&input, A.parse().unwrap()).unwrap();
     let parsed = parse(&bytes).unwrap();
-    assert_eq!(parsed.payload.subject.candidate_identity_digest, digest(A));
+    assert_eq!(
+        parsed.payload.subject.candidate_identity_digest,
+        A.parse().unwrap()
+    );
     assert_eq!(
         parsed.payload.subject.source_report_payload_digest,
         Nullable::Null
     );
-    assert_eq!(parsed.payload.observations, vec![row]);
+    assert_eq!(parsed.payload.observations, [row]);
 }
 
 #[test]
 fn strict_templates_have_no_candidate_or_report_binding_surface() {
-    let valid = WireValue::object(vec![
-        ("schema".to_owned(), WireValue::string(TEMPLATE_SCHEMA)),
-        (
-            "producer".to_owned(),
-            WireValue::object(vec![
-                ("kind".to_owned(), WireValue::string("record-set")),
-                ("identity".to_owned(), WireValue::string("test-public-api")),
-                ("version".to_owned(), WireValue::string("1")),
-                ("context_digest".to_owned(), WireValue::string(B)),
-                ("input_digest".to_owned(), WireValue::string(C)),
-            ]),
-        ),
-        ("complete".to_owned(), WireValue::Bool(true)),
-        ("observations".to_owned(), WireValue::array(Vec::new())),
-    ]);
-    assert_eq!(
-        parse_template(&serde_json_canonicalizer::to_vec(&valid).unwrap()).unwrap(),
-        evidence_template(Vec::new())
-    );
-
+    let input = evidence_template(Vec::new());
+    let valid = template(input.clone()).unwrap();
+    assert_eq!(parse_template(&valid).unwrap(), input);
+    let valid = String::from_utf8(valid).unwrap();
     for field in ["candidate_identity_digest", "source_report_payload_digest"] {
-        let WireValue::Object(members) = &valid else {
-            panic!("the fixture is an object")
-        };
-        let mut members = members.as_ref().to_vec();
-        members.push((field.to_owned(), WireValue::string(A)));
-        let invalid = WireValue::object(members);
-        let error =
-            parse_template(&serde_json_canonicalizer::to_vec(&invalid).unwrap()).unwrap_err();
-        assert_eq!(error.kind, ErrorKind::UnknownField);
-    }
-}
-
-#[test]
-fn template_observations_must_already_be_canonical_sets() {
-    let a = observation(vec![
-        ("kind", serde_json::json!("site-route")),
-        ("route", serde_json::json!("/a")),
-    ]);
-    let z = observation(vec![
-        ("kind", serde_json::json!("site-route")),
-        ("route", serde_json::json!("/z")),
-    ]);
-    let input = evidence_template(vec![a, z]);
-    let (_document, bytes) = bind_template(&input, digest(A)).unwrap();
-    let mut value = amiss_wire::json::parse(&bytes).unwrap();
-    let payload = member_mut(&mut value, "payload");
-    let observations = member_mut(payload, "observations").clone();
-    let producer = member_mut(payload, "producer").clone();
-    let template_value = WireValue::object(vec![
-        ("schema".to_owned(), WireValue::string(TEMPLATE_SCHEMA)),
-        ("producer".to_owned(), producer),
-        ("complete".to_owned(), WireValue::Bool(true)),
-        ("observations".to_owned(), observations),
-    ]);
-    let mut reversed = template_value.clone();
-    reverse_template_observations(&mut reversed);
-    assert_eq!(
-        parse_template(&serde_json_canonicalizer::to_vec(&reversed).unwrap())
-            .unwrap_err()
-            .kind,
-        ErrorKind::UnsortedSet
-    );
-    assert!(parse_template(&serde_json_canonicalizer::to_vec(&template_value).unwrap()).is_ok());
-}
-
-#[test]
-fn duplicate_observations_are_refused() {
-    let row = observation(vec![("kind", serde_json::json!("site-route"))]);
-    let error = envelope(evidence(vec![row.clone(), row])).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::DuplicateMember);
-}
-
-#[test]
-fn construction_refuses_observation_values_outside_strict_json() {
-    let unsafe_integer = observation(vec![
-        ("kind", serde_json::json!("site-route")),
-        ("count", serde_json::json!(9_007_199_254_740_992_i64)),
-    ]);
-    let mut deep = serde_json::Value::Null;
-    for _ in 0..513 {
-        deep = serde_json::Value::Array(vec![deep]);
-    }
-    let excessive_depth = observation(vec![
-        ("kind", serde_json::json!("site-route")),
-        ("value", deep),
-    ]);
-
-    for (invalid, defect) in [
-        (unsafe_integer, JsonErrorKind::IntegerOutOfRange),
-        (excessive_depth, JsonErrorKind::DepthLimit),
-    ] {
-        let error = envelope(evidence(vec![invalid])).unwrap_err();
-        assert_eq!(error.path, "$.payload.observations[0]");
-        assert!(matches!(error.kind, ErrorKind::Json(error) if error.kind == defect));
-    }
-}
-
-#[test]
-fn serialized_semantic_bytes_preserve_unicode_order_and_escaping() {
-    let row = serde_json::json!({
-        "kind": "future-fact",
-        "\u{e000}": "last key",
-        "\u{10000}": "earlier UTF-16 key",
-        "data": "quote\" slash/ backslash\\ newline\n nul\0 é",
-    });
-    for bytes in [
-        template(evidence_template(vec![row.clone()])).unwrap(),
-        envelope(evidence(vec![row])).unwrap().1,
-    ] {
-        let value = amiss_wire::json::parse(&bytes).unwrap();
-        assert_eq!(bytes, serde_json_canonicalizer::to_vec(&value).unwrap());
-        assert!(!bytes.ends_with(b"\n"));
-    }
-}
-
-#[test]
-fn serialized_semantic_bytes_check_depth_after_wrapping_observations() {
-    let mut nested = serde_json::Value::Null;
-    for _ in 0..511 {
-        nested = serde_json::Value::Array(vec![nested]);
-    }
-    let row = serde_json::json!({ "kind": "future-fact", "data": nested });
-    let observation_bytes = serde_json_canonicalizer::to_vec(&row).unwrap();
-    assert!(amiss_wire::json::parse(&observation_bytes).is_ok());
-    for error in [
-        template(evidence_template(vec![row.clone()])).unwrap_err(),
-        envelope(evidence(vec![row])).unwrap_err(),
-    ] {
-        assert_eq!(error.path, "$");
-        assert!(
-            matches!(error.kind, ErrorKind::Json(error) if error.kind == JsonErrorKind::DepthLimit)
+        let invalid = valid.replacen('{', &format!(r#"{{"{field}":"{A}","#), 1);
+        assert_eq!(
+            parse_template(invalid.as_bytes()).unwrap_err().kind,
+            ErrorKind::UnknownField
         );
     }
 }
 
 #[test]
-fn serialized_semantic_bytes_enforce_the_complete_document_ceiling() {
-    let mut row = serde_json::json!({ "kind": "future-fact", "data": "" });
-    let overhead = template(evidence_template(vec![row.clone()]))
+fn template_observations_must_already_be_canonical_sets() {
+    let mut input = evidence_template(vec![observation("a"), observation("z")]);
+    assert!(parse_template(&serde_json_canonicalizer::to_vec(&input).unwrap()).is_ok());
+    std::sync::Arc::make_mut(&mut input.observations).reverse();
+    assert_eq!(
+        parse_template(&serde_json_canonicalizer::to_vec(&input).unwrap())
+            .unwrap_err()
+            .kind,
+        ErrorKind::UnsortedSet
+    );
+}
+
+#[test]
+fn duplicate_observations_are_refused() {
+    let rows = vec![observation("a"); 2];
+    assert_eq!(
+        envelope(evidence(rows.clone())).unwrap_err().kind,
+        ErrorKind::DuplicateMember
+    );
+    assert_eq!(
+        template(evidence_template(rows.clone())).unwrap_err().kind,
+        ErrorKind::DuplicateMember
+    );
+    assert_eq!(
+        parse_template(&serde_json_canonicalizer::to_vec(&evidence_template(rows)).unwrap())
+            .unwrap_err()
+            .kind,
+        ErrorKind::DuplicateMember
+    );
+}
+
+#[test]
+fn semantic_readers_refuse_unknown_shapes_even_with_correct_payload_digests() {
+    let row = observation("rust/api");
+    let original = String::from_utf8(serde_json_canonicalizer::to_vec(&row).unwrap()).unwrap();
+    for invalid in [
+        "null",
+        "[]",
+        r#"["record-set","rust/api",[]]"#,
+        "{}",
+        r#"{"kind":null}"#,
+        r#"{"kind":1}"#,
+        r#"{"kind":"../bad"}"#,
+        r#"{"arbitrary":{"new":[true,null]},"kind":"future-fact"}"#,
+        r#"{"extra":true,"kind":"record-set","name":"rust/api","records":[]}"#,
+    ] {
+        let payload = String::from_utf8(
+            serde_json_canonicalizer::to_vec(&evidence(vec![row.clone()])).unwrap(),
+        )
         .unwrap()
-        .len();
+        .replace(&original, invalid);
+        let digest = hb(PAYLOAD_SCHEMA, payload.as_bytes());
+        let envelope = format!(
+            r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{payload},"payload_digest":"{digest}"}}"#
+        );
+        assert!(parse(envelope.as_bytes()).is_err(), "{invalid}");
+        let template = String::from_utf8(template(evidence_template(vec![row.clone()])).unwrap())
+            .unwrap()
+            .replace(&original, invalid);
+        assert!(parse_template(template.as_bytes()).is_err(), "{invalid}");
+    }
+}
+
+#[test]
+fn semantic_readers_enforce_strict_json_before_decoding_observations() {
+    let row = observation("a");
+    let original = String::from_utf8(serde_json_canonicalizer::to_vec(&row).unwrap()).unwrap();
+    let nested = format!("{}null{}", "[".repeat(511), "]".repeat(511));
+    assert!(amiss_wire::json::parse(nested.as_bytes()).is_ok());
+    for (invalid, expected) in [
+        (
+            "9007199254740992".to_owned(),
+            JsonErrorKind::IntegerOutOfRange,
+        ),
+        (nested, JsonErrorKind::DepthLimit),
+        (
+            r#"{"kind":"record-set","kind":"record-set"}"#.to_owned(),
+            JsonErrorKind::DuplicateKey,
+        ),
+    ] {
+        for bytes in [
+            template(evidence_template(vec![row.clone()])).unwrap(),
+            envelope(evidence(vec![row.clone()])).unwrap().1,
+        ] {
+            let malformed = String::from_utf8(bytes)
+                .unwrap()
+                .replace(&original, &invalid);
+            let error = if malformed.contains("semantic-evidence-template") {
+                parse_template(malformed.as_bytes()).unwrap_err()
+            } else {
+                parse(malformed.as_bytes()).unwrap_err()
+            };
+            assert_eq!(error.path, "$");
+            assert!(matches!(error.kind, ErrorKind::Json(error) if error.kind == expected));
+        }
+    }
+}
+
+#[test]
+fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
+    let row = Observation::Record(record::Observation {
+        kind: record::ObservationKind::Current,
+        name: "rust/api".parse().unwrap(),
+        records: vec![record::Record {
+            key: "\u{e000}\u{10000}".to_owned(),
+            value: "quote\" slash/ backslash\\ newline\n nul\0 é".to_owned(),
+        }],
+    });
+    let expected = br#"quote\" slash/ backslash\\ newline\n nul\u0000 "#;
+    for bytes in [
+        template(evidence_template(vec![row.clone()])).unwrap(),
+        envelope(evidence(vec![row.clone()])).unwrap().1,
+    ] {
+        assert!(
+            bytes
+                .windows(expected.len())
+                .any(|window| window == expected)
+        );
+        assert!(!bytes.ends_with(b"\n"));
+    }
+    let parsed = parse_template(&template(evidence_template(vec![row.clone()])).unwrap()).unwrap();
+    assert_eq!(parsed.observations.as_ref(), [row]);
+}
+
+#[test]
+fn serialized_semantic_bytes_enforce_the_complete_document_ceiling() {
+    let mut records = record::Observation {
+        kind: record::ObservationKind::Current,
+        name: "rust/api".parse().unwrap(),
+        records: vec![record::Record {
+            key: "a".to_owned(),
+            value: String::new(),
+        }],
+    };
+    let overhead = template(evidence_template(vec![Observation::Record(
+        records.clone(),
+    )]))
+    .unwrap()
+    .len();
     let limit = usize::try_from(SEMANTIC_EVIDENCE_BYTES).unwrap();
-    row["data"] = serde_json::Value::String("x".repeat(limit - overhead));
-    let bytes = template(evidence_template(vec![row.clone()])).unwrap();
+    records.records[0].value = "x".repeat(limit - overhead);
+    let bytes = template(evidence_template(vec![Observation::Record(
+        records.clone(),
+    )]))
+    .unwrap();
     assert_eq!(bytes.len(), limit);
     assert!(parse_template(&bytes).is_ok());
     assert_eq!(
-        envelope(evidence(vec![row.clone()])).unwrap_err().kind,
-        ErrorKind::LimitExceeded,
-        "candidate binding adds bytes beyond the template ceiling"
+        envelope(evidence(vec![Observation::Record(records.clone())]))
+            .unwrap_err()
+            .kind,
+        ErrorKind::LimitExceeded
     );
-    row["data"] = serde_json::Value::String("x".repeat(limit - overhead + 1));
-    let error = template(evidence_template(vec![row])).unwrap_err();
+    records.records[0].value.push('x');
+    let error = template(evidence_template(vec![Observation::Record(records)])).unwrap_err();
     assert_eq!(error.path, "$");
     assert_eq!(error.kind, ErrorKind::LimitExceeded);
 }
@@ -402,7 +314,6 @@ fn producer_versions_and_input_bytes_are_bounded_before_parsing() {
     let mut input = evidence(Vec::new());
     input.producer.version = "bad version".to_owned();
     assert_eq!(envelope(input).unwrap_err().kind, ErrorKind::InvalidValue);
-
     let oversized = vec![b' '; usize::try_from(SEMANTIC_EVIDENCE_BYTES).unwrap() + 1];
     assert_eq!(
         parse(&oversized).unwrap_err().kind,
@@ -415,79 +326,23 @@ fn producer_versions_and_input_bytes_are_bounded_before_parsing() {
 }
 
 #[test]
-fn unknown_observation_kinds_remain_inert_data() {
-    let row = observation(vec![
-        ("kind", serde_json::json!("future-producer-fact")),
-        ("answer", serde_json::json!(42)),
-    ]);
-    let parsed = parse(&envelope(evidence(vec![row])).unwrap().1).unwrap();
-    assert_eq!(
-        parsed.payload.observations[0]
-            .get("kind")
-            .and_then(serde_json::Value::as_str),
-        Some("future-producer-fact")
-    );
-}
-
-#[test]
 fn tampered_and_unsorted_payloads_are_refused() {
-    let a = observation(vec![
-        ("kind", serde_json::json!("site-route")),
-        ("route", serde_json::json!("/a")),
-    ]);
-    let z = observation(vec![
-        ("kind", serde_json::json!("site-route")),
-        ("route", serde_json::json!("/z")),
-    ]);
-    let (_document, bytes) = envelope(evidence(vec![a, z])).unwrap();
-    let mut value = amiss_wire::json::parse(&bytes).unwrap();
-    reverse_observations(&mut value);
+    let (mut document, _) = envelope(evidence(vec![observation("a"), observation("z")])).unwrap();
+    document.payload.observations.reverse();
     assert_eq!(
-        parse(&serde_json_canonicalizer::to_vec(&value).unwrap())
+        parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::DigestMismatch
     );
-
-    rebind_payload(&mut value);
+    document.payload_digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&document.payload).unwrap(),
+    );
     assert_eq!(
-        parse(&serde_json_canonicalizer::to_vec(&value).unwrap())
+        parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::UnsortedSet
     );
-}
-
-fn reverse_observations(value: &mut WireValue) {
-    let WireValue::Array(observations) = member_mut(member_mut(value, "payload"), "observations")
-    else {
-        panic!("observations are an array")
-    };
-    observations.reverse();
-}
-
-fn reverse_template_observations(value: &mut WireValue) {
-    let WireValue::Array(observations) = member_mut(value, "observations") else {
-        panic!("observations are an array")
-    };
-    observations.reverse();
-}
-
-fn rebind_payload(value: &mut WireValue) {
-    let payload_digest = amiss_wire::digest::hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).expect("fixture JSON"),
-    );
-    *member_mut(value, "payload_digest") = WireValue::string(payload_digest.to_string());
-}
-
-fn member_mut<'a>(value: &'a mut WireValue, name: &str) -> &'a mut WireValue {
-    let WireValue::Object(members) = value else {
-        panic!("member parent is an object")
-    };
-    members
-        .iter_mut()
-        .find(|(candidate, _)| candidate == name)
-        .map(|(_, value)| value)
-        .expect("member exists")
 }
