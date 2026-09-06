@@ -2,6 +2,39 @@ use amiss_wire::{de::ErrorKind, digest::hb, semantic};
 use serde_json::json;
 
 #[test]
+fn generated_semantic_digests_keep_the_exact_payload_preimage() {
+    let original: semantic::SemanticEvidenceEnvelope = serde_json::from_slice(include_bytes!(
+        "../../../../spec/examples/scanner-semantic-evidence.json"
+    ))
+    .unwrap();
+    for observations in [
+        vec![],
+        vec![json!({
+            "kind": "future-fact",
+            "extra": {"é": [true, null, 2], "escaped": "quote\" and newline\n"}
+        })],
+        vec![
+            json!({"kind": "future-fact", "value": "z".repeat(131_072)}),
+            json!({"kind": "future-fact", "value": "a"}),
+        ],
+    ] {
+        let (document, bytes) = semantic::envelope(semantic::SemanticEvidence {
+            observations,
+            ..original.payload.clone()
+        })
+        .unwrap();
+        let preimage =
+            amiss_wire::json::parse(&serde_json::to_vec(&document.payload).unwrap()).unwrap();
+        assert_eq!(
+            document.payload_digest,
+            amiss_wire::digest::hj(semantic::PAYLOAD_SCHEMA, &preimage)
+        );
+        assert_eq!(semantic::validate(&document), Ok(()));
+        assert_eq!(semantic::parse(&bytes).unwrap(), document);
+    }
+}
+
+#[test]
 fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
     let bytes = include_bytes!("../../../../spec/examples/scanner-semantic-evidence.json");
     let original: semantic::SemanticEvidenceEnvelope = serde_json::from_slice(bytes).unwrap();
