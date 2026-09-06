@@ -1,5 +1,7 @@
 use std::cmp::Ordering;
 
+use serde_with::{As, Map, Same};
+
 mod read;
 mod write;
 
@@ -13,7 +15,8 @@ pub const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 pub type Text = Box<str>;
 
 /// An owned strict-JSON tree with fixed-size strings, arrays, and objects.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(untagged)]
 pub enum Value {
     Null,
     Bool(bool),
@@ -21,7 +24,10 @@ pub enum Value {
     String(Text),
     Array(Box<[Value]>),
     /// Keys sorted by UTF-16 code units and unique; `parse` enforces both.
-    Object(Box<[(String, Value)]>),
+    Object(
+        #[serde(serialize_with = "As::<Map<Same, Same>>::serialize::<_, [_]>")]
+        Box<[(String, Value)]>,
+    ),
 }
 
 impl Value {
