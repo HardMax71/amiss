@@ -153,6 +153,7 @@ fn string(raw: &str) -> Value {
 struct Run {
     repository: CommitChain,
     requests: SealedRequests,
+    controls_input: Option<Vec<u8>>,
     wire: Vec<u8>,
 }
 
@@ -180,6 +181,7 @@ fn sealed_run(staged: &Release) -> Run {
     Run {
         repository,
         requests,
+        controls_input: None,
         wire,
     }
 }
@@ -425,6 +427,9 @@ struct Invocation {
 fn invoke(staged: &Release, run: &Run, result_name: &str, scratch_link: bool) -> Invocation {
     let scratch = tempfile::tempdir().expect("a scratch root");
     let paths = run.requests.write(scratch.path());
+    if let Some(bytes) = &run.controls_input {
+        fs::write(&paths.controls, bytes).unwrap();
+    }
     let report = scratch.path().join("report");
     let result = scratch.path().join(result_name);
     fs::write(&report, b"").unwrap();

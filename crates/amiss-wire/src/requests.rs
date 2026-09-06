@@ -11,6 +11,7 @@ use crate::controls::{
 use crate::de::{self, Error, ErrorKind};
 use crate::digest::Digest;
 use crate::model::ArtifactId;
+use crate::semantic::SemanticEvidenceEnvelope;
 
 mod candidate;
 mod evaluation;
@@ -201,7 +202,8 @@ serde_with::with_prefix!(object "");
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SuppliedSemanticEvidence {
-    pub value: serde_json::Value,
+    #[serde(deserialize_with = "object::deserialize")]
+    pub value: SemanticEvidenceEnvelope,
     pub expected_context_digest: Digest,
 }
 
@@ -246,8 +248,7 @@ impl ControlsRequest {
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
-    /// grammar values. Controls are decoded under their closed schemas;
-    /// semantic evidence is still shape-checked as an object only.
+    /// grammar values. Controls and semantic evidence decode under their closed schemas.
     /// Consumers verify semantic constraints and independent digests.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
         root(bytes)?;
@@ -293,23 +294,7 @@ fn validate_controls(request: &ControlsRequest) -> Result<(), Error> {
     if request.semantic_evidence.len() > SEMANTIC_EVIDENCE_REQUEST_LIMIT {
         return Err(Error::new("$.semantic_evidence", ErrorKind::LimitExceeded));
     }
-    request
-        .semantic_evidence
-        .iter()
-        .enumerate()
-        .try_for_each(|(index, evidence)| {
-            require_object(
-                &format!("$.semantic_evidence[{index}].value"),
-                &evidence.value,
-            )
-        })
-}
-
-fn require_object(path: &str, value: &serde_json::Value) -> Result<(), Error> {
-    value
-        .is_object()
-        .then_some(())
-        .ok_or_else(|| Error::new(path, ErrorKind::WrongType))
+    Ok(())
 }
 
 /// The three exact streams carried through the bootstrap-to-engine pipe.

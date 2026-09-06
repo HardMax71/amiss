@@ -110,10 +110,10 @@ fn semantic_evidence(
 
 fn supplied_semantic(evidence: SemanticEvidence) -> SuppliedSemanticEvidence {
     let expected_context_digest = evidence.producer.context_digest;
-    let (_document, bytes) = amiss_wire::semantic::envelope(evidence)
+    let (value, _bytes) = amiss_wire::semantic::envelope(evidence)
         .expect("the envelope contains known observation models");
     SuppliedSemanticEvidence {
-        value: serde_json::from_slice(&bytes).expect("the envelope is JSON"),
+        value,
         expected_context_digest,
     }
 }
@@ -525,6 +525,10 @@ fn site_claims_require_valid_explicit_source_attribution() {
             Some(hb("test/report", b"source report")),
             Vec::new(),
         );
+        let mut request = empty();
+        request.semantic_evidence = vec![supplied_semantic(evidence.clone())];
+        let original = serde_json::to_string(&request.semantic_evidence[0].value).unwrap();
+        let encoded = serde_json::to_string(&request).unwrap();
         let payload = String::from_utf8(serde_json_canonicalizer::to_vec(&evidence).unwrap())
             .unwrap()
             .replace(
@@ -535,13 +539,12 @@ fn site_claims_require_valid_explicit_source_attribution() {
         let envelope = format!(
             r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{payload},"payload_digest":"{digest}"}}"#
         );
-        let mut request = empty();
-        request.semantic_evidence = vec![SuppliedSemanticEvidence {
-            value: serde_json::from_str(&envelope).unwrap(),
-            expected_context_digest: evidence.producer.context_digest,
-        }];
-        let error = controls(&request).expect_err("a claim without its source fails closed");
-        assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
+        let malformed = encoded.replace(&original, &envelope);
+        assert_ne!(malformed, encoded);
+        assert!(
+            ControlsRequest::parse(malformed.as_bytes()).is_err(),
+            "{observation}"
+        );
     }
 }
 

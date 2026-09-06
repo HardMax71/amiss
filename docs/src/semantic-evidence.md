@@ -214,7 +214,11 @@ display value in byte-sorted order and refuses a partial set before judging visi
 the same generic projection controls used by any record producer; the scanner does not parse Rust
 syntax or introduce a symbol-specific finding.
 
-The sealed controls request remains the provider-authenticated intake. A controller plan may hold
+The sealed controls request remains the provider-authenticated intake. It decodes each supplied
+envelope into the same closed model: malformed shapes are invalid controls requests, while digest,
+context, ordering, and semantic checks remain the consumers' responsibility. The request schema
+includes the full envelope definitions with local references, so it needs no external schema registry.
+A controller plan may hold
 candidate-independent templates such as an Intersphinx inventory set. A trusted acquisition may
 instead return exact candidate-independent template bytes beside the repository and action roots.
 The frozen plan names each acquisition identity, producer kind, producer identity, version, and

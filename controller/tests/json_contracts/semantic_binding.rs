@@ -3,8 +3,8 @@ use amiss_wire::{
     assessment::Nullable,
     digest::{hb, sha256},
     semantic::{
-        SemanticEvidenceEnvelope, SemanticEvidenceTemplate, SemanticProducer, TemplateSchema,
-        observation::Observation, record,
+        SemanticEvidenceTemplate, SemanticProducer, TemplateSchema, observation::Observation,
+        record,
     },
 };
 
@@ -38,8 +38,7 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
         let bound =
             bind_semantic_evidence(std::slice::from_ref(&template), &[], &[], candidate).unwrap();
         let supplied = &bound.supplied[0];
-        let document: SemanticEvidenceEnvelope =
-            serde_json::from_value(supplied.value.clone()).unwrap();
+        let document = &supplied.value;
         assert_eq!(
             document.payload.subject.candidate_identity_digest,
             candidate
@@ -65,7 +64,7 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
         assert_eq!(row["payload_digest"], document.payload_digest.to_string());
         assert_eq!(
             row["envelope_digest"],
-            sha256(&serde_json_canonicalizer::to_vec(&document).unwrap()).to_string()
+            sha256(&serde_json_canonicalizer::to_vec(document).unwrap()).to_string()
         );
     }
 }
