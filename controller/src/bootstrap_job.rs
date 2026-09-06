@@ -187,10 +187,8 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         evaluation_instant: input.evaluation_instant,
         valid_until: input.valid_until,
     };
-    let (statement_bytes, statement_digest) =
+    let (_, statement_digest) =
         canonical_trusted_time(&statement).map_err(|_defect| BootstrapJobError::TrustedTime)?;
-    let statement_value = serde_json::from_slice(&statement_bytes)
-        .map_err(|_defect| BootstrapJobError::TrustedTime)?;
 
     let (constraint, constraint_digest) =
         canonical_execution_constraint(&checked_plan.execution)
@@ -207,7 +205,13 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     let controls = controls::request(
         &checked_plan.policy,
         run,
-        supplied_time(input.run, statement_digest, statement_value),
+        SuppliedTime {
+            value: statement,
+            expected_digest: statement_digest,
+            provider: input.run.delivery.provider.namespace.as_str().to_owned(),
+            provider_run_id: input.run.provider_run.run_id.as_str().to_owned(),
+            provider_run_attempt: input.run.provider_run.attempt.get(),
+        },
         SuppliedControl {
             value: constraint_value,
             expected_digest: constraint_digest,
@@ -229,18 +233,4 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         constraint,
         semantic_artifact: semantic.artifact,
     })
-}
-
-fn supplied_time(
-    run: &RunRequest,
-    expected_digest: Digest,
-    value: serde_json::Value,
-) -> SuppliedTime {
-    SuppliedTime {
-        value,
-        expected_digest,
-        provider: run.delivery.provider.namespace.as_str().to_owned(),
-        provider_run_id: run.provider_run.run_id.as_str().to_owned(),
-        provider_run_attempt: run.provider_run.attempt.get(),
-    }
 }

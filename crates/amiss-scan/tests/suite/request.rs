@@ -145,7 +145,7 @@ fn a_verified_time_statement_lands_with_its_run_context() {
     let (_, digest) = amiss_wire::controls::canonical_trusted_time(&statement).unwrap();
     let mut request = empty();
     request.trusted_time = Some(SuppliedTime {
-        value: serde_json::from_str(TIME).expect("the fixture is JSON"),
+        value: statement.clone(),
         expected_digest: digest,
         provider: "gitlab-ci".to_owned(),
         provider_run_id: "pipeline/01J2Z9-7".to_owned(),
@@ -171,6 +171,36 @@ fn a_wrong_time_digest_is_refused() {
     });
     let error = controls(&request).expect_err("a foreign digest never passes");
     assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
+}
+
+#[test]
+fn typed_time_still_requires_semantic_validation() {
+    let valid = amiss_wire::controls::parse_trusted_time(TIME.as_bytes()).unwrap();
+    let (_, expected_digest) = amiss_wire::controls::canonical_trusted_time(&valid).unwrap();
+    for value in [
+        amiss_wire::controls::TrustedTimeStatement {
+            provider: "bad provider!".to_owned(),
+            ..valid.clone()
+        },
+        amiss_wire::controls::TrustedTimeStatement {
+            valid_until: valid.evaluation_instant.clone(),
+            ..valid
+        },
+    ] {
+        let request = ControlsRequest {
+            trusted_time: Some(SuppliedTime {
+                value,
+                expected_digest,
+                provider: "gitlab-ci".to_owned(),
+                provider_run_id: "pipeline/01J2Z9-7".to_owned(),
+                provider_run_attempt: 2,
+            }),
+            ..empty()
+        };
+        let error =
+            controls(&request).expect_err("typed fields do not establish semantic validity");
+        assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
+    }
 }
 
 #[test]
