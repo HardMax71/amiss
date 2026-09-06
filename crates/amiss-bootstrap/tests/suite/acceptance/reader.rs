@@ -133,15 +133,32 @@ fn core_status_tags_are_strings_and_completion_is_boolean() {
 }
 
 #[test]
-fn unavailable_evaluations_and_unrequested_candidates_remain_supported() {
+fn available_and_unavailable_candidates_without_an_expected_commit_remain_supported() {
     use amiss_wire::report::model::{
         SnapshotUnavailableReason, UnavailableEvaluation, UnavailableSnapshot,
         UnavailableSnapshotKind, UnavailableStatus,
+    };
+    use amiss_wire::requests::{
+        IndexIdentityScope, IndexSnapshotIdentity, IndexSnapshotKind, IndexSnapshotSchema,
     };
 
     let (wire, mut expectations) = accepted_report();
     expectations.candidate_commit = None;
     let mut report: Value = serde_json::from_slice(&wire).unwrap();
+    assert_eq!(accept(&wire, &expectations), Ok(0));
+    let candidate = &report["payload"]["evaluation"]["candidate"];
+    let index = IndexSnapshotIdentity {
+        base_commit_oid: expectations.base_commit.clone(),
+        base_object_format: serde_json::from_value(candidate["object_format"].clone()).unwrap(),
+        entry_count: 0,
+        identity_scope: IndexIdentityScope::CompleteLogicalIndex,
+        index_projection_digest: hb("test", b"index projection"),
+        kind: IndexSnapshotKind::Index,
+        snapshot_digest: hb("test", b"snapshot"),
+        snapshot_schema: IndexSnapshotSchema::Current,
+    };
+    report["payload"]["evaluation"]["candidate"] = serde_json::to_value(index).unwrap();
+    assert_eq!(accept(&bind(&mut report), &expectations), Ok(0));
     report["payload"]["result"]["complete"] = json!(false);
     report["payload"]["result"]["exit_code"] = json!(2);
     report["payload"]["result"]["status"] = json!("incomplete");
@@ -159,6 +176,50 @@ fn unavailable_evaluations_and_unrequested_candidates_remain_supported() {
     })
     .unwrap();
     assert_eq!(accept(&bind(&mut report), &expectations), Ok(2));
+}
+
+#[test]
+fn candidates_without_an_expected_commit_still_require_a_snapshot_shape() {
+    let (wire, mut expectations) = accepted_report();
+    expectations.candidate_commit = None;
+    let mut report: Value = serde_json::from_slice(&wire).unwrap();
+    let candidate = &report["payload"]["evaluation"]["candidate"];
+    let positional = json!([
+        candidate["commit_oid"],
+        candidate["kind"],
+        candidate["object_format"],
+        candidate["tree_oid"],
+    ]);
+    let mut malformed_git = candidate.clone();
+    malformed_git["commit_oid"] = json!("not-an-oid");
+    for invalid in [
+        Value::Null,
+        json!(true),
+        json!(7),
+        json!("index"),
+        json!([]),
+        json!({}),
+        positional,
+        malformed_git,
+        json!({"kind": "index"}),
+        json!({"kind": "unavailable"}),
+    ] {
+        report["payload"]["evaluation"]["candidate"] = invalid;
+        assert_eq!(
+            accept(&bind(&mut report), &expectations),
+            Err(AcceptanceDefect::Shape),
+            "{}",
+            report["payload"]["evaluation"]["candidate"]
+        );
+    }
+    report["payload"]["evaluation"]
+        .as_object_mut()
+        .unwrap()
+        .remove("candidate");
+    assert_eq!(
+        accept(&bind(&mut report), &expectations),
+        Err(AcceptanceDefect::Shape)
+    );
 }
 
 #[test]
