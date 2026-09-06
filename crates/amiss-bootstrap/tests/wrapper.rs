@@ -238,7 +238,7 @@ fn bind_statement(
         .expect("a valid statement fixture");
     let (_, digest) = canonical_trusted_time(&parsed).unwrap();
     time.expected_digest = digest;
-    time.value = serde_json::to_value(&statement).expect("a JSON statement");
+    time.value = parsed;
     (statement, digest.to_string())
 }
 
@@ -570,24 +570,31 @@ fn identity_absent(staged: &Release) {
 }
 
 fn invalid_supplied_controls(staged: &Release) {
-    for (constraint, field, value, diagnostic) in [
+    let mut constraint = sealed_run(staged);
+    let controls = &mut constraint.requests.controls;
+    *controls
+        .execution_constraint
+        .as_mut()
+        .unwrap()
+        .value
+        .get_mut("required_status_name")
+        .unwrap() = serde_json::json!(" bad");
+    let mut provider = sealed_run(staged);
+    let controls = &mut provider.requests.controls;
+    "bad provider!".clone_into(&mut controls.trusted_time.as_mut().unwrap().value.provider);
+    let mut lifetime = sealed_run(staged);
+    let controls = &mut lifetime.requests.controls;
+    let statement = &mut controls.trusted_time.as_mut().unwrap().value;
+    statement.valid_until = statement.evaluation_instant.clone();
+    for (run, field, diagnostic) in [
         (
-            true,
+            constraint,
             "required_status_name",
-            " bad",
             "execution-constraint-invalid",
         ),
-        (false, "provider", "bad provider!", "trusted-time-invalid"),
-        (false, "valid_until", INSTANT, "trusted-time-invalid"),
+        (provider, "provider", "trusted-time-invalid"),
+        (lifetime, "valid_until", "trusted-time-invalid"),
     ] {
-        let mut run = sealed_run(staged);
-        let controls = &mut run.requests.controls;
-        let supplied = if constraint {
-            &mut controls.execution_constraint.as_mut().unwrap().value
-        } else {
-            &mut controls.trusted_time.as_mut().unwrap().value
-        };
-        supplied[field] = serde_json::json!(value);
         plant(&run, &run.wire, "0");
         let invocation = invoke(staged, &run, "result", false);
         assert_eq!(invocation.output.status.code(), Some(2), "{field}");

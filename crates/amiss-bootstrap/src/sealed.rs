@@ -5,8 +5,7 @@ use std::path::Path;
 use amiss_bootstrap::supervise::{SealedControlExpectation, SealedExpectations};
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository};
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, TrustedTimeStatement, canonical_execution_constraint,
-    canonical_trusted_time,
+    ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_trusted_time,
 };
 use amiss_wire::report::model::{SemanticEvidenceProducer, SemanticEvidenceProvenance};
 use amiss_wire::requests::{
@@ -89,10 +88,9 @@ pub(super) fn capture_requests(
         .trusted_time
         .as_ref()
         .ok_or_else(|| tampered("trusted-time-absent"))?;
-    let statement = TrustedTimeStatement::deserialize(&supplied_time.value)
-        .map_err(|_defect| tampered("trusted-time-invalid"))?;
+    let statement = &supplied_time.value;
     let (_, statement_digest) =
-        canonical_trusted_time(&statement).map_err(|_defect| tampered("trusted-time-invalid"))?;
+        canonical_trusted_time(statement).map_err(|_defect| tampered("trusted-time-invalid"))?;
     if statement_digest != supplied_time.expected_digest
         || statement.provider != supplied_time.provider
         || statement.provider_run_id != supplied_time.provider_run_id

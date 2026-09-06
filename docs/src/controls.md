@@ -215,6 +215,10 @@ The machine-facing evaluation and controls requests are closed by the
 intentional: before 1.0 the shipped schema, parser, examples, and report form one rolling
 contract and move together.
 
+The request reader decodes trusted time directly into the closed statement type. An unknown
+statement field, wrong schema, or non-object statement rejects the request before evaluation;
+the consumers still verify its lifetime, expected digest, and authenticated run bindings.
+
 In the public command and GitHub composite Action, all five external controls are absent and no
 protected target ref is authenticated. The Action supplies no semantic evidence; a direct public
 `check` may carry one self-asserted template. The report records

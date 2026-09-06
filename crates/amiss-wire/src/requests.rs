@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::controls::{provider_run_id_valid, root};
+use crate::controls::{TrustedTimeStatement, provider_run_id_valid, root};
 use crate::de::{self, Error, ErrorKind};
 use crate::digest::Digest;
 use crate::model::ArtifactId;
@@ -178,12 +178,16 @@ pub enum RequestTrust {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SuppliedTime {
-    pub value: serde_json::Value,
+    #[serde(deserialize_with = "object::deserialize")]
+    pub value: TrustedTimeStatement,
     pub expected_digest: Digest,
     pub provider: String,
     pub provider_run_id: String,
     pub provider_run_attempt: u64,
 }
+
+// An empty prefix preserves every key while the library requires an object, not a sequence.
+serde_with::with_prefix!(object "");
 
 /// One semantic envelope paired with the independently planned build or
 /// inventory context it must identify.
@@ -235,8 +239,9 @@ impl ControlsRequest {
     /// # Errors
     ///
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
-    /// grammar values. Embedded control values are shape-checked as objects
-    /// only; their own schemas and digests are the consumer's verification.
+    /// grammar values. Trusted time is decoded under its closed schema;
+    /// the other embedded controls are shape-checked as objects only.
+    /// Consumers verify semantic constraints and independent digests.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
         root(bytes)?;
         let request: Self = de::deserialize_json(bytes)?;
@@ -273,7 +278,6 @@ fn validate_controls(request: &ControlsRequest) -> Result<(), Error> {
     .try_for_each(|(path, value)| require_object(path, value))?;
 
     if let Some(time) = &request.trusted_time {
-        require_object("$.trusted_time.value", &time.value)?;
         ArtifactId::new(time.provider.clone())
             .is_some()
             .then_some(())
