@@ -2,7 +2,7 @@ use core::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
-use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
+use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
 
 /// The same-repository URL dialect a run applies: named in the report's
 /// evaluation and selecting the recognition grammar in the resolver.
@@ -12,15 +12,15 @@ use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
     Debug,
     PartialEq,
     Eq,
+    Display,
     AsRefStr,
     EnumIter,
     EnumString,
     IntoStaticStr,
-    Serialize,
-    Deserialize,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "lowercase")]
-#[serde(rename_all = "kebab-case")]
 pub enum ForgeDialect {
     Github,
     Gitlab,
@@ -53,14 +53,14 @@ impl ForgeDialect {
     Eq,
     PartialOrd,
     Ord,
+    Display,
     AsRefStr,
     EnumString,
     IntoStaticStr,
-    Serialize,
-    Deserialize,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
 pub enum ObjectFormat {
     Sha1,
     Sha256,

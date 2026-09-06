@@ -16,6 +16,7 @@ mod policy_presence;
 mod report_identity;
 mod report_reader;
 mod semantic_reader;
+mod string_tags;
 
 #[test]
 fn document_classifications_match_the_report_schema() {

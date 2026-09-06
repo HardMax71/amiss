@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::digest::{Digest, hb};
@@ -6,14 +8,18 @@ use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentit
 
 use super::{CANDIDATE_IDENTITY_DOMAIN, EvaluationRequest, RequestMode, SnapshotMaterialization};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum CandidateIdentitySchema {
-    #[serde(rename = "amiss/scanner-candidate-identity")]
+    #[strum(serialize = "amiss/scanner-candidate-identity")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum CandidateEventKind {
     PullRequest,
     MergeGroup,
@@ -22,8 +28,10 @@ pub enum CandidateEventKind {
     LocalIndex,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum CandidateFinality {
     PrSyntheticMerge,
     MergeGroupCandidate,
@@ -33,15 +41,7 @@ pub enum CandidateFinality {
 }
 
 #[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
-    strum::Display,
-    strum::EnumString,
+    Clone, Copy, Debug, PartialEq, Eq, SerializeDisplay, DeserializeFromStr, Display, EnumString,
 )]
 pub enum GitSnapshotKind {
     #[strum(serialize = "git-commit")]
@@ -56,21 +56,27 @@ pub struct GitSnapshotIdentity {
     pub tree_oid: Oid,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum IndexSnapshotSchema {
-    #[serde(rename = "amiss/scanner-snapshot")]
+    #[strum(serialize = "amiss/scanner-snapshot")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum IndexIdentityScope {
-    #[serde(rename = "complete-logical-index")]
+    #[strum(serialize = "complete-logical-index")]
     CompleteLogicalIndex,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum IndexSnapshotKind {
-    #[serde(rename = "index")]
+    #[strum(serialize = "index")]
     Index,
 }
 
