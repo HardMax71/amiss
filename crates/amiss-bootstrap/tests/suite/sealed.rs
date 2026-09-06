@@ -17,8 +17,8 @@ use amiss_wire::controls::{
     canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
     parse_trusted_time,
 };
-use amiss_wire::digest::hj;
-use amiss_wire::json::{Value, canonical, parse};
+
+use amiss_wire::json::{Value, parse};
 use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA};
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
@@ -144,7 +144,11 @@ fn identity_digest(evaluation: &Value) -> String {
         "schema".to_owned(),
         Value::string(CANDIDATE_IDENTITY_DOMAIN),
     ));
-    hj(CANDIDATE_IDENTITY_DOMAIN, &Value::object(identity)).to_string()
+    amiss_wire::digest::hb(
+        CANDIDATE_IDENTITY_DOMAIN,
+        &serde_json_canonicalizer::to_vec(&Value::object(identity)).unwrap(),
+    )
+    .to_string()
 }
 
 fn statement_value(repository: &Value, ties: &StatementTies, identity: &str) -> Value {
@@ -232,7 +236,8 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
     let repository_value = entry(evaluation, "repository").clone();
     let statement = statement_value(&repository_value, &ties, &identity);
     let parsed_statement =
-        parse_trusted_time(&canonical(&statement)).expect("a valid statement fixture");
+        parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap())
+            .expect("a valid statement fixture");
     let statement_digest = canonical_trusted_time(&parsed_statement)
         .unwrap()
         .1
@@ -240,7 +245,8 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
 
     let descriptor = example("scanner-execution-constraint.json");
     let constraint =
-        parse_execution_constraint(&canonical(&descriptor)).expect("a valid constraint fixture");
+        parse_execution_constraint(&serde_json_canonicalizer::to_vec(&descriptor).unwrap())
+            .expect("a valid constraint fixture");
     let constraint_digest = canonical_execution_constraint(&constraint)
         .unwrap()
         .1
@@ -268,9 +274,13 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
     )
     .unwrap();
 
-    let digest = hj(PAYLOAD_SCHEMA, entry(&mut envelope, "payload")).to_string();
+    let digest = amiss_wire::digest::hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(entry(&mut envelope, "payload")).unwrap(),
+    )
+    .to_string();
     set(&mut envelope, "payload_digest", string(&digest));
-    let mut wire = canonical(&envelope);
+    let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     wire.push(b'\n');
 
     let mut sealed =

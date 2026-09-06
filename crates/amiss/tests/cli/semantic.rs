@@ -79,7 +79,7 @@ fn fixture() -> (amiss_fixtures::CommitPair, String) {
     let (code, stdout, stderr) = amiss(&["record-set", "--evidence", &input_path]);
     assert_eq!((code, stderr.as_str()), (0, ""));
     let parsed = amiss_wire::json::parse(&stdout).unwrap();
-    let mut canonical = amiss_wire::json::canonical(&parsed);
+    let mut canonical = serde_json_canonicalizer::to_vec(&parsed).unwrap();
     canonical.push(b'\n');
     assert_eq!(
         stdout, canonical,

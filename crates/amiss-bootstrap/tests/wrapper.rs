@@ -22,8 +22,8 @@ use amiss_wire::controls::{
     ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_trusted_time,
     parse_execution_constraint, parse_trusted_time,
 };
-use amiss_wire::digest::{hb, hj};
-use amiss_wire::json::{Value, canonical, parse};
+use amiss_wire::digest::hb;
+use amiss_wire::json::{Value, parse};
 use amiss_wire::model::Oid;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::requests::{
@@ -234,10 +234,12 @@ fn bind_statement(
     );
     set(&mut statement, "evaluation_instant", string(INSTANT));
     set(&mut statement, "valid_until", string(VALID_UNTIL));
-    let parsed = parse_trusted_time(&canonical(&statement)).expect("a valid statement fixture");
+    let parsed = parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap())
+        .expect("a valid statement fixture");
     let (_, digest) = canonical_trusted_time(&parsed).unwrap();
     time.expected_digest = digest;
-    time.value = serde_json::from_slice(&canonical(&statement)).expect("a JSON statement");
+    time.value = serde_json::from_slice(&serde_json_canonicalizer::to_vec(&statement).unwrap())
+        .expect("a JSON statement");
     (statement, digest.to_string())
 }
 
@@ -300,9 +302,13 @@ fn bind_envelope(
     if exit_class == 1 {
         set(entry(payload, "result"), "status", string("block"));
     }
-    let digest = hj(PAYLOAD_SCHEMA, entry(&mut envelope, "payload")).to_string();
+    let digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(entry(&mut envelope, "payload")).unwrap(),
+    )
+    .to_string();
     set(&mut envelope, "payload_digest", string(&digest));
-    let mut wire = canonical(&envelope);
+    let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     wire.push(b'\n');
     wire
 }

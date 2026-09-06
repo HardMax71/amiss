@@ -532,7 +532,7 @@ fn external_examples_replay_from_the_report_and_evidence() {
         .expect("the report example yields a plan");
     assert_eq!(
         plan,
-        amiss_wire::json::canonical(&plan_example),
+        serde_json_canonicalizer::to_vec(&plan_example).unwrap(),
         "the plan example drifted from its own derivation"
     );
 
@@ -549,7 +549,7 @@ fn external_examples_replay_from_the_report_and_evidence() {
         .expect("the derived plan and evidence example yield an assessment");
     assert_eq!(
         assessment,
-        amiss_wire::json::canonical(&assessment_example),
+        serde_json_canonicalizer::to_vec(&assessment_example).unwrap(),
         "the assessment example drifted from its own derivation"
     );
 }
@@ -567,7 +567,7 @@ fn the_semantic_evidence_example_matches_its_checked_writer() {
         amiss_wire::json::parse(&bytes).expect("the semantic evidence example is strict JSON");
     assert_eq!(
         written,
-        amiss_wire::json::canonical(&example),
+        serde_json_canonicalizer::to_vec(&example).unwrap(),
         "the semantic evidence example drifted from its writer"
     );
 }
@@ -587,7 +587,7 @@ fn the_record_set_input_example_produces_the_semantic_template_example() {
         amiss_wire::json::parse(&template).expect("the semantic template example is strict JSON");
     assert_eq!(
         written,
-        amiss_wire::json::canonical(&template),
+        serde_json_canonicalizer::to_vec(&template).unwrap(),
         "the record-set input and semantic template examples drifted"
     );
 }
@@ -601,7 +601,7 @@ fn report_example_is_schema_clean_and_matches_its_canonical_form() {
         .expect("canonical report example is readable");
 
     let parsed = amiss_wire::json::parse(&pretty).expect("pretty example is strict JSON");
-    let mut canonical = amiss_wire::json::canonical(&parsed);
+    let mut canonical = serde_json_canonicalizer::to_vec(&parsed).unwrap();
     canonical.push(b'\n');
     assert_eq!(
         canonical, canonical_fixture,
