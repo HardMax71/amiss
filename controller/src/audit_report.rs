@@ -1,17 +1,16 @@
 mod tests;
 
-use std::collections::BTreeMap;
-
 use amiss_wire::digest::{Digest, hj_serde, sha256};
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 use amiss_wire::report::model::{
-    BaseSnapshot, Evaluation, ReportEnvelope, ReportPayload, Snapshot,
+    BaseSnapshot, Evaluation, IdentityPayload, IdentityPreimage, ReportEnvelope, ReportPayload,
+    Snapshot,
 };
 use amiss_wire::requests::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateEventKind, CandidateFinality, CandidateIdentitySchema,
     CandidateSnapshot, RequestMode, SnapshotMaterialization,
 };
-use serde::{Deserialize, Serialize, de::IgnoredAny};
+use serde::Deserialize;
 
 use crate::ArtifactError;
 
@@ -28,30 +27,6 @@ pub(crate) struct AcceptedReport {
 pub(crate) struct AcceptedSnapshot {
     pub(crate) commit: Oid,
     pub(crate) tree: Oid,
-}
-
-#[derive(Deserialize)]
-struct IdentityPayload {
-    evaluation: IdentityEvaluation,
-}
-
-#[derive(Deserialize, Serialize)]
-struct IdentityEvaluation {
-    #[serde(default, skip_serializing, rename = "schema")]
-    _schema: json_serde::Absent,
-    #[serde(skip_serializing, rename = "evaluation_instant")]
-    _evaluation_instant: IgnoredAny,
-    #[serde(skip_serializing, rename = "trusted_time")]
-    _trusted_time: IgnoredAny,
-    #[serde(flatten)]
-    fields: BTreeMap<String, serde_json::Value>,
-}
-
-#[derive(Serialize)]
-struct IdentityPreimage {
-    #[serde(flatten)]
-    evaluation: IdentityEvaluation,
-    schema: CandidateIdentitySchema,
 }
 
 pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactError> {
