@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::model::{ArtifactId, RepoPathText};
@@ -52,8 +54,10 @@ pub struct SphinxLabelObservation {
     pub destination: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum SphinxLabelKind {
-    #[serde(rename = "sphinx-label")]
+    #[strum(serialize = "sphinx-label")]
     Current,
 }

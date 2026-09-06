@@ -1,6 +1,8 @@
 use std::{cmp::Ordering, sync::Arc};
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
@@ -28,9 +30,11 @@ pub struct SemanticEvidenceEnvelope<O = serde_json::Value> {
     pub payload_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum EnvelopeSchema {
-    #[serde(rename = "amiss/semantic-evidence-envelope")]
+    #[strum(serialize = "amiss/semantic-evidence-envelope")]
     Current,
 }
 
@@ -44,9 +48,11 @@ pub struct SemanticEvidence<O = serde_json::Value> {
     pub observations: Vec<O>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum PayloadSchema {
-    #[serde(rename = "amiss/semantic-evidence-payload")]
+    #[strum(serialize = "amiss/semantic-evidence-payload")]
     Current,
 }
 
@@ -76,9 +82,11 @@ pub struct SemanticEvidenceTemplate<O = serde_json::Value> {
     pub observations: Arc<[O]>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum TemplateSchema {
-    #[serde(rename = "amiss/semantic-evidence-template")]
+    #[strum(serialize = "amiss/semantic-evidence-template")]
     Current,
 }
 
