@@ -12,7 +12,6 @@ use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestMode, RequestStreams,
     SnapshotMaterialization, SnapshotRequest,
 };
-use serde::Deserialize;
 
 use super::{Args, Execution, Failure, SealedRun, tampered, unavailable};
 
@@ -135,11 +134,8 @@ fn semantic_expectations(
     values
         .iter()
         .map(|supplied| {
-            // ControlsRequest already bounded and checked the containing strict JSON.
-            let envelope =
-                amiss_wire::semantic::SemanticEvidenceEnvelope::deserialize(&supplied.value)
-                    .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
-            amiss_wire::semantic::validate(&envelope)
+            let envelope = &supplied.value;
+            amiss_wire::semantic::validate(envelope)
                 .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
             if envelope.payload.producer.context_digest != supplied.expected_context_digest {
                 return Err(tampered("semantic-evidence-invalid"));
@@ -147,10 +143,10 @@ fn semantic_expectations(
             Ok(SemanticEvidenceProvenance {
                 payload_digest: envelope.payload_digest,
                 producer: SemanticEvidenceProducer {
-                    identity: envelope.payload.producer.identity,
+                    identity: envelope.payload.producer.identity.clone(),
                     input_digest: envelope.payload.producer.input_digest,
                     kind: envelope.payload.producer.kind,
-                    version: envelope.payload.producer.version,
+                    version: envelope.payload.producer.version.clone(),
                 },
             })
         })

@@ -166,7 +166,7 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
         payload.subject.source_report_payload_digest = Nullable::Null;
         payload.observations = vec![observation.clone()];
         let (document, bytes) = semantic::envelope(payload).unwrap();
-        let mut request = ControlsRequest {
+        let request = ControlsRequest {
             semantic_evidence: vec![SuppliedSemanticEvidence {
                 value: serde_json::from_slice(&bytes).unwrap(),
                 expected_context_digest: document.payload.producer.context_digest,
@@ -174,6 +174,7 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
             ..ControlsRequest::default()
         };
         assert!(amiss_scan::request::controls(&request).is_ok(), "{kind}");
+        let request_bytes = String::from_utf8(request.canonical_bytes().unwrap()).unwrap();
         let extended = ExtendedObservation {
             observation,
             unexpected: true,
@@ -185,16 +186,16 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
                 .unwrap();
         let envelope = String::from_utf8(bytes).unwrap();
         let mut invalids = vec![
-            br#"{"kind":"future-fact"}"#.to_vec(),
-            serde_json_canonicalizer::to_vec(&extended).unwrap(),
+            (br#"{"kind":"future-fact"}"#.to_vec(), false),
+            (serde_json_canonicalizer::to_vec(&extended).unwrap(), false),
         ];
         invalids.extend(
             cases
                 .iter()
                 .filter(|(other_kind, _, _)| other_kind != kind)
-                .map(|(_, _, other)| serde_json_canonicalizer::to_vec(other).unwrap()),
+                .map(|(_, _, other)| (serde_json_canonicalizer::to_vec(other).unwrap(), true)),
         );
-        for invalid in invalids {
+        for (invalid, typed) in invalids {
             let invalid = String::from_utf8(invalid).unwrap();
             let changed = payload.replace(&observation, &invalid);
             assert_ne!(payload, changed);
@@ -202,13 +203,20 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
             let encoded = envelope
                 .replace(&payload, &changed)
                 .replace(&document.payload_digest.to_string(), &digest.to_string());
-            request.semantic_evidence[0].value = serde_json::from_str(&encoded).unwrap();
-            let error = amiss_scan::request::controls(&request).unwrap_err();
-            assert_eq!(
-                error.code,
-                AnalysisErrorCode::ConfigurationInvalid,
-                "{kind}: {invalid}"
-            );
+            let altered = request_bytes.replace(&envelope, &encoded);
+            assert_ne!(altered, request_bytes);
+            let parsed = ControlsRequest::parse(altered.as_bytes());
+            if typed {
+                assert_eq!(
+                    amiss_scan::request::controls(&parsed.unwrap())
+                        .unwrap_err()
+                        .code,
+                    AnalysisErrorCode::ConfigurationInvalid,
+                    "{kind}: {invalid}"
+                );
+            } else {
+                assert!(parsed.is_err(), "{kind}: {invalid}");
+            }
         }
     }
 }

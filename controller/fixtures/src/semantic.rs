@@ -37,14 +37,8 @@ pub fn semantic_input_artifact() -> Result<SemanticInputArtifact, BootstrapJobEr
     let payload_digests = bound
         .supplied
         .iter()
-        .map(|supplied| {
-            let bytes = serde_json::to_vec(&supplied.value)
-                .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-            amiss_wire::semantic::parse(&bytes)
-                .map(|envelope| envelope.payload_digest)
-                .map_err(|_defect| BootstrapJobError::SemanticEvidence)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|supplied| supplied.value.payload_digest)
+        .collect::<Vec<_>>();
     Ok(SemanticInputArtifact {
         report: amiss_fixtures::semantic_report(&payload_digests)
             .ok_or(BootstrapJobError::SemanticEvidence)?,
