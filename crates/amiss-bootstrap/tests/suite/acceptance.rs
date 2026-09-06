@@ -24,6 +24,8 @@ use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
+mod reader;
+
 /// The frozen dossier examples: the indented readable envelope and its exact
 /// one-line `JCS(envelope) || LF` canonicalization.
 fn dossier_example(name: &str) -> Vec<u8> {
@@ -38,8 +40,9 @@ fn dossier_example(name: &str) -> Vec<u8> {
 fn foreign_expectations() -> Expectations {
     Expectations {
         engine_digest: "sha256:0000000000000000000000000000000000000000000000000000000000000000"
-            .to_owned(),
-        base_commit: "0000000000000000000000000000000000000000".to_owned(),
+            .parse()
+            .unwrap(),
+        base_commit: "0000000000000000000000000000000000000000".parse().unwrap(),
         candidate_commit: None,
         sealed: None,
     }
@@ -201,9 +204,9 @@ fn accepted_report() -> (Vec<u8>, Expectations) {
     (
         wire,
         Expectations {
-            engine_digest,
-            base_commit,
-            candidate_commit,
+            engine_digest: engine_digest.parse().unwrap(),
+            base_commit: base_commit.parse().unwrap(),
+            candidate_commit: candidate_commit.map(|commit| commit.parse().unwrap()),
             sealed: None,
         },
     )

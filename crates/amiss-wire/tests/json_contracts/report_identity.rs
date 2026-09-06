@@ -3,6 +3,38 @@ use amiss_wire::requests::CandidateIdentitySchema;
 use serde_json::{Value, json};
 
 #[test]
+fn snapshot_and_unavailable_tags_require_strings() -> serde_json::Result<()> {
+    use amiss_wire::report::model::UnavailableStatus;
+    use amiss_wire::requests::GitSnapshotKind;
+
+    assert_eq!(
+        serde_json::to_value(GitSnapshotKind::GitCommit)?,
+        json!("git-commit")
+    );
+    assert_eq!(
+        serde_json::to_value(UnavailableStatus::Unavailable)?,
+        json!("unavailable")
+    );
+    for value in [
+        json!({"git-commit": null}),
+        Value::Null,
+        json!(false),
+        json!(1),
+    ] {
+        assert!(serde_json::from_value::<GitSnapshotKind>(value).is_err());
+    }
+    for value in [
+        json!({"unavailable": null}),
+        Value::Null,
+        json!(false),
+        json!(1),
+    ] {
+        assert!(serde_json::from_value::<UnavailableStatus>(value).is_err());
+    }
+    Ok(())
+}
+
+#[test]
 fn report_identity_projections_keep_the_candidate_contract() -> serde_json::Result<()> {
     for bytes in [
         include_bytes!("../../../../spec/examples/candidate-identity.json").as_slice(),

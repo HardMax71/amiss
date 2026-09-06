@@ -4,20 +4,16 @@ use amiss_wire::controls::{
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::report::model::{
-    ControlProvenance, ControlStatus, ControlTrustSource, ReportEnvelope, SandboxAssurance,
+    ControlProvenance, ControlStatus, ControlTrustSource, SandboxAssurance,
     SandboxEnforcementSource, SemanticEvidenceProducer, SemanticEvidenceProvenance,
     VerifiedExecutionConstraint, VerifiedTrustedTime,
 };
 use serde::Deserialize;
+use serde::de::value::MapDeserializer;
+use serde_json::{Map, Value};
 
+use super::model::Object;
 use super::{AcceptanceDefect, SealedExpectations};
-
-#[derive(Deserialize)]
-struct Object<T> {
-    // Flatten requires an object instead of accepting a positional struct array.
-    #[serde(flatten)]
-    fields: T,
-}
 
 #[derive(Deserialize)]
 struct ControlPayload {
@@ -27,13 +23,12 @@ struct ControlPayload {
 #[derive(Deserialize)]
 struct ControlView {
     debt_snapshot: Object<ControlProvenance>,
-    execution_constraint:
-        Object<VerifiedExecutionConstraint<Object<ExecutionConstraintDescriptor>>>,
+    execution_constraint: Object<VerifiedExecutionConstraint<Map<String, Value>>>,
     organization_floor: Object<ControlProvenance>,
     profile: Profile,
     sandbox: Object<SandboxView>,
     semantic_evidence: Vec<Object<SemanticEvidenceProvenance<Object<SemanticEvidenceProducer>>>>,
-    trusted_time_source: Object<VerifiedTrustedTime<Object<TrustedTimeStatement>>>,
+    trusted_time_source: Object<VerifiedTrustedTime<Map<String, Value>>>,
     waiver_bundle: Object<ControlProvenance>,
 }
 
@@ -46,17 +41,14 @@ struct SandboxView {
 }
 
 pub(super) fn accept(
-    wire: &[u8],
+    payload: &Value,
     evaluation_instant: Option<&str>,
     identity_digest: Digest,
     expected: &SealedExpectations,
 ) -> Result<(), AcceptanceDefect> {
-    let mut deserializer = serde_json::Deserializer::from_slice(wire);
-    // The caller already applied the strict parser's nesting limit.
-    deserializer.disable_recursion_limit();
-    let envelope = ReportEnvelope::<ControlPayload>::deserialize(&mut deserializer)
-        .map_err(|_defect| AcceptanceDefect::SealedControls)?;
-    let controls = envelope.payload.controls.fields;
+    let payload =
+        ControlPayload::deserialize(payload).map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    let controls = payload.controls.fields;
     if controls.profile != expected.profile {
         return Err(AcceptanceDefect::SealedControls);
     }
@@ -97,7 +89,11 @@ pub(super) fn accept(
         return Err(AcceptanceDefect::SealedControls);
     }
     let constraint = controls.execution_constraint.fields;
-    let (_, descriptor_digest) = canonical_execution_constraint(&constraint.descriptor.fields)
+    let descriptor = ExecutionConstraintDescriptor::deserialize(MapDeserializer::new(
+        constraint.descriptor.into_iter(),
+    ))
+    .map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    let (_, descriptor_digest) = canonical_execution_constraint(&descriptor)
         .map_err(|_defect| AcceptanceDefect::SealedControls)?;
     if constraint.descriptor_digest != expected.execution_constraint.digest
         || constraint.trust_source != expected.execution_constraint.trust_source
@@ -106,7 +102,9 @@ pub(super) fn accept(
         return Err(AcceptanceDefect::SealedControls);
     }
     let trusted = controls.trusted_time_source.fields;
-    let statement = trusted.statement.fields;
+    let statement =
+        TrustedTimeStatement::deserialize(MapDeserializer::new(trusted.statement.into_iter()))
+            .map_err(|_defect| AcceptanceDefect::SealedControls)?;
     let (_, statement_digest) =
         canonical_trusted_time(&statement).map_err(|_defect| AcceptanceDefect::SealedControls)?;
     if trusted.statement_digest != expected.trusted_time_digest

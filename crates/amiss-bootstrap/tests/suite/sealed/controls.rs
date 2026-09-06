@@ -65,10 +65,25 @@ fn sealed_reports_use_the_closed_wire_envelope() {
     set(&mut envelope, "future", Value::Bool(true));
     let mut wire = canonical(&envelope);
     wire.push(b'\n');
-    assert_eq!(
-        accept(&wire, &expectations),
-        Err(AcceptanceDefect::SealedControls)
-    );
+    assert_eq!(accept(&wire, &expectations), Err(AcceptanceDefect::Shape));
+}
+
+#[test]
+fn embedded_closed_controls_do_not_accept_unknown_members() {
+    for (control, body) in [
+        ("execution_constraint", "descriptor"),
+        ("trusted_time_source", "statement"),
+    ] {
+        let deviation = Deviation::post(move |payload| {
+            let body = entry(entry(entry(payload, "controls"), control), body);
+            set(body, "future", Value::Null);
+        });
+        assert_eq!(
+            refused(deviation),
+            AcceptanceDefect::SealedControls,
+            "{control}"
+        );
+    }
 }
 
 #[test]
