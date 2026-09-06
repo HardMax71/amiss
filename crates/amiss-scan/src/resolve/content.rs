@@ -2,8 +2,7 @@ use std::collections::BTreeMap;
 
 use amiss_git::{ObjectKind, ValueCap};
 use amiss_wire::controls::{GitMode, ResourceName};
-use amiss_wire::digest::{Digest, hb, hj};
-use amiss_wire::json::Value;
+use amiss_wire::digest::{Digest, hb, hj_serde};
 use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::resolution::BlobContent;
 
@@ -13,6 +12,12 @@ use crate::{Error, lfs};
 use super::anchor::Anchors;
 use super::line::LineRange;
 use super::{RAW_EVIDENCE_DOMAIN, Resolver, TARGET_PROJECTION_DOMAIN, TargetCache};
+
+#[derive(serde::Serialize)]
+struct TargetProjection {
+    git_mode: GitMode,
+    raw_digest: Digest,
+}
 
 #[derive(Debug)]
 pub(super) struct CachedContent {
@@ -53,20 +58,21 @@ impl Content {
     }
 }
 
-pub(super) fn target_projection(domain: &str, mode: GitMode, raw_digest: Digest) -> Digest {
-    hj(
-        domain,
-        &Value::object(vec![
-            (
-                "git_mode".to_owned(),
-                Value::string(mode.as_ref().to_owned()),
-            ),
-            (
-                "raw_digest".to_owned(),
-                Value::string(raw_digest.to_string()),
-            ),
-        ]),
-    )
+pub(super) fn target_projection(
+    domain: &str,
+    mode: GitMode,
+    raw_digest: Digest,
+) -> Result<Digest, Error> {
+    hj_serde(domain, |mut writer| {
+        serde_json_canonicalizer::to_writer(
+            &TargetProjection {
+                git_mode: mode,
+                raw_digest,
+            },
+            &mut writer,
+        )
+    })
+    .map_err(|_defect| Error::Internal)
 }
 
 pub(super) fn content_cache<'a>(
@@ -112,7 +118,7 @@ pub(super) fn read_target(
     } else {
         Content::Ordinary {
             raw_digest: raw,
-            projection_digest: target_projection(TARGET_PROJECTION_DOMAIN, mode, raw),
+            projection_digest: target_projection(TARGET_PROJECTION_DOMAIN, mode, raw)?,
             body: object.body.into_boxed_slice(),
             line_projections: BTreeMap::new(),
             anchors: Anchors::Unread,

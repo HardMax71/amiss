@@ -23,6 +23,13 @@ pub enum ProtectedState {
 
 pub const PROTECTED_CONTROL_EVIDENCE_DOMAIN: &str = "amiss/scanner-protected-control-evidence";
 
+#[derive(serde::Serialize)]
+struct ProtectedControlEvidence<'a> {
+    git_mode: GitMode,
+    path: &'a str,
+    raw_digest: Digest,
+}
+
 /// Reads one protected control path's state from a snapshot: the evidence
 /// digest binds path, mode, and raw digest; the blob is size-checked under
 /// the selected-control resources and never parsed or executed.
@@ -61,24 +68,16 @@ pub fn protected_state(
         return Ok(ProtectedState::Unsupported);
     }
     let raw = amiss_wire::digest::hb(crate::resolve::RAW_EVIDENCE_DOMAIN, &object.body);
-    let descriptor = amiss_wire::json::Value::object(vec![
-        (
-            "git_mode".to_owned(),
-            amiss_wire::json::Value::string(mode.as_ref().to_owned()),
-        ),
-        (
-            "path".to_owned(),
-            amiss_wire::json::Value::string(path.to_owned()),
-        ),
-        (
-            "raw_digest".to_owned(),
-            amiss_wire::json::Value::string(raw.to_string()),
-        ),
-    ]);
-    Ok(ProtectedState::Present(amiss_wire::digest::hj(
-        PROTECTED_CONTROL_EVIDENCE_DOMAIN,
-        &descriptor,
-    )))
+    let descriptor = ProtectedControlEvidence {
+        git_mode: *mode,
+        path,
+        raw_digest: raw,
+    };
+    amiss_wire::digest::hj_serde(PROTECTED_CONTROL_EVIDENCE_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&descriptor, &mut writer)
+    })
+    .map(ProtectedState::Present)
+    .map_err(|_defect| Error::Internal)
 }
 
 /// The floor inventory obligation over the candidate: every protected
