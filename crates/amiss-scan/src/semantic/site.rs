@@ -9,9 +9,7 @@ use amiss_wire::report::model::{
     BrokenRedirectFactEvidenceKind, BrokenRedirectReason, DuplicateRouteFactEvidenceKind,
     FindingFactEvidence,
 };
-use amiss_wire::semantic::observation::{
-    SITE_GENERATED_ROUTE, SITE_NAVIGATION, SITE_REDIRECT, SITE_ROUTE, SiteBuildObservation,
-};
+use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 
 use super::{
     SiteClaim, SiteDefect, SiteEvaluation, SiteNavigation, SitePageBacking, SiteRoute, SiteTarget,
@@ -31,24 +29,20 @@ struct SiteDefectIdentity<'a, K> {
 pub(super) fn site_build_inputs(
     routes: &mut Arc<BTreeMap<String, SiteRoute>>,
     path: &str,
-    observations: Vec<serde_json::Value>,
+    observations: Vec<Observation>,
     item_count: &mut usize,
 ) -> Result<SiteEvaluation, Error> {
     let mut navigation = None;
     for (index, observation) in observations.into_iter().enumerate() {
         let observation_path = format!("{path}.payload.observations[{index}]");
-        let kind = observation.get("kind").and_then(serde_json::Value::as_str);
-        if !matches!(
-            kind,
-            Some(SITE_ROUTE | SITE_GENERATED_ROUTE | SITE_REDIRECT | SITE_NAVIGATION)
-        ) {
-            continue;
-        }
+        let Observation::Site(observation) = observation else {
+            return fail(&observation_path, ErrorKind::Inconsistent);
+        };
         let digest = hj_serde(SITE_CLAIM_DOMAIN, |mut writer| {
             serde_json_canonicalizer::to_writer(&observation, &mut writer)
         })
         .map_err(|_defect| Error::new(&observation_path, ErrorKind::InvalidValue))?;
-        match amiss_wire::de::deserialize_value(&observation_path, observation)? {
+        match observation {
             SiteBuildObservation::Navigation {
                 root,
                 manifest,
