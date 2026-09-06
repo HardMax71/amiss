@@ -28,7 +28,10 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
     .unwrap();
     let bytes = template(source).unwrap();
     let parsed = amiss_wire::semantic::parse_template(&bytes).unwrap();
-    assert_eq!(parsed.producer.kind.as_str(), "record-set");
+    assert_eq!(
+        parsed.producer.kind,
+        amiss_wire::semantic::SemanticProducerKind::RecordSet
+    );
     assert_eq!(parsed.producer.identity.as_str(), "test-public-api");
     assert_eq!(parsed.producer.version, "1");
     assert!(parsed.complete);

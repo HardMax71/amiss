@@ -37,9 +37,7 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
     let template = SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
-            kind: amiss_wire::semantic::observation::SITE_BUILD_PRODUCER
-                .parse()
-                .unwrap(),
+            kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
             identity: "fixture".parse().unwrap(),
             version: amiss_wire::semantic::observation::SITE_BUILD_VERSION.to_owned(),
             context_digest: hb("test", b"context"),

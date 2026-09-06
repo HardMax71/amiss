@@ -1866,7 +1866,7 @@
       ],
       "properties": {
         "kind": {
-          "$ref": "#/$defs/ArtifactId"
+          "enum": ["sphinx-inventory-set", "site-build", "record-set"]
         },
         "identity": {
           "$ref": "#/$defs/ArtifactId"

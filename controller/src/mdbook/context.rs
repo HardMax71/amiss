@@ -3,7 +3,8 @@ use std::path::{Component, Path, PathBuf};
 
 use amiss_wire::digest::{Digest, hb, hj_serde};
 use amiss_wire::model::{ArtifactId, RepoPathText};
-use amiss_wire::semantic::observation::{SITE_BUILD_PRODUCER, SITE_BUILD_VERSION};
+use amiss_wire::semantic::SemanticProducerKind;
+use amiss_wire::semantic::observation::SITE_BUILD_VERSION;
 use serde::Deserialize as _;
 use url::Url;
 
@@ -51,14 +52,12 @@ pub(super) fn site_build_context(
     let context_digest = serde_json_canonicalizer::to_vec(site)
         .map(|canonical| hb(CONTEXT_DOMAIN, &canonical))
         .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
-    let producer_kind =
-        ArtifactId::new(SITE_BUILD_PRODUCER.to_owned()).ok_or(MdBookEvidenceError::Evidence)?;
     let producer_identity = ArtifactId::new("amiss-controller-mdbook-html".to_owned())
         .ok_or(MdBookEvidenceError::Evidence)?;
     Ok((
         crate::SemanticEvidenceExpectation {
             acquisition_identity: producer_identity.clone(),
-            producer_kind,
+            producer_kind: SemanticProducerKind::SiteBuild,
             producer_identity,
             producer_version: SITE_BUILD_VERSION.to_owned(),
             context_digest,

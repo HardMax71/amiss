@@ -13,7 +13,9 @@ use amiss_wire::requests::{
     ControlsRequest, ControlsRequestSchema, RequestTrust, SuppliedControl,
     SuppliedSemanticEvidence, SuppliedTime,
 };
-use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
+use amiss_wire::semantic::{
+    PayloadSchema, SemanticEvidence, SemanticProducer, SemanticProducerKind, SemanticSubject,
+};
 
 const FLOOR: &str = r#"{
   "schema": "amiss/organization-floor",
@@ -78,7 +80,7 @@ fn supplied<T: serde::de::DeserializeOwned>(doc: &str, expected: Digest) -> Supp
 }
 
 fn semantic_evidence(
-    producer_kind: &str,
+    producer_kind: SemanticProducerKind,
     producer_version: &str,
     input_digest: Digest,
     source_report_payload_digest: Option<Digest>,
@@ -92,7 +94,7 @@ fn semantic_evidence(
                 .map_or(Nullable::Null, Nullable::Value),
         },
         producer: SemanticProducer {
-            kind: ArtifactId::new(producer_kind.to_owned()).expect("the producer kind is valid"),
+            kind: producer_kind,
             identity: ArtifactId::new("amiss-test".to_owned())
                 .expect("the producer identity is valid"),
             version: producer_version.to_owned(),
@@ -226,7 +228,7 @@ fn a_wrong_constraint_digest_is_refused() {
 #[test]
 fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
     let valid = semantic_evidence(
-        "sphinx-inventory-set",
+        SemanticProducerKind::SphinxInventorySet,
         "1",
         hb("test/inventory", b"inventory"),
         None,
@@ -265,7 +267,7 @@ fn record_sets_accept_complete_empty_and_partial_typed_rows() {
         (false, vec![("amiss::check", "pub fn check()")]),
     ] {
         let mut evidence = semantic_evidence(
-            "record-set",
+            SemanticProducerKind::RecordSet,
             "1",
             hb("test/records", b"rust public api"),
             None,
@@ -281,7 +283,7 @@ fn record_sets_accept_complete_empty_and_partial_typed_rows() {
 #[test]
 fn malformed_record_sets_fail_closed() {
     let valid = semantic_evidence(
-        "record-set",
+        SemanticProducerKind::RecordSet,
         "1",
         hb("test/records", b"rust public api"),
         None,
@@ -330,7 +332,7 @@ fn malformed_record_sets_fail_closed() {
 #[test]
 fn two_envelopes_cannot_claim_the_same_record_set() {
     let mut left = semantic_evidence(
-        "record-set",
+        SemanticProducerKind::RecordSet,
         "1",
         hb("test/records", b"left"),
         None,
@@ -338,7 +340,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
     );
     left.producer.context_digest = hb("test/record-context", b"left");
     let mut right = semantic_evidence(
-        "record-set",
+        SemanticProducerKind::RecordSet,
         "1",
         hb("test/records", b"right"),
         None,
@@ -360,7 +362,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
 #[test]
 fn semantic_evidence_must_match_the_independently_supplied_context() {
     let evidence = semantic_evidence(
-        "sphinx-inventory-set",
+        SemanticProducerKind::SphinxInventorySet,
         "1",
         hb("test/inventory", b"inventory"),
         None,
@@ -381,7 +383,7 @@ fn semantic_evidence_must_match_the_independently_supplied_context() {
 #[test]
 fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let valid = semantic_evidence(
-        "site-build",
+        SemanticProducerKind::SiteBuild,
         "0.5.1",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
@@ -423,7 +425,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         SiteObservation::Page("docs/guide.md", &["intro", "intro"]),
     )];
     let malformed_fragment_redirect = semantic_evidence(
-        "site-build",
+        SemanticProducerKind::SiteBuild,
         "0.5.1",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
@@ -496,7 +498,7 @@ fn site_claims_require_explicit_source_attribution() {
         }),
     ] {
         let evidence = semantic_evidence(
-            "site-build",
+            SemanticProducerKind::SiteBuild,
             "0.5.1",
             hb("test/site-output", b"site output"),
             Some(hb("test/report", b"source report")),
@@ -512,7 +514,7 @@ fn site_claims_require_explicit_source_attribution() {
 #[test]
 fn generated_site_claims_admit_absent_repository_attribution() {
     let evidence = semantic_evidence(
-        "site-build",
+        SemanticProducerKind::SiteBuild,
         "0.5.1",
         hb("test/site-output", b"site output"),
         Some(hb("test/report", b"source report")),
@@ -555,7 +557,7 @@ fn inconsistent_site_navigation_never_becomes_input() {
     ];
     for navigation in cases {
         let evidence = semantic_evidence(
-            "site-build",
+            SemanticProducerKind::SiteBuild,
             "0.5.1",
             hb("test/site-output", b"site output"),
             None,

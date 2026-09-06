@@ -16,7 +16,7 @@ fn controller_binding_preserves_candidate_context_and_unknown_observation_fields
     let template = SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
-            kind: "future-producer".parse().unwrap(),
+            kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
             identity: "fixture".parse().unwrap(),
             version: "1".to_owned(),
             context_digest: hb("test", b"context"),

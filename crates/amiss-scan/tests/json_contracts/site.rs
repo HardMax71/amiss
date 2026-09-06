@@ -7,8 +7,8 @@ use amiss_wire::{
     model::{ObjectFormat, Oid},
     report::{EngineProvenance, FindingKind, model::FindingKeyScope},
     semantic::{
-        SemanticEvidenceTemplate, SemanticProducer, TemplateSchema,
-        observation::{SITE_BUILD_PRODUCER, SITE_BUILD_VERSION},
+        SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind, TemplateSchema,
+        observation::SITE_BUILD_VERSION,
     },
 };
 
@@ -53,7 +53,7 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
         semantic: amiss_scan::semantic::Input::Template(SemanticEvidenceTemplate {
             schema: TemplateSchema::Current,
             producer: SemanticProducer {
-                kind: SITE_BUILD_PRODUCER.parse().unwrap(),
+                kind: SemanticProducerKind::SiteBuild,
                 identity: "fixture".parse().unwrap(),
                 version: SITE_BUILD_VERSION.to_owned(),
                 context_digest: hb("test", b"context"),

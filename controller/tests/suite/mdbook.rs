@@ -114,7 +114,10 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
 
     assert_eq!(parsed.payload.subject.candidate_identity_digest, candidate);
-    assert_eq!(parsed.payload.producer.kind.as_str(), "site-build");
+    assert_eq!(
+        parsed.payload.producer.kind,
+        amiss_wire::semantic::SemanticProducerKind::SiteBuild
+    );
     assert_eq!(parsed.payload.producer.version, "0.5.1");
     assert_eq!(
         parsed.payload.producer.context_digest,

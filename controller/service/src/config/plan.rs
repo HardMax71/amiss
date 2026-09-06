@@ -58,7 +58,7 @@ struct WorkflowArtifactFile {
 #[serde(deny_unknown_fields)]
 struct SemanticEvidenceFile {
     acquisition_identity: String,
-    producer_kind: String,
+    producer_kind: amiss_wire::semantic::SemanticProducerKind,
     producer_identity: String,
     producer_version: String,
     context_digest: String,
@@ -144,8 +144,7 @@ fn load_workflow_artifacts(
                         file.semantic.acquisition_identity.clone(),
                     )
                     .ok_or_else(invalid)?,
-                    producer_kind: ArtifactId::new(file.semantic.producer_kind.clone())
-                        .ok_or_else(invalid)?,
+                    producer_kind: file.semantic.producer_kind,
                     producer_identity: ArtifactId::new(file.semantic.producer_identity.clone())
                         .ok_or_else(invalid)?,
                     producer_version: file.semantic.producer_version.clone(),

@@ -162,7 +162,7 @@ fn every_workflow_identity_member_changes_the_frozen_binding() {
                 ArtifactId::new("other-source".to_owned()).unwrap();
         },
         |artifact| {
-            artifact.semantic.producer_kind = ArtifactId::new("other-kind".to_owned()).unwrap();
+            artifact.semantic.producer_kind = amiss_wire::semantic::SemanticProducerKind::RecordSet;
         },
         |artifact| {
             artifact.semantic.producer_identity =
@@ -182,7 +182,7 @@ fn semantic_template_identity_members_cannot_change_under_a_frozen_plan() {
         |template| template.complete = !template.complete,
         |template| template.producer.context_digest = hb("amiss/test-context", b"other"),
         |template| template.producer.input_digest = hb("amiss/test-input", b"other"),
-        |template| template.producer.kind = ArtifactId::new("other-kind".to_owned()).unwrap(),
+        |template| template.producer.kind = amiss_wire::semantic::SemanticProducerKind::RecordSet,
         |template| {
             template.producer.identity = ArtifactId::new("other-producer".to_owned()).unwrap();
         },
