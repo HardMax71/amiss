@@ -24,6 +24,7 @@ use amiss_wire::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA};
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
 mod controls;
+mod identity;
 
 const CANDIDATE_REF: &str = "refs/heads/topic";
 const TARGET_REF: &str = "refs/heads/main";

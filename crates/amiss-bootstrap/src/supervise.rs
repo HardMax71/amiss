@@ -7,9 +7,10 @@ use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::model::SemanticEvidenceProvenance;
 use amiss_wire::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
-use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, RequestTrust};
+use amiss_wire::requests::RequestTrust;
 
 mod controls;
+mod identity;
 
 /// The exact acceptance defect, most specific first in evaluation order. The
 /// trusted wrapper publishes success only when acceptance returns no defect.
@@ -148,7 +149,7 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
             return Err(AcceptanceDefect::CandidateIdentity);
         }
         if let Some(sealed) = &expectations.sealed {
-            accept_sealed(wire, evaluation, sealed)?;
+            identity::accept(wire, sealed)?;
         }
     }
     let result = member(payload, "result").ok_or(AcceptanceDefect::Shape)?;
@@ -172,43 +173,6 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
         return Err(AcceptanceDefect::FindingCount);
     }
     Ok(exit_code)
-}
-
-fn accept_sealed(
-    wire: &[u8],
-    evaluation: &Value,
-    expected: &SealedExpectations,
-) -> Result<(), AcceptanceDefect> {
-    if text(evaluation, "candidate_ref") != Some(expected.candidate_ref.as_str())
-        || text(evaluation, "target_ref") != Some(expected.target_ref.as_str())
-        || member(evaluation, "trusted_time") != Some(&Value::Bool(true))
-    {
-        return Err(AcceptanceDefect::SealedIdentity);
-    }
-    let Value::Object(evaluation_members) = evaluation else {
-        return Err(AcceptanceDefect::Shape);
-    };
-    let mut identity_members: Vec<(String, Value)> = evaluation_members
-        .iter()
-        .filter(|(name, _value)| name != "evaluation_instant" && name != "trusted_time")
-        .cloned()
-        .collect();
-    identity_members.push((
-        "schema".to_owned(),
-        Value::string(CANDIDATE_IDENTITY_DOMAIN),
-    ));
-    let identity = Value::object(identity_members);
-    let identity_digest = hj(CANDIDATE_IDENTITY_DOMAIN, &identity);
-    if identity_digest != expected.candidate_identity_digest {
-        return Err(AcceptanceDefect::SealedIdentity);
-    }
-
-    controls::accept(
-        wire,
-        text(evaluation, "evaluation_instant"),
-        identity_digest,
-        expected,
-    )
 }
 
 /// The watchdog outcome for one spawned engine process.
