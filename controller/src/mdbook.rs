@@ -160,6 +160,7 @@ pub fn mdbook_site_evidence(
         complete: true,
         observations,
     })
+    .map(|(_document, bytes)| bytes)
     .map_err(|_defect| MdBookEvidenceError::Evidence)
 }
 

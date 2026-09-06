@@ -29,7 +29,7 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
     let mut template_bytes = amiss_wire::semantic::template(template.clone())
         .map_err(|_defect| ArtifactError::Corrupt)?;
     template_bytes.push(b'\n');
-    let envelope_bytes = amiss_wire::semantic::bind_template(&template, candidate)
+    let (_document, envelope_bytes) = amiss_wire::semantic::bind_template(&template, candidate)
         .map_err(|_defect| ArtifactError::Corrupt)?;
     let payload_digest = amiss_wire::semantic::parse(&envelope_bytes)
         .map_err(|_defect| ArtifactError::Corrupt)?

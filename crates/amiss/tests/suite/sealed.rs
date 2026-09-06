@@ -330,7 +330,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     semantic.producer.input_digest = hb("amiss-test/input", b"inventory bytes");
     let producer = semantic.producer.clone();
     let expected_context_digest = semantic.producer.context_digest;
-    let evidence = amiss_wire::semantic::envelope(semantic).unwrap();
+    let (_document, evidence) = amiss_wire::semantic::envelope(semantic).unwrap();
     let expected_provenance = vec![SemanticEvidenceProvenance {
         payload_digest: amiss_wire::semantic::parse(&evidence)
             .unwrap()
@@ -430,7 +430,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
     )
     .unwrap();
     let context_digest = hb("amiss-test/site-context", b"default/current");
-    let evidence = amiss_wire::semantic::envelope(SemanticEvidence {
+    let (_document, evidence) = amiss_wire::semantic::envelope(SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
             candidate_identity_digest: identity,
@@ -738,7 +738,7 @@ fn assert_unlinked(envelope: &serde_json::Value, expected: &[&str]) {
 fn stale_intersphinx_evidence_refuses_the_run() {
     let (fixture, evaluation, semantic) = intersphinx_case();
     let expected_context_digest = semantic.producer.context_digest;
-    let stale = amiss_wire::semantic::envelope(SemanticEvidence {
+    let (_document, stale) = amiss_wire::semantic::envelope(SemanticEvidence {
         subject: SemanticSubject {
             candidate_identity_digest: hb("amiss-test/stale", b"another candidate"),
             source_report_payload_digest: Nullable::Null,

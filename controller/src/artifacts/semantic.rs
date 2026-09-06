@@ -59,7 +59,7 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
             return Err(ArtifactError::Corrupt);
         }
         candidate_identity = Some(candidate);
-        let rebound = amiss_wire::semantic::bind_template(&template, candidate)
+        let (_document, rebound) = amiss_wire::semantic::bind_template(&template, candidate)
             .map_err(|_defect| ArtifactError::Corrupt)?;
         if rebound != envelope_bytes {
             return Err(ArtifactError::Corrupt);

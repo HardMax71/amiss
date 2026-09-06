@@ -132,7 +132,7 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
         Input::None => return Ok(Context::default()),
         Input::Bound(inputs) => inputs,
         Input::Template(template) => {
-            let bytes = amiss_wire::semantic::bind_template(template, candidate)
+            let (_document, bytes) = amiss_wire::semantic::bind_template(template, candidate)
                 .map_err(|error| crate::request::configuration_detail(&error))?;
             let value = serde_json::from_slice(&bytes).map_err(|_defect| {
                 crate::request::configuration_detail(&amiss_wire::de::Error::new(

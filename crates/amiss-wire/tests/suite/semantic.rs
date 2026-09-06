@@ -97,11 +97,11 @@ fn real_inventory_and_site_shapes_share_an_envelope_without_sharing_vocabularies
         ("anchors", serde_json::json!(["the-external-assessment"])),
     ]);
 
-    let first = parse(&envelope(evidence(vec![inventory])).unwrap()).unwrap();
+    let first = parse(&envelope(evidence(vec![inventory])).unwrap().1).unwrap();
     let mut site = evidence(vec![route]);
     site.producer.kind = id("site-build");
     site.producer.identity = id("amiss-site-output");
-    let second = parse(&envelope(site).unwrap()).unwrap();
+    let second = parse(&envelope(site).unwrap().1).unwrap();
 
     assert_eq!(
         first.payload.observations[0]
@@ -127,7 +127,7 @@ fn construction_sorts_observations_and_binds_the_payload() {
         ("kind", serde_json::json!("site-route")),
         ("route", serde_json::json!("/z")),
     ]);
-    let bytes = envelope(evidence(vec![z, a])).unwrap();
+    let (_document, bytes) = envelope(evidence(vec![z, a])).unwrap();
     let parsed = parse(&bytes).unwrap();
     let value = amiss_wire::json::parse(&bytes).unwrap();
     assert_eq!(parsed.payload.observations[0]["route"], "/a");
@@ -161,11 +161,14 @@ fn typed_templates_borrow_nonclone_observations_through_sorting_and_binding() {
         ]
         .into(),
     };
-    let first = bind_template(&input, digest(A)).unwrap();
-    let second = bind_template(&input, digest(B)).unwrap();
+    let (first_document, first) = bind_template(&input, digest(A)).unwrap();
+    let (second_document, second) = bind_template(&input, digest(B)).unwrap();
     let first = parse(&first).unwrap();
     let second = parse(&second).unwrap();
     assert_eq!(input.observations[0].value, "z");
+    assert_eq!(first_document.payload.observations[0].value, "a");
+    assert_eq!(first_document.payload_digest, first.payload_digest);
+    assert_eq!(second_document.payload_digest, second.payload_digest);
     assert_eq!(first.payload.observations[0]["value"], "a");
     assert_eq!(first.payload.observations, second.payload.observations);
     assert_ne!(first.payload_digest, second.payload_digest);
@@ -191,7 +194,7 @@ fn observation_headers_are_deserialized_without_closing_unknown_fact_fields() {
     }
     let row = serde_json::json!({ "kind": "future-fact", "arbitrary": { "new": [true, null] } });
     assert_eq!(
-        parse(&envelope(evidence(vec![row.clone()])).unwrap())
+        parse(&envelope(evidence(vec![row.clone()])).unwrap().1)
             .unwrap()
             .payload
             .observations,
@@ -207,7 +210,7 @@ fn candidate_free_templates_bind_only_when_the_candidate_is_known() {
         ("records", serde_json::json!([])),
     ]);
     let input = evidence_template(vec![row.clone()]);
-    let bytes = bind_template(&input, digest(A)).unwrap();
+    let (_document, bytes) = bind_template(&input, digest(A)).unwrap();
     let parsed = parse(&bytes).unwrap();
     assert_eq!(parsed.payload.subject.candidate_identity_digest, digest(A));
     assert_eq!(
@@ -262,7 +265,7 @@ fn template_observations_must_already_be_canonical_sets() {
         ("route", serde_json::json!("/z")),
     ]);
     let input = evidence_template(vec![a, z]);
-    let bytes = bind_template(&input, digest(A)).unwrap();
+    let (_document, bytes) = bind_template(&input, digest(A)).unwrap();
     let mut value = amiss_wire::json::parse(&bytes).unwrap();
     let payload = member_mut(&mut value, "payload");
     let observations = member_mut(payload, "observations").clone();
@@ -324,7 +327,7 @@ fn serialized_semantic_bytes_preserve_unicode_order_and_escaping() {
     });
     for bytes in [
         template(evidence_template(vec![row.clone()])).unwrap(),
-        envelope(evidence(vec![row])).unwrap(),
+        envelope(evidence(vec![row])).unwrap().1,
     ] {
         let value = amiss_wire::json::parse(&bytes).unwrap();
         assert_eq!(bytes, canonical(&value));
@@ -379,7 +382,7 @@ fn incomplete_pre_report_evidence_round_trips_without_claiming_absence() {
     let mut input = evidence(Vec::new());
     input.subject.source_report_payload_digest = Nullable::Null;
     input.complete = false;
-    let parsed = parse(&envelope(input).unwrap()).unwrap();
+    let parsed = parse(&envelope(input).unwrap().1).unwrap();
     assert_eq!(
         parsed.payload.subject.source_report_payload_digest,
         Nullable::Null
@@ -410,7 +413,7 @@ fn unknown_observation_kinds_remain_inert_data() {
         ("kind", serde_json::json!("future-producer-fact")),
         ("answer", serde_json::json!(42)),
     ]);
-    let parsed = parse(&envelope(evidence(vec![row])).unwrap()).unwrap();
+    let parsed = parse(&envelope(evidence(vec![row])).unwrap().1).unwrap();
     assert_eq!(
         parsed.payload.observations[0]
             .get("kind")
@@ -429,7 +432,7 @@ fn tampered_and_unsorted_payloads_are_refused() {
         ("kind", serde_json::json!("site-route")),
         ("route", serde_json::json!("/z")),
     ]);
-    let bytes = envelope(evidence(vec![a, z])).unwrap();
+    let (_document, bytes) = envelope(evidence(vec![a, z])).unwrap();
     let mut value = amiss_wire::json::parse(&bytes).unwrap();
     reverse_observations(&mut value);
     assert_eq!(
