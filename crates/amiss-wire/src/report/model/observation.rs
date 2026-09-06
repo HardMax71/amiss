@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::controls::{SourceConstruct, TargetKind};
@@ -13,20 +15,34 @@ pub use crate::resolution::{
 
 use super::RepoPath;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ObservationIdInputSchema {
-    #[serde(rename = "amiss/scanner-observation-id-input")]
+    #[strum(serialize = "amiss/scanner-observation-id-input")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum StructuralAddressSchema {
-    #[serde(rename = "amiss/scanner-structural-address")]
+    #[strum(serialize = "amiss/scanner-structural-address")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::IntoStaticStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::IntoStaticStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum AddressKind {
     AsciidocBlockPath,
@@ -101,15 +117,19 @@ pub enum ResolutionContent {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum BlobResolutionTargetKind {
-    #[serde(rename = "blob")]
+    #[strum(serialize = "blob")]
     Blob,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum TreeResolutionTargetKind {
-    #[serde(rename = "tree")]
+    #[strum(serialize = "tree")]
     Tree,
 }
 
@@ -128,27 +148,35 @@ pub enum ResolutionTarget<P = RepoPath> {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum HeadingAnchorNotFoundResolutionReason {
-    #[serde(rename = "heading-anchor-not-found")]
+    #[strum(serialize = "heading-anchor-not-found")]
     HeadingAnchorNotFound,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum LabelNotDeclaredResolutionReason {
-    #[serde(rename = "label-not-declared")]
+    #[strum(serialize = "label-not-declared")]
     LabelNotDeclared,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum LineFragmentOutOfRangeResolutionReason {
-    #[serde(rename = "line-fragment-out-of-range")]
+    #[strum(serialize = "line-fragment-out-of-range")]
     LineFragmentOutOfRange,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum PathNotFoundResolutionReason {
-    #[serde(rename = "path-not-found")]
+    #[strum(serialize = "path-not-found")]
     PathNotFound,
 }
 
@@ -195,21 +223,27 @@ pub enum UnsupportedSemanticsResolution<P = RepoPath> {
     SiteRoute,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum KnownCommitVersionScopeKind {
-    #[serde(rename = "known-commit")]
+    #[strum(serialize = "known-commit")]
     KnownCommit,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum KnownPathVersionScopeKind {
-    #[serde(rename = "known-path")]
+    #[strum(serialize = "known-path")]
     KnownPath,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum UnknownPathVersionScopeKind {
-    #[serde(rename = "unknown-path")]
+    #[strum(serialize = "unknown-path")]
     UnknownPath,
 }
 
@@ -230,57 +264,75 @@ pub enum VersionScope<P = RepoPath> {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum DeclaredUntrackedResolutionKind {
-    #[serde(rename = "declared-untracked")]
+    #[strum(serialize = "declared-untracked")]
     DeclaredUntracked,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ExternalResolutionKind {
-    #[serde(rename = "external")]
+    #[strum(serialize = "external")]
     External,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum InvalidResolutionKind {
-    #[serde(rename = "invalid")]
+    #[strum(serialize = "invalid")]
     Invalid,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum MissingResolutionKind {
-    #[serde(rename = "missing")]
+    #[strum(serialize = "missing")]
     Missing,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ResolvedResolutionKind {
-    #[serde(rename = "resolved")]
+    #[strum(serialize = "resolved")]
     Resolved,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum TypeMismatchResolutionKind {
-    #[serde(rename = "type-mismatch")]
+    #[strum(serialize = "type-mismatch")]
     TypeMismatch,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum UnsupportedSemanticsResolutionKind {
-    #[serde(rename = "unsupported-semantics")]
+    #[strum(serialize = "unsupported-semantics")]
     UnsupportedSemantics,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum UnsupportedTargetResolutionKind {
-    #[serde(rename = "unsupported-target")]
+    #[strum(serialize = "unsupported-target")]
     UnsupportedTarget,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum UnsupportedVersionResolutionKind {
-    #[serde(rename = "unsupported-version")]
+    #[strum(serialize = "unsupported-version")]
     UnsupportedVersion,
 }
 
@@ -355,8 +407,18 @@ pub struct CorrelationAlternatives<P = RepoPath, R = Resolution<P>> {
     pub candidate: Vec<Occurrence<P, R>>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Correlation {
     Ambiguous,
@@ -365,8 +427,18 @@ pub enum Correlation {
     None,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum CorrelationReason {
     ExactDocumentRenameUnchangedProjection,
@@ -378,8 +450,18 @@ pub enum CorrelationReason {
     SameIntentUnchangedProjection,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum SourceChange {
     Added,
@@ -389,8 +471,18 @@ pub enum SourceChange {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum TargetChange {
     BecameMissing,
@@ -400,8 +492,18 @@ pub enum TargetChange {
     NotComparable,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Impact {
     DependencyAndSubjectCochanged,

@@ -1,18 +1,27 @@
 use crate::digest::Digest;
 use crate::model::Oid;
 use serde::{Deserialize, Serialize};
-use strum::{AsRefStr, EnumDiscriminants, EnumIter, EnumString};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{AsRefStr, Display, EnumDiscriminants, EnumIter, EnumString};
 
 /// The two ordinary Git blob modes. Trees, symlinks, and gitlinks are
 /// represented by other target types and cannot be smuggled into a blob.
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter, Serialize, Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    AsRefStr,
+    EnumString,
+    EnumIter,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum BlobMode {
-    #[serde(rename = "100644")]
     #[strum(serialize = "100644")]
     Regular,
-    #[serde(rename = "100755")]
     #[strum(serialize = "100755")]
     Executable,
 }
@@ -192,9 +201,18 @@ pub enum VersionScope<P> {
 /// A syntax defect that prevents a reference from identifying a repository or
 /// external target.
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter, Serialize, Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    AsRefStr,
+    EnumString,
+    EnumIter,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
-#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum InvalidReference {
     Uri,
@@ -210,9 +228,18 @@ pub enum InvalidReference {
 /// References that are valid but intentionally outside the evaluated
 /// repository.
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter, Serialize, Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    AsRefStr,
+    EnumString,
+    EnumIter,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
-#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum ExternalReference {
     Url,
