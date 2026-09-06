@@ -412,6 +412,87 @@ fn all_public_contract_examples_clear_their_schema_and_registered_reader() {
     );
 }
 
+#[test]
+fn public_readers_reject_object_shaped_string_tags() {
+    let mut defects = Vec::new();
+    let mut checked = 0_usize;
+
+    for (contract_name, schema_path, example_path) in public_schema_examples() {
+        let schema: serde_json::Value =
+            serde_json::from_slice(&fs::read(schema_path).unwrap()).unwrap();
+        let example_bytes = fs::read(example_path).unwrap();
+        let example: serde_json::Value = serde_json::from_slice(&example_bytes).unwrap();
+        let validator = jsonschema::validator_for(&schema).unwrap();
+        assert!(validator.is_valid(&example), "{contract_name}");
+        assert_eq!(example_reader_defect(&contract_name, &example_bytes), None);
+
+        let payload_domain = example
+            .pointer("/payload/schema")
+            .and_then(serde_json::Value::as_str)
+            .filter(|_| example.get("payload_digest").is_some());
+        let mut pending = vec![(jsonschema::paths::Location::new(), &example)];
+        while let Some((location, value)) = pending.pop() {
+            match value {
+                serde_json::Value::Object(members) => {
+                    pending.extend(
+                        members
+                            .iter()
+                            .map(|(key, value)| (location.join(key), value)),
+                    );
+                }
+                serde_json::Value::Array(items) => {
+                    pending.extend(
+                        items
+                            .iter()
+                            .enumerate()
+                            .map(|(index, value)| (location.join(index), value)),
+                    );
+                }
+                serde_json::Value::String(tag) => {
+                    let mut mutation = example.clone();
+                    *mutation.pointer_mut(location.as_str()).unwrap() =
+                        serde_json::json!({tag: null});
+                    if validator.is_valid(&mutation) {
+                        continue;
+                    }
+                    let mut candidates = vec![serde_json::to_vec(&mutation).unwrap()];
+                    // Readers hash either the original payload or its typed projection.
+                    if let Some(domain) = payload_domain
+                        && location.as_str().starts_with("/payload/")
+                    {
+                        let payload =
+                            serde_json_canonicalizer::to_vec(&mutation["payload"]).unwrap();
+                        mutation["payload_digest"] =
+                            serde_json::to_value(amiss_wire::digest::hb(domain, &payload)).unwrap();
+                        assert!(
+                            !validator.is_valid(&mutation),
+                            "{contract_name} at {location}"
+                        );
+                        candidates.push(serde_json::to_vec(&mutation).unwrap());
+                    }
+                    checked = checked.saturating_add(1);
+                    if candidates
+                        .iter()
+                        .any(|bytes| example_reader_defect(&contract_name, bytes).is_none())
+                    {
+                        defects.push(format!("{contract_name} at {location}"));
+                    }
+                }
+                serde_json::Value::Null
+                | serde_json::Value::Bool(_)
+                | serde_json::Value::Number(_) => {}
+            }
+        }
+    }
+
+    assert!(checked > 0, "no schema-rejected string mutations checked");
+    assert!(
+        defects.is_empty(),
+        "readers accepted object-shaped strings rejected by their schemas:\n{}",
+        defects.join("\n"),
+    );
+}
+
 /// The example the last release shipped, refreshed by the release workflow,
 /// must keep clearing the rolling schema and reader: additions leave it
 /// clean, so a failure here is a payload reshape, which the frozen major
