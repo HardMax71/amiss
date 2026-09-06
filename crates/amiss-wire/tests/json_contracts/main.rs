@@ -9,6 +9,7 @@ use strum::IntoEnumIterator;
 mod relation_fixture;
 
 mod control_tags;
+mod external_evidence;
 mod external_reader;
 mod report_identity;
 mod report_reader;
@@ -190,7 +191,15 @@ fn the_external_examples_match_their_typed_sources() {
     );
     let external_evidence_bytes =
         fs::read(examples.join("scanner-external-evidence.json")).unwrap();
-    let external_evidence = external::parse_evidence(&external_evidence_bytes).unwrap();
+    let (external_evidence, evidence_digest) =
+        external::parse_evidence(&external_evidence_bytes).unwrap();
+    assert_eq!(
+        evidence_digest,
+        amiss_wire::digest::hj(
+            external::EVIDENCE_SCHEMA,
+            &json::parse(&external_evidence_bytes).unwrap()
+        )
+    );
     assert_eq!(
         external::evidence(&external_evidence).unwrap(),
         json::canonical(&json::parse(&external_evidence_bytes).unwrap())
