@@ -10,6 +10,7 @@ use amiss_controller_fixtures::semantic::semantic_input_artifact;
 use amiss_wire::digest::sha256;
 
 mod relation_binding;
+mod semantic_binding;
 
 #[test]
 fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
