@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::{Profile, root};
 use crate::de::{self, Error, ErrorKind, fail};
@@ -6,9 +8,11 @@ use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentit
 
 use super::RequestMode;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum EvaluationRequestSchema {
-    #[serde(rename = "amiss/scanner-evaluation-request")]
+    #[strum(serialize = "amiss/scanner-evaluation-request")]
     Current,
 }
 

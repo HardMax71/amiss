@@ -1,6 +1,8 @@
 use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::{provider_run_id_valid, root};
 use crate::de::{self, Error, ErrorKind};
@@ -45,27 +47,31 @@ pub const REPOSITORY_HANDLE_ORDINAL: i64 = 3;
     Debug,
     PartialEq,
     Eq,
-    Serialize,
-    Deserialize,
+    Display,
+    SerializeDisplay,
+    DeserializeFromStr,
     strum::AsRefStr,
-    strum::EnumString,
+    EnumString,
     strum::IntoStaticStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum RequestMode {
     CommitPair,
     Index,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum SnapshotSchema {
-    #[serde(rename = "amiss/scanner-snapshot-request")]
+    #[strum(serialize = "amiss/scanner-snapshot-request")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum SnapshotMaterialization {
     GitObjects,
     Index,
@@ -154,12 +160,12 @@ pub struct SuppliedControl {
     Debug,
     PartialEq,
     Eq,
-    serde_with::SerializeDisplay,
-    serde_with::DeserializeFromStr,
+    SerializeDisplay,
+    DeserializeFromStr,
     strum::AsRefStr,
-    strum::EnumString,
+    EnumString,
     strum::IntoStaticStr,
-    strum::Display,
+    Display,
 )]
 #[strum(serialize_all = "kebab-case")]
 pub enum RequestTrust {
@@ -188,10 +194,21 @@ pub struct SuppliedSemanticEvidence {
     pub expected_context_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
 pub enum ControlsRequestSchema {
     #[default]
-    #[serde(rename = "amiss/scanner-controls-request")]
+    #[strum(serialize = "amiss/scanner-controls-request")]
     Current,
 }
 
