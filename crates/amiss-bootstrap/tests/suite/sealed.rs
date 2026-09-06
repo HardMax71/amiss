@@ -279,9 +279,9 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
         patch(&mut sealed);
     }
     let expectations = Expectations {
-        engine_digest,
-        base_commit,
-        candidate_commit: Some(candidate_commit),
+        engine_digest: engine_digest.parse().unwrap(),
+        base_commit: base_commit.parse().unwrap(),
+        candidate_commit: Some(candidate_commit.parse().unwrap()),
         sealed: Some(sealed),
     };
     (wire, expectations)

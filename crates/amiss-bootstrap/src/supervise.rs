@@ -2,15 +2,17 @@ use std::process::{Child, ExitStatus};
 use std::time::{Duration, Instant};
 
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::{Digest, hj};
-use amiss_wire::json::{Value, canonical, parse};
-use amiss_wire::model::RepositoryIdentity;
+use amiss_wire::digest::Digest;
+use amiss_wire::model::{Oid, RepositoryIdentity};
 use amiss_wire::report::model::SemanticEvidenceProvenance;
-use amiss_wire::report::{ENVELOPE_SCHEMA, PAYLOAD_SCHEMA};
 use amiss_wire::requests::RequestTrust;
 
 mod controls;
 mod identity;
+mod model;
+mod read;
+
+pub use read::accept;
 
 /// The exact acceptance defect, most specific first in evaluation order. The
 /// trusted wrapper publishes success only when acceptance returns no defect.
@@ -44,9 +46,9 @@ pub enum AcceptanceDefect {
 /// requested.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Expectations {
-    pub engine_digest: String,
-    pub base_commit: String,
-    pub candidate_commit: Option<String>,
+    pub engine_digest: Digest,
+    pub base_commit: Oid,
+    pub candidate_commit: Option<Oid>,
     pub sealed: Option<SealedExpectations>,
 }
 
@@ -76,103 +78,6 @@ pub struct SealedExpectations {
 pub struct SealedControlExpectation {
     pub digest: Digest,
     pub trust_source: RequestTrust,
-}
-
-fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
-    match value {
-        Value::Object(members) => members
-            .iter()
-            .find(|(name, _)| name == key)
-            .map(|(_, member)| member),
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Array(_) => {
-            None
-        }
-    }
-}
-
-fn text<'value>(value: &'value Value, key: &str) -> Option<&'value str> {
-    match member(value, key) {
-        Some(Value::String(text)) => Some(text),
-        _ => None,
-    }
-}
-
-/// The acceptance law: the wire is exactly `JCS(envelope) || LF`, the
-/// payload-only digest recomputes, the engine digest equals the validated
-/// binary's, the evaluated identities equal the ones requested, the
-/// completeness flag agrees with the exit class, and the finding count equals
-/// the findings array length. Text printed before a crash is never
-/// interpreted as a result. Success returns the envelope's exit class, so the
-/// wrapper can hold the engine process to it.
-///
-/// # Errors
-///
-/// The first applicable defect in the order above.
-pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, AcceptanceDefect> {
-    let trimmed = wire
-        .strip_suffix(b"\n")
-        .ok_or(AcceptanceDefect::Noncanonical)?;
-    let envelope = parse(trimmed).map_err(|_defect| AcceptanceDefect::Shape)?;
-    if canonical(&envelope) != trimmed {
-        return Err(AcceptanceDefect::Noncanonical);
-    }
-    if text(&envelope, "schema") != Some(ENVELOPE_SCHEMA) {
-        return Err(AcceptanceDefect::Shape);
-    }
-    let payload = member(&envelope, "payload").ok_or(AcceptanceDefect::Shape)?;
-    if text(payload, "schema") != Some(PAYLOAD_SCHEMA) {
-        return Err(AcceptanceDefect::Shape);
-    }
-    let recorded = text(&envelope, "payload_digest").ok_or(AcceptanceDefect::Shape)?;
-    if hj(PAYLOAD_SCHEMA, payload).to_string() != recorded {
-        return Err(AcceptanceDefect::PayloadDigest);
-    }
-    let engine_row = member(payload, "engine").ok_or(AcceptanceDefect::Shape)?;
-    if text(engine_row, "engine_digest") != Some(expectations.engine_digest.as_str()) {
-        return Err(AcceptanceDefect::Engine);
-    }
-    let evaluation = member(payload, "evaluation").ok_or(AcceptanceDefect::Shape)?;
-    let resolved = text(evaluation, "status") != Some("unavailable");
-    if expectations.sealed.is_some() && !resolved {
-        return Err(AcceptanceDefect::SealedIdentity);
-    }
-    if resolved {
-        let base = member(evaluation, "base").ok_or(AcceptanceDefect::Shape)?;
-        if text(base, "commit_oid") != Some(expectations.base_commit.as_str()) {
-            return Err(AcceptanceDefect::BaseIdentity);
-        }
-        let candidate = member(evaluation, "candidate").ok_or(AcceptanceDefect::Shape)?;
-        if let Some(expected) = expectations.candidate_commit.as_deref()
-            && (text(candidate, "kind") != Some("git-commit")
-                || text(candidate, "commit_oid") != Some(expected))
-        {
-            return Err(AcceptanceDefect::CandidateIdentity);
-        }
-        if let Some(sealed) = &expectations.sealed {
-            identity::accept(wire, sealed)?;
-        }
-    }
-    let result = member(payload, "result").ok_or(AcceptanceDefect::Shape)?;
-    let exit_code = match member(result, "exit_code") {
-        Some(Value::Integer(code)) => *code,
-        _ => return Err(AcceptanceDefect::Shape),
-    };
-    let complete = member(result, "complete") == Some(&Value::Bool(true));
-    if complete != (exit_code == 0 || exit_code == 1) {
-        return Err(AcceptanceDefect::Completeness);
-    }
-    let count = match member(result, "finding_count") {
-        Some(Value::Integer(count)) => *count,
-        _ => return Err(AcceptanceDefect::Shape),
-    };
-    let findings = match member(payload, "findings") {
-        Some(Value::Array(rows)) => rows.len(),
-        _ => return Err(AcceptanceDefect::Shape),
-    };
-    if i64::try_from(findings).map_err(|_defect| AcceptanceDefect::Shape)? != count {
-        return Err(AcceptanceDefect::FindingCount);
-    }
-    Ok(exit_code)
 }
 
 /// The watchdog outcome for one spawned engine process.

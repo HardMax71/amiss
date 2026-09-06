@@ -85,9 +85,19 @@ pub struct ResolvedEvaluation {
     pub trusted_time: bool,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+)]
 pub enum UnavailableStatus {
-    #[serde(rename = "unavailable")]
+    #[strum(serialize = "unavailable")]
     Unavailable,
 }
 

@@ -32,9 +32,19 @@ pub enum CandidateFinality {
     LocalNonfinal,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde_with::SerializeDisplay,
+    serde_with::DeserializeFromStr,
+    strum::Display,
+    strum::EnumString,
+)]
 pub enum GitSnapshotKind {
-    #[serde(rename = "git-commit")]
+    #[strum(serialize = "git-commit")]
     GitCommit,
 }
 

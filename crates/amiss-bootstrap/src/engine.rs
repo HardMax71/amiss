@@ -29,13 +29,9 @@ pub(super) fn run(
     sealed: SealedRun,
 ) -> Execution<Accepted> {
     let expectations = Expectations {
-        engine_digest: validated.engine_digest.to_string(),
-        base_commit: sealed.evaluation.base_commit.as_str().to_owned(),
-        candidate_commit: sealed
-            .evaluation
-            .candidate_commit
-            .as_ref()
-            .map(|candidate| candidate.as_str().to_owned()),
+        engine_digest: validated.engine_digest,
+        base_commit: sealed.evaluation.base_commit.clone(),
+        candidate_commit: sealed.evaluation.candidate_commit.clone(),
         sealed: Some(sealed.expected.clone()),
     };
 
