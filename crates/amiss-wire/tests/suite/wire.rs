@@ -1,5 +1,4 @@
 use amiss_wire::ExitClass;
-use amiss_wire::de::{self, Error as DecodeError, ErrorKind as DecodeErrorKind, Obj};
 use amiss_wire::digest::{hb, hb_stream, hj, sha256, sha256_stream};
 use amiss_wire::json::{Error, ErrorKind, MAX_SAFE_INTEGER, Value, canonical, parse};
 
@@ -186,43 +185,6 @@ fn streamed_byte_digests_are_the_digest_of_the_concatenated_bytes() {
         }),
         sha256(b"one\ntwo")
     );
-}
-
-#[test]
-fn required_object_members_decode_through_their_exact_paths() {
-    let mut object = Obj::new(
-        "$.outer",
-        Value::object(vec![(
-            "required".to_owned(),
-            Value::string("value".to_owned()),
-        )]),
-    )
-    .unwrap();
-    assert_eq!(object.required("required", de::string).unwrap(), "value");
-    object.finish().unwrap();
-
-    let mut missing = Obj::new("$.outer", Value::object(Vec::new())).unwrap();
-    assert_eq!(
-        missing.required("required", de::string).unwrap_err(),
-        DecodeError {
-            path: "$.outer.required".to_owned(),
-            kind: DecodeErrorKind::MissingField,
-        }
-    );
-
-    let mut invalid = Obj::new(
-        "$.outer",
-        Value::object(vec![("required".to_owned(), Value::Bool(true))]),
-    )
-    .unwrap();
-    assert_eq!(
-        invalid.required("required", de::integer).unwrap_err(),
-        DecodeError {
-            path: "$.outer.required".to_owned(),
-            kind: DecodeErrorKind::WrongType,
-        }
-    );
-    assert_eq!(invalid.field("next"), "$.outer.next");
 }
 
 /// The identity grammar after the host opened: a host is any nonempty

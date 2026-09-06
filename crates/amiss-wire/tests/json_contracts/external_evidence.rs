@@ -56,13 +56,25 @@ fn assessments_use_the_digest_of_all_evidence_fields() {
 fn evidence_capture_keeps_strict_bounds_and_requires_an_object() {
     let mut evidence: Value = serde_json::from_slice(EVIDENCE).unwrap();
     let mut nested = Value::Null;
-    for _ in 0..256 {
+    for _ in 0..511 {
         nested = json!([nested]);
     }
     evidence["future"] = nested;
     let bytes = serde_json::to_vec(&evidence).unwrap();
     serde_json::from_slice::<external::ExternalEvidence>(&bytes).unwrap();
     external::parse_evidence(&bytes).unwrap();
+    let nested = evidence["future"].take();
+    evidence["future"] = json!([nested]);
+    assert!(matches!(
+        external::parse_evidence(&serde_json::to_vec(&evidence).unwrap()),
+        Err(EvidenceDefect::Wire(amiss_wire::de::Error {
+            kind: ErrorKind::Json(json::Error {
+                kind: json::ErrorKind::DepthLimit,
+                ..
+            }),
+            ..
+        }))
+    ));
     for invalid in [
         br#"{"future":0,"\u0066uture":1}"#.as_slice(),
         br#"{"future":-0}"#,
