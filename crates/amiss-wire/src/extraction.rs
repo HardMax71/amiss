@@ -1,5 +1,7 @@
 use crate::controls::SourceConstruct;
 use crate::report::AnalysisErrorCode;
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 /// The frozen node resources of `parser-work-accounting`: `nodes` is the
 /// logical node count of one document and `nesting` its maximum node depth.
@@ -62,13 +64,14 @@ impl From<Fault> for AnalyzeError {
     Debug,
     PartialEq,
     Eq,
+    Display,
+    EnumString,
     strum::AsRefStr,
     strum::IntoStaticStr,
-    serde::Serialize,
-    serde::Deserialize,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum BlockKind {
     Paragraph,
     ListItem,
