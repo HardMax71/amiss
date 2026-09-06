@@ -17,7 +17,7 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
     let template: SemanticEvidenceTemplate = SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
-            kind: ArtifactId::new("record-set".to_owned()).ok_or(ArtifactError::Corrupt)?,
+            kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
             identity: ArtifactId::new("test-records".to_owned()).ok_or(ArtifactError::Corrupt)?,
             version: "1".to_owned(),
             context_digest: hb("amiss/test-context", b"context"),

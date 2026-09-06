@@ -9,11 +9,11 @@ use crate::digest::Digest;
 use crate::model::ArtifactId;
 
 use super::{
-    SEMANTIC_OBSERVATIONS_LIMIT, SemanticEvidenceTemplate, SemanticProducer, TemplateSchema,
+    SEMANTIC_OBSERVATIONS_LIMIT, SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind,
+    TemplateSchema,
 };
 
 pub const INPUT_SCHEMA: &str = "amiss/record-set-input";
-pub const PRODUCER_KIND: &str = "record-set";
 pub const PRODUCER_VERSION: &str = "1";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,8 +79,6 @@ pub fn parse_input(bytes: &[u8]) -> Result<Input, Error> {
 /// contract is invalid, or the encoded template exceeds the semantic evidence bounds.
 pub fn template(input: Input) -> Result<Vec<u8>, Error> {
     validate_records("$.records", &input.records)?;
-    let producer_kind = ArtifactId::new(PRODUCER_KIND.to_owned())
-        .ok_or_else(|| Error::new("$.producer.kind", ErrorKind::InvalidValue))?;
     let observation = Observation {
         kind: ObservationKind::Current,
         name: input.name,
@@ -89,7 +87,7 @@ pub fn template(input: Input) -> Result<Vec<u8>, Error> {
     super::template(SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
-            kind: producer_kind,
+            kind: SemanticProducerKind::RecordSet,
             identity: input.producer_identity,
             version: PRODUCER_VERSION.to_owned(),
             context_digest: input.context_digest,

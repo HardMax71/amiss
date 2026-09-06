@@ -302,7 +302,7 @@ fn intersphinx_case() -> (
             source_report_payload_digest: Nullable::Null,
         },
         producer: SemanticProducer {
-            kind: id("sphinx-inventory-set"),
+            kind: amiss_wire::semantic::SemanticProducerKind::SphinxInventorySet,
             identity: id("amiss-test"),
             version: "1".to_owned(),
             context_digest,
@@ -440,7 +440,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
             )),
         },
         producer: SemanticProducer {
-            kind: id("site-build"),
+            kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
             identity: id("amiss-test"),
             version: "0.5.1".to_owned(),
             context_digest,

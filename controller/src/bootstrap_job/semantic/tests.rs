@@ -16,8 +16,7 @@ fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
     let template = SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
-            kind: ArtifactId::new("record-set".to_owned())
-                .ok_or(BootstrapJobError::SemanticEvidence)?,
+            kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
             identity: ArtifactId::new("test-records".to_owned())
                 .ok_or(BootstrapJobError::SemanticEvidence)?,
             version: "1".to_owned(),

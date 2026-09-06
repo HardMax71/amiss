@@ -17,9 +17,15 @@ The semantic-evidence envelope is that boundary. Its payload binds:
 - at most 100,000 observation objects, sorted by canonical JSON and unique.
 
 The envelope carries the domain-separated payload digest and is limited to 16 MiB. Its strict
-reader refuses malformed JSON, unknown envelope fields, invalid identities, duplicate or unsorted
-observations, oversized input, and a mismatched digest. Construction sorts observations once so a
-filesystem, inventory, or build traversal order cannot change the evidence identity.
+reader refuses malformed JSON, unknown envelope fields or producer kinds, invalid identities,
+duplicate or unsorted observations, oversized input, and a mismatched digest. Construction sorts
+observations once so a filesystem, inventory, or build traversal order cannot change the evidence
+identity.
+
+Producer kinds are the closed set `sphinx-inventory-set`, `site-build`, and `record-set`.
+Templates, controller acquisition expectations, and report provenance use the same set.
+Implementation identities remain producer-owned; a new producer family requires a compiled
+consumer and a corresponding contract update.
 
 Observation vocabularies do not share a synthetic universal graph. An Intersphinx producer needs
 domain, role, object name, inventory identity, and URI. A site-output producer needs routes,

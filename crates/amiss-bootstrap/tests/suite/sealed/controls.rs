@@ -127,7 +127,7 @@ fn semantic_evidence_binds_each_producer_fact() {
         producer: SemanticEvidenceProducer {
             identity: "producer".parse().unwrap(),
             input_digest: FLOOR_DIGEST.parse().unwrap(),
-            kind: "rustdoc".parse().unwrap(),
+            kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
             version: "1".to_owned(),
         },
     };

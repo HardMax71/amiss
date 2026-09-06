@@ -44,8 +44,8 @@
       "required": ["context_digest", "identity", "input_digest", "kind", "version"],
       "properties": {
         "kind": {
-          "description": "The bounded producer class selected by a compiled consumer.",
-          "$ref": "#/$defs/Identifier"
+          "description": "One of the compiled semantic producer families.",
+          "enum": ["sphinx-inventory-set", "site-build", "record-set"]
         },
         "identity": {
           "description": "The stable producer implementation identity within that class.",
