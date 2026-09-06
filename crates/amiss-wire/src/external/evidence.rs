@@ -4,10 +4,10 @@ use serde::{Deserialize, Serialize};
 use wary::Validate;
 
 use crate::de::{self, Error, ErrorKind};
-use crate::digest::Digest;
+use crate::digest::{Digest, hj_serde};
 use crate::json;
 
-use super::EXTERNAL_DOCUMENT_BYTES;
+use super::{EVIDENCE_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, wary::Wary)]
 #[validate(func = |_, evidence: &ExternalEvidence| {
@@ -152,25 +152,25 @@ pub enum EvidenceDefect {
 }
 
 /// Parses one strict external evidence document. Additive fields are inert.
+/// Returns the decoded evidence and the canonical digest of the complete input,
+/// including additive fields that the typed model does not retain.
 ///
 /// # Errors
 ///
 /// Fails on an oversized or malformed strict document, a malformed known
 /// field, or a schema law reported by the derived validator.
-pub fn parse_evidence(bytes: &[u8]) -> Result<ExternalEvidence, EvidenceDefect> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return Err(EvidenceDefect::Wire(Error::new(
-            "$",
-            ErrorKind::LimitExceeded,
-        )));
-    }
-    json::parse(bytes)
-        .map_err(|defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::Json(defect))))?;
-    let document: ExternalEvidence = de::deserialize_json(bytes).map_err(EvidenceDefect::Wire)?;
+pub fn parse_evidence(bytes: &[u8]) -> Result<(ExternalEvidence, Digest), EvidenceDefect> {
+    let value: serde_json::Value = super::read(bytes).map_err(EvidenceDefect::Wire)?;
+    let digest = hj_serde(EVIDENCE_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&value, &mut writer)
+    })
+    .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
+    let document: ExternalEvidence =
+        de::deserialize_value("$", value).map_err(EvidenceDefect::Wire)?;
     document
         .validate(&())
         .map_err(EvidenceDefect::Contract)
-        .map(|()| document)
+        .map(|()| (document, digest))
 }
 
 /// Builds one validated external evidence document from its typed source.

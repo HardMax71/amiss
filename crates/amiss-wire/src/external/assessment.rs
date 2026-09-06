@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use wary::Validate;
 
 use crate::de::{self, Error, ErrorKind};
-use crate::digest::{Digest, hb, hj, hj_serde};
+use crate::digest::{Digest, hb, hj_serde};
 use crate::json;
 
 use super::evidence::{
@@ -14,7 +14,7 @@ use super::evidence::{
 use super::plan::{
     ExternalDestination, ExternalEngine, ExternalPlanEnvelope, ExternalRepository, parse_plan,
 };
-use super::{ASSESSMENT_PAYLOAD_SCHEMA, EVIDENCE_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
+use super::{ASSESSMENT_PAYLOAD_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
 
 /// Why a plan and evidence could not yield an assessment.
 #[derive(Debug, thiserror::Error)]
@@ -195,12 +195,7 @@ pub fn assess(
     engine_digest: Digest,
 ) -> Result<Vec<u8>, AssessDefect> {
     let plan = parse_plan(plan)?;
-    let evidence = parse_evidence(evidence_bytes)?;
-    let evidence_digest = hj(
-        EVIDENCE_SCHEMA,
-        &json::parse(evidence_bytes)
-            .map_err(|defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::Json(defect))))?,
-    );
+    let (evidence, evidence_digest) = parse_evidence(evidence_bytes)?;
     if evidence.plan_payload_digest != plan.payload_digest {
         return Err(AssessDefect::UnboundEvidence);
     }

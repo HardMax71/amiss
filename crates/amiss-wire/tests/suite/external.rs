@@ -811,10 +811,8 @@ fn evidence_bytes_preserve_escaping_and_round_trip() {
         }],
     };
     let bytes = amiss_wire::external::evidence(&document).expect("the evidence encodes");
-    assert_eq!(
-        parse_evidence(&bytes).expect("the evidence parses"),
-        document
-    );
+    let (parsed, _digest) = parse_evidence(&bytes).expect("the evidence parses");
+    assert_eq!(parsed, document);
     assert_eq!(
         bytes,
         amiss_wire::json::canonical(&amiss_wire::json::parse(&bytes).expect("strict JSON")),
@@ -846,7 +844,7 @@ fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
         text(field(subject, "evidence_digest")),
         hb(EVIDENCE_SCHEMA, &canonical).to_string(),
     );
-    let typed = parse_evidence(&canonical).expect("valid evidence");
+    let (typed, _digest) = parse_evidence(&canonical).expect("valid evidence");
     assert_ne!(
         hb(EVIDENCE_SCHEMA, &canonical),
         hb(
