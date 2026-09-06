@@ -1,13 +1,24 @@
-use serde::{Deserialize, Serialize};
-use strum::{AsRefStr, EnumIter, IntoEnumIterator, IntoStaticStr};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{AsRefStr, Display, EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
 use super::model::{EvidenceClass, InvariantClass};
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumIter, Serialize, Deserialize,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    AsRefStr,
+    EnumIter,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "kebab-case")]
-#[serde(rename_all = "kebab-case")]
 pub enum IntentKind {
     RepositoryPath,
     SameRepositoryGithub,
@@ -31,9 +42,21 @@ pub enum FindingScope {
 }
 
 /// The closed disposition values a policy step can produce.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Display,
+    EnumString,
+    AsRefStr,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
 #[strum(serialize_all = "lowercase")]
-#[serde(rename_all = "lowercase")]
 pub enum Disposition {
     Record,
     Warn,
@@ -139,9 +162,8 @@ static CONTROL_PLANE: FindingMetadata = FindingMetadata {
 
 declare_taxonomy! {
     /// The complete closed finding taxonomy, in schema declaration order.
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, EnumIter, IntoStaticStr, Serialize, Deserialize)]
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, AsRefStr, Display, EnumIter, EnumString, IntoStaticStr, SerializeDisplay, DeserializeFromStr)]
     #[strum(serialize_all = "kebab-case")]
-    #[serde(rename_all = "kebab-case")]
     pub enum FindingKind {
         ExplicitTargetMissing => {
             meaning: "a reference names a repository path, a line range inside one, or a heading anchor no known renderer publishes; restore the target or correct the link",

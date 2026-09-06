@@ -1,4 +1,6 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::{
     FactSchema, FindingKeyInputSchema, ProjectionKind, ProjectionSink, SourceConstruct, TargetKind,
@@ -13,9 +15,11 @@ use super::{
     SourceSpan,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ReferenceOccurrenceKind {
-    #[serde(rename = "source-projection")]
+    #[strum(serialize = "source-projection")]
     SourceProjection,
 }
 
@@ -25,15 +29,19 @@ pub struct ReferenceOccurrence {
     pub source_projection_digest: Digest,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum RepositoryIntentKind {
-    #[serde(rename = "repository-path")]
+    #[strum(serialize = "repository-path")]
     RepositoryPath,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum EmptyRepositoryPath {
-    #[serde(rename = "")]
+    #[strum(serialize = "")]
     Empty,
 }
 
@@ -61,27 +69,35 @@ pub struct RepositoryTargetIntent<P = RepoPath> {
     pub target_kind: TargetKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ControlFindingKeyScopeKind {
-    #[serde(rename = "control")]
+    #[strum(serialize = "control")]
     Control,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum DocumentFindingKeyScopeKind {
-    #[serde(rename = "document")]
+    #[strum(serialize = "document")]
     Document,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ObservationFindingKeyScopeKind {
-    #[serde(rename = "observation")]
+    #[strum(serialize = "observation")]
     Observation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ReferenceFindingKeyScopeKind {
-    #[serde(rename = "reference")]
+    #[strum(serialize = "reference")]
     Reference,
 }
 
@@ -118,14 +134,18 @@ pub struct FindingKeyInput<P = RepoPath> {
     pub scope: FindingKeyScope<P>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ControlStateSchema {
-    #[serde(rename = "amiss/scanner-control-state")]
+    #[strum(serialize = "amiss/scanner-control-state")]
     Current,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ControlState {
     Absent,
     Invalid,
@@ -150,14 +170,18 @@ pub struct ControlStateInput {
     pub state: ControlState,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ClaimKind {
-    #[serde(rename = "value")]
+    #[strum(serialize = "value")]
     Value,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum ClaimObserved {
     LineDiffers,
     LineOutOfRange,
@@ -166,8 +190,10 @@ pub enum ClaimObserved {
     TargetNotABlob,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum BrokenRedirectReason {
     AmbiguousRoute,
     MissingAnchor,
@@ -175,33 +201,43 @@ pub enum BrokenRedirectReason {
     NonterminalRedirect,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum BlobLinesProjectionSourceKind {
-    #[serde(rename = "blob-lines")]
+    #[strum(serialize = "blob-lines")]
     BlobLines,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum NamedRegionProjectionSourceKind {
-    #[serde(rename = "named-region")]
+    #[strum(serialize = "named-region")]
     NamedRegion,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum RecordSetProjectionSourceKind {
-    #[serde(rename = "record-set")]
+    #[strum(serialize = "record-set")]
     RecordSet,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum RecordValueProjectionSourceKind {
-    #[serde(rename = "record-value")]
+    #[strum(serialize = "record-value")]
     RecordValue,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum TreePathsProjectionSourceKind {
-    #[serde(rename = "tree-paths")]
+    #[strum(serialize = "tree-paths")]
     TreePaths,
 }
 
@@ -243,9 +279,18 @@ pub enum ProjectionSource {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr, strum::EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+    strum::EnumIter,
 )]
-#[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum ProjectionObserved {
     ContentDiffers,
@@ -273,15 +318,19 @@ pub enum ProjectionObserved {
     SourceTreeRootNotATree,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum CountProjectionDifferenceKind {
-    #[serde(rename = "count")]
+    #[strum(serialize = "count")]
     Count,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum RowsProjectionDifferenceKind {
-    #[serde(rename = "rows")]
+    #[strum(serialize = "rows")]
     Rows,
 }
 
@@ -311,15 +360,19 @@ pub enum ProjectionDifference<R = RowsProjectionDifference> {
     Rows(R),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum DebtExceptionDiagnosticKind {
-    #[serde(rename = "debt")]
+    #[strum(serialize = "debt")]
     Debt,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum WaiverExceptionDiagnosticKind {
-    #[serde(rename = "waiver")]
+    #[strum(serialize = "waiver")]
     Waiver,
 }
 
@@ -357,51 +410,67 @@ pub enum ExceptionDiagnostic {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum BrokenRedirectFactEvidenceKind {
-    #[serde(rename = "broken-redirect")]
+    #[strum(serialize = "broken-redirect")]
     BrokenRedirect,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ClaimFactEvidenceKind {
-    #[serde(rename = "claim")]
+    #[strum(serialize = "claim")]
     Claim,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ControlFactEvidenceKind {
-    #[serde(rename = "control")]
+    #[strum(serialize = "control")]
     Control,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum DocumentFactEvidenceKind {
-    #[serde(rename = "document")]
+    #[strum(serialize = "document")]
     Document,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum DuplicateRouteFactEvidenceKind {
-    #[serde(rename = "duplicate-route")]
+    #[strum(serialize = "duplicate-route")]
     DuplicateRoute,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ObservationFactEvidenceKind {
-    #[serde(rename = "observation")]
+    #[strum(serialize = "observation")]
     Observation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ProjectionFactEvidenceKind {
-    #[serde(rename = "projection")]
+    #[strum(serialize = "projection")]
     Projection,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum ReferenceFactEvidenceKind {
-    #[serde(rename = "reference")]
+    #[strum(serialize = "reference")]
     Reference,
 }
 
@@ -510,8 +579,10 @@ pub struct FindingFactInput<K = FindingKeyInput, E = FindingFactEvidence> {
     pub schema: FactSchema,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
 pub enum CoverageRequirement {
     BuiltIn,
     ControlPlane,
@@ -520,8 +591,18 @@ pub enum CoverageRequirement {
     RepositoryRequested,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum EvidenceClass {
     AnalysisIntegrity,
@@ -532,8 +613,18 @@ pub enum EvidenceClass {
     Unsupported,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum InvariantClass {
     Absolute,
@@ -542,8 +633,18 @@ pub enum InvariantClass {
     Ratcheted,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum Attribution {
     Introduced,
@@ -553,15 +654,19 @@ pub enum Attribution {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum AggregationStrategy {
-    #[serde(rename = "one-per-finding-key")]
+    #[strum(serialize = "one-per-finding-key")]
     OnePerFindingKey,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
 pub enum RepresentativeRule {
-    #[serde(rename = "lowest-location-then-observation-id")]
+    #[strum(serialize = "lowest-location-then-observation-id")]
     LowestLocationThenObservationId,
 }
 
@@ -573,8 +678,18 @@ pub struct FindingAggregation {
     pub strategy: AggregationStrategy,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum LocationSide {
     Base,
@@ -607,8 +722,18 @@ pub struct FindingFix {
     pub span: ByteSpan,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
-#[serde(rename_all = "kebab-case")]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    strum::AsRefStr,
+)]
 #[strum(serialize_all = "kebab-case")]
 pub enum PolicySource {
     BuiltIn,
