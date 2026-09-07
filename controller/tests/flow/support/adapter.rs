@@ -133,7 +133,7 @@ impl ProviderAdapter for FakeAdapter {
 
     fn verify_external(
         &self,
-        _plan: &[u8],
+        _plan: &amiss_wire::external::ExternalPlanEnvelope,
         _checked_at: &str,
     ) -> Result<Option<Vec<u8>>, ProviderError> {
         self.verify_count.fetch_add(1, Ordering::Relaxed);

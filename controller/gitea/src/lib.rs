@@ -90,7 +90,7 @@ pub trait GiteaApi: Send + Sync {
     /// No fact could be gathered before the first one.
     fn verify_external(
         &self,
-        _plan: &[u8],
+        _plan: &amiss_wire::external::ExternalPlanEnvelope,
         _checked_at: &str,
     ) -> Result<Option<Vec<u8>>, ProviderError> {
         Ok(None)

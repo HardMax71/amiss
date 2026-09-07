@@ -18,7 +18,7 @@ pub(super) const PRODUCER_NAME: &str = "amiss-controller-github";
 /// destination stays unproven downstream.
 pub(super) fn verify_external<R: GitHubVerification>(
     rest: &R,
-    plan: &[u8],
+    plan: &amiss_wire::external::ExternalPlanEnvelope,
     host: &str,
     producer_version: &str,
     checked_at: &str,

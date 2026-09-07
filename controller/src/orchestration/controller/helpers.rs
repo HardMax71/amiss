@@ -346,9 +346,9 @@ fn prepare_external(
             amiss_wire::external::EXTERNAL_DOCUMENT_BYTES,
         )
         .map_err(|_defect| amiss_wire::external::PlanDefect::MalformedExternal)?;
-        Ok((bytes, report.payload.engine))
+        Ok((plan, bytes, report.payload.engine))
     });
-    let Ok((plan_bytes, engine)) = planned else {
+    let Ok((plan, plan_bytes, engine)) = planned else {
         return PreparedExternal {
             incomplete: true,
             ..PreparedExternal::default()
@@ -361,7 +361,9 @@ fn prepare_external(
             ..PreparedExternal::default()
         };
     };
-    match adapter.verify_external(&plan_bytes, &now.to_string()) {
+    let verification = adapter.verify_external(&plan, &now.to_string());
+    drop(plan);
+    match verification {
         Ok(Some(evidence)) => {
             match amiss_wire::external::assess(
                 &plan_bytes,

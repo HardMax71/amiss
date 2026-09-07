@@ -63,6 +63,7 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
 #[test]
 fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
     let mut plan: ExternalPlanEnvelope = serde_json::from_slice(PLAN).unwrap();
+    assert!(external::validate_plan_envelope(&plan).is_ok());
     let version = serde_json::to_string(&plan.payload.engine.engine_version).unwrap();
     let wire = serde_json::to_string(&plan).unwrap();
     let malformed = wire.replace(
@@ -74,6 +75,9 @@ fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
     assert_eq!(defect.path, "$.payload.engine.engine_version");
     assert_eq!(defect.kind, ErrorKind::WrongType);
     plan.payload.engine.engine_version.clear();
+    let defect = external::validate_plan_envelope(&plan).unwrap_err();
+    assert_eq!(defect.path, "$.payload_digest");
+    assert_eq!(defect.kind, ErrorKind::DigestMismatch);
     assert_eq!(
         external::parse_plan(&serde_json::to_vec(&plan).unwrap())
             .unwrap_err()
@@ -84,12 +88,19 @@ fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
         external::PLAN_PAYLOAD_SCHEMA,
         &serde_json_canonicalizer::to_vec(&plan.payload).unwrap(),
     );
+    let defect = external::validate_plan_envelope(&plan).unwrap_err();
+    assert_eq!(defect.path, "$.payload.engine.engine_version");
+    assert_eq!(defect.kind, ErrorKind::InvalidValue);
     assert_eq!(
         external::parse_plan(&serde_json::to_vec(&plan).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
     );
+    plan.payload.retained_count = u64::MAX;
+    let defect = external::validate_plan_envelope(&plan).unwrap_err();
+    assert_eq!(defect.path, "$.payload");
+    assert_eq!(defect.kind, ErrorKind::InvalidValue);
 
     let mut assessment: ExternalAssessmentEnvelope = serde_json::from_slice(ASSESSMENT).unwrap();
     let version = serde_json::to_string(&assessment.payload.producer.version).unwrap();

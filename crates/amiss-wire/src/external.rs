@@ -16,7 +16,7 @@ pub use evidence::{
 pub use plan::{
     ExternalDestination, ExternalEngine, ExternalPlan, ExternalPlanEnvelope,
     ExternalPlanEnvelopeSchema, ExternalPlanPayloadSchema, ExternalPlanReport, ExternalRepository,
-    parse_plan, plan,
+    parse_plan, plan, validate_plan_envelope,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/external-plan-envelope";

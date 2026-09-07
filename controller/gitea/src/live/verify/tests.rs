@@ -6,7 +6,6 @@ use std::time::Duration;
 use amiss_controller::ProviderError;
 use amiss_fixtures::{external_facts, external_plan};
 use amiss_wire::external::{ExternalReason, ExternalVerdict, assess};
-use amiss_wire::json::Value;
 
 use super::super::rest::{GiteaVerification, OperationDeadline, Presence, RefFamily, Visibility};
 use super::{PRODUCER_NAME, verify_external};
@@ -171,10 +170,7 @@ fn every_selector_and_visibility_becomes_its_fact() {
         amiss_wire::external::parse_evidence(&evidence).expect("the evidence is valid");
     assert_eq!(document.producer.name, PRODUCER_NAME);
     assert_eq!(
-        document.plan_payload_digest,
-        amiss_wire::external::parse_plan(&plan)
-            .expect("the plan is valid")
-            .payload_digest,
+        document.plan_payload_digest, plan.payload_digest,
         "the evidence binds the exact plan"
     );
 }
@@ -248,13 +244,10 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
     let evidence = verify_external(&matrix_rest(), &plan, "codeberg.org", "0.0.0", "t0")
         .expect("evidence is produced");
     let assessment = assess(
-        &plan,
+        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
         &evidence,
         "0.0.0",
-        amiss_wire::digest::hb(
-            "t",
-            &serde_json_canonicalizer::to_vec(&Value::Null).unwrap(),
-        ),
+        amiss_wire::digest::hb("t", b"null"),
     )
     .expect("the engine judges the evidence");
     let verdicts: Vec<_> = assessment

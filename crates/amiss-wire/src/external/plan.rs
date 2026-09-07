@@ -194,6 +194,17 @@ pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
     let document: ExternalPlanEnvelope = super::read(bytes)?;
     verified_json_digest(PLAN_ENVELOPE_SCHEMA, bytes, &document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    validate_plan_envelope(&document)?;
+    Ok(document)
+}
+
+/// Checks a typed plan's payload identity before its plan laws.
+///
+/// # Errors
+///
+/// Fails on an unserializable payload, a digest mismatch, or a violated plan law.
+/// Encoded input and output byte ceilings belong to their respective I/O boundaries.
+pub fn validate_plan_envelope(document: &ExternalPlanEnvelope) -> Result<(), Error> {
     let payload_digest = hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
         serde_json_canonicalizer::to_writer(&document.payload, &mut writer)
     })
@@ -201,8 +212,7 @@ pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
     if payload_digest != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
-    validate_plan(&document.payload)?;
-    Ok(document)
+    validate_plan(&document.payload)
 }
 
 fn plan_payload_digest(plan: &ExternalPlan) -> Result<Digest, Error> {

@@ -32,7 +32,10 @@ Plan derivation returns the existing owned envelope, and assessment likewise ret
 typed envelope. Human rendering and the controller's verdict tally use those fields directly.
 The shared canonical writer checks the external byte ceiling at output, including a sink
 check before human rendering; JSON reaches stdout only after the buffered write succeeds.
-Untrusted input still uses the reader.
+The controller passes the typed plan through all three forge adapters. Their shared verifier
+checks its payload digest and plan laws before preparing or querying the provider; it does not
+decode the plan again. Encoded plan limits still apply before retention. Evidence output and
+assessment inputs remain byte-oriented. Untrusted input still uses the reader.
 
 Each row carries the destination exactly as the report recorded it, after the format's
 own decoding, the address an evidence producer would request; its lowercased scheme; and the sorted

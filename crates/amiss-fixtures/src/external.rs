@@ -68,23 +68,15 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
 
 /// Derives the external plan from the shared digest-true report fixture.
 #[must_use]
-pub fn external_plan(destinations: &[&str]) -> Option<Vec<u8>> {
+pub fn external_plan(destinations: &[&str]) -> Option<amiss_wire::external::ExternalPlanEnvelope> {
     let report = external_report(destinations)?;
     let (report, _verdict) = amiss_wire::report::validate_envelope(&report).ok()?;
-    let plan = amiss_wire::external::plan(
+    amiss_wire::external::plan(
         &report,
         &report.payload.engine.engine_version,
         report.payload.engine.engine_digest,
     )
-    .ok()?;
-    let mut bytes = Vec::new();
-    amiss_wire::write_json(
-        &plan,
-        &mut bytes,
-        amiss_wire::external::EXTERNAL_DOCUMENT_BYTES,
-    )
-    .ok()?;
-    Some(bytes)
+    .ok()
 }
 
 /// Flattens forge evidence rows into the facts provider tests compare.

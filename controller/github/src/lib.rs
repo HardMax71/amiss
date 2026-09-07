@@ -67,7 +67,7 @@ pub trait GitHubApi: Send + Sync {
     /// No fact could be gathered before the first one.
     fn verify_external(
         &self,
-        _plan: &[u8],
+        _plan: &amiss_wire::external::ExternalPlanEnvelope,
         _checked_at: &str,
     ) -> Result<Option<Vec<u8>>, ProviderError> {
         Ok(None)
@@ -233,7 +233,7 @@ impl<A: GitHubApi> ProviderAdapter for GitHubPullRequestAdapter<A> {
 
     fn verify_external(
         &self,
-        plan: &[u8],
+        plan: &amiss_wire::external::ExternalPlanEnvelope,
         checked_at: &str,
     ) -> Result<Option<Vec<u8>>, ProviderError> {
         self.api.verify_external(plan, checked_at)
