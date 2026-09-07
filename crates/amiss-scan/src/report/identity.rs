@@ -1,10 +1,9 @@
 use super::{CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, Setup};
-use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::report::{model, sandbox_descriptor};
 use amiss_wire::requests::{
-    CandidateEventKind, CandidateFinality, CandidateIdentity, CandidateIdentitySchema,
-    CandidateSnapshot, RequestMode, RequestTrust, SnapshotMaterialization,
+    CandidateEventKind, CandidateFinality, CandidateIdentitySchema, CandidateSnapshot, RequestMode,
+    RequestTrust, SnapshotMaterialization,
 };
 
 /// The candidate-identity digest a trusted-time statement must carry: `HJ`
@@ -16,37 +15,17 @@ use amiss_wire::requests::{
 /// unavailable or its closed serde model cannot be encoded.
 pub fn candidate_identity_digest(setup: &Setup) -> Result<Digest, crate::Error> {
     let evaluation = evaluation(setup);
-    let (model::BaseSnapshot::Git(base), model::Snapshot::Available(candidate)) =
-        (evaluation.base, evaluation.candidate)
+    let (model::BaseSnapshot::Git(_), model::Snapshot::Available(_)) =
+        (&evaluation.base, &evaluation.candidate)
     else {
         return Err(crate::Error::Internal);
     };
-    let identity = CandidateIdentity {
+    let identity = model::IdentityPreimage {
+        evaluation: &evaluation,
         schema: CandidateIdentitySchema::Current,
-        mode: evaluation.mode,
-        event_kind: evaluation.event_kind,
-        finality: evaluation.finality,
-        repository: evaluation
-            .repository
-            .map_or(Nullable::Null, Nullable::Value),
-        candidate_ref: evaluation
-            .candidate_ref
-            .map_or(Nullable::Null, Nullable::Value),
-        target_ref: evaluation
-            .target_ref
-            .map_or(Nullable::Null, Nullable::Value),
-        default_branch_ref: evaluation
-            .default_branch_ref
-            .map_or(Nullable::Null, Nullable::Value),
-        base,
-        candidate,
-        materialization: evaluation.materialization,
-        skip_worktree_paths: evaluation.skip_worktree_paths,
-        index_only_materialized_paths: evaluation.index_only_materialized_paths,
-        forge: evaluation.forge.map_or(Nullable::Null, Nullable::Value),
     };
-    hj_serde(CANDIDATE_IDENTITY_DOMAIN, |writer| {
-        serde_json::to_writer(writer, &identity)
+    hj_serde(CANDIDATE_IDENTITY_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&identity, &mut writer)
     })
     .map_err(|_defect| crate::Error::Internal)
 }

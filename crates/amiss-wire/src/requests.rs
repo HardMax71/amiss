@@ -195,7 +195,7 @@ pub struct SuppliedTime {
 }
 
 // An empty prefix preserves every key while the library requires an object, not a sequence.
-serde_with::with_prefix!(object "");
+serde_with::with_prefix!(pub(crate) object "");
 
 /// One semantic envelope paired with the independently planned build or
 /// inventory context it must identify.

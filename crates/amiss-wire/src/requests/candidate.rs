@@ -49,6 +49,7 @@ pub enum GitSnapshotKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GitSnapshotIdentity {
     pub commit_oid: Oid,
     pub kind: GitSnapshotKind,
@@ -81,6 +82,7 @@ pub enum IndexSnapshotKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct IndexSnapshotIdentity {
     pub base_commit_oid: Oid,
     pub base_object_format: ObjectFormat,
@@ -95,13 +97,14 @@ pub struct IndexSnapshotIdentity {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CandidateSnapshot {
-    Git(GitSnapshotIdentity),
-    Index(IndexSnapshotIdentity),
+    Git(#[serde(deserialize_with = "super::object::deserialize")] GitSnapshotIdentity),
+    Index(#[serde(deserialize_with = "super::object::deserialize")] IndexSnapshotIdentity),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CandidateIdentity {
+    #[serde(deserialize_with = "super::object::deserialize")]
     pub base: GitSnapshotIdentity,
     pub candidate: CandidateSnapshot,
     pub candidate_ref: Nullable<BranchRef>,

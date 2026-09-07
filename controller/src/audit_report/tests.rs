@@ -84,7 +84,7 @@ fn audit_acceptance_keeps_the_commit_pair_and_identity_constraints() -> Result<(
 }
 
 #[test]
-fn additive_evaluation_fields_remain_bound_but_time_does_not() -> Result<(), ArtifactError> {
+fn evaluation_extensions_are_refused_and_time_stays_out_of_identity() -> Result<(), ArtifactError> {
     let fixture = amiss_fixtures::publication_audit(true).ok_or(ArtifactError::Corrupt)?;
     let original = accepted_report(&fixture.report)?;
     let timed = edited_report(&fixture.report, |evaluation| {
@@ -93,6 +93,7 @@ fn additive_evaluation_fields_remain_bound_but_time_does_not() -> Result<(), Art
         Ok(())
     })?;
     let accepted = accepted_report(&timed)?;
+    assert_eq!(accepted.report_digest, sha256(&timed));
     assert_eq!(
         accepted.candidate_identity_digest,
         original.candidate_identity_digest
@@ -105,34 +106,17 @@ fn additive_evaluation_fields_remain_bound_but_time_does_not() -> Result<(), Art
                 json!({"\u{1f600}": [null, true, -7], "\u{e000}": "extra"});
             Ok(())
         })?;
-        let mut decoded: Value =
-            serde_json::from_slice(&extended).map_err(|_defect| ArtifactError::Corrupt)?;
-        let mut identity = decoded["payload"]["evaluation"].take();
-        let members = identity.as_object_mut().ok_or(ArtifactError::Corrupt)?;
-        members.remove("evaluation_instant");
-        members.remove("trusted_time");
-        members.insert("schema".to_owned(), json!(CANDIDATE_IDENTITY_DOMAIN));
-        let preimage = serde_json_canonicalizer::to_vec(&identity)
-            .map_err(|_defect| ArtifactError::Corrupt)?;
-        let accepted = accepted_report(&extended)?;
-        assert_eq!(accepted.report_digest, sha256(&extended));
-        assert_eq!(
-            accepted.candidate_identity_digest,
-            hb(CANDIDATE_IDENTITY_DOMAIN, &preimage)
-        );
-        assert_ne!(
-            accepted.candidate_identity_digest, original.candidate_identity_digest,
+        assert!(
+            matches!(accepted_report(&extended), Err(ArtifactError::Corrupt)),
             "{path}"
         );
-        assert_ne!(accepted.payload_digest, original.payload_digest, "{path}");
     }
     Ok(())
 }
 
 #[test]
-fn opaque_identity_fields_keep_the_report_depth_ceiling() -> Result<(), ArtifactError> {
+fn identity_extensions_are_refused_at_every_depth() -> Result<(), ArtifactError> {
     let fixture = amiss_fixtures::publication_audit(true).ok_or(ArtifactError::Corrupt)?;
-    let original = accepted_report(&fixture.report)?;
     for depth in [127, 256, 513] {
         let changed = edited_report(&fixture.report, |evaluation| {
             let mut nested = Value::Null;
@@ -142,19 +126,10 @@ fn opaque_identity_fields_keep_the_report_depth_ceiling() -> Result<(), Artifact
             evaluation["candidate"]["future_field"] = nested;
             Ok(())
         })?;
-        if depth <= 256 {
-            let accepted = accepted_report(&changed)?;
-            assert_ne!(accepted.payload_digest, original.payload_digest);
-            assert_ne!(
-                accepted.candidate_identity_digest,
-                original.candidate_identity_digest
-            );
-        } else {
-            assert!(matches!(
-                accepted_report(&changed),
-                Err(ArtifactError::Corrupt)
-            ));
-        }
+        assert!(
+            matches!(accepted_report(&changed), Err(ArtifactError::Corrupt)),
+            "{depth}"
+        );
     }
     Ok(())
 }

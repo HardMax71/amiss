@@ -226,12 +226,7 @@ fn candidates_without_an_expected_commit_still_require_a_snapshot_shape() {
 fn additive_core_fields_are_accepted_only_with_a_matching_payload_digest() {
     let (wire, expectations) = accepted_report();
     let original: Value = serde_json::from_slice(&wire).unwrap();
-    for path in [
-        "/payload",
-        "/payload/engine",
-        "/payload/evaluation/base",
-        "/payload/result",
-    ] {
+    for path in ["/payload", "/payload/engine", "/payload/result"] {
         let mut report = original.clone();
         report.pointer_mut(path).unwrap()["future"] =
             json!({"\u{1f600}": [null, true, -7], "\u{e000}": "extra"});
