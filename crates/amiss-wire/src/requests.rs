@@ -203,7 +203,7 @@ serde_with::with_prefix!(object "");
 #[serde(deny_unknown_fields)]
 pub struct SuppliedSemanticEvidence {
     #[serde(deserialize_with = "object::deserialize")]
-    pub value: SemanticEvidenceEnvelope,
+    pub value: SemanticEvidenceEnvelope<'static>,
     pub expected_context_digest: Digest,
 }
 

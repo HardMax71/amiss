@@ -5,6 +5,8 @@
     reason = "integration assertions over exact semantic-evidence and report shapes"
 )]
 
+use std::borrow::Cow;
+
 use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity};
@@ -73,7 +75,7 @@ fn semantic_inputs(
             input_digest: hb("test/record-set-input", b"rust public api output"),
         },
         complete,
-        observations: vec![Observation::Record(record::Observation {
+        observations: vec![Cow::Owned(Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
             name: set.parse().unwrap(),
             records: records
@@ -83,7 +85,7 @@ fn semantic_inputs(
                     value: (*value).to_owned(),
                 })
                 .collect(),
-        })],
+        }))],
     };
     let (_document, bytes) = amiss_wire::semantic::envelope(evidence).unwrap();
     let request = ControlsRequest {

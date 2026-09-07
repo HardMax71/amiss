@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_git::Repository;
 use amiss_scan::{SetupShell, pipeline::commit_pair, report::RequestDigests, semantic::Input};
@@ -65,7 +67,9 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
             .unwrap(),
             site_observation("/generated/", SiteObservation::Generated(None, &["intro"])).unwrap(),
         ]
-        .into(),
+        .into_iter()
+        .map(Cow::Owned)
+        .collect(),
     };
     let (envelope, bytes) = bind_template(&template, identity).unwrap();
     let request = ControlsRequest {
@@ -125,7 +129,7 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
 
 #[test]
 fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digests() {
-    let original: SemanticEvidenceEnvelope<Observation> = serde_json::from_slice(include_bytes!(
+    let original: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();
@@ -164,7 +168,7 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
         payload.producer.kind = *kind;
         payload.producer.version = (*version).to_owned();
         payload.subject.source_report_payload_digest = Nullable::Null;
-        payload.observations = vec![observation.clone()];
+        payload.observations = vec![Cow::Owned(observation.clone())];
         let (document, bytes) = semantic::envelope(payload).unwrap();
         let request = ControlsRequest {
             semantic_evidence: vec![SuppliedSemanticEvidence {

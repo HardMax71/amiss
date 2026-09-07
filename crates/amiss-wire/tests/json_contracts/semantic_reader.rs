@@ -1,12 +1,44 @@
+use std::borrow::Cow;
+
 use amiss_wire::assessment::Nullable;
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 use amiss_wire::{de::ErrorKind, digest::hb, semantic};
 
 #[test]
+fn decoded_semantic_models_own_observations_after_the_input_bytes_are_dropped() {
+    let (document, template) = {
+        let envelope_bytes =
+            include_bytes!("../../../../spec/examples/scanner-semantic-evidence.json").to_vec();
+        let template_bytes =
+            include_bytes!("../../../../spec/examples/scanner-semantic-template.json").to_vec();
+        (
+            semantic::parse(&envelope_bytes).unwrap(),
+            semantic::parse_template(&template_bytes).unwrap(),
+        )
+    };
+    for observations in [
+        document.payload.observations.as_slice(),
+        template.observations.as_ref(),
+    ] {
+        assert!(!observations.is_empty());
+        assert!(observations.iter().all(|row| matches!(row, Cow::Owned(_))));
+    }
+    assert_eq!(semantic::validate(&document), Ok(()));
+    assert_eq!(
+        semantic::envelope(document.payload.clone()).unwrap().0,
+        document
+    );
+    assert_eq!(
+        semantic::parse_template(&semantic::template(template.clone()).unwrap()).unwrap(),
+        template
+    );
+}
+
+#[test]
 fn generated_semantic_digests_keep_the_exact_payload_preimage() {
-    let original: semantic::SemanticEvidenceEnvelope = serde_json::from_slice(include_bytes!(
-        "../../../../spec/examples/scanner-semantic-evidence.json"
-    ))
+    let original: semantic::SemanticEvidenceEnvelope<'static> = serde_json::from_slice(
+        include_bytes!("../../../../spec/examples/scanner-semantic-evidence.json"),
+    )
     .unwrap();
     for observations in [
         vec![],
@@ -26,7 +58,7 @@ fn generated_semantic_digests_keep_the_exact_payload_preimage() {
             .to_vec(),
     ] {
         let (document, bytes) = semantic::envelope(semantic::SemanticEvidence {
-            observations,
+            observations: observations.into_iter().map(Cow::Owned).collect(),
             ..original.payload.clone()
         })
         .unwrap();
@@ -43,7 +75,8 @@ fn generated_semantic_digests_keep_the_exact_payload_preimage() {
 #[test]
 fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
     let bytes = include_bytes!("../../../../spec/examples/scanner-semantic-evidence.json");
-    let original: semantic::SemanticEvidenceEnvelope = serde_json::from_slice(bytes).unwrap();
+    let original: semantic::SemanticEvidenceEnvelope<'static> =
+        serde_json::from_slice(bytes).unwrap();
     assert_eq!(semantic::validate(&original), Ok(()));
 
     let mut tampered = original.clone();
@@ -63,6 +96,7 @@ fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
                         anchors: Vec::new(),
                     })
                 })
+                .map(Cow::Owned)
                 .to_vec(),
             ErrorKind::UnsortedSet,
         ),

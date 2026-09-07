@@ -3,6 +3,8 @@
     reason = "integration assertions over the external-control request gate"
 )]
 
+use std::borrow::Cow;
+
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_scan::request::controls;
 use amiss_wire::assessment::Nullable;
@@ -87,7 +89,7 @@ fn semantic_evidence(
     input_digest: Digest,
     source_report_payload_digest: Option<Digest>,
     observations: Vec<Observation>,
-) -> SemanticEvidence {
+) -> SemanticEvidence<'static> {
     SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
@@ -104,11 +106,11 @@ fn semantic_evidence(
             input_digest,
         },
         complete: true,
-        observations,
+        observations: observations.into_iter().map(Cow::Owned).collect(),
     }
 }
 
-fn supplied_semantic(evidence: SemanticEvidence) -> SuppliedSemanticEvidence {
+fn supplied_semantic(evidence: SemanticEvidence<'static>) -> SuppliedSemanticEvidence {
     let expected_context_digest = evidence.producer.context_digest;
     let (value, _bytes) = amiss_wire::semantic::envelope(evidence)
         .expect("the envelope contains known observation models");
@@ -256,12 +258,12 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
     let mut unsupported = valid.clone();
     unsupported.producer.version = "2".to_owned();
     let mut malformed = valid;
-    malformed.observations[0] = Observation::Sphinx(SphinxLabelObservation {
+    malformed.observations[0] = Cow::Owned(Observation::Sphinx(SphinxLabelObservation {
         kind: SphinxLabelKind::Current,
         inventory: "python".parse().unwrap(),
         name: "except_star".to_owned(),
         destination: "https:///missing-authority".to_owned(),
-    });
+    }));
 
     for evidence in [incomplete, unsupported, malformed] {
         let mut request = empty();
@@ -326,11 +328,11 @@ fn malformed_record_sets_fail_closed() {
     let mut multiple_sets = valid.clone();
     multiple_sets
         .observations
-        .push(Observation::Record(record::Observation {
+        .push(Cow::Owned(Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
             name: "rust/other".parse().unwrap(),
             records: Vec::new(),
-        }));
+        })));
     let mut invalid = vec![wrong_version, report_derived, multiple_sets];
     for rows in [
         &[("b", "B"), ("a", "A")][..],
@@ -339,7 +341,7 @@ fn malformed_record_sets_fail_closed() {
         &[("a", "")][..],
     ] {
         let mut evidence = valid.clone();
-        evidence.observations = vec![Observation::Record(record::Observation {
+        evidence.observations = vec![Cow::Owned(Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
             name: "rust/public-api".parse().unwrap(),
             records: rows
@@ -349,7 +351,7 @@ fn malformed_record_sets_fail_closed() {
                     value: (*value).to_owned(),
                 })
                 .collect(),
-        })];
+        }))];
         invalid.push(evidence);
     }
 
@@ -445,29 +447,29 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let mut unsupported = valid.clone();
     unsupported.producer.version = "0.2.0".to_owned();
     let mut invalid_route = valid.clone();
-    invalid_route.observations = vec![
+    invalid_route.observations = vec![Cow::Owned(
         site_observation(
             "//other.example/guide",
             SiteObservation::Page("docs/guide.md", &["intro"]),
         )
         .unwrap(),
-    ];
+    )];
     let mut unsorted_anchors = valid.clone();
-    unsorted_anchors.observations = vec![
+    unsorted_anchors.observations = vec![Cow::Owned(
         site_observation(
             "/guide/",
             SiteObservation::Page("docs/guide.md", &["intro", "details"]),
         )
         .unwrap(),
-    ];
+    )];
     let mut duplicate_anchors = valid;
-    duplicate_anchors.observations = vec![
+    duplicate_anchors.observations = vec![Cow::Owned(
         site_observation(
             "/guide/",
             SiteObservation::Page("docs/guide.md", &["intro", "intro"]),
         )
         .unwrap(),
-    ];
+    )];
     let malformed_fragment_redirect = semantic_evidence(
         SemanticProducerKind::SiteBuild,
         "0.5.1",
@@ -487,13 +489,13 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         "/legacy/#intro",
     ] {
         let mut invalid = malformed_fragment_redirect.clone();
-        invalid.observations = vec![
+        invalid.observations = vec![Cow::Owned(
             site_observation(
                 "/legacy/",
                 SiteObservation::Redirect("docs/redirects.toml", destination),
             )
             .unwrap(),
-        ];
+        )];
         let mut request = empty();
         request.semantic_evidence = vec![supplied_semantic(invalid)];
         assert_eq!(
