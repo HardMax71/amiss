@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DocumentCounts {
     pub discovered: u64,
     pub excluded_builtin: u64,
@@ -20,6 +21,7 @@ pub struct DocumentCounts {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReferenceCounts {
     pub explicit_local: u64,
     pub external_out_of_scope: u64,
@@ -31,6 +33,7 @@ pub struct ReferenceCounts {
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FindingCounts {
     pub analysis_errors: u64,
     pub debt_tolerated: u64,
@@ -48,11 +51,15 @@ pub struct FindingCounts {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Summary {
     pub counts_complete: bool,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub documents: DocumentCounts,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub findings: FindingCounts,
     pub governed_claims: u64,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub references: ReferenceCounts,
     pub unattested_claims: u64,
 }
