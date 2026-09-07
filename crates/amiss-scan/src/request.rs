@@ -22,17 +22,16 @@ pub struct ControlInputs {
     pub semantic: crate::semantic::Inputs,
 }
 
-/// Parses every supplied value under its own schema and requires its semantic
-/// digest to equal the independently supplied expected digest.
+/// Validates and consumes the typed controls, requiring their semantic digests
+/// to equal the independently supplied expected digests.
 ///
 /// # Errors
 ///
 /// The first malformed embedded control or digest mismatch, as one typed
 /// configuration detail suitable for the pipeline's unavailable projection.
-pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail> {
+pub fn controls(request: ControlsRequest) -> Result<ControlInputs, ErrorDetail> {
     let floor = request
         .organization_floor
-        .as_ref()
         .map(|supplied| {
             let digest = canonical_organization_floor(&supplied.value)
                 .map_err(floor_detail)?
@@ -41,7 +40,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
             Ok(FloorInput {
-                floor: supplied.value.clone(),
+                floor: supplied.value,
                 digest,
                 trust_source: supplied.trust_source,
             })
@@ -49,7 +48,6 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .transpose()?;
     let debt = request
         .debt_snapshot
-        .as_ref()
         .map(|supplied| {
             typed(supplied, canonical_debt_snapshot).map(|(snapshot, digest, trust_source)| {
                 DebtInput {
@@ -62,7 +60,6 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .transpose()?;
     let waiver = request
         .waiver_bundle
-        .as_ref()
         .map(|supplied| {
             typed(supplied, canonical_waiver_bundle).map(|(bundle, digest, trust_source)| {
                 WaiverInput {
@@ -75,7 +72,6 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .transpose()?;
     let time = request
         .trusted_time
-        .as_ref()
         .map(|supplied| {
             let (_, digest) = canonical_trusted_time(&supplied.value)
                 .map_err(|error| configuration_detail(&error))?;
@@ -83,16 +79,15 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
             Ok(TimeInput {
-                statement: supplied.value.clone(),
-                provider: supplied.provider.clone(),
-                provider_run_id: supplied.provider_run_id.clone(),
+                statement: supplied.value,
+                provider: supplied.provider,
+                provider_run_id: supplied.provider_run_id,
                 provider_run_attempt: supplied.provider_run_attempt,
             })
         })
         .transpose()?;
     let constraint = request
         .execution_constraint
-        .as_ref()
         .map(|supplied| {
             let (_, digest) = canonical_execution_constraint(&supplied.value)
                 .map_err(|error| configuration_detail(&error))?;
@@ -100,12 +95,12 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
             Ok(ConstraintInput {
-                descriptor: supplied.value.clone(),
+                descriptor: supplied.value,
                 trust_source: supplied.trust_source,
             })
         })
         .transpose()?;
-    let semantic = crate::semantic::parse(request.semantic_evidence.iter().enumerate().map(
+    let semantic = crate::semantic::parse(request.semantic_evidence.into_iter().enumerate().map(
         |(index, supplied)| {
             crate::semantic::validated_envelope(supplied, &format!("$.semantic_evidence[{index}]"))
         },
@@ -140,8 +135,8 @@ fn floor_detail(error: FloorDefect) -> ErrorDetail {
     }
 }
 
-fn typed<T: Clone>(
-    supplied: &SuppliedControl<T>,
+fn typed<T>(
+    supplied: SuppliedControl<T>,
     canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), Error>,
 ) -> Result<(T, Digest, RequestTrust), ErrorDetail> {
     let digest = canonical(&supplied.value)
@@ -150,7 +145,7 @@ fn typed<T: Clone>(
     if digest != supplied.expected_digest {
         return Err(code(AnalysisErrorCode::DigestMismatch));
     }
-    Ok((supplied.value.clone(), digest, supplied.trust_source))
+    Ok((supplied.value, digest, supplied.trust_source))
 }
 
 /// Maps one strict external-input defect into the scanner's public analysis taxonomy.

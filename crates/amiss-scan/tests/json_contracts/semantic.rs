@@ -75,7 +75,7 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
         }],
         ..ControlsRequest::default()
     };
-    let inputs = amiss_scan::request::controls(&request).unwrap();
+    let inputs = amiss_scan::request::controls(request).unwrap();
     let expected_digest = envelope.payload_digest;
     let engine = EngineProvenance {
         version: "test".to_owned(),
@@ -173,8 +173,8 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
             }],
             ..ControlsRequest::default()
         };
-        assert!(amiss_scan::request::controls(&request).is_ok(), "{kind}");
         let request_bytes = String::from_utf8(request.canonical_bytes().unwrap()).unwrap();
+        assert!(amiss_scan::request::controls(request).is_ok(), "{kind}");
         let extended = ExtendedObservation {
             observation,
             unexpected: true,
@@ -208,7 +208,7 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
             let parsed = ControlsRequest::parse(altered.as_bytes());
             if typed {
                 assert_eq!(
-                    amiss_scan::request::controls(&parsed.unwrap())
+                    amiss_scan::request::controls(parsed.unwrap())
                         .unwrap_err()
                         .code,
                     AnalysisErrorCode::ConfigurationInvalid,

@@ -93,7 +93,7 @@ fn semantic_inputs(
         }],
         ..ControlsRequest::default()
     };
-    controls(&request)
+    controls(request)
         .expect("the typed record set enters the scanner")
         .semantic
 }
