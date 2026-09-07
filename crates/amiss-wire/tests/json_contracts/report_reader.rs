@@ -5,26 +5,22 @@ use serde_json::{Value, json};
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
 #[test]
-fn extension_fields_are_rejected_after_digest_verification() {
-    for (path, expected) in [
-        ("/payload", Err(ReportDefect::NotAReport)),
-        ("/payload/engine", Err(ReportDefect::NotAReport)),
-        ("/payload/summary", Err(ReportDefect::NotAReport)),
-    ] {
+fn extension_fields_are_rejected_before_digest_verification() {
+    for path in ["/payload", "/payload/engine", "/payload/summary"] {
         let mut report: Value = serde_json::from_slice(REPORT).unwrap();
         report.pointer_mut(path).unwrap()["future_field"] =
             json!({"\u{1f600}": [null, true, -7], "\u{e000}": "extra"});
         assert_eq!(
             validate_envelope(&serde_json::to_vec(&report).unwrap()).map(|_| ()),
-            Err(ReportDefect::DigestMismatch),
+            Err(ReportDefect::NotAReport),
             "{path}"
         );
         let canonical = bind(&mut report).unwrap();
         let checked = validate_envelope(&canonical).map(drop);
-        assert_eq!(checked, expected, "{path}");
+        assert_eq!(checked, Err(ReportDefect::NotAReport), "{path}");
         assert_eq!(
             validate_envelope(&serde_json::to_vec_pretty(&report).unwrap()).map(drop),
-            expected,
+            Err(ReportDefect::NotAReport),
             "{path}"
         );
     }
@@ -66,7 +62,7 @@ fn report_headers_and_verdicts_keep_their_closed_json_shapes() {
         (
             "/payload/compatibility",
             json!("2"),
-            ReportDefect::UnsupportedCompatibility,
+            ReportDefect::NotAReport,
         ),
         (
             "/payload/compatibility",
@@ -82,17 +78,17 @@ fn report_headers_and_verdicts_keep_their_closed_json_shapes() {
         (
             "/payload/result",
             json!([true, "pass", 0]),
-            ReportDefect::InvalidResult,
+            ReportDefect::NotAReport,
         ),
         (
             "/payload/result/status",
             json!({"pass": null}),
-            ReportDefect::InvalidResult,
+            ReportDefect::NotAReport,
         ),
         (
             "/payload/result/complete",
             json!(null),
-            ReportDefect::InvalidResult,
+            ReportDefect::NotAReport,
         ),
         (
             "/payload/result/exit_code",

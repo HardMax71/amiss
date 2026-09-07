@@ -18,6 +18,7 @@ mod report_controls;
 mod report_details;
 mod report_findings;
 mod report_identity;
+mod report_ingress;
 mod report_keys;
 mod report_projections;
 mod report_reader;

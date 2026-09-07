@@ -4,30 +4,15 @@ use crate::ExitClass;
 use crate::digest::{Digest, hj_serde};
 use crate::json;
 
-use super::model::{
-    ReportEnvelope, ReportPayload, ReportPayloadSchema, ReportResult, ReportStatus,
-};
-use super::{COMPATIBILITY, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect};
-
-#[derive(Deserialize)]
-struct PayloadHeader {
-    #[serde(rename = "schema")]
-    _schema: ReportPayloadSchema,
-    compatibility: String,
-}
-
-#[derive(Deserialize)]
-struct ResultHeader {
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
-    result: ReportResult,
-}
+use super::model::{ReportEnvelope, ReportPayload, ReportResult, ReportStatus};
+use super::{ENVELOPE_SCHEMA, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect};
 
 /// Accepts the active report bytes and returns the typed payload and recorded verdict.
 ///
 /// # Errors
 ///
-/// Refuses oversized or non-strict JSON, unsupported report identities, and invalid
-/// payload digests, result tuples, or known fields.
+/// Refuses oversized or non-strict JSON, invalid report shapes or identities, and
+/// typed normalization before checking the payload digest and result tuple.
 pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitClass), ReportDefect> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES
         || !matches!(json::parse(bytes), Ok(json::Value::Object(_)))
@@ -37,16 +22,23 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitCla
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     // The strict gate has already enforced the document depth ceiling.
     deserializer.disable_recursion_limit();
-    let envelope: ReportEnvelope<serde_json::Value> =
-        ReportEnvelope::deserialize(&mut deserializer)
-            .map_err(|_defect| ReportDefect::NotAReport)?;
-    if !envelope.payload.is_object() {
-        return Err(ReportDefect::NotAReport);
-    }
-    let header = PayloadHeader::deserialize(&envelope.payload)
+    let envelope: ReportEnvelope = ReportEnvelope::deserialize(&mut deserializer)
         .map_err(|_defect| ReportDefect::NotAReport)?;
-    if header.compatibility != COMPATIBILITY {
-        return Err(ReportDefect::UnsupportedCompatibility);
+    let typed_digest = hj_serde(ENVELOPE_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&envelope, &mut writer)
+    })
+    .map_err(|_defect| ReportDefect::NotAReport)?;
+    let mut input = serde_json::Deserializer::from_slice(bytes);
+    input.disable_recursion_limit();
+    let input_digest = hj_serde(ENVELOPE_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(
+            &serde_transcode::Transcoder::new(&mut input),
+            &mut writer,
+        )
+    })
+    .map_err(|_defect| ReportDefect::NotAReport)?;
+    if input_digest != typed_digest {
+        return Err(ReportDefect::NotAReport);
     }
     let digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
         serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
@@ -55,12 +47,8 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitCla
     if digest != envelope.payload_digest {
         return Err(ReportDefect::DigestMismatch);
     }
-    let ResultHeader { result } = ResultHeader::deserialize(&envelope.payload)
-        .map_err(|_defect| ReportDefect::InvalidResult)?;
-    let verdict = result_verdict(&result)?;
-    let payload =
-        serde_json::from_value(envelope.payload).map_err(|_defect| ReportDefect::NotAReport)?;
-    Ok((payload, digest, verdict))
+    let verdict = result_verdict(&envelope.payload.result)?;
+    Ok((envelope.payload, digest, verdict))
 }
 
 /// Checks the recorded completeness, status and exit code as one verdict.

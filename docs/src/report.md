@@ -31,6 +31,15 @@ their specific errors. Exact canonical byte equality prevents accepting a differ
 input with the digest of its typed normalization. Unknown payload-root fields are rejected by
 both readers.
 
+The public reader also decodes the complete model. It accepts whitespace, member reordering
+and equivalent JSON string escapes, but not changes to the data's shape. At ingress,
+`serde-transcode` feeds the original JSON directly to the canonical writer; a domain-separated
+SHA-256 check compares that envelope with the typed envelope before its payload digest is
+trusted. This prevents a positional array, dropped member or normalized field from borrowing
+the digest of a different report, without retaining a dynamic payload or staging two output
+buffers. Malformed fields and unsupported compatibility tags return the report-shape error;
+validly shaped payload-digest and result-tuple mismatches retain their specific errors.
+
 Engine, action, adapter and summary metadata also use closed models. Unknown members are
 rejected even with a matching payload digest. Bootstrap validates the summary's declared
 fields as well as the engine block; a local action tag cannot conceal a forge-action body.
