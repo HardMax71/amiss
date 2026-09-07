@@ -127,8 +127,17 @@ fn a_verified_floor_lands_typed() {
         .1;
     let mut request = empty();
     request.organization_floor = Some(supplied(FLOOR, digest));
-    let inputs = controls(&request).expect("a matching digest passes the gate");
+    let original_allocation = request
+        .organization_floor
+        .as_ref()
+        .unwrap()
+        .value
+        .floor_id
+        .as_str()
+        .as_ptr();
+    let inputs = controls(request).expect("a matching digest passes the gate");
     let landed = inputs.floor.expect("the floor lands typed");
+    assert_eq!(landed.floor.floor_id.as_str().as_ptr(), original_allocation);
     assert_eq!(landed.floor, floor);
     assert_eq!(landed.digest, digest);
     assert!(inputs.time.is_none() && inputs.debt.is_none());
@@ -138,7 +147,7 @@ fn a_verified_floor_lands_typed() {
 fn a_wrong_floor_digest_is_refused() {
     let mut request = empty();
     request.organization_floor = Some(supplied(FLOOR, hb("test/other", b"not the floor")));
-    let error = controls(&request).expect_err("a foreign digest never passes");
+    let error = controls(request).expect_err("a foreign digest never passes");
     assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
 }
 
@@ -155,8 +164,10 @@ fn a_verified_time_statement_lands_with_its_run_context() {
         provider_run_id: "pipeline/01J2Z9-7".to_owned(),
         provider_run_attempt: 2,
     });
-    let inputs = controls(&request).expect("a matching digest passes the gate");
+    let provider_allocation = request.trusted_time.as_ref().unwrap().provider.as_ptr();
+    let inputs = controls(request).expect("a matching digest passes the gate");
     let landed = inputs.time.expect("the statement lands typed");
+    assert_eq!(landed.provider.as_ptr(), provider_allocation);
     assert_eq!(landed.statement, statement);
     assert_eq!(landed.provider, "gitlab-ci");
     assert_eq!(landed.provider_run_id, "pipeline/01J2Z9-7");
@@ -173,7 +184,7 @@ fn a_wrong_time_digest_is_refused() {
         provider_run_id: "pipeline/01J2Z9-7".to_owned(),
         provider_run_attempt: 2,
     });
-    let error = controls(&request).expect_err("a foreign digest never passes");
+    let error = controls(request).expect_err("a foreign digest never passes");
     assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
 }
 
@@ -201,8 +212,7 @@ fn typed_time_still_requires_semantic_validation() {
             }),
             ..empty()
         };
-        let error =
-            controls(&request).expect_err("typed fields do not establish semantic validity");
+        let error = controls(request).expect_err("typed fields do not establish semantic validity");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }
 }
@@ -214,7 +224,7 @@ fn a_verified_constraint_lands_through_the_shared_gate() {
     let (_, digest) = amiss_wire::controls::canonical_execution_constraint(&descriptor).unwrap();
     let mut request = empty();
     request.execution_constraint = Some(supplied(CONSTRAINT, digest));
-    let inputs = controls(&request).expect("a matching digest passes the gate");
+    let inputs = controls(request).expect("a matching digest passes the gate");
     let landed = inputs.constraint.expect("the descriptor lands typed");
     assert_eq!(landed.descriptor, descriptor);
 }
@@ -223,7 +233,7 @@ fn a_verified_constraint_lands_through_the_shared_gate() {
 fn a_wrong_constraint_digest_is_refused() {
     let mut request = empty();
     request.execution_constraint = Some(supplied(CONSTRAINT, hb("test/other", b"not the plan")));
-    let error = controls(&request).expect_err("a foreign digest never passes");
+    let error = controls(request).expect_err("a foreign digest never passes");
     assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
 }
 
@@ -256,7 +266,7 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
     for evidence in [incomplete, unsupported, malformed] {
         let mut request = empty();
         request.semantic_evidence = vec![supplied_semantic(evidence)];
-        let error = controls(&request).expect_err("the inventory consumer fails closed");
+        let error = controls(request).expect_err("the inventory consumer fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }
 }
@@ -288,7 +298,7 @@ fn record_sets_accept_complete_empty_and_partial_typed_rows() {
         evidence.complete = complete;
         let mut request = empty();
         request.semantic_evidence = vec![supplied_semantic(evidence)];
-        controls(&request).expect("one typed record set reaches the projection context");
+        controls(request).expect("one typed record set reaches the projection context");
     }
 }
 
@@ -346,7 +356,7 @@ fn malformed_record_sets_fail_closed() {
     for evidence in invalid {
         let mut request = empty();
         request.semantic_evidence = vec![supplied_semantic(evidence)];
-        let error = controls(&request).expect_err("malformed record evidence stays unavailable");
+        let error = controls(request).expect_err("malformed record evidence stays unavailable");
         assert!(matches!(
             error.code,
             AnalysisErrorCode::ConfigurationInvalid | AnalysisErrorCode::NoncanonicalArray
@@ -384,7 +394,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
     });
     let mut request = empty();
     request.semantic_evidence = supplied;
-    let error = controls(&request).expect_err("one set name has one evidence authority");
+    let error = controls(request).expect_err("one set name has one evidence authority");
     assert_eq!(error.code, AnalysisErrorCode::NoncanonicalArray);
 }
 
@@ -405,7 +415,7 @@ fn semantic_evidence_must_match_the_independently_supplied_context() {
         expected_context_digest: hb("test/inventory", b"another inventory"),
     }];
 
-    let error = controls(&request).expect_err("a foreign context never reaches a consumer");
+    let error = controls(request).expect_err("a foreign context never reaches a consumer");
     assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
 }
 
@@ -487,13 +497,13 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
         let mut request = empty();
         request.semantic_evidence = vec![supplied_semantic(invalid)];
         assert_eq!(
-            controls(&request).unwrap_err().code,
+            controls(request).unwrap_err().code,
             AnalysisErrorCode::ConfigurationInvalid
         );
     }
     let mut accepted = empty();
     accepted.semantic_evidence = vec![supplied_semantic(malformed_fragment_redirect)];
-    controls(&accepted).expect("a literal percent sign remains a valid redirect fragment");
+    controls(accepted).expect("a literal percent sign remains a valid redirect fragment");
 
     for (evidence, expected) in [
         (incomplete, AnalysisErrorCode::ConfigurationInvalid),
@@ -504,7 +514,7 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     ] {
         let mut request = empty();
         request.semantic_evidence = vec![supplied_semantic(evidence)];
-        let error = controls(&request).expect_err("the site-build consumer fails closed");
+        let error = controls(request).expect_err("the site-build consumer fails closed");
         assert_eq!(error.code, expected);
     }
 }
@@ -568,7 +578,7 @@ fn generated_site_claims_admit_absent_repository_attribution() {
     let mut request = empty();
     request.semantic_evidence = vec![supplied_semantic(evidence)];
 
-    controls(&request).expect("explicit null attribution is a valid generated-page claim");
+    controls(request).expect("explicit null attribution is a valid generated-page claim");
 }
 
 #[test]
@@ -608,7 +618,7 @@ fn inconsistent_site_navigation_never_becomes_input() {
         );
         let mut request = empty();
         request.semantic_evidence = vec![supplied_semantic(evidence)];
-        let error = controls(&request).expect_err("inconsistent navigation fails closed");
+        let error = controls(request).expect_err("inconsistent navigation fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
     }
 }
