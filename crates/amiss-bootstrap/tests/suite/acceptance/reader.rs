@@ -6,6 +6,97 @@ use serde_json::{Value, json};
 use super::accepted_report;
 
 #[test]
+fn report_rows_are_decoded_not_just_counted() {
+    use amiss_wire::report::model::ReportEnvelope;
+
+    let (wire, expectations) = accepted_report();
+    let report: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    let payload =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
+    let wire = String::from_utf8(wire).unwrap();
+    let rejected = [
+        (
+            "documents",
+            serde_json_canonicalizer::to_vec(&report.payload.documents).unwrap(),
+            report.payload.documents.len(),
+        ),
+        (
+            "observations",
+            serde_json_canonicalizer::to_vec(&report.payload.observations).unwrap(),
+            report.payload.observations.len(),
+        ),
+        (
+            "findings",
+            serde_json_canonicalizer::to_vec(&report.payload.findings).unwrap(),
+            report.payload.findings.len(),
+        ),
+        (
+            "errors",
+            serde_json_canonicalizer::to_vec(&report.payload.errors).unwrap(),
+            report.payload.errors.len(),
+        ),
+    ]
+    .map(|(name, rows, count)| {
+        let rows = String::from_utf8(rows).unwrap();
+        let invalid = format!("[{}]", vec!["null"; count.max(1)].join(","));
+        let changed = payload.replace(
+            &format!("\"{name}\":{rows}"),
+            &format!("\"{name}\":{invalid}"),
+        );
+        assert_ne!(changed, payload);
+        let altered = wire.replace(&payload, &changed).replace(
+            &report.payload_digest.to_string(),
+            &hb(PAYLOAD_SCHEMA, changed.as_bytes()).to_string(),
+        );
+        accept(altered.as_bytes(), &expectations)
+    });
+    assert_eq!(rejected, [Err(AcceptanceDefect::Shape); 4]);
+}
+
+#[test]
+fn typed_normalization_cannot_substitute_for_the_input_bytes() {
+    use amiss_wire::report::model::ReportEnvelope;
+
+    let (wire, expectations) = accepted_report();
+    let report: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    let step = &report.payload.findings[0].policy_trace[0];
+    let object = String::from_utf8(serde_json_canonicalizer::to_vec(step).unwrap()).unwrap();
+    let sequence =
+        serde_json::to_string(&(step.after, step.before, &step.rule_id, step.source)).unwrap();
+    let original = String::from_utf8(wire).unwrap();
+    let changed = original.replace(&object, &sequence);
+    assert_ne!(changed, original);
+    assert_eq!(
+        serde_json::from_str::<ReportEnvelope>(&changed).unwrap(),
+        report
+    );
+    assert_eq!(
+        accept(changed.as_bytes(), &expectations),
+        Err(AcceptanceDefect::Noncanonical)
+    );
+}
+
+#[test]
+fn typed_counts_still_obey_the_strict_json_integer_limit() {
+    use amiss_wire::report::model::ReportEnvelope;
+
+    let (wire, expectations) = accepted_report();
+    let mut report: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    report.payload.summary.findings.warn = 9_007_199_254_740_992;
+    report.payload_digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+    );
+    let mut wire = serde_json_canonicalizer::to_vec(&report).unwrap();
+    wire.push(b'\n');
+    assert_eq!(
+        serde_json::from_slice::<ReportEnvelope>(&wire).unwrap(),
+        report
+    );
+    assert_eq!(accept(&wire, &expectations), Err(AcceptanceDefect::Shape));
+}
+
+#[test]
 fn report_readers_agree_on_complete_status_and_exit_code() {
     use amiss_wire::report::{
         ReportDefect,
@@ -126,8 +217,8 @@ fn core_defects_keep_their_order_when_later_fields_are_also_wrong() {
             AcceptanceDefect::BaseIdentity,
         ),
         (
-            "/payload/evaluation/candidate/kind",
-            json!("git-tag"),
+            "/payload/evaluation/candidate/commit_oid",
+            json!("b".repeat(40)),
             AcceptanceDefect::CandidateIdentity,
         ),
         (
@@ -154,7 +245,6 @@ fn core_defects_keep_their_order_when_later_fields_are_also_wrong() {
     }
     let mut report = original;
     report["payload"]["engine"]["engine_digest"] = json!(format!("sha256:{}", "0".repeat(64)));
-    report["payload"]["result"] = Value::Null;
     assert_eq!(
         accept(&bind(&mut report), &expectations),
         Err(AcceptanceDefect::Engine)
@@ -166,35 +256,30 @@ fn core_defects_keep_their_order_when_later_fields_are_also_wrong() {
         accept(&wire, &expectations),
         Err(AcceptanceDefect::PayloadDigest)
     );
+    report["payload"]["result"] = Value::Null;
+    let mut wire = serde_json_canonicalizer::to_vec(&report).unwrap();
+    wire.push(b'\n');
+    assert_eq!(accept(&wire, &expectations), Err(AcceptanceDefect::Shape));
 }
 
 #[test]
 fn core_objects_cannot_be_replaced_by_positional_arrays() {
     let (wire, expectations) = accepted_report();
     let original: Value = serde_json::from_slice(&wire).unwrap();
-    for (path, expected) in [
-        ("", AcceptanceDefect::Shape),
-        ("/payload", AcceptanceDefect::Shape),
-        ("/payload/engine", AcceptanceDefect::Engine),
-        (
-            "/payload/engine/action_provenance",
-            AcceptanceDefect::Engine,
-        ),
-        (
-            "/payload/engine/adapters/0/contract_descriptor",
-            AcceptanceDefect::Engine,
-        ),
-        ("/payload/evaluation", AcceptanceDefect::Shape),
-        ("/payload/evaluation/base", AcceptanceDefect::BaseIdentity),
-        (
-            "/payload/evaluation/candidate",
-            AcceptanceDefect::CandidateIdentity,
-        ),
-        ("/payload/result", AcceptanceDefect::Shape),
-        ("/payload/summary", AcceptanceDefect::Shape),
-        ("/payload/summary/documents", AcceptanceDefect::Shape),
-        ("/payload/summary/findings", AcceptanceDefect::Shape),
-        ("/payload/summary/references", AcceptanceDefect::Shape),
+    for path in [
+        "",
+        "/payload",
+        "/payload/engine",
+        "/payload/engine/action_provenance",
+        "/payload/engine/adapters/0/contract_descriptor",
+        "/payload/evaluation",
+        "/payload/evaluation/base",
+        "/payload/evaluation/candidate",
+        "/payload/result",
+        "/payload/summary",
+        "/payload/summary/documents",
+        "/payload/summary/findings",
+        "/payload/summary/references",
     ] {
         let mut report = original.clone();
         let value = report.pointer_mut(path).unwrap();
@@ -206,7 +291,11 @@ fn core_objects_cannot_be_replaced_by_positional_arrays() {
         } else {
             bind(&mut report)
         };
-        assert_eq!(accept(&wire, &expectations), Err(expected), "{path}");
+        assert_eq!(
+            accept(&wire, &expectations),
+            Err(AcceptanceDefect::Shape),
+            "{path}"
+        );
     }
 }
 
@@ -223,7 +312,7 @@ fn core_status_tags_are_strings_and_completion_is_boolean() {
         (
             "/payload/evaluation/candidate/kind",
             json!({"git-commit": null}),
-            AcceptanceDefect::CandidateIdentity,
+            AcceptanceDefect::Shape,
         ),
     ] {
         let mut report = original.clone();
@@ -340,26 +429,20 @@ fn candidates_without_an_expected_commit_still_require_a_snapshot_shape() {
 }
 
 #[test]
-fn metadata_extensions_are_rejected_after_the_payload_digest_check() {
+fn metadata_extensions_are_rejected_before_the_payload_digest_check() {
     let (wire, expectations) = accepted_report();
     let original: Value = serde_json::from_slice(&wire).unwrap();
-    for (path, expected) in [
-        ("/payload", Ok(0)),
-        ("/payload/engine", Err(AcceptanceDefect::Engine)),
-        (
-            "/payload/engine/action_provenance",
-            Err(AcceptanceDefect::Engine),
-        ),
-        ("/payload/engine/adapters/0", Err(AcceptanceDefect::Engine)),
-        (
-            "/payload/engine/adapters/0/contract_descriptor",
-            Err(AcceptanceDefect::Engine),
-        ),
-        ("/payload/result", Err(AcceptanceDefect::Shape)),
-        ("/payload/summary", Err(AcceptanceDefect::Shape)),
-        ("/payload/summary/documents", Err(AcceptanceDefect::Shape)),
-        ("/payload/summary/findings", Err(AcceptanceDefect::Shape)),
-        ("/payload/summary/references", Err(AcceptanceDefect::Shape)),
+    for path in [
+        "/payload",
+        "/payload/engine",
+        "/payload/engine/action_provenance",
+        "/payload/engine/adapters/0",
+        "/payload/engine/adapters/0/contract_descriptor",
+        "/payload/result",
+        "/payload/summary",
+        "/payload/summary/documents",
+        "/payload/summary/findings",
+        "/payload/summary/references",
     ] {
         let mut report = original.clone();
         report.pointer_mut(path).unwrap()["future"] =
@@ -368,12 +451,12 @@ fn metadata_extensions_are_rejected_after_the_payload_digest_check() {
         stale.push(b'\n');
         assert_eq!(
             accept(&stale, &expectations),
-            Err(AcceptanceDefect::PayloadDigest),
+            Err(AcceptanceDefect::Shape),
             "{path}"
         );
         assert_eq!(
             accept(&bind(&mut report), &expectations),
-            expected,
+            Err(AcceptanceDefect::Shape),
             "{path}"
         );
     }

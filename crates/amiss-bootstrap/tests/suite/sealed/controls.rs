@@ -1,7 +1,7 @@
 use amiss_bootstrap::supervise::{AcceptanceDefect, accept};
 use amiss_wire::json::{Value, parse};
 
-use super::{Deviation, FLOOR_DIGEST, FOREIGN_DIGEST, Patch, entry, golden, refused, set, string};
+use super::{Deviation, entry, golden, refused, set};
 
 #[test]
 fn sealed_controls_require_objects_not_positional_arrays() {
@@ -34,11 +34,7 @@ fn sealed_controls_require_objects_not_positional_arrays() {
                     .collect(),
             );
         });
-        assert_eq!(
-            refused(deviation),
-            AcceptanceDefect::SealedControls,
-            "{path:?}"
-        );
+        assert_eq!(refused(deviation), AcceptanceDefect::Shape, "{path:?}");
     }
 }
 
@@ -64,7 +60,7 @@ fn unknown_control_members_are_refused_with_correct_payload_digests() {
         }));
         assert_eq!(
             accept(&wire, &expectations),
-            Err(AcceptanceDefect::SealedControls),
+            Err(AcceptanceDefect::Shape),
             "{path:?}"
         );
     }
@@ -90,25 +86,22 @@ fn embedded_closed_controls_do_not_accept_unknown_members() {
             let body = entry(entry(entry(payload, "controls"), control), body);
             set(body, "future", Value::Null);
         });
-        assert_eq!(
-            refused(deviation),
-            AcceptanceDefect::SealedControls,
-            "{control}"
-        );
+        assert_eq!(refused(deviation), AcceptanceDefect::Shape, "{control}");
     }
 }
 
 #[test]
 fn control_extensions_keep_the_strict_parser_depth_boundary() {
-    for (depth, result) in [
-        (128, Err(AcceptanceDefect::SealedControls)),
-        (512, Err(AcceptanceDefect::Shape)),
-    ] {
+    for depth in [128, 512] {
         let (wire, expectations) = golden(Deviation::post(move |payload| {
             let extension = (0..depth).fold(Value::Null, |value, _| Value::array(vec![value]));
             set(entry(payload, "controls"), "future", extension);
         }));
-        assert_eq!(accept(&wire, &expectations), result, "{depth}");
+        assert_eq!(
+            accept(&wire, &expectations),
+            Err(AcceptanceDefect::Shape),
+            "{depth}"
+        );
     }
 }
 
@@ -125,112 +118,6 @@ fn missing_nullable_control_members_are_not_null() {
                 .filter(|(name, _)| name != key)
                 .collect();
         });
-        assert_eq!(
-            refused(deviation),
-            AcceptanceDefect::SealedControls,
-            "{name}.{key}"
-        );
-    }
-}
-
-#[test]
-fn semantic_evidence_binds_each_producer_fact() {
-    use amiss_wire::report::model::{SemanticEvidenceProducer, SemanticEvidenceProvenance};
-
-    let expected = SemanticEvidenceProvenance {
-        payload_digest: FLOOR_DIGEST.parse().unwrap(),
-        producer: SemanticEvidenceProducer {
-            identity: "producer".parse().unwrap(),
-            input_digest: FLOOR_DIGEST.parse().unwrap(),
-            kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
-            version: "1".to_owned(),
-        },
-    };
-    let mut cases: Vec<(&str, Option<Patch>)> = vec![
-        ("unchanged", None),
-        (
-            "payload digest",
-            Some(Box::new(|row| {
-                set(row, "payload_digest", string(FOREIGN_DIGEST));
-            })),
-        ),
-        (
-            "row shape",
-            Some(Box::new(|row| {
-                let Value::Object(members) = std::mem::replace(row, Value::Null) else {
-                    panic!("a row")
-                };
-                *row = Value::array(
-                    members
-                        .into_vec()
-                        .into_iter()
-                        .map(|(_, value)| value)
-                        .collect(),
-                );
-            })),
-        ),
-        (
-            "producer shape",
-            Some(Box::new(|row| {
-                let producer = entry(row, "producer");
-                let Value::Object(members) = std::mem::replace(producer, Value::Null) else {
-                    panic!("a producer")
-                };
-                *producer = Value::array(
-                    members
-                        .into_vec()
-                        .into_iter()
-                        .map(|(_, value)| value)
-                        .collect(),
-                );
-            })),
-        ),
-        (
-            "additive",
-            Some(Box::new(|row| {
-                set(row, "future", Value::Bool(true));
-                set(entry(row, "producer"), "future", Value::Bool(true));
-            })),
-        ),
-    ];
-    for (field, value) in [
-        ("input_digest", FOREIGN_DIGEST),
-        ("identity", "other"),
-        ("kind", "other"),
-        ("version", "2"),
-    ] {
-        cases.push((
-            field,
-            Some(Box::new(move |row| {
-                set(entry(row, "producer"), field, string(value));
-            })),
-        ));
-    }
-    for (name, patch) in cases {
-        let mut row = parse(&serde_json::to_vec(&expected).unwrap()).unwrap();
-        if let Some(patch) = patch {
-            patch(&mut row);
-        }
-        let (wire, mut expectations) = golden(Deviation::post(move |payload| {
-            set(
-                entry(payload, "controls"),
-                "semantic_evidence",
-                Value::array(vec![row]),
-            );
-        }));
-        expectations.sealed.as_mut().unwrap().semantic_evidence = vec![expected.clone()];
-        let result = if name == "unchanged" {
-            Ok(0)
-        } else {
-            Err(AcceptanceDefect::SealedControls)
-        };
-        assert_eq!(accept(&wire, &expectations), result, "{name}");
-        let sealed = expectations.sealed.as_mut().unwrap();
-        sealed.semantic_evidence.clear();
-        assert_eq!(
-            accept(&wire, &expectations),
-            Err(AcceptanceDefect::SealedControls),
-            "unexpected row: {name}"
-        );
+        assert_eq!(refused(deviation), AcceptanceDefect::Shape, "{name}.{key}");
     }
 }

@@ -58,14 +58,16 @@ pub enum ReportCompatibility {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
 pub struct ReportEnvelope<P = ReportPayload> {
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: P,
     pub payload_digest: Digest,
     pub schema: ReportEnvelopeSchema,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReportPayload<
     P = RepoPath,
     R = Resolution<P>,

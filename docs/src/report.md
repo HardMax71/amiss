@@ -23,6 +23,14 @@ Both report readers use the same result model and verdict check. They require ev
 member and reject unknown members, negative counts, and disagreements between `complete`,
 `status`, and `exit_code`. Bootstrap also checks the recorded finding count against the array.
 
+Bootstrap decodes the complete report once, including document, observation, finding and
+error rows, and passes the typed evaluation and controls through verification. After LF
+framing, malformed fields fail the shape check before canonical bytes, digests and semantic
+bindings are checked. Validly shaped engine, identity, control and verdict mismatches retain
+their specific errors. Exact canonical byte equality prevents accepting a differently shaped
+input with the digest of its typed normalization. Unknown payload-root fields are rejected by
+both readers.
+
 Engine, action, adapter and summary metadata also use closed models. Unknown members are
 rejected even with a matching payload digest. Bootstrap validates the summary's declared
 fields as well as the engine block; a local action tag cannot conceal a forge-action body.
