@@ -44,6 +44,10 @@ Finding-key scopes use the enum's own tag and reject unknown members, including 
 target intents and occurrence identities. Finding keys are hashed through the canonical
 writer, so Rust field declaration order does not affect identity or adoption reproduction.
 
+Projection sources reuse the policy producer's model through report decoding. Their tags
+select closed bodies; a record-set tag cannot hide a record-value selection. A tree-path
+suffix may be absent, but an explicit `null` is rejected by policy and report readers alike.
+
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
 to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,

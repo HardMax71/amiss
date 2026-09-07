@@ -6,11 +6,11 @@ use amiss_wire::{
         PAYLOAD_SCHEMA, ReportDefect,
         model::{
             ActionProvenance, Controls, ControlsUnavailableReason, ExecutionConstraintProvenance,
-            ForgeActionKind, ForgeActionProvenance, LocalActionKind, ReportEnvelope,
-            SandboxAssurance, SandboxEnforcementSource, SandboxMechanism, SandboxVerification,
-            SandboxVerificationSchema, SandboxVerifier, SemanticEvidenceProducer,
-            SemanticEvidenceProvenance, TrustedTimeProvenance, TrustedTimeTrustSource,
-            UnavailableControls, UnavailableStatus, VerifiedControlStatus,
+            FindingFactEvidence, ForgeActionKind, ForgeActionProvenance, LocalActionKind,
+            ReportEnvelope, SandboxAssurance, SandboxEnforcementSource, SandboxMechanism,
+            SandboxVerification, SandboxVerificationSchema, SandboxVerifier,
+            SemanticEvidenceProducer, SemanticEvidenceProvenance, TrustedTimeProvenance,
+            TrustedTimeTrustSource, UnavailableControls, UnavailableStatus, VerifiedControlStatus,
             VerifiedExecutionConstraint, VerifiedTrustedTime,
         },
         validate_envelope,
@@ -123,7 +123,8 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
         ))
         .unwrap(),
     );
-    assert_eq!(cases.len(), 6);
+    cases.extend(super::report_projections::reports());
+    assert_eq!(cases.len(), 12);
     for mut report in cases {
         let payload =
             String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
@@ -168,22 +169,24 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
             ),
         ]
         .into_iter()
-        .chain(report.payload.findings.iter().flat_map(|finding| {
-            std::iter::once(&finding.key_input)
-                .chain(
-                    finding
-                        .base_fact
-                        .iter()
-                        .chain(&finding.candidate_fact)
-                        .map(|fact| &fact.key_input),
-                )
-                .map(|key| {
-                    (
-                        serde_json_canonicalizer::to_vec(key).unwrap(),
-                        ReportDefect::NotAReport,
-                    )
+        .chain(
+            report
+                .payload
+                .findings
+                .iter()
+                .flat_map(|finding| {
+                    let mut fragments =
+                        vec![serde_json_canonicalizer::to_vec(&finding.key_input).unwrap()];
+                    for fact in finding.base_fact.iter().chain(&finding.candidate_fact) {
+                        fragments.push(serde_json_canonicalizer::to_vec(&fact.key_input).unwrap());
+                        if let FindingFactEvidence::Projection { source, .. } = &fact.evidence {
+                            fragments.push(serde_json_canonicalizer::to_vec(source).unwrap());
+                        }
+                    }
+                    fragments
                 })
-        })) {
+                .map(|fragment| (fragment, ReportDefect::NotAReport)),
+        ) {
             let fragment = String::from_utf8(fragment).unwrap();
             for (offset, _) in fragment.match_indices('{') {
                 let mut invalid = fragment.clone();

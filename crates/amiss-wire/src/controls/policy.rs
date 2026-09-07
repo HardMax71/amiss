@@ -98,7 +98,11 @@ pub struct NamedRegionSelection {
 #[serde(deny_unknown_fields)]
 pub struct TreePathSelection {
     pub root: RepoPathText,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "json_serde::deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub suffix: Option<String>,
     pub maximum_depth: u64,
 }
