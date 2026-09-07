@@ -176,6 +176,14 @@ fn core_objects_cannot_be_replaced_by_positional_arrays() {
         ("", AcceptanceDefect::Shape),
         ("/payload", AcceptanceDefect::Shape),
         ("/payload/engine", AcceptanceDefect::Engine),
+        (
+            "/payload/engine/action_provenance",
+            AcceptanceDefect::Engine,
+        ),
+        (
+            "/payload/engine/adapters/0/contract_descriptor",
+            AcceptanceDefect::Engine,
+        ),
         ("/payload/evaluation", AcceptanceDefect::Shape),
         ("/payload/evaluation/base", AcceptanceDefect::BaseIdentity),
         (
@@ -183,6 +191,10 @@ fn core_objects_cannot_be_replaced_by_positional_arrays() {
             AcceptanceDefect::CandidateIdentity,
         ),
         ("/payload/result", AcceptanceDefect::Shape),
+        ("/payload/summary", AcceptanceDefect::Shape),
+        ("/payload/summary/documents", AcceptanceDefect::Shape),
+        ("/payload/summary/findings", AcceptanceDefect::Shape),
+        ("/payload/summary/references", AcceptanceDefect::Shape),
     ] {
         let mut report = original.clone();
         let value = report.pointer_mut(path).unwrap();
@@ -328,13 +340,26 @@ fn candidates_without_an_expected_commit_still_require_a_snapshot_shape() {
 }
 
 #[test]
-fn result_extensions_are_rejected_after_the_payload_digest_check() {
+fn metadata_extensions_are_rejected_after_the_payload_digest_check() {
     let (wire, expectations) = accepted_report();
     let original: Value = serde_json::from_slice(&wire).unwrap();
     for (path, expected) in [
         ("/payload", Ok(0)),
-        ("/payload/engine", Ok(0)),
+        ("/payload/engine", Err(AcceptanceDefect::Engine)),
+        (
+            "/payload/engine/action_provenance",
+            Err(AcceptanceDefect::Engine),
+        ),
+        ("/payload/engine/adapters/0", Err(AcceptanceDefect::Engine)),
+        (
+            "/payload/engine/adapters/0/contract_descriptor",
+            Err(AcceptanceDefect::Engine),
+        ),
         ("/payload/result", Err(AcceptanceDefect::Shape)),
+        ("/payload/summary", Err(AcceptanceDefect::Shape)),
+        ("/payload/summary/documents", Err(AcceptanceDefect::Shape)),
+        ("/payload/summary/findings", Err(AcceptanceDefect::Shape)),
+        ("/payload/summary/references", Err(AcceptanceDefect::Shape)),
     ] {
         let mut report = original.clone();
         report.pointer_mut(path).unwrap()["future"] =

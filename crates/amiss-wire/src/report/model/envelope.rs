@@ -74,6 +74,7 @@ pub struct ReportPayload<
     pub compatibility: ReportCompatibility,
     pub controls: Controls,
     pub documents: Vec<DocumentResult<P, DocumentSide<M>>>,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub engine: Engine,
     pub errors: Vec<AnalysisError<P>>,
     pub evaluation: Evaluation,
@@ -83,6 +84,7 @@ pub struct ReportPayload<
     #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub result: ReportResult,
     pub schema: ReportPayloadSchema,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub summary: Summary,
 }
 

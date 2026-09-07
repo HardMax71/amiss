@@ -1,10 +1,12 @@
 use amiss_wire::{
     controls::{canonical_execution_constraint, canonical_trusted_time},
     digest::hb,
+    manifest::canonical_release_manifest,
     report::{
         PAYLOAD_SCHEMA, ReportDefect,
         model::{
-            Controls, ControlsUnavailableReason, ExecutionConstraintProvenance, ReportEnvelope,
+            ActionProvenance, Controls, ControlsUnavailableReason, ExecutionConstraintProvenance,
+            ForgeActionKind, ForgeActionProvenance, LocalActionKind, ReportEnvelope,
             SandboxAssurance, SandboxEnforcementSource, SandboxMechanism, SandboxVerification,
             SandboxVerificationSchema, SandboxVerifier, SemanticEvidenceProducer,
             SemanticEvidenceProvenance, TrustedTimeProvenance, TrustedTimeTrustSource,
@@ -36,6 +38,30 @@ fn reports() -> Vec<ReportEnvelope> {
     ))
     .unwrap();
     let (_, descriptor_digest) = canonical_execution_constraint(&descriptor).unwrap();
+    let release_manifest = serde_json::from_slice(include_bytes!(
+        "../../../../spec/examples/scanner-release-manifest.json"
+    ))
+    .unwrap();
+    let (_, release_manifest_digest) = canonical_release_manifest(&release_manifest).unwrap();
+    let artifact = release_manifest
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.platform == descriptor.selected_platform)
+        .unwrap();
+    report.payload.engine.action_provenance =
+        ActionProvenance::ForgeAction(Box::new(ForgeActionProvenance {
+            action_commit_oid: descriptor.action_commit_oid.clone(),
+            action_object_format: descriptor.action_object_format,
+            action_repository: descriptor.action_repository.clone(),
+            action_tree_oid: descriptor.action_tree_oid.clone(),
+            dependency_lock_digest: release_manifest.dependency_lock_digest,
+            kind: ForgeActionKind::ForgeAction,
+            manifest_path: descriptor.manifest_path.clone(),
+            selected_artifact_name: artifact.artifact_name.to_string(),
+            release_manifest,
+            release_manifest_digest,
+            selected_platform: descriptor.selected_platform,
+        }));
     let statement = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-trusted-time-statement.json"
     ))
@@ -88,7 +114,7 @@ fn reports() -> Vec<ReportEnvelope> {
 }
 
 #[test]
-fn report_controls_and_results_reject_unknown_members_after_digest_verification() {
+fn report_metadata_rejects_unknown_members_after_digest_verification() {
     let cases = reports();
     assert_eq!(cases.len(), 3);
     for mut report in cases {
@@ -109,6 +135,14 @@ fn report_controls_and_results_reject_unknown_members_after_digest_verification(
                 serde_json_canonicalizer::to_vec(&report.payload.result).unwrap(),
                 ReportDefect::InvalidResult,
             ),
+            (
+                serde_json_canonicalizer::to_vec(&report.payload.engine).unwrap(),
+                ReportDefect::NotAReport,
+            ),
+            (
+                serde_json_canonicalizer::to_vec(&report.payload.summary).unwrap(),
+                ReportDefect::NotAReport,
+            ),
         ] {
             let fragment = String::from_utf8(fragment).unwrap();
             for (offset, _) in fragment.match_indices('{') {
@@ -128,6 +162,17 @@ fn report_controls_and_results_reject_unknown_members_after_digest_verification(
             }
         }
     }
+}
+
+#[test]
+fn local_action_status_cannot_hide_a_forge_action_body() {
+    let report = reports().remove(1);
+    let action = serde_json::to_string(&report.payload.engine.action_provenance).unwrap();
+    let forge = serde_json::to_string(&ForgeActionKind::ForgeAction).unwrap();
+    let local = serde_json::to_string(&LocalActionKind::Local).unwrap();
+    let invalid = action.replace(&forge, &local);
+    assert_ne!(action, invalid);
+    assert!(serde_json::from_str::<ActionProvenance>(&invalid).is_err());
 }
 
 #[test]
