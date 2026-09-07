@@ -272,7 +272,7 @@ fn sphinx_label(inventory: &str, name: &str, destination: &str) -> Observation {
 fn intersphinx_case() -> (
     amiss_fixtures::CommitPair,
     EvaluationRequest,
-    SemanticEvidence,
+    SemanticEvidence<'static>,
 ) {
     let fixture = amiss_fixtures::commit_pair(
         &[("docs/guide.rst", "Guide\n=====\n")],
@@ -318,7 +318,10 @@ fn intersphinx_case() -> (
             ),
             sphinx_label("python", "shared", "https://docs.python.org/3/shared"),
             sphinx_label("another", "shared", "https://example.invalid/shared"),
-        ],
+        ]
+        .into_iter()
+        .map(std::borrow::Cow::Owned)
+        .collect(),
     };
     (fixture, evaluation, semantic)
 }
@@ -448,7 +451,10 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
             input_digest: hb("amiss-test/site-output", b"site output"),
         },
         complete: true,
-        observations: site_build_observations(),
+        observations: site_build_observations()
+            .into_iter()
+            .map(std::borrow::Cow::Owned)
+            .collect(),
     })
     .unwrap();
     let streams = RequestStreams {

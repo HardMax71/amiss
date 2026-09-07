@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -29,13 +30,13 @@ struct SiteDefectIdentity<'a, K> {
 pub(super) fn site_build_inputs(
     routes: &mut Arc<BTreeMap<String, SiteRoute>>,
     path: &str,
-    observations: Vec<Observation>,
+    observations: Vec<Cow<'_, Observation>>,
     item_count: &mut usize,
 ) -> Result<SiteEvaluation, Error> {
     let mut navigation = None;
     for (index, observation) in observations.into_iter().enumerate() {
         let observation_path = format!("{path}.payload.observations[{index}]");
-        let Observation::Site(observation) = observation else {
+        let Observation::Site(observation) = observation.into_owned() else {
             return fail(&observation_path, ErrorKind::Inconsistent);
         };
         let digest = hj_serde(SITE_CLAIM_DOMAIN, |mut writer| {

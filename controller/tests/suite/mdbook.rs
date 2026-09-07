@@ -3,7 +3,7 @@
     reason = "the fixture constructs known-valid renderer contexts and output trees"
 )]
 
-use std::fs;
+use std::{borrow::Cow, fs};
 
 use amiss_controller::{
     MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, SiteBuildContext,
@@ -141,7 +141,10 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
         }),
     ] {
         assert!(
-            parsed.payload.observations.contains(&expected),
+            parsed
+                .payload
+                .observations
+                .contains(&Cow::Borrowed(&expected)),
             "{expected:?}"
         );
     }
@@ -185,7 +188,10 @@ fn generated_chapters_need_no_repository_attribution() {
         }),
     ] {
         assert!(
-            parsed.payload.observations.contains(&expected),
+            parsed
+                .payload
+                .observations
+                .contains(&Cow::Borrowed(&expected)),
             "{expected:?}"
         );
     }
@@ -229,17 +235,22 @@ fn completed_links_not_chapter_membership_define_navigation() {
     )
     .unwrap();
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
-    assert!(parsed.payload.observations.contains(&Observation::Site(
-        SiteBuildObservation::Navigation {
-            root: Nullable::Value("guide".parse().unwrap()),
-            manifest: "guide/SUMMARY.md".parse().unwrap(),
-            entrypoints: vec!["/manual/index.html".to_owned()],
-            reachable: vec![
-                "guide/first.md".parse().unwrap(),
-                "guide/nested/second.md".parse().unwrap()
-            ],
-        }
-    )));
+    assert!(
+        parsed
+            .payload
+            .observations
+            .contains(&Cow::Owned(Observation::Site(
+                SiteBuildObservation::Navigation {
+                    root: Nullable::Value("guide".parse().unwrap()),
+                    manifest: "guide/SUMMARY.md".parse().unwrap(),
+                    entrypoints: vec!["/manual/index.html".to_owned()],
+                    reachable: vec![
+                        "guide/first.md".parse().unwrap(),
+                        "guide/nested/second.md".parse().unwrap()
+                    ],
+                }
+            )))
+    );
 }
 
 #[test]
@@ -380,13 +391,13 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
     let evidence = mdbook_site_evidence(candidate, &site, &bytes, &output(&root)).unwrap();
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
     assert!(
-        parsed.payload.observations.contains(
-            &site_observation(
+        parsed.payload.observations.contains(&Cow::Owned(
+            site_observation(
                 "/chapter.html",
                 SiteObservation::Page("src/chapter.md", &["chapter"]),
             )
             .unwrap()
-        )
+        ))
     );
 }
 

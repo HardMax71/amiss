@@ -54,7 +54,7 @@ fn semantic_producer_kinds_are_closed_string_tags_through_provenance() {
 
 #[test]
 fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
-    let document: SemanticEvidenceEnvelope = serde_json::from_slice(include_bytes!(
+    let document: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();
@@ -76,7 +76,7 @@ fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
         ErrorKind::InvalidValue
     );
 
-    let template: SemanticEvidenceTemplate = serde_json::from_slice(include_bytes!(
+    let template: SemanticEvidenceTemplate<'static> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-template.json"
     ))
     .unwrap();

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use amiss_controller::bind_semantic_evidence;
 use amiss_wire::{
     assessment::Nullable,
@@ -28,15 +30,21 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
             input_digest: hb("test", b"input"),
         },
         complete: true,
-        observations: vec![observation.clone()].into(),
+        observations: vec![Cow::Borrowed(&observation)].into(),
     };
-    let mut previous = None;
-    for candidate in [
+    let expected_producer = template.producer.clone();
+    let expected_observation = observation.clone();
+    let candidates = [
         hb("test", b"first candidate"),
         hb("test", b"second candidate"),
-    ] {
-        let bound =
-            bind_semantic_evidence(std::slice::from_ref(&template), &[], &[], candidate).unwrap();
+    ];
+    let bindings = candidates.map(|candidate| {
+        bind_semantic_evidence(std::slice::from_ref(&template), &[], &[], candidate).unwrap()
+    });
+    drop(template);
+    drop(observation);
+    let mut previous = None;
+    for (candidate, bound) in candidates.into_iter().zip(bindings) {
         let supplied = &bound.supplied[0];
         let document = &supplied.value;
         assert_eq!(
@@ -47,15 +55,18 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
             document.payload.subject.source_report_payload_digest,
             Nullable::Null
         );
-        assert_eq!(document.payload.producer, template.producer);
+        assert_eq!(document.payload.producer, expected_producer);
         assert_eq!(
             supplied.expected_context_digest,
-            template.producer.context_digest
+            expected_producer.context_digest
         );
         assert_eq!(
-            document.payload.observations,
-            std::slice::from_ref(&observation)
+            document.payload.observations[0].as_ref(),
+            &expected_observation
         );
+        assert_eq!(document.payload.observations.len(), 1);
+        assert!(matches!(document.payload.observations[0], Cow::Owned(_)));
+        assert_eq!(amiss_wire::semantic::validate(document), Ok(()));
         assert!(previous.is_none_or(|digest| digest != document.payload_digest));
         previous = Some(document.payload_digest);
 

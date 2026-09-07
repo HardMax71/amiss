@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
@@ -94,7 +95,10 @@ pub fn template(input: Input) -> Result<Vec<u8>, Error> {
             input_digest: input.input_digest,
         },
         complete: input.complete,
-        observations: vec![super::observation::Observation::Record(observation)].into(),
+        observations: vec![Cow::Owned(super::observation::Observation::Record(
+            observation,
+        ))]
+        .into(),
     })
 }
 

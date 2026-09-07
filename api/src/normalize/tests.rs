@@ -48,7 +48,7 @@ fn produced_templates_keep_the_context_and_rustdoc_digest_preimages() {
     assert_eq!(template.producer.context_digest, context_digest);
     assert_eq!(template.producer.input_digest, input_digest);
     let amiss_wire::semantic::observation::Observation::Record(observation) =
-        &template.observations[0]
+        template.observations[0].as_ref()
     else {
         panic!("the API producer emits records");
     };

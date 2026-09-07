@@ -1,11 +1,13 @@
 mod tests;
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::requests::SuppliedSemanticEvidence;
+use amiss_wire::semantic::{SemanticEvidence, SemanticEvidenceEnvelope};
 use base64::Engine as _;
 
 use super::plan::normalized_expectations;
@@ -33,7 +35,7 @@ struct BoundInput {
 /// A template is malformed, exceeds a limit, disagrees with its planned acquisition identity,
 /// or collides with another derived envelope.
 pub fn bind_semantic_evidence(
-    templates: &[SemanticEvidenceTemplate],
+    templates: &[SemanticEvidenceTemplate<'_>],
     expectations: &[SemanticEvidenceExpectation],
     acquired: &[AcquiredSemanticTemplate],
     candidate_identity_digest: Digest,
@@ -105,7 +107,7 @@ pub fn bind_semantic_evidence(
 }
 
 fn bind_input(
-    template: &SemanticEvidenceTemplate,
+    template: &SemanticEvidenceTemplate<'_>,
     acquisition_identity: Option<ArtifactId>,
     template_bytes: Arc<[u8]>,
     candidate_identity_digest: Digest,
@@ -116,8 +118,18 @@ fn bind_input(
     Ok(BoundInput {
         payload_digest: envelope.payload_digest,
         supplied: SuppliedSemanticEvidence {
-            value: serde_json::from_slice(&envelope_bytes)
-                .map_err(|_defect| BootstrapJobError::SemanticEvidence)?,
+            value: SemanticEvidenceEnvelope {
+                payload: SemanticEvidence {
+                    observations: envelope
+                        .payload
+                        .observations
+                        .into_iter()
+                        .map(|row| Cow::Owned(row.into_owned()))
+                        .collect(),
+                    ..envelope.payload
+                },
+                ..envelope
+            },
             expected_context_digest: template.producer.context_digest,
         },
         acquisition_identity,

@@ -151,7 +151,9 @@ fn malformed_controls(request: &ControlsRequest) -> Vec<Vec<u8>> {
         .collect()
 }
 
-fn semantic_defects(document: &SemanticEvidenceEnvelope) -> Vec<SemanticEvidenceEnvelope> {
+fn semantic_defects(
+    document: &SemanticEvidenceEnvelope<'static>,
+) -> Vec<SemanticEvidenceEnvelope<'static>> {
     let mut wrong_version = document.clone();
     "not a version".clone_into(&mut wrong_version.payload.producer.version);
     let mut duplicate = document.clone();
@@ -166,6 +168,7 @@ fn semantic_defects(document: &SemanticEvidenceEnvelope) -> Vec<SemanticEvidence
                 anchors: Vec::new(),
             })
         })
+        .map(std::borrow::Cow::Owned)
         .to_vec();
     let mut wrong_context = document.clone();
     wrong_context.payload.producer.context_digest = hb("test", b"wrong context");

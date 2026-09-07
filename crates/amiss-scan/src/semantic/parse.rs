@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -20,8 +21,8 @@ mod tests;
 const LABEL_BYTES: usize = 4_096;
 const DESTINATION_BYTES: usize = 16_384;
 
-pub(crate) fn parse(
-    values: impl IntoIterator<Item = Result<SemanticEvidenceEnvelope, Error>>,
+pub(crate) fn parse<'a>(
+    values: impl IntoIterator<Item = Result<SemanticEvidenceEnvelope<'a>, Error>>,
 ) -> Result<Inputs, Error> {
     let mut inputs = Inputs::default();
     let mut previous: Option<Digest> = None;
@@ -113,7 +114,7 @@ pub(crate) fn parse(
 pub(crate) fn validated_envelope(
     supplied: SuppliedSemanticEvidence,
     path: &str,
-) -> Result<SemanticEvidenceEnvelope, Error> {
+) -> Result<SemanticEvidenceEnvelope<'static>, Error> {
     let mut counter = countio::Counter::new(std::io::sink());
     serde_json::to_writer(&mut counter, &supplied.value)
         .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
@@ -136,7 +137,7 @@ pub(crate) fn validated_envelope(
 fn insert_labels(
     labels: &mut BTreeMap<String, InventoryLabel>,
     path: &str,
-    observations: Vec<Observation>,
+    observations: Vec<Cow<'_, Observation>>,
 ) -> Result<(), Error> {
     for (index, observation) in observations.into_iter().enumerate() {
         let path = format!("{path}.payload.observations[{index}]");
@@ -145,7 +146,7 @@ fn insert_labels(
             inventory: _inventory,
             name,
             destination,
-        }) = observation
+        }) = observation.into_owned()
         else {
             return fail(&path, ErrorKind::Inconsistent);
         };

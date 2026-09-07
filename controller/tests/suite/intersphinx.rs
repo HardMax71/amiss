@@ -31,7 +31,7 @@ fn input(identity: &str, base_url: &str, body: &[u8]) -> IntersphinxInventory {
     }
 }
 
-pub(super) fn evidence() -> Vec<amiss_controller::SemanticEvidenceTemplate> {
+pub(super) fn evidence() -> Vec<amiss_controller::SemanticEvidenceTemplate<'static>> {
     intersphinx_evidence(vec![input(
         "python",
         "https://docs.python.org/3",
@@ -54,11 +54,11 @@ fn a_bounded_inventory_becomes_only_complete_label_evidence() {
     assert!(parsed.payload.complete);
     assert_eq!(parsed.payload.observations.len(), 2);
     assert!(parsed.payload.observations.iter().any(|row| {
-        matches!(row, Observation::Sphinx(label) if label.name == "except_star"
+        matches!(row.as_ref(), Observation::Sphinx(label) if label.name == "except_star"
             && label.destination == "https://docs.python.org/3/reference/compound_stmts.html#except-star")
     }));
     assert!(parsed.payload.observations.iter().any(|row| {
-        matches!(row, Observation::Sphinx(label) if label.name == "testcase-objects"
+        matches!(row.as_ref(), Observation::Sphinx(label) if label.name == "testcase-objects"
             && label.destination == "https://docs.python.org/3/library/unittest.html#testcase-objects")
     }));
 }

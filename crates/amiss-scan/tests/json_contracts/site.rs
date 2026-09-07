@@ -61,7 +61,10 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
                 input_digest: hb("test", b"input"),
             },
             complete: true,
-            observations: observations.into(),
+            observations: observations
+                .into_iter()
+                .map(std::borrow::Cow::Owned)
+                .collect(),
         }),
         requests: RequestDigests::default(),
         external_defect: None,

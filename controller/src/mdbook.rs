@@ -158,7 +158,11 @@ pub fn mdbook_site_evidence(
             input_digest,
         },
         complete: true,
-        observations: observations.into_iter().map(Observation::Site).collect(),
+        observations: observations
+            .into_iter()
+            .map(Observation::Site)
+            .map(std::borrow::Cow::Owned)
+            .collect(),
     })
     .map(|(_document, bytes)| bytes)
     .map_err(|_defect| MdBookEvidenceError::Evidence)

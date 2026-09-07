@@ -178,7 +178,7 @@ fn every_workflow_identity_member_changes_the_frozen_binding() {
 
 #[test]
 fn semantic_template_identity_members_cannot_change_under_a_frozen_plan() {
-    let changes: [fn(&mut SemanticEvidenceTemplate); 6] = [
+    let changes: [fn(&mut SemanticEvidenceTemplate<'static>); 6] = [
         |template| template.complete = !template.complete,
         |template| template.producer.context_digest = hb("amiss/test-context", b"other"),
         |template| template.producer.input_digest = hb("amiss/test-input", b"other"),

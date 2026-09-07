@@ -34,7 +34,7 @@ pub enum Input {
     #[default]
     None,
     Bound(Inputs),
-    Template(amiss_wire::semantic::SemanticEvidenceTemplate),
+    Template(amiss_wire::semantic::SemanticEvidenceTemplate<'static>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -134,19 +134,8 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
         Input::Template(template) => {
             let (envelope, _bytes) = amiss_wire::semantic::bind_template(template, candidate)
                 .map_err(|error| crate::request::configuration_detail(&error))?;
-            let payload = envelope.payload;
-            parsed = parse([Ok(amiss_wire::semantic::SemanticEvidenceEnvelope {
-                schema: envelope.schema,
-                payload: amiss_wire::semantic::SemanticEvidence {
-                    schema: payload.schema,
-                    subject: payload.subject,
-                    producer: payload.producer,
-                    complete: payload.complete,
-                    observations: payload.observations.into_iter().cloned().collect(),
-                },
-                payload_digest: envelope.payload_digest,
-            })])
-            .map_err(|error| crate::request::configuration_detail(&error))?;
+            parsed = parse([Ok(envelope)])
+                .map_err(|error| crate::request::configuration_detail(&error))?;
             &parsed
         }
     };

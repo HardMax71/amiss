@@ -5,6 +5,7 @@ use amiss_wire::{
     digest::hb,
     semantic::{self, SemanticEvidenceEnvelope, observation::SiteBuildObservation},
 };
+use std::borrow::Cow;
 
 use super::{ErrorKind, Observation, SuppliedSemanticEvidence, validated_envelope};
 
@@ -47,6 +48,7 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
                 anchors: Vec::new(),
             })
         })
+        .map(Cow::Owned)
         .to_vec();
     let mut too_many = original.clone();
     too_many.payload.observations =
@@ -97,16 +99,18 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
 
 #[test]
 fn in_process_intake_keeps_the_exact_encoded_byte_ceiling() {
-    let mut document: SemanticEvidenceEnvelope = serde_json::from_slice(EXAMPLE).unwrap();
-    document.payload.observations = vec![Observation::Site(SiteBuildObservation::GeneratedRoute {
-        route: "/é\"\\".to_owned(),
-        source: Nullable::Null,
-        anchors: vec!["\n\t\u{0008}".to_owned()],
-    })];
+    let mut document: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(EXAMPLE).unwrap();
+    document.payload.observations = vec![Cow::Owned(Observation::Site(
+        SiteBuildObservation::GeneratedRoute {
+            route: "/é\"\\".to_owned(),
+            source: Nullable::Null,
+            anchors: vec!["\n\t\u{0008}".to_owned()],
+        },
+    ))];
     let limit = usize::try_from(semantic::SEMANTIC_EVIDENCE_BYTES).unwrap();
     let initial = serde_json::to_vec(&document).unwrap().len();
     let Observation::Site(SiteBuildObservation::GeneratedRoute { route, .. }) =
-        &mut document.payload.observations[0]
+        document.payload.observations[0].to_mut()
     else {
         panic!("the fixture is a generated route");
     };
@@ -134,7 +138,7 @@ fn in_process_intake_keeps_the_exact_encoded_byte_ceiling() {
             assert_eq!(defect.path, "$");
         }
         let Observation::Site(SiteBuildObservation::GeneratedRoute { route, .. }) =
-            &mut document.payload.observations[0]
+            document.payload.observations[0].to_mut()
         else {
             panic!("the fixture remains a generated route");
         };

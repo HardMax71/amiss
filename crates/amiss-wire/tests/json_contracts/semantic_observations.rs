@@ -73,7 +73,7 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
         unexpected: bool,
     }
 
-    let original: SemanticEvidenceEnvelope = serde_json::from_slice(include_bytes!(
+    let original: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();
@@ -101,7 +101,7 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
             schema: TemplateSchema::Current,
             producer: original.payload.producer.clone(),
             complete: true,
-            observations: vec![observation].into(),
+            observations: vec![std::borrow::Cow::Owned(observation)].into(),
         };
         let template_bytes = semantic::template(template.clone()).unwrap();
         assert_eq!(semantic::parse_template(&template_bytes).unwrap(), template);

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::collections::btree_map::Entry;
 
@@ -14,17 +15,17 @@ pub(super) fn insert_record_set(
     path: &str,
     source_report_payload_digest: Nullable<Digest>,
     complete: bool,
-    observations: Vec<Observation>,
+    observations: Vec<Cow<'_, Observation>>,
 ) -> Result<(), Error> {
     if source_report_payload_digest != Nullable::Null {
         return fail(path, ErrorKind::Inconsistent);
     }
     let observations_path = format!("{path}.payload.observations");
-    let [observation]: [Observation; 1] = observations
+    let [observation]: [Cow<'_, Observation>; 1] = observations
         .try_into()
         .map_err(|_values| Error::new(&observations_path, ErrorKind::Inconsistent))?;
     let observation_path = format!("{path}.payload.observations[0]");
-    let Observation::Record(decoded) = observation else {
+    let Observation::Record(decoded) = observation.into_owned() else {
         return fail(&observation_path, ErrorKind::Inconsistent);
     };
     amiss_wire::semantic::record::validate_records(

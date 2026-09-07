@@ -19,7 +19,7 @@ pub struct PolicyControls {
     pub organization_floor: Option<SuppliedControl<OrganizationFloor>>,
     pub debt_snapshot: Option<SuppliedControl<DebtSnapshot>>,
     pub waiver_bundle: Option<SuppliedControl<WaiverBundle>>,
-    pub semantic_evidence: Vec<super::SemanticEvidenceTemplate>,
+    pub semantic_evidence: Vec<super::SemanticEvidenceTemplate<'static>>,
     pub semantic_acquisitions: Vec<super::SemanticEvidenceExpectation>,
     pub workflow_artifacts: Vec<super::WorkflowArtifactExpectation>,
 }
