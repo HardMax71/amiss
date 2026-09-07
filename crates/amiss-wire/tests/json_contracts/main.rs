@@ -334,7 +334,9 @@ fn semantic_examples_match_the_actual_typed_producers() {
     semantic::parse(&semantic_evidence_bytes).unwrap();
     let typed: semantic::SemanticEvidenceEnvelope<'static> =
         serde_json::from_slice(&semantic_evidence_bytes).unwrap();
-    let (generated, canonical) = semantic::envelope(typed.payload.clone()).unwrap();
+    let generated = semantic::envelope(typed.payload.clone()).unwrap();
+    let mut canonical = Vec::new();
+    semantic::write(&generated, &mut canonical).unwrap();
     assert_eq!(generated, typed);
     assert_eq!(
         canonical,

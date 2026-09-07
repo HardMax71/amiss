@@ -105,11 +105,13 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
         };
         let template_bytes = semantic::template(template.clone()).unwrap();
         assert_eq!(semantic::parse_template(&template_bytes).unwrap(), template);
-        let (document, envelope_bytes) = semantic::bind_template(
+        let document = semantic::bind_template(
             &template,
             original.payload.subject.candidate_identity_digest,
         )
         .unwrap();
+        let mut envelope_bytes = Vec::new();
+        semantic::write(&document, &mut envelope_bytes).unwrap();
         assert_eq!(
             semantic::parse(&envelope_bytes)
                 .unwrap()

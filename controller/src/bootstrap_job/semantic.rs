@@ -112,9 +112,11 @@ fn bind_input(
     template_bytes: Arc<[u8]>,
     candidate_identity_digest: Digest,
 ) -> Result<BoundInput, BootstrapJobError> {
-    let (envelope, envelope_bytes) =
-        amiss_wire::semantic::bind_template(template, candidate_identity_digest)
-            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let envelope = amiss_wire::semantic::bind_template(template, candidate_identity_digest)
+        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let mut envelope_bytes = Vec::new();
+    amiss_wire::semantic::write(&envelope, &mut envelope_bytes)
+        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     Ok(BoundInput {
         payload_digest: envelope.payload_digest,
         supplied: SuppliedSemanticEvidence {
@@ -155,10 +157,11 @@ fn input_artifact(inputs: &[BoundInput], limit: u64) -> Result<Vec<u8>, Bootstra
             .collect(),
         schema: InputArtifactSchema::Current,
     };
-    let metadata =
-        serde_json::to_vec(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    let mut projected_length =
-        u64::try_from(metadata.len()).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let mut metadata = countio::Counter::new(std::io::sink());
+    serde_json::to_writer(&mut metadata, &artifact)
+        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let mut projected_length = u64::try_from(metadata.writer_bytes())
+        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     for input in inputs {
         let template_length = base64::encoded_len(input.template_bytes.len(), true)
             .and_then(|length| u64::try_from(length).ok())

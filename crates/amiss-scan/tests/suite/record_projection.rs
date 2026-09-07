@@ -87,10 +87,9 @@ fn semantic_inputs(
                 .collect(),
         }))],
     };
-    let (_document, bytes) = amiss_wire::semantic::envelope(evidence).unwrap();
     let request = ControlsRequest {
         semantic_evidence: vec![SuppliedSemanticEvidence {
-            value: serde_json::from_slice(&bytes).unwrap(),
+            value: amiss_wire::semantic::envelope(evidence).unwrap(),
             expected_context_digest: context_digest,
         }],
         ..ControlsRequest::default()

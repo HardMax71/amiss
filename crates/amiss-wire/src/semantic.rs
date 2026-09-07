@@ -160,16 +160,16 @@ fn parse_document<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Err
     de::deserialize_json(bytes)
 }
 
-/// Binds a template to one candidate, retaining the envelope and its canonical bytes.
+/// Binds a template to one candidate without encoding the resulting envelope.
 ///
 /// # Errors
 ///
-/// Fails when the template violates the same bounds [`envelope`] enforces or the resulting
-/// envelope exceeds the byte ceiling.
+/// Fails when the template violates the producer or observation laws [`envelope`] enforces.
+/// Intake and output callers enforce the encoded-byte ceiling with [`write`].
 pub fn bind_template<'a>(
     template: &'a SemanticEvidenceTemplate<'_>,
     candidate_identity_digest: Digest,
-) -> Result<(SemanticEvidenceEnvelope<'a>, Vec<u8>), Error> {
+) -> Result<SemanticEvidenceEnvelope<'a>, Error> {
     envelope(SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
@@ -203,34 +203,35 @@ pub fn template(input: SemanticEvidenceTemplate<'_>) -> Result<Vec<u8>, Error> {
             .map(|row| Cow::Borrowed(row.as_ref()))
             .collect(),
     )?;
-    canonical_bytes(&SemanticEvidenceTemplate {
-        schema: input.schema,
-        producer: input.producer,
-        complete: input.complete,
-        observations: observations.into(),
-    })
+    let mut bytes = Vec::new();
+    write(
+        &SemanticEvidenceTemplate {
+            schema: input.schema,
+            producer: input.producer,
+            complete: input.complete,
+            observations: observations.into(),
+        },
+        &mut bytes,
+    )?;
+    Ok(bytes)
 }
 
-/// Returns one digest-bound envelope together with its canonical bytes.
+/// Constructs one digest-bound envelope without encoding the complete document.
 /// Observation order is canonicalized, so traversal order cannot change its identity.
 ///
 /// # Errors
 ///
-/// Fails when producer metadata or an observation violates the same bounds [`parse`] enforces,
-/// when observations repeat, or when the resulting envelope exceeds the byte ceiling.
-pub fn envelope(
-    mut evidence: SemanticEvidence<'_>,
-) -> Result<(SemanticEvidenceEnvelope<'_>, Vec<u8>), Error> {
+/// Fails on invalid producer metadata, repeated observations or an oversized observation set.
+/// Intake and output callers enforce the encoded-byte ceiling with [`write`].
+pub fn envelope(mut evidence: SemanticEvidence<'_>) -> Result<SemanticEvidenceEnvelope<'_>, Error> {
     validate_producer("$.payload.producer", &evidence.producer)?;
     evidence.observations = ordered_observations("$.payload.observations", evidence.observations)?;
     let payload_digest = payload_digest(&evidence)?;
-    let document = SemanticEvidenceEnvelope {
+    Ok(SemanticEvidenceEnvelope {
         schema: EnvelopeSchema::Current,
         payload: evidence,
         payload_digest,
-    };
-    let bytes = canonical_bytes(&document)?;
-    Ok((document, bytes))
+    })
 }
 
 fn validate_producer(path: &str, producer: &SemanticProducer) -> Result<(), Error> {
@@ -300,11 +301,19 @@ fn payload_digest(payload: &SemanticEvidence<'_>) -> Result<Digest, Error> {
     .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
-fn canonical_bytes<T: Serialize>(document: &T) -> Result<Vec<u8>, Error> {
-    let canonical = serde_json_canonicalizer::to_vec(document)
+/// Writes a semantic artifact canonically within the shared encoded-byte ceiling.
+/// A sink checks the same ceiling without retaining the output bytes.
+///
+/// # Errors
+///
+/// Fails on serialization or output errors, or when the encoded artifact exceeds the ceiling.
+/// The destination may already contain partial or oversized output when an error is returned.
+pub fn write<T: Serialize>(document: &T, writer: impl std::io::Write) -> Result<(), Error> {
+    let mut writer = countio::Counter::new(writer);
+    serde_json_canonicalizer::to_writer(document, &mut writer)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
+    if u64::try_from(writer.writer_bytes()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    Ok(canonical)
+    Ok(())
 }

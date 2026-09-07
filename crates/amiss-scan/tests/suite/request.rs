@@ -112,7 +112,7 @@ fn semantic_evidence(
 
 fn supplied_semantic(evidence: SemanticEvidence<'static>) -> SuppliedSemanticEvidence {
     let expected_context_digest = evidence.producer.context_digest;
-    let (value, _bytes) = amiss_wire::semantic::envelope(evidence)
+    let value = amiss_wire::semantic::envelope(evidence)
         .expect("the envelope contains known observation models");
     SuppliedSemanticEvidence {
         value,
@@ -389,11 +389,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
             supplied_semantic(evidence)
         })
         .collect::<Vec<_>>();
-    supplied.sort_by_key(|item| {
-        amiss_wire::semantic::parse(&serde_json::to_vec(&item.value).expect("envelope JSON"))
-            .expect("the generic envelopes are valid")
-            .payload_digest
-    });
+    supplied.sort_by_key(|item| item.value.payload_digest);
     let mut request = empty();
     request.semantic_evidence = supplied;
     let error = controls(request).expect_err("one set name has one evidence authority");
@@ -410,10 +406,8 @@ fn semantic_evidence_must_match_the_independently_supplied_context() {
         Vec::new(),
     );
     let mut request = empty();
-    let (_document, bytes) =
-        amiss_wire::semantic::envelope(evidence).expect("the generic envelope is valid");
     request.semantic_evidence = vec![SuppliedSemanticEvidence {
-        value: serde_json::from_slice(&bytes).expect("the envelope is JSON"),
+        value: amiss_wire::semantic::envelope(evidence).expect("the envelope is valid"),
         expected_context_digest: hb("test/inventory", b"another inventory"),
     }];
 

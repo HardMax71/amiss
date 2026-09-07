@@ -42,6 +42,12 @@ Compiled consumers additionally check producer versions, family membership, and 
 laws such as valid routes or sorted record keys. Parsing an envelope never turns it into a pass,
 a block, or a suppression.
 
+Envelope construction returns the typed model; canonical encoding belongs to intake and output
+boundaries. Template intake checks the bound envelope's byte ceiling through a sink, without
+retaining a discarded output buffer. Controller audit capture and site-output producers write
+the canonical bytes they actually retain. The canonicalization library may still allocate
+internally; this separation does not promise allocation-free serialization.
+
 This contract authenticates nothing by itself. Provider-enforced use must acquire it outside the
 repository. Each sealed value carries an independently planned expected context digest; the engine
 requires the producer's context digest to match before interpreting any observation. A repository

@@ -13,7 +13,7 @@ use amiss_wire::semantic::{
     PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
     SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind, SemanticSubject,
     TemplateSchema, bind_template, envelope, observation::Observation, parse, parse_template,
-    record, template,
+    record, template, write,
 };
 
 const A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -60,7 +60,9 @@ fn evidence_template(observations: Vec<Observation>) -> SemanticEvidenceTemplate
 fn construction_sorts_observations_and_binds_the_payload() {
     let a = observation("a");
     let z = observation("z");
-    let (document, bytes) = envelope(evidence(vec![z.clone(), a.clone()])).unwrap();
+    let document = envelope(evidence(vec![z.clone(), a.clone()])).unwrap();
+    let mut bytes = Vec::new();
+    write(&document, &mut bytes).unwrap();
     let parsed = parse(&bytes).unwrap();
     assert_eq!(parsed, document);
     assert_eq!(parsed.payload.observations, [Cow::Owned(a), Cow::Owned(z)]);
@@ -81,9 +83,9 @@ fn typed_templates_borrow_observations_through_sorting_and_binding() {
         &input.observations,
         &shared.observations
     ));
-    let (first_document, first) = bind_template(&input, A.parse().unwrap()).unwrap();
-    let (second_document, second) = bind_template(&input, B.parse().unwrap()).unwrap();
-    for (document, bytes) in [(&first_document, &first), (&second_document, &second)] {
+    let first = bind_template(&input, A.parse().unwrap()).unwrap();
+    let second = bind_template(&input, B.parse().unwrap()).unwrap();
+    for document in [&first, &second] {
         for (bound, original) in document
             .payload
             .observations
@@ -93,18 +95,15 @@ fn typed_templates_borrow_observations_through_sorting_and_binding() {
             assert!(matches!(bound, Cow::Borrowed(_)));
             assert!(std::ptr::eq(bound.as_ref(), original.as_ref()));
         }
-        assert_eq!(
-            document.payload_digest,
-            parse(bytes).unwrap().payload_digest
-        );
+        let mut bytes = Vec::new();
+        write(document, &mut bytes).unwrap();
+        assert_eq!(parse(&bytes).unwrap(), *document);
     }
-    let first = parse(&first).unwrap();
-    let second = parse(&second).unwrap();
     assert_eq!(input.observations[0].as_ref(), &observation("z"));
     assert_eq!(first.payload.observations, second.payload.observations);
     assert_ne!(first.payload_digest, second.payload_digest);
     assert_eq!(
-        parse_template(&template(input).unwrap())
+        parse_template(&template(input.clone()).unwrap())
             .unwrap()
             .observations
             .as_ref(),
@@ -116,8 +115,7 @@ fn typed_templates_borrow_observations_through_sorting_and_binding() {
 fn candidate_free_templates_bind_only_when_the_candidate_is_known() {
     let row = observation("rust/public-api");
     let input = evidence_template(vec![row.clone()]);
-    let (_, bytes) = bind_template(&input, A.parse().unwrap()).unwrap();
-    let parsed = parse(&bytes).unwrap();
+    let parsed = bind_template(&input, A.parse().unwrap()).unwrap();
     assert_eq!(
         parsed.payload.subject.candidate_identity_digest,
         A.parse().unwrap()
@@ -211,6 +209,9 @@ fn semantic_readers_refuse_unknown_shapes_even_with_correct_payload_digests() {
 #[test]
 fn semantic_readers_enforce_strict_json_before_decoding_observations() {
     let row = observation("a");
+    let document = envelope(evidence(vec![row.clone()])).unwrap();
+    let mut bytes = Vec::new();
+    write(&document, &mut bytes).unwrap();
     let original = String::from_utf8(serde_json_canonicalizer::to_vec(&row).unwrap()).unwrap();
     let nested = format!("{}null{}", "[".repeat(511), "]".repeat(511));
     assert!(amiss_wire::json::parse(nested.as_bytes()).is_ok());
@@ -227,7 +228,7 @@ fn semantic_readers_enforce_strict_json_before_decoding_observations() {
     ] {
         for bytes in [
             template(evidence_template(vec![row.clone()])).unwrap(),
-            envelope(evidence(vec![row.clone()])).unwrap().1,
+            bytes.clone(),
         ] {
             let malformed = String::from_utf8(bytes)
                 .unwrap()
@@ -254,9 +255,12 @@ fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
         }],
     });
     let expected = br#"quote\" slash/ backslash\\ newline\n nul\u0000 "#;
+    let document = envelope(evidence(vec![row.clone()])).unwrap();
+    let mut bytes = Vec::new();
+    write(&document, &mut bytes).unwrap();
     for bytes in [
         template(evidence_template(vec![row.clone()])).unwrap(),
-        envelope(evidence(vec![row.clone()])).unwrap().1,
+        bytes,
     ] {
         assert!(
             bytes
@@ -292,10 +296,9 @@ fn serialized_semantic_bytes_enforce_the_complete_document_ceiling() {
     .unwrap();
     assert_eq!(bytes.len(), limit);
     assert!(parse_template(&bytes).is_ok());
+    let document = envelope(evidence(vec![Observation::Record(records.clone())])).unwrap();
     assert_eq!(
-        envelope(evidence(vec![Observation::Record(records.clone())]))
-            .unwrap_err()
-            .kind,
+        write(&document, std::io::sink()).unwrap_err().kind,
         ErrorKind::LimitExceeded
     );
     records.records[0].value.push('x');
@@ -309,7 +312,10 @@ fn incomplete_pre_report_evidence_round_trips_without_claiming_absence() {
     let mut input = evidence(Vec::new());
     input.subject.source_report_payload_digest = Nullable::Null;
     input.complete = false;
-    let parsed = parse(&envelope(input).unwrap().1).unwrap();
+    let document = envelope(input).unwrap();
+    let mut bytes = Vec::new();
+    write(&document, &mut bytes).unwrap();
+    let parsed = parse(&bytes).unwrap();
     assert_eq!(
         parsed.payload.subject.source_report_payload_digest,
         Nullable::Null
@@ -335,7 +341,7 @@ fn producer_versions_and_input_bytes_are_bounded_before_parsing() {
 
 #[test]
 fn tampered_and_unsorted_payloads_are_refused() {
-    let (mut document, _) = envelope(evidence(vec![observation("a"), observation("z")])).unwrap();
+    let mut document = envelope(evidence(vec![observation("a"), observation("z")])).unwrap();
     document.payload.observations.reverse();
     assert_eq!(
         parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
