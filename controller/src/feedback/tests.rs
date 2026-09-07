@@ -257,7 +257,7 @@ fn the_strict_profile_also_covers_fields_the_projection_ignores() {
 }
 
 #[test]
-fn additive_fields_and_large_exact_counts_preserve_the_projection() {
+fn large_exact_counts_are_preserved_but_unknown_feedback_fields_are_rejected() {
     let max_safe = 9_007_199_254_740_991;
     let bytes = report(max_safe, vec![item(FeedbackAction::Check, None, max_safe)]);
     let expected = vec![
@@ -265,27 +265,19 @@ fn additive_fields_and_large_exact_counts_preserve_the_projection() {
         "- Check target - affected places 9007199254740991".to_owned(),
     ];
     assert_eq!(feedback_lines(Some(&bytes), false), expected);
-    let mut extended: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    for path in [
-        "",
-        "/payload",
-        "/payload/feedback",
-        "/payload/feedback/items/0",
-    ] {
-        extended.pointer_mut(path).unwrap()["future"] =
-            serde_json::json!({"data": [1, true, null]});
+    let text = std::str::from_utf8(&bytes).unwrap();
+    for object in ["\"feedback\":{", "\"items\":[{"] {
+        let extended = text.replace(object, &format!("{object}\"future\":true,"));
+        assert_ne!(text, extended);
+        assert!(feedback_lines(Some(extended.as_bytes()), false).is_empty());
     }
-    assert_eq!(
-        feedback_lines(Some(&serde_json::to_vec(&extended).unwrap()), false),
-        expected
-    );
     let nested = format!("{}0{}", "[".repeat(256), "]".repeat(256));
-    let extended = std::str::from_utf8(&bytes).unwrap().replace(
+    let extended = text.replace(
         "\"status\":\"available\"",
         &format!("\"status\":\"available\",\"future\":{nested}"),
     );
     assert!(amiss_wire::json::parse(extended.as_bytes()).is_ok());
-    assert_eq!(feedback_lines(Some(extended.as_bytes()), false), expected);
+    assert!(feedback_lines(Some(extended.as_bytes()), false).is_empty());
 }
 
 #[test]
