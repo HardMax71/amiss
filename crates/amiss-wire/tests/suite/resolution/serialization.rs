@@ -1,7 +1,7 @@
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::resolution::{
-    BlobMode, BlobTarget, DeclaredUntracked, Missing, Target, UnsupportedSemantics,
-    UnsupportedTarget, VersionScope,
+    BlobMode, BlobTarget, DeclaredUntracked, Missing, TaggedBlobTarget, Target,
+    UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
 use serde::Serialize;
 
@@ -85,7 +85,7 @@ fn target_and_version_details_keep_their_wire_fields() -> Result<(), serde_json:
         r#"{"kind":"known-path","path":"docs"}"#,
     )?;
     assert_json(
-        &VersionScope::<&str>::UnknownPath,
+        &VersionScope::<&str>::UnknownPath {},
         r#"{"kind":"unknown-path"}"#,
     )?;
     for (format, width) in [(ObjectFormat::Sha1, 40), (ObjectFormat::Sha256, 64)] {
@@ -116,7 +116,10 @@ fn semantic_details_tag_blob_fragments_without_changing_target_decoding()
             let target = Target::Blob(blob.clone());
             let expected = serde_json::to_value(&target).unwrap();
             for (semantics, reason) in [
-                (UnsupportedSemantics::Fragment(blob), "fragment"),
+                (
+                    UnsupportedSemantics::Fragment(TaggedBlobTarget::Blob(blob)),
+                    "fragment",
+                ),
                 (UnsupportedSemantics::Query(target.clone()), "query"),
                 (UnsupportedSemantics::CodeFragment(target), "code-fragment"),
             ] {

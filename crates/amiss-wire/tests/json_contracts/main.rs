@@ -17,6 +17,7 @@ mod policy_presence;
 mod report_controls;
 mod report_identity;
 mod report_reader;
+mod report_resolutions;
 mod report_rows;
 mod semantic_observations;
 mod semantic_producers;
@@ -50,10 +51,7 @@ fn document_classifications_match_the_report_schema() {
 
 #[test]
 fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
-    use amiss_wire::report::model::{
-        ExternalResolutionKind, InvalidResolutionKind, RepoPath, Resolution,
-        UnsupportedTargetResolutionKind,
-    };
+    use amiss_wire::report::model::{RepoPath, Resolution};
     use amiss_wire::resolution::{ExternalReference, InvalidReference, UnsupportedTargetTag};
 
     let schema: serde_json::Value = serde_json::from_slice(include_bytes!(
@@ -65,29 +63,13 @@ fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
         (
             "InvalidResolution",
             InvalidReference::iter()
-                .map(|reason| {
-                    (
-                        reason.as_ref().to_owned(),
-                        Resolution::Invalid {
-                            kind: InvalidResolutionKind::Invalid,
-                            reason,
-                        },
-                    )
-                })
+                .map(|reason| (reason.as_ref().to_owned(), Resolution::Invalid { reason }))
                 .collect::<Vec<_>>(),
         ),
         (
             "ExternalResolution",
             ExternalReference::iter()
-                .map(|reason| {
-                    (
-                        reason.as_ref().to_owned(),
-                        Resolution::External {
-                            kind: ExternalResolutionKind::External,
-                            reason,
-                        },
-                    )
-                })
+                .map(|reason| (reason.as_ref().to_owned(), Resolution::External { reason }))
                 .collect(),
         ),
         (
@@ -97,7 +79,6 @@ fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
                     (
                         reason.as_ref().to_owned(),
                         Resolution::UnsupportedTarget {
-                            kind: UnsupportedTargetResolutionKind::UnsupportedTarget,
                             path: path.clone(),
                             reason,
                         },

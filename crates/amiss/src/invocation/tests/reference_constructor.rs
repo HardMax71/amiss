@@ -242,7 +242,7 @@ fn assert_split_outcome(intent: &Intent, row: &Resolution, expected: &Value, id:
                     assert_eq!(Some(commit_oid.as_str()), expected_commit, "{id}");
                     assert_eq!(path.as_str(), expected_path, "{id}");
                 }
-                VersionScope::UnknownPath => {
+                VersionScope::UnknownPath {} => {
                     assert_eq!(expected_path, None, "{id}");
                     assert_eq!(expected_commit, None, "{id}");
                 }

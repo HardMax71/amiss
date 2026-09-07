@@ -5,10 +5,11 @@ mod projection;
 use amiss_wire::report::model::{
     AnalysisError, BaseSnapshot, Controls, DocumentResult, Engine, Evaluation, ExceptionDiagnostic,
     Feedback, Finding, FindingFactEvidence, FindingKeyScope, MissingResolution,
-    ObservationComparison, ProjectionDifference, ProjectionSource, ReportEnvelope, Resolution,
-    ResolutionTarget, Snapshot, Summary, VersionScope,
+    ObservationComparison, ProjectionDifference, ProjectionSource, RepoPath, ReportEnvelope,
+    Resolution, Snapshot, Summary,
 };
 use amiss_wire::requests::CandidateSnapshot;
+use amiss_wire::resolution::{Target, VersionScope};
 
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
@@ -34,10 +35,9 @@ fn published_provenance_blocks_match_the_models() {
 #[test]
 fn entire_report_streams_in_canonical_order() {
     let envelope: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
-    assert_eq!(
-        serde_json::to_vec(&envelope).unwrap(),
-        REPORT.strip_suffix(b"\n").unwrap_or(REPORT),
-    );
+    let mut output = Vec::new();
+    amiss_wire::report::emit_report(&envelope, &mut output).unwrap();
+    assert_eq!(output, REPORT);
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::
         r#"{"content":{"kind":"lfs-pointer","raw_digest":"$digest"},"kind":"blob","mode":"100644","path":"a.md"}"#,
         r#"{"kind":"tree","path":"a"}"#,
     ] {
-        assert_canonical::<ResolutionTarget>(&template.replace("$digest", DIGEST))?;
+        assert_canonical::<Target<RepoPath>>(&template.replace("$digest", DIGEST))?;
     }
     for wire in [
         r#"{"near":null,"path":"a.md","reason":"heading-anchor-not-found"}"#,
@@ -104,7 +104,7 @@ fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::
         r#"{"kind":"known-path","path":"a.md"}"#,
         r#"{"kind":"unknown-path"}"#,
     ] {
-        assert_canonical::<VersionScope>(&template.replace("$oid", OID))?;
+        assert_canonical::<VersionScope<RepoPath>>(&template.replace("$oid", OID))?;
     }
     for wire in [
         r#"{"declared_by":".gitignore","kind":"declared-untracked","path":"a.md"}"#,
@@ -170,8 +170,8 @@ where
 {
     let value: T = serde_json::from_str(wire)?;
     assert_eq!(
-        serde_json::to_vec(&value)?,
         serde_json_canonicalizer::to_vec(&value)?,
+        wire.as_bytes(),
         "{wire}",
     );
     Ok(())
