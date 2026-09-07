@@ -335,31 +335,13 @@ fn prepare_external(
     clock: &dyn ControllerClock,
     report: &[u8],
 ) -> PreparedExternal {
-    let Ok(parsed) = amiss_wire::json::parse(report) else {
-        return PreparedExternal {
-            incomplete: true,
-            ..PreparedExternal::default()
-        };
-    };
-    let engine = parsed
-        .member("payload")
-        .and_then(|payload| payload.member("engine"));
-    let (Some(version), Some(digest)) = (
-        engine.and_then(|engine| engine.text("engine_version")),
-        engine.and_then(|engine| engine.text("engine_digest")),
-    ) else {
-        return PreparedExternal {
-            incomplete: true,
-            ..PreparedExternal::default()
-        };
-    };
-    let Some(engine_digest) = amiss_wire::digest::Digest::from_wire(digest) else {
-        return PreparedExternal {
-            incomplete: true,
-            ..PreparedExternal::default()
-        };
-    };
-    let Ok(plan_bytes) = amiss_wire::external::plan(report, version, engine_digest) else {
+    let planned = amiss_wire::report::validate_envelope(report).and_then(|(report, _verdict)| {
+        let engine = &report.payload.engine;
+        let plan =
+            amiss_wire::external::plan(&report, &engine.engine_version, engine.engine_digest)?;
+        Ok((plan, report.payload.engine))
+    });
+    let Ok((plan_bytes, engine)) = planned else {
         return PreparedExternal {
             incomplete: true,
             ..PreparedExternal::default()
@@ -374,7 +356,12 @@ fn prepare_external(
     };
     match adapter.verify_external(&plan_bytes, &now.to_string()) {
         Ok(Some(evidence)) => {
-            match amiss_wire::external::assess(&plan_bytes, &evidence, version, engine_digest) {
+            match amiss_wire::external::assess(
+                &plan_bytes,
+                &evidence,
+                &engine.engine_version,
+                engine.engine_digest,
+            ) {
                 Ok(assessment) => {
                     let Ok(parsed) = amiss_wire::external::parse_assessment(&assessment) else {
                         return PreparedExternal {

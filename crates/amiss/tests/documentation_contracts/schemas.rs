@@ -584,32 +584,19 @@ fn the_first_frozen_example_binds_the_major() {
     );
 }
 
-fn external_engine(example: &serde_json::Value) -> (&str, amiss_wire::digest::Digest) {
-    let version = example
-        .pointer("/payload/engine/engine_version")
-        .and_then(serde_json::Value::as_str)
-        .expect("the external example names an engine version");
-    let digest = example
-        .pointer("/payload/engine/engine_digest")
-        .and_then(serde_json::Value::as_str)
-        .and_then(amiss_wire::digest::Digest::from_wire)
-        .expect("the external example names an engine digest");
-    (version, digest)
-}
-
 #[test]
 fn external_examples_replay_from_the_report_and_evidence() {
     let root = repository_root();
     let report_bytes = fs::read(root.join("spec/examples/scanner-report.json"))
         .expect("the report example is readable");
+    let (report, _verdict) = amiss_wire::report::validate_envelope(&report_bytes)
+        .expect("the report example is accepted");
     let plan_bytes = fs::read(root.join("spec/examples/scanner-external-plan.json"))
         .expect("the plan example is readable");
     let plan_example =
-        amiss_wire::json::parse(&plan_bytes).expect("the plan example is strict JSON");
-    let example: serde_json::Value =
-        serde_json::from_slice(&plan_bytes).expect("the plan example is JSON");
-    let (version, digest) = external_engine(&example);
-    let plan = amiss_wire::external::plan(&report_bytes, version, digest)
+        amiss_wire::external::parse_plan(&plan_bytes).expect("the plan example is accepted");
+    let engine = &plan_example.payload.engine;
+    let plan = amiss_wire::external::plan(&report, &engine.engine_version, engine.engine_digest)
         .expect("the report example yields a plan");
     assert_eq!(
         plan,
@@ -621,13 +608,16 @@ fn external_examples_replay_from_the_report_and_evidence() {
         .expect("the evidence example is readable");
     let assessment_bytes = fs::read(root.join("spec/examples/scanner-external-assessment.json"))
         .expect("the assessment example is readable");
-    let assessment_example =
-        amiss_wire::json::parse(&assessment_bytes).expect("the assessment example is strict JSON");
-    let example: serde_json::Value =
-        serde_json::from_slice(&assessment_bytes).expect("the assessment example is JSON");
-    let (version, digest) = external_engine(&example);
-    let assessment = amiss_wire::external::assess(&plan, &evidence_bytes, version, digest)
-        .expect("the derived plan and evidence example yield an assessment");
+    let assessment_example = amiss_wire::external::parse_assessment(&assessment_bytes)
+        .expect("the assessment example is accepted");
+    let engine = &assessment_example.payload.engine;
+    let assessment = amiss_wire::external::assess(
+        &plan,
+        &evidence_bytes,
+        &engine.engine_version,
+        engine.engine_digest,
+    )
+    .expect("the derived plan and evidence example yield an assessment");
     assert_eq!(
         assessment,
         serde_json_canonicalizer::to_vec(&assessment_example).unwrap(),

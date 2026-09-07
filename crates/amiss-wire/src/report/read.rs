@@ -26,6 +26,11 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportEnvelope, ExitClass), Re
         .map_err(|_defect| ReportDefect::NotAReport)?;
     verified_json_digest(ENVELOPE_SCHEMA, bytes, &envelope)
         .map_err(|_defect| ReportDefect::NotAReport)?;
+    let verdict = validate_report(&envelope)?;
+    Ok((envelope, verdict))
+}
+
+pub(crate) fn validate_report(envelope: &ReportEnvelope) -> Result<ExitClass, ReportDefect> {
     let digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
         serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
     })
@@ -33,8 +38,7 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportEnvelope, ExitClass), Re
     if digest != envelope.payload_digest {
         return Err(ReportDefect::DigestMismatch);
     }
-    let verdict = result_verdict(&envelope.payload.result)?;
-    Ok((envelope, verdict))
+    result_verdict(&envelope.payload.result)
 }
 
 /// Checks the recorded completeness, status and exit code as one verdict.

@@ -74,7 +74,7 @@ fn external_plans_retain_the_reports_existing_snapshot_types() {
     let bytes = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
     let report: ReportEnvelope = serde_json::from_slice(bytes).unwrap();
     let generated = amiss_wire::external::plan(
-        bytes,
+        &report,
         &report.payload.engine.engine_version,
         report.payload.engine.engine_digest,
     )

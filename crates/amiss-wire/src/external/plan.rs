@@ -11,9 +11,9 @@ use crate::json;
 use crate::model::ForgeDialect;
 use crate::report::model::{
     BaseSnapshot, Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence,
-    RepoPath, Resolution, Snapshot,
+    RepoPath, ReportEnvelope, Resolution, Snapshot,
 };
-use crate::report::validate_envelope;
+use crate::report::validate_report;
 use crate::requests::RequestMode;
 use crate::resolution::VersionScope;
 
@@ -132,16 +132,16 @@ struct Entry {
 ///
 /// # Errors
 ///
-/// Returns the first [`PlanDefect`] when the bytes are not a report envelope,
-/// its digest does not hold, it is incomplete, or a delegated occurrence
+/// Returns the first [`PlanDefect`] when the report's digest or result does not hold,
+/// it is incomplete, or a delegated occurrence
 /// lacks a field the exactly-when contract promises.
 pub fn plan(
-    envelope: &[u8],
+    report: &ReportEnvelope,
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, PlanDefect> {
-    let (report, _verdict) = validate_envelope(envelope)?;
-    let payload = report.payload;
+    validate_report(report)?;
+    let payload = &report.payload;
     if !payload.result.complete {
         return Err(PlanDefect::Incomplete);
     }

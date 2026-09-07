@@ -21,6 +21,12 @@ the mirror case. A destination that only moved between documents is neither; it 
 counted under `retained_count` and never listed, which keeps the plan proportional to
 the change rather than to the corpus.
 
+Inside the CLI and controller, decoding happens before derivation: planning consumes the
+accepted `ReportEnvelope` directly, without a JSON round trip or string-key lookups.
+It shares the reader's payload-digest and result checks, so changing a public field after
+decoding still requires a matching digest and a consistent result. Input byte and grammar
+limits remain at the reader; plan output limits and canonical bytes are unchanged.
+
 Each row carries the destination exactly as the report recorded it, after the format's
 own decoding, the address an evidence producer would request; its lowercased scheme; and the sorted
 documents naming it. Unavailable exact history uses `https`, the only scheme accepted by the

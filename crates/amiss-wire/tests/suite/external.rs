@@ -7,11 +7,15 @@ use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::external::{
     AssessDefect, EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
-    ExternalEvidenceSchema, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod,
-    assess, parse_assessment, parse_evidence, parse_plan, plan,
+    ExternalEvidenceSchema, ExternalPlanEnvelopeSchema, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA,
+    PlanDefect, ProbeMethod, assess, parse_assessment, parse_evidence, parse_plan, plan,
 };
 use amiss_wire::json::Value;
-use amiss_wire::report::PAYLOAD_SCHEMA;
+use amiss_wire::report::{
+    PAYLOAD_SCHEMA,
+    model::{ReportEnvelope, ReportStatus},
+    validate_envelope,
+};
 
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
@@ -84,7 +88,7 @@ fn row(base: Value, candidate: Value) -> Value {
     object(vec![("base", base), ("candidate", candidate)])
 }
 
-fn report(observations: Vec<Value>) -> Value {
+fn report(observations: Vec<Value>) -> ReportEnvelope {
     let mut document: serde_json::Value =
         serde_json::from_slice(REPORT).expect("the report example is valid JSON");
     let examples = document
@@ -126,7 +130,9 @@ fn report(observations: Vec<Value>) -> Value {
         .pointer_mut("/payload/observations")
         .expect("the report example has observations") = serde_json::Value::Array(rows);
     let bytes = refresh_payload_digest(&mut document, PAYLOAD_SCHEMA);
-    amiss_wire::json::parse(&bytes).expect("the completed test report is strict JSON")
+    validate_envelope(&bytes)
+        .expect("the completed test report is accepted")
+        .0
 }
 
 fn expand_occurrence(
@@ -190,12 +196,8 @@ fn expand_occurrence(
 }
 
 fn planned(observations: Vec<Value>) -> Value {
-    let bytes = plan(
-        &serde_json_canonicalizer::to_vec(&report(observations)).expect("fixture JSON"),
-        "0.0.0",
-        sample_digest(),
-    )
-    .expect("the report yields a plan");
+    let bytes =
+        plan(&report(observations), "0.0.0", sample_digest()).expect("the report yields a plan");
     amiss_wire::json::parse(&bytes).expect("the plan is strict JSON")
 }
 
@@ -382,11 +384,7 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
     historical.retain(|(name, _)| name != "external_destination");
     let source = report(vec![row(Value::Null, Value::object(historical))]);
     assert_eq!(
-        plan(
-            &serde_json_canonicalizer::to_vec(&source).unwrap(),
-            "0.0.0",
-            sample_digest()
-        ),
+        plan(&source, "0.0.0", sample_digest()),
         Err(PlanDefect::MalformedExternal)
     );
 }
@@ -394,28 +392,19 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
 #[test]
 fn the_envelope_binds_the_source_digest_and_its_own() {
     let source = report(Vec::new());
-    let derived = plan(
-        &serde_json_canonicalizer::to_vec(&source).unwrap(),
-        "0.0.0",
-        sample_digest(),
-    )
-    .expect("an empty report yields a plan");
-    let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
-    assert_eq!(field(&derived, "schema"), &string(PLAN_ENVELOPE_SCHEMA));
-    let payload = field(&derived, "payload");
+    let derived = plan(&source, "0.0.0", sample_digest()).expect("an empty report yields a plan");
+    let derived = parse_plan(&derived).expect("the plan is accepted");
+    assert_eq!(derived.schema, ExternalPlanEnvelopeSchema::Current);
     let recomputed = hb(
         PLAN_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(payload).expect("fixture JSON"),
-    )
-    .to_string();
+        &serde_json_canonicalizer::to_vec(&derived.payload).expect("fixture JSON"),
+    );
     assert_eq!(
-        field(&derived, "payload_digest"),
-        &string(&recomputed),
+        derived.payload_digest, recomputed,
         "the plan digest is recomputable from its payload"
     );
     assert_eq!(
-        field(field(payload, "report"), "payload_digest"),
-        field(&source, "payload_digest"),
+        derived.payload.report.payload_digest, source.payload_digest,
         "the plan binds the digest of the report it read"
     );
 }
@@ -463,31 +452,32 @@ fn malformed_known_plan_fields_are_refused_after_binding() {
 
 #[test]
 fn a_tampered_payload_is_refused() {
-    let mut envelope: amiss_wire::report::model::ReportEnvelope =
-        serde_json::from_slice(REPORT).unwrap();
+    let mut envelope: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
     envelope.payload.result.finding_count += 1;
     let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&envelope).unwrap()).unwrap();
     assert_eq!(
-        plan(wire.as_bytes(), "0.0.0", sample_digest()),
+        plan(&envelope, "0.0.0", sample_digest()),
         Err(PlanDefect::DigestMismatch)
     );
     let result = serde_json::to_string(&envelope.payload.result).unwrap();
     let malformed = wire.replace(&format!("\"result\":{result}"), "\"result\":null");
     assert_ne!(malformed, wire);
     assert_eq!(
-        plan(malformed.as_bytes(), "0.0.0", sample_digest()),
+        validate_envelope(malformed.as_bytes()).map(drop),
         Err(PlanDefect::NotAReport)
     );
 }
 
 #[test]
 fn an_incomplete_report_is_refused() {
-    let mut document =
-        serde_json::to_value(report(Vec::new())).expect("the complete report is JSON");
-    document["payload"]["result"]["complete"] = serde_json::Value::Bool(false);
-    document["payload"]["result"]["status"] = serde_json::Value::String("incomplete".to_owned());
-    document["payload"]["result"]["exit_code"] = serde_json::Value::Number(2.into());
-    let envelope = refresh_payload_digest(&mut document, PAYLOAD_SCHEMA);
+    let mut envelope = report(Vec::new());
+    envelope.payload.result.complete = false;
+    envelope.payload.result.status = ReportStatus::Incomplete;
+    envelope.payload.result.exit_code = 2;
+    envelope.payload_digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&envelope.payload).unwrap(),
+    );
     assert_eq!(
         plan(&envelope, "0.0.0", sample_digest()),
         Err(PlanDefect::Incomplete)
@@ -497,15 +487,11 @@ fn an_incomplete_report_is_refused() {
 #[test]
 fn a_foreign_value_is_not_a_report() {
     assert_eq!(
-        plan(b"null", "0.0.0", sample_digest()),
+        validate_envelope(b"null").map(drop),
         Err(PlanDefect::NotAReport)
     );
     assert_eq!(
-        plan(
-            br#"{"schema":"amiss/something-else"}"#,
-            "0.0.0",
-            sample_digest()
-        ),
+        validate_envelope(br#"{"schema":"amiss/something-else"}"#).map(drop),
         Err(PlanDefect::NotAReport)
     );
 }
@@ -646,15 +632,11 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
         document["payload"]["evaluation"]["forge"] = serde_json::Value::String(dialect.to_owned());
         document["payload"]["evaluation"]["repository"]["host"] =
             serde_json::Value::String(host.to_owned());
-        let envelope =
-            amiss_wire::json::parse(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
-                .expect("the declared-host report is strict JSON");
-        let derived = plan(
-            &serde_json_canonicalizer::to_vec(&envelope).unwrap(),
-            "0.0.0",
-            sample_digest(),
-        )
-        .expect("the declared-host report yields a plan");
+        let (envelope, _) =
+            validate_envelope(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
+                .expect("the declared-host report is accepted");
+        let derived = plan(&envelope, "0.0.0", sample_digest())
+            .expect("the declared-host report yields a plan");
         let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
         let repository = repository_of(&derived, destination).expect("the declared host is shaped");
         assert_eq!(
@@ -1179,11 +1161,7 @@ fn an_external_occurrence_missing_its_promise_is_refused() {
     occurrence.retain(|(name, _)| name != "external_destination");
     let source = report(vec![row(Value::Null, Value::object(occurrence))]);
     assert_eq!(
-        plan(
-            &serde_json_canonicalizer::to_vec(&source).unwrap(),
-            "0.0.0",
-            sample_digest()
-        ),
+        plan(&source, "0.0.0", sample_digest()),
         Err(PlanDefect::MalformedExternal)
     );
 }

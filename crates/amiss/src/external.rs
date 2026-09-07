@@ -10,7 +10,12 @@ pub(crate) fn run_plan(invocation: &PlanInvocation) -> ExitCode {
     run_pure(
         "external-plan",
         invocation.format,
-        || crate::input::report_bytes(&invocation.report),
+        || {
+            let bytes = crate::input::report_bytes(&invocation.report)?;
+            amiss_wire::report::validate_envelope(&bytes)
+                .map(|(report, _verdict)| report)
+                .map_err(|defect| defect.to_string())
+        },
         |report, version, digest| amiss_wire::external::plan(&report, version, digest),
         |bytes| {
             parse_plan(bytes)

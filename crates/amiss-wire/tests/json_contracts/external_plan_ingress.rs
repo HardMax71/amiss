@@ -2,12 +2,61 @@ use amiss_wire::{
     de::ErrorKind,
     digest::hb,
     external::{
-        ExternalPlan, ExternalPlanEnvelope, ExternalRepository, PLAN_PAYLOAD_SCHEMA, parse_plan,
+        ExternalPlan, ExternalPlanEnvelope, ExternalRepository, PLAN_PAYLOAD_SCHEMA, PlanDefect,
+        parse_plan, plan,
     },
     model::ForgeDialect,
+    report::{PAYLOAD_SCHEMA, model::ReportStatus, validate_envelope},
 };
 
 const PLAN: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-plan.json");
+
+#[test]
+fn typed_plan_derivation_rechecks_integrity_before_result_laws() {
+    let (report, _) = validate_envelope(include_bytes!(
+        "../../../../spec/examples/scanner-report.canonical.json"
+    ))
+    .unwrap();
+    let engine = &report.payload.engine;
+    assert!(plan(&report, &engine.engine_version, engine.engine_digest).is_ok());
+
+    let mut tampered = report.clone();
+    tampered.payload.result.finding_count += 1;
+    let mut invalid_result = report.clone();
+    invalid_result.payload.result.status = ReportStatus::Incomplete;
+    assert_eq!(
+        plan(
+            &invalid_result,
+            &engine.engine_version,
+            engine.engine_digest
+        ),
+        Err(PlanDefect::DigestMismatch)
+    );
+    invalid_result.payload_digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&invalid_result.payload).unwrap(),
+    );
+    let mut invalid_count = report.clone();
+    invalid_count.payload.summary.findings.warn = u64::MAX;
+    let mut incomplete = invalid_result.clone();
+    incomplete.payload.result.complete = false;
+    incomplete.payload.result.exit_code = 2;
+    incomplete.payload_digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&incomplete.payload).unwrap(),
+    );
+    for (input, defect) in [
+        (tampered, PlanDefect::DigestMismatch),
+        (invalid_result, PlanDefect::InvalidResult),
+        (invalid_count, PlanDefect::NotAReport),
+        (incomplete, PlanDefect::Incomplete),
+    ] {
+        assert_eq!(
+            plan(&input, &engine.engine_version, engine.engine_digest),
+            Err(defect)
+        );
+    }
+}
 
 #[test]
 fn external_plan_objects_reject_extra_fields_with_matching_digests() {

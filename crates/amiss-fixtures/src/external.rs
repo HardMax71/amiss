@@ -70,12 +70,11 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
 #[must_use]
 pub fn external_plan(destinations: &[&str]) -> Option<Vec<u8>> {
     let report = external_report(destinations)?;
-    let parsed = amiss_wire::json::parse(&report).ok()?;
-    let engine = parsed.member("payload")?.member("engine")?;
+    let (report, _verdict) = amiss_wire::report::validate_envelope(&report).ok()?;
     amiss_wire::external::plan(
         &report,
-        engine.text("engine_version")?,
-        amiss_wire::digest::Digest::from_wire(engine.text("engine_digest")?)?,
+        &report.payload.engine.engine_version,
+        report.payload.engine.engine_digest,
     )
     .ok()
 }
