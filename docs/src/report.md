@@ -52,6 +52,12 @@ Projection differences and debt/waiver diagnostics also use their enum's own tag
 a closed body. Diagnostic trees must be objects. A count's `observed_count` and a waiver's
 `current_fact_digest` remain required even when null. Canonical fact bytes stay unchanged.
 
+Finding facts reject unknown members throughout their evidence and control-state objects.
+One tagged evidence enum serves both report construction and borrowed adoption preimages;
+the latter keeps the original resolution borrowed. Site-defect identities use its derived
+kind label, preserving their kind/route preimages. Embedded document rows and observation
+comparisons must be objects, not positional arrays.
+
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
 to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,

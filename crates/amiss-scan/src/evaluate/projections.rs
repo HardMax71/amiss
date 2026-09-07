@@ -1,7 +1,7 @@
 use amiss_wire::controls::{Profile, ProjectionSink};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
-use amiss_wire::report::model::{FindingFactEvidence, ProjectionFactEvidenceKind};
+use amiss_wire::report::model::FindingFactEvidence;
 
 use crate::projection::{Outcome, Verdict};
 
@@ -28,7 +28,6 @@ pub(super) fn projection_finding(
     };
     let assertion = &outcome.assertion;
     let evidence = FindingFactEvidence::Projection {
-        kind: ProjectionFactEvidenceKind::Projection,
         name: assertion.name.clone(),
         projection: assertion.projection,
         sink: ProjectionSink::PreviousCode,
