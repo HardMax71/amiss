@@ -1,35 +1,34 @@
 use std::{fs, process::Command};
 
-use amiss_wire::{digest::hb, report::PAYLOAD_SCHEMA};
+use amiss_wire::{
+    digest::hb,
+    report::{
+        PAYLOAD_SCHEMA,
+        model::{RepoPath, RepoPathBytes, ReportEnvelope},
+    },
+};
 use serde_json::{Value, json};
 
 #[test]
-fn refs_preserve_original_occurrences_and_nested_extensions_in_canonical_order() {
-    let mut report: Value = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
-    let mut comparison = report["payload"]["observations"][0].clone();
-    let candidate = &mut comparison["candidate"];
-    let mut deep = json!("leaf");
-    for _ in 0..180 {
-        deep = json!([deep]);
-    }
-    for path in [
-        "",
-        "/intent",
-        "/resolution/target",
-        "/source_span",
-        "/observation_id_input",
-    ] {
-        candidate.pointer_mut(path).unwrap()["future"] =
-            json!({"\u{e000}": false, "\u{1f600}": [null, -7], "deep": deep});
-    }
+fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
+    let mut report: ReportEnvelope =
+        serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+    let mut comparison = report.payload.observations[0].clone();
+    let candidate = comparison.candidate.as_ref().unwrap();
     let mut alternative = candidate.clone();
-    alternative["document"] = json!({"bytes_hex": "646f63732fff2e6d64"});
-    let expected = json!([candidate, alternative]);
-    comparison["alternatives"]["candidate"] = json!([alternative]);
-    report["payload"]["observations"] = json!([comparison]);
+    alternative.document = RepoPath::Bytes(RepoPathBytes {
+        bytes_hex: hex::encode(b"docs/\xff.md"),
+    });
+    let expected = [candidate.clone(), alternative.clone()];
+    comparison.alternatives.candidate = vec![alternative.clone()];
+    report.payload.observations = vec![comparison];
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("report.json");
-    bind(&mut report, &path).unwrap();
+    report.payload_digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+    );
+    fs::write(&path, serde_json::to_vec(&report).unwrap()).unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
         .args(["refs", "--report"])
@@ -58,8 +57,12 @@ fn refs_preserve_original_occurrences_and_nested_extensions_in_canonical_order()
         "{human}"
     );
 
-    report["payload"]["observations"][0]["candidate"] = Value::Null;
-    bind(&mut report, &path).unwrap();
+    report.payload.observations[0].candidate = None;
+    report.payload_digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+    );
+    fs::write(&path, serde_json::to_vec(&report).unwrap()).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
         .args(["refs", "--report"])
         .arg(&path)
@@ -70,6 +73,28 @@ fn refs_preserve_original_occurrences_and_nested_extensions_in_canonical_order()
     let mut expected_bytes = serde_json_canonicalizer::to_vec(&[alternative]).unwrap();
     expected_bytes.push(b'\n');
     assert_eq!(output.stdout, expected_bytes);
+
+    let payload =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
+    let invalid = payload.replacen(
+        "\"source_span\":{",
+        "\"source_span\":{\"__unexpected\":true,",
+        1,
+    );
+    assert_ne!(payload, invalid);
+    let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&report).unwrap()).unwrap();
+    let wire = wire.replace(&payload, &invalid).replace(
+        &report.payload_digest.to_string(),
+        &hb(PAYLOAD_SCHEMA, invalid.as_bytes()).to_string(),
+    );
+    fs::write(&path, wire).unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
+        .args(["refs", "--report"])
+        .arg(&path)
+        .args(["--target", "docs/guide.md", "--format", "json"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2), "{:?}", output.stderr);
 }
 
 #[test]

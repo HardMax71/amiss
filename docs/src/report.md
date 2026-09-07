@@ -27,6 +27,10 @@ Engine, action, adapter and summary metadata also use closed models. Unknown mem
 rejected even with a matching payload digest. Bootstrap validates the summary's declared
 fields as well as the engine block; a local action tag cannot conceal a forge-action body.
 
+Document, feedback and analysis-error rows reject unknown members too, including nested
+source spans and byte-path objects. An unavailable feedback tag cannot hide available items.
+Nullable fields remain explicit: `null` is not an omitted member or an empty object.
+
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
 to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,

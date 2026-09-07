@@ -61,6 +61,7 @@ pub struct StructuralAddress {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SourceSpan {
     pub end_byte: u64,
     pub end_column: u64,

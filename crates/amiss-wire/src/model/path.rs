@@ -5,8 +5,6 @@ use hex_fmt::HexFmt;
 use serde::Serialize;
 use serde_with::{DeserializeFromStr, DisplayFromStr, SerializeDisplay, serde_as};
 
-use crate::json::Value;
-
 /// A repository path whose bytes are valid UTF-8, mirroring the schema's
 /// `RepoPathText`: the form every configuration surface is confined to.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
@@ -91,19 +89,6 @@ impl RepoPath {
         match &self.0 {
             Repr::Text(text) => Some(text),
             Repr::Bytes { .. } => None,
-        }
-    }
-
-    /// The wire form: a plain string for text, byte-identical to the first
-    /// contract, and the `bytes_hex` object for a path text cannot hold.
-    #[must_use]
-    pub fn to_value(&self) -> Value {
-        match &self.0 {
-            Repr::Text(text) => Value::String(text.clone().into()),
-            Repr::Bytes { bytes_hex } => Value::Object(Box::new([(
-                "bytes_hex".into(),
-                Value::String(bytes_hex.to_string().into()),
-            )])),
         }
     }
 }

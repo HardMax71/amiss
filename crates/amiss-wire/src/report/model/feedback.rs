@@ -31,13 +31,15 @@ pub enum FeedbackAction {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FeedbackAnnotation {
     pub path: RepoPathText,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub span: SourceSpan,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
 pub struct FeedbackItem<P = RepoPath> {
     pub action: FeedbackAction,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -58,6 +60,7 @@ pub enum AvailableFeedbackStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AvailableFeedback<P = RepoPath> {
     pub existing_count: u64,
     pub items: Vec<FeedbackItem<P>>,
@@ -65,13 +68,18 @@ pub struct AvailableFeedback<P = RepoPath> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnavailableFeedback {
     pub status: UnavailableStatus,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, bound(deserialize = "P: Deserialize<'de>"))]
 pub enum Feedback<P = RepoPath> {
-    Available(AvailableFeedback<P>),
-    Unavailable(UnavailableFeedback),
+    Available(
+        #[serde(deserialize_with = "crate::requests::object::deserialize")] AvailableFeedback<P>,
+    ),
+    Unavailable(
+        #[serde(deserialize_with = "crate::requests::object::deserialize")] UnavailableFeedback,
+    ),
 }

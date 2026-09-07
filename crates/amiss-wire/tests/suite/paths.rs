@@ -1,5 +1,5 @@
-use amiss_wire::json::Value;
 use amiss_wire::model::{RepoPath, RepoPathText};
+use amiss_wire::report::model as report;
 
 /// Every byte string over this alphabet up to length four: enough to cross
 /// every rule boundary (separators, dots, NUL, backslash, a non-UTF-8 byte,
@@ -94,15 +94,12 @@ fn construction_classifies_and_the_forms_never_overlap() {
 #[test]
 fn the_wire_form_is_the_string_or_the_hex_object() {
     let text = RepoPath::new("docs/guide.md".to_owned()).unwrap();
-    assert_eq!(text.to_value(), Value::string("docs/guide.md".to_owned()));
+    assert_eq!(serde_json::to_string(&text).unwrap(), r#""docs/guide.md""#);
 
     let bytes = RepoPath::from_bytes(b"docs/b\xff.md".to_vec()).unwrap();
     assert_eq!(
-        bytes.to_value(),
-        Value::object(vec![(
-            "bytes_hex".to_owned(),
-            Value::string("646f63732f62ff2e6d64".to_owned()),
-        )])
+        serde_json::to_string(&bytes).unwrap(),
+        r#"{"bytes_hex":"646f63732f62ff2e6d64"}"#
     );
 }
 
@@ -119,11 +116,13 @@ fn serde_paths_preserve_the_canonical_text_and_byte_forms() {
             continue;
         };
         let bytes = serde_json::to_vec(&path).unwrap();
-        assert_eq!(
-            bytes,
-            serde_json_canonicalizer::to_vec(&path.to_value()).unwrap(),
-            "{raw:?}"
-        );
+        let decoded: report::RepoPath = serde_json::from_slice(&bytes).unwrap();
+        match decoded {
+            report::RepoPath::Text(text) => assert_eq!(text.as_str().as_bytes(), raw),
+            report::RepoPath::Bytes(bytes) => {
+                assert_eq!(hex::decode(bytes.bytes_hex).unwrap(), raw);
+            }
+        }
         assert_eq!(bytes, serde_json_canonicalizer::to_vec(&path).unwrap());
     }
     let bytes = RepoPath::from_bytes(b"docs/b\xff.md".to_vec()).unwrap();

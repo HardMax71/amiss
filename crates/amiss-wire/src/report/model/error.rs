@@ -33,7 +33,7 @@ pub enum AnalysisPhase {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
 pub struct AnalysisError<P = RepoPath> {
     pub code: AnalysisErrorCode,
     #[serde(deserialize_with = "Option::deserialize")]

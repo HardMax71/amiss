@@ -115,8 +115,9 @@ fn reports() -> Vec<ReportEnvelope> {
 
 #[test]
 fn report_metadata_rejects_unknown_members_after_digest_verification() {
-    let cases = reports();
-    assert_eq!(cases.len(), 3);
+    let mut cases = reports();
+    cases.extend(super::report_rows::reports().unwrap());
+    assert_eq!(cases.len(), 5);
     for mut report in cases {
         let payload =
             String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
@@ -141,6 +142,18 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
             ),
             (
                 serde_json_canonicalizer::to_vec(&report.payload.summary).unwrap(),
+                ReportDefect::NotAReport,
+            ),
+            (
+                serde_json_canonicalizer::to_vec(&report.payload.documents).unwrap(),
+                ReportDefect::NotAReport,
+            ),
+            (
+                serde_json_canonicalizer::to_vec(&report.payload.feedback).unwrap(),
+                ReportDefect::NotAReport,
+            ),
+            (
+                serde_json_canonicalizer::to_vec(&report.payload.errors).unwrap(),
                 ReportDefect::NotAReport,
             ),
         ] {
