@@ -23,6 +23,10 @@ Both report readers use the same result model and verdict check. They require ev
 member and reject unknown members, negative counts, and disagreements between `complete`,
 `status`, and `exit_code`. Bootstrap also checks the recorded finding count against the array.
 
+Engine, action, adapter and summary metadata also use closed models. Unknown members are
+rejected even with a matching payload digest. Bootstrap validates the summary's declared
+fields as well as the engine block; a local action tag cannot conceal a forge-action body.
+
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
 to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,

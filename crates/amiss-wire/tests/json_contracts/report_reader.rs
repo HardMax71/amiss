@@ -7,7 +7,11 @@ const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.c
 #[test]
 fn additive_fields_are_checked_before_typed_decoding() {
     let original = validate_envelope(REPORT).unwrap();
-    for path in ["/payload", "/payload/engine", "/payload/summary"] {
+    for (path, expected) in [
+        ("/payload", Ok(())),
+        ("/payload/engine", Err(ReportDefect::NotAReport)),
+        ("/payload/summary", Err(ReportDefect::NotAReport)),
+    ] {
         let mut report: Value = serde_json::from_slice(REPORT).unwrap();
         report.pointer_mut(path).unwrap()["future_field"] =
             json!({"\u{1f600}": [null, true, -7], "\u{e000}": "extra"});
@@ -17,13 +21,16 @@ fn additive_fields_are_checked_before_typed_decoding() {
             "{path}"
         );
         let canonical = bind(&mut report).unwrap();
-        let (payload, digest, verdict) = validate_envelope(&canonical).unwrap();
-        assert_eq!(payload, original.0, "{path}");
-        assert_ne!(digest, original.1, "{path}");
-        assert_eq!(verdict, original.2);
+        let checked = validate_envelope(&canonical).map(|(payload, digest, verdict)| {
+            assert_eq!(payload, original.0, "{path}");
+            assert_ne!(digest, original.1, "{path}");
+            assert_eq!(verdict, original.2, "{path}");
+        });
+        assert_eq!(checked, expected, "{path}");
         assert_eq!(
-            validate_envelope(&serde_json::to_vec_pretty(&report).unwrap()).unwrap(),
-            (payload, digest, verdict)
+            validate_envelope(&serde_json::to_vec_pretty(&report).unwrap()).map(drop),
+            expected,
+            "{path}"
         );
     }
 }

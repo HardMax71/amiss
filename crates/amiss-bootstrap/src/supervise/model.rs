@@ -1,4 +1,6 @@
-use amiss_wire::report::model::{Engine, ReportPayloadSchema, ReportResult, UnavailableStatus};
+use amiss_wire::report::model::{
+    Engine, ReportPayloadSchema, ReportResult, Summary, UnavailableStatus,
+};
 use amiss_wire::requests::GitSnapshotIdentity;
 use serde::{Deserialize, de::IgnoredAny};
 
@@ -40,6 +42,8 @@ pub(super) struct CandidateEvaluation<C = Object<GitSnapshotIdentity>> {
 #[derive(Deserialize)]
 pub(super) struct ResultPayload {
     pub(super) result: Object<ReportResult>,
+    #[serde(rename = "summary")]
+    _summary: Object<Summary>,
 }
 
 #[derive(Deserialize)]
