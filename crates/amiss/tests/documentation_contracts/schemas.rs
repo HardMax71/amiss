@@ -611,7 +611,7 @@ fn external_examples_replay_from_the_report_and_evidence() {
         .expect("the assessment example is accepted");
     let engine = &assessment_example.payload.engine;
     let assessment = amiss_wire::external::assess(
-        &plan_bytes,
+        &plan,
         &evidence_bytes,
         &engine.engine_version,
         engine.engine_digest,

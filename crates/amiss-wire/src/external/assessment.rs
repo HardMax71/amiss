@@ -13,7 +13,8 @@ use super::evidence::{
     ForgeRepository, ForgeTail, ProbeMethod, parse_evidence,
 };
 use super::plan::{
-    ExternalDestination, ExternalEngine, ExternalPlanEnvelope, ExternalRepository, parse_plan,
+    ExternalDestination, ExternalEngine, ExternalPlanEnvelope, ExternalRepository,
+    validate_plan_envelope,
 };
 use super::{ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA};
 
@@ -208,6 +209,7 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
 /// complete assessment. The same inputs always produce the same output.
 /// The caller writes the returned envelope through [`crate::write_json`] with
 /// the external artifact byte ceiling.
+/// Read untrusted plans through [`super::parse_plan`] before calling this function.
 ///
 /// # Errors
 ///
@@ -215,18 +217,18 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
 /// bound one-to-one to introduced destinations, or the result cannot satisfy
 /// the assessment contract.
 pub fn assess(
-    plan: &[u8],
+    plan: &ExternalPlanEnvelope,
     evidence_bytes: &[u8],
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<ExternalAssessmentEnvelope, AssessDefect> {
-    let plan = parse_plan(plan)?;
+    validate_plan_envelope(plan)?;
     let (evidence, evidence_digest) = parse_evidence(evidence_bytes)?;
     if evidence.plan_payload_digest != plan.payload_digest {
         return Err(AssessDefect::UnboundEvidence);
     }
-    let observed = bound_rows(&plan, &evidence)?;
-    let verdicts = verdict_rows(&plan, &observed);
+    let observed = bound_rows(plan, &evidence)?;
+    let verdicts = verdict_rows(plan, &observed);
     let payload = ExternalAssessment {
         schema: ExternalAssessmentPayloadSchema::Current,
         engine: ExternalEngine {

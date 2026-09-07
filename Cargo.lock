@@ -258,7 +258,6 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
- "serde_json_canonicalizer",
  "sha2",
  "thiserror 2.0.20",
  "url",
@@ -304,7 +303,6 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
- "serde_json_canonicalizer",
  "serde_urlencoded",
  "sha2",
  "tempfile",
@@ -346,7 +344,6 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
- "serde_json_canonicalizer",
  "thiserror 2.0.20",
  "url",
 ]

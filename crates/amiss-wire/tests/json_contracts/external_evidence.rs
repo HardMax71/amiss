@@ -13,6 +13,7 @@ const PLAN: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-p
 
 #[test]
 fn evidence_models_reject_unknown_fields() {
+    let plan = external::parse_plan(PLAN).unwrap();
     let mut document: ExternalEvidence = serde_json::from_slice(EVIDENCE).unwrap();
     document.rows.extend([
         ExternalEvidenceRow::HttpProbe {
@@ -58,7 +59,7 @@ fn evidence_models_reject_unknown_fields() {
         .unwrap()
         .replacen('{', "{\"future\":true,", 1);
     assert!(matches!(
-        external::assess(PLAN, extended.as_bytes(), "0.0.0", hb("test", b"engine")),
+        external::assess(&plan, extended.as_bytes(), "0.0.0", hb("test", b"engine")),
         Err(AssessDefect::Evidence(_))
     ));
 }
@@ -112,6 +113,7 @@ fn evidence_does_not_normalize_positional_data() {
 
 #[test]
 fn assessments_use_the_verified_evidence_identity() {
+    let plan = external::parse_plan(PLAN).unwrap();
     let mut document: ExternalEvidence = serde_json::from_slice(EVIDENCE).unwrap();
     let original_digest = external::parse_evidence(EVIDENCE).unwrap().1;
     document.producer.name = "probe \"quoted\" \\ \n \t 😀 \u{e000}".to_owned();
@@ -130,7 +132,7 @@ fn assessments_use_the_verified_evidence_identity() {
         let (parsed, digest) = external::parse_evidence(&bytes).unwrap();
         assert_eq!(parsed, document);
         assert_eq!(digest, expected);
-        let assessment = external::assess(PLAN, &bytes, "0.0.0", hb("test", b"engine")).unwrap();
+        let assessment = external::assess(&plan, &bytes, "0.0.0", hb("test", b"engine")).unwrap();
         assert_eq!(assessment.payload.subject.evidence_digest, expected);
     }
     document.producer.version.push_str("-changed");
@@ -143,7 +145,7 @@ fn assessments_use_the_verified_evidence_identity() {
     let mut trailing = external::evidence(&document).unwrap();
     trailing.extend_from_slice(b" null");
     assert!(matches!(
-        external::assess(PLAN, &trailing, "0.0.0", hb("test", b"engine")),
+        external::assess(&plan, &trailing, "0.0.0", hb("test", b"engine")),
         Err(AssessDefect::Evidence(_))
     ));
 }

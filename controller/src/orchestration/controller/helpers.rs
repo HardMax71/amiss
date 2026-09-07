@@ -361,12 +361,10 @@ fn prepare_external(
             ..PreparedExternal::default()
         };
     };
-    let verification = adapter.verify_external(&plan, &now.to_string());
-    drop(plan);
-    match verification {
+    match adapter.verify_external(&plan, &now.to_string()) {
         Ok(Some(evidence)) => {
             match amiss_wire::external::assess(
-                &plan_bytes,
+                &plan,
                 &evidence,
                 &engine.engine_version,
                 engine.engine_digest,

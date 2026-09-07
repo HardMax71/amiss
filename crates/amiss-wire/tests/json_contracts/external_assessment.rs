@@ -3,8 +3,8 @@ use amiss_wire::{
     digest::hb,
     external::{
         ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, AssessmentDefect, ExternalAssessment,
-        ExternalAssessmentEnvelope, ExternalReason, ExternalVerdict, ExternalVerdictRow, assess,
-        parse_assessment,
+        ExternalAssessmentEnvelope, ExternalReason, ExternalVerdict, ExternalVerdictRow,
+        PLAN_PAYLOAD_SCHEMA, assess, parse_assessment, parse_plan,
     },
 };
 
@@ -12,10 +12,69 @@ const ASSESSMENT: &[u8] =
     include_bytes!("../../../../spec/examples/scanner-external-assessment.json");
 
 #[test]
+fn assessment_checks_mutable_plan_identity_and_laws_before_evidence() {
+    let plan = parse_plan(include_bytes!(
+        "../../../../spec/examples/scanner-external-plan.json"
+    ))
+    .unwrap();
+    let evidence = include_bytes!("../../../../spec/examples/scanner-external-evidence.json");
+    let engine = hb("test", b"engine");
+    let assessment = assess(&plan, evidence, "0.0.0", engine).unwrap();
+    assert_eq!(
+        assessment.payload.subject.plan_payload_digest,
+        plan.payload_digest
+    );
+    assert!(matches!(
+        assess(&plan, b"null", "0.0.0", engine),
+        Err(AssessDefect::Evidence(_))
+    ));
+
+    let mut changed = plan.clone();
+    changed.payload.retained_count += 1;
+    let mut invalid = plan.clone();
+    invalid.payload.introduced[0].documents.clear();
+    let mut rebound = invalid.clone();
+    rebound.payload_digest = hb(
+        PLAN_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&rebound.payload).unwrap(),
+    );
+    let mut out_of_range = plan;
+    out_of_range.payload.retained_count = u64::MAX;
+    for (input, path, kind) in [
+        (&changed, "$.payload_digest", ErrorKind::DigestMismatch),
+        (&invalid, "$.payload_digest", ErrorKind::DigestMismatch),
+        (
+            &rebound,
+            "$.payload.introduced[0].documents",
+            ErrorKind::InvalidValue,
+        ),
+        (&out_of_range, "$.payload", ErrorKind::InvalidValue),
+    ] {
+        let Err(AssessDefect::Plan(defect)) = assess(input, b"null", "0.0.0", engine) else {
+            panic!("invalid plans must be refused before evidence is read");
+        };
+        assert_eq!(defect.path, path);
+        assert_eq!(defect.kind, kind);
+    }
+    changed.payload_digest = hb(
+        PLAN_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&changed.payload).unwrap(),
+    );
+    assert!(matches!(
+        assess(&changed, evidence, "0.0.0", engine),
+        Err(AssessDefect::UnboundEvidence)
+    ));
+}
+
+#[test]
 fn assessment_writer_uses_the_same_derived_validation_as_the_reader() {
+    let plan = parse_plan(include_bytes!(
+        "../../../../spec/examples/scanner-external-plan.json"
+    ))
+    .unwrap();
     assert!(matches!(
         assess(
-            include_bytes!("../../../../spec/examples/scanner-external-plan.json"),
+            &plan,
             include_bytes!("../../../../spec/examples/scanner-external-evidence.json"),
             "",
             hb("test", b"engine"),

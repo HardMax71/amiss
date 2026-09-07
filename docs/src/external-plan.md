@@ -34,8 +34,10 @@ The shared canonical writer checks the external byte ceiling at output, includin
 check before human rendering; JSON reaches stdout only after the buffered write succeeds.
 The controller passes the typed plan through all three forge adapters. Their shared verifier
 checks its payload digest and plan laws before preparing or querying the provider; it does not
-decode the plan again. Encoded plan limits still apply before retention. Evidence output and
-assessment inputs remain byte-oriented. Untrusted input still uses the reader.
+decode the plan again. Assessment consumes that same typed plan and rechecks its integrity
+before reading evidence. The CLI decodes plan files at ingress, while controller plan encoding
+serves artifact retention only. Evidence still crosses the provider and assessment APIs as
+bytes. Untrusted input still uses the reader, and retained output keeps its byte ceiling.
 
 Each row carries the destination exactly as the report recorded it, after the format's
 own decoding, the address an evidence producer would request; its lowercased scheme; and the sorted

@@ -35,7 +35,7 @@ fn external_outputs_own_their_data_and_replay_the_committed_artifacts() {
         let evidence = include_bytes!("../../../../spec/examples/scanner-external-evidence.json");
         let engine = &expected_assessment.payload.engine;
         let assessed = assess(
-            &plan_bytes,
+            &planned,
             evidence,
             &engine.engine_version,
             engine.engine_digest,

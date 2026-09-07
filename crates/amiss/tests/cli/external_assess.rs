@@ -1,5 +1,11 @@
 use std::fs;
 
+use amiss_wire::external::{
+    ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
+    ExternalPlanEnvelope, ExternalReason, ExternalVerdict, ExternalVerdictRow, ProbeMethod,
+    parse_assessment, parse_plan,
+};
+
 use crate::support;
 
 #[test]
@@ -90,11 +96,11 @@ fn external_assessment_uses_shared_artifact_refusals_and_bounded_file_reads() {
         "json",
     ]);
     assert_eq!((code, stderr.as_str()), (0, ""));
-    assert!(amiss_wire::external::parse_assessment(&stdout).is_ok());
+    assert!(parse_assessment(&stdout).is_ok());
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
-fn planned_pair() -> (amiss_fixtures::CommitPair, String, serde_json::Value) {
+fn planned_pair() -> (amiss_fixtures::CommitPair, String, ExternalPlanEnvelope) {
     let pair = amiss_fixtures::commit_pair(
         &[("docs/a.md", "[kept](https://kept.example/k)\n")],
         &[(
@@ -129,25 +135,30 @@ fn planned_pair() -> (amiss_fixtures::CommitPair, String, serde_json::Value) {
         "json",
     ]);
     assert_eq!((code, stderr.as_str()), (0, ""));
-    let plan: serde_json::Value = serde_json::from_slice(&plan_bytes).unwrap();
+    let plan = parse_plan(&plan_bytes).unwrap();
     let plan_path = format!("{}/plan.json", pair.repo);
     fs::write(&plan_path, &plan_bytes).unwrap();
     (pair, plan_path, plan)
 }
 
-fn evidence_json(plan: &serde_json::Value, status: u16, method: &str) -> serde_json::Value {
-    serde_json::json!({
-        "schema": "amiss/external-evidence",
-        "plan_payload_digest": plan["payload_digest"],
-        "producer": {"name": "curl-recipe", "version": "0"},
-        "rows": [{
-            "kind": "http-probe",
-            "destination": "https://new.example/n",
-            "method": method,
-            "status": status,
-            "checked_at": "2026-08-14T00:00:00Z",
+fn evidence(plan: &ExternalPlanEnvelope, status: u16, method: ProbeMethod) -> ExternalEvidence {
+    ExternalEvidence {
+        schema: ExternalEvidenceSchema::Current,
+        plan_payload_digest: plan.payload_digest,
+        producer: ExternalEvidenceProducer {
+            name: "curl-recipe".to_owned(),
+            version: "0".to_owned(),
+        },
+        rows: vec![ExternalEvidenceRow::HttpProbe {
+            destination: "https://new.example/n".to_owned(),
+            method,
+            status: Some(status),
+            failure: None,
+            final_destination: None,
+            redirect_chain_permanent: None,
+            checked_at: "2026-08-14T00:00:00Z".to_owned(),
         }],
-    })
+    }
 }
 
 #[test]
@@ -156,7 +167,7 @@ fn the_chain_judges_an_introduced_destination() {
     let evidence_path = format!("{}/evidence.json", pair.repo);
     fs::write(
         &evidence_path,
-        serde_json::to_string(&evidence_json(&plan, 410, "get")).unwrap(),
+        serde_json::to_vec(&evidence(&plan, 410, ProbeMethod::Get)).unwrap(),
     )
     .unwrap();
 
@@ -170,34 +181,35 @@ fn the_chain_judges_an_introduced_destination() {
         "json",
     ]);
     assert_eq!((code, stderr.as_str()), (0, ""));
-    let assessment: serde_json::Value = serde_json::from_slice(&stdout).unwrap();
-    assert_eq!(assessment["schema"], "amiss/external-assessment-envelope");
+    let assessment = parse_assessment(&stdout).unwrap();
     assert_eq!(
-        assessment["payload"]["verdicts"],
-        serde_json::json!([{
-            "destination": "https://new.example/n",
-            "documents": ["docs/a.md"],
-            "reason": "gone",
-            "verdict": "refuted",
-        }]),
+        assessment.payload.verdicts,
+        vec![ExternalVerdictRow {
+            destination: "https://new.example/n".to_owned(),
+            documents: vec!["docs/a.md".to_owned()],
+            reason: Some(ExternalReason::Gone),
+            verdict: ExternalVerdict::Refuted,
+            retarget: None,
+        }],
     );
     assert_eq!(
-        assessment["payload"]["subject"]["plan_payload_digest"],
-        plan["payload_digest"],
+        assessment.payload.subject.plan_payload_digest,
+        plan.payload_digest,
     );
     assert_eq!(
-        assessment["payload"]["subject"]["report_payload_digest"],
-        plan["payload"]["report"]["payload_digest"],
+        assessment.payload.subject.report_payload_digest,
+        plan.payload.report.payload_digest,
     );
 }
 
 #[test]
 fn evidence_for_a_foreign_plan_is_refused() {
     let (pair, plan_path, plan) = planned_pair();
-    let mut foreign = evidence_json(&plan, 200, "head");
-    foreign["plan_payload_digest"] = serde_json::json!(format!("sha256:{}", "0".repeat(64)));
+    let mut foreign = evidence(&plan, 200, ProbeMethod::Head);
+    foreign.plan_payload_digest = amiss_wire::digest::hb("foreign", b"plan");
+    assert_ne!(foreign.plan_payload_digest, plan.payload_digest);
     let evidence_path = format!("{}/evidence.json", pair.repo);
-    fs::write(&evidence_path, serde_json::to_string(&foreign).unwrap()).unwrap();
+    fs::write(&evidence_path, serde_json::to_vec(&foreign).unwrap()).unwrap();
 
     let (code, stdout, stderr) = support::amiss(&[
         "external-assess",
@@ -217,7 +229,7 @@ fn the_human_projection_windows_the_refuted() {
     let evidence_path = format!("{}/evidence.json", pair.repo);
     fs::write(
         &evidence_path,
-        serde_json::to_string(&evidence_json(&plan, 404, "get")).unwrap(),
+        serde_json::to_vec(&evidence(&plan, 404, ProbeMethod::Get)).unwrap(),
     )
     .unwrap();
 
@@ -239,11 +251,21 @@ fn the_human_projection_windows_the_refuted() {
 #[test]
 fn the_human_projection_suggests_only_a_proved_permanent_retarget() {
     let (pair, plan_path, plan) = planned_pair();
-    let mut evidence = evidence_json(&plan, 200, "head");
-    evidence["rows"][0]["final_destination"] = serde_json::json!("https://current.example/n");
-    evidence["rows"][0]["redirect_chain_permanent"] = serde_json::json!(true);
+    let mut evidence = evidence(&plan, 200, ProbeMethod::Head);
+    let [
+        ExternalEvidenceRow::HttpProbe {
+            final_destination,
+            redirect_chain_permanent,
+            ..
+        },
+    ] = evidence.rows.as_mut_slice()
+    else {
+        panic!("the fixture contains one HTTP probe");
+    };
+    *final_destination = Some("https://current.example/n".to_owned());
+    *redirect_chain_permanent = Some(true);
     let evidence_path = format!("{}/evidence.json", pair.repo);
-    fs::write(&evidence_path, serde_json::to_string(&evidence).unwrap()).unwrap();
+    fs::write(&evidence_path, serde_json::to_vec(&evidence).unwrap()).unwrap();
 
     let (code, stdout, stderr) = support::amiss(&[
         "external-assess",

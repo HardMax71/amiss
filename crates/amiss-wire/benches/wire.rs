@@ -3,8 +3,8 @@
 use amiss_wire::controls::parse_organization_floor;
 use amiss_wire::digest::{hb, hj_serde};
 use amiss_wire::external::{
-    EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
-    ExternalEvidenceSchema, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess, evidence,
+    ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
+    ExternalPlanEnvelope, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess, evidence,
 };
 use amiss_wire::json::{Value, parse};
 use divan::counter::BytesCount;
@@ -111,7 +111,10 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
         .unwrap_or_else(|defect| panic!("dense assessment fixture: {defect:?}"));
     assert_eq!(validation.payload.verdicts.len(), 16_384);
 
-    let bytes = plan.len().saturating_add(evidence.len());
+    let mut encoded = countio::Counter::new(std::io::sink());
+    serde_json_canonicalizer::to_writer(&plan, &mut encoded)
+        .unwrap_or_else(|defect| panic!("benchmark plan: {defect}"));
+    let bytes = encoded.writer_bytes().saturating_add(evidence.len());
     bencher.counter(BytesCount::new(bytes)).bench_local(|| {
         assess(
             black_box(&plan),
@@ -122,7 +125,7 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     });
 }
 
-fn assessment_fixture(count: usize) -> (Vec<u8>, Vec<u8>) {
+fn assessment_fixture(count: usize) -> (ExternalPlanEnvelope, Vec<u8>) {
     let destinations: Vec<String> = (0..count)
         .map(|index| format!("https://example.com/resource-{index:05}"))
         .collect();
@@ -144,8 +147,6 @@ fn assessment_fixture(count: usize) -> (Vec<u8>, Vec<u8>) {
     let payload = serde_json_canonicalizer::to_vec(&document.payload)
         .unwrap_or_else(|defect| panic!("benchmark payload: {defect}"));
     document.payload_digest = hb(PLAN_PAYLOAD_SCHEMA, &payload);
-    let plan = serde_json_canonicalizer::to_vec(&document)
-        .unwrap_or_else(|defect| panic!("benchmark plan: {defect}"));
     let rows = destinations
         .iter()
         .rev()
@@ -169,12 +170,5 @@ fn assessment_fixture(count: usize) -> (Vec<u8>, Vec<u8>) {
         rows,
     })
     .unwrap_or_else(|defect| panic!("benchmark evidence is malformed: {defect}"));
-    assert_eq!(
-        parse(&evidence)
-            .ok()
-            .as_ref()
-            .and_then(|value| value.text("schema")),
-        Some(EVIDENCE_SCHEMA)
-    );
-    (plan, evidence)
+    (document, evidence)
 }

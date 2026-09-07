@@ -9,8 +9,7 @@ use amiss_wire::external::{
     ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, EVIDENCE_SCHEMA, ExternalAssessmentEnvelope,
     ExternalDestination, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
     ExternalEvidenceSchema, ExternalPlanEnvelope, ExternalPlanEnvelopeSchema, ExternalRepository,
-    PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod, assess, parse_evidence,
-    parse_plan, plan,
+    PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod, assess, parse_evidence, parse_plan, plan,
 };
 use amiss_wire::json::Value;
 use amiss_wire::report::{
@@ -772,13 +771,8 @@ fn the_judgment_policy_is_conservative() {
         &plan,
         destinations.iter().map(|(_, row)| row.clone()).collect(),
     );
-    let assessment = assess(
-        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-        &evidence,
-        "0.0.0",
-        sample_digest(),
-    )
-    .expect("the pair yields an assessment");
+    let assessment =
+        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
     assert_eq!(
         verdicts_of(&assessment),
         vec![
@@ -853,13 +847,8 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
             ]),
         ],
     );
-    let assessment = assess(
-        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-        &observed,
-        "0.0.0",
-        sample_digest(),
-    )
-    .expect("the redirects are evidence");
+    let assessment =
+        assess(&plan, &observed, "0.0.0", sample_digest()).expect("the redirects are evidence");
     let verdicts = &assessment.payload.verdicts;
     let verdict = |destination: &str| {
         verdicts
@@ -894,7 +883,7 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
     ] {
         assert!(matches!(
             assess(
-                &serde_json_canonicalizer::to_vec(&plan).unwrap(),
+                &plan,
                 &evidence(&plan, vec![malformed]),
                 "0.0.0",
                 sample_digest()
@@ -921,13 +910,8 @@ fn forge_facts_refute_only_after_visibility_and_resolution() {
             forge_row(&shaped("three"), "readable", None),
         ],
     );
-    let assessment = assess(
-        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-        &evidence,
-        "0.0.0",
-        sample_digest(),
-    )
-    .expect("the pair yields an assessment");
+    let assessment =
+        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
     assert_eq!(
         verdicts_of(&assessment),
         vec![
@@ -955,35 +939,15 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
         vec![forge_row("https://a.example/x", "readable", None)],
     ] {
         assert!(matches!(
-            assess(
-                &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-                &evidence(&plan, rows),
-                "0.0.0",
-                sample_digest(),
-            ),
+            assess(&plan, &evidence(&plan, rows), "0.0.0", sample_digest(),),
             Err(AssessDefect::UnboundEvidence)
         ));
     }
-    let Value::Object(members) =
-        amiss_wire::json::parse(&evidence(&plan, Vec::new())).expect("the evidence is strict JSON")
-    else {
-        panic!("the evidence is an object");
-    };
-    let mut members = members.into_vec();
-    members.retain(|(key, _)| key != "plan_payload_digest");
-    members.push((
-        "plan_payload_digest".to_owned(),
-        string(&sample_digest().to_string()),
-    ));
-    members.sort_by(|left, right| left.0.cmp(&right.0));
-    let foreign = serde_json_canonicalizer::to_vec(&Value::object(members)).unwrap();
+    let (mut foreign, _) = parse_evidence(&evidence(&plan, Vec::new())).unwrap();
+    foreign.plan_payload_digest = sample_digest();
+    let foreign = serde_json_canonicalizer::to_vec(&foreign).unwrap();
     assert!(matches!(
-        assess(
-            &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-            &foreign,
-            "0.0.0",
-            sample_digest()
-        ),
+        assess(&plan, &foreign, "0.0.0", sample_digest()),
         Err(AssessDefect::UnboundEvidence)
     ));
 }
@@ -1014,12 +978,7 @@ fn malformed_evidence_rows_are_refused() {
     let above = probe("https://a.example/x", "get", 1000);
     for bad in [both, neither, below, above] {
         assert!(matches!(
-            assess(
-                &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-                &evidence(&plan, vec![bad]),
-                "0.0.0",
-                sample_digest()
-            ),
+            assess(&plan, &evidence(&plan, vec![bad]), "0.0.0", sample_digest()),
             Err(AssessDefect::Evidence(_))
         ));
     }
@@ -1036,60 +995,26 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         sample_digest(),
     )
     .expect("the report yields a plan");
-    let Value::Object(unnamed) =
-        amiss_wire::json::parse(&evidence(&plan, Vec::new())).expect("the evidence is strict JSON")
-    else {
-        panic!("the evidence is an object");
-    };
-    let mut unnamed = unnamed.into_vec();
-    for (key, value) in &mut unnamed {
-        if key == "producer" {
-            *value = object(vec![("name", string("p")), ("version", string(""))]);
-        }
-    }
+    let (mut unnamed, _) = parse_evidence(&evidence(&plan, Vec::new())).unwrap();
+    unnamed.producer.version.clear();
     assert!(matches!(
         assess(
-            &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-            &serde_json_canonicalizer::to_vec(&Value::object(unnamed)).unwrap(),
+            &plan,
+            &serde_json_canonicalizer::to_vec(&unnamed).unwrap(),
             "0.0.0",
             sample_digest(),
         ),
         Err(AssessDefect::Evidence(_))
     ));
 
-    let broken_row = object(vec![
-        ("destination", string("https://a.example/x")),
-        ("scheme", string("https")),
-    ]);
-    let payload = object(vec![
-        ("schema", string(PLAN_PAYLOAD_SCHEMA)),
-        (
-            "report",
-            object(vec![(
-                "payload_digest",
-                string(&sample_digest().to_string()),
-            )]),
-        ),
-        ("introduced", Value::array(vec![broken_row])),
-        ("removed", Value::array(Vec::new())),
-        ("retained_count", Value::Integer(0)),
-    ]);
-    let digest = hb(
+    let mut invalid_plan = plan;
+    invalid_plan.payload.introduced[0].documents.clear();
+    invalid_plan.payload_digest = hb(
         PLAN_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&payload).expect("fixture JSON"),
+        &serde_json_canonicalizer::to_vec(&invalid_plan.payload).unwrap(),
     );
-    let handcrafted = object(vec![
-        ("schema", string(PLAN_ENVELOPE_SCHEMA)),
-        ("payload", payload),
-        ("payload_digest", string(&digest.to_string())),
-    ]);
     assert!(matches!(
-        assess(
-            &serde_json_canonicalizer::to_vec(&handcrafted).unwrap(),
-            b"null",
-            "0.0.0",
-            sample_digest(),
-        ),
+        assess(&invalid_plan, b"null", "0.0.0", sample_digest(),),
         Err(AssessDefect::Plan(_))
     ));
 }
@@ -1103,7 +1028,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
         .expect("the report yields a plan");
     assert!(matches!(
         assess(
-            &serde_json_canonicalizer::to_vec(&plan).unwrap(),
+            &plan,
             &evidence(&plan, vec![forge_row(bare, "readable", Some("resolved"))]),
             "0.0.0",
             sample_digest()
@@ -1111,7 +1036,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
         Err(AssessDefect::UnboundEvidence)
     ));
     let visibility_only = assess(
-        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
+        &plan,
         &evidence(&plan, vec![forge_row(bare, "readable", None)]),
         "0.0.0",
         sample_digest(),
@@ -1133,13 +1058,8 @@ fn the_assessment_binds_the_whole_chain() {
     .expect("the report yields a plan");
     let rows = vec![probe("https://a.example/x", "get", 200)];
     let evidence = evidence(&plan, rows);
-    let assessment = assess(
-        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-        &evidence,
-        "0.0.0",
-        sample_digest(),
-    )
-    .expect("the pair yields an assessment");
+    let assessment =
+        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
     let subject = &assessment.payload.subject;
     assert_eq!(subject.plan_payload_digest, plan.payload_digest);
     assert_eq!(subject.evidence_digest, hb(EVIDENCE_SCHEMA, &evidence));
