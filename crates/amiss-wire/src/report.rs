@@ -118,8 +118,6 @@ pub const SANDBOX_SCHEMA: &str = "amiss/scanner-sandbox-profile";
 pub enum ReportDefect {
     #[error("the input is not a scanner report envelope")]
     NotAReport,
-    #[error("the report uses an unsupported wire compatibility")]
-    UnsupportedCompatibility,
     #[error("the report payload does not match its recorded digest")]
     DigestMismatch,
     #[error("the report carries an invalid result tuple")]

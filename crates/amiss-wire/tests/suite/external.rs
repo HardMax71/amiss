@@ -514,26 +514,20 @@ fn malformed_known_plan_fields_are_refused_after_binding() {
 
 #[test]
 fn a_tampered_payload_is_refused() {
-    let Value::Object(envelope) = report(Vec::new()) else {
-        panic!("the report is an object");
-    };
-    let mut envelope = envelope.into_vec();
-    for (key, value) in &mut envelope {
-        if key == "payload"
-            && let Value::Object(payload) = std::mem::replace(value, Value::Null)
-        {
-            let mut payload = payload.into_vec();
-            payload.retain(|(name, _)| name != "result");
-            *value = Value::object(payload);
-        }
-    }
+    let mut envelope: amiss_wire::report::model::ReportEnvelope =
+        serde_json::from_slice(REPORT).unwrap();
+    envelope.payload.result.finding_count += 1;
+    let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&envelope).unwrap()).unwrap();
     assert_eq!(
-        plan(
-            &serde_json_canonicalizer::to_vec(&Value::object(envelope)).unwrap(),
-            "0.0.0",
-            sample_digest()
-        ),
+        plan(wire.as_bytes(), "0.0.0", sample_digest()),
         Err(PlanDefect::DigestMismatch)
+    );
+    let result = serde_json::to_string(&envelope.payload.result).unwrap();
+    let malformed = wire.replace(&format!("\"result\":{result}"), "\"result\":null");
+    assert_ne!(malformed, wire);
+    assert_eq!(
+        plan(malformed.as_bytes(), "0.0.0", sample_digest()),
+        Err(PlanDefect::NotAReport)
     );
 }
 

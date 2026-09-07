@@ -114,7 +114,7 @@ fn reports() -> Vec<ReportEnvelope> {
 }
 
 #[test]
-fn report_metadata_rejects_unknown_members_after_digest_verification() {
+fn complete_report_payloads_reject_unknown_members_with_matching_digests() {
     let mut cases = reports();
     cases.extend(super::report_rows::reports().unwrap());
     cases.push(
@@ -136,60 +136,18 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
             validate_envelope(wire.as_bytes()).unwrap().0,
             report.payload
         );
-        for (fragment, expected) in [
-            (
-                serde_json_canonicalizer::to_vec(&report.payload.controls).unwrap(),
-                ReportDefect::NotAReport,
-            ),
-            (
-                serde_json_canonicalizer::to_vec(&report.payload.result).unwrap(),
-                ReportDefect::InvalidResult,
-            ),
-            (
-                serde_json_canonicalizer::to_vec(&report.payload.engine).unwrap(),
-                ReportDefect::NotAReport,
-            ),
-            (
-                serde_json_canonicalizer::to_vec(&report.payload.summary).unwrap(),
-                ReportDefect::NotAReport,
-            ),
-            (
-                serde_json_canonicalizer::to_vec(&report.payload.documents).unwrap(),
-                ReportDefect::NotAReport,
-            ),
-            (
-                serde_json_canonicalizer::to_vec(&report.payload.feedback).unwrap(),
-                ReportDefect::NotAReport,
-            ),
-            (
-                serde_json_canonicalizer::to_vec(&report.payload.errors).unwrap(),
-                ReportDefect::NotAReport,
-            ),
-            (
-                serde_json_canonicalizer::to_vec(&report.payload.observations).unwrap(),
-                ReportDefect::NotAReport,
-            ),
-            (
-                serde_json_canonicalizer::to_vec(&report.payload.findings).unwrap(),
-                ReportDefect::NotAReport,
-            ),
-        ] {
-            let fragment = String::from_utf8(fragment).unwrap();
-            for (offset, _) in fragment.match_indices('{') {
-                let mut invalid = fragment.clone();
-                invalid.insert_str(offset + 1, "\"__unexpected\":true,");
-                let altered_payload = payload.replace(&fragment, &invalid);
-                assert_ne!(payload, altered_payload);
-                let altered = wire.replace(&payload, &altered_payload).replace(
-                    &report.payload_digest.to_string(),
-                    &hb(PAYLOAD_SCHEMA, altered_payload.as_bytes()).to_string(),
-                );
-                assert_eq!(
-                    validate_envelope(altered.as_bytes()).map(drop),
-                    Err(expected),
-                    "{invalid:.160} (object offset {offset})"
-                );
-            }
+        for (offset, _) in payload.match_indices('{') {
+            let mut invalid = payload.clone();
+            invalid.insert_str(offset + 1, "\"__unexpected\":true,");
+            let altered = wire.replace(&payload, &invalid).replace(
+                &report.payload_digest.to_string(),
+                &hb(PAYLOAD_SCHEMA, invalid.as_bytes()).to_string(),
+            );
+            assert_eq!(
+                validate_envelope(altered.as_bytes()).map(drop),
+                Err(ReportDefect::NotAReport),
+                "{invalid:.160} (object offset {offset})"
+            );
         }
     }
 }

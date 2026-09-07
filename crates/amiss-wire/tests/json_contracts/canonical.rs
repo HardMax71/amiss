@@ -27,6 +27,11 @@ fn strict_values_serialize_as_json_without_enum_or_pair_wrappers() {
         let value = parse(input.as_bytes()).unwrap();
         let bytes = serde_json_canonicalizer::to_vec(&value).unwrap();
         assert_eq!(bytes, expected.as_bytes(), "{input}");
+        let mut deserializer = serde_json::Deserializer::from_str(input);
+        let transcoded =
+            serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut deserializer))
+                .unwrap();
+        assert_eq!(transcoded, bytes, "{input}");
         assert_eq!(parse(&bytes).unwrap(), value);
         let mut counter = countio::Counter::new(std::io::sink());
         serde_json_canonicalizer::to_writer(&value, &mut counter).unwrap();
@@ -61,6 +66,13 @@ fn library_serialization_preserves_the_strict_readers_full_depth() {
         let bytes = serde_json_canonicalizer::to_vec(&value).unwrap();
         assert_eq!(bytes, source.as_bytes());
         assert_eq!(parse(&bytes).unwrap(), value);
+        let mut deserializer = serde_json::Deserializer::from_str(&source);
+        deserializer.disable_recursion_limit();
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut deserializer))
+                .unwrap(),
+            bytes
+        );
     }
 }
 
