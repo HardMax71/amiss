@@ -15,6 +15,10 @@ fn sealed_controls_require_objects_not_positional_arrays() {
         &["controls", "trusted_time_source"],
         &["controls", "trusted_time_source", "statement"],
         &["controls", "sandbox"],
+        &["controls", "sandbox", "descriptor"],
+        &["controls", "sandbox", "descriptor", "physical_memory"],
+        &["controls", "sandbox", "descriptor", "temporary_storage"],
+        &["controls", "sandbox", "descriptor", "watchdog"],
     ];
     for &path in paths {
         let deviation = Deviation::post(move |payload| {
@@ -39,7 +43,7 @@ fn sealed_controls_require_objects_not_positional_arrays() {
 }
 
 #[test]
-fn additive_control_members_remain_accepted() {
+fn unknown_control_members_are_refused_with_correct_payload_digests() {
     let paths: &[&[&str]] = &[
         &["controls"],
         &["controls", "organization_floor"],
@@ -48,13 +52,21 @@ fn additive_control_members_remain_accepted() {
         &["controls", "execution_constraint"],
         &["controls", "trusted_time_source"],
         &["controls", "sandbox"],
+        &["controls", "sandbox", "descriptor"],
+        &["controls", "sandbox", "descriptor", "physical_memory"],
+        &["controls", "sandbox", "descriptor", "temporary_storage"],
+        &["controls", "sandbox", "descriptor", "watchdog"],
     ];
     for &path in paths {
         let (wire, expectations) = golden(Deviation::post(move |payload| {
             let value = path.iter().fold(payload, |value, key| entry(value, key));
             set(value, "future", Value::Bool(true));
         }));
-        assert_eq!(accept(&wire, &expectations), Ok(0), "{path:?}");
+        assert_eq!(
+            accept(&wire, &expectations),
+            Err(AcceptanceDefect::SealedControls),
+            "{path:?}"
+        );
     }
 }
 
@@ -88,7 +100,10 @@ fn embedded_closed_controls_do_not_accept_unknown_members() {
 
 #[test]
 fn control_extensions_keep_the_strict_parser_depth_boundary() {
-    for (depth, result) in [(128, Ok(0)), (512, Err(AcceptanceDefect::Shape))] {
+    for (depth, result) in [
+        (128, Err(AcceptanceDefect::SealedControls)),
+        (512, Err(AcceptanceDefect::Shape)),
+    ] {
         let (wire, expectations) = golden(Deviation::post(move |payload| {
             let extension = (0..depth).fold(Value::Null, |value, _| Value::array(vec![value]));
             set(entry(payload, "controls"), "future", extension);
@@ -204,7 +219,7 @@ fn semantic_evidence_binds_each_producer_fact() {
             );
         }));
         expectations.sealed.as_mut().unwrap().semantic_evidence = vec![expected.clone()];
-        let result = if name == "unchanged" || name == "additive" {
+        let result = if name == "unchanged" {
             Ok(0)
         } else {
             Err(AcceptanceDefect::SealedControls)
