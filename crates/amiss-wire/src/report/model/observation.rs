@@ -7,11 +7,11 @@ use crate::controls::{SourceConstruct, TargetKind};
 use crate::digest::Digest;
 use crate::extraction::BlockKind;
 use crate::model::{Adapter, Oid};
-use crate::resolution::BlobMode;
 pub use crate::resolution::{
     ExternalReference as ExternalResolutionReason, InvalidReference as InvalidResolutionReason,
     UnsupportedTargetTag as UnsupportedTargetReason,
 };
+use crate::resolution::{TaggedBlobTarget, Target, VersionScope};
 
 use super::RepoPath;
 
@@ -107,101 +107,26 @@ pub struct ObservationIdInput<P = RepoPath> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
-pub enum ResolutionContent {
-    Available {
-        projection_digest: Digest,
-        raw_digest: Digest,
-    },
-    LfsPointer {
-        raw_digest: Digest,
-    },
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+#[serde(
+    tag = "reason",
+    rename_all = "kebab-case",
+    deny_unknown_fields,
+    bound(deserialize = "P: Deserialize<'de>")
 )]
-pub enum BlobResolutionTargetKind {
-    #[strum(serialize = "blob")]
-    Blob,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum TreeResolutionTargetKind {
-    #[strum(serialize = "tree")]
-    Tree,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ResolutionTarget<P = RepoPath> {
-    Blob {
-        content: ResolutionContent,
-        kind: BlobResolutionTargetKind,
-        mode: BlobMode,
-        path: P,
-    },
-    Tree {
-        kind: TreeResolutionTargetKind,
-        path: P,
-    },
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum HeadingAnchorNotFoundResolutionReason {
-    #[strum(serialize = "heading-anchor-not-found")]
-    HeadingAnchorNotFound,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum LabelNotDeclaredResolutionReason {
-    #[strum(serialize = "label-not-declared")]
-    LabelNotDeclared,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum LineFragmentOutOfRangeResolutionReason {
-    #[strum(serialize = "line-fragment-out-of-range")]
-    LineFragmentOutOfRange,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum PathNotFoundResolutionReason {
-    #[strum(serialize = "path-not-found")]
-    PathNotFound,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged, bound(deserialize = "P: Deserialize<'de>"))]
 pub enum MissingResolution<P = RepoPath> {
     HeadingAnchorNotFound {
         #[serde(deserialize_with = "Option::deserialize")]
         near: Option<String>,
         path: P,
-        reason: HeadingAnchorNotFoundResolutionReason,
     },
-    LabelNotDeclared {
-        reason: LabelNotDeclaredResolutionReason,
-    },
+    LabelNotDeclared {},
     LineFragmentOutOfRange {
         path: P,
-        reason: LineFragmentOutOfRangeResolutionReason,
     },
     PathNotFound {
         #[serde(deserialize_with = "Option::deserialize")]
         near: Option<P>,
         path: P,
-        reason: PathNotFoundResolutionReason,
         #[serde(
             default,
             deserialize_with = "json_serde::deserialize_some",
@@ -212,172 +137,45 @@ pub enum MissingResolution<P = RepoPath> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "reason", rename_all = "kebab-case")]
+#[serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum UnsupportedSemanticsResolution<P = RepoPath> {
-    AttributeDependent,
-    CodeFragment { target: ResolutionTarget<P> },
-    DuplicateLabel,
-    ExternalInventory,
-    Fragment { target: ResolutionTarget<P> },
-    NetworkPath,
-    Query { target: ResolutionTarget<P> },
-    SiteRoute,
+    AttributeDependent {},
+    CodeFragment { target: Target<P> },
+    DuplicateLabel {},
+    ExternalInventory {},
+    Fragment { target: TaggedBlobTarget<P> },
+    NetworkPath {},
+    Query { target: Target<P> },
+    SiteRoute {},
 }
 
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum KnownCommitVersionScopeKind {
-    #[strum(serialize = "known-commit")]
-    KnownCommit,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum KnownPathVersionScopeKind {
-    #[strum(serialize = "known-path")]
-    KnownPath,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum UnknownPathVersionScopeKind {
-    #[strum(serialize = "unknown-path")]
-    UnknownPath,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum VersionScope<P = RepoPath> {
-    KnownCommit {
-        commit_oid: Oid,
-        kind: KnownCommitVersionScopeKind,
-        path: P,
-    },
-    KnownPath {
-        kind: KnownPathVersionScopeKind,
-        path: P,
-    },
-    UnknownPath {
-        kind: UnknownPathVersionScopeKind,
-    },
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum DeclaredUntrackedResolutionKind {
-    #[strum(serialize = "declared-untracked")]
-    DeclaredUntracked,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ExternalResolutionKind {
-    #[strum(serialize = "external")]
-    External,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum InvalidResolutionKind {
-    #[strum(serialize = "invalid")]
-    Invalid,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum MissingResolutionKind {
-    #[strum(serialize = "missing")]
-    Missing,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ResolvedResolutionKind {
-    #[strum(serialize = "resolved")]
-    Resolved,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum TypeMismatchResolutionKind {
-    #[strum(serialize = "type-mismatch")]
-    TypeMismatch,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum UnsupportedSemanticsResolutionKind {
-    #[strum(serialize = "unsupported-semantics")]
-    UnsupportedSemantics,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum UnsupportedTargetResolutionKind {
-    #[strum(serialize = "unsupported-target")]
-    UnsupportedTarget,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum UnsupportedVersionResolutionKind {
-    #[strum(serialize = "unsupported-version")]
-    UnsupportedVersion,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, strum::AsRefStr)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[strum(serialize_all = "kebab-case")]
 pub enum Resolution<P = RepoPath> {
     DeclaredUntracked {
         declared_by: P,
-        kind: DeclaredUntrackedResolutionKind,
         path: P,
     },
     External {
-        kind: ExternalResolutionKind,
         reason: ExternalResolutionReason,
     },
     Invalid {
-        kind: InvalidResolutionKind,
         reason: InvalidResolutionReason,
     },
-    Missing {
-        kind: MissingResolutionKind,
-        #[serde(flatten)]
-        detail: MissingResolution<P>,
-    },
+    Missing(MissingResolution<P>),
     Resolved {
-        kind: ResolvedResolutionKind,
-        target: ResolutionTarget<P>,
+        target: Target<P>,
     },
     TypeMismatch {
-        kind: TypeMismatchResolutionKind,
-        target: ResolutionTarget<P>,
+        target: Target<P>,
     },
-    UnsupportedSemantics {
-        kind: UnsupportedSemanticsResolutionKind,
-        #[serde(flatten)]
-        detail: UnsupportedSemanticsResolution<P>,
-    },
+    UnsupportedSemantics(UnsupportedSemanticsResolution<P>),
     UnsupportedTarget {
-        kind: UnsupportedTargetResolutionKind,
         path: P,
         reason: UnsupportedTargetReason,
     },
     UnsupportedVersion {
-        kind: UnsupportedVersionResolutionKind,
         scope: VersionScope<P>,
     },
 }

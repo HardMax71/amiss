@@ -7,8 +7,8 @@ use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model as report;
 use amiss_wire::resolution::{
     BlobContent, BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, InvalidReference,
-    Missing, Resolution, ResolutionTag, Target, UnsupportedSemantics, UnsupportedTarget,
-    VersionScope,
+    Missing, Resolution, ResolutionTag, TaggedBlobTarget, Target, UnsupportedSemantics,
+    UnsupportedTarget, VersionScope,
 };
 use strum::{IntoDiscriminant, IntoEnumIterator};
 
@@ -79,6 +79,7 @@ fn derived_resolutions_match_produced_bytes_and_the_report_reader() -> Result<()
         for resolution in cases {
             let encoded = serde_json_canonicalizer::to_vec(&resolution)?;
             let decoded: report::Resolution = serde_json::from_slice(&encoded)?;
+            assert_eq!(decoded.as_ref(), resolution.discriminant().as_ref());
             assert_eq!(serde_json_canonicalizer::to_vec(&decoded)?, encoded);
         }
     }
@@ -104,7 +105,7 @@ fn resolution_cases(path: &RepoPath) -> Vec<Resolution<RepoPath>> {
                 content,
             };
             cases.push(Resolution::UnsupportedSemantics(
-                UnsupportedSemantics::Fragment(blob.clone()),
+                UnsupportedSemantics::Fragment(TaggedBlobTarget::Blob(blob.clone())),
             ));
             targets.push(Target::Blob(blob));
         }
@@ -134,7 +135,7 @@ fn resolution_cases(path: &RepoPath) -> Vec<Resolution<RepoPath>> {
             scope: VersionScope::KnownPath { path: path.clone() },
         },
         Resolution::UnsupportedVersion {
-            scope: VersionScope::UnknownPath,
+            scope: VersionScope::UnknownPath {},
         },
     ]);
     for near in [None, Some(path.clone())] {

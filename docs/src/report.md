@@ -31,6 +31,10 @@ Document, feedback and analysis-error rows reject unknown members too, including
 source spans and byte-path objects. An unavailable feedback tag cannot hide available items.
 Nullable fields remain explicit: `null` is not an omitted member or an empty object.
 
+Resolution tags select closed bodies: fields belonging to another kind or reason are
+rejected. Targets, blob evidence and version scopes reuse the producer's types; a fragment
+target must carry the `blob` tag and its complete blob evidence.
+
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
 to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,

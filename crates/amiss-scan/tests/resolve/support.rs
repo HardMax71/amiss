@@ -397,7 +397,7 @@ fn ambiguous_trusted_splits_have_unknown_version_scope() {
     assert_eq!(
         row,
         Resolution::UnsupportedVersion {
-            scope: VersionScope::UnknownPath
+            scope: VersionScope::UnknownPath {}
         }
     );
 }

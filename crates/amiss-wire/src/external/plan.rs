@@ -11,9 +11,9 @@ use crate::json;
 use crate::model::ForgeDialect;
 use crate::report::model::{
     Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath, Resolution,
-    VersionScope,
 };
 use crate::report::validate_envelope;
+use crate::resolution::VersionScope;
 
 use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
 

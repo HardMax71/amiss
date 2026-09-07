@@ -261,7 +261,7 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
             };
             if commit_oid.object_format() != identity.object_format {
                 return ForgeRoute::Unsupported(Resolution::UnsupportedVersion {
-                    scope: VersionScope::UnknownPath,
+                    scope: VersionScope::UnknownPath {},
                 });
             }
             decoded_tail(directory_hint, raw_tail).and_then(|decoded| {
@@ -269,7 +269,7 @@ fn gitea(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
             })
         }
         "tag" => Err(Resolution::UnsupportedVersion {
-            scope: VersionScope::UnknownPath,
+            scope: VersionScope::UnknownPath {},
         }),
         _ => return ForgeRoute::Foreign,
     };
@@ -325,7 +325,7 @@ fn bitbucket_cloud_split(
         || commit_oid.is_some() && (candidate_matches || default_matches)
     {
         return Err(Resolution::UnsupportedVersion {
-            scope: VersionScope::UnknownPath,
+            scope: VersionScope::UnknownPath {},
         });
     }
     let literal_oid = raw_tail
@@ -537,7 +537,7 @@ fn versioned_split(
 
     if decoded_oid.is_some() && (candidate_split.is_some() || default_split.is_some()) {
         return Err(Resolution::UnsupportedVersion {
-            scope: VersionScope::UnknownPath,
+            scope: VersionScope::UnknownPath {},
         });
     }
     let literal_oid = raw_tail
@@ -555,7 +555,7 @@ fn versioned_split(
         (Some(after), None) => Ok((ForgeVersion::Candidate, contained_path(after)?)),
         (None, Some(after)) => Ok((ForgeVersion::OtherNamedRef, contained_path(after)?)),
         (Some(_), Some(_)) | (None, None) => Err(Resolution::UnsupportedVersion {
-            scope: VersionScope::UnknownPath,
+            scope: VersionScope::UnknownPath {},
         }),
     }
 }
