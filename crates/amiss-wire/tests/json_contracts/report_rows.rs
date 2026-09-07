@@ -47,13 +47,16 @@ pub(super) fn reports() -> serde_json::Result<[ReportEnvelope; 2]> {
 }
 
 #[test]
-fn feedback_and_byte_path_objects_reject_positional_forms() {
+fn report_row_objects_reject_positional_forms() {
     let [report, incomplete] = reports().unwrap();
     let Feedback::Available(feedback) = &report.payload.feedback else {
         panic!("the row fixture has available feedback");
     };
     let annotation = feedback.items[0].annotation.as_ref().unwrap();
-    let span = annotation.span;
+    let comparison = &report.payload.observations[0];
+    let occurrence = comparison.candidate.as_ref().unwrap();
+    let address = &occurrence.observation_id_input.structural_address;
+    assert_ne!(annotation.span, occurrence.source_span);
     let fragments = [
         (
             serde_json::to_string(&report.payload.feedback).unwrap(),
@@ -61,14 +64,13 @@ fn feedback_and_byte_path_objects_reject_positional_forms() {
                 .unwrap(),
         ),
         (
-            serde_json::to_string(&span).unwrap(),
+            serde_json::to_string(address).unwrap(),
             serde_json::to_string(&(
-                span.end_byte,
-                span.end_column,
-                span.end_line,
-                span.start_byte,
-                span.start_column,
-                span.start_line,
+                address.address_kind,
+                address.construct_index,
+                address.duplicate_index,
+                &address.node_path,
+                address.schema,
             ))
             .unwrap(),
         ),
@@ -76,7 +78,34 @@ fn feedback_and_byte_path_objects_reject_positional_forms() {
             serde_json::to_string(&report.payload.documents[0].path).unwrap(),
             serde_json::to_string(&[hex::encode(b"docs/b\xff.md")]).unwrap(),
         ),
-    ];
+        (
+            serde_json::to_string(&comparison.alternatives).unwrap(),
+            serde_json::to_string(&(
+                &comparison.alternatives.base,
+                &comparison.alternatives.candidate,
+            ))
+            .unwrap(),
+        ),
+    ]
+    .into_iter()
+    .chain(
+        [annotation.span, occurrence.source_span]
+            .into_iter()
+            .map(|span| {
+                (
+                    serde_json::to_string(&span).unwrap(),
+                    serde_json::to_string(&(
+                        span.end_byte,
+                        span.end_column,
+                        span.end_line,
+                        span.start_byte,
+                        span.start_column,
+                        span.start_line,
+                    ))
+                    .unwrap(),
+                )
+            }),
+    );
     let encoded = serde_json::to_string(&report).unwrap();
     for (object, sequence) in fragments {
         let altered = encoded.replace(&object, &sequence);
@@ -92,10 +121,12 @@ fn feedback_and_byte_path_objects_reject_positional_forms() {
 }
 
 #[test]
-fn nullable_document_sides_and_feedback_fields_remain_required() {
+fn nullable_row_fields_remain_required() {
     let [mut report, _incomplete] = reports().unwrap();
     report.payload.documents[0].base = None;
     report.payload.documents[0].candidate = None;
+    report.payload.observations[0].base = None;
+    report.payload.observations[0].candidate = None;
     let Feedback::Available(feedback) = &mut report.payload.feedback else {
         panic!("the row fixture has available feedback");
     };
@@ -104,6 +135,10 @@ fn nullable_document_sides_and_feedback_fields_remain_required() {
     let fragments = [
         (
             serde_json::to_string(&report.payload.documents[0]).unwrap(),
+            ["base", "candidate"],
+        ),
+        (
+            serde_json::to_string(&report.payload.observations[0]).unwrap(),
             ["base", "candidate"],
         ),
         (

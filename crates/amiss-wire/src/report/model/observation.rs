@@ -52,6 +52,7 @@ pub enum AddressKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StructuralAddress {
     pub address_kind: AddressKind,
     pub construct_index: u64,
@@ -72,7 +73,7 @@ pub struct SourceSpan {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
 pub struct TargetIntent<P = RepoPath> {
     #[serde(
         default,
@@ -95,14 +96,17 @@ pub struct TargetIntent<P = RepoPath> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ObservationIdInput<P = RepoPath> {
     pub adapter_contract_digest: Digest,
     pub adapter_id: Adapter,
     pub document: P,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub extracted_intent: TargetIntent<P>,
     pub schema: ObservationIdInputSchema,
     pub source_construct: SourceConstruct,
     pub source_projection_digest: Digest,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub structural_address: StructuralAddress,
 }
 
@@ -181,6 +185,7 @@ pub enum Resolution<P = RepoPath> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Occurrence<P = RepoPath, R = Resolution<P>> {
     pub adapter_id: Adapter,
     pub block_kind: BlockKind,
@@ -191,16 +196,20 @@ pub struct Occurrence<P = RepoPath, R = Resolution<P>> {
         skip_serializing_if = "Option::is_none"
     )]
     pub external_destination: Option<String>,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub intent: TargetIntent<P>,
     pub observation_id: Digest,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub observation_id_input: ObservationIdInput<P>,
     pub resolution: R,
     pub source_construct: SourceConstruct,
     pub source_projection_digest: Digest,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub source_span: SourceSpan,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CorrelationAlternatives<P = RepoPath, R = Resolution<P>> {
     pub base: Vec<Occurrence<P, R>>,
     pub candidate: Vec<Occurrence<P, R>>,
@@ -317,7 +326,12 @@ pub enum Impact {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    deny_unknown_fields,
+    bound(deserialize = "P: Deserialize<'de>, R: Deserialize<'de>")
+)]
 pub struct ObservationComparison<P = RepoPath, R = Resolution<P>> {
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub alternatives: CorrelationAlternatives<P, R>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub base: Option<Occurrence<P, R>>,
