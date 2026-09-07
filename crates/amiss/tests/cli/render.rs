@@ -126,7 +126,7 @@ fn untrusted_reports_are_refused_before_projection() {
 
     for (path, reason) in [
         (mismatch_path.as_str(), "does not match its recorded digest"),
-        (unsupported_path.as_str(), "unsupported wire compatibility"),
+        (unsupported_path.as_str(), "not a scanner report envelope"),
         (result_path.as_str(), "invalid result tuple"),
     ] {
         let (code, stdout, stderr) = amiss(&["render", "--report", path, "--format", "sarif"]);

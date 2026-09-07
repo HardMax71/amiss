@@ -190,7 +190,7 @@ fn report_result_members_are_required_and_typed_in_both_readers() {
         );
         assert_eq!(
             validate_envelope(altered.as_bytes()).map(drop),
-            Err(ReportDefect::InvalidResult),
+            Err(ReportDefect::NotAReport),
             "{invalid}"
         );
         assert_eq!(
