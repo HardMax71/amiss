@@ -22,10 +22,11 @@ use amiss_wire::json::{Value, parse};
 use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::model::ReportStatus;
 use amiss_wire::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA};
-use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
+use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, RequestTrust};
 
 mod controls;
 mod identity;
+mod semantic;
 
 const CANDIDATE_REF: &str = "refs/heads/topic";
 const TARGET_REF: &str = "refs/heads/main";
@@ -351,13 +352,13 @@ fn sealed_expectations(
         candidate_identity_digest: identity.parse().unwrap(),
         organization_floor: Some(SealedControlExpectation {
             digest: FLOOR_DIGEST.parse().unwrap(),
-            trust_source: amiss_wire::requests::RequestTrust::ExternalRequiredCheck,
+            trust_source: RequestTrust::ExternalRequiredCheck,
         }),
         debt_snapshot: None,
         waiver_bundle: None,
         execution_constraint: SealedControlExpectation {
             digest: constraint_digest.parse().unwrap(),
-            trust_source: amiss_wire::requests::RequestTrust::ExternalRequiredCheck,
+            trust_source: RequestTrust::ExternalRequiredCheck,
         },
         trusted_time_digest: statement_digest.parse().unwrap(),
         semantic_evidence: Vec::new(),
@@ -431,25 +432,34 @@ fn the_sealed_identity_binds_refs_time_and_candidate() {
             let candidate = entry(entry(payload, "evaluation"), "candidate");
             set(candidate, "kind", string("git-tag"));
         })),
-        AcceptanceDefect::CandidateIdentity,
-        "a wrong kind is a candidate defect even when every binding is consistent with it"
+        AcceptanceDefect::Shape,
+        "an unknown kind is rejected before its claimed bindings are evaluated"
     );
 }
 
 #[test]
 fn the_constraint_echo_binds_status_digest_source_and_descriptor() {
-    let cases: [(&str, Patch); 4] = [
+    let cases: [(&str, Patch, AcceptanceDefect); 4] = [
         (
             "status",
             Box::new(|constraint| set(constraint, "status", string("unverified"))),
+            AcceptanceDefect::Shape,
         ),
         (
             "digest text",
             Box::new(|constraint| set(constraint, "descriptor_digest", string(FOREIGN_DIGEST))),
+            AcceptanceDefect::SealedControls,
         ),
         (
             "trust source",
-            Box::new(|constraint| set(constraint, "trust_source", string("none"))),
+            Box::new(|constraint| {
+                set(
+                    constraint,
+                    "trust_source",
+                    string(RequestTrust::OrganizationPolicy.as_ref()),
+                );
+            }),
+            AcceptanceDefect::SealedControls,
         ),
         (
             "embedded descriptor",
@@ -460,45 +470,41 @@ fn the_constraint_echo_binds_status_digest_source_and_descriptor() {
                     string("amiss / other"),
                 );
             }),
+            AcceptanceDefect::SealedControls,
         ),
     ];
-    for (reason, patch) in cases {
+    for (reason, patch, expected) in cases {
         let deviation = Deviation::post(move |payload| {
             patch(entry(entry(payload, "controls"), "execution_constraint"));
         });
-        assert_eq!(
-            refused(deviation),
-            AcceptanceDefect::SealedControls,
-            "{reason}"
-        );
+        assert_eq!(refused(deviation), expected, "{reason}");
     }
 }
 
 #[test]
 fn the_time_echo_binds_every_statement_fact() {
-    let post_cases: [(&str, Patch); 3] = [
+    let post_cases: [(&str, Patch, AcceptanceDefect); 3] = [
         (
             "status",
             Box::new(|trusted| set(trusted, "status", string("unverified"))),
+            AcceptanceDefect::Shape,
         ),
         (
             "trust source",
             Box::new(|trusted| set(trusted, "trust_source", string("provider"))),
+            AcceptanceDefect::Shape,
         ),
         (
             "digest text",
             Box::new(|trusted| set(trusted, "statement_digest", string(FOREIGN_DIGEST))),
+            AcceptanceDefect::SealedControls,
         ),
     ];
-    for (reason, patch) in post_cases {
+    for (reason, patch, expected) in post_cases {
         let deviation = Deviation::post(move |payload| {
             patch(entry(entry(payload, "controls"), "trusted_time_source"));
         });
-        assert_eq!(
-            refused(deviation),
-            AcceptanceDefect::SealedControls,
-            "{reason}"
-        );
+        assert_eq!(refused(deviation), expected, "{reason}");
     }
 
     let mut agree_on_wrong = Deviation::post(|payload| {
@@ -579,29 +585,43 @@ fn the_time_echo_binds_every_statement_fact() {
 
 #[test]
 fn the_sandbox_echo_admits_only_the_self_asserted_row() {
-    let cases: [(&str, Patch); 3] = [
+    let cases: [(&str, Patch, AcceptanceDefect); 3] = [
         (
             "assurance",
-            Box::new(|sandbox| set(sandbox, "assurance", string("external"))),
+            Box::new(|sandbox| {
+                set(
+                    sandbox,
+                    "assurance",
+                    string(amiss_wire::report::model::SandboxAssurance::ProviderVerified.as_ref()),
+                );
+            }),
+            AcceptanceDefect::SealedControls,
         ),
         (
             "enforcement source",
-            Box::new(|sandbox| set(sandbox, "enforcement_source", string("remote"))),
+            Box::new(|sandbox| {
+                set(
+                    sandbox,
+                    "enforcement_source",
+                    string(
+                        amiss_wire::report::model::SandboxEnforcementSource::ExternalRequiredCheck
+                            .as_ref(),
+                    ),
+                );
+            }),
+            AcceptanceDefect::SealedControls,
         ),
         (
             "verification",
             Box::new(|sandbox| set(sandbox, "verification", string("attested"))),
+            AcceptanceDefect::Shape,
         ),
     ];
-    for (reason, patch) in cases {
+    for (reason, patch, expected) in cases {
         let deviation = Deviation::post(move |payload| {
             patch(entry(entry(payload, "controls"), "sandbox"));
         });
-        assert_eq!(
-            refused(deviation),
-            AcceptanceDefect::SealedControls,
-            "{reason}"
-        );
+        assert_eq!(refused(deviation), expected, "{reason}");
     }
 }
 
@@ -643,7 +663,13 @@ fn an_optional_control_matches_its_expectation_on_every_fact() {
         ),
         (
             "trust source",
-            Box::new(|debt| set(debt, "trust_source", string("provider"))),
+            Box::new(|debt| {
+                set(
+                    debt,
+                    "trust_source",
+                    string(RequestTrust::ExternalRequiredCheck.as_ref()),
+                );
+            }),
         ),
     ];
     for (reason, patch) in absent {

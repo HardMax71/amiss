@@ -1,27 +1,19 @@
 use amiss_wire::digest::hj_serde;
 use amiss_wire::json;
-use amiss_wire::report::model::{IdentityPayload, ReportEnvelope, Snapshot};
+use amiss_wire::report::model::{BaseSnapshot, Evaluation, ReportEnvelope, Snapshot};
 use amiss_wire::report::{PAYLOAD_SCHEMA, result_verdict};
+use amiss_wire::requests::CandidateSnapshot;
 use serde::Deserialize;
-use serde_json::Value;
 
-use super::model::{
-    BaseEvaluation, CandidateEvaluation, EnginePayload, EvaluationStatus, Findings, Object,
-    PayloadHeader, ResultPayload,
-};
 use super::{AcceptanceDefect, Expectations, identity};
 
-/// The acceptance law: the wire is exactly `JCS(envelope) || LF`, the
-/// payload-only digest recomputes, the engine digest equals the validated
-/// binary's, the evaluated identities equal the ones requested, the
-/// status, completeness flag and exit class agree, and the finding count equals
-/// the findings array length. Text printed before a crash is never
-/// interpreted as a result. Success returns the envelope's exit class, so the
-/// wrapper can hold the engine process to it.
+/// Checks a full report's shape, canonical bytes and bindings, returning its exit class.
 ///
 /// # Errors
 ///
-/// The first applicable defect in the order above.
+/// Requires LF framing and a closed typed envelope, then checks canonical bytes,
+/// payload digest, engine/base/candidate identities, sealed controls, verdict and
+/// finding count in that order.
 pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, AcceptanceDefect> {
     let trimmed = wire
         .strip_suffix(b"\n")
@@ -32,17 +24,14 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
     let mut deserializer = serde_json::Deserializer::from_slice(trimmed);
     // The strict gate has already enforced the document depth ceiling.
     deserializer.disable_recursion_limit();
-    let opaque =
-        Value::deserialize(&mut deserializer).map_err(|_defect| AcceptanceDefect::Shape)?;
-    if serde_json_canonicalizer::to_vec(&opaque).map_err(|_defect| AcceptanceDefect::Shape)?
+    let envelope: ReportEnvelope = ReportEnvelope::deserialize(&mut deserializer)
+        .map_err(|_defect| AcceptanceDefect::Shape)?;
+    if serde_json_canonicalizer::to_vec(&envelope).map_err(|_defect| AcceptanceDefect::Shape)?
         != trimmed
     {
         return Err(AcceptanceDefect::Noncanonical);
     }
-    let envelope = serde_json::from_value::<ReportEnvelope<Value>>(opaque)
-        .map_err(|_defect| AcceptanceDefect::Shape)?;
     let payload = envelope.payload;
-    Object::<PayloadHeader>::deserialize(&payload).map_err(|_defect| AcceptanceDefect::Shape)?;
     let digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
         serde_json_canonicalizer::to_writer(&payload, &mut writer)
     })
@@ -50,47 +39,40 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
     if digest != envelope.payload_digest {
         return Err(AcceptanceDefect::PayloadDigest);
     }
-    let engine =
-        EnginePayload::deserialize(&payload).map_err(|_defect| AcceptanceDefect::Engine)?;
-    if engine.engine.fields.engine_digest != expectations.engine_digest {
+    if payload.engine.engine_digest != expectations.engine_digest {
         return Err(AcceptanceDefect::Engine);
     }
-    let state = IdentityPayload::<Object<EvaluationStatus>>::deserialize(&payload)
-        .map_err(|_defect| AcceptanceDefect::Shape)?;
-    if state.evaluation.fields.status.is_some() {
-        if expectations.sealed.is_some() {
-            return Err(AcceptanceDefect::SealedIdentity);
-        }
-    } else {
-        let base = IdentityPayload::<BaseEvaluation>::deserialize(&payload)
-            .map_err(|_defect| AcceptanceDefect::BaseIdentity)?;
-        if base.evaluation.base.fields.commit_oid != expectations.base_commit {
-            return Err(AcceptanceDefect::BaseIdentity);
-        }
-        IdentityPayload::<CandidateEvaluation<serde::de::IgnoredAny>>::deserialize(&payload)
-            .map_err(|_defect| AcceptanceDefect::Shape)?;
-        if let Some(expected) = &expectations.candidate_commit {
-            let candidate = IdentityPayload::<CandidateEvaluation>::deserialize(&payload)
-                .map_err(|_defect| AcceptanceDefect::CandidateIdentity)?;
-            if candidate.evaluation.candidate.fields.commit_oid != *expected {
-                return Err(AcceptanceDefect::CandidateIdentity);
+    match &payload.evaluation {
+        Evaluation::Unavailable(_) => {
+            if expectations.sealed.is_some() {
+                return Err(AcceptanceDefect::SealedIdentity);
             }
-        } else {
-            IdentityPayload::<CandidateEvaluation<Object<Snapshot>>>::deserialize(&payload)
-                .map_err(|_defect| AcceptanceDefect::Shape)?;
         }
-        if let Some(sealed) = &expectations.sealed {
-            identity::accept(&payload, sealed)?;
+        Evaluation::Resolved(evaluation) => {
+            let BaseSnapshot::Git(base) = &evaluation.base else {
+                return Err(AcceptanceDefect::BaseIdentity);
+            };
+            if base.commit_oid != expectations.base_commit {
+                return Err(AcceptanceDefect::BaseIdentity);
+            }
+            if let Some(expected) = &expectations.candidate_commit {
+                let Snapshot::Available(CandidateSnapshot::Git(candidate)) = &evaluation.candidate
+                else {
+                    return Err(AcceptanceDefect::CandidateIdentity);
+                };
+                if candidate.commit_oid != *expected {
+                    return Err(AcceptanceDefect::CandidateIdentity);
+                }
+            }
+            if let Some(sealed) = &expectations.sealed {
+                identity::accept(evaluation, &payload.controls, sealed)?;
+            }
         }
     }
-    let result = ResultPayload::deserialize(&payload)
-        .map_err(|_defect| AcceptanceDefect::Shape)?
-        .result
-        .fields;
-    let verdict = result_verdict(&result).map_err(|_defect| AcceptanceDefect::Completeness)?;
-    let findings = Findings::deserialize(&payload).map_err(|_defect| AcceptanceDefect::Shape)?;
-    if u64::try_from(findings.findings.len()).map_err(|_defect| AcceptanceDefect::Shape)?
-        != result.finding_count
+    let verdict =
+        result_verdict(&payload.result).map_err(|_defect| AcceptanceDefect::Completeness)?;
+    if u64::try_from(payload.findings.len()).map_err(|_defect| AcceptanceDefect::Shape)?
+        != payload.result.finding_count
     {
         return Err(AcceptanceDefect::FindingCount);
     }

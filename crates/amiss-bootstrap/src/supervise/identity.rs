@@ -1,18 +1,15 @@
 use amiss_wire::digest::hj_serde;
 use amiss_wire::model::{BranchRef, UtcInstant};
-use amiss_wire::report::model::{IdentityPayload, IdentityPreimage, ResolvedEvaluation};
+use amiss_wire::report::model::{Controls, IdentityPreimage, ResolvedEvaluation};
 use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, CandidateIdentitySchema};
-use serde::Deserialize;
 
 use super::{AcceptanceDefect, SealedExpectations, controls};
 
 pub(super) fn accept(
-    payload: &serde_json::Value,
+    evaluation: &ResolvedEvaluation,
+    controls: &Controls,
     expected: &SealedExpectations,
 ) -> Result<(), AcceptanceDefect> {
-    let evaluation = IdentityPayload::<ResolvedEvaluation>::deserialize(payload)
-        .map_err(|_defect| AcceptanceDefect::SealedIdentity)?
-        .evaluation;
     if evaluation.candidate_ref.as_ref().map(BranchRef::as_str)
         != Some(expected.candidate_ref.as_str())
         || evaluation.target_ref.as_ref().map(BranchRef::as_str)
@@ -22,7 +19,7 @@ pub(super) fn accept(
         return Err(AcceptanceDefect::SealedIdentity);
     }
     let preimage = IdentityPreimage {
-        evaluation: &evaluation,
+        evaluation,
         schema: CandidateIdentitySchema::Current,
     };
     let identity_digest = hj_serde(CANDIDATE_IDENTITY_DOMAIN, |mut writer| {
@@ -33,7 +30,7 @@ pub(super) fn accept(
         return Err(AcceptanceDefect::SealedIdentity);
     }
     controls::accept(
-        payload,
+        controls,
         evaluation
             .evaluation_instant
             .as_ref()

@@ -9,7 +9,6 @@ use amiss_wire::requests::RequestTrust;
 
 mod controls;
 mod identity;
-mod model;
 mod read;
 
 pub use read::accept;

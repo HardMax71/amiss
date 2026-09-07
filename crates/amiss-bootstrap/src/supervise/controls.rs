@@ -1,63 +1,40 @@
-use amiss_wire::controls::{Profile, canonical_execution_constraint, canonical_trusted_time};
+use amiss_wire::controls::{canonical_execution_constraint, canonical_trusted_time};
 use amiss_wire::digest::Digest;
 use amiss_wire::report::model::{
-    ControlProvenance, ControlStatus, ControlTrustSource, SandboxAssurance,
-    SandboxEnforcementSource, SandboxProvenance, SemanticEvidenceProvenance,
-    VerifiedExecutionConstraint, VerifiedTrustedTime,
+    ControlStatus, ControlTrustSource, Controls, ExecutionConstraintProvenance, SandboxAssurance,
+    SandboxEnforcementSource, TrustedTimeProvenance,
 };
-use serde::Deserialize;
-use serde_json::Value;
 
-use super::model::Object;
 use super::{AcceptanceDefect, SealedExpectations};
 
-#[derive(Deserialize)]
-struct ControlPayload {
-    controls: Object<ControlView>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ControlView {
-    #[serde(
-        rename = "base_repository_policy_digest",
-        deserialize_with = "Option::deserialize"
-    )]
-    _base_repository_policy_digest: Option<Digest>,
-    #[serde(
-        rename = "candidate_repository_policy_digest",
-        deserialize_with = "Option::deserialize"
-    )]
-    _candidate_repository_policy_digest: Option<Digest>,
-    debt_snapshot: Object<ControlProvenance>,
-    execution_constraint: Object<VerifiedExecutionConstraint>,
-    organization_floor: Object<ControlProvenance>,
-    profile: Profile,
-    sandbox: Object<SandboxProvenance>,
-    semantic_evidence: Vec<Object<SemanticEvidenceProvenance>>,
-    trusted_time_source: Object<VerifiedTrustedTime>,
-    waiver_bundle: Object<ControlProvenance>,
-}
-
 pub(super) fn accept(
-    payload: &Value,
+    controls: &Controls,
     evaluation_instant: Option<&str>,
     identity_digest: Digest,
     expected: &SealedExpectations,
 ) -> Result<(), AcceptanceDefect> {
-    let payload =
-        ControlPayload::deserialize(payload).map_err(|_defect| AcceptanceDefect::SealedControls)?;
-    let controls = payload.controls.fields;
+    let Controls::Resolved(controls) = controls else {
+        return Err(AcceptanceDefect::SealedControls);
+    };
+    let (
+        ExecutionConstraintProvenance::Verified(constraint),
+        TrustedTimeProvenance::Verified(trusted),
+        Some(semantic_evidence),
+    ) = (
+        &controls.execution_constraint,
+        &controls.trusted_time_source,
+        &controls.semantic_evidence,
+    )
+    else {
+        return Err(AcceptanceDefect::SealedControls);
+    };
     if controls.profile != expected.profile {
         return Err(AcceptanceDefect::SealedControls);
     }
     for (actual, expected) in [
-        (
-            &controls.organization_floor.fields,
-            &expected.organization_floor,
-        ),
-        (&controls.debt_snapshot.fields, &expected.debt_snapshot),
-        (&controls.waiver_bundle.fields, &expected.waiver_bundle),
+        (&controls.organization_floor, &expected.organization_floor),
+        (&controls.debt_snapshot, &expected.debt_snapshot),
+        (&controls.waiver_bundle, &expected.waiver_bundle),
     ] {
         let accepted = match expected {
             Some(expected) => {
@@ -75,15 +52,9 @@ pub(super) fn accept(
             return Err(AcceptanceDefect::SealedControls);
         }
     }
-    if controls
-        .semantic_evidence
-        .iter()
-        .map(|row| &row.fields)
-        .ne(&expected.semantic_evidence)
-    {
+    if semantic_evidence != &expected.semantic_evidence {
         return Err(AcceptanceDefect::SealedControls);
     }
-    let constraint = controls.execution_constraint.fields;
     let (_, descriptor_digest) = canonical_execution_constraint(&constraint.descriptor)
         .map_err(|_defect| AcceptanceDefect::SealedControls)?;
     if constraint.descriptor_digest != expected.execution_constraint.digest
@@ -92,10 +63,9 @@ pub(super) fn accept(
     {
         return Err(AcceptanceDefect::SealedControls);
     }
-    let trusted = controls.trusted_time_source.fields;
-    let statement = trusted.statement;
+    let statement = &trusted.statement;
     let (_, statement_digest) =
-        canonical_trusted_time(&statement).map_err(|_defect| AcceptanceDefect::SealedControls)?;
+        canonical_trusted_time(statement).map_err(|_defect| AcceptanceDefect::SealedControls)?;
     if trusted.statement_digest != expected.trusted_time_digest
         || statement_digest != expected.trusted_time_digest
         || statement.provider != expected.provider
@@ -105,9 +75,9 @@ pub(super) fn accept(
         || statement.ref_name.as_str() != expected.target_ref
         || statement.candidate_identity_digest != identity_digest
         || evaluation_instant != Some(statement.evaluation_instant.as_str())
-        || controls.sandbox.fields.assurance != SandboxAssurance::SelfAsserted
-        || controls.sandbox.fields.enforcement_source != SandboxEnforcementSource::LocalProcess
-        || controls.sandbox.fields.verification.is_some()
+        || controls.sandbox.assurance != SandboxAssurance::SelfAsserted
+        || controls.sandbox.enforcement_source != SandboxEnforcementSource::LocalProcess
+        || controls.sandbox.verification.is_some()
     {
         return Err(AcceptanceDefect::SealedControls);
     }

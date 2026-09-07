@@ -366,7 +366,7 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
     });
     assert_eq!(
         accept(&unavailable_hybrid, &expectations),
-        Err(AcceptanceDefect::SealedIdentity)
+        Err(AcceptanceDefect::Shape)
     );
 }
 
