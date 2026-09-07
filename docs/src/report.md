@@ -19,6 +19,10 @@ Inside the payload: which trees were compared and how; the result block with `st
 discovered document, its classification, and whether its content was available; the
 `findings` array; and the `errors` array of analysis errors the run kept.
 
+Both report readers use the same result model and verdict check. They require every result
+member and reject unknown members, negative counts, and disagreements between `complete`,
+`status`, and `exit_code`. Bootstrap also checks the recorded finding count against the array.
+
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
 to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,

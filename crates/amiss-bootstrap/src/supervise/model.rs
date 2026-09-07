@@ -1,4 +1,4 @@
-use amiss_wire::report::model::{Engine, ReportPayloadSchema, UnavailableStatus};
+use amiss_wire::report::model::{Engine, ReportPayloadSchema, ReportResult, UnavailableStatus};
 use amiss_wire::requests::GitSnapshotIdentity;
 use serde::{Deserialize, de::IgnoredAny};
 
@@ -38,19 +38,8 @@ pub(super) struct CandidateEvaluation<C = Object<GitSnapshotIdentity>> {
 }
 
 #[derive(Deserialize)]
-pub(super) struct ResultPayload<R> {
-    pub(super) result: Object<R>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct Completion {
-    pub(super) complete: bool,
-    pub(super) exit_code: i64,
-}
-
-#[derive(Deserialize)]
-pub(super) struct FindingCount {
-    pub(super) finding_count: i64,
+pub(super) struct ResultPayload {
+    pub(super) result: Object<ReportResult>,
 }
 
 #[derive(Deserialize)]

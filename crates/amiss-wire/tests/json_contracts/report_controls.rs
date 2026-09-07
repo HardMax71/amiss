@@ -88,7 +88,7 @@ fn reports() -> Vec<ReportEnvelope> {
 }
 
 #[test]
-fn report_controls_reject_unknown_members_after_payload_digest_verification() {
+fn report_controls_and_results_reject_unknown_members_after_digest_verification() {
     let cases = reports();
     assert_eq!(cases.len(), 3);
     for mut report in cases {
@@ -100,23 +100,32 @@ fn report_controls_reject_unknown_members_after_payload_digest_verification() {
             validate_envelope(wire.as_bytes()).unwrap().0,
             report.payload
         );
-        let controls =
-            String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload.controls).unwrap())
-                .unwrap();
-        for (offset, _) in controls.match_indices('{') {
-            let mut invalid = controls.clone();
-            invalid.insert_str(offset + 1, "\"__unexpected\":true,");
-            let altered_payload = payload.replace(&controls, &invalid);
-            assert_ne!(payload, altered_payload);
-            let altered = wire.replace(&payload, &altered_payload).replace(
-                &report.payload_digest.to_string(),
-                &hb(PAYLOAD_SCHEMA, altered_payload.as_bytes()).to_string(),
-            );
-            assert_eq!(
-                validate_envelope(altered.as_bytes()).map(drop),
-                Err(ReportDefect::NotAReport),
-                "{invalid}"
-            );
+        for (fragment, expected) in [
+            (
+                serde_json_canonicalizer::to_vec(&report.payload.controls).unwrap(),
+                ReportDefect::NotAReport,
+            ),
+            (
+                serde_json_canonicalizer::to_vec(&report.payload.result).unwrap(),
+                ReportDefect::InvalidResult,
+            ),
+        ] {
+            let fragment = String::from_utf8(fragment).unwrap();
+            for (offset, _) in fragment.match_indices('{') {
+                let mut invalid = fragment.clone();
+                invalid.insert_str(offset + 1, "\"__unexpected\":true,");
+                let altered_payload = payload.replace(&fragment, &invalid);
+                assert_ne!(payload, altered_payload);
+                let altered = wire.replace(&payload, &altered_payload).replace(
+                    &report.payload_digest.to_string(),
+                    &hb(PAYLOAD_SCHEMA, altered_payload.as_bytes()).to_string(),
+                );
+                assert_eq!(
+                    validate_envelope(altered.as_bytes()).map(drop),
+                    Err(expected),
+                    "{invalid}"
+                );
+            }
         }
     }
 }
