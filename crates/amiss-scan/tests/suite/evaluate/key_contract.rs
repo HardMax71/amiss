@@ -1,6 +1,5 @@
 use amiss_scan::evaluate::{FINDING_KEY_DOMAIN, structural_facts};
 use amiss_scan::policy::ControlSeed;
-use amiss_wire::json;
 
 use super::*;
 
@@ -63,17 +62,13 @@ fn reference_keys_preserve_normalization_and_optional_identity_fields() {
                             .digest
                     ))
                 );
-                let expected = json::parse(expected.as_bytes()).expect("key fixture");
                 assert_eq!(
                     finding.finding_key,
-                    hb(
-                        FINDING_KEY_DOMAIN,
-                        &serde_json_canonicalizer::to_vec(&expected).unwrap()
-                    )
+                    hb(FINDING_KEY_DOMAIN, expected.as_bytes())
                 );
                 assert_eq!(
-                    serde_json::to_vec(&finding.key_input).expect("typed key"),
-                    serde_json_canonicalizer::to_vec(&expected).unwrap()
+                    serde_json_canonicalizer::to_vec(&finding.key_input).expect("typed key"),
+                    expected.as_bytes()
                 );
             }
         }
@@ -139,7 +134,7 @@ fn nonreference_keys_preserve_document_observation_and_control_scopes() {
             .iter()
             .map(|finding| (
                 finding.finding_key,
-                serde_json::to_vec(&finding.key_input).expect("typed key")
+                serde_json_canonicalizer::to_vec(&finding.key_input).expect("typed key")
             ))
             .collect::<Vec<_>>(),
         expected

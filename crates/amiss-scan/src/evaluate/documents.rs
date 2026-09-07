@@ -1,6 +1,5 @@
 use amiss_wire::controls::Profile;
 use amiss_wire::report::FindingKind;
-use amiss_wire::report::model::DocumentFindingKeyScopeKind;
 
 use super::finding::simple;
 use super::{
@@ -19,7 +18,6 @@ pub(super) fn document_findings(
             FindingKind::DocumentRemoved,
             FindingKeyScope::Document {
                 document: path.clone(),
-                kind: DocumentFindingKeyScopeKind::Document,
             },
             Attribution::NotApplicable,
             Vec::new(),
@@ -46,7 +44,6 @@ pub(super) fn document_findings(
                 FindingKind::UnsupportedDocumentFormat,
                 FindingKeyScope::Document {
                     document: path.clone(),
-                    kind: DocumentFindingKeyScopeKind::Document,
                 },
                 Attribution::NotApplicable,
                 Vec::new(),
@@ -64,7 +61,6 @@ pub(super) fn document_findings(
                     FindingKind::OpaqueMdxRegion,
                     FindingKeyScope::Document {
                         document: path.clone(),
-                        kind: DocumentFindingKeyScopeKind::Document,
                     },
                     Attribution::NotApplicable,
                     Vec::new(),
@@ -77,7 +73,6 @@ pub(super) fn document_findings(
                     FindingKind::OpaqueHtmlRegion,
                     FindingKeyScope::Document {
                         document: path.clone(),
-                        kind: DocumentFindingKeyScopeKind::Document,
                     },
                     Attribution::NotApplicable,
                     Vec::new(),
@@ -94,7 +89,6 @@ pub(super) fn document_findings(
                     FindingKind::UnlinkedDocument,
                     FindingKeyScope::Document {
                         document: path.clone(),
-                        kind: DocumentFindingKeyScopeKind::Document,
                     },
                     Attribution::NotApplicable,
                     Vec::new(),

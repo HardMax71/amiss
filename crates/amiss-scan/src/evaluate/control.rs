@@ -7,8 +7,8 @@ use amiss_wire::report::FindingKind;
 use amiss_wire::report::model::ProjectionDifference;
 use amiss_wire::report::model::RowsProjectionDifference;
 use amiss_wire::report::model::{
-    ControlFactEvidenceKind, ControlFindingKeyScopeKind, ControlState, ControlStateInput,
-    ControlStateSchema, ControlStateSource, ExceptionDiagnostic, FindingFactEvidence,
+    ControlFactEvidenceKind, ControlState, ControlStateInput, ControlStateSchema,
+    ControlStateSource, ExceptionDiagnostic, FindingFactEvidence,
 };
 use amiss_wire::resolution::Resolution;
 
@@ -50,7 +50,6 @@ pub(super) fn control_fact_finding(
         kind,
         FindingKeyScope::Control {
             control_path: Some(document.clone()),
-            kind: ControlFindingKeyScopeKind::Control,
             rule_id: rule_id.to_owned(),
         },
         evidence,
@@ -133,7 +132,6 @@ pub(super) fn control_row(
 ) -> Result<Finding, crate::Error> {
     let scope = FindingKeyScope::Control {
         control_path: control_path.clone(),
-        kind: ControlFindingKeyScopeKind::Control,
         rule_id: rule_id.clone(),
     };
     let evidence = FindingFactEvidence::Control {

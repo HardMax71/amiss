@@ -40,6 +40,10 @@ Observation comparisons, occurrences, intents and identity inputs are closed too
 individual occurrences or retain unknown extension fields. Candidate and alternative order,
 byte-path spelling and canonical JSON output remain unchanged.
 
+Finding-key scopes use the enum's own tag and reject unknown members, including nested
+target intents and occurrence identities. Finding keys are hashed through the canonical
+writer, so Rust field declaration order does not affect identity or adoption reproduction.
+
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
 to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,
