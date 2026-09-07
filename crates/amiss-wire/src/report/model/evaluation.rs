@@ -52,6 +52,7 @@ pub enum SnapshotUnavailableReason {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnavailableSnapshot {
     pub kind: UnavailableSnapshotKind,
     pub reasons: Vec<SnapshotUnavailableReason>,
@@ -62,18 +63,23 @@ pub struct UnavailableSnapshot {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BaseSnapshot {
-    Git(GitSnapshot),
-    Unavailable(UnavailableSnapshot),
+    Git(#[serde(deserialize_with = "crate::requests::object::deserialize")] GitSnapshot),
+    Unavailable(
+        #[serde(deserialize_with = "crate::requests::object::deserialize")] UnavailableSnapshot,
+    ),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Snapshot {
     Available(CandidateSnapshot),
-    Unavailable(UnavailableSnapshot),
+    Unavailable(
+        #[serde(deserialize_with = "crate::requests::object::deserialize")] UnavailableSnapshot,
+    ),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ResolvedEvaluation {
     pub base: BaseSnapshot,
     pub candidate: Snapshot,
@@ -127,6 +133,7 @@ pub enum EvaluationUnavailableReason {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UnavailableEvaluation {
     pub reasons: Vec<EvaluationUnavailableReason>,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -137,6 +144,10 @@ pub struct UnavailableEvaluation {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Evaluation {
-    Resolved(Box<ResolvedEvaluation>),
-    Unavailable(UnavailableEvaluation),
+    Resolved(
+        #[serde(deserialize_with = "crate::requests::object::deserialize")] Box<ResolvedEvaluation>,
+    ),
+    Unavailable(
+        #[serde(deserialize_with = "crate::requests::object::deserialize")] UnavailableEvaluation,
+    ),
 }

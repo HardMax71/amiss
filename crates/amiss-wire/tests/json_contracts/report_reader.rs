@@ -10,8 +10,6 @@ fn additive_fields_are_checked_before_typed_decoding() {
     for path in [
         "/payload",
         "/payload/engine",
-        "/payload/evaluation",
-        "/payload/evaluation/base",
         "/payload/result",
         "/payload/summary",
     ] {
