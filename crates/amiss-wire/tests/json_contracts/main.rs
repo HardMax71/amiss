@@ -14,6 +14,7 @@ mod control_tags;
 mod external_evidence;
 mod external_reader;
 mod policy_presence;
+mod report_controls;
 mod report_identity;
 mod report_reader;
 mod semantic_observations;
