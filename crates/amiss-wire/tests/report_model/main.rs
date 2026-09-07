@@ -5,8 +5,8 @@ mod projection;
 use amiss_wire::report::model::{
     AnalysisError, BaseSnapshot, Controls, DocumentResult, Engine, Evaluation, ExceptionDiagnostic,
     Feedback, Finding, FindingFactEvidence, FindingKeyScope, MissingResolution,
-    ObservationComparison, ProjectionDifference, ProjectionSource, RepoPath, ReportEnvelope,
-    Resolution, Snapshot, Summary,
+    ObservationComparison, ProjectionDifference, RepoPath, ReportEnvelope, Resolution, Snapshot,
+    Summary,
 };
 use amiss_wire::requests::CandidateSnapshot;
 use amiss_wire::resolution::{Target, VersionScope};
@@ -126,15 +126,6 @@ fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::
         r#"{"document":"a.md","kind":"reference","normalized_target_intent":{"fragment_digest":null,"kind":"repository-path","path":"a.md","query_digest":null,"target_kind":"blob"},"occurrence":{"kind":"source-projection","source_projection_digest":"$digest"},"source_construct":"markdown-inline-link"}"#,
     ] {
         assert_canonical::<FindingKeyScope>(&template.replace("$digest", DIGEST))?;
-    }
-    for wire in [
-        r#"{"first_line":1,"kind":"blob-lines","last_line":2,"path":"a.md"}"#,
-        r#"{"end_marker":"end","kind":"named-region","path":"a.md","start_marker":"start"}"#,
-        r#"{"kind":"record-set","set":"records"}"#,
-        r#"{"key":"name","kind":"record-value","set":"records"}"#,
-        r#"{"kind":"tree-paths","maximum_depth":1,"root":"docs"}"#,
-    ] {
-        assert_canonical::<ProjectionSource>(wire)?;
     }
     for wire in [
         r#"{"expected_count":1,"kind":"count","observed_count":null}"#,

@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 
+use crate::controls::ProjectionSource;
 use crate::digest::Digest;
 
 use super::{
     AnalysisError, Controls, DocumentGitMode, DocumentResult, DocumentSide, Engine, Evaluation,
-    Feedback, Finding, FindingFactEvidence, ObservationComparison, ProjectionDifference,
-    ProjectionSource, RepoPath, Resolution, Summary,
+    Feedback, Finding, FindingFactEvidence, ObservationComparison, ProjectionDifference, RepoPath,
+    Resolution, Summary,
 };
 
 #[derive(
