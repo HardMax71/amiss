@@ -7,6 +7,7 @@ use crate::digest::Digest;
 use crate::model::{Adapter, Oid, RepoPathText};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RepoPathBytes {
     pub bytes_hex: String,
 }
@@ -15,7 +16,7 @@ pub struct RepoPathBytes {
 #[serde(untagged)]
 pub enum RepoPath {
     Text(RepoPathText),
-    Bytes(RepoPathBytes),
+    Bytes(#[serde(deserialize_with = "crate::requests::object::deserialize")] RepoPathBytes),
 }
 
 #[derive(
@@ -91,6 +92,7 @@ pub enum DocumentGitMode {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DocumentSide<M = DocumentGitMode> {
     #[serde(deserialize_with = "Option::deserialize")]
     pub adapter_id: Option<Adapter>,
@@ -125,7 +127,10 @@ pub enum DocumentChange {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "P: Deserialize<'de>, S: Deserialize<'de>"))]
+#[serde(
+    deny_unknown_fields,
+    bound(deserialize = "P: Deserialize<'de>, S: Deserialize<'de>")
+)]
 pub struct DocumentResult<P = RepoPath, S = DocumentSide> {
     #[serde(deserialize_with = "Option::deserialize")]
     pub base: Option<S>,

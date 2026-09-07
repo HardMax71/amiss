@@ -17,6 +17,7 @@ mod policy_presence;
 mod report_controls;
 mod report_identity;
 mod report_reader;
+mod report_rows;
 mod semantic_observations;
 mod semantic_producers;
 mod semantic_reader;
