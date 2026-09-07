@@ -10,9 +10,11 @@ use crate::digest::{Digest, hb, hj_serde};
 use crate::json;
 use crate::model::ForgeDialect;
 use crate::report::model::{
-    Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath, Resolution,
+    BaseSnapshot, Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence,
+    RepoPath, Resolution, Snapshot,
 };
 use crate::report::validate_envelope;
+use crate::requests::RequestMode;
 use crate::resolution::VersionScope;
 
 use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
@@ -33,9 +35,11 @@ pub enum ExternalPlanEnvelopeSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalPlan<B = BTreeMap<String, serde_json::Value>, C = B> {
+#[serde(bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>"))]
+pub struct ExternalPlan<B = BaseSnapshot, C = Snapshot> {
     pub schema: ExternalPlanPayloadSchema,
     pub engine: ExternalEngine,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub report: ExternalPlanReport<B, C>,
     pub introduced: Vec<ExternalDestination>,
     pub removed: Vec<ExternalDestination>,
@@ -58,11 +62,17 @@ pub struct ExternalEngine {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalPlanReport<B = BTreeMap<String, serde_json::Value>, C = B> {
+#[serde(
+    deny_unknown_fields,
+    bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>")
+)]
+pub struct ExternalPlanReport<B = BaseSnapshot, C = Snapshot> {
     pub payload_digest: Digest,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub base: B,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub candidate: C,
-    pub mode: String,
+    pub mode: RequestMode,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,7 +162,7 @@ pub fn plan(
             payload_digest: recorded,
             base: &evaluation.base,
             candidate: &evaluation.candidate,
-            mode: evaluation.mode.as_ref().to_owned(),
+            mode: evaluation.mode,
         },
         introduced: rows(&candidate, &base, declared),
         removed: rows(&base, &candidate, declared),
@@ -210,9 +220,6 @@ fn plan_payload_digest<B: Serialize, C: Serialize>(
 fn validate_plan<B, C>(plan: &ExternalPlan<B, C>) -> Result<(), Error> {
     if plan.engine.engine_version.is_empty() {
         return fail("$.payload.engine.engine_version", ErrorKind::InvalidValue);
-    }
-    if plan.report.mode.is_empty() {
-        return fail("$.payload.report.mode", ErrorKind::InvalidValue);
     }
     if plan.retained_count > json::MAX_SAFE_INTEGER.unsigned_abs() {
         return fail("$.payload.retained_count", ErrorKind::LimitExceeded);

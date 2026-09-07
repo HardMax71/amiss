@@ -13,6 +13,7 @@ mod control_inputs;
 mod control_tags;
 mod external_evidence;
 mod external_reader;
+mod external_snapshots;
 mod policy_presence;
 mod report_controls;
 mod report_counts;

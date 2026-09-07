@@ -40,6 +40,12 @@ identity without re-reading the tree. The schema is
 [`scanner-external-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/scanner-external-plan.schema.json),
 and its example is derived from the report example by the same code path, checked in CI.
 
+The echoed `report` object uses the report's existing snapshot types: Git or unavailable for
+the base, and Git, index or unavailable for the candidate. Its mode is `commit-pair` or `index`.
+Unknown snapshot kinds, extra identity fields and malformed object IDs are rejected during
+decoding, including when the plan's payload digest matches. These identities are structured
+data, not extensible maps; the schema includes their definitions locally.
+
 The plan states work; it performs none. Fetching stays outside the engine for the same
 reasons [What Amiss is not](non-goals.md) gives for live URLs: a probe's answer varies
 with the network's mood, and a guessed pass looks exactly like a real one. What a

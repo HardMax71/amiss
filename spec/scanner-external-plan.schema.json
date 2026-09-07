@@ -23,6 +23,159 @@
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
     },
+    "GitSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "object_format",
+        "commit_oid",
+        "tree_oid"
+      ],
+      "properties": {
+        "kind": {
+          "const": "git-commit"
+        },
+        "object_format": {
+          "enum": [
+            "sha1",
+            "sha256"
+          ]
+        },
+        "commit_oid": {
+          "$ref": "#/$defs/GitOid"
+        },
+        "tree_oid": {
+          "$ref": "#/$defs/GitOid"
+        }
+      }
+    },
+    "GitOid": {
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      ]
+    },
+    "Snapshot": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GitSnapshot"
+        },
+        {
+          "$ref": "#/$defs/SyntheticSnapshot"
+        },
+        {
+          "$ref": "#/$defs/UnavailableSnapshot"
+        }
+      ]
+    },
+    "SyntheticSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "snapshot_schema",
+        "identity_scope",
+        "base_object_format",
+        "base_commit_oid",
+        "index_projection_digest",
+        "entry_count",
+        "snapshot_digest"
+      ],
+      "properties": {
+        "kind": {
+          "const": "index"
+        },
+        "snapshot_schema": {
+          "const": "amiss/scanner-snapshot"
+        },
+        "identity_scope": {
+          "const": "complete-logical-index"
+        },
+        "base_object_format": {
+          "enum": [
+            "sha1",
+            "sha256"
+          ]
+        },
+        "base_commit_oid": {
+          "$ref": "#/$defs/GitOid"
+        },
+        "index_projection_digest": {
+          "$ref": "#/$defs/Digest"
+        },
+        "entry_count": {
+          "$ref": "#/$defs/SafeUInt"
+        },
+        "snapshot_digest": {
+          "$ref": "#/$defs/Digest"
+        }
+      }
+    },
+    "SafeUInt": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "UnavailableSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "request_digest",
+        "reasons"
+      ],
+      "properties": {
+        "kind": {
+          "const": "unavailable"
+        },
+        "request_digest": {
+          "$ref": "#/$defs/NullableDigest"
+        },
+        "reasons": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "uniqueItems": true,
+          "description": "All applicable reasons in the item-enum order.",
+          "x-amiss-order": [
+            "enum-declaration-order"
+          ],
+          "items": {
+            "enum": [
+              "not-evaluated",
+              "not-supplied",
+              "repository-unavailable",
+              "missing-object",
+              "wrong-object-kind",
+              "unreadable-object",
+              "index-invalid",
+              "index-unmerged",
+              "intent-to-add",
+              "snapshot-changed",
+              "unrepresentable-path",
+              "resource-limit"
+            ]
+          }
+        }
+      }
+    },
+    "NullableDigest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Digest"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
     "PlanPayload": {
       "type": "object",
       "additionalProperties": false,
@@ -57,16 +210,18 @@
             },
             "base": {
               "description": "The report's evaluation.base value, echoed verbatim.",
-              "type": "object"
+              "oneOf": [
+                { "$ref": "#/$defs/GitSnapshot" },
+                { "$ref": "#/$defs/UnavailableSnapshot" }
+              ]
             },
             "candidate": {
               "description": "The report's evaluation.candidate value, echoed verbatim.",
-              "type": "object"
+              "$ref": "#/$defs/Snapshot"
             },
             "mode": {
               "description": "The report's evaluation.mode value, echoed verbatim.",
-              "type": "string",
-              "minLength": 1
+              "enum": ["commit-pair", "index"]
             }
           }
         },

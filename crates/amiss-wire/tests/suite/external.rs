@@ -434,42 +434,6 @@ fn the_plan_model_reads_the_checked_writer() {
 }
 
 #[test]
-fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
-    let written = plan(
-        &serde_json_canonicalizer::to_vec(&report(Vec::new())).unwrap(),
-        "0.0.0",
-        sample_digest(),
-    )
-    .expect("valid report");
-    let document: serde_json::Value = serde_json::from_slice(&written).expect("valid plan");
-    for side in ["base", "candidate"] {
-        let mut extended = document.clone();
-        extended["payload"]["report"][side] = serde_json::json!({
-            "future_kind": {"😀": "quoted \" \\ \n", "\u{e000}": [null, true, 42]}
-        });
-        let bytes = refresh_payload_digest(&mut extended, PLAN_PAYLOAD_SCHEMA);
-        let parsed = parse_plan(&bytes).expect("snapshot objects are an open contract");
-        assert_eq!(
-            serde_json_canonicalizer::to_vec(&parsed).expect("canonical plan"),
-            bytes
-        );
-        for value in [
-            serde_json::Value::Null,
-            serde_json::json!(true),
-            serde_json::json!(42),
-            serde_json::json!("snapshot"),
-            serde_json::json!([]),
-        ] {
-            extended["payload"]["report"][side] = value;
-            let bytes = refresh_payload_digest(&mut extended, PLAN_PAYLOAD_SCHEMA);
-            let error = parse_plan(&bytes).expect_err("a snapshot must be an object");
-            assert_eq!(error.kind, ErrorKind::WrongType);
-            assert_eq!(error.path, format!("$.payload.report.{side}"));
-        }
-    }
-}
-
-#[test]
 fn additive_plan_fields_are_digest_bound_but_inert() {
     let written = planned(Vec::new());
     let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
