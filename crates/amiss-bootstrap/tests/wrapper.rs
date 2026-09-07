@@ -26,6 +26,7 @@ use amiss_wire::digest::hb;
 use amiss_wire::json::{Value, parse};
 use amiss_wire::model::{Oid, RepoPathText};
 use amiss_wire::report::PAYLOAD_SCHEMA;
+use amiss_wire::report::model::ReportStatus;
 use amiss_wire::requests::{
     REQUEST_STREAM_BYTES, SEALED_ENGINE_ARGUMENT, commit_candidate_identity_digest,
 };
@@ -301,7 +302,11 @@ fn bind_envelope(
         Value::Integer(exit_class),
     );
     if exit_class == 1 {
-        set(entry(payload, "result"), "status", string("block"));
+        set(
+            entry(payload, "result"),
+            "status",
+            string(ReportStatus::Fail.as_ref()),
+        );
     }
     let digest = hb(
         PAYLOAD_SCHEMA,

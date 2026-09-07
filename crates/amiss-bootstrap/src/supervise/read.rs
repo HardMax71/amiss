@@ -1,20 +1,20 @@
 use amiss_wire::digest::hj_serde;
 use amiss_wire::json;
-use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::report::model::{IdentityPayload, ReportEnvelope, Snapshot};
+use amiss_wire::report::{PAYLOAD_SCHEMA, result_verdict};
 use serde::Deserialize;
 use serde_json::Value;
 
 use super::model::{
-    BaseEvaluation, CandidateEvaluation, Completion, EnginePayload, EvaluationStatus, FindingCount,
-    Findings, Object, PayloadHeader, ResultPayload,
+    BaseEvaluation, CandidateEvaluation, EnginePayload, EvaluationStatus, Findings, Object,
+    PayloadHeader, ResultPayload,
 };
 use super::{AcceptanceDefect, Expectations, identity};
 
 /// The acceptance law: the wire is exactly `JCS(envelope) || LF`, the
 /// payload-only digest recomputes, the engine digest equals the validated
 /// binary's, the evaluated identities equal the ones requested, the
-/// completeness flag agrees with the exit class, and the finding count equals
+/// status, completeness flag and exit class agree, and the finding count equals
 /// the findings array length. Text printed before a crash is never
 /// interpreted as a result. Success returns the envelope's exit class, so the
 /// wrapper can hold the engine process to it.
@@ -83,21 +83,16 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
             identity::accept(&payload, sealed)?;
         }
     }
-    let result = ResultPayload::<Completion>::deserialize(&payload)
+    let result = ResultPayload::deserialize(&payload)
         .map_err(|_defect| AcceptanceDefect::Shape)?
         .result
         .fields;
-    if result.complete != (result.exit_code == 0 || result.exit_code == 1) {
-        return Err(AcceptanceDefect::Completeness);
-    }
-    let count = ResultPayload::<FindingCount>::deserialize(&payload)
-        .map_err(|_defect| AcceptanceDefect::Shape)?
-        .result
-        .fields
-        .finding_count;
+    let verdict = result_verdict(&result).map_err(|_defect| AcceptanceDefect::Completeness)?;
     let findings = Findings::deserialize(&payload).map_err(|_defect| AcceptanceDefect::Shape)?;
-    if i64::try_from(findings.findings.len()).map_err(|_defect| AcceptanceDefect::Shape)? != count {
+    if u64::try_from(findings.findings.len()).map_err(|_defect| AcceptanceDefect::Shape)?
+        != result.finding_count
+    {
         return Err(AcceptanceDefect::FindingCount);
     }
-    Ok(result.exit_code)
+    Ok(i64::from(verdict.code()))
 }

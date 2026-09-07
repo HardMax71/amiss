@@ -6,6 +6,111 @@ use serde_json::{Value, json};
 use super::accepted_report;
 
 #[test]
+fn report_readers_agree_on_complete_status_and_exit_code() {
+    use amiss_wire::report::{
+        ReportDefect,
+        model::{ReportEnvelope, ReportStatus},
+        validate_envelope,
+    };
+
+    let (wire, expectations) = accepted_report();
+    let mut report: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    let valid = [
+        (true, ReportStatus::Pass, 0),
+        (true, ReportStatus::Fail, 1),
+        (false, ReportStatus::Incomplete, 2),
+    ];
+    for complete in [false, true] {
+        for status in [
+            ReportStatus::Pass,
+            ReportStatus::Fail,
+            ReportStatus::Incomplete,
+        ] {
+            for exit_code in [0, 1, 2, 3, u8::MAX] {
+                report.payload.result.complete = complete;
+                report.payload.result.status = status;
+                report.payload.result.exit_code = exit_code;
+                report.payload_digest = hb(
+                    PAYLOAD_SCHEMA,
+                    &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+                );
+                let mut bytes = serde_json_canonicalizer::to_vec(&report).unwrap();
+                bytes.push(b'\n');
+                let (normal, sealed) = if valid.contains(&(complete, status, exit_code)) {
+                    (Ok(exit_code), Ok(i64::from(exit_code)))
+                } else {
+                    (
+                        Err(ReportDefect::InvalidResult),
+                        Err(AcceptanceDefect::Completeness),
+                    )
+                };
+                assert_eq!(
+                    validate_envelope(&bytes).map(|(_, _, verdict)| verdict.code()),
+                    normal,
+                    "{complete} {status:?} {exit_code}"
+                );
+                assert_eq!(
+                    accept(&bytes, &expectations),
+                    sealed,
+                    "{complete} {status:?} {exit_code}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn report_result_members_are_required_and_typed_in_both_readers() {
+    use amiss_wire::report::{ReportDefect, model::ReportEnvelope, validate_envelope};
+
+    let (wire, expectations) = accepted_report();
+    let report: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    let payload =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
+    let result =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload.result).unwrap())
+            .unwrap();
+    let error_count = format!("\"error_count\":{}", report.payload.result.error_count);
+    let finding_count = format!("\"finding_count\":{}", report.payload.result.finding_count);
+    let omitted_error_count = format!("{error_count},");
+    let omitted_finding_count = format!("{finding_count},");
+    let wire = String::from_utf8(wire).unwrap();
+    for (original, replacement) in [
+        ("\"complete\":true,", ""),
+        (omitted_error_count.as_str(), ""),
+        ("\"exit_code\":0,", ""),
+        (omitted_finding_count.as_str(), ""),
+        (",\"status\":\"pass\"", ""),
+        (error_count.as_str(), "\"error_count\":-1"),
+        (error_count.as_str(), "\"error_count\":null"),
+        (finding_count.as_str(), "\"finding_count\":-1"),
+        (finding_count.as_str(), "\"finding_count\":null"),
+        ("\"exit_code\":0", "\"exit_code\":256"),
+        ("\"exit_code\":0", "\"exit_code\":-1"),
+        ("\"status\":\"pass\"", "\"status\":\"unknown\""),
+        (result.as_str(), "[true,0,0,0,\"pass\"]"),
+    ] {
+        let invalid = result.replace(original, replacement);
+        assert_ne!(invalid, result, "{original}");
+        let altered_payload = payload.replace(&result, &invalid);
+        let altered = wire.replace(&payload, &altered_payload).replace(
+            &report.payload_digest.to_string(),
+            &hb(PAYLOAD_SCHEMA, altered_payload.as_bytes()).to_string(),
+        );
+        assert_eq!(
+            validate_envelope(altered.as_bytes()).map(drop),
+            Err(ReportDefect::InvalidResult),
+            "{invalid}"
+        );
+        assert_eq!(
+            accept(altered.as_bytes(), &expectations),
+            Err(AcceptanceDefect::Shape),
+            "{invalid}"
+        );
+    }
+}
+
+#[test]
 fn core_defects_keep_their_order_when_later_fields_are_also_wrong() {
     let (wire, expectations) = accepted_report();
     let original: Value = serde_json::from_slice(&wire).unwrap();
@@ -223,10 +328,14 @@ fn candidates_without_an_expected_commit_still_require_a_snapshot_shape() {
 }
 
 #[test]
-fn additive_core_fields_are_accepted_only_with_a_matching_payload_digest() {
+fn result_extensions_are_rejected_after_the_payload_digest_check() {
     let (wire, expectations) = accepted_report();
     let original: Value = serde_json::from_slice(&wire).unwrap();
-    for path in ["/payload", "/payload/engine", "/payload/result"] {
+    for (path, expected) in [
+        ("/payload", Ok(0)),
+        ("/payload/engine", Ok(0)),
+        ("/payload/result", Err(AcceptanceDefect::Shape)),
+    ] {
         let mut report = original.clone();
         report.pointer_mut(path).unwrap()["future"] =
             json!({"\u{1f600}": [null, true, -7], "\u{e000}": "extra"});
@@ -237,7 +346,11 @@ fn additive_core_fields_are_accepted_only_with_a_matching_payload_digest() {
             Err(AcceptanceDefect::PayloadDigest),
             "{path}"
         );
-        assert_eq!(accept(&bind(&mut report), &expectations), Ok(0), "{path}");
+        assert_eq!(
+            accept(&bind(&mut report), &expectations),
+            expected,
+            "{path}"
+        );
     }
 }
 
