@@ -111,7 +111,12 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
         )
         .unwrap();
         let mut envelope_bytes = Vec::new();
-        semantic::write(&document, &mut envelope_bytes).unwrap();
+        amiss_wire::write_json(
+            &document,
+            &mut envelope_bytes,
+            semantic::SEMANTIC_EVIDENCE_BYTES,
+        )
+        .unwrap();
         assert_eq!(
             semantic::parse(&envelope_bytes)
                 .unwrap()

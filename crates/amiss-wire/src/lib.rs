@@ -10,6 +10,7 @@ pub mod json;
 pub mod locale;
 pub mod manifest;
 pub mod model;
+mod output;
 pub mod publication;
 pub mod relation;
 pub mod report;
@@ -17,6 +18,8 @@ pub mod requests;
 pub mod resolution;
 pub mod semantic;
 pub mod uri;
+
+pub use output::write_json;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExitClass {

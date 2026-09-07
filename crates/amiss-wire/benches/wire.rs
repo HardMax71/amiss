@@ -109,9 +109,7 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     let engine_digest = hb("amiss/benchmark-engine", b"null");
     let validation = assess(&plan, &evidence, "0.0.0", engine_digest)
         .unwrap_or_else(|defect| panic!("dense assessment fixture: {defect:?}"));
-    let document = amiss_wire::external::parse_assessment(&validation)
-        .unwrap_or_else(|defect| panic!("dense assessment output: {defect}"));
-    assert_eq!(document.payload.verdicts.len(), 16_384);
+    assert_eq!(validation.payload.verdicts.len(), 16_384);
 
     let bytes = plan.len().saturating_add(evidence.len());
     bencher.counter(BytesCount::new(bytes)).bench_local(|| {

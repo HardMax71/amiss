@@ -14,6 +14,7 @@ mod control_tags;
 mod external_assessment;
 mod external_counts;
 mod external_evidence;
+mod external_output;
 mod external_plan_ingress;
 mod external_reader;
 mod external_snapshots;
@@ -298,7 +299,12 @@ fn semantic_examples_match_the_actual_typed_producers() {
         serde_json::from_slice(&semantic_evidence_bytes).unwrap();
     let generated = semantic::envelope(typed.payload.clone()).unwrap();
     let mut canonical = Vec::new();
-    semantic::write(&generated, &mut canonical).unwrap();
+    amiss_wire::write_json(
+        &generated,
+        &mut canonical,
+        semantic::SEMANTIC_EVIDENCE_BYTES,
+    )
+    .unwrap();
     assert_eq!(generated, typed);
     assert_eq!(
         canonical,

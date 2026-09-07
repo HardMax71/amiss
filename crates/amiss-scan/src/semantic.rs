@@ -134,7 +134,11 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
         Input::Template(template) => {
             parsed = amiss_wire::semantic::bind_template(template, candidate)
                 .and_then(|envelope| {
-                    amiss_wire::semantic::write(&envelope, std::io::sink())?;
+                    amiss_wire::write_json(
+                        &envelope,
+                        std::io::sink(),
+                        amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES,
+                    )?;
                     parse([Ok(envelope)])
                 })
                 .map_err(|error| crate::request::configuration_detail(&error))?;

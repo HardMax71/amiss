@@ -1,7 +1,5 @@
 #![cfg(test)]
 
-use amiss_wire::external::parse_plan;
-
 use super::targets;
 
 #[test]
@@ -21,7 +19,6 @@ fn only_unshaped_https_destinations_are_selected_up_to_the_cap() {
         report.payload.engine.engine_digest,
     )
     .unwrap();
-    let plan = parse_plan(&plan).unwrap();
 
     let (selected, skipped) = targets(&plan, 64);
     assert_eq!(

@@ -2,7 +2,7 @@ use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
 use amiss_wire::digest::Digest;
-use amiss_wire::external::{parse_assessment, parse_plan};
+use amiss_wire::external::EXTERNAL_DOCUMENT_BYTES;
 
 use crate::invocation::{AssessInvocation, OutputFormat, PlanInvocation};
 
@@ -17,11 +17,7 @@ pub(crate) fn run_plan(invocation: &PlanInvocation) -> ExitCode {
                 .map_err(|defect| defect.to_string())
         },
         |report, version, digest| amiss_wire::external::plan(&report, version, digest),
-        |bytes| {
-            parse_plan(bytes)
-                .map(|document| crate::human::plan(&document.payload))
-                .map_err(|defect| defect.to_string())
-        },
+        |document| crate::human::plan(&document.payload),
     )
 }
 
@@ -38,21 +34,17 @@ pub(crate) fn run_assess(invocation: &AssessInvocation) -> ExitCode {
         |(plan, evidence), version, digest| {
             amiss_wire::external::assess(&plan, &evidence, version, digest)
         },
-        |bytes| {
-            parse_assessment(bytes)
-                .map(|document| crate::human::assessment(&document.payload))
-                .map_err(|defect| defect.to_string())
-        },
+        |document| crate::human::assessment(&document.payload),
     )
 }
 
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
-fn run_pure<T, E: std::fmt::Display>(
+fn run_pure<T, O: serde::Serialize, E: std::fmt::Display>(
     command: &str,
     format: OutputFormat,
     load: impl FnOnce() -> Result<T, String>,
-    derive: impl FnOnce(T, &str, Digest) -> Result<Vec<u8>, E>,
-    human: impl FnOnce(&[u8]) -> Result<(), String>,
+    derive: impl FnOnce(T, &str, Digest) -> Result<O, E>,
+    human: impl FnOnce(&O),
 ) -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
     let input = match load() {
@@ -69,13 +61,24 @@ fn run_pure<T, E: std::fmt::Display>(
         );
         return failure;
     };
-    let bytes = match derive(input, &engine.version, engine.digest) {
-        Ok(bytes) => bytes,
+    let document = match derive(input, &engine.version, engine.digest) {
+        Ok(document) => document,
         Err(defect) => {
             eprintln!("amiss {command}: {defect}");
             return failure;
         }
     };
+    let mut bytes = Vec::new();
+    let mut sink = std::io::sink();
+    let output: &mut dyn std::io::Write = if format == OutputFormat::Json {
+        &mut bytes
+    } else {
+        &mut sink
+    };
+    if let Err(defect) = amiss_wire::write_json(&document, output, EXTERNAL_DOCUMENT_BYTES) {
+        eprintln!("amiss {command}: {defect}");
+        return failure;
+    }
     match format {
         OutputFormat::Json => {
             if let Err(defect) = crate::output::write_json(&bytes)
@@ -89,10 +92,7 @@ fn run_pure<T, E: std::fmt::Display>(
         | OutputFormat::Sarif
         | OutputFormat::CodeQuality
         | OutputFormat::Junit => {
-            if let Err(defect) = human(&bytes) {
-                eprintln!("amiss {command}: {defect}");
-                return failure;
-            }
+            human(&document);
         }
     }
     ExitCode::from(ExitClass::Success.code())

@@ -599,8 +599,7 @@ fn external_examples_replay_from_the_report_and_evidence() {
     let plan = amiss_wire::external::plan(&report, &engine.engine_version, engine.engine_digest)
         .expect("the report example yields a plan");
     assert_eq!(
-        plan,
-        serde_json_canonicalizer::to_vec(&plan_example).unwrap(),
+        plan, plan_example,
         "the plan example drifted from its own derivation"
     );
 
@@ -612,15 +611,14 @@ fn external_examples_replay_from_the_report_and_evidence() {
         .expect("the assessment example is accepted");
     let engine = &assessment_example.payload.engine;
     let assessment = amiss_wire::external::assess(
-        &plan,
+        &plan_bytes,
         &evidence_bytes,
         &engine.engine_version,
         engine.engine_digest,
     )
     .expect("the derived plan and evidence example yield an assessment");
     assert_eq!(
-        assessment,
-        serde_json_canonicalizer::to_vec(&assessment_example).unwrap(),
+        assessment, assessment_example,
         "the assessment example drifted from its own derivation"
     );
 }
@@ -635,8 +633,12 @@ fn the_semantic_evidence_example_matches_its_checked_writer() {
     let document = amiss_wire::semantic::envelope(parsed.payload)
         .expect("the semantic evidence example clears typed construction");
     let mut written = Vec::new();
-    amiss_wire::semantic::write(&document, &mut written)
-        .expect("the semantic evidence example clears the checked writer");
+    amiss_wire::write_json(
+        &document,
+        &mut written,
+        amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES,
+    )
+    .expect("the semantic evidence example clears the checked writer");
     let example =
         amiss_wire::json::parse(&bytes).expect("the semantic evidence example is strict JSON");
     assert_eq!(

@@ -28,7 +28,11 @@ decoding still requires a matching digest and a consistent result. Input byte an
 limits remain at the reader; plan output limits and canonical bytes are unchanged.
 The shared index snapshot's entry count and the plan's retained count enforce safe JSON
 integer bounds in Serde on both reading and writing, including direct use of these models.
-The plan writer no longer reparses its generated JSON; untrusted input still uses the reader.
+Plan derivation returns the existing owned envelope, and assessment likewise returns its
+typed envelope. Human rendering and the controller's verdict tally use those fields directly.
+The shared canonical writer checks the external byte ceiling at output, including a sink
+check before human rendering; JSON reaches stdout only after the buffered write succeeds.
+Untrusted input still uses the reader.
 
 Each row carries the destination exactly as the report recorded it, after the format's
 own decoding, the address an evidence producer would request; its lowercased scheme; and the sorted

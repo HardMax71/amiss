@@ -204,7 +204,7 @@ pub fn template(input: SemanticEvidenceTemplate<'_>) -> Result<Vec<u8>, Error> {
             .collect(),
     )?;
     let mut bytes = Vec::new();
-    write(
+    crate::write_json(
         &SemanticEvidenceTemplate {
             schema: input.schema,
             producer: input.producer,
@@ -212,6 +212,7 @@ pub fn template(input: SemanticEvidenceTemplate<'_>) -> Result<Vec<u8>, Error> {
             observations: observations.into(),
         },
         &mut bytes,
+        SEMANTIC_EVIDENCE_BYTES,
     )?;
     Ok(bytes)
 }
@@ -299,21 +300,4 @@ fn payload_digest(payload: &SemanticEvidence<'_>) -> Result<Digest, Error> {
         serde_json_canonicalizer::to_writer(payload, &mut writer)
     })
     .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
-}
-
-/// Writes a semantic artifact canonically within the shared encoded-byte ceiling.
-/// A sink checks the same ceiling without retaining the output bytes.
-///
-/// # Errors
-///
-/// Fails on serialization or output errors, or when the encoded artifact exceeds the ceiling.
-/// The destination may already contain partial or oversized output when an error is returned.
-pub fn write<T: Serialize>(document: &T, writer: impl std::io::Write) -> Result<(), Error> {
-    let mut writer = countio::Counter::new(writer);
-    serde_json_canonicalizer::to_writer(document, &mut writer)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(writer.writer_bytes()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    Ok(())
 }

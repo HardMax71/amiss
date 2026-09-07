@@ -257,9 +257,7 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
         ),
     )
     .expect("the engine judges the evidence");
-    let document =
-        amiss_wire::external::parse_assessment(&assessment).expect("the assessment is valid");
-    let verdicts: Vec<_> = document
+    let verdicts: Vec<_> = assessment
         .payload
         .verdicts
         .iter()

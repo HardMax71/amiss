@@ -17,14 +17,14 @@ use crate::report::validate_report;
 use crate::requests::RequestMode;
 use crate::resolution::VersionScope;
 
-use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect};
+use super::{PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
-pub struct ExternalPlanEnvelope<P = ExternalPlan> {
+#[serde(deny_unknown_fields)]
+pub struct ExternalPlanEnvelope {
     pub schema: ExternalPlanEnvelopeSchema,
     #[serde(deserialize_with = "crate::requests::object::deserialize")]
-    pub payload: P,
+    pub payload: ExternalPlan,
     pub payload_digest: Digest,
 }
 
@@ -37,16 +37,13 @@ pub enum ExternalPlanEnvelopeSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>")
-)]
-pub struct ExternalPlan<B = BaseSnapshot, C = Snapshot> {
+#[serde(deny_unknown_fields)]
+pub struct ExternalPlan {
     pub schema: ExternalPlanPayloadSchema,
     #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub engine: ExternalEngine,
     #[serde(deserialize_with = "crate::requests::object::deserialize")]
-    pub report: ExternalPlanReport<B, C>,
+    pub report: ExternalPlanReport,
     pub introduced: Vec<ExternalDestination>,
     pub removed: Vec<ExternalDestination>,
     #[serde(with = "As::<TryFromInto<UInt>>")]
@@ -70,16 +67,13 @@ pub struct ExternalEngine {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>")
-)]
-pub struct ExternalPlanReport<B = BaseSnapshot, C = Snapshot> {
+#[serde(deny_unknown_fields)]
+pub struct ExternalPlanReport {
     pub payload_digest: Digest,
     #[serde(deserialize_with = "crate::requests::object::deserialize")]
-    pub base: B,
+    pub base: BaseSnapshot,
     #[serde(deserialize_with = "crate::requests::object::deserialize")]
-    pub candidate: C,
+    pub candidate: Snapshot,
     pub mode: RequestMode,
 }
 
@@ -130,6 +124,8 @@ struct Entry {
 /// derivation verified.
 /// The engine never fetches a destination; the plan only names the work an
 /// evidence producer may do.
+/// The returned envelope owns its snapshots; [`crate::write_json`] enforces the
+/// encoded byte ceiling when the caller writes an artifact.
 ///
 /// # Errors
 ///
@@ -140,7 +136,7 @@ pub fn plan(
     report: &ReportEnvelope,
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Vec<u8>, PlanDefect> {
+) -> Result<ExternalPlanEnvelope, PlanDefect> {
     validate_report(report)?;
     let payload = &report.payload;
     if !payload.result.complete {
@@ -171,8 +167,8 @@ pub fn plan(
         },
         report: ExternalPlanReport {
             payload_digest: report.payload_digest,
-            base: &evaluation.base,
-            candidate: &evaluation.candidate,
+            base: evaluation.base.clone(),
+            candidate: evaluation.candidate.clone(),
             mode: evaluation.mode,
         },
         introduced: rows(&candidate, &base, declared),
@@ -181,17 +177,11 @@ pub fn plan(
     };
     let payload_digest =
         plan_payload_digest(&payload).map_err(|_defect| PlanDefect::MalformedExternal)?;
-    let document = ExternalPlanEnvelope {
+    Ok(ExternalPlanEnvelope {
         schema: ExternalPlanEnvelopeSchema::Current,
         payload,
         payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| PlanDefect::MalformedExternal)?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return Err(PlanDefect::MalformedExternal);
-    }
-    Ok(canonical)
+    })
 }
 
 /// Parses one strict, digest-bound external plan without discarding or reshaping input.
@@ -215,9 +205,7 @@ pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
     Ok(document)
 }
 
-fn plan_payload_digest<B: Serialize, C: Serialize>(
-    plan: &ExternalPlan<B, C>,
-) -> Result<Digest, Error> {
+fn plan_payload_digest(plan: &ExternalPlan) -> Result<Digest, Error> {
     validate_plan(plan)?;
     hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
         serde_json_canonicalizer::to_writer(plan, &mut writer)
@@ -225,7 +213,7 @@ fn plan_payload_digest<B: Serialize, C: Serialize>(
     .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
-fn validate_plan<B, C>(plan: &ExternalPlan<B, C>) -> Result<(), Error> {
+fn validate_plan(plan: &ExternalPlan) -> Result<(), Error> {
     if plan.engine.engine_version.is_empty() {
         return fail("$.payload.engine.engine_version", ErrorKind::InvalidValue);
     }

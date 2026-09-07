@@ -79,7 +79,7 @@ fn external_plans_retain_the_reports_existing_snapshot_types() {
         report.payload.engine.engine_digest,
     )
     .unwrap();
-    let plan = parse_plan(&generated).unwrap();
+    let plan = &generated;
     let Evaluation::Resolved(evaluation) = report.payload.evaluation else {
         panic!("the example carries a resolved evaluation");
     };
@@ -87,7 +87,10 @@ fn external_plans_retain_the_reports_existing_snapshot_types() {
     assert_eq!(plan.payload.report.candidate, evaluation.candidate);
     assert_eq!(plan.payload.report.mode, evaluation.mode);
     assert_eq!(plan.payload.report.payload_digest, report.payload_digest);
-    assert_eq!(serde_json_canonicalizer::to_vec(&plan).unwrap(), generated);
+    assert_eq!(
+        parse_plan(&serde_json_canonicalizer::to_vec(plan).unwrap()).unwrap(),
+        generated
+    );
 }
 
 #[test]

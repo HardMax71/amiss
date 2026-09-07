@@ -13,7 +13,7 @@ use amiss_wire::semantic::{
     PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
     SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind, SemanticSubject,
     TemplateSchema, bind_template, envelope, observation::Observation, parse, parse_template,
-    record, template, write,
+    record, template,
 };
 
 const A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -62,7 +62,7 @@ fn construction_sorts_observations_and_binds_the_payload() {
     let z = observation("z");
     let document = envelope(evidence(vec![z.clone(), a.clone()])).unwrap();
     let mut bytes = Vec::new();
-    write(&document, &mut bytes).unwrap();
+    amiss_wire::write_json(&document, &mut bytes, SEMANTIC_EVIDENCE_BYTES).unwrap();
     let parsed = parse(&bytes).unwrap();
     assert_eq!(parsed, document);
     assert_eq!(parsed.payload.observations, [Cow::Owned(a), Cow::Owned(z)]);
@@ -96,7 +96,7 @@ fn typed_templates_borrow_observations_through_sorting_and_binding() {
             assert!(std::ptr::eq(bound.as_ref(), original.as_ref()));
         }
         let mut bytes = Vec::new();
-        write(document, &mut bytes).unwrap();
+        amiss_wire::write_json(document, &mut bytes, SEMANTIC_EVIDENCE_BYTES).unwrap();
         assert_eq!(parse(&bytes).unwrap(), *document);
     }
     assert_eq!(input.observations[0].as_ref(), &observation("z"));
@@ -211,7 +211,7 @@ fn semantic_readers_enforce_strict_json_before_decoding_observations() {
     let row = observation("a");
     let document = envelope(evidence(vec![row.clone()])).unwrap();
     let mut bytes = Vec::new();
-    write(&document, &mut bytes).unwrap();
+    amiss_wire::write_json(&document, &mut bytes, SEMANTIC_EVIDENCE_BYTES).unwrap();
     let original = String::from_utf8(serde_json_canonicalizer::to_vec(&row).unwrap()).unwrap();
     let nested = format!("{}null{}", "[".repeat(511), "]".repeat(511));
     assert!(amiss_wire::json::parse(nested.as_bytes()).is_ok());
@@ -257,7 +257,7 @@ fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
     let expected = br#"quote\" slash/ backslash\\ newline\n nul\u0000 "#;
     let document = envelope(evidence(vec![row.clone()])).unwrap();
     let mut bytes = Vec::new();
-    write(&document, &mut bytes).unwrap();
+    amiss_wire::write_json(&document, &mut bytes, SEMANTIC_EVIDENCE_BYTES).unwrap();
     for bytes in [
         template(evidence_template(vec![row.clone()])).unwrap(),
         bytes,
@@ -298,7 +298,9 @@ fn serialized_semantic_bytes_enforce_the_complete_document_ceiling() {
     assert!(parse_template(&bytes).is_ok());
     let document = envelope(evidence(vec![Observation::Record(records.clone())])).unwrap();
     assert_eq!(
-        write(&document, std::io::sink()).unwrap_err().kind,
+        amiss_wire::write_json(&document, std::io::sink(), SEMANTIC_EVIDENCE_BYTES)
+            .unwrap_err()
+            .kind,
         ErrorKind::LimitExceeded
     );
     records.records[0].value.push('x');
@@ -314,7 +316,7 @@ fn incomplete_pre_report_evidence_round_trips_without_claiming_absence() {
     input.complete = false;
     let document = envelope(input).unwrap();
     let mut bytes = Vec::new();
-    write(&document, &mut bytes).unwrap();
+    amiss_wire::write_json(&document, &mut bytes, SEMANTIC_EVIDENCE_BYTES).unwrap();
     let parsed = parse(&bytes).unwrap();
     assert_eq!(
         parsed.payload.subject.source_report_payload_digest,

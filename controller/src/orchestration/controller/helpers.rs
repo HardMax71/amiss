@@ -339,7 +339,14 @@ fn prepare_external(
         let engine = &report.payload.engine;
         let plan =
             amiss_wire::external::plan(&report, &engine.engine_version, engine.engine_digest)?;
-        Ok((plan, report.payload.engine))
+        let mut bytes = Vec::new();
+        amiss_wire::write_json(
+            &plan,
+            &mut bytes,
+            amiss_wire::external::EXTERNAL_DOCUMENT_BYTES,
+        )
+        .map_err(|_defect| amiss_wire::external::PlanDefect::MalformedExternal)?;
+        Ok((bytes, report.payload.engine))
     });
     let Ok((plan_bytes, engine)) = planned else {
         return PreparedExternal {
@@ -363,16 +370,23 @@ fn prepare_external(
                 engine.engine_digest,
             ) {
                 Ok(assessment) => {
-                    let Ok(parsed) = amiss_wire::external::parse_assessment(&assessment) else {
+                    let mut assessment_bytes = Vec::new();
+                    if amiss_wire::write_json(
+                        &assessment,
+                        &mut assessment_bytes,
+                        amiss_wire::external::EXTERNAL_DOCUMENT_BYTES,
+                    )
+                    .is_err()
+                    {
                         return PreparedExternal {
                             plan: Some(plan_bytes),
                             evidence: Some(evidence),
                             incomplete: true,
                             ..PreparedExternal::default()
                         };
-                    };
+                    }
                     let mut tally = super::ExternalTally::default();
-                    for row in parsed.payload.verdicts {
+                    for row in assessment.payload.verdicts {
                         match row.verdict {
                             ExternalVerdict::Refuted => {
                                 tally.refuted = tally.refuted.saturating_add(1);
@@ -388,7 +402,7 @@ fn prepare_external(
                     PreparedExternal {
                         plan: Some(plan_bytes),
                         evidence: Some(evidence),
-                        assessment: Some(assessment),
+                        assessment: Some(assessment_bytes),
                         tally: Some(tally),
                         incomplete: false,
                     }

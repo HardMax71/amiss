@@ -7,7 +7,6 @@ use wary::Validate;
 
 use crate::de::{Error, ErrorKind};
 use crate::digest::{Digest, hj_serde, verified_json_digest};
-use crate::json;
 
 use super::evidence::{
     EvidenceDefect, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
@@ -16,7 +15,7 @@ use super::evidence::{
 use super::plan::{
     ExternalDestination, ExternalEngine, ExternalPlanEnvelope, ExternalRepository, parse_plan,
 };
-use super::{ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
+use super::{ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA};
 
 /// Why a plan and evidence could not yield an assessment.
 #[derive(Debug, thiserror::Error)]
@@ -207,6 +206,8 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
 /// Every introduced destination gets a verdict in plan order, missing
 /// evidence stays unproven, and evidence outside the plan invalidates the
 /// complete assessment. The same inputs always produce the same output.
+/// The caller writes the returned envelope through [`crate::write_json`] with
+/// the external artifact byte ceiling.
 ///
 /// # Errors
 ///
@@ -218,7 +219,7 @@ pub fn assess(
     evidence_bytes: &[u8],
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Vec<u8>, AssessDefect> {
+) -> Result<ExternalAssessmentEnvelope, AssessDefect> {
     let plan = parse_plan(plan)?;
     let (evidence, evidence_digest) = parse_evidence(evidence_bytes)?;
     if evidence.plan_payload_digest != plan.payload_digest {
@@ -241,19 +242,11 @@ pub fn assess(
         verdicts,
     };
     let payload_digest = assessment_payload_digest(&payload)?;
-    let document = ExternalAssessmentEnvelope {
+    Ok(ExternalAssessmentEnvelope {
         schema: ExternalAssessmentEnvelopeSchema::Current,
         payload,
         payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return Err(AssessmentDefect::Wire(Error::new("$", ErrorKind::LimitExceeded)).into());
-    }
-    json::parse(&canonical)
-        .map_err(|defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::Json(defect))))?;
-    Ok(canonical)
+    })
 }
 
 fn assessment_payload_digest(assessment: &ExternalAssessment) -> Result<Digest, AssessmentDefect> {

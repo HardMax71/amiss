@@ -131,14 +131,7 @@ fn assessments_use_the_verified_evidence_identity() {
         assert_eq!(parsed, document);
         assert_eq!(digest, expected);
         let assessment = external::assess(PLAN, &bytes, "0.0.0", hb("test", b"engine")).unwrap();
-        assert_eq!(
-            external::parse_assessment(&assessment)
-                .unwrap()
-                .payload
-                .subject
-                .evidence_digest,
-            expected
-        );
+        assert_eq!(assessment.payload.subject.evidence_digest, expected);
     }
     document.producer.version.push_str("-changed");
     assert_ne!(

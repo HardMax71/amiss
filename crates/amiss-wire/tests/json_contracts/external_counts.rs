@@ -47,10 +47,12 @@ fn index_entry_count_is_checked_through_its_shared_consumers() {
             .0,
             report
         );
-        let bytes = plan(&report, &engine.engine_version, engine.engine_digest).unwrap();
-        derived = parse_plan(&bytes).unwrap();
+        derived = plan(&report, &engine.engine_version, engine.engine_digest).unwrap();
         assert_eq!(derived.payload.report.candidate, evaluation.candidate);
-        assert_eq!(serde_json_canonicalizer::to_vec(&derived).unwrap(), bytes);
+        assert_eq!(
+            parse_plan(&serde_json_canonicalizer::to_vec(&derived).unwrap()).unwrap(),
+            derived
+        );
         assert_eq!(
             serde_json::from_slice::<CandidateIdentity>(&serde_json::to_vec(&identity).unwrap())
                 .unwrap(),

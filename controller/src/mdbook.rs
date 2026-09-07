@@ -166,8 +166,12 @@ pub fn mdbook_site_evidence(
     })
     .map_err(|_defect| MdBookEvidenceError::Evidence)?;
     let mut bytes = Vec::new();
-    amiss_wire::semantic::write(&document, &mut bytes)
-        .map_err(|_defect| MdBookEvidenceError::Evidence)?;
+    amiss_wire::write_json(
+        &document,
+        &mut bytes,
+        amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES,
+    )
+    .map_err(|_defect| MdBookEvidenceError::Evidence)?;
     Ok(bytes)
 }
 
