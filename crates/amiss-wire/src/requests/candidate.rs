@@ -1,5 +1,6 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
@@ -86,6 +87,7 @@ pub enum IndexSnapshotKind {
 pub struct IndexSnapshotIdentity {
     pub base_commit_oid: Oid,
     pub base_object_format: ObjectFormat,
+    #[serde(with = "As::<TryFromInto<UInt>>")]
     pub entry_count: u64,
     pub identity_scope: IndexIdentityScope,
     pub index_projection_digest: Digest,

@@ -1,13 +1,13 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::de::{Error, ErrorKind, fail};
 use crate::digest::{Digest, hj_serde, verified_json_digest};
-use crate::json;
 use crate::model::ForgeDialect;
 use crate::report::model::{
     BaseSnapshot, Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence,
@@ -49,6 +49,7 @@ pub struct ExternalPlan<B = BaseSnapshot, C = Snapshot> {
     pub report: ExternalPlanReport<B, C>,
     pub introduced: Vec<ExternalDestination>,
     pub removed: Vec<ExternalDestination>,
+    #[serde(with = "As::<TryFromInto<UInt>>")]
     pub retained_count: u64,
 }
 
@@ -190,7 +191,6 @@ pub fn plan(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
         return Err(PlanDefect::MalformedExternal);
     }
-    json::parse(&canonical).map_err(|_defect| PlanDefect::MalformedExternal)?;
     Ok(canonical)
 }
 
@@ -228,9 +228,6 @@ fn plan_payload_digest<B: Serialize, C: Serialize>(
 fn validate_plan<B, C>(plan: &ExternalPlan<B, C>) -> Result<(), Error> {
     if plan.engine.engine_version.is_empty() {
         return fail("$.payload.engine.engine_version", ErrorKind::InvalidValue);
-    }
-    if plan.retained_count > json::MAX_SAFE_INTEGER.unsigned_abs() {
-        return fail("$.payload.retained_count", ErrorKind::LimitExceeded);
     }
     validate_rows("$.payload.introduced", &plan.introduced)?;
     validate_rows("$.payload.removed", &plan.removed)?;

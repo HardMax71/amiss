@@ -26,6 +26,9 @@ accepted `ReportEnvelope` directly, without a JSON round trip or string-key look
 It shares the reader's payload-digest and result checks, so changing a public field after
 decoding still requires a matching digest and a consistent result. Input byte and grammar
 limits remain at the reader; plan output limits and canonical bytes are unchanged.
+The shared index snapshot's entry count and the plan's retained count enforce safe JSON
+integer bounds in Serde on both reading and writing, including direct use of these models.
+The plan writer no longer reparses its generated JSON; untrusted input still uses the reader.
 
 Each row carries the destination exactly as the report recorded it, after the format's
 own decoding, the address an evidence producer would request; its lowercased scheme; and the sorted

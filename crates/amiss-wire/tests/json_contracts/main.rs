@@ -12,6 +12,7 @@ mod canonical;
 mod control_inputs;
 mod control_tags;
 mod external_assessment;
+mod external_counts;
 mod external_evidence;
 mod external_plan_ingress;
 mod external_reader;
