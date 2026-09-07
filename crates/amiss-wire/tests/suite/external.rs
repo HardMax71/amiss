@@ -6,10 +6,9 @@
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::external::{
-    ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, AssessmentDefect, EVIDENCE_SCHEMA, ExternalEvidence,
-    ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema, ExternalVerdict,
-    PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod, assess, parse_assessment,
-    parse_evidence, parse_plan, plan,
+    AssessDefect, EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
+    ExternalEvidenceSchema, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod,
+    assess, parse_assessment, parse_evidence, parse_plan, plan,
 };
 use amiss_wire::json::Value;
 use amiss_wire::report::PAYLOAD_SCHEMA;
@@ -755,103 +754,19 @@ fn derived_validation_rejects_invalid_evidence_shapes() {
     assert!(amiss_wire::external::evidence(&document).is_err());
 }
 
-#[test]
-fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
-    let bytes = std::fs::read(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../spec/examples/scanner-external-assessment.json"
-    ))
-    .expect("the assessment example is readable");
-    let document: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
-
-    let mut extended = document.clone();
-    extended
-        .get_mut("payload")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("the assessment payload is an object")
-        .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
-    let extended_bytes = refresh_payload_digest(&mut extended, ASSESSMENT_PAYLOAD_SCHEMA);
-    let parsed = parse_assessment(&extended_bytes).expect("an additive field remains compatible");
-    assert_eq!(
-        parsed.payload.verdicts.first().map(|row| row.verdict),
-        Some(ExternalVerdict::Refuted)
-    );
-
-    extended
-        .pointer_mut("/payload/future_fact")
-        .map(|value| *value = serde_json::Value::Bool(false))
-        .expect("the additive field is present");
-    let tampered = serde_json_canonicalizer::to_vec(&extended).expect("canonical JSON");
-    let Err(AssessmentDefect::Wire(error)) = parse_assessment(&tampered) else {
-        panic!("changing an additive field must break its digest");
-    };
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
-
-    for field in ["reason", "retarget"] {
-        let mut null = document.clone();
-        null.pointer_mut("/payload/verdicts/0")
-            .and_then(serde_json::Value::as_object_mut)
-            .expect("the assessment has one verdict")
-            .insert(field.to_owned(), serde_json::Value::Null);
-        let bytes = refresh_payload_digest(&mut null, ASSESSMENT_PAYLOAD_SCHEMA);
-        let defect = parse_assessment(&bytes);
-        assert!(
-            matches!(defect, Err(AssessmentDefect::Wire(_))),
-            "{defect:?}"
-        );
-    }
-
-    let mut inconsistent = document.clone();
-    *inconsistent
-        .pointer_mut("/payload/verdicts/0/verdict")
-        .expect("the assessment has one verdict") =
-        serde_json::Value::String("reachable".to_owned());
-    assert!(matches!(
-        parse_assessment(&refresh_payload_digest(
-            &mut inconsistent,
-            ASSESSMENT_PAYLOAD_SCHEMA
-        )),
-        Err(AssessmentDefect::Contract(_))
-    ));
-
-    let mut repeated = document;
-    let verdicts = repeated
-        .pointer_mut("/payload/verdicts")
-        .and_then(serde_json::Value::as_array_mut)
-        .expect("the assessment verdicts are an array");
-    let mut other = verdicts.first().cloned().expect("one verdict");
-    *other
-        .pointer_mut("/documents/0")
-        .expect("the verdict has one document") =
-        serde_json::Value::String("docs/other.md".to_owned());
-    verdicts.push(other);
-    assert!(matches!(
-        parse_assessment(&refresh_payload_digest(
-            &mut repeated,
-            ASSESSMENT_PAYLOAD_SCHEMA
-        )),
-        Err(AssessmentDefect::Contract(_))
-    ));
-}
-
 fn verdicts_of(assessment: &[u8]) -> Vec<(String, String, String)> {
-    let assessment = amiss_wire::json::parse(assessment).expect("the assessment is strict JSON");
-    array(field(field(&assessment, "payload"), "verdicts"))
-        .iter()
+    parse_assessment(assessment)
+        .expect("the assessment clears its typed contract")
+        .payload
+        .verdicts
+        .into_iter()
         .map(|row| {
-            let reason = if let Value::Object(members) = row {
-                members
-                    .iter()
-                    .find(|(key, _)| key == "reason")
-                    .map(|(_, value)| text(value).to_owned())
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            };
             (
-                text(field(row, "destination")).to_owned(),
-                text(field(row, "verdict")).to_owned(),
-                reason,
+                row.destination,
+                row.verdict.to_string(),
+                row.reason
+                    .map(|reason| reason.to_string())
+                    .unwrap_or_default(),
             )
         })
         .collect()

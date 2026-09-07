@@ -54,18 +54,6 @@ pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> 
         .map_err(|defect| deserialize_error("$", &defect))
 }
 
-/// Deserializes one already strict JSON value while retaining the caller's document path.
-///
-/// # Errors
-///
-/// Fails with the structural error and its exact nested path.
-pub fn deserialize_value<T: serde::de::DeserializeOwned>(
-    path: &str,
-    value: serde_json::Value,
-) -> Result<T, Error> {
-    serde_path_to_error::deserialize(value).map_err(|defect| deserialize_error(path, &defect))
-}
-
 pub(crate) fn deserialize_error<E: std::fmt::Display>(
     base: &str,
     defect: &serde_path_to_error::Error<E>,

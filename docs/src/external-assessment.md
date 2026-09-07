@@ -36,6 +36,11 @@ The reader verifies that decoding preserves the complete input's canonical ident
 returns that digest to the judge. Whitespace and equivalent JSON escapes preserve the
 identity; a change to any accepted evidence field changes it.
 
+Assessment reading uses the complete typed envelope too: extra fields and positional arrays
+are rejected throughout its payload. The reader and writer share the same derived validation
+and payload hashing path. Invalid verdict relationships are reported before a digest mismatch;
+valid examples and their recorded identities stay unchanged.
+
 The judgment policy is fixed in the engine and deliberately conservative, because the
 web's refusals outnumber its deaths. A 404 or 410 refutes only when a GET confirmed it,
 since servers drop HEAD requests they would answer. A 401, 403, 429, or LinkedIn's 999

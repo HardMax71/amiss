@@ -5,8 +5,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 use wary::Validate;
 
-use crate::de::{self, Error, ErrorKind};
-use crate::digest::{Digest, hb, hj_serde};
+use crate::de::{Error, ErrorKind};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 
 use super::evidence::{
@@ -16,7 +16,7 @@ use super::evidence::{
 use super::plan::{
     ExternalDestination, ExternalEngine, ExternalPlanEnvelope, ExternalRepository, parse_plan,
 };
-use super::{ASSESSMENT_PAYLOAD_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
+use super::{ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
 
 /// Why a plan and evidence could not yield an assessment.
 #[derive(Debug, thiserror::Error)]
@@ -34,9 +34,11 @@ pub enum AssessDefect {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalAssessmentEnvelope<P = ExternalAssessment> {
+#[serde(deny_unknown_fields)]
+pub struct ExternalAssessmentEnvelope {
     pub schema: ExternalAssessmentEnvelopeSchema,
-    pub payload: P,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
+    pub payload: ExternalAssessment,
     pub payload_digest: Digest,
 }
 
@@ -49,6 +51,7 @@ pub enum ExternalAssessmentEnvelopeSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, wary::Wary)]
+#[serde(deny_unknown_fields)]
 #[validate(func = |_, assessment: &ExternalAssessment| {
     (assessment
         .verdicts
@@ -63,9 +66,12 @@ pub enum ExternalAssessmentEnvelopeSchema {
 pub struct ExternalAssessment {
     pub schema: ExternalAssessmentPayloadSchema,
     #[validate(dive)]
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub engine: ExternalEngine,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub subject: ExternalAssessmentSubject,
     #[validate(dive)]
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub producer: ExternalEvidenceProducer,
     #[validate(inner(dive))]
     pub verdicts: Vec<ExternalVerdictRow>,
@@ -80,6 +86,7 @@ pub enum ExternalAssessmentPayloadSchema {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExternalAssessmentSubject {
     pub report_payload_digest: Digest,
     pub plan_payload_digest: Digest,
@@ -87,6 +94,7 @@ pub struct ExternalAssessmentSubject {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, wary::Wary)]
+#[serde(deny_unknown_fields)]
 #[validate(func = |_, row: &ExternalVerdictRow| {
     let documents_are_unique =
         row.documents.iter().collect::<BTreeSet<_>>().len() == row.documents.len();
@@ -173,29 +181,18 @@ pub enum AssessmentDefect {
     Contract(wary::Report),
 }
 
-/// Parses one strict, digest-bound external assessment. Additive fields are inert.
+/// Parses one closed, typed external assessment bound to its canonical input.
 ///
 /// # Errors
 ///
-/// Fails on an oversized or malformed strict document, a malformed known
-/// field, a schema law reported by the derived validator, or a digest mismatch.
+/// Fails on oversized or malformed strict JSON, unknown or reshaped data,
+/// malformed fields, a derived validation error, or a digest mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, AssessmentDefect> {
-    let envelope: ExternalAssessmentEnvelope<serde_json::Value> =
+    let document: ExternalAssessmentEnvelope =
         super::read(bytes).map_err(AssessmentDefect::Wire)?;
-    let payload_digest = hj_serde(ASSESSMENT_PAYLOAD_SCHEMA, |mut writer| {
-        serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
-    })
-    .map_err(|_defect| AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::InvalidValue)))?;
-    let document: ExternalAssessmentEnvelope = ExternalAssessmentEnvelope {
-        schema: envelope.schema,
-        payload: de::deserialize_value("$.payload", envelope.payload)
-            .map_err(AssessmentDefect::Wire)?,
-        payload_digest: envelope.payload_digest,
-    };
-    document
-        .payload
-        .validate(&())
-        .map_err(AssessmentDefect::Contract)?;
+    verified_json_digest(ASSESSMENT_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
+    let payload_digest = assessment_payload_digest(&document.payload)?;
     if payload_digest != document.payload_digest {
         return Err(AssessmentDefect::Wire(Error::new(
             "$.payload_digest",
@@ -263,9 +260,10 @@ fn assessment_payload_digest(assessment: &ExternalAssessment) -> Result<Digest, 
     assessment
         .validate(&())
         .map_err(AssessmentDefect::Contract)?;
-    serde_json_canonicalizer::to_vec(assessment)
-        .map(|canonical| hb(ASSESSMENT_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::InvalidValue)))
+    hj_serde(ASSESSMENT_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(assessment, &mut writer)
+    })
+    .map_err(|_defect| AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::InvalidValue)))
 }
 
 fn bound_rows<'e>(
