@@ -136,6 +136,27 @@ pub fn hj_serde(
     Ok(Digest(writer.0.finalize().into()))
 }
 
+pub(crate) fn preserves_json(
+    domain: &str,
+    bytes: &[u8],
+    document: &impl serde::Serialize,
+) -> serde_json::Result<bool> {
+    let typed_digest = hj_serde(domain, |mut writer| {
+        serde_json_canonicalizer::to_writer(document, &mut writer)
+    })?;
+    let mut input = serde_json::Deserializer::from_slice(bytes);
+    // Callers enforce the strict document depth ceiling before this comparison.
+    input.disable_recursion_limit();
+    let input_digest = hj_serde(domain, |mut writer| {
+        serde_json_canonicalizer::to_writer(
+            &serde_transcode::Transcoder::new(&mut input),
+            &mut writer,
+        )
+    })?;
+    input.end()?;
+    Ok(input_digest == typed_digest)
+}
+
 fn hash(domain: &str, update: impl FnOnce(&mut Sha256)) -> Digest {
     let mut hasher = Sha256::new();
     hasher.update(domain.as_bytes());

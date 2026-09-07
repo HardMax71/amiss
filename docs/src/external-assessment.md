@@ -27,6 +27,9 @@ and
 and the assessment example is derived from the plan and evidence examples by the same
 code path, checked in CI.
 
+Plans and assessments share the engine descriptor: its version and digest are the only
+accepted fields. An unknown field in that object is rejected even with a matching payload digest.
+
 The judgment policy is fixed in the engine and deliberately conservative, because the
 web's refusals outnumber its deaths. A 404 or 410 refutes only when a GET confirmed it,
 since servers drop HEAD requests they would answer. A 401, 403, 429, or LinkedIn's 999

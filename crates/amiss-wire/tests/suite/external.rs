@@ -434,20 +434,6 @@ fn the_plan_model_reads_the_checked_writer() {
 }
 
 #[test]
-fn additive_plan_fields_are_digest_bound_but_inert() {
-    let written = planned(Vec::new());
-    let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
-    document
-        .get_mut("payload")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("the plan payload is an object")
-        .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
-    let parsed = parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA))
-        .expect("an additive field remains compatible");
-    assert!(parsed.payload.introduced.is_empty());
-}
-
-#[test]
 fn known_optional_plan_fields_do_not_accept_null() {
     let written = planned(introduced("https://github.com/acme/widgets/blob/main/a.md"));
     let mut document = serde_json::to_value(&written).expect("the written plan is JSON");

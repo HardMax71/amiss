@@ -1,10 +1,9 @@
 use amiss_wire::{
-    de::ErrorKind,
+    de::{Error, ErrorKind},
     digest::hb,
-    external::{self, AssessmentDefect},
+    external::{self, AssessmentDefect, ExternalAssessmentEnvelope, ExternalPlanEnvelope},
     json,
 };
-use serde_json::{Value, json};
 
 const PLAN: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-plan.json");
 const ASSESSMENT: &[u8] =
@@ -16,45 +15,9 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
         |bytes| external::parse_plan(bytes).is_ok(),
         |bytes| external::parse_assessment(bytes).is_ok(),
     ];
-    for ((bytes, domain), read) in [
-        (PLAN, external::PLAN_PAYLOAD_SCHEMA),
-        (ASSESSMENT, external::ASSESSMENT_PAYLOAD_SCHEMA),
-    ]
-    .into_iter()
-    .zip(readers)
-    {
-        let original: Value = serde_json::from_slice(bytes).unwrap();
+    for (bytes, read) in [PLAN, ASSESSMENT].into_iter().zip(readers) {
         assert!(read(bytes));
-        for path in ["/payload", "/payload/engine"] {
-            let mut extended = original.clone();
-            extended.pointer_mut(path).unwrap()["future"] = json!({"😀": 1, "\u{e000}": 2});
-            let payload = serde_json::to_vec(&extended["payload"]).unwrap();
-            extended["payload_digest"] = json!(hb(
-                domain,
-                &serde_json_canonicalizer::to_vec(&json::parse(&payload).unwrap()).unwrap()
-            ));
-            assert!(read(&serde_json::to_vec(&extended).unwrap()));
-            extended.pointer_mut(path).unwrap()["future"] = json!({"😀": 2, "\u{e000}": 1});
-            assert!(!read(&serde_json::to_vec(&extended).unwrap()));
-        }
-
-        let mut extended = original.clone();
-        let mut nested = Value::Null;
-        for _ in 0..510 {
-            nested = json!([nested]);
-        }
-        extended["payload"]["future"] = nested;
-        extended["payload_digest"] = json!(hb(
-            domain,
-            &serde_json_canonicalizer::to_vec(&extended["payload"]).unwrap()
-        ));
-        let bytes = serde_json::to_vec(&extended).unwrap();
-        assert!(read(&bytes));
-        let nested = extended["payload"]["future"].take();
-        extended["payload"]["future"] = json!([nested]);
-        assert!(!read(&serde_json::to_vec(&extended).unwrap()));
-
-        let text = String::from_utf8(serde_json::to_vec(&original).unwrap()).unwrap();
+        let text = std::str::from_utf8(bytes).unwrap();
         for member in [
             r#""future":-0,"#,
             r#""future":0.5,"#,
@@ -69,35 +32,58 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
         for suffix in ["null", "{}", "garbage"] {
             assert!(!read(format!("{text}{suffix}").as_bytes()));
         }
-        let positional = json!([
-            original["schema"],
-            original["payload"],
-            original["payload_digest"]
-        ]);
-        assert!(!read(&serde_json::to_vec(&positional).unwrap()));
+        assert!(!read(format!("[{text}]").as_bytes()));
         let oversized = vec![b' '; usize::try_from(external::EXTERNAL_DOCUMENT_BYTES + 1).unwrap()];
         assert!(!read(&oversized));
     }
+
+    let mut assessment: ExternalAssessmentEnvelope = serde_json::from_slice(ASSESSMENT).unwrap();
+    assessment
+        .payload
+        .engine
+        .engine_version
+        .push_str("-changed");
+    assert!(matches!(
+        external::parse_assessment(&serde_json::to_vec(&assessment).unwrap()),
+        Err(AssessmentDefect::Wire(Error {
+            kind: ErrorKind::DigestMismatch,
+            ..
+        }))
+    ));
+    assessment.payload_digest = hb(
+        external::ASSESSMENT_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&assessment.payload).unwrap(),
+    );
+    assert_eq!(
+        external::parse_assessment(&serde_json::to_vec(&assessment).unwrap()).unwrap(),
+        assessment
+    );
 }
 
 #[test]
 fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
-    let mut plan: Value = serde_json::from_slice(PLAN).unwrap();
-    plan["payload"]["engine"]["engine_version"] = json!(1);
-    let defect = external::parse_plan(&serde_json::to_vec(&plan).unwrap()).unwrap_err();
+    let mut plan: ExternalPlanEnvelope = serde_json::from_slice(PLAN).unwrap();
+    let version = serde_json::to_string(&plan.payload.engine.engine_version).unwrap();
+    let wire = serde_json::to_string(&plan).unwrap();
+    let malformed = wire.replace(
+        &format!("\"engine_version\":{version}"),
+        "\"engine_version\":1",
+    );
+    assert_ne!(malformed, wire);
+    let defect = external::parse_plan(malformed.as_bytes()).unwrap_err();
     assert_eq!(defect.path, "$.payload.engine.engine_version");
     assert_eq!(defect.kind, ErrorKind::WrongType);
-    plan["payload"]["engine"]["engine_version"] = json!("");
+    plan.payload.engine.engine_version.clear();
     assert_eq!(
         external::parse_plan(&serde_json::to_vec(&plan).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::DigestMismatch
     );
-    plan["payload_digest"] = json!(hb(
+    plan.payload_digest = hb(
         external::PLAN_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&plan["payload"]).unwrap()
-    ));
+        &serde_json_canonicalizer::to_vec(&plan.payload).unwrap(),
+    );
     assert_eq!(
         external::parse_plan(&serde_json::to_vec(&plan).unwrap())
             .unwrap_err()
@@ -105,18 +91,81 @@ fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
         ErrorKind::InvalidValue
     );
 
-    let mut assessment: Value = serde_json::from_slice(ASSESSMENT).unwrap();
-    assessment["payload"]["producer"]["version"] = json!(null);
-    let Err(AssessmentDefect::Wire(defect)) =
-        external::parse_assessment(&serde_json::to_vec(&assessment).unwrap())
+    let mut assessment: ExternalAssessmentEnvelope = serde_json::from_slice(ASSESSMENT).unwrap();
+    let version = serde_json::to_string(&assessment.payload.producer.version).unwrap();
+    let wire = serde_json::to_string(&assessment).unwrap();
+    let malformed = wire.replace(&format!("\"version\":{version}"), "\"version\":null");
+    assert_ne!(malformed, wire);
+    let Err(AssessmentDefect::Wire(defect)) = external::parse_assessment(malformed.as_bytes())
     else {
         panic!("the producer version must be a string");
     };
     assert_eq!(defect.path, "$.payload.producer.version");
     assert_eq!(defect.kind, ErrorKind::WrongType);
-    assessment["payload"]["producer"]["version"] = json!("");
+    assessment.payload.producer.version.clear();
     assert!(matches!(
         external::parse_assessment(&serde_json::to_vec(&assessment).unwrap()),
         Err(AssessmentDefect::Contract(_))
     ));
+}
+
+#[test]
+fn assessments_share_the_closed_engine_descriptor() {
+    let document: ExternalAssessmentEnvelope = serde_json::from_slice(ASSESSMENT).unwrap();
+    let payload =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap()).unwrap();
+    let extended = payload.replace("\"engine\":{", "\"engine\":{\"future\":true,");
+    assert_ne!(extended, payload);
+    let canonical = serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(
+        &mut serde_json::Deserializer::from_str(&extended),
+    ))
+    .unwrap();
+    let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap();
+    let changed = wire.replace(&payload, &extended).replace(
+        &document.payload_digest.to_string(),
+        &hb(external::ASSESSMENT_PAYLOAD_SCHEMA, &canonical).to_string(),
+    );
+    let Err(AssessmentDefect::Wire(error)) = external::parse_assessment(changed.as_bytes()) else {
+        panic!("the shared engine descriptor must reject unknown fields");
+    };
+    assert_eq!(error.path, "$.payload.engine.future");
+    assert_eq!(error.kind, ErrorKind::UnknownField);
+}
+
+#[test]
+fn closed_external_plans_still_enforce_strict_lexical_and_depth_limits() {
+    let document: ExternalPlanEnvelope = serde_json::from_slice(PLAN).unwrap();
+    let wire = serde_json::to_string(&document).unwrap();
+    for member in [
+        "\"retained_count\":-0",
+        "\"retained_count\":0.0",
+        "\"retained_count\":0e0",
+        "\"retained_count\":9007199254740992",
+        "\"retained_count\":0,\"retained_count\":0",
+        "\"retained_count\":0,\"retained_\\u0063ount\":0",
+    ] {
+        let changed = wire.replace("\"retained_count\":0", member);
+        assert_ne!(changed, wire);
+        assert!(matches!(
+            external::parse_plan(changed.as_bytes()),
+            Err(Error {
+                kind: ErrorKind::Json(_),
+                ..
+            })
+        ));
+    }
+    let nested = format!("{}null{}", "[".repeat(510), "]".repeat(510));
+    let changed = wire.replace(
+        "\"payload\":{",
+        &format!("\"payload\":{{\"future\":{nested},"),
+    );
+    assert_eq!(
+        external::parse_plan(changed.as_bytes()).unwrap_err().kind,
+        ErrorKind::UnknownField
+    );
+    let too_deep = changed.replace(&nested, &format!("[{nested}]"));
+    let ErrorKind::Json(error) = external::parse_plan(too_deep.as_bytes()).unwrap_err().kind else {
+        panic!("the strict depth limit must be enforced before typed decoding");
+    };
+    assert_eq!(error.kind, json::ErrorKind::DepthLimit);
 }

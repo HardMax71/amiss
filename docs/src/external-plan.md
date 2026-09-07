@@ -46,6 +46,12 @@ Unknown snapshot kinds, extra identity fields and malformed object IDs are rejec
 decoding, including when the plan's payload digest matches. These identities are structured
 data, not extensible maps; the schema includes their definitions locally.
 
+The reader decodes the complete plan directly into those types. Unknown fields are rejected
+throughout the plan, and object fields cannot use positional arrays. Before checking the
+payload digest, it compares the input's canonical identity with the typed document's identity
+so decoding cannot silently discard or reshape data. Whitespace, member order and equivalent
+JSON escapes do not change that identity.
+
 The plan states work; it performs none. Fetching stays outside the engine for the same
 reasons [What Amiss is not](non-goals.md) gives for live URLs: a probe's answer varies
 with the network's mood, and a guessed pass looks exactly like a real one. What a

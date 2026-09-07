@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb, hj_serde};
+use crate::de::{Error, ErrorKind, fail};
+use crate::digest::{Digest, hj_serde, preserves_json};
 use crate::json;
 use crate::model::ForgeDialect;
 use crate::report::model::{
@@ -17,11 +17,13 @@ use crate::report::validate_envelope;
 use crate::requests::RequestMode;
 use crate::resolution::VersionScope;
 
-use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
+use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
 pub struct ExternalPlanEnvelope<P = ExternalPlan> {
     pub schema: ExternalPlanEnvelopeSchema,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: P,
     pub payload_digest: Digest,
 }
@@ -35,9 +37,13 @@ pub enum ExternalPlanEnvelopeSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>"))]
+#[serde(
+    deny_unknown_fields,
+    bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>")
+)]
 pub struct ExternalPlan<B = BaseSnapshot, C = Snapshot> {
     pub schema: ExternalPlanPayloadSchema,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub engine: ExternalEngine,
     #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub report: ExternalPlanReport<B, C>,
@@ -55,6 +61,7 @@ pub enum ExternalPlanPayloadSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, wary::Wary)]
+#[serde(deny_unknown_fields)]
 pub struct ExternalEngine {
     #[validate(length(chars, 1..))]
     pub engine_version: String,
@@ -76,6 +83,7 @@ pub struct ExternalPlanReport<B = BaseSnapshot, C = Snapshot> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExternalDestination {
     pub destination: String,
     pub scheme: String,
@@ -89,6 +97,7 @@ pub struct ExternalDestination {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ExternalRepository {
     pub host: String,
     pub dialect: ForgeDialect,
@@ -184,23 +193,23 @@ pub fn plan(
     Ok(canonical)
 }
 
-/// Parses one strict, digest-bound external plan while ignoring additive fields.
+/// Parses one strict, digest-bound external plan without discarding or reshaping input.
 ///
 /// # Errors
 ///
-/// Fails on oversized or malformed strict JSON, a malformed known field, a
+/// Fails on oversized or malformed strict JSON, an unknown or malformed field, a
 /// violated plan law, or a payload digest mismatch.
 pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
-    let envelope: ExternalPlanEnvelope<serde_json::Value> = super::read(bytes)?;
+    let document: ExternalPlanEnvelope = super::read(bytes)?;
+    if !preserves_json(PLAN_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?
+    {
+        return fail("$", ErrorKind::InvalidValue);
+    }
     let payload_digest = hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
-        serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
+        serde_json_canonicalizer::to_writer(&document.payload, &mut writer)
     })
     .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
-    let document = ExternalPlanEnvelope {
-        schema: envelope.schema,
-        payload: de::deserialize_value("$.payload", envelope.payload)?,
-        payload_digest: envelope.payload_digest,
-    };
     if payload_digest != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -212,9 +221,10 @@ fn plan_payload_digest<B: Serialize, C: Serialize>(
     plan: &ExternalPlan<B, C>,
 ) -> Result<Digest, Error> {
     validate_plan(plan)?;
-    serde_json_canonicalizer::to_vec(plan)
-        .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(plan, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_plan<B, C>(plan: &ExternalPlan<B, C>) -> Result<(), Error> {

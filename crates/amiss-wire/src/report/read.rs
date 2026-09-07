@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use crate::ExitClass;
-use crate::digest::{Digest, hj_serde};
+use crate::digest::{Digest, hj_serde, preserves_json};
 use crate::json;
 
 use super::model::{ReportEnvelope, ReportPayload, ReportResult, ReportStatus};
@@ -24,20 +24,9 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitCla
     deserializer.disable_recursion_limit();
     let envelope: ReportEnvelope = ReportEnvelope::deserialize(&mut deserializer)
         .map_err(|_defect| ReportDefect::NotAReport)?;
-    let typed_digest = hj_serde(ENVELOPE_SCHEMA, |mut writer| {
-        serde_json_canonicalizer::to_writer(&envelope, &mut writer)
-    })
-    .map_err(|_defect| ReportDefect::NotAReport)?;
-    let mut input = serde_json::Deserializer::from_slice(bytes);
-    input.disable_recursion_limit();
-    let input_digest = hj_serde(ENVELOPE_SCHEMA, |mut writer| {
-        serde_json_canonicalizer::to_writer(
-            &serde_transcode::Transcoder::new(&mut input),
-            &mut writer,
-        )
-    })
-    .map_err(|_defect| ReportDefect::NotAReport)?;
-    if input_digest != typed_digest {
+    if !preserves_json(ENVELOPE_SCHEMA, bytes, &envelope)
+        .map_err(|_defect| ReportDefect::NotAReport)?
+    {
         return Err(ReportDefect::NotAReport);
     }
     let digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
