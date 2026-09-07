@@ -5,10 +5,9 @@ use serde_json::{Value, json};
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
 #[test]
-fn additive_fields_are_checked_before_typed_decoding() {
-    let original = validate_envelope(REPORT).unwrap();
+fn extension_fields_are_rejected_after_digest_verification() {
     for (path, expected) in [
-        ("/payload", Ok(())),
+        ("/payload", Err(ReportDefect::NotAReport)),
         ("/payload/engine", Err(ReportDefect::NotAReport)),
         ("/payload/summary", Err(ReportDefect::NotAReport)),
     ] {
@@ -21,11 +20,7 @@ fn additive_fields_are_checked_before_typed_decoding() {
             "{path}"
         );
         let canonical = bind(&mut report).unwrap();
-        let checked = validate_envelope(&canonical).map(|(payload, digest, verdict)| {
-            assert_eq!(payload, original.0, "{path}");
-            assert_ne!(digest, original.1, "{path}");
-            assert_eq!(verdict, original.2, "{path}");
-        });
+        let checked = validate_envelope(&canonical).map(drop);
         assert_eq!(checked, expected, "{path}");
         assert_eq!(
             validate_envelope(&serde_json::to_vec_pretty(&report).unwrap()).map(drop),
@@ -162,14 +157,17 @@ fn unowned_fields_keep_the_strict_number_duplicate_and_stream_rules() {
 }
 
 #[test]
-fn opaque_payload_fields_keep_the_existing_depth_ceiling() {
+fn unknown_payload_fields_are_rejected_below_and_above_the_depth_ceiling() {
     let mut report: Value = serde_json::from_slice(REPORT).unwrap();
     let mut nested = Value::Null;
     for _ in 0..256 {
         nested = json!([nested]);
     }
     report["payload"]["future_field"] = nested.clone();
-    validate_envelope(&bind(&mut report).unwrap()).unwrap();
+    assert_eq!(
+        validate_envelope(&bind(&mut report).unwrap()).map(drop),
+        Err(ReportDefect::NotAReport)
+    );
     for _ in 256..513 {
         nested = json!([nested]);
     }

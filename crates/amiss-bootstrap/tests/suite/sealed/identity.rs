@@ -6,11 +6,7 @@ use super::{Deviation, entry, golden, refused, set, string};
 
 #[test]
 fn identity_extensions_are_refused_even_with_matching_bindings() {
-    for (path, defect) in [
-        (None, AcceptanceDefect::SealedIdentity),
-        (Some("base"), AcceptanceDefect::BaseIdentity),
-        (Some("candidate"), AcceptanceDefect::CandidateIdentity),
-    ] {
+    for path in [None, Some("base"), Some("candidate")] {
         for changed in [false, true] {
             let deviation = Deviation {
                 pre: Some(Box::new(move |payload| {
@@ -40,7 +36,7 @@ fn identity_extensions_are_refused_even_with_matching_bindings() {
             let (wire, expectations) = golden(deviation);
             assert_eq!(
                 accept(&wire, &expectations),
-                Err(defect),
+                Err(AcceptanceDefect::Shape),
                 "{path:?}, {changed}"
             );
         }
@@ -58,7 +54,7 @@ fn a_reserved_schema_cannot_join_the_identity_preimage() {
             refused(Deviation::pre(move |payload| {
                 set(entry(payload, "evaluation"), "schema", schema);
             })),
-            AcceptanceDefect::SealedIdentity
+            AcceptanceDefect::Shape
         );
     }
 }
@@ -67,7 +63,7 @@ fn a_reserved_schema_cannot_join_the_identity_preimage() {
 fn clock_shape_and_binding_defects_remain_distinct() {
     for (value, defect) in [
         (Value::Null, AcceptanceDefect::SealedControls),
-        (Value::Bool(true), AcceptanceDefect::SealedIdentity),
+        (Value::Bool(true), AcceptanceDefect::Shape),
         (string("not-an-instant"), AcceptanceDefect::SealedControls),
     ] {
         assert_eq!(
@@ -88,16 +84,13 @@ fn clock_shape_and_binding_defects_remain_distinct() {
                 .filter(|(name, _)| name != "evaluation_instant")
                 .collect();
         })),
-        AcceptanceDefect::SealedIdentity
+        AcceptanceDefect::Shape
     );
 }
 
 #[test]
 fn identity_extensions_cannot_bypass_the_closed_shape_or_outer_depth_limit() {
-    for (depth, defect) in [
-        (256, AcceptanceDefect::CandidateIdentity),
-        (513, AcceptanceDefect::Shape),
-    ] {
+    for depth in [256, 513] {
         let (wire, expectations) = golden(Deviation::pre(move |payload| {
             let nested = (0..depth).fold(Value::Null, |value, _| Value::array(vec![value]));
             set(
@@ -106,6 +99,10 @@ fn identity_extensions_cannot_bypass_the_closed_shape_or_outer_depth_limit() {
                 nested,
             );
         }));
-        assert_eq!(accept(&wire, &expectations), Err(defect), "{depth}");
+        assert_eq!(
+            accept(&wire, &expectations),
+            Err(AcceptanceDefect::Shape),
+            "{depth}"
+        );
     }
 }
