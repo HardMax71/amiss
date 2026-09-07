@@ -117,7 +117,13 @@ fn reports() -> Vec<ReportEnvelope> {
 fn report_metadata_rejects_unknown_members_after_digest_verification() {
     let mut cases = reports();
     cases.extend(super::report_rows::reports().unwrap());
-    assert_eq!(cases.len(), 5);
+    cases.push(
+        serde_json::from_slice(include_bytes!(
+            "../../../../spec/examples/scanner-report.frozen-1.json"
+        ))
+        .unwrap(),
+    );
+    assert_eq!(cases.len(), 6);
     for mut report in cases {
         let payload =
             String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
@@ -160,7 +166,24 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
                 serde_json_canonicalizer::to_vec(&report.payload.observations).unwrap(),
                 ReportDefect::NotAReport,
             ),
-        ] {
+        ]
+        .into_iter()
+        .chain(report.payload.findings.iter().flat_map(|finding| {
+            std::iter::once(&finding.key_input)
+                .chain(
+                    finding
+                        .base_fact
+                        .iter()
+                        .chain(&finding.candidate_fact)
+                        .map(|fact| &fact.key_input),
+                )
+                .map(|key| {
+                    (
+                        serde_json_canonicalizer::to_vec(key).unwrap(),
+                        ReportDefect::NotAReport,
+                    )
+                })
+        })) {
             let fragment = String::from_utf8(fragment).unwrap();
             for (offset, _) in fragment.match_indices('{') {
                 let mut invalid = fragment.clone();

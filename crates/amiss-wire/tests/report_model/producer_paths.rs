@@ -91,7 +91,6 @@ fn producer_payload<R>(
         schema: FindingKeyInputSchema::Current,
         scope: report::FindingKeyScope::Reference {
             document: path,
-            kind: report::ReferenceFindingKeyScopeKind::Reference,
             normalized_target_intent: report::RepositoryTargetIntent {
                 commit_oid: None,
                 fragment_digest: None,

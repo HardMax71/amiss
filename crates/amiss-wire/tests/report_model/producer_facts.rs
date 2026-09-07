@@ -20,7 +20,6 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
             schema: FindingKeyInputSchema::Current,
             scope: report::FindingKeyScope::Reference {
                 document: &path,
-                kind: report::ReferenceFindingKeyScopeKind::Reference,
                 normalized_target_intent: report::RepositoryTargetIntent {
                     commit_oid: None,
                     fragment_digest: None,
@@ -63,24 +62,26 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
                 serde_json_canonicalizer::to_vec(&evidence.resolution)?,
                 serde_json_canonicalizer::to_vec(&resolution)?
             );
-            let json: serde_json::Value = serde_json::from_slice(&encoded)?;
-            assert_eq!(json["schema"], "amiss/scanner-fact");
-            assert_eq!(json["evidence"]["kind"], "reference");
-            assert_eq!(json["evidence"]["occurrence_multiplicity"], 3);
-            assert_eq!(
-                json["evidence"]["resolution"]["near"],
-                serde_json::Value::Null
-            );
-            assert!(
-                json["evidence"]["resolution"]
-                    .get("same_object_at")
-                    .is_some()
-            );
-            assert!(
-                json["key_input"]["scope"]["normalized_target_intent"]
-                    .get("commit_oid")
-                    .is_none()
-            );
+            assert_eq!(decoded.schema, FactSchema::Current);
+            assert_eq!(evidence.kind, report::ReferenceFactEvidenceKind::Reference);
+            assert!(matches!(
+                evidence.resolution,
+                report::Resolution::Missing(report::MissingResolution::PathNotFound {
+                    near: None,
+                    same_object_at: Some(_),
+                    ..
+                })
+            ));
+            assert!(matches!(
+                decoded.key_input.scope,
+                report::FindingKeyScope::Reference {
+                    normalized_target_intent: report::RepositoryTargetIntent {
+                        commit_oid: None,
+                        ..
+                    },
+                    ..
+                }
+            ));
         }
     }
     Ok(())

@@ -24,6 +24,7 @@ pub enum ReferenceOccurrenceKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReferenceOccurrence {
     pub kind: ReferenceOccurrenceKind,
     pub source_projection_digest: Digest,
@@ -53,6 +54,7 @@ pub enum RepositoryIntentPath<P = RepoPath> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RepositoryTargetIntent<P = RepoPath> {
     #[serde(
         default,
@@ -69,65 +71,37 @@ pub struct RepositoryTargetIntent<P = RepoPath> {
     pub target_kind: TargetKind,
 }
 
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ControlFindingKeyScopeKind {
-    #[strum(serialize = "control")]
-    Control,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum DocumentFindingKeyScopeKind {
-    #[strum(serialize = "document")]
-    Document,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ObservationFindingKeyScopeKind {
-    #[strum(serialize = "observation")]
-    Observation,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ReferenceFindingKeyScopeKind {
-    #[strum(serialize = "reference")]
-    Reference,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(
+    tag = "kind",
+    rename_all = "kebab-case",
+    deny_unknown_fields,
+    bound(deserialize = "P: Deserialize<'de>")
+)]
 pub enum FindingKeyScope<P = RepoPath> {
     Control {
         #[serde(deserialize_with = "Option::deserialize")]
         control_path: Option<P>,
-        kind: ControlFindingKeyScopeKind,
         rule_id: String,
     },
     Document {
         document: P,
-        kind: DocumentFindingKeyScopeKind,
     },
     Observation {
-        kind: ObservationFindingKeyScopeKind,
         observation_id: Digest,
     },
     Reference {
         document: P,
-        kind: ReferenceFindingKeyScopeKind,
+        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         normalized_target_intent: RepositoryTargetIntent<P>,
+        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         occurrence: ReferenceOccurrence,
         source_construct: SourceConstruct,
     },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
 pub struct FindingKeyInput<P = RepoPath> {
     pub finding_kind: FindingKind,
     pub schema: FindingKeyInputSchema,
@@ -572,9 +546,11 @@ pub enum FindingFactEvidence<
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(bound(deserialize = "K: Deserialize<'de>, E: Deserialize<'de>"))]
 pub struct FindingFactInput<K = FindingKeyInput, E = FindingFactEvidence> {
     pub evidence: E,
     pub finding_kind: FindingKind,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub key_input: K,
     pub schema: FactSchema,
 }
@@ -805,6 +781,7 @@ pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
     #[serde(deserialize_with = "Option::deserialize")]
     pub fix: Option<FindingFix>,
     pub invariant_class: InvariantClass,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub key_input: FindingKeyInput<P>,
     pub kind: FindingKind,
     pub location: FindingLocation<P>,
