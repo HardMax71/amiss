@@ -1,10 +1,12 @@
-use serde::{Deserialize, de::IgnoredAny};
+use serde::Deserialize;
 
 use crate::ExitClass;
 use crate::digest::{Digest, hj_serde};
 use crate::json;
 
-use super::model::{ReportEnvelope, ReportPayload, ReportPayloadSchema, ReportStatus};
+use super::model::{
+    ReportEnvelope, ReportPayload, ReportPayloadSchema, ReportResult, ReportStatus,
+};
 use super::{COMPATIBILITY, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect};
 
 #[derive(Deserialize)]
@@ -16,16 +18,8 @@ struct PayloadHeader {
 
 #[derive(Deserialize)]
 struct ResultHeader {
-    result: ResultTuple,
-}
-
-#[derive(Deserialize)]
-struct ResultTuple {
-    complete: bool,
-    status: ReportStatus,
-    exit_code: i64,
-    #[serde(flatten)]
-    _extensions: IgnoredAny,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
+    result: ReportResult,
 }
 
 /// Accepts the active report bytes and returns the typed payload and recorded verdict.
@@ -64,13 +58,21 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitCla
     }
     let ResultHeader { result } = ResultHeader::deserialize(&envelope.payload)
         .map_err(|_defect| ReportDefect::InvalidResult)?;
-    let verdict = match (result.complete, result.status, result.exit_code) {
-        (true, ReportStatus::Pass, 0) => ExitClass::Success,
-        (true, ReportStatus::Fail, 1) => ExitClass::BlockingFindings,
-        (false, ReportStatus::Incomplete, 2) => ExitClass::Failure,
-        (_, _, _) => return Err(ReportDefect::InvalidResult),
-    };
+    let verdict = result_verdict(&result)?;
     let payload =
         serde_json::from_value(envelope.payload).map_err(|_defect| ReportDefect::NotAReport)?;
     Ok((payload, digest, verdict))
+}
+
+/// Checks the recorded completeness, status and exit code as one verdict.
+///
+/// # Errors
+/// Refuses inconsistent or unsupported result tuples.
+pub fn result_verdict(result: &ReportResult) -> Result<ExitClass, ReportDefect> {
+    match (result.complete, result.status, result.exit_code) {
+        (true, ReportStatus::Pass, 0) => Ok(ExitClass::Success),
+        (true, ReportStatus::Fail, 1) => Ok(ExitClass::BlockingFindings),
+        (false, ReportStatus::Incomplete, 2) => Ok(ExitClass::Failure),
+        (_, _, _) => Err(ReportDefect::InvalidResult),
+    }
 }

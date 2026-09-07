@@ -20,6 +20,7 @@ use amiss_wire::controls::{
 
 use amiss_wire::json::{Value, parse};
 use amiss_wire::model::RepositoryIdentity;
+use amiss_wire::report::model::ReportStatus;
 use amiss_wire::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA};
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
@@ -392,7 +393,11 @@ fn the_sealed_golden_clears_acceptance_and_settlement() {
 fn a_complete_block_report_is_accepted_at_class_one() {
     let (wire, expectations) = golden(Deviation::pre(|payload| {
         set(entry(payload, "result"), "exit_code", Value::Integer(1));
-        set(entry(payload, "result"), "status", string("block"));
+        set(
+            entry(payload, "result"),
+            "status",
+            string(ReportStatus::Fail.as_ref()),
+        );
     }));
     assert_eq!(accept(&wire, &expectations), Ok(1));
 }

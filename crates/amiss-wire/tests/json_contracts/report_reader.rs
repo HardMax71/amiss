@@ -7,12 +7,7 @@ const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.c
 #[test]
 fn additive_fields_are_checked_before_typed_decoding() {
     let original = validate_envelope(REPORT).unwrap();
-    for path in [
-        "/payload",
-        "/payload/engine",
-        "/payload/result",
-        "/payload/summary",
-    ] {
+    for path in ["/payload", "/payload/engine", "/payload/summary"] {
         let mut report: Value = serde_json::from_slice(REPORT).unwrap();
         report.pointer_mut(path).unwrap()["future_field"] =
             json!({"\u{1f600}": [null, true, -7], "\u{e000}": "extra"});
