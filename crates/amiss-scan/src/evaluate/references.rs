@@ -4,10 +4,9 @@ use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, Profile, TargetKin
 use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
-    EmptyRepositoryPath, FindingFactInput, FindingKeyInput, ObservationFindingKeyScopeKind,
-    PolicySource, ReferenceFactEvidence, ReferenceFactEvidenceKind, ReferenceFindingKeyScopeKind,
-    ReferenceOccurrence, ReferenceOccurrenceKind, RepositoryIntentKind, RepositoryIntentPath,
-    RepositoryTargetIntent,
+    EmptyRepositoryPath, FindingFactInput, FindingKeyInput, PolicySource, ReferenceFactEvidence,
+    ReferenceFactEvidenceKind, ReferenceOccurrence, ReferenceOccurrenceKind, RepositoryIntentKind,
+    RepositoryIntentPath, RepositoryTargetIntent,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 
@@ -78,7 +77,6 @@ fn collect_structural<'a>(
         schema: FindingKeyInputSchema::Current,
         scope: FindingKeyScope::Reference {
             document: observation.document.clone(),
-            kind: ReferenceFindingKeyScopeKind::Reference,
             normalized_target_intent: RepositoryTargetIntent {
                 commit_oid: intent.commit_oid.clone(),
                 fragment_digest: observe::fragment_digest(intent),
@@ -97,8 +95,8 @@ fn collect_structural<'a>(
             source_construct: observation.construct,
         },
     };
-    let digest = hj_serde(FINDING_KEY_DOMAIN, |writer| {
-        serde_json::to_writer(writer, &key)
+    let digest = hj_serde(FINDING_KEY_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&key, &mut writer)
     })
     .map_err(|_defect| crate::Error::Internal)?;
     let group = groups.entry(digest).or_insert_with(|| KeyGroup {
@@ -233,25 +231,6 @@ pub(super) fn comparison_findings(
     profile: Profile,
     findings: &mut Vec<Finding>,
 ) -> Result<(), crate::Error> {
-    if comparison.outcome == Outcome::None
-        && comparison.base.is_some()
-        && comparison.candidate.is_none()
-    {
-        if let Some(base) = &comparison.base {
-            findings.push(simple(
-                FindingKind::ExplicitReferenceRemoved,
-                FindingKeyScope::Observation {
-                    kind: ObservationFindingKeyScopeKind::Observation,
-                    observation_id: base.id,
-                },
-                Attribution::NotApplicable,
-                vec![base.id],
-                observation_location(base, LocationSide::Base),
-                profile,
-            )?);
-        }
-        return Ok(());
-    }
     let primary = comparison
         .candidate
         .as_ref()
@@ -265,45 +244,41 @@ pub(super) fn comparison_findings(
     let Some((primary, side)) = primary else {
         return Ok(());
     };
-    if comparison.outcome == Outcome::Ambiguous {
-        findings.push(simple(
-            FindingKind::ObservationCorrelationAmbiguous,
-            FindingKeyScope::Observation {
-                kind: ObservationFindingKeyScopeKind::Observation,
-                observation_id: primary.id,
-            },
-            Attribution::NotApplicable,
-            vec![primary.id],
-            observation_location(primary, side),
-            profile,
-        )?);
-        return Ok(());
-    }
-    let impact_kind = match comparison.impact {
-        Impact::DependencyChangedSubjectUnchanged => {
-            Some(FindingKind::DependencyChangedSubjectUnchanged)
+    let kind = if comparison.outcome == Outcome::None && comparison.candidate.is_none() {
+        Some(FindingKind::ExplicitReferenceRemoved)
+    } else if comparison.outcome == Outcome::Ambiguous {
+        Some(FindingKind::ObservationCorrelationAmbiguous)
+    } else {
+        match comparison.impact {
+            Impact::DependencyChangedSubjectUnchanged => {
+                Some(FindingKind::DependencyChangedSubjectUnchanged)
+            }
+            Impact::DependencyAndSubjectCochanged => {
+                Some(FindingKind::DependencyAndSubjectCochanged)
+            }
+            Impact::SubjectChanged => Some(FindingKind::SubjectChanged),
+            Impact::None
+            | Impact::ReferenceResolved
+            | Impact::NotApplicable
+            | Impact::ObservationCorrelationAmbiguous
+            | Impact::NewObservation
+            | Impact::RemovedObservation => None,
         }
-        Impact::DependencyAndSubjectCochanged => Some(FindingKind::DependencyAndSubjectCochanged),
-        Impact::SubjectChanged => Some(FindingKind::SubjectChanged),
-        Impact::None
-        | Impact::ReferenceResolved
-        | Impact::NotApplicable
-        | Impact::ObservationCorrelationAmbiguous
-        | Impact::NewObservation
-        | Impact::RemovedObservation => None,
     };
-    if let Some(kind) = impact_kind {
-        findings.push(simple(
-            kind,
-            FindingKeyScope::Observation {
-                kind: ObservationFindingKeyScopeKind::Observation,
-                observation_id: primary.id,
-            },
-            Attribution::NotApplicable,
-            vec![primary.id],
-            observation_location(primary, side),
-            profile,
-        )?);
-    }
+    findings.extend(
+        kind.map(|kind| {
+            simple(
+                kind,
+                FindingKeyScope::Observation {
+                    observation_id: primary.id,
+                },
+                Attribution::NotApplicable,
+                vec![primary.id],
+                observation_location(primary, side),
+                profile,
+            )
+        })
+        .transpose()?,
+    );
     Ok(())
 }

@@ -168,8 +168,8 @@ pub(super) fn simple(
         schema: FindingKeyInputSchema::Current,
         scope,
     };
-    let finding_key = hj_serde(FINDING_KEY_DOMAIN, |writer| {
-        serde_json::to_writer(writer, &key_input)
+    let finding_key = hj_serde(FINDING_KEY_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&key_input, &mut writer)
     })
     .map_err(|_defect| crate::Error::Internal)?;
     let configured = kind.built_in_disposition(profile);

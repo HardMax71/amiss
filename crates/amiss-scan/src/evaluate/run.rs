@@ -353,7 +353,6 @@ fn ordinary(
         findings.push(candidate_fact_finding(
             FindingKind::SiteBuildDefect,
             super::FindingKeyScope::Observation {
-                kind: amiss_wire::report::model::ObservationFindingKeyScopeKind::Observation,
                 observation_id: defect.id,
             },
             defect.evidence.clone(),
@@ -387,7 +386,6 @@ fn ordinary(
             findings.push(simple(
                 kind,
                 super::FindingKeyScope::Observation {
-                    kind: amiss_wire::report::model::ObservationFindingKeyScopeKind::Observation,
                     observation_id: observation.id,
                 },
                 attribution,
