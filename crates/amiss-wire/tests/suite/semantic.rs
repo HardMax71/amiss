@@ -3,6 +3,8 @@
     reason = "integration assertions over values constructed in the same test"
 )]
 
+use std::borrow::Cow;
+
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hb;
@@ -26,7 +28,7 @@ fn observation(name: &str) -> Observation {
     })
 }
 
-fn evidence(observations: Vec<Observation>) -> SemanticEvidence {
+fn evidence(observations: Vec<Observation>) -> SemanticEvidence<'static> {
     SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
@@ -41,16 +43,16 @@ fn evidence(observations: Vec<Observation>) -> SemanticEvidence {
             input_digest: C.parse().unwrap(),
         },
         complete: true,
-        observations,
+        observations: observations.into_iter().map(Cow::Owned).collect(),
     }
 }
 
-fn evidence_template(observations: Vec<Observation>) -> SemanticEvidenceTemplate {
+fn evidence_template(observations: Vec<Observation>) -> SemanticEvidenceTemplate<'static> {
     SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: evidence(Vec::new()).producer,
         complete: true,
-        observations: observations.into(),
+        observations: observations.into_iter().map(Cow::Owned).collect(),
     }
 }
 
@@ -61,7 +63,7 @@ fn construction_sorts_observations_and_binds_the_payload() {
     let (document, bytes) = envelope(evidence(vec![z.clone(), a.clone()])).unwrap();
     let parsed = parse(&bytes).unwrap();
     assert_eq!(parsed, document);
-    assert_eq!(parsed.payload.observations, [a, z]);
+    assert_eq!(parsed.payload.observations, [Cow::Owned(a), Cow::Owned(z)]);
     assert_eq!(
         parsed.payload_digest,
         hb(
@@ -74,6 +76,11 @@ fn construction_sorts_observations_and_binds_the_payload() {
 #[test]
 fn typed_templates_borrow_observations_through_sorting_and_binding() {
     let input = evidence_template(vec![observation("z"), observation("a")]);
+    let shared = input.clone();
+    assert!(std::sync::Arc::ptr_eq(
+        &input.observations,
+        &shared.observations
+    ));
     let (first_document, first) = bind_template(&input, A.parse().unwrap()).unwrap();
     let (second_document, second) = bind_template(&input, B.parse().unwrap()).unwrap();
     for (document, bytes) in [(&first_document, &first), (&second_document, &second)] {
@@ -83,7 +90,8 @@ fn typed_templates_borrow_observations_through_sorting_and_binding() {
             .iter()
             .zip(input.observations.iter().rev())
         {
-            assert!(std::ptr::eq(*bound, original));
+            assert!(matches!(bound, Cow::Borrowed(_)));
+            assert!(std::ptr::eq(bound.as_ref(), original.as_ref()));
         }
         assert_eq!(
             document.payload_digest,
@@ -92,7 +100,7 @@ fn typed_templates_borrow_observations_through_sorting_and_binding() {
     }
     let first = parse(&first).unwrap();
     let second = parse(&second).unwrap();
-    assert_eq!(input.observations[0], observation("z"));
+    assert_eq!(input.observations[0].as_ref(), &observation("z"));
     assert_eq!(first.payload.observations, second.payload.observations);
     assert_ne!(first.payload_digest, second.payload_digest);
     assert_eq!(
@@ -118,7 +126,7 @@ fn candidate_free_templates_bind_only_when_the_candidate_is_known() {
         parsed.payload.subject.source_report_payload_digest,
         Nullable::Null
     );
-    assert_eq!(parsed.payload.observations, [row]);
+    assert_eq!(parsed.payload.observations, [Cow::Owned(row)]);
 }
 
 #[test]
@@ -258,7 +266,7 @@ fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
         assert!(!bytes.ends_with(b"\n"));
     }
     let parsed = parse_template(&template(evidence_template(vec![row.clone()])).unwrap()).unwrap();
-    assert_eq!(parsed.observations.as_ref(), [row]);
+    assert_eq!(parsed.observations.as_ref(), [Cow::Owned(row)]);
 }
 
 #[test]

@@ -66,7 +66,7 @@ pub enum IntersphinxError {
 /// invalid, incomplete, duplicated, or outside its ceiling.
 pub fn intersphinx_evidence(
     mut inventories: Vec<IntersphinxInventory>,
-) -> Result<Vec<SemanticEvidenceTemplate>, IntersphinxError> {
+) -> Result<Vec<SemanticEvidenceTemplate<'static>>, IntersphinxError> {
     if inventories.is_empty() {
         return Ok(Vec::new());
     }
@@ -119,6 +119,7 @@ pub fn intersphinx_evidence(
     let observations = observations
         .into_iter()
         .map(Observation::Sphinx)
+        .map(std::borrow::Cow::Owned)
         .collect::<Vec<_>>();
     let evidence = vec![SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,

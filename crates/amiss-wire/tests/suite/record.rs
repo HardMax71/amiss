@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use amiss_wire::de::ErrorKind;
 use amiss_wire::json::Value;
 use amiss_wire::semantic::SemanticEvidenceTemplate;
@@ -29,7 +31,7 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
     ))
     .unwrap();
     let bytes = template(source).unwrap();
-    let parsed: SemanticEvidenceTemplate = serde_json::from_slice(&bytes).unwrap();
+    let parsed: SemanticEvidenceTemplate<'static> = serde_json::from_slice(&bytes).unwrap();
     assert!(amiss_wire::semantic::parse_template(&bytes).is_ok());
     assert_eq!(
         parsed.producer.kind,
@@ -38,7 +40,7 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
     assert_eq!(parsed.producer.identity.as_str(), "test-public-api");
     assert_eq!(parsed.producer.version, "1");
     assert!(parsed.complete);
-    let [Observation::Record(decoded)] = parsed.observations.as_ref() else {
+    let [Cow::Owned(Observation::Record(decoded))] = parsed.observations.as_ref() else {
         panic!("one normalized set becomes one observation")
     };
     validate_records("$.observations[0].records", &decoded.records).unwrap();
