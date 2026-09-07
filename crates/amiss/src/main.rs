@@ -236,7 +236,7 @@ fn run_sealed(reserve: &mut BufWriter<Stdout>) -> ExitCode {
         eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_ref());
         return failure;
     }
-    let control_result = amiss_scan::request::controls(&controls);
+    let control_result = amiss_scan::request::controls(controls);
     let (inputs, external_defect) = match control_result {
         Ok(inputs) => (inputs, None),
         Err(detail) => (amiss_scan::request::ControlInputs::default(), Some(detail)),

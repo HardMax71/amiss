@@ -33,7 +33,10 @@ anchors, redirects, navigation edges, and source attribution. Envelope and templ
 observations directly into the existing closed site, Sphinx label, or record-set models. Unknown
 kinds or fields and positional observation arrays are rejected at that boundary. Binding a template
 borrows its typed observations; the scanner consumes them without encoding and parsing each row
-again. Compiled consumers additionally check producer versions, family membership, and semantic
+again. Sealed scanner intake consumes the typed controls request, retaining its envelope storage
+instead of encoding and reparsing it. A counting writer preserves the exact encoded-byte ceiling
+for in-process inputs too; it does not retain a JSON buffer. Compiled consumers additionally check
+producer versions, family membership, and semantic
 laws such as valid routes or sorted record keys. Parsing an envelope never turns it into a pass,
 a block, or a suppression.
 

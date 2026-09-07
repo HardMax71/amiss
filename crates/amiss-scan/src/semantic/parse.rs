@@ -15,6 +15,8 @@ use super::record::insert_record_set;
 use super::site::site_build_inputs;
 use super::{Inputs, InventoryLabel, Provenance};
 
+mod tests;
+
 const LABEL_BYTES: usize = 4_096;
 const DESTINATION_BYTES: usize = 16_384;
 
@@ -109,12 +111,19 @@ pub(crate) fn parse(
 }
 
 pub(crate) fn validated_envelope(
-    supplied: &SuppliedSemanticEvidence,
+    supplied: SuppliedSemanticEvidence,
     path: &str,
 ) -> Result<SemanticEvidenceEnvelope, Error> {
-    let bytes = serde_json::to_vec(&supplied.value)
+    let mut counter = countio::Counter::new(std::io::sink());
+    serde_json::to_writer(&mut counter, &supplied.value)
         .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
-    let envelope = amiss_wire::semantic::parse(&bytes)?;
+    if u64::try_from(counter.writer_bytes()).unwrap_or(u64::MAX)
+        > amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES
+    {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    let envelope = supplied.value;
+    amiss_wire::semantic::validate(&envelope)?;
     if envelope.payload.producer.context_digest != supplied.expected_context_digest {
         return fail(
             &format!("{path}.expected_context_digest"),
