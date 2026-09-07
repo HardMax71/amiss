@@ -35,6 +35,11 @@ Resolution tags select closed bodies: fields belonging to another kind or reason
 rejected. Targets, blob evidence and version scopes reuse the producer's types; a fragment
 target must carry the `blob` tag and its complete blob evidence.
 
+Observation comparisons, occurrences, intents and identity inputs are closed too. The
+`refs` command retains their decoded models for querying and output; it does not reparse
+individual occurrences or retain unknown extension fields. Candidate and alternative order,
+byte-path spelling and canonical JSON output remain unchanged.
+
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
 to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,
