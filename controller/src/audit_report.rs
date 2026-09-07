@@ -3,14 +3,12 @@ mod tests;
 use amiss_wire::digest::{Digest, hj_serde, sha256};
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 use amiss_wire::report::model::{
-    BaseSnapshot, Evaluation, IdentityPayload, IdentityPreimage, ReportEnvelope, ReportPayload,
-    Snapshot,
+    BaseSnapshot, Evaluation, IdentityPreimage, ReportPayload, Snapshot,
 };
 use amiss_wire::requests::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateEventKind, CandidateFinality, CandidateIdentitySchema,
     CandidateSnapshot, RequestMode, SnapshotMaterialization,
 };
-use serde::Deserialize;
 
 use crate::ArtifactError;
 
@@ -50,6 +48,14 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
     {
         return Err(ArtifactError::Corrupt);
     }
+    let preimage = IdentityPreimage {
+        evaluation: &evaluation,
+        schema: CandidateIdentitySchema::Current,
+    };
+    let candidate_identity_digest = hj_serde(CANDIDATE_IDENTITY_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&preimage, &mut writer)
+    })
+    .map_err(|_defect| ArtifactError::Corrupt)?;
     let (BaseSnapshot::Git(base), Snapshot::Available(CandidateSnapshot::Git(candidate))) =
         (evaluation.base, evaluation.candidate)
     else {
@@ -72,19 +78,6 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
     .ok_or(ArtifactError::Corrupt)?;
     let target_ref = evaluation.target_ref;
 
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    // Report validation has already enforced the strict document depth ceiling.
-    deserializer.disable_recursion_limit();
-    let identity = ReportEnvelope::<IdentityPayload>::deserialize(&mut deserializer)
-        .map_err(|_defect| ArtifactError::Corrupt)?;
-    let preimage = IdentityPreimage {
-        evaluation: identity.payload.evaluation,
-        schema: CandidateIdentitySchema::Current,
-    };
-    let candidate_identity_digest = hj_serde(CANDIDATE_IDENTITY_DOMAIN, |mut writer| {
-        serde_json_canonicalizer::to_writer(&preimage, &mut writer)
-    })
-    .map_err(|_defect| ArtifactError::Corrupt)?;
     Ok(AcceptedReport {
         report_digest: sha256(bytes),
         payload_digest,

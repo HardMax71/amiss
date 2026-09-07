@@ -1,29 +1,45 @@
-use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
 
-use serde::{Deserialize, Serialize, de::IgnoredAny};
+use crate::model::{BranchRef, ForgeDialect, RepositoryIdentity, UtcInstant};
+use crate::requests::{
+    CandidateEventKind, CandidateFinality, CandidateIdentitySchema, RequestMode,
+    SnapshotMaterialization,
+};
 
-use crate::requests::CandidateIdentitySchema;
+use super::{BaseSnapshot, ResolvedEvaluation, Snapshot};
 
 #[derive(Deserialize)]
-pub struct IdentityPayload<E = IdentityEvaluation> {
+#[serde(bound(deserialize = "E: Deserialize<'de>"))]
+pub struct IdentityPayload<E = ResolvedEvaluation> {
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub evaluation: E,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Serialize)]
+#[serde(remote = "ResolvedEvaluation")]
 pub struct IdentityEvaluation {
-    #[serde(default, skip_serializing)]
-    pub schema: json_serde::Absent,
-    #[serde(default, skip_serializing)]
-    pub evaluation_instant: IgnoredAny,
-    #[serde(default, skip_serializing)]
-    pub trusted_time: IgnoredAny,
-    #[serde(flatten)]
-    pub fields: BTreeMap<String, serde_json::Value>,
+    pub base: BaseSnapshot,
+    pub candidate: Snapshot,
+    pub candidate_ref: Option<BranchRef>,
+    pub default_branch_ref: Option<BranchRef>,
+    #[serde(skip_serializing)]
+    pub evaluation_instant: Option<UtcInstant>,
+    pub event_kind: CandidateEventKind,
+    pub finality: CandidateFinality,
+    pub forge: Option<ForgeDialect>,
+    pub index_only_materialized_paths: u64,
+    pub materialization: SnapshotMaterialization,
+    pub mode: RequestMode,
+    pub repository: Option<RepositoryIdentity>,
+    pub skip_worktree_paths: u64,
+    pub target_ref: Option<BranchRef>,
+    #[serde(skip_serializing)]
+    pub trusted_time: bool,
 }
 
 #[derive(Serialize)]
-pub struct IdentityPreimage {
-    #[serde(flatten)]
-    pub evaluation: IdentityEvaluation,
+pub struct IdentityPreimage<'a> {
+    #[serde(flatten, with = "IdentityEvaluation")]
+    pub evaluation: &'a ResolvedEvaluation,
     pub schema: CandidateIdentitySchema,
 }

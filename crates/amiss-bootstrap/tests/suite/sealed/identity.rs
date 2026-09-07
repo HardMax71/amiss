@@ -5,8 +5,12 @@ use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 use super::{Deviation, entry, golden, refused, set, string};
 
 #[test]
-fn additive_identity_fields_are_retained_and_bound() {
-    for path in [None, Some("base"), Some("candidate")] {
+fn identity_extensions_are_refused_even_with_matching_bindings() {
+    for (path, defect) in [
+        (None, AcceptanceDefect::SealedIdentity),
+        (Some("base"), AcceptanceDefect::BaseIdentity),
+        (Some("candidate"), AcceptanceDefect::CandidateIdentity),
+    ] {
         for changed in [false, true] {
             let deviation = Deviation {
                 pre: Some(Box::new(move |payload| {
@@ -34,14 +38,9 @@ fn additive_identity_fields_are_retained_and_bound() {
                 ..Deviation::default()
             };
             let (wire, expectations) = golden(deviation);
-            let expected = if changed {
-                Err(AcceptanceDefect::SealedIdentity)
-            } else {
-                Ok(0)
-            };
             assert_eq!(
                 accept(&wire, &expectations),
-                expected,
+                Err(defect),
                 "{path:?}, {changed}"
             );
         }
@@ -65,13 +64,17 @@ fn a_reserved_schema_cannot_join_the_identity_preimage() {
 }
 
 #[test]
-fn malformed_runtime_time_is_a_control_defect_not_an_identity_defect() {
-    for value in [Value::Null, Value::Bool(true), string("not-an-instant")] {
+fn clock_shape_and_binding_defects_remain_distinct() {
+    for (value, defect) in [
+        (Value::Null, AcceptanceDefect::SealedControls),
+        (Value::Bool(true), AcceptanceDefect::SealedIdentity),
+        (string("not-an-instant"), AcceptanceDefect::SealedControls),
+    ] {
         assert_eq!(
             refused(Deviation::post(move |payload| {
                 set(entry(payload, "evaluation"), "evaluation_instant", value);
             })),
-            AcceptanceDefect::SealedControls
+            defect
         );
     }
     assert_eq!(
@@ -85,13 +88,16 @@ fn malformed_runtime_time_is_a_control_defect_not_an_identity_defect() {
                 .filter(|(name, _)| name != "evaluation_instant")
                 .collect();
         })),
-        AcceptanceDefect::SealedControls
+        AcceptanceDefect::SealedIdentity
     );
 }
 
 #[test]
-fn deep_identity_extensions_keep_the_outer_depth_limit() {
-    for (depth, expected) in [(256, Ok(0)), (513, Err(AcceptanceDefect::Shape))] {
+fn identity_extensions_cannot_bypass_the_closed_shape_or_outer_depth_limit() {
+    for (depth, defect) in [
+        (256, AcceptanceDefect::CandidateIdentity),
+        (513, AcceptanceDefect::Shape),
+    ] {
         let (wire, expectations) = golden(Deviation::pre(move |payload| {
             let nested = (0..depth).fold(Value::Null, |value, _| Value::array(vec![value]));
             set(
@@ -100,6 +106,6 @@ fn deep_identity_extensions_keep_the_outer_depth_limit() {
                 nested,
             );
         }));
-        assert_eq!(accept(&wire, &expectations), expected, "{depth}");
+        assert_eq!(accept(&wire, &expectations), Err(defect), "{depth}");
     }
 }
