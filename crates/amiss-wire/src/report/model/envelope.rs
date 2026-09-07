@@ -80,6 +80,7 @@ pub struct ReportPayload<
     pub feedback: Feedback<P>,
     pub findings: Vec<Finding<P, E>>,
     pub observations: Vec<ObservationComparison<P, R>>,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub result: ReportResult,
     pub schema: ReportPayloadSchema,
     pub summary: Summary,
@@ -105,6 +106,7 @@ pub enum ReportStatus {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ReportResult {
     pub complete: bool,
     pub error_count: u64,

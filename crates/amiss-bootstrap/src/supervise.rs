@@ -34,7 +34,7 @@ pub enum AcceptanceDefect {
     SealedIdentity,
     /// The report does not carry the exact sealed controls and provider run.
     SealedControls,
-    /// The completeness flag disagrees with the exit class.
+    /// The status, completeness flag and exit class disagree.
     Completeness,
     /// The finding count differs from the findings array length.
     FindingCount,
