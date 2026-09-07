@@ -4,7 +4,7 @@ use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::FindingKind;
-use amiss_wire::report::model::{DebtExceptionDiagnosticKind, ExceptionDiagnostic};
+use amiss_wire::report::model::ExceptionDiagnostic;
 
 use super::control::control_row;
 use super::{Finding, candidate_digest_of};
@@ -15,7 +15,6 @@ fn debt_diagnostic(
     current_fact_digest: Digest,
 ) -> ExceptionDiagnostic {
     ExceptionDiagnostic::Debt {
-        kind: DebtExceptionDiagnosticKind::Debt,
         debt_id: item.debt_id.clone(),
         debt_snapshot_digest: context.digest,
         adoption_tree: context.adoption_tree.clone(),

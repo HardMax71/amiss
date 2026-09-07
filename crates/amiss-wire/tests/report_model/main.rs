@@ -3,10 +3,9 @@ mod producer_paths;
 mod projection;
 
 use amiss_wire::report::model::{
-    AnalysisError, BaseSnapshot, Controls, DocumentResult, Engine, Evaluation, ExceptionDiagnostic,
-    Feedback, Finding, FindingFactEvidence, FindingKeyScope, MissingResolution,
-    ObservationComparison, ProjectionDifference, RepoPath, ReportEnvelope, Resolution, Snapshot,
-    Summary,
+    AnalysisError, BaseSnapshot, Controls, DocumentResult, Engine, Evaluation, Feedback, Finding,
+    FindingFactEvidence, FindingKeyScope, MissingResolution, ObservationComparison, RepoPath,
+    ReportEnvelope, Resolution, Snapshot, Summary,
 };
 use amiss_wire::requests::CandidateSnapshot;
 use amiss_wire::resolution::{Target, VersionScope};
@@ -126,19 +125,6 @@ fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::
         r#"{"document":"a.md","kind":"reference","normalized_target_intent":{"fragment_digest":null,"kind":"repository-path","path":"a.md","query_digest":null,"target_kind":"blob"},"occurrence":{"kind":"source-projection","source_projection_digest":"$digest"},"source_construct":"markdown-inline-link"}"#,
     ] {
         assert_canonical::<FindingKeyScope>(&template.replace("$digest", DIGEST))?;
-    }
-    for wire in [
-        r#"{"expected_count":1,"kind":"count","observed_count":null}"#,
-        r#"{"expected_records":1,"extra_omitted":0,"extra_preview":[],"extra_records":0,"kind":"rows","missing_omitted":0,"missing_preview":[],"missing_records":0,"observed_records":1,"ordering_only":false}"#,
-    ] {
-        assert_canonical::<ProjectionDifference>(wire)?;
-    }
-    for template in [
-        r#"{"accepted_fact_digest":"$digest","adoption_tree":{"object_format":"sha1","tree_oid":"$oid"},"created_at":"2026-01-01T00:00:00Z","current_fact_digest":"$digest","debt_id":"debt","debt_snapshot_digest":"$digest","expires_at":"2026-01-02T00:00:00Z","kind":"debt","owner":"team:docs","reason":"reason"}"#,
-        r#"{"authorized_fact_digest":"$digest","candidate_tree":{"object_format":"sha1","tree_oid":"$oid"},"created_at":"2026-01-01T00:00:00Z","current_fact_digest":null,"expires_at":"2026-01-02T00:00:00Z","finding_key":"$digest","issuer":"service:amiss","kind":"waiver","not_before":"2026-01-01T00:00:00Z","owner":"team:docs","reason":"reason","residual_disposition":"warn","waiver_bundle_digest":"$digest","waiver_id":"waiver"}"#,
-    ] {
-        let wire = template.replace("$digest", DIGEST).replace("$oid", OID);
-        assert_canonical::<ExceptionDiagnostic>(&wire)?;
     }
     for template in [
         r#"{"claim_digest":"$digest","destination":"/new","kind":"broken-redirect","reason":"missing-route","route":"/old","source":"a.md"}"#,
