@@ -220,6 +220,12 @@ Sandbox provenance is separate again. The present writer reports `self-asserted`
 projection. Runtime-closure validation, a cleared environment, fixed input, and a watchdog do
 not satisfy the report schema's provider-verified OCI or microVM mechanisms.
 
+Control provenance retains the concrete execution descriptor, trusted-time statement and
+semantic producer metadata. Readers reject unknown control and sandbox members, including
+when the report's payload digest matches. Sealed acceptance additionally requires verified
+controls and an explicit evidence list, then checks the retained bodies and their independent
+bindings. It never reconstructs those bodies from arbitrary JSON maps.
+
 The machine contract is the
 [current report schema](https://github.com/HardMax71/amiss/blob/main/spec/scanner-report.schema.json), its
 [readable example](https://github.com/HardMax71/amiss/blob/main/spec/examples/scanner-report.json), and the corresponding
