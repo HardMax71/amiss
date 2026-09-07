@@ -3,8 +3,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::{
-    FactSchema, FindingKeyInputSchema, ProjectionKind, ProjectionSink, SourceConstruct, TargetKind,
-    WaiverResidualDisposition,
+    FactSchema, FindingKeyInputSchema, ProjectionKind, ProjectionSink, ProjectionSource,
+    SourceConstruct, TargetKind, WaiverResidualDisposition,
 };
 use crate::digest::Digest;
 use crate::model::{ArtifactId, Oid, OwnerId, RepoPathText, TreeIdentity, UtcInstant};
@@ -173,83 +173,6 @@ pub enum BrokenRedirectReason {
     MissingAnchor,
     MissingRoute,
     NonterminalRedirect,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum BlobLinesProjectionSourceKind {
-    #[strum(serialize = "blob-lines")]
-    BlobLines,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum NamedRegionProjectionSourceKind {
-    #[strum(serialize = "named-region")]
-    NamedRegion,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum RecordSetProjectionSourceKind {
-    #[strum(serialize = "record-set")]
-    RecordSet,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum RecordValueProjectionSourceKind {
-    #[strum(serialize = "record-value")]
-    RecordValue,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum TreePathsProjectionSourceKind {
-    #[strum(serialize = "tree-paths")]
-    TreePaths,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ProjectionSource {
-    BlobLines {
-        first_line: u64,
-        kind: BlobLinesProjectionSourceKind,
-        last_line: u64,
-        path: RepoPathText,
-    },
-    NamedRegion {
-        end_marker: String,
-        kind: NamedRegionProjectionSourceKind,
-        path: RepoPathText,
-        start_marker: String,
-    },
-    RecordSet {
-        kind: RecordSetProjectionSourceKind,
-        set: ArtifactId,
-    },
-    RecordValue {
-        key: String,
-        kind: RecordValueProjectionSourceKind,
-        set: ArtifactId,
-    },
-    TreePaths {
-        kind: TreePathsProjectionSourceKind,
-        maximum_depth: u64,
-        root: RepoPathText,
-        #[serde(
-            default,
-            deserialize_with = "json_serde::deserialize_some",
-            skip_serializing_if = "Option::is_none"
-        )]
-        suffix: Option<String>,
-    },
 }
 
 #[derive(
