@@ -3,11 +3,13 @@ use amiss_wire::requests::GitSnapshotIdentity;
 use serde::{Deserialize, de::IgnoredAny};
 
 #[derive(Deserialize)]
+#[serde(transparent, bound(deserialize = "T: Deserialize<'de>"))]
 pub(super) struct Object<T> {
-    // Open projections only: flatten masks an inner deny_unknown_fields guard.
-    #[serde(flatten)]
+    #[serde(deserialize_with = "object::deserialize")]
     pub(super) fields: T,
 }
+
+serde_with::with_prefix!(object "");
 
 #[derive(Deserialize)]
 pub(super) struct PayloadHeader {

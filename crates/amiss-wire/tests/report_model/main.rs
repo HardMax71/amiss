@@ -41,19 +41,28 @@ fn entire_report_streams_in_canonical_order() {
 }
 
 #[test]
-fn report_snapshots_accept_additive_members() {
-    let mut report: serde_json::Value = serde_json::from_slice(REPORT).unwrap();
-    report["payload"]["evaluation"]["base"]["future_member"] = true.into();
-    report["payload"]["evaluation"]["candidate"]["future_member"] = true.into();
-    let _: ReportEnvelope = serde_json::from_value(report).unwrap();
-
-    let identity: serde_json::Value = serde_json::from_slice(include_bytes!(
+fn report_snapshots_refuse_unknown_members() {
+    let report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
+    let encoded = serde_json::to_string(&report).unwrap();
+    let Evaluation::Resolved(evaluation) = report.payload.evaluation else {
+        panic!("the report fixture resolves its snapshots");
+    };
+    for snapshot in [
+        serde_json::to_string(&evaluation.base).unwrap(),
+        serde_json::to_string(&evaluation.candidate).unwrap(),
+    ] {
+        let invalid = snapshot.replacen('{', "{\"future_member\":true,", 1);
+        let changed = encoded.replace(&snapshot, &invalid);
+        assert_ne!(changed, encoded);
+        assert!(serde_json::from_str::<ReportEnvelope>(&changed).is_err());
+    }
+    let identity: amiss_wire::requests::CandidateIdentity = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/candidate-identity-index.json"
     ))
     .unwrap();
-    let mut snapshot = identity["candidate"].clone();
-    snapshot["future_member"] = true.into();
-    let _: Snapshot = serde_json::from_value(snapshot).unwrap();
+    let snapshot = serde_json::to_string(&identity.candidate).unwrap();
+    let invalid = snapshot.replacen('{', "{\"future_member\":true,", 1);
+    assert!(serde_json::from_str::<Snapshot>(&invalid).is_err());
 }
 
 #[test]

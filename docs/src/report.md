@@ -26,6 +26,13 @@ and the direct CLI currently leaves the target null. Both values enter the candi
 preimage. They describe the exact inputs the engine evaluated; their presence does not prove who
 selected or authenticated them.
 
+Candidate identity is serialized from the same typed evaluation carried by the report,
+with `evaluation_instant` and `trusted_time` excluded and the candidate-identity schema
+added. The report reader and sealed acceptance reject unknown evaluation and snapshot
+members, as the published schema requires; they never discard extra identity data before
+hashing it. Missing or wrongly typed clock fields fail sealed identity decoding. A null
+instant or a string that disagrees with the trusted statement fails control verification.
+
 An exact same-repository forge URL carries an optional `commit_oid` in its target intent and
 finding-key projection. The engine resolves it only from that commit's objects already available in
 the declared Git roots. If the commit or any required object is unavailable, an
