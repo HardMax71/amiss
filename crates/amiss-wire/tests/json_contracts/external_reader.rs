@@ -110,26 +110,32 @@ fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
 }
 
 #[test]
-fn assessments_share_the_closed_engine_descriptor() {
+fn assessments_share_the_closed_engine_and_producer_descriptors() {
     let document: ExternalAssessmentEnvelope = serde_json::from_slice(ASSESSMENT).unwrap();
     let payload =
         String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap()).unwrap();
-    let extended = payload.replace("\"engine\":{", "\"engine\":{\"future\":true,");
-    assert_ne!(extended, payload);
-    let canonical = serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(
-        &mut serde_json::Deserializer::from_str(&extended),
-    ))
-    .unwrap();
     let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap();
-    let changed = wire.replace(&payload, &extended).replace(
-        &document.payload_digest.to_string(),
-        &hb(external::ASSESSMENT_PAYLOAD_SCHEMA, &canonical).to_string(),
-    );
-    let Err(AssessmentDefect::Wire(error)) = external::parse_assessment(changed.as_bytes()) else {
-        panic!("the shared engine descriptor must reject unknown fields");
-    };
-    assert_eq!(error.path, "$.payload.engine.future");
-    assert_eq!(error.kind, ErrorKind::UnknownField);
+    for field in ["engine", "producer"] {
+        let extended = payload.replace(
+            &format!("\"{field}\":{{"),
+            &format!("\"{field}\":{{\"future\":true,"),
+        );
+        assert_ne!(extended, payload);
+        let canonical = serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(
+            &mut serde_json::Deserializer::from_str(&extended),
+        ))
+        .unwrap();
+        let changed = wire.replace(&payload, &extended).replace(
+            &document.payload_digest.to_string(),
+            &hb(external::ASSESSMENT_PAYLOAD_SCHEMA, &canonical).to_string(),
+        );
+        let Err(AssessmentDefect::Wire(error)) = external::parse_assessment(changed.as_bytes())
+        else {
+            panic!("the shared {field} descriptor must reject unknown fields");
+        };
+        assert_eq!(error.path, format!("$.payload.{field}.future"));
+        assert_eq!(error.kind, ErrorKind::UnknownField);
+    }
 }
 
 #[test]

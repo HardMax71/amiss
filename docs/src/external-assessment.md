@@ -30,6 +30,12 @@ code path, checked in CI.
 Plans and assessments share the engine descriptor: its version and digest are the only
 accepted fields. An unknown field in that object is rejected even with a matching payload digest.
 
+Evidence is decoded directly into its declared producer and row types. Unknown fields and
+positional arrays are rejected, including extra producer fields echoed by an assessment.
+The reader verifies that decoding preserves the complete input's canonical identity and
+returns that digest to the judge. Whitespace and equivalent JSON escapes preserve the
+identity; a change to any accepted evidence field changes it.
+
 The judgment policy is fixed in the engine and deliberately conservative, because the
 web's refusals outnumber its deaths. A 404 or 410 refutes only when a GET confirmed it,
 since servers drop HEAD requests they would answer. A 401, 403, 429, or LinkedIn's 999

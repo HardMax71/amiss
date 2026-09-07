@@ -707,33 +707,6 @@ fn forge_row(destination: &str, repository: &str, tail: Option<&str>) -> Value {
 }
 
 #[test]
-fn additive_evidence_fields_are_inert_but_known_nulls_are_refused() {
-    let bytes = std::fs::read(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../spec/examples/scanner-external-evidence.json"
-    ))
-    .expect("the evidence example is readable");
-    let mut document: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
-    document
-        .as_object_mut()
-        .expect("the evidence is an object")
-        .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
-    assert!(
-        parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
-            .is_ok()
-    );
-    document
-        .pointer_mut("/rows/0")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("the evidence has one row")
-        .insert("failure".to_owned(), serde_json::Value::Null);
-    assert!(
-        parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
-            .is_err()
-    );
-}
-
-#[test]
 fn evidence_bytes_preserve_escaping_and_round_trip() {
     let document = ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
@@ -755,57 +728,8 @@ fn evidence_bytes_preserve_escaping_and_round_trip() {
     let bytes = amiss_wire::external::evidence(&document).expect("the evidence encodes");
     let (parsed, _digest) = parse_evidence(&bytes).expect("the evidence parses");
     assert_eq!(parsed, document);
-    assert_eq!(
-        bytes,
-        serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(&bytes).expect("strict JSON"))
-            .unwrap(),
-    );
+    assert_eq!(bytes, serde_json_canonicalizer::to_vec(&parsed).unwrap(),);
     assert!(!bytes.ends_with(b"\n"));
-}
-
-#[test]
-fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
-    let plan = planned(introduced("https://a.example/x"));
-    let mut document: serde_json::Value = serde_json::from_slice(&evidence(
-        &plan,
-        vec![probe("https://a.example/x", "get", 200)],
-    ))
-    .expect("the evidence is JSON");
-    document["future_field"] = serde_json::json!({"😀": "\t", "\u{e000}": null});
-    let canonical = serde_json_canonicalizer::to_vec(&document).expect("canonical evidence");
-    let pretty = serde_json::to_vec_pretty(&document).expect("formatted evidence");
-    let assessment = assess(
-        &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-        &pretty,
-        "0.0.0",
-        sample_digest(),
-    )
-    .expect("valid evidence");
-    let assessment = amiss_wire::json::parse(&assessment).expect("the assessment is strict JSON");
-    let subject = field(field(&assessment, "payload"), "subject");
-    assert_eq!(
-        text(field(subject, "evidence_digest")),
-        hb(EVIDENCE_SCHEMA, &canonical).to_string(),
-    );
-    let (typed, _digest) = parse_evidence(&canonical).expect("valid evidence");
-    assert_ne!(
-        hb(EVIDENCE_SCHEMA, &canonical),
-        hb(
-            EVIDENCE_SCHEMA,
-            &amiss_wire::external::evidence(&typed).expect("typed evidence")
-        ),
-    );
-    let mut trailing = pretty;
-    trailing.extend_from_slice(b" null");
-    assert!(matches!(
-        assess(
-            &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-            &trailing,
-            "0.0.0",
-            sample_digest()
-        ),
-        Err(AssessDefect::Evidence(_)),
-    ));
 }
 
 #[test]

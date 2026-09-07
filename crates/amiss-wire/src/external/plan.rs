@@ -6,7 +6,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde, preserves_json};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 use crate::model::ForgeDialect;
 use crate::report::model::{
@@ -201,11 +201,8 @@ pub fn plan(
 /// violated plan law, or a payload digest mismatch.
 pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
     let document: ExternalPlanEnvelope = super::read(bytes)?;
-    if !preserves_json(PLAN_ENVELOPE_SCHEMA, bytes, &document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?
-    {
-        return fail("$", ErrorKind::InvalidValue);
-    }
+    verified_json_digest(PLAN_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     let payload_digest = hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
         serde_json_canonicalizer::to_writer(&document.payload, &mut writer)
     })

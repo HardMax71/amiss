@@ -1,5 +1,6 @@
 use core::{fmt, str::FromStr};
 
+use serde::de::Error as _;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use sha2::{Digest as _, Sha256};
 
@@ -136,11 +137,11 @@ pub fn hj_serde(
     Ok(Digest(writer.0.finalize().into()))
 }
 
-pub(crate) fn preserves_json(
+pub(crate) fn verified_json_digest(
     domain: &str,
     bytes: &[u8],
     document: &impl serde::Serialize,
-) -> serde_json::Result<bool> {
+) -> serde_json::Result<Digest> {
     let typed_digest = hj_serde(domain, |mut writer| {
         serde_json_canonicalizer::to_writer(document, &mut writer)
     })?;
@@ -154,7 +155,9 @@ pub(crate) fn preserves_json(
         )
     })?;
     input.end()?;
-    Ok(input_digest == typed_digest)
+    (input_digest == typed_digest)
+        .then_some(typed_digest)
+        .ok_or_else(|| serde_json::Error::custom("typed document changes the JSON input"))
 }
 
 fn hash(domain: &str, update: impl FnOnce(&mut Sha256)) -> Digest {

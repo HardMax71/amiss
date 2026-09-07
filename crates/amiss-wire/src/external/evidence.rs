@@ -5,13 +5,14 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 use wary::Validate;
 
-use crate::de::{self, Error, ErrorKind};
-use crate::digest::{Digest, hj_serde};
+use crate::de::{Error, ErrorKind};
+use crate::digest::{Digest, verified_json_digest};
 use crate::json;
 
 use super::{EVIDENCE_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, wary::Wary)]
+#[serde(deny_unknown_fields)]
 #[validate(func = |_, evidence: &ExternalEvidence| {
     (evidence.rows.iter().collect::<BTreeSet<_>>().len() == evidence.rows.len())
         .then_some(())
@@ -35,6 +36,7 @@ pub enum ExternalEvidenceSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, wary::Wary)]
+#[serde(deny_unknown_fields)]
 pub struct ExternalEvidenceProducer {
     #[validate(length(chars, 1..))]
     pub name: String,
@@ -43,7 +45,7 @@ pub struct ExternalEvidenceProducer {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, wary::Wary)]
-#[serde(tag = "kind")]
+#[serde(tag = "kind", deny_unknown_fields)]
 #[validate(func = |_, row: &ExternalEvidenceRow| {
     match row {
         ExternalEvidenceRow::HttpProbe {
@@ -203,22 +205,16 @@ pub enum EvidenceDefect {
     Contract(wary::Report),
 }
 
-/// Parses one strict external evidence document. Additive fields are inert.
-/// Returns the decoded evidence and the canonical digest of the complete input,
-/// including additive fields that the typed model does not retain.
+/// Parses typed external evidence and returns its verified canonical input digest.
 ///
 /// # Errors
 ///
-/// Fails on an oversized or malformed strict document, a malformed known
-/// field, or a schema law reported by the derived validator.
+/// Fails on oversized or malformed strict JSON, unknown or reshaped data,
+/// malformed fields, or a schema law reported by the derived validator.
 pub fn parse_evidence(bytes: &[u8]) -> Result<(ExternalEvidence, Digest), EvidenceDefect> {
-    let value: serde_json::Value = super::read(bytes).map_err(EvidenceDefect::Wire)?;
-    let digest = hj_serde(EVIDENCE_SCHEMA, |mut writer| {
-        serde_json_canonicalizer::to_writer(&value, &mut writer)
-    })
-    .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
-    let document: ExternalEvidence =
-        de::deserialize_value("$", value).map_err(EvidenceDefect::Wire)?;
+    let document: ExternalEvidence = super::read(bytes).map_err(EvidenceDefect::Wire)?;
+    let digest = verified_json_digest(EVIDENCE_SCHEMA, bytes, &document)
+        .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
     document
         .validate(&())
         .map_err(EvidenceDefect::Contract)
