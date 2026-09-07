@@ -157,29 +157,8 @@ pub(super) fn finding<E>(finding: Finding<E>) -> model::Finding<RepoPath, E> {
         configured_disposition: finding.configured_disposition,
         effective_disposition: finding.effective_disposition,
         policy_trace: finding.steps,
-        debt: finding.debt.map(|applied| model::DebtApplication {
-            debt_id: applied.item.debt_id,
-            debt_snapshot_digest: applied.snapshot_digest,
-            adoption_tree: applied.adoption_tree,
-            accepted_fact_digest: applied.item.accepted_fact_digest,
-            owner: applied.item.owner,
-            reason: applied.item.reason,
-            created_at: applied.item.created_at,
-            expires_at: applied.item.expires_at,
-        }),
-        waiver: finding.waiver.map(|applied| model::WaiverApplication {
-            waiver_id: applied.item.waiver_id,
-            waiver_bundle_digest: applied.bundle_digest,
-            candidate_tree: applied.item.candidate_tree,
-            authorized_fact_digest: applied.item.authorized_fact_digest,
-            issuer: applied.item.issuer,
-            not_before: applied.item.not_before,
-            residual_disposition: applied.item.residual_disposition,
-            owner: applied.item.owner,
-            reason: applied.item.reason,
-            created_at: applied.item.created_at,
-            expires_at: applied.item.expires_at,
-        }),
+        debt: finding.debt,
+        waiver: finding.waiver,
     }
 }
 

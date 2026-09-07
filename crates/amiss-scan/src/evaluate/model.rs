@@ -2,11 +2,13 @@ use amiss_wire::controls::GitMode;
 use amiss_wire::controls::ProjectionSource;
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{RepoPath, RepoPathText};
+use amiss_wire::report::model::DebtApplication;
 use amiss_wire::report::model::FindingFactEvidence;
 use amiss_wire::report::model::FindingFactInput;
 use amiss_wire::report::model::FindingKeyInput;
 use amiss_wire::report::model::ProjectionDifference;
 use amiss_wire::report::model::RowsProjectionDifference;
+use amiss_wire::report::model::WaiverApplication;
 pub use amiss_wire::report::model::{Attribution, LocationSide, PolicyStep};
 use amiss_wire::report::{Disposition, FixKind};
 use amiss_wire::resolution::Resolution;
@@ -92,23 +94,7 @@ pub struct Finding<
     pub configured_disposition: Disposition,
     pub effective_disposition: Disposition,
     pub steps: Vec<PolicyStep>,
-    pub debt: Option<DebtApplied>,
-    pub waiver: Option<WaiverApplied>,
+    pub debt: Option<DebtApplication>,
+    pub waiver: Option<WaiverApplication>,
     pub(crate) fix: Option<FindingFix>,
-}
-
-/// A valid active debt item applied to this finding, retained as adoption
-/// provenance even when its residual equals the incoming disposition.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DebtApplied {
-    pub item: amiss_wire::controls::DebtItem,
-    pub snapshot_digest: Digest,
-    pub adoption_tree: amiss_wire::model::TreeIdentity,
-}
-
-/// A valid selected waiver applied to this finding: exactly `fail -> warn`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct WaiverApplied {
-    pub item: amiss_wire::controls::WaiverItem,
-    pub bundle_digest: Digest,
 }

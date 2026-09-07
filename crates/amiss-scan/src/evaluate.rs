@@ -19,8 +19,8 @@ pub use control::GovernedSeed;
 pub(crate) use finding::fact;
 use model::FindingKeyScope;
 pub use model::{
-    Attribution, DebtApplied, DocumentInput, DocumentSide, Finding, FindingFact, FindingFix,
-    Location, LocationSide, PolicyStep, WaiverApplied,
+    Attribution, DocumentInput, DocumentSide, Finding, FindingFact, FindingFix, Location,
+    LocationSide, PolicyStep,
 };
 pub use references::structural_facts;
 use run::candidate_digest_of;
