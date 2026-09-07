@@ -16,6 +16,7 @@ digest-io.workspace = true
 hex = { workspace = true, features = ["serde"] }
 hex_fmt.workspace = true
 json-serde.workspace = true
+js_int.workspace = true
 serde.workspace = true
 serde-transcode.workspace = true
 serde_json = { workspace = true, features = ["unbounded_depth"] }

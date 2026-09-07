@@ -82,18 +82,23 @@ fn typed_counts_still_obey_the_strict_json_integer_limit() {
 
     let (wire, expectations) = accepted_report();
     let mut report: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
-    report.payload.summary.findings.warn = 9_007_199_254_740_992;
-    report.payload_digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+    report.payload.summary.findings.warn = 9_007_199_254_740_991;
+    let payload =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
+    let invalid = payload.replace("9007199254740991", "9007199254740992");
+    assert_ne!(invalid, payload);
+    report.payload_digest = hb(PAYLOAD_SCHEMA, invalid.as_bytes());
+    let wire = format!(
+        "{}\n",
+        String::from_utf8(serde_json_canonicalizer::to_vec(&report).unwrap())
+            .unwrap()
+            .replace(&payload, &invalid)
     );
-    let mut wire = serde_json_canonicalizer::to_vec(&report).unwrap();
-    wire.push(b'\n');
+    assert!(serde_json::from_str::<ReportEnvelope>(&wire).is_err());
     assert_eq!(
-        serde_json::from_slice::<ReportEnvelope>(&wire).unwrap(),
-        report
+        accept(wire.as_bytes(), &expectations),
+        Err(AcceptanceDefect::Shape)
     );
-    assert_eq!(accept(&wire, &expectations), Err(AcceptanceDefect::Shape));
 }
 
 #[test]

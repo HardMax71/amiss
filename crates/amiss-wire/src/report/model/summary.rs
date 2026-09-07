@@ -1,5 +1,8 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
+use serde_with::{As, TryFromInto, apply};
 
+#[apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DocumentCounts {
@@ -20,6 +23,7 @@ pub struct DocumentCounts {
     pub unsupported: u64,
 }
 
+#[apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReferenceCounts {
@@ -32,6 +36,7 @@ pub struct ReferenceCounts {
     pub unsupported: u64,
 }
 
+#[apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FindingCounts {
@@ -50,6 +55,7 @@ pub struct FindingCounts {
     pub warn: u64,
 }
 
+#[apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Summary {

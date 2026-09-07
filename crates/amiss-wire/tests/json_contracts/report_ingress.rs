@@ -95,19 +95,30 @@ fn known_fields_cannot_hide_non_strict_json_tokens() {
 fn typed_counts_keep_the_safe_integer_boundary() {
     let mut report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
     let safe = u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER).unwrap();
-    for (count, expected) in [(safe, Ok(())), (safe + 1, Err(ReportDefect::NotAReport))] {
-        report.payload.summary.findings.warn = count;
-        report.payload_digest = hb(
-            PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
-        );
-        let input = serde_json_canonicalizer::to_vec(&report).unwrap();
-        assert_eq!(
-            serde_json::from_slice::<ReportEnvelope>(&input).unwrap(),
-            report
-        );
-        assert_eq!(validate_envelope(&input).map(drop), expected, "{count}");
-    }
+    assert_eq!(safe, js_int::MAX_SAFE_UINT);
+    report.payload.summary.findings.warn = safe;
+    report.payload_digest = hb(
+        PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+    );
+    let input = serde_json_canonicalizer::to_vec(&report).unwrap();
+    assert_eq!(
+        serde_json::from_slice::<ReportEnvelope>(&input).unwrap(),
+        report
+    );
+    assert!(validate_envelope(&input).is_ok());
+
+    let invalid = String::from_utf8(input)
+        .unwrap()
+        .replace(&safe.to_string(), &(safe + 1).to_string());
+    assert!(serde_json::from_str::<ReportEnvelope>(&invalid).is_err());
+    assert_eq!(
+        validate_envelope(invalid.as_bytes()).map(drop),
+        Err(ReportDefect::NotAReport)
+    );
+    report.payload.summary.findings.warn = safe + 1;
+    assert!(serde_json::to_vec(&report).is_err());
+    assert!(serde_json_canonicalizer::to_vec(&report).is_err());
 }
 
 #[test]
