@@ -4,7 +4,7 @@ use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::model::{
-    ClaimFactEvidenceKind, ClaimKind, ClaimObserved, ControlStateSource, FindingFactEvidence,
+    ClaimKind, ClaimObserved, ControlStateSource, FindingFactEvidence,
 };
 use amiss_wire::report::{FindingKind, FixKind};
 
@@ -130,7 +130,6 @@ pub fn claim_groups(outcomes: &[crate::claim::ClaimOutcome]) -> Vec<ClaimGroup> 
 pub(super) fn claim_finding(group: &ClaimGroup, profile: Profile) -> Result<Finding, crate::Error> {
     let rule_id = format!("claim/value/{}", group.name);
     let evidence = FindingFactEvidence::Claim {
-        kind: ClaimFactEvidenceKind::Claim,
         claim_kind: ClaimKind::Value,
         name: group.name.clone(),
         target_path: group

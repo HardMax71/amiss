@@ -42,8 +42,7 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
                 same_object_at: relocation,
             });
             let input = report::FindingFactInput {
-                evidence: report::ReferenceFactEvidence {
-                    kind: report::ReferenceFactEvidenceKind::Reference,
+                evidence: report::FindingFactEvidence::<&RepoPath, _>::Reference {
                     occurrence_multiplicity: 3,
                     resolution: &resolution,
                 },
@@ -54,18 +53,22 @@ fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_jso
             let encoded = serde_json_canonicalizer::to_vec(&input)?;
             let decoded: report::FindingFactInput = serde_json::from_slice(&encoded)?;
             assert_eq!(serde_json_canonicalizer::to_vec(&decoded)?, encoded);
-            let report::FindingFactEvidence::Reference(evidence) = decoded.evidence else {
+            assert_eq!(decoded.evidence.to_string(), "reference");
+            let report::FindingFactEvidence::Reference {
+                occurrence_multiplicity,
+                resolution: observed_resolution,
+            } = decoded.evidence
+            else {
                 panic!("expected reference evidence");
             };
-            assert_eq!(evidence.occurrence_multiplicity, 3);
+            assert_eq!(occurrence_multiplicity, 3);
             assert_eq!(
-                serde_json_canonicalizer::to_vec(&evidence.resolution)?,
+                serde_json_canonicalizer::to_vec(&observed_resolution)?,
                 serde_json_canonicalizer::to_vec(&resolution)?
             );
             assert_eq!(decoded.schema, FactSchema::Current);
-            assert_eq!(evidence.kind, report::ReferenceFactEvidenceKind::Reference);
             assert!(matches!(
-                evidence.resolution,
+                observed_resolution,
                 report::Resolution::Missing(report::MissingResolution::PathNotFound {
                     near: None,
                     same_object_at: Some(_),

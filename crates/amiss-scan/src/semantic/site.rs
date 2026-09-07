@@ -6,10 +6,7 @@ use amiss_wire::assessment::Nullable;
 use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::model::RepoPath;
-use amiss_wire::report::model::{
-    BrokenRedirectFactEvidenceKind, BrokenRedirectReason, DuplicateRouteFactEvidenceKind,
-    FindingFactEvidence,
-};
+use amiss_wire::report::model::{BrokenRedirectReason, FindingFactEvidence};
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 
 use super::{
@@ -21,9 +18,11 @@ const DESTINATION_BYTES: usize = 16_384;
 const SITE_CLAIM_DOMAIN: &str = "amiss/scanner-site-claim";
 const SITE_DEFECT_DOMAIN: &str = "amiss/scanner-site-defect";
 
+#[serde_with::serde_as]
 #[derive(serde::Serialize)]
-struct SiteDefectIdentity<'a, K> {
-    kind: K,
+struct SiteDefectIdentity<'a, K: std::fmt::Display> {
+    #[serde_as(as = "serde_with::DisplayFromStr")]
+    kind: &'a K,
     route: &'a str,
 }
 
@@ -291,12 +290,11 @@ fn duplicate_route_defect(
 ) -> serde_json::Result<SiteDefect> {
     let evidence = FindingFactEvidence::DuplicateRoute {
         claim_digests: claims.to_vec(),
-        kind: DuplicateRouteFactEvidenceKind::DuplicateRoute,
         route: route.to_owned(),
         sources: sources.to_vec(),
     };
     Ok(SiteDefect {
-        id: site_defect_id(DuplicateRouteFactEvidenceKind::DuplicateRoute, route)?,
+        id: site_defect_id(&evidence, route)?,
         evidence,
         source: sources.first().cloned(),
         member_count: u64::try_from(claims.len()).unwrap_or(u64::MAX),
@@ -344,21 +342,16 @@ fn broken_redirect_defect(
     let evidence = FindingFactEvidence::BrokenRedirect {
         claim_digest: claim.digest,
         destination: published,
-        kind: BrokenRedirectFactEvidenceKind::BrokenRedirect,
         reason,
         route: route.to_owned(),
         source: source.clone(),
     };
-    Some(
-        site_defect_id(BrokenRedirectFactEvidenceKind::BrokenRedirect, route).map(|id| {
-            SiteDefect {
-                id,
-                evidence,
-                source: Some(source.clone()),
-                member_count: 1,
-            }
-        }),
-    )
+    Some(site_defect_id(&evidence, route).map(|id| SiteDefect {
+        id,
+        evidence,
+        source: Some(source.clone()),
+        member_count: 1,
+    }))
 }
 
 pub(crate) fn fragment_target(anchors: &[String], fragment: &str) -> bool {
@@ -377,7 +370,7 @@ pub(crate) fn fragment_target(anchors: &[String], fragment: &str) -> bool {
                 .is_some_and(published))
 }
 
-fn site_defect_id(kind: impl serde::Serialize, route: &str) -> serde_json::Result<Digest> {
+fn site_defect_id(kind: &impl std::fmt::Display, route: &str) -> serde_json::Result<Digest> {
     hj_serde(SITE_DEFECT_DOMAIN, |mut writer| {
         serde_json_canonicalizer::to_writer(&SiteDefectIdentity { kind, route }, &mut writer)
     })

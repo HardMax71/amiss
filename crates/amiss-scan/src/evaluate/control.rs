@@ -7,8 +7,8 @@ use amiss_wire::report::FindingKind;
 use amiss_wire::report::model::ProjectionDifference;
 use amiss_wire::report::model::RowsProjectionDifference;
 use amiss_wire::report::model::{
-    ControlFactEvidenceKind, ControlState, ControlStateInput, ControlStateSchema,
-    ControlStateSource, ExceptionDiagnostic, FindingFactEvidence,
+    ControlState, ControlStateInput, ControlStateSchema, ControlStateSource, ExceptionDiagnostic,
+    FindingFactEvidence,
 };
 use amiss_wire::resolution::Resolution;
 
@@ -74,7 +74,6 @@ pub(super) fn governed_finding(
 ) -> Result<Finding, crate::Error> {
     let rule_id = "unsupported/governed-claim";
     let evidence = FindingFactEvidence::Control {
-        kind: ControlFactEvidenceKind::Control,
         control_path: Some(seed.document.clone()),
         rule_id: rule_id.to_owned(),
         base_control_state: None,
@@ -135,7 +134,6 @@ pub(super) fn control_row(
         rule_id: rule_id.clone(),
     };
     let evidence = FindingFactEvidence::Control {
-        kind: ControlFactEvidenceKind::Control,
         control_path: control_path.clone(),
         rule_id,
         base_control_state: None,

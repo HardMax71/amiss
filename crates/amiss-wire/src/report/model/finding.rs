@@ -129,12 +129,14 @@ pub enum ControlState {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ControlStateSource {
     pub digest: Digest,
     pub multiplicity: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ControlStateInput {
     #[serde(deserialize_with = "Option::deserialize")]
     pub path: Option<RepoPathText>,
@@ -274,80 +276,12 @@ pub enum ExceptionDiagnostic {
     },
 }
 
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum BrokenRedirectFactEvidenceKind {
-    #[strum(serialize = "broken-redirect")]
-    BrokenRedirect,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ClaimFactEvidenceKind {
-    #[strum(serialize = "claim")]
-    Claim,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ControlFactEvidenceKind {
-    #[strum(serialize = "control")]
-    Control,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum DocumentFactEvidenceKind {
-    #[strum(serialize = "document")]
-    Document,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum DuplicateRouteFactEvidenceKind {
-    #[strum(serialize = "duplicate-route")]
-    DuplicateRoute,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ObservationFactEvidenceKind {
-    #[strum(serialize = "observation")]
-    Observation,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ProjectionFactEvidenceKind {
-    #[strum(serialize = "projection")]
-    Projection,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ReferenceFactEvidenceKind {
-    #[strum(serialize = "reference")]
-    Reference,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ReferenceFactEvidence<R = Resolution> {
-    pub kind: ReferenceFactEvidenceKind,
-    pub occurrence_multiplicity: u64,
-    pub resolution: R,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Display)]
+#[strum(serialize_all = "kebab-case")]
 #[serde(
-    untagged,
+    tag = "kind",
+    rename_all = "kebab-case",
+    deny_unknown_fields,
     bound(
         deserialize = "P: Deserialize<'de>, R: Deserialize<'de>, S: Deserialize<'de>, D: Deserialize<'de>, M: Deserialize<'de>"
     )
@@ -362,7 +296,6 @@ pub enum FindingFactEvidence<
     BrokenRedirect {
         claim_digest: Digest,
         destination: String,
-        kind: BrokenRedirectFactEvidenceKind,
         reason: BrokenRedirectReason,
         route: String,
         source: P,
@@ -370,7 +303,6 @@ pub enum FindingFactEvidence<
     Claim {
         claim_kind: ClaimKind,
         expected_digest: Digest,
-        kind: ClaimFactEvidenceKind,
         line: u64,
         name: String,
         observed: ClaimObserved,
@@ -392,22 +324,20 @@ pub enum FindingFactEvidence<
         control_path: Option<P>,
         #[serde(deserialize_with = "Option::deserialize")]
         exception: Option<Box<ExceptionDiagnostic>>,
-        kind: ControlFactEvidenceKind,
         rule_id: String,
     },
     Document {
+        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         document_result: DocumentResult<P, DocumentSide<M>>,
-        kind: DocumentFactEvidenceKind,
     },
     DuplicateRoute {
         claim_digests: Vec<Digest>,
-        kind: DuplicateRouteFactEvidenceKind,
         route: String,
         sources: Vec<P>,
     },
     Observation {
+        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         comparison: Box<ObservationComparison<P, R>>,
-        kind: ObservationFactEvidenceKind,
     },
     Projection {
         #[serde(
@@ -420,7 +350,6 @@ pub enum FindingFactEvidence<
         expected_bytes: Option<u64>,
         #[serde(deserialize_with = "Option::deserialize")]
         expected_digest: Option<Digest>,
-        kind: ProjectionFactEvidenceKind,
         name: String,
         observed: ProjectionObserved,
         #[serde(deserialize_with = "Option::deserialize")]
@@ -432,11 +361,17 @@ pub enum FindingFactEvidence<
         source: S,
         sources: Vec<ControlStateSource>,
     },
-    Reference(ReferenceFactEvidence<R>),
+    Reference {
+        occurrence_multiplicity: u64,
+        resolution: R,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "K: Deserialize<'de>, E: Deserialize<'de>"))]
+#[serde(
+    deny_unknown_fields,
+    bound(deserialize = "K: Deserialize<'de>, E: Deserialize<'de>")
+)]
 pub struct FindingFactInput<K = FindingKeyInput, E = FindingFactEvidence> {
     pub evidence: E,
     pub finding_kind: FindingKind,
