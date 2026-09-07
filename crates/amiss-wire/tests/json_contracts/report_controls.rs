@@ -124,7 +124,8 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
         .unwrap(),
     );
     cases.extend(super::report_projections::reports());
-    assert_eq!(cases.len(), 12);
+    cases.extend(super::report_details::reports());
+    assert_eq!(cases.len(), 16);
     for mut report in cases {
         let payload =
             String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
@@ -179,8 +180,15 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
                         vec![serde_json_canonicalizer::to_vec(&finding.key_input).unwrap()];
                     for fact in finding.base_fact.iter().chain(&finding.candidate_fact) {
                         fragments.push(serde_json_canonicalizer::to_vec(&fact.key_input).unwrap());
-                        if let FindingFactEvidence::Projection { source, .. } = &fact.evidence {
+                        if let FindingFactEvidence::Projection {
+                            source, difference, ..
+                        } = &fact.evidence
+                        {
                             fragments.push(serde_json_canonicalizer::to_vec(source).unwrap());
+                            fragments.push(serde_json_canonicalizer::to_vec(difference).unwrap());
+                        }
+                        if let FindingFactEvidence::Control { exception, .. } = &fact.evidence {
+                            fragments.push(serde_json_canonicalizer::to_vec(exception).unwrap());
                         }
                     }
                     fragments
