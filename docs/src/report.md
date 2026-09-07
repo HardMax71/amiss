@@ -58,6 +58,11 @@ the latter keeps the original resolution borrowed. Site-defect identities use it
 kind label, preserving their kind/route preimages. Embedded document rows and observation
 comparisons must be objects, not positional arrays.
 
+Finding rows, locations, aggregation, fixes, policy steps and applied debt/waiver metadata
+reject unknown members. Evaluation carries applied exceptions directly into the report;
+it retains their provenance without cloning the accepted or authorized fact again.
+Nullable finding fields remain required, and canonical report bytes stay unchanged.
+
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
 to which branch-scoped controls were matched. Either may be null on a local, self-asserted run,

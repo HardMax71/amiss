@@ -23,7 +23,6 @@ struct ResultHeader {
 }
 
 /// Accepts the active report bytes and returns the typed payload and recorded verdict.
-/// Additive fields remain digest-bound within the supported compatibility.
 ///
 /// # Errors
 ///

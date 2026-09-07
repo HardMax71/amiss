@@ -472,6 +472,7 @@ pub enum RepresentativeRule {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FindingAggregation {
     pub locations_omitted: u64,
     pub member_count: u64,
@@ -500,7 +501,7 @@ pub enum LocationSide {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
 pub struct FindingLocation<P = RepoPath> {
     #[serde(deserialize_with = "Option::deserialize")]
     pub path: Option<P>,
@@ -510,16 +511,19 @@ pub struct FindingLocation<P = RepoPath> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ByteSpan {
     pub end_byte: u64,
     pub start_byte: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FindingFix {
     pub description: String,
     pub path: RepoPathText,
     pub replacement: String,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub span: ByteSpan,
 }
 
@@ -548,6 +552,7 @@ pub enum PolicySource {
 
 /// Built-in starts at `record`; each later `before` equals the previous `after`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PolicyStep {
     pub after: Disposition,
     pub before: Disposition,
@@ -556,8 +561,10 @@ pub struct PolicyStep {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DebtApplication {
     pub accepted_fact_digest: Digest,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub adoption_tree: TreeIdentity,
     pub created_at: UtcInstant,
     pub debt_id: ArtifactId,
@@ -568,8 +575,10 @@ pub struct DebtApplication {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct WaiverApplication {
     pub authorized_fact_digest: Digest,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub candidate_tree: TreeIdentity,
     pub created_at: UtcInstant,
     pub expires_at: UtcInstant,
@@ -583,8 +592,12 @@ pub struct WaiverApplication {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "P: Deserialize<'de>, E: Deserialize<'de>"))]
+#[serde(
+    deny_unknown_fields,
+    bound(deserialize = "P: Deserialize<'de>, E: Deserialize<'de>")
+)]
 pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub aggregation: FindingAggregation,
     pub attribution: Attribution,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -609,6 +622,7 @@ pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
     #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub key_input: FindingKeyInput<P>,
     pub kind: FindingKind,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub location: FindingLocation<P>,
     pub observation_ids: Vec<Digest>,
     pub policy_trace: Vec<PolicyStep>,

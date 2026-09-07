@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
-use amiss_wire::report::model::PolicySource;
+use amiss_wire::report::model::{DebtApplication, PolicySource, WaiverApplication};
 use amiss_wire::report::{Disposition, ErrorDetail, FindingKind};
 use amiss_wire::resolution::Resolution;
 
@@ -15,8 +15,7 @@ use super::projections::projection_finding;
 use super::references::{comparison_findings, structural_findings};
 use super::waiver::waiver_pass;
 use super::{
-    Attribution, DebtApplied, DocumentInput, Finding, Location, LocationSide, PolicyStep,
-    WaiverApplied, resolution_kinds,
+    Attribution, DocumentInput, Finding, Location, LocationSide, PolicyStep, resolution_kinds,
 };
 use crate::correlate::{Comparison, Outcome};
 
@@ -270,10 +269,15 @@ fn apply_valid_exceptions(
                     after: Disposition::Warn,
                 });
                 finding.effective_disposition = Disposition::Warn;
-                finding.debt = Some(DebtApplied {
-                    item: item.clone(),
-                    snapshot_digest: context.digest,
+                finding.debt = Some(DebtApplication {
+                    debt_id: item.debt_id.clone(),
+                    debt_snapshot_digest: context.digest,
                     adoption_tree: context.adoption_tree.clone(),
+                    accepted_fact_digest: item.accepted_fact_digest,
+                    owner: item.owner.clone(),
+                    reason: item.reason.clone(),
+                    created_at: item.created_at.clone(),
+                    expires_at: item.expires_at.clone(),
                 });
             }
             (None, Some(index)) => {
@@ -298,9 +302,18 @@ fn apply_valid_exceptions(
                         after: Disposition::Warn,
                     });
                     finding.effective_disposition = Disposition::Warn;
-                    finding.waiver = Some(WaiverApplied {
-                        item: item.clone(),
-                        bundle_digest: context.digest,
+                    finding.waiver = Some(WaiverApplication {
+                        waiver_id: item.waiver_id.clone(),
+                        waiver_bundle_digest: context.digest,
+                        candidate_tree: item.candidate_tree.clone(),
+                        authorized_fact_digest: item.authorized_fact_digest,
+                        issuer: item.issuer.clone(),
+                        not_before: item.not_before.clone(),
+                        residual_disposition: item.residual_disposition,
+                        owner: item.owner.clone(),
+                        reason: item.reason.clone(),
+                        created_at: item.created_at.clone(),
+                        expires_at: item.expires_at.clone(),
                     });
                 }
             }

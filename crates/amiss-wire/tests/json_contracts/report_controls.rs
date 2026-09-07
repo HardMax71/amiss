@@ -125,7 +125,8 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
     );
     cases.extend(super::report_projections::reports());
     cases.extend(super::report_details::reports());
-    assert_eq!(cases.len(), 16);
+    cases.extend(super::report_findings::reports());
+    assert_eq!(cases.len(), 18);
     for mut report in cases {
         let payload =
             String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
@@ -168,23 +169,11 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
                 serde_json_canonicalizer::to_vec(&report.payload.observations).unwrap(),
                 ReportDefect::NotAReport,
             ),
-        ]
-        .into_iter()
-        .chain(
-            report
-                .payload
-                .findings
-                .iter()
-                .flat_map(|finding| {
-                    let mut fragments =
-                        vec![serde_json_canonicalizer::to_vec(&finding.key_input).unwrap()];
-                    for fact in finding.base_fact.iter().chain(&finding.candidate_fact) {
-                        fragments.push(serde_json_canonicalizer::to_vec(fact).unwrap());
-                    }
-                    fragments
-                })
-                .map(|fragment| (fragment, ReportDefect::NotAReport)),
-        ) {
+            (
+                serde_json_canonicalizer::to_vec(&report.payload.findings).unwrap(),
+                ReportDefect::NotAReport,
+            ),
+        ] {
             let fragment = String::from_utf8(fragment).unwrap();
             for (offset, _) in fragment.match_indices('{') {
                 let mut invalid = fragment.clone();

@@ -22,6 +22,7 @@ use amiss_wire::resolution::{
     UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
 
+mod applications;
 mod fact_contract;
 mod key_contract;
 
@@ -711,7 +712,7 @@ fn waived_fact() -> amiss_wire::controls::Fact {
                     path: amiss_wire::model::RepoPathText::new("absent.md".to_owned())
                         .expect("path"),
                     near: None,
-                    same_object_at: None,
+                    same_object_at: Some(amiss_wire::assessment::Nullable::Null),
                 },
             ),
             occurrence_multiplicity: 1,
