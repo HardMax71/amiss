@@ -642,7 +642,10 @@ fn the_semantic_evidence_example_matches_its_checked_writer() {
         .expect("the semantic evidence example is readable");
     let parsed = amiss_wire::semantic::parse(&bytes)
         .expect("the semantic evidence example clears the strict reader");
-    let (_document, written) = amiss_wire::semantic::envelope(parsed.payload)
+    let document = amiss_wire::semantic::envelope(parsed.payload)
+        .expect("the semantic evidence example clears typed construction");
+    let mut written = Vec::new();
+    amiss_wire::semantic::write(&document, &mut written)
         .expect("the semantic evidence example clears the checked writer");
     let example =
         amiss_wire::json::parse(&bytes).expect("the semantic evidence example is strict JSON");

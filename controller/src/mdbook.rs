@@ -144,7 +144,7 @@ pub fn mdbook_site_evidence(
     })
     .map(|canonical| hb(INPUT_DOMAIN, &canonical))
     .map_err(|_defect| MdBookEvidenceError::Evidence)?;
-    amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
+    let document = amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
             candidate_identity_digest,
@@ -164,8 +164,11 @@ pub fn mdbook_site_evidence(
             .map(std::borrow::Cow::Owned)
             .collect(),
     })
-    .map(|(_document, bytes)| bytes)
-    .map_err(|_defect| MdBookEvidenceError::Evidence)
+    .map_err(|_defect| MdBookEvidenceError::Evidence)?;
+    let mut bytes = Vec::new();
+    amiss_wire::semantic::write(&document, &mut bytes)
+        .map_err(|_defect| MdBookEvidenceError::Evidence)?;
+    Ok(bytes)
 }
 
 fn collect_pages(

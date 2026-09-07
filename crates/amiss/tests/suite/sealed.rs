@@ -10,7 +10,7 @@ use std::process::{Command, Stdio};
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{Profile, canonical_organization_floor, parse_organization_floor};
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::digest::hb;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity,
 };
@@ -23,13 +23,6 @@ use amiss_wire::semantic::observation::{
     Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation,
 };
 use amiss_wire::semantic::{PayloadSchema, SemanticEvidence, SemanticProducer, SemanticSubject};
-
-fn supplied_semantic(bytes: &[u8], expected_context_digest: Digest) -> SuppliedSemanticEvidence {
-    SuppliedSemanticEvidence {
-        value: serde_json::from_slice(bytes).unwrap(),
-        expected_context_digest,
-    }
-}
 
 fn run(repo: Option<&str>, input: &[u8]) -> std::process::Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_amiss"));
@@ -334,11 +327,9 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     semantic.producer.input_digest = hb("amiss-test/input", b"inventory bytes");
     let producer = semantic.producer.clone();
     let expected_context_digest = semantic.producer.context_digest;
-    let (_document, evidence) = amiss_wire::semantic::envelope(semantic).unwrap();
+    let evidence = amiss_wire::semantic::envelope(semantic).unwrap();
     let expected_provenance = vec![SemanticEvidenceProvenance {
-        payload_digest: amiss_wire::semantic::parse(&evidence)
-            .unwrap()
-            .payload_digest,
+        payload_digest: evidence.payload_digest,
         producer: SemanticEvidenceProducer {
             kind: producer.kind,
             identity: producer.identity,
@@ -347,7 +338,10 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
         },
     }];
     let controls = ControlsRequest {
-        semantic_evidence: vec![supplied_semantic(&evidence, expected_context_digest)],
+        semantic_evidence: vec![SuppliedSemanticEvidence {
+            value: evidence,
+            expected_context_digest,
+        }],
         ..ControlsRequest::default()
     };
     let streams = RequestStreams {
@@ -434,7 +428,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
     )
     .unwrap();
     let context_digest = hb("amiss-test/site-context", b"default/current");
-    let (_document, evidence) = amiss_wire::semantic::envelope(SemanticEvidence {
+    let evidence = amiss_wire::semantic::envelope(SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
             candidate_identity_digest: identity,
@@ -461,7 +455,10 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         evaluation: evaluation.canonical_bytes().unwrap(),
         snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
         controls: ControlsRequest {
-            semantic_evidence: vec![supplied_semantic(&evidence, context_digest)],
+            semantic_evidence: vec![SuppliedSemanticEvidence {
+                value: evidence,
+                expected_context_digest: context_digest,
+            }],
             ..ControlsRequest::default()
         }
         .canonical_bytes()
@@ -746,7 +743,7 @@ fn assert_unlinked(envelope: &serde_json::Value, expected: &[&str]) {
 fn stale_intersphinx_evidence_refuses_the_run() {
     let (fixture, evaluation, semantic) = intersphinx_case();
     let expected_context_digest = semantic.producer.context_digest;
-    let (_document, stale) = amiss_wire::semantic::envelope(SemanticEvidence {
+    let stale = amiss_wire::semantic::envelope(SemanticEvidence {
         subject: SemanticSubject {
             candidate_identity_digest: hb("amiss-test/stale", b"another candidate"),
             source_report_payload_digest: Nullable::Null,
@@ -758,7 +755,10 @@ fn stale_intersphinx_evidence_refuses_the_run() {
         evaluation: evaluation.canonical_bytes().unwrap(),
         snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
         controls: ControlsRequest {
-            semantic_evidence: vec![supplied_semantic(&stale, expected_context_digest)],
+            semantic_evidence: vec![SuppliedSemanticEvidence {
+                value: stale,
+                expected_context_digest,
+            }],
             ..ControlsRequest::default()
         }
         .canonical_bytes()
