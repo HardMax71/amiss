@@ -38,13 +38,12 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
 }
 
 fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrence>, String> {
-    let (payload, _digest, _verdict) =
-        validate_envelope(bytes).map_err(|error| error.to_string())?;
-    if !payload.result.complete {
+    let (report, _verdict) = validate_envelope(bytes).map_err(|error| error.to_string())?;
+    if !report.payload.result.complete {
         return Err(ReportDefect::Incomplete.to_string());
     }
     let target_hex = hex::encode(target.as_bytes());
-    Ok(payload
+    Ok(report.payload
         .observations
         .into_iter()
         .flat_map(|comparison| {

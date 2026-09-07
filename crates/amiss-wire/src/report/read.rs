@@ -1,19 +1,19 @@
 use serde::Deserialize;
 
 use crate::ExitClass;
-use crate::digest::{Digest, hj_serde, verified_json_digest};
+use crate::digest::{hj_serde, verified_json_digest};
 use crate::json;
 
-use super::model::{ReportEnvelope, ReportPayload, ReportResult, ReportStatus};
+use super::model::{ReportEnvelope, ReportResult, ReportStatus};
 use super::{ENVELOPE_SCHEMA, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect};
 
-/// Accepts the active report bytes and returns the typed payload and recorded verdict.
+/// Accepts the active report bytes and returns the complete typed envelope and verdict.
 ///
 /// # Errors
 ///
 /// Refuses oversized or non-strict JSON, invalid report shapes or identities, and
 /// typed normalization before checking the payload digest and result tuple.
-pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitClass), ReportDefect> {
+pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportEnvelope, ExitClass), ReportDefect> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES
         || !matches!(json::parse(bytes), Ok(json::Value::Object(_)))
     {
@@ -34,7 +34,7 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitCla
         return Err(ReportDefect::DigestMismatch);
     }
     let verdict = result_verdict(&envelope.payload.result)?;
-    Ok((envelope.payload, digest, verdict))
+    Ok((envelope, verdict))
 }
 
 /// Checks the recorded completeness, status and exit code as one verdict.

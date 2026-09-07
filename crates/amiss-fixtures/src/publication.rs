@@ -19,9 +19,9 @@ pub struct PublicationAuditFixture {
 #[must_use]
 pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture> {
     let report = REPORT.to_vec();
-    let (_, report_payload_digest, _) = amiss_wire::report::validate_envelope(&report).ok()?;
+    let (envelope, _) = amiss_wire::report::validate_envelope(&report).ok()?;
     let mut plan_envelope = parse_plan(PLAN).ok()?;
-    plan_envelope.payload.report_payload_digest = report_payload_digest;
+    plan_envelope.payload.report_payload_digest = envelope.payload_digest;
     plan_envelope.payload.docs = DocsCandidate {
         repository: RepositoryIdentity::new(
             "git.example.internal".to_owned(),

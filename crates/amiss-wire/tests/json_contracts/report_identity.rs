@@ -66,11 +66,11 @@ fn report_identity_projections_keep_the_candidate_contract() -> serde_json::Resu
 
 #[test]
 fn report_evaluations_and_snapshots_are_closed_objects() {
-    let (payload, _, _) = amiss_wire::report::validate_envelope(include_bytes!(
+    let (report, _) = amiss_wire::report::validate_envelope(include_bytes!(
         "../../../../spec/examples/scanner-report.canonical.json"
     ))
     .unwrap();
-    let Evaluation::Resolved(mut evaluation) = payload.evaluation else {
+    let Evaluation::Resolved(mut evaluation) = report.payload.evaluation else {
         panic!("the report example has a resolved evaluation");
     };
     let unavailable = UnavailableSnapshot {

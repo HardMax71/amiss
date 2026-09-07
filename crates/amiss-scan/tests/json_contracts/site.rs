@@ -72,7 +72,8 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
     };
     let built = commit_pair(&repo, &engine, None, &setup, &base, &candidate).unwrap();
     let bytes = amiss_scan::report::wire(&built).unwrap();
-    let (payload, _, _) = amiss_wire::report::validate_envelope(&bytes).unwrap();
+    let (report, _) = amiss_wire::report::validate_envelope(&bytes).unwrap();
+    let payload = report.payload;
     assert!(payload.errors.is_empty(), "{:?}", payload.errors);
     let mut ids = payload
         .findings

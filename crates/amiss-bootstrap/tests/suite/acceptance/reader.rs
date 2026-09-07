@@ -141,7 +141,7 @@ fn report_readers_agree_on_complete_status_and_exit_code() {
                     )
                 };
                 assert_eq!(
-                    validate_envelope(&bytes).map(|(_, _, verdict)| verdict.code()),
+                    validate_envelope(&bytes).map(|(_, verdict)| verdict.code()),
                     normal,
                     "{complete} {status:?} {exit_code}"
                 );

@@ -80,9 +80,9 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
 }
 
 fn report_digests(report: &[u8]) -> Result<Vec<Digest>, ArtifactError> {
-    let (payload, _digest, _verdict) =
+    let (report, _verdict) =
         amiss_wire::report::validate_envelope(report).map_err(|_defect| ArtifactError::Corrupt)?;
-    let amiss_wire::report::model::Controls::Resolved(controls) = payload.controls else {
+    let amiss_wire::report::model::Controls::Resolved(controls) = report.payload.controls else {
         return Ok(Vec::new());
     };
     Ok(controls

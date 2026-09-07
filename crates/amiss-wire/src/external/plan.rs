@@ -140,7 +140,8 @@ pub fn plan(
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, PlanDefect> {
-    let (payload, recorded, _verdict) = validate_envelope(envelope)?;
+    let (report, _verdict) = validate_envelope(envelope)?;
+    let payload = report.payload;
     if !payload.result.complete {
         return Err(PlanDefect::Incomplete);
     }
@@ -168,7 +169,7 @@ pub fn plan(
             engine_digest,
         },
         report: ExternalPlanReport {
-            payload_digest: recorded,
+            payload_digest: report.payload_digest,
             base: &evaluation.base,
             candidate: &evaluation.candidate,
             mode: evaluation.mode,

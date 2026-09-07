@@ -132,10 +132,7 @@ fn complete_report_payloads_reject_unknown_members_with_matching_digests() {
             String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
         report.payload_digest = hb(PAYLOAD_SCHEMA, payload.as_bytes());
         let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&report).unwrap()).unwrap();
-        assert_eq!(
-            validate_envelope(wire.as_bytes()).unwrap().0,
-            report.payload
-        );
+        assert_eq!(validate_envelope(wire.as_bytes()).unwrap().0, report);
         for (offset, _) in payload.match_indices('{') {
             let mut invalid = payload.clone();
             invalid.insert_str(offset + 1, "\"__unexpected\":true,");

@@ -41,26 +41,36 @@ fn positional_rows_are_rejected_with_original_and_rebound_digests() {
 
 #[test]
 fn formatting_and_escaped_members_preserve_report_identity() {
-    let report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
-    let expected = validate_envelope(REPORT).unwrap();
-    let payload =
-        String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
-    let reordered = format!(
-        "{{\"schema\":{},\"payload_digest\":{},\"payload\":{payload}}}",
-        serde_json::to_string(&report.schema).unwrap(),
-        serde_json::to_string(&report.payload_digest).unwrap(),
-    );
-    let escaped = reordered.replace(
-        "\"compatibility\":\"1\"",
-        "\"\\u0063ompatibility\" : \"\\u0031\"",
-    );
-    assert_ne!(escaped, reordered);
-    for input in [
-        serde_json::to_string_pretty(&report).unwrap(),
-        reordered,
-        format!(" \r\n\t{escaped}\n\r "),
+    for example in [
+        REPORT,
+        include_bytes!("../../../../spec/examples/scanner-report.json"),
+        include_bytes!("../../../../spec/examples/scanner-report.frozen-1.json"),
+        include_bytes!("../../../../spec/examples/scanner-report.last-released.json"),
     ] {
-        assert_eq!(validate_envelope(input.as_bytes()).unwrap(), expected);
+        let report: ReportEnvelope = serde_json::from_slice(example).unwrap();
+        let (accepted, verdict) = validate_envelope(example).unwrap();
+        assert_eq!(accepted, report);
+        assert_eq!(verdict.code(), report.payload.result.exit_code);
+        let payload =
+            String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
+        let reordered = format!(
+            "{{\"schema\":{},\"payload_digest\":{},\"payload\":{payload}}}",
+            serde_json::to_string(&report.schema).unwrap(),
+            serde_json::to_string(&report.payload_digest).unwrap(),
+        );
+        let escaped = reordered.replace(
+            "\"compatibility\":\"1\"",
+            "\"\\u0063ompatibility\" : \"\\u0031\"",
+        );
+        assert_ne!(escaped, reordered);
+        let expected = (accepted, verdict);
+        for input in [
+            serde_json::to_string_pretty(&report).unwrap(),
+            reordered,
+            format!(" \r\n\t{escaped}\n\r "),
+        ] {
+            assert_eq!(validate_envelope(input.as_bytes()).unwrap(), expected);
+        }
     }
 }
 

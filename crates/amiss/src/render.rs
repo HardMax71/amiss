@@ -3,10 +3,7 @@ use std::io::{BufWriter, Stdout};
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
-use amiss_wire::report::{
-    model::{RepoPath, ReportEnvelope, ReportEnvelopeSchema},
-    validate_envelope,
-};
+use amiss_wire::report::{model::RepoPath, validate_envelope};
 
 use crate::invocation::RenderInvocation;
 
@@ -20,7 +17,7 @@ pub(crate) fn run(invocation: &RenderInvocation, reserve: &mut BufWriter<Stdout>
             return failure;
         }
     };
-    let (payload, payload_digest, verdict) = match validate_envelope(&input) {
+    let (report, verdict) = match validate_envelope(&input) {
         Ok(validated) => validated,
         Err(defect) => {
             eprintln!("amiss render: {defect}");
@@ -28,11 +25,7 @@ pub(crate) fn run(invocation: &RenderInvocation, reserve: &mut BufWriter<Stdout>
         }
     };
     let result = crate::project(
-        &ReportEnvelope {
-            payload,
-            payload_digest,
-            schema: ReportEnvelopeSchema::Current,
-        },
+        &report,
         invocation.format,
         false,
         invocation.full,

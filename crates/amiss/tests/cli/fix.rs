@@ -80,8 +80,9 @@ fn byte_named_documents_keep_findings_without_invalid_fixes() {
         args.extend(["--format", "json"]);
         let (code, bytes, stderr) = amiss(&args);
         assert_eq!((code, stderr.as_str()), (1, ""));
-        let (payload, _, _) = validate_envelope(&bytes).unwrap();
-        let rows: Vec<_> = payload
+        let (report, _) = validate_envelope(&bytes).unwrap();
+        let rows: Vec<_> = report
+            .payload
             .findings
             .iter()
             .filter(|row| row.kind == kind)

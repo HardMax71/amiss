@@ -109,7 +109,8 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
         };
         let built = commit_pair(&repo, &engine, None, &setup, &base, &candidate).unwrap();
         let bytes = amiss_scan::report::wire(&built).unwrap();
-        let (payload, _, _) = amiss_wire::report::validate_envelope(&bytes).unwrap();
+        let (report, _) = amiss_wire::report::validate_envelope(&bytes).unwrap();
+        let payload = report.payload;
         assert!(payload.errors.is_empty(), "{:?}", payload.errors);
         let amiss_wire::report::model::Controls::Resolved(controls) = payload.controls else {
             panic!("controls must resolve");

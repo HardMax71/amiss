@@ -44,6 +44,10 @@ the digest of a different report, without retaining a dynamic payload or staging
 buffers. Malformed fields and unsupported compatibility tags return the report-shape error;
 validly shaped payload-digest and result-tuple mismatches retain their specific errors.
 
+The accepted result retains the complete `ReportEnvelope` alongside its checked exit class.
+Rendering uses that object directly, keeping the payload, digest and schema together instead
+of reconstructing an envelope for each projection.
+
 Engine, action, adapter and summary metadata also use closed models. Unknown members are
 rejected even with a matching payload digest. Bootstrap validates the summary's declared
 fields as well as the engine block; a local action tag cannot conceal a forge-action body.

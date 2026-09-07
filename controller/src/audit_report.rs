@@ -2,9 +2,7 @@ mod tests;
 
 use amiss_wire::digest::{Digest, hj_serde, sha256};
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
-use amiss_wire::report::model::{
-    BaseSnapshot, Evaluation, IdentityPreimage, ReportPayload, Snapshot,
-};
+use amiss_wire::report::model::{BaseSnapshot, Evaluation, IdentityPreimage, Snapshot};
 use amiss_wire::requests::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateEventKind, CandidateFinality, CandidateIdentitySchema,
     CandidateSnapshot, RequestMode, SnapshotMaterialization,
@@ -31,12 +29,12 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > amiss_wire::report::MACHINE_JSON_BYTES {
         return Err(ArtifactError::TooLarge);
     }
-    let (ReportPayload { evaluation, .. }, payload_digest, verdict) =
+    let (report, verdict) =
         amiss_wire::report::validate_envelope(bytes).map_err(|_defect| ArtifactError::Corrupt)?;
     if verdict == amiss_wire::ExitClass::Failure {
         return Err(ArtifactError::Corrupt);
     }
-    let Evaluation::Resolved(evaluation) = evaluation else {
+    let Evaluation::Resolved(evaluation) = report.payload.evaluation else {
         return Err(ArtifactError::Corrupt);
     };
     if evaluation.mode != RequestMode::CommitPair
@@ -80,7 +78,7 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
 
     Ok(AcceptedReport {
         report_digest: sha256(bytes),
-        payload_digest,
+        payload_digest: report.payload_digest,
         repository,
         target_ref,
         base: AcceptedSnapshot {

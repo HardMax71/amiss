@@ -120,37 +120,6 @@ fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
 }
 
 #[test]
-fn report_examples_match_their_typed_source() {
-    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
-    for name in ["scanner-report.canonical.json", "scanner-report.json"] {
-        let bytes = fs::read(examples.join(name)).unwrap();
-        let _: report::model::ReportEnvelope =
-            serde_json::from_slice(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
-        let value = json::parse(&bytes).unwrap();
-        let (payload, payload_digest, _verdict) =
-            report::validate_envelope(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
-        let envelope = report::model::ReportEnvelope {
-            payload,
-            payload_digest,
-            schema: report::model::ReportEnvelopeSchema::Current,
-        };
-        assert_eq!(
-            serde_json_canonicalizer::to_vec(&envelope).unwrap(),
-            serde_json_canonicalizer::to_vec(&value).unwrap(),
-            "{name}",
-        );
-    }
-
-    for name in [
-        "scanner-report.frozen-1.json",
-        "scanner-report.last-released.json",
-    ] {
-        let bytes = fs::read(examples.join(name)).unwrap();
-        report::validate_envelope(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
-    }
-}
-
-#[test]
 fn optional_report_members_preserve_digest_bound_presence() {
     for document in [
         r#"{"reason":"path-not-found","near":null,"path":"docs/missing.md"}"#,

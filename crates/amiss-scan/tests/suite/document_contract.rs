@@ -57,8 +57,9 @@ fn unparsed_documents_survive_the_report_contract() {
     ] {
         assert_eq!(report.exit_code, 0);
         let bytes = amiss_scan::report::wire(&report).unwrap();
-        let (payload, digest, _) = validate_envelope(&bytes).unwrap();
-        assert_eq!(digest, report.payload_digest);
+        let (parsed, _) = validate_envelope(&bytes).unwrap();
+        assert_eq!(parsed.payload_digest, report.payload_digest);
+        let payload = parsed.payload;
         assert_eq!(payload.documents.len(), 3);
         assert_eq!(payload.summary.documents.unsupported, 2);
         assert_eq!(payload.summary.documents.excluded_builtin, 1);
