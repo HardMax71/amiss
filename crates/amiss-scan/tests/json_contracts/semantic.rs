@@ -71,7 +71,9 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
         .map(Cow::Owned)
         .collect(),
     };
-    let (envelope, bytes) = bind_template(&template, identity).unwrap();
+    let envelope = bind_template(&template, identity).unwrap();
+    let mut bytes = Vec::new();
+    semantic::write(&envelope, &mut bytes).unwrap();
     let request = ControlsRequest {
         semantic_evidence: vec![SuppliedSemanticEvidence {
             value: serde_json::from_slice(&bytes).unwrap(),
@@ -169,10 +171,12 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
         payload.producer.version = (*version).to_owned();
         payload.subject.source_report_payload_digest = Nullable::Null;
         payload.observations = vec![Cow::Owned(observation.clone())];
-        let (document, bytes) = semantic::envelope(payload).unwrap();
+        let document = semantic::envelope(payload).unwrap();
+        let mut bytes = Vec::new();
+        semantic::write(&document, &mut bytes).unwrap();
         let request = ControlsRequest {
             semantic_evidence: vec![SuppliedSemanticEvidence {
-                value: serde_json::from_slice(&bytes).unwrap(),
+                value: document.clone(),
                 expected_context_digest: document.payload.producer.context_digest,
             }],
             ..ControlsRequest::default()

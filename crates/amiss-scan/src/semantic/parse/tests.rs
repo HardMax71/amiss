@@ -14,6 +14,72 @@ const EXAMPLE: &[u8] =
 const PATH: &str = "$.semantic_evidence[0]";
 
 #[test]
+fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size() {
+    let mut template = semantic::parse_template(include_bytes!(
+        "../../../../../spec/examples/scanner-semantic-template.json"
+    ))
+    .unwrap();
+    let candidate = hb("test", b"candidate");
+    let limit = usize::try_from(semantic::SEMANTIC_EVIDENCE_BYTES).unwrap();
+    let Observation::Record(observation) =
+        std::sync::Arc::make_mut(&mut template.observations)[0].to_mut()
+    else {
+        panic!("the example contains one record set");
+    };
+    observation.records = (0..limit / semantic::RECORD_VALUE_BYTES)
+        .map(|index| semantic::record::Record {
+            key: format!("{index:08}"),
+            value: "x".repeat(semantic::RECORD_VALUE_BYTES),
+        })
+        .collect();
+    let document = semantic::bind_template(&template, candidate).unwrap();
+    let encoded_length = serde_json_canonicalizer::to_vec(&document).unwrap().len();
+    drop(document);
+    let Observation::Record(observation) =
+        std::sync::Arc::make_mut(&mut template.observations)[0].to_mut()
+    else {
+        panic!("the example remains a record set");
+    };
+    observation
+        .records
+        .last_mut()
+        .unwrap()
+        .value
+        .truncate(semantic::RECORD_VALUE_BYTES - (encoded_length - limit + 1));
+
+    for length in [limit - 1, limit, limit + 1] {
+        assert!(semantic::template(template.clone()).unwrap().len() < limit);
+        let document = semantic::bind_template(&template, candidate).unwrap();
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&document).unwrap().len(),
+            length
+        );
+        drop(document);
+        let result = crate::semantic::bind(
+            &crate::semantic::Input::Template(template.clone()),
+            candidate,
+        );
+        if length <= limit {
+            assert!(result.is_ok(), "a bounded record set reaches the consumer");
+        } else {
+            assert_eq!(
+                result
+                    .map(drop)
+                    .expect_err("binding must account for the envelope metadata")
+                    .code,
+                amiss_wire::report::AnalysisErrorCode::ConfigurationInvalid
+            );
+        }
+        let Observation::Record(observation) =
+            std::sync::Arc::make_mut(&mut template.observations)[0].to_mut()
+        else {
+            panic!("the example remains a record set");
+        };
+        observation.records.last_mut().unwrap().value.push('x');
+    }
+}
+
+#[test]
 fn typed_intake_retains_the_original_envelope_allocations() {
     let value = semantic::parse(EXAMPLE).unwrap();
     let observations = value.payload.observations.as_ptr();

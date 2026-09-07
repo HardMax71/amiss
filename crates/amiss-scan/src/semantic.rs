@@ -132,9 +132,11 @@ pub(crate) fn bind(input: &Input, candidate: Digest) -> Result<Context, ErrorDet
         Input::None => return Ok(Context::default()),
         Input::Bound(inputs) => inputs,
         Input::Template(template) => {
-            let (envelope, _bytes) = amiss_wire::semantic::bind_template(template, candidate)
-                .map_err(|error| crate::request::configuration_detail(&error))?;
-            parsed = parse([Ok(envelope)])
+            parsed = amiss_wire::semantic::bind_template(template, candidate)
+                .and_then(|envelope| {
+                    amiss_wire::semantic::write(&envelope, std::io::sink())?;
+                    parse([Ok(envelope)])
+                })
                 .map_err(|error| crate::request::configuration_detail(&error))?;
             &parsed
         }
