@@ -6,8 +6,7 @@ use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::model::ProjectionDifference;
 use amiss_wire::report::model::RowsProjectionDifference;
 use amiss_wire::report::model::{
-    FindingFactEvidence, FindingFactInput, FindingKeyInput, PolicySource, ReferenceFactEvidence,
-    ReferenceFactEvidenceKind,
+    FindingFactEvidence, FindingFactInput, FindingKeyInput, PolicySource,
 };
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 use amiss_wire::resolution::{Missing, Resolution};
@@ -49,11 +48,10 @@ pub(super) fn reference_fact(
 ) -> Result<FindingFact, crate::Error> {
     fact(
         key,
-        FindingFactEvidence::Reference(ReferenceFactEvidence {
-            kind: ReferenceFactEvidenceKind::Reference,
+        FindingFactEvidence::Reference {
             occurrence_multiplicity: multiplicity,
             resolution: observation.resolution.clone(),
-        }),
+        },
     )
 }
 

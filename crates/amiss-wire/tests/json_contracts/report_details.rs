@@ -4,8 +4,9 @@ use amiss_wire::{
     report::{
         FindingKind,
         model::{
-            ControlFactEvidenceKind, ExceptionDiagnostic, FindingFactEvidence, FindingKeyScope,
-            ProjectionDifference, ReportEnvelope,
+            ControlState, ControlStateInput, ControlStateSchema, ControlStateSource,
+            ExceptionDiagnostic, FindingFactEvidence, FindingKeyScope, ProjectionDifference,
+            ReportEnvelope,
         },
     },
 };
@@ -86,10 +87,18 @@ pub(super) fn reports() -> Vec<ReportEnvelope> {
             base_control_digest: None,
             base_control_state: None,
             candidate_control_digest: None,
-            candidate_control_state: None,
+            candidate_control_state: Some(ControlStateInput {
+                path: None,
+                rule_id: kind.as_ref().to_owned(),
+                schema: ControlStateSchema::Current,
+                sources: vec![ControlStateSource {
+                    digest: hb("test", b"control"),
+                    multiplicity: 1,
+                }],
+                state: ControlState::Present,
+            }),
             control_path: None,
             exception: Some(Box::new(detail)),
-            kind: ControlFactEvidenceKind::Control,
             rule_id: kind.as_ref().to_owned(),
         };
         reports.push(report);

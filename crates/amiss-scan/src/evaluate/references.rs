@@ -4,9 +4,9 @@ use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, Profile, TargetKin
 use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
-    EmptyRepositoryPath, FindingFactInput, FindingKeyInput, PolicySource, ReferenceFactEvidence,
-    ReferenceFactEvidenceKind, ReferenceOccurrence, ReferenceOccurrenceKind, RepositoryIntentKind,
-    RepositoryIntentPath, RepositoryTargetIntent,
+    EmptyRepositoryPath, FindingFactEvidence, FindingFactInput, FindingKeyInput, PolicySource,
+    ReferenceOccurrence, ReferenceOccurrenceKind, RepositoryIntentKind, RepositoryIntentPath,
+    RepositoryTargetIntent,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 
@@ -39,8 +39,7 @@ pub fn structural_facts(
             let first = group.candidate.first().ok_or(crate::Error::Internal)?;
             let multiplicity = u64::try_from(group.candidate.len()).unwrap_or(u64::MAX);
             let input = FindingFactInput {
-                evidence: ReferenceFactEvidence {
-                    kind: ReferenceFactEvidenceKind::Reference,
+                evidence: FindingFactEvidence::<RepoPath, _>::Reference {
                     occurrence_multiplicity: multiplicity,
                     resolution: &first.resolution,
                 },

@@ -3,33 +3,13 @@ mod producer_paths;
 mod projection;
 
 use amiss_wire::report::model::{
-    AnalysisError, BaseSnapshot, Controls, DocumentResult, Engine, Evaluation, Feedback, Finding,
-    FindingFactEvidence, FindingKeyScope, MissingResolution, ObservationComparison, RepoPath,
-    ReportEnvelope, Resolution, Snapshot, Summary,
+    BaseSnapshot, Evaluation, FindingFactEvidence, FindingFactInput, FindingKeyScope,
+    MissingResolution, RepoPath, ReportEnvelope, Resolution, Snapshot,
 };
 use amiss_wire::requests::CandidateSnapshot;
 use amiss_wire::resolution::{Target, VersionScope};
 
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
-
-#[test]
-fn published_provenance_blocks_match_the_models() {
-    let document: serde_json::Value = serde_json::from_slice(REPORT).unwrap();
-    let payload = document.get("payload").unwrap();
-    let _: Controls = serde_json::from_value(payload.get("controls").unwrap().clone()).unwrap();
-    let _: Engine = serde_json::from_value(payload.get("engine").unwrap().clone()).unwrap();
-    let _: Evaluation = serde_json::from_value(payload.get("evaluation").unwrap().clone()).unwrap();
-    let _: Summary = serde_json::from_value(payload.get("summary").unwrap().clone()).unwrap();
-    let _: Vec<AnalysisError> =
-        serde_json::from_value(payload.get("errors").unwrap().clone()).unwrap();
-    let _: Vec<DocumentResult> =
-        serde_json::from_value(payload.get("documents").unwrap().clone()).unwrap();
-    let _: Vec<ObservationComparison> =
-        serde_json::from_value(payload.get("observations").unwrap().clone()).unwrap();
-    let _: Feedback = serde_json::from_value(payload.get("feedback").unwrap().clone()).unwrap();
-    let _: Vec<Finding> = serde_json::from_value(payload.get("findings").unwrap().clone()).unwrap();
-    let _: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
-}
 
 #[test]
 fn entire_report_streams_in_canonical_order() {
@@ -136,9 +116,83 @@ fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::
         r#"{"expected_bytes":null,"expected_digest":null,"kind":"projection","name":"names","observed":"sink-absent","observed_bytes":null,"observed_digest":null,"projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"record-set","set":"records"},"sources":[]}"#,
         r#"{"kind":"reference","occurrence_multiplicity":1,"resolution":{"kind":"external","reason":"url"}}"#,
     ] {
-        assert_canonical::<FindingFactEvidence>(&template.replace("$digest", DIGEST))?;
+        let wire = template.replace("$digest", DIGEST);
+        let evidence: FindingFactEvidence = serde_json::from_str(&wire)?;
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&evidence)?,
+            wire.as_bytes()
+        );
+        assert!(serde_json::to_string(&evidence)?.starts_with(&format!(
+            "{{\"kind\":{},",
+            serde_json::to_string(&evidence.to_string())?
+        )));
+        assert!(
+            serde_json::from_str::<FindingFactEvidence>(&wire.replacen(
+                '{',
+                "{\"unexpected\":true,",
+                1
+            ))
+            .is_err()
+        );
     }
     Ok(())
+}
+
+#[test]
+fn fact_evidence_requires_document_and_comparison_objects() {
+    let report: ReportEnvelope = serde_json::from_slice(include_bytes!(
+        "../../../../spec/examples/scanner-report.frozen-1.json"
+    ))
+    .unwrap();
+    let mut rejected = Vec::new();
+    for fact in report
+        .payload
+        .findings
+        .iter()
+        .flat_map(|finding| finding.base_fact.iter().chain(&finding.candidate_fact))
+    {
+        let mut fragments = Vec::new();
+        if let FindingFactEvidence::Document { document_result } = &fact.evidence {
+            fragments.push((
+                serde_json::to_string(document_result).unwrap(),
+                serde_json::to_string(&(
+                    &document_result.base,
+                    &document_result.candidate,
+                    document_result.change,
+                    document_result.classification,
+                    &document_result.path,
+                ))
+                .unwrap(),
+            ));
+        }
+        if let FindingFactEvidence::Observation { comparison } = &fact.evidence {
+            fragments.push((
+                serde_json::to_string(comparison).unwrap(),
+                serde_json::to_string(&(
+                    &comparison.alternatives,
+                    &comparison.base,
+                    &comparison.candidate,
+                    comparison.correlation,
+                    comparison.correlation_reason,
+                    comparison.impact,
+                    comparison.source_change,
+                    comparison.target_change,
+                ))
+                .unwrap(),
+            ));
+        }
+        let encoded = serde_json::to_string(fact).unwrap();
+        assert_eq!(
+            serde_json::from_str::<FindingFactInput>(&encoded).unwrap(),
+            *fact
+        );
+        for (object, sequence) in fragments {
+            let invalid = encoded.replace(&object, &sequence);
+            assert_ne!(invalid, encoded);
+            rejected.push(serde_json::from_str::<FindingFactInput>(&invalid).is_err());
+        }
+    }
+    assert_eq!(rejected, [true; 2]);
 }
 
 fn assert_canonical<T>(wire: &str) -> Result<(), Box<dyn std::error::Error>>

@@ -6,11 +6,11 @@ use amiss_wire::{
         PAYLOAD_SCHEMA, ReportDefect,
         model::{
             ActionProvenance, Controls, ControlsUnavailableReason, ExecutionConstraintProvenance,
-            FindingFactEvidence, ForgeActionKind, ForgeActionProvenance, LocalActionKind,
-            ReportEnvelope, SandboxAssurance, SandboxEnforcementSource, SandboxMechanism,
-            SandboxVerification, SandboxVerificationSchema, SandboxVerifier,
-            SemanticEvidenceProducer, SemanticEvidenceProvenance, TrustedTimeProvenance,
-            TrustedTimeTrustSource, UnavailableControls, UnavailableStatus, VerifiedControlStatus,
+            ForgeActionKind, ForgeActionProvenance, LocalActionKind, ReportEnvelope,
+            SandboxAssurance, SandboxEnforcementSource, SandboxMechanism, SandboxVerification,
+            SandboxVerificationSchema, SandboxVerifier, SemanticEvidenceProducer,
+            SemanticEvidenceProvenance, TrustedTimeProvenance, TrustedTimeTrustSource,
+            UnavailableControls, UnavailableStatus, VerifiedControlStatus,
             VerifiedExecutionConstraint, VerifiedTrustedTime,
         },
         validate_envelope,
@@ -179,17 +179,7 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
                     let mut fragments =
                         vec![serde_json_canonicalizer::to_vec(&finding.key_input).unwrap()];
                     for fact in finding.base_fact.iter().chain(&finding.candidate_fact) {
-                        fragments.push(serde_json_canonicalizer::to_vec(&fact.key_input).unwrap());
-                        if let FindingFactEvidence::Projection {
-                            source, difference, ..
-                        } = &fact.evidence
-                        {
-                            fragments.push(serde_json_canonicalizer::to_vec(source).unwrap());
-                            fragments.push(serde_json_canonicalizer::to_vec(difference).unwrap());
-                        }
-                        if let FindingFactEvidence::Control { exception, .. } = &fact.evidence {
-                            fragments.push(serde_json_canonicalizer::to_vec(exception).unwrap());
-                        }
+                        fragments.push(serde_json_canonicalizer::to_vec(fact).unwrap());
                     }
                     fragments
                 })

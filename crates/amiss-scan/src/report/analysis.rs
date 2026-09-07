@@ -247,7 +247,6 @@ pub(super) fn nonreference_fact(
                     .ok()
                     .and_then(|index| rows.get(index))
                     .map(|(_, row)| model::FindingFactEvidence::Observation {
-                        kind: model::ObservationFactEvidenceKind::Observation,
                         comparison: Box::new(row.clone()),
                     })
             })
@@ -258,7 +257,6 @@ pub(super) fn nonreference_fact(
                 .ok()
                 .and_then(|index| document_rows.get(index))
                 .map(|row| model::FindingFactEvidence::Document {
-                    kind: model::DocumentFactEvidenceKind::Document,
                     document_result: row.clone(),
                 })
         }),
