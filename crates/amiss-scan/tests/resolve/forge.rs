@@ -158,7 +158,7 @@ fn a_full_local_commit_resolves_only_in_the_declared_object_format() {
     assert_eq!(
         resolution,
         Resolution::UnsupportedVersion {
-            scope: VersionScope::UnknownPath
+            scope: VersionScope::UnknownPath {}
         }
     );
 
@@ -352,7 +352,7 @@ fn a_ref_spelled_like_a_full_oid_is_ambiguous() {
     assert_eq!(
         resolution,
         Resolution::UnsupportedVersion {
-            scope: VersionScope::UnknownPath
+            scope: VersionScope::UnknownPath {}
         }
     );
 }
@@ -417,7 +417,7 @@ fn gitea_recognition_resolves_against_the_tree() {
     assert_eq!(
         tag,
         Resolution::UnsupportedVersion {
-            scope: VersionScope::UnknownPath
+            scope: VersionScope::UnknownPath {}
         },
         "a tag spelled like the candidate branch is still no trusted ref"
     );
@@ -701,7 +701,7 @@ fn a_commit_selector_is_an_exact_oid() {
         assert_eq!(
             row,
             Resolution::UnsupportedVersion {
-                scope: VersionScope::UnknownPath
+                scope: VersionScope::UnknownPath {}
             },
             "{selector} belongs to the other object format"
         );

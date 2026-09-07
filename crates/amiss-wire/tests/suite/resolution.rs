@@ -2,8 +2,8 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::resolution::{
     BlobContent, BlobContentTag, BlobMode, BlobTarget, ExternalReference, InvalidReference,
-    Missing, MissingTag, Resolution, ResolutionTag, Target, TargetTag, UnsupportedSemantics,
-    UnsupportedTarget, VersionScope,
+    Missing, MissingTag, Resolution, ResolutionTag, TaggedBlobTarget, Target, TargetTag,
+    UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
 use strum::IntoDiscriminant;
 
@@ -113,11 +113,11 @@ fn the_pointer_answer_survives_every_wrapper() {
     assert!(!Target::Tree { path: () }.is_lfs_pointer());
 
     let fragment = |content| {
-        UnsupportedSemantics::Fragment(BlobTarget {
+        UnsupportedSemantics::Fragment(TaggedBlobTarget::Blob(BlobTarget {
             path: (),
             mode: BlobMode::Regular,
             content,
-        })
+        }))
     };
     assert!(fragment(pointer()).is_lfs_pointer());
     assert!(!fragment(available()).is_lfs_pointer());

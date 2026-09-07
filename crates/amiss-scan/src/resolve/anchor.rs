@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use amiss_wire::controls::{GitMode, TargetKind};
 use amiss_wire::model::{Adapter, ForgeDialect, RepoPath};
 use amiss_wire::report::IntentKind;
-use amiss_wire::resolution::{BlobTarget, Missing, Target, UnsupportedSemantics};
+use amiss_wire::resolution::{BlobTarget, Missing, TaggedBlobTarget, Target, UnsupportedSemantics};
 
 use crate::Error;
 use crate::anchor::anchor_set;
@@ -89,7 +89,7 @@ pub(super) fn fragment_resolution(
         Some(classification) => match native_adapter(classification) {
             Some(adapter) => anchor_resolution(resolver, path, mode, blob, adapter, decoded),
             None => Ok(Resolution::UnsupportedSemantics(
-                UnsupportedSemantics::Fragment(blob),
+                UnsupportedSemantics::Fragment(TaggedBlobTarget::Blob(blob)),
             )),
         },
         None => match resolver.snapshot.bound_adapter(path) {
@@ -113,8 +113,9 @@ fn anchor_resolution(
     adapter: Adapter,
     fragment: &str,
 ) -> Result<Resolution, Error> {
-    let unsupported =
-        Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(blob.clone()));
+    let unsupported = Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(
+        TaggedBlobTarget::Blob(blob.clone()),
+    ));
     let Some(cached) = content_cache(resolver.cache, resolver.commit_oid.as_ref()).get_mut(path)
     else {
         return Err(Error::Internal);

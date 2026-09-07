@@ -69,12 +69,10 @@ pub struct BlobTarget<P> {
     pub content: BlobContent,
 }
 
-#[derive(Serialize)]
-#[serde(remote = "BlobTarget", tag = "kind", rename = "blob")]
-struct TaggedBlobTarget<P> {
-    path: P,
-    mode: BlobMode,
-    content: BlobContent,
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+pub enum TaggedBlobTarget<P> {
+    Blob(BlobTarget<P>),
 }
 
 /// A located target. A tree has no blob content; a blob always carries a
@@ -161,7 +159,7 @@ pub enum UnsupportedTarget<P> {
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub enum UnsupportedSemantics<P> {
     Query(Target<P>),
-    Fragment(#[serde(serialize_with = "TaggedBlobTarget::serialize")] BlobTarget<P>),
+    Fragment(TaggedBlobTarget<P>),
     CodeFragment(Target<P>),
     SiteRoute,
     NetworkPath,
@@ -175,7 +173,7 @@ impl<P> UnsupportedSemantics<P> {
     pub const fn is_lfs_pointer(&self) -> bool {
         match self {
             Self::Query(target) | Self::CodeFragment(target) => target.is_lfs_pointer(),
-            Self::Fragment(blob) => blob.content.is_lfs_pointer(),
+            Self::Fragment(TaggedBlobTarget::Blob(blob)) => blob.content.is_lfs_pointer(),
             Self::SiteRoute
             | Self::NetworkPath
             | Self::AttributeDependent
@@ -187,15 +185,15 @@ impl<P> UnsupportedSemantics<P> {
 
 /// Version-scoped forge references identify a contained path under a named
 /// ref, a full immutable commit and path, or no trustworthy path at all.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize)]
-#[serde(tag = "kind", rename_all = "kebab-case")]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 #[strum_discriminants(name(VersionScopeTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub enum VersionScope<P> {
     KnownPath { path: P },
     KnownCommit { commit_oid: Oid, path: P },
-    UnknownPath,
+    UnknownPath {},
 }
 
 /// A syntax defect that prevents a reference from identifying a repository or

@@ -18,8 +18,8 @@ use amiss_wire::report::{
     Disposition, EngineProvenance, FindingKind, IntentKind, adapter_contract,
 };
 use amiss_wire::resolution::{
-    BlobContent, BlobMode, BlobTarget, InvalidReference, Missing, Target, UnsupportedSemantics,
-    UnsupportedTarget, VersionScope,
+    BlobContent, BlobMode, BlobTarget, InvalidReference, Missing, TaggedBlobTarget, Target,
+    UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
 
 mod fact_contract;
@@ -258,9 +258,9 @@ fn boundary_kinds_follow_the_mapping() {
             FindingKind::InvalidReference,
         ),
         (
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(available_blob(
-                "t.md", b"target",
-            ))),
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(
+                TaggedBlobTarget::Blob(available_blob("t.md", b"target")),
+            )),
             FindingKind::UnsupportedReferenceSemantics,
         ),
         (

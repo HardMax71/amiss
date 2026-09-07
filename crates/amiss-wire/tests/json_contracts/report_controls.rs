@@ -156,7 +156,21 @@ fn report_metadata_rejects_unknown_members_after_digest_verification() {
                 serde_json_canonicalizer::to_vec(&report.payload.errors).unwrap(),
                 ReportDefect::NotAReport,
             ),
-        ] {
+        ]
+        .into_iter()
+        .chain(
+            report
+                .payload
+                .observations
+                .iter()
+                .flat_map(|comparison| comparison.base.iter().chain(&comparison.candidate))
+                .map(|occurrence| {
+                    (
+                        serde_json_canonicalizer::to_vec(&occurrence.resolution).unwrap(),
+                        ReportDefect::NotAReport,
+                    )
+                }),
+        ) {
             let fragment = String::from_utf8(fragment).unwrap();
             for (offset, _) in fragment.match_indices('{') {
                 let mut invalid = fragment.clone();

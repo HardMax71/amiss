@@ -18,15 +18,11 @@ fn report_producers_can_borrow_validated_text_and_byte_paths() {
             let relocation_value = relocation
                 .as_ref()
                 .map(|value| serde_json::to_value(value).unwrap());
-            let resolution = report::Resolution::Missing {
-                kind: report::MissingResolutionKind::Missing,
-                detail: report::MissingResolution::PathNotFound {
-                    near: Some(&path),
-                    path: &path,
-                    reason: report::PathNotFoundResolutionReason::PathNotFound,
-                    same_object_at: relocation,
-                },
-            };
+            let resolution = report::Resolution::Missing(report::MissingResolution::PathNotFound {
+                near: Some(&path),
+                path: &path,
+                same_object_at: relocation,
+            });
             let payload = producer_payload(&path, resolution).unwrap();
             let payload_bytes = serde_json_canonicalizer::to_vec(&payload).unwrap();
             let envelope = report::ReportEnvelope {
