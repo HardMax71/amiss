@@ -1,4 +1,6 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
+use serde_with::{As, TryFromInto, apply};
 
 use crate::controls::ProjectionSource;
 use crate::digest::Digest;
@@ -110,6 +112,7 @@ pub enum ReportStatus {
     Pass,
 }
 
+#[apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReportResult {

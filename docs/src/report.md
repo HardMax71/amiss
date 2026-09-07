@@ -23,6 +23,10 @@ Both report readers use the same result model and verdict check. They require ev
 member and reject unknown members, negative counts, and disagreements between `complete`,
 `status`, and `exit_code`. Bootstrap also checks the recorded finding count against the array.
 
+Summary and result counts are limited to `0..=9007199254740991` by their Serde models on
+both input and output. They remain ordinary `u64` fields in Rust; serialization refuses an
+out-of-range count rather than emitting a number the report reader cannot accept.
+
 Bootstrap decodes the complete report once, including document, observation, finding and
 error rows, and passes the typed evaluation and controls through verification. After LF
 framing, malformed fields fail the shape check before canonical bytes, digests and semantic

@@ -15,6 +15,7 @@ mod external_evidence;
 mod external_reader;
 mod policy_presence;
 mod report_controls;
+mod report_counts;
 mod report_details;
 mod report_findings;
 mod report_identity;
