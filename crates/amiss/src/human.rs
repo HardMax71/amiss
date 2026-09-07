@@ -3,10 +3,8 @@ use std::collections::BTreeSet;
 use amiss_wire::human::{atom, atom_bytes};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
-    Evaluation, Feedback, FeedbackAction, FeedbackItem, ReportPayload,
+    Evaluation, Feedback, FeedbackAction, FeedbackItem, Occurrence, ReportPayload,
 };
-
-use crate::references::model::Reference;
 
 mod tests;
 
@@ -120,7 +118,7 @@ pub(crate) fn report<P, R, M, E>(
     totals(&mut out, payload);
 }
 
-pub(crate) fn references(target: &RepoPath, occurrences: &[Reference]) {
+pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
     let mut out = Channel {
         out: std::io::stdout(),
         open: true,
@@ -133,8 +131,7 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[Reference]) {
         "amiss refs: target {shown_target} candidate occurrences {}",
         occurrences.len()
     );
-    for occurrence in occurrences {
-        let row = &occurrence.occurrence;
+    for row in occurrences {
         let document = match &row.document {
             amiss_wire::report::model::RepoPath::Text(path) => atom(path.as_str()),
             amiss_wire::report::model::RepoPath::Bytes(path) => {
@@ -148,7 +145,7 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[Reference]) {
             row.source_span.start_line,
             row.source_span.start_column,
             atom(row.source_construct.as_ref()),
-            atom(&row.resolution.kind),
+            atom(row.resolution.as_ref()),
             atom(&row.observation_id.to_string()),
         );
     }

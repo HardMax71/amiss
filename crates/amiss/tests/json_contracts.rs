@@ -4,10 +4,12 @@ use amiss_wire::{
     digest::hb,
     report::{
         PAYLOAD_SCHEMA,
-        model::{RepoPath, RepoPathBytes, ReportEnvelope},
+        model::{
+            MissingResolution, Occurrence, RepoPath, RepoPathBytes, ReportEnvelope, Resolution,
+        },
     },
+    resolution::{Target, VersionScope},
 };
-use serde_json::{Value, json};
 
 #[test]
 fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
@@ -24,11 +26,7 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
     report.payload.observations = vec![comparison];
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("report.json");
-    report.payload_digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
-    );
-    fs::write(&path, serde_json::to_vec(&report).unwrap()).unwrap();
+    bind(&mut report, &path).unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
         .args(["refs", "--report"])
@@ -38,6 +36,12 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
         .unwrap();
     assert_eq!(output.status.code(), Some(0));
     assert!(output.stderr.is_empty(), "{:?}", output.stderr);
+    assert_eq!(
+        serde_json::from_slice::<Vec<Occurrence>>(&output.stdout)
+            .unwrap()
+            .len(),
+        expected.len()
+    );
     let mut expected_bytes = serde_json_canonicalizer::to_vec(&expected).unwrap();
     expected_bytes.push(b'\n');
     assert_eq!(output.stdout, expected_bytes);
@@ -58,11 +62,7 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
     );
 
     report.payload.observations[0].candidate = None;
-    report.payload_digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
-    );
-    fs::write(&path, serde_json::to_vec(&report).unwrap()).unwrap();
+    bind(&mut report, &path).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
         .args(["refs", "--report"])
         .arg(&path)
@@ -99,47 +99,61 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
 
 #[test]
 fn refs_query_each_path_source_and_raw_byte_targets() {
-    let original: Value = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+    let original: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("report.json");
+    let text_target = RepoPath::Text("docs/query.md".parse().unwrap());
     for (intent, resolution, flag, target) in [
         (
-            json!("docs/query.md"),
-            json!({"kind": "missing", "reason": "label-not-declared"}),
+            Some(text_target.clone()),
+            Resolution::Missing(MissingResolution::LabelNotDeclared {}),
             "--target",
             "docs/query.md",
         ),
         (
-            Value::Null,
-            json!({"kind": "missing", "reason": "path-not-found", "path": "docs/query.md", "near": null}),
+            None,
+            Resolution::Missing(MissingResolution::PathNotFound {
+                path: text_target.clone(),
+                near: None,
+                same_object_at: None,
+            }),
             "--target",
             "docs/query.md",
         ),
         (
-            Value::Null,
-            json!({"kind": "resolved", "target": {"kind": "tree", "path": "docs/query.md"}}),
+            None,
+            Resolution::Resolved {
+                target: Target::Tree {
+                    path: text_target.clone(),
+                },
+            },
             "--target",
             "docs/query.md",
         ),
         (
-            Value::Null,
-            json!({"kind": "unsupported-version", "scope": {"kind": "known-path", "path": "docs/query.md"}}),
+            None,
+            Resolution::UnsupportedVersion {
+                scope: VersionScope::KnownPath { path: text_target },
+            },
             "--target",
             "docs/query.md",
         ),
         (
-            json!({"bytes_hex": "646f63732fff2e6d64"}),
-            json!({"kind": "missing", "reason": "label-not-declared"}),
+            Some(RepoPath::Bytes(RepoPathBytes {
+                bytes_hex: hex::encode(b"docs/\xff.md"),
+            })),
+            Resolution::Missing(MissingResolution::LabelNotDeclared {}),
             "--target-bytes-hex",
             "646f63732fff2e6d64",
         ),
     ] {
         let mut report = original.clone();
-        let mut comparison = report["payload"]["observations"][0].clone();
-        comparison["candidate"]["intent"]["repository_path"] = intent;
-        comparison["candidate"]["resolution"] = resolution;
-        let expected = json!([comparison["candidate"]]);
-        report["payload"]["observations"] = json!([comparison]);
+        let mut comparison = report.payload.observations[0].clone();
+        let candidate = comparison.candidate.as_mut().unwrap();
+        candidate.intent.repository_path = intent;
+        candidate.resolution = resolution;
+        let expected = [candidate.clone()];
+        report.payload.observations = vec![comparison];
         bind(&mut report, &path).unwrap();
         let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
             .args(["refs", "--report"])
@@ -149,15 +163,18 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
             .unwrap();
         assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
         assert_eq!(
-            serde_json::from_slice::<Value>(&output.stdout).unwrap(),
+            serde_json::from_slice::<Vec<Occurrence>>(&output.stdout).unwrap(),
             expected
         );
     }
 }
 
-fn bind(report: &mut Value, path: &std::path::Path) -> Result<(), Box<dyn std::error::Error>> {
-    let payload = serde_json_canonicalizer::to_vec(&report["payload"])?;
-    report["payload_digest"] = json!(hb(PAYLOAD_SCHEMA, &payload));
+fn bind(
+    report: &mut ReportEnvelope,
+    path: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let payload = serde_json_canonicalizer::to_vec(&report.payload)?;
+    report.payload_digest = hb(PAYLOAD_SCHEMA, &payload);
     fs::write(path, serde_json::to_vec_pretty(report)?)?;
     Ok(())
 }
