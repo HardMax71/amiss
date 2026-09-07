@@ -5,8 +5,7 @@ use amiss_wire::controls::{GitMode, ProjectionKind, TreePathSelection};
 use amiss_wire::digest::{Digest, hb, hb_stream};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
-    CountProjectionDifferenceKind, ProjectionDifference, ProjectionObserved,
-    RowsProjectionDifference, RowsProjectionDifferenceKind,
+    ProjectionDifference, ProjectionObserved, RowsProjectionDifference,
 };
 
 use crate::Error;
@@ -174,7 +173,6 @@ fn difference(
         preview_row(&mut extra, row, resources)?;
     }
     Ok(RowsProjectionDifference {
-        kind: RowsProjectionDifferenceKind::Rows,
         ordering_only: missing_records == 0 && extra_records == 0,
         expected_records: u64::try_from(rows.len()).unwrap_or(u64::MAX),
         observed_records: u64::try_from(observed_rows.len()).unwrap_or(u64::MAX),
@@ -315,7 +313,6 @@ pub(super) fn compare_count(
         hb(COUNT_SOURCE_DOMAIN, expected.as_bytes()),
         u64::try_from(expected.len()).unwrap_or(u64::MAX),
         ProjectionDifference::Count {
-            kind: CountProjectionDifferenceKind::Count,
             expected_count,
             observed_count: canonical_count(&sink.value),
         },

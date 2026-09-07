@@ -215,29 +215,13 @@ pub enum ProjectionObserved {
     SourceTreeRootNotATree,
 }
 
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum CountProjectionDifferenceKind {
-    #[strum(serialize = "count")]
-    Count,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum RowsProjectionDifferenceKind {
-    #[strum(serialize = "rows")]
-    Rows,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RowsProjectionDifference {
     pub expected_records: u64,
     pub extra_omitted: u64,
     pub extra_preview: Vec<String>,
     pub extra_records: u64,
-    pub kind: RowsProjectionDifferenceKind,
     pub missing_omitted: u64,
     pub missing_preview: Vec<String>,
     pub missing_records: u64,
@@ -246,50 +230,34 @@ pub struct RowsProjectionDifference {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ProjectionDifference<R = RowsProjectionDifference> {
     Count {
         expected_count: u64,
-        kind: CountProjectionDifferenceKind,
         #[serde(deserialize_with = "Option::deserialize")]
         observed_count: Option<u64>,
     },
     Rows(R),
 }
 
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum DebtExceptionDiagnosticKind {
-    #[strum(serialize = "debt")]
-    Debt,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum WaiverExceptionDiagnosticKind {
-    #[strum(serialize = "waiver")]
-    Waiver,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ExceptionDiagnostic {
     Debt {
         accepted_fact_digest: Digest,
+        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         adoption_tree: TreeIdentity,
         created_at: UtcInstant,
         current_fact_digest: Digest,
         debt_id: ArtifactId,
         debt_snapshot_digest: Digest,
         expires_at: UtcInstant,
-        kind: DebtExceptionDiagnosticKind,
         owner: OwnerId,
         reason: String,
     },
     Waiver {
         authorized_fact_digest: Digest,
+        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         candidate_tree: TreeIdentity,
         created_at: UtcInstant,
         #[serde(deserialize_with = "Option::deserialize")]
@@ -297,7 +265,6 @@ pub enum ExceptionDiagnostic {
         expires_at: UtcInstant,
         finding_key: Digest,
         issuer: OwnerId,
-        kind: WaiverExceptionDiagnosticKind,
         not_before: UtcInstant,
         owner: OwnerId,
         reason: String,

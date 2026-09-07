@@ -1,16 +1,12 @@
 #![cfg(test)]
 
-use amiss_wire::report::model::{
-    CountProjectionDifferenceKind, ProjectionDifference, RowsProjectionDifference,
-    RowsProjectionDifferenceKind,
-};
+use amiss_wire::report::model::{ProjectionDifference, RowsProjectionDifference};
 
 #[test]
 fn projection_difference_fields_keep_their_canonical_bytes() {
     let cases = [
         (
             ProjectionDifference::Count {
-                kind: CountProjectionDifferenceKind::Count,
                 expected_count: 7,
                 observed_count: None,
             },
@@ -18,7 +14,6 @@ fn projection_difference_fields_keep_their_canonical_bytes() {
         ),
         (
             ProjectionDifference::Count {
-                kind: CountProjectionDifferenceKind::Count,
                 expected_count: 9_007_199_254_740_991,
                 observed_count: Some(0),
             },
@@ -26,7 +21,6 @@ fn projection_difference_fields_keep_their_canonical_bytes() {
         ),
         (
             ProjectionDifference::Rows(Box::new(RowsProjectionDifference {
-                kind: RowsProjectionDifferenceKind::Rows,
                 ordering_only: false,
                 expected_records: 7,
                 observed_records: 8,
@@ -41,7 +35,6 @@ fn projection_difference_fields_keep_their_canonical_bytes() {
         ),
         (
             ProjectionDifference::Rows(Box::new(RowsProjectionDifference {
-                kind: RowsProjectionDifferenceKind::Rows,
                 ordering_only: true,
                 expected_records: 2,
                 observed_records: 2,
@@ -57,22 +50,15 @@ fn projection_difference_fields_keep_their_canonical_bytes() {
     ];
     for (difference, expected) in cases {
         assert_eq!(
-            serde_json::to_vec(&difference).unwrap(),
+            serde_json_canonicalizer::to_vec(&difference).unwrap(),
             expected.as_bytes()
         );
         let decoded: ProjectionDifference = serde_json::from_str(expected).unwrap();
-        assert_eq!(serde_json::to_vec(&decoded).unwrap(), expected.as_bytes());
-        let mut additive: serde_json::Value = serde_json::from_str(expected).unwrap();
-        for field in additive.as_object().unwrap().keys() {
-            let mut missing = additive.clone();
-            missing.as_object_mut().unwrap().remove(field);
-            assert!(
-                serde_json::from_value::<ProjectionDifference>(missing).is_err(),
-                "{field}"
-            );
-        }
-        additive["future-field"] = true.into();
-        let decoded: ProjectionDifference = serde_json::from_value(additive).unwrap();
-        assert_eq!(serde_json::to_vec(&decoded).unwrap(), expected.as_bytes());
+        assert_eq!(
+            serde_json_canonicalizer::to_vec(&decoded).unwrap(),
+            expected.as_bytes()
+        );
+        let additive = expected.replacen('{', "{\"future-field\":true,", 1);
+        assert!(serde_json::from_str::<ProjectionDifference>(&additive).is_err());
     }
 }

@@ -4,7 +4,7 @@ use amiss_wire::controls::Profile;
 use amiss_wire::digest::Digest;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::FindingKind;
-use amiss_wire::report::model::{ExceptionDiagnostic, WaiverExceptionDiagnosticKind};
+use amiss_wire::report::model::ExceptionDiagnostic;
 
 use super::control::control_row;
 use super::{Finding, candidate_digest_of};
@@ -15,7 +15,6 @@ fn waiver_diagnostic(
     current_fact_digest: Option<Digest>,
 ) -> ExceptionDiagnostic {
     ExceptionDiagnostic::Waiver {
-        kind: WaiverExceptionDiagnosticKind::Waiver,
         waiver_id: item.waiver_id.clone(),
         waiver_bundle_digest: bundle_digest,
         candidate_tree: item.candidate_tree.clone(),
