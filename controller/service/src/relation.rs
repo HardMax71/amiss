@@ -12,7 +12,7 @@ use amiss_controller_git::{
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::ArtifactId;
-use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, assess, parse_evidence};
+use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, assess};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoordinatedRelation {
@@ -142,12 +142,11 @@ pub fn execute_relation_audit(
         .then_some(())
         .ok_or(RelationAuditExecutionError::Superseded)?;
     let plan = relation_audit_plan(&request.pending.transition, request.report)?;
-    let evidence_bytes = project_relation_evidence(RelationProjectionRequest {
+    let evidence = project_relation_evidence(RelationProjectionRequest {
         transition: &request.pending.transition,
         plan: &plan,
         roots: request.roots,
     })?;
-    let evidence = parse_evidence(&evidence_bytes)?;
     let assessment = assess(
         &plan,
         Some(&evidence),
@@ -156,6 +155,8 @@ pub fn execute_relation_audit(
     )?;
     let mut plan_bytes = Vec::new();
     amiss_wire::write_json(&plan, &mut plan_bytes, RELATION_DOCUMENT_BYTES)?;
+    let mut evidence_bytes = Vec::new();
+    amiss_wire::write_json(&evidence, &mut evidence_bytes, RELATION_DOCUMENT_BYTES)?;
     let mut assessment_bytes = Vec::new();
     amiss_wire::write_json(&assessment, &mut assessment_bytes, RELATION_DOCUMENT_BYTES)?;
     let bundle = RelationAuditBundle {

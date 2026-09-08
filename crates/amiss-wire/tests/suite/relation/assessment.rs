@@ -4,13 +4,9 @@ use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hb;
 use amiss_wire::relation::{
-    ASSESSMENT_PAYLOAD_SCHEMA, RelationEvidence, RelationEvidenceEnvelope, RelationProjectionSlot,
-    RelationReason, RelationVerdict, assess, evidence, parse_assessment, parse_evidence, plan,
+    ASSESSMENT_PAYLOAD_SCHEMA, RelationProjectionSlot, RelationReason, RelationVerdict, assess,
+    evidence, parse_assessment, plan,
 };
-
-fn evidence_envelope(input: &RelationEvidence) -> RelationEvidenceEnvelope {
-    parse_evidence(&evidence(input).unwrap()).unwrap()
-}
 
 #[test]
 fn complete_projection_pairs_classify_all_four_equality_transitions() {
@@ -33,7 +29,7 @@ fn complete_projection_pairs_classify_all_four_equality_transitions() {
         (pre_existing, RelationVerdict::PreExistingDrift),
         (resolved, RelationVerdict::ResolvedDrift),
     ] {
-        let evidence = evidence_envelope(&input);
+        let evidence = evidence(input).unwrap();
         let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
         assert_eq!(assessment.payload.verdict, expected);
         assert_eq!(assessment.payload.reason, Nullable::Null);
@@ -54,7 +50,7 @@ fn digest_and_length_jointly_define_projected_value_equality() {
     candidate.value_bytes = candidate.value_bytes.saturating_add(1);
     input.subjects[1].candidate = RelationProjectionSlot::Projected(candidate);
 
-    let evidence = evidence_envelope(&input);
+    let evidence = evidence(input).unwrap();
     assert_eq!(
         assess(&plan, Some(&evidence), "0.26.0", digest('a'))
             .unwrap()
@@ -70,17 +66,17 @@ fn absent_unbound_misrouted_and_partial_evidence_stays_unproven() {
 
     let mut unbound = relation_contract().evidence;
     unbound.plan_payload_digest = digest('9');
-    let unbound = evidence_envelope(&unbound);
+    let unbound = evidence(unbound).unwrap();
 
     let mut misrouted = relation_contract().evidence;
     misrouted.plan_payload_digest = plan.payload_digest;
     misrouted.subjects[0].role = identity("manual");
-    let misrouted = evidence_envelope(&misrouted);
+    let misrouted = evidence(misrouted).unwrap();
 
     let mut partial = relation_contract().evidence;
     partial.plan_payload_digest = plan.payload_digest;
     partial.subjects[1].base = RelationProjectionSlot::Unproven;
-    let partial = evidence_envelope(&partial);
+    let partial = evidence(partial).unwrap();
 
     for (evidence, expected) in [
         (None, RelationReason::EvidenceAbsent),
@@ -111,13 +107,13 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
     let plan = plan(relation_contract().plan).unwrap();
     let mut input = relation_contract().evidence;
     input.plan_payload_digest = plan.payload_digest;
-    let mut broken_evidence = evidence_envelope(&input);
+    let mut broken_evidence = evidence(input.clone()).unwrap();
     broken_evidence.payload_digest = digest('f');
     let error = assess(&plan, Some(&broken_evidence), "0.26.0", digest('a')).unwrap_err();
     assert_eq!(error.path, "$.evidence.payload_digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
-    let evidence = evidence_envelope(&input);
+    let evidence = evidence(input).unwrap();
     let mut inconsistent = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     inconsistent.payload.verdict = RelationVerdict::Unproven;
     inconsistent.payload_digest = hb(

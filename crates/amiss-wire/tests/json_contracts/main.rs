@@ -25,6 +25,7 @@ mod publication_evidence;
 mod publication_input;
 mod publication_plan;
 mod relation_assessment;
+mod relation_evidence;
 mod relation_plan;
 mod report_controls;
 mod report_counts;
@@ -216,18 +217,18 @@ fn sidecar_examples_match_their_typed_sources() {
     );
     source.end().unwrap();
 
-    let generated_evidence = relation::evidence(&contract.evidence).unwrap();
+    let generated_evidence = relation::evidence(contract.evidence).unwrap();
     let committed_evidence = fs::read(examples.join("relation-evidence.json")).unwrap();
     assert_eq!(
-        relation::parse_evidence(&committed_evidence)
-            .unwrap()
-            .payload,
-        contract.evidence
+        relation::parse_evidence(&committed_evidence).unwrap(),
+        generated_evidence
     );
+    let mut source = serde_json::Deserializer::from_slice(&committed_evidence);
     assert_eq!(
-        generated_evidence,
-        serde_json_canonicalizer::to_vec(&json::parse(&committed_evidence).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(&generated_evidence).unwrap(),
+        serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut source)).unwrap()
     );
+    source.end().unwrap();
 
     let publication_plan_bytes = fs::read(examples.join("publication-plan.json")).unwrap();
     let publication_plan = publication::parse_plan(&publication_plan_bytes).unwrap();

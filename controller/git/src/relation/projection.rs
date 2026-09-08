@@ -7,8 +7,8 @@ use amiss_controller::{
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::{RepositoryProjectionLimits, RepositoryProjectionRequest, project_repository};
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationPlanEnvelope, RelationProjectionSlot,
-    evidence,
+    EvidencePayloadSchema, RelationEvidence, RelationEvidenceEnvelope, RelationEvidenceSubject,
+    RelationPlanEnvelope, RelationProjectionSlot, evidence,
 };
 
 #[derive(Clone, Copy)]
@@ -27,7 +27,7 @@ pub enum RelationProjectionError {
 }
 
 /// Revalidates two acquired roots and projects all four exact snapshots into
-/// one plan-bound evidence document.
+/// one owned plan-bound evidence envelope.
 ///
 /// # Errors
 ///
@@ -36,7 +36,7 @@ pub enum RelationProjectionError {
 /// document cannot reproduce the checked result.
 pub fn project_relation_evidence(
     request: RelationProjectionRequest<'_>,
-) -> Result<Vec<u8>, RelationProjectionError> {
+) -> Result<RelationEvidenceEnvelope, RelationProjectionError> {
     let transition = relation_transition(
         request.transition.relation.clone(),
         request.transition.coordination.clone(),
@@ -113,7 +113,8 @@ pub fn project_relation_evidence(
         });
     }
 
-    evidence(&RelationEvidence {
+    evidence(RelationEvidence {
+        schema: EvidencePayloadSchema::Current,
         plan_payload_digest: request.plan.payload_digest,
         subjects: subjects
             .try_into()

@@ -7,9 +7,9 @@ use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection}
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
-    PlanPayloadSchema, RelationEvidence, RelationEvidenceSubject, RelationIdentity, RelationPlan,
-    RelationProjectedValue, RelationProjectionSlot, RelationSnapshot, RelationSubject,
-    plan_payload_digest,
+    EvidencePayloadSchema, PlanPayloadSchema, RelationEvidence, RelationEvidenceSubject,
+    RelationIdentity, RelationPlan, RelationProjectedValue, RelationProjectionSlot,
+    RelationSnapshot, RelationSubject, plan_payload_digest,
 };
 
 pub(crate) fn digest(digit: char) -> Digest {
@@ -86,6 +86,7 @@ pub(crate) fn relation_contract() -> RelationContract {
         ],
     };
     let evidence = RelationEvidence {
+        schema: EvidencePayloadSchema::Current,
         plan_payload_digest: plan_payload_digest(&plan).unwrap(),
         subjects: [
             RelationEvidenceSubject {

@@ -1,15 +1,9 @@
-#![expect(
-    clippy::unwrap_used,
-    reason = "tests build known-valid relation identities and inspect exact refusals"
-)]
-
 use amiss_wire::controls::{
     BlobLineSelection, NamedRegionSelection, ProjectionKind, ProjectionSource, RecordSetSelection,
     RecordValueSelection, TreePathSelection,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json;
 use amiss_wire::model::{ObjectFormat, RepoPathText};
 use amiss_wire::relation::{
     EVIDENCE_PAYLOAD_SCHEMA, PLAN_PAYLOAD_SCHEMA, RELATION_DOCUMENT_BYTES, RelationProjectionSlot,
@@ -168,16 +162,18 @@ fn relation_plan_refuses_repository_values_that_bypass_construction() {
 #[test]
 fn relation_evidence_round_trips_four_independent_slots() {
     let expected = relation_contract().evidence;
-    let bytes = evidence(&expected).unwrap();
-    let value = json::parse(&bytes).unwrap();
+    let envelope = evidence(expected.clone()).unwrap();
+    let mut bytes = Vec::new();
+    amiss_wire::write_json(&envelope, &mut bytes, RELATION_DOCUMENT_BYTES).unwrap();
     let parsed = parse_evidence(&bytes).unwrap();
 
+    assert_eq!(parsed, envelope);
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
         hb(
             EVIDENCE_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap()
+            &serde_json_canonicalizer::to_vec(&expected).unwrap()
         )
     );
 }
@@ -189,56 +185,40 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
     partial.subjects[1].candidate = RelationProjectionSlot::Unproven;
     partial.subjects[1].base = RelationProjectionSlot::Projected(projected('a', 0));
 
-    let parsed = parse_evidence(&evidence(&partial).unwrap()).unwrap();
-    assert_eq!(parsed.payload, partial);
+    let envelope = evidence(partial.clone()).unwrap();
+    let mut bytes = Vec::new();
+    amiss_wire::write_json(&envelope, &mut bytes, RELATION_DOCUMENT_BYTES).unwrap();
+    assert_eq!(parse_evidence(&bytes).unwrap(), envelope);
+    assert_eq!(envelope.payload, partial);
 
     for subject in &mut partial.subjects {
         subject.base = RelationProjectionSlot::Unproven;
         subject.candidate = RelationProjectionSlot::Unproven;
     }
-    assert_eq!(
-        parse_evidence(&evidence(&partial).unwrap())
-            .unwrap()
-            .payload,
-        partial
-    );
-}
-
-#[test]
-fn nullable_projection_slots_are_still_required_fields() {
-    let bytes = evidence(&relation_contract().evidence).unwrap();
-    let mut document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(
-        document
-            .pointer_mut("/payload/subjects/0")
-            .unwrap()
-            .as_object_mut()
-            .unwrap()
-            .remove("base")
-            .is_some()
-    );
-
-    let error = parse_evidence(&serde_json::to_vec(&document).unwrap()).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    let envelope = evidence(partial.clone()).unwrap();
+    bytes.clear();
+    amiss_wire::write_json(&envelope, &mut bytes, RELATION_DOCUMENT_BYTES).unwrap();
+    assert_eq!(parse_evidence(&bytes).unwrap(), envelope);
+    assert_eq!(envelope.payload, partial);
 }
 
 #[test]
 fn relation_evidence_refuses_role_and_value_shape_drift() {
     let mut unsorted = relation_contract().evidence;
     unsorted.subjects.reverse();
-    let error = evidence(&unsorted).unwrap_err();
+    let error = evidence(unsorted).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 
     let mut repeated = relation_contract().evidence;
     repeated.subjects[1].role = repeated.subjects[0].role.clone();
-    let error = evidence(&repeated).unwrap_err();
+    let error = evidence(repeated).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
     assert_eq!(error.kind, ErrorKind::DuplicateMember);
 
     let mut unsafe_bytes = relation_contract().evidence;
     unsafe_bytes.subjects[0].base = RelationProjectionSlot::Projected(projected('a', u64::MAX));
-    let error = evidence(&unsafe_bytes).unwrap_err();
+    let error = evidence(unsafe_bytes).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].base.value_bytes");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }

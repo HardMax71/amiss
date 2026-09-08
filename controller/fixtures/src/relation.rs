@@ -10,8 +10,8 @@ use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection}
 use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
-    RELATION_DOCUMENT_BYTES, RelationEvidence, RelationEvidenceSubject, RelationProjectedValue,
-    RelationProjectionSlot, assess, evidence, parse_evidence,
+    EvidencePayloadSchema, RELATION_DOCUMENT_BYTES, RelationEvidence, RelationEvidenceEnvelope,
+    RelationEvidenceSubject, RelationProjectedValue, RelationProjectionSlot, assess, evidence,
 };
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
@@ -44,23 +44,29 @@ pub fn relation_audit_with_coordination(
     } else {
         None
     };
-    let parsed_evidence = evidence.as_deref().map(parse_evidence).transpose().ok()?;
     let assessment = assess(
         &plan,
-        parsed_evidence.as_ref(),
+        evidence.as_ref(),
         env!("CARGO_PKG_VERSION"),
         sha256(b"relation evaluator fixture"),
     )
     .ok()?;
     let mut plan_bytes = Vec::new();
     amiss_wire::write_json(&plan, &mut plan_bytes, RELATION_DOCUMENT_BYTES).ok()?;
+    let evidence_bytes = evidence
+        .map(|evidence| {
+            let mut bytes = Vec::new();
+            amiss_wire::write_json(&evidence, &mut bytes, RELATION_DOCUMENT_BYTES).map(|()| bytes)
+        })
+        .transpose()
+        .ok()?;
     let mut assessment_bytes = Vec::new();
     amiss_wire::write_json(&assessment, &mut assessment_bytes, RELATION_DOCUMENT_BYTES).ok()?;
     Some(RelationAuditFixture {
         transition,
         report,
         plan: plan_bytes,
-        evidence,
+        evidence: evidence_bytes,
         assessment: assessment_bytes,
     })
 }
@@ -200,7 +206,9 @@ fn frozen(
     })
 }
 
-fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Option<Vec<u8>> {
+fn relation_evidence(
+    plan: &amiss_wire::relation::RelationPlanEnvelope,
+) -> Option<RelationEvidenceEnvelope> {
     let aligned = RelationProjectedValue {
         value_digest: sha256(b"timeout: u64"),
         value_bytes: 12,
@@ -209,7 +217,8 @@ fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Optio
         value_digest: sha256(b"timeout: u128"),
         value_bytes: 13,
     };
-    evidence(&RelationEvidence {
+    evidence(RelationEvidence {
+        schema: EvidencePayloadSchema::Current,
         plan_payload_digest: plan.payload_digest,
         subjects: [
             RelationEvidenceSubject {

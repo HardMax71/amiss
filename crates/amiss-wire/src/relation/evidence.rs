@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::de::{Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 use crate::model::ArtifactId;
 
@@ -10,17 +12,36 @@ use super::RELATION_DOCUMENT_BYTES;
 pub const EVIDENCE_ENVELOPE_SCHEMA: &str = "amiss/relation-evidence-envelope";
 pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/relation-evidence-payload";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationEvidenceEnvelope {
+    pub schema: EvidenceEnvelopeSchema,
     pub payload: RelationEvidence,
     pub payload_digest: Digest,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+pub enum EvidenceEnvelopeSchema {
+    #[strum(serialize = "amiss/relation-evidence-envelope")]
+    Current,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationEvidence {
+    pub schema: EvidencePayloadSchema,
     pub plan_payload_digest: Digest,
     pub subjects: [RelationEvidenceSubject; 2],
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+pub enum EvidencePayloadSchema {
+    #[strum(serialize = "amiss/relation-evidence-payload")]
+    Current,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -45,20 +66,6 @@ pub struct RelationProjectedValue {
     pub value_bytes: u64,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum EvidenceEnvelope<T> {
-    #[serde(rename = "amiss/relation-evidence-envelope")]
-    Current { payload: T, payload_digest: Digest },
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum EvidencePayload<T> {
-    #[serde(rename = "amiss/relation-evidence-payload")]
-    Current(T),
-}
-
 /// Parses one closed, digest-bound set of four relation projections.
 ///
 /// # Errors
@@ -71,50 +78,38 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<RelationEvidenceEnvelope, Error> {
         return fail("$", ErrorKind::LimitExceeded);
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let document: EvidenceEnvelope<EvidencePayload<RelationEvidence>> =
-        serde_json::from_slice(bytes)
-            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let EvidenceEnvelope::Current {
-        payload,
-        payload_digest,
-    } = document;
-    let EvidencePayload::Current(payload) = payload;
-    if evidence_payload_digest(&payload)? != payload_digest {
+    let document: RelationEvidenceEnvelope = serde_json::from_slice(bytes)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    verified_json_digest(EVIDENCE_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    if evidence_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
+    Ok(document)
+}
+
+/// Binds four owned relation projection slots to their validated payload digest.
+///
+/// The result stays typed; output callers enforce byte limits with [`crate::write_json`].
+///
+/// # Errors
+///
+/// Fails when a public field violates the same closed grammar [`parse_evidence`] enforces.
+pub fn evidence(input: RelationEvidence) -> Result<RelationEvidenceEnvelope, Error> {
+    let payload_digest = evidence_payload_digest(&input)?;
     Ok(RelationEvidenceEnvelope {
-        payload,
+        schema: EvidenceEnvelopeSchema::Current,
+        payload: input,
         payload_digest,
     })
 }
 
-/// Builds the unique digest-bound value for four relation projection slots.
-///
-/// # Errors
-///
-/// Fails when a public field violates the same closed grammar
-/// [`parse_evidence`] enforces or the encoded document exceeds its byte
-/// ceiling.
-pub fn evidence(input: &RelationEvidence) -> Result<Vec<u8>, Error> {
-    let payload_digest = evidence_payload_digest(input)?;
-    let document = EvidenceEnvelope::Current {
-        payload: EvidencePayload::Current(input),
-        payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    Ok(canonical)
-}
-
 pub(super) fn evidence_payload_digest(input: &RelationEvidence) -> Result<Digest, Error> {
     validate(input)?;
-    serde_json_canonicalizer::to_vec(&EvidencePayload::Current(input))
-        .map(|canonical| hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(EVIDENCE_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(input, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate(evidence: &RelationEvidence) -> Result<(), Error> {
