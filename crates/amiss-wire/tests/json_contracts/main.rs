@@ -21,6 +21,7 @@ mod external_snapshots;
 mod input;
 mod policy_presence;
 mod publication_assessment;
+mod publication_evidence;
 mod publication_plan;
 mod relation_assessment;
 mod report_controls;
@@ -238,10 +239,17 @@ fn sidecar_examples_match_their_typed_sources() {
     let publication_evidence_bytes = fs::read(examples.join("publication-evidence.json")).unwrap();
     let publication_evidence = publication::parse_evidence(&publication_evidence_bytes).unwrap();
     assert_eq!(
-        publication::evidence(&publication_evidence.payload).unwrap(),
-        serde_json_canonicalizer::to_vec(&json::parse(&publication_evidence_bytes).unwrap())
-            .unwrap()
+        publication_evidence.payload.plan_payload_digest,
+        publication_plan.payload_digest
     );
+    let replayed = publication::evidence(publication_evidence.payload.clone()).unwrap();
+    assert_eq!(replayed, publication_evidence);
+    let mut input = serde_json::Deserializer::from_slice(&publication_evidence_bytes);
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(&replayed).unwrap(),
+        serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut input)).unwrap()
+    );
+    input.end().unwrap();
 
     let publication_assessment_bytes =
         fs::read(examples.join("publication-assessment.json")).unwrap();

@@ -3,7 +3,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde};
 use crate::json;
 
 use super::{
@@ -17,9 +17,9 @@ pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/publication-evidence-payload";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PublicationEvidenceEnvelope<T = PublicationEvidence> {
+pub struct PublicationEvidenceEnvelope {
     pub schema: EvidenceEnvelopeSchema,
-    pub payload: T,
+    pub payload: PublicationEvidence,
     pub payload_digest: Digest,
 }
 
@@ -88,33 +88,28 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error
     Ok(document)
 }
 
-/// Builds the unique digest-bound value for one successful-publication receipt.
+/// Binds one owned successful-publication receipt to its validated payload digest.
+///
+/// The result stays typed; output callers enforce byte limits with [`crate::write_json`].
 ///
 /// # Errors
 ///
-/// Fails when a public field violates the same closed grammar [`parse_evidence`]
-/// enforces or the encoded document exceeds its byte ceiling.
-pub fn evidence(input: &PublicationEvidence) -> Result<Vec<u8>, Error> {
-    let payload_digest = evidence_payload_digest(input)?;
-    let document = PublicationEvidenceEnvelope {
+/// Fails when a public field violates the same grammar [`parse_evidence`] enforces.
+pub fn evidence(input: PublicationEvidence) -> Result<PublicationEvidenceEnvelope, Error> {
+    let payload_digest = evidence_payload_digest(&input)?;
+    Ok(PublicationEvidenceEnvelope {
         schema: EvidenceEnvelopeSchema::Current,
         payload: input,
         payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    Ok(canonical)
+    })
 }
 
 pub(super) fn evidence_payload_digest(input: &PublicationEvidence) -> Result<Digest, Error> {
     validate_evidence(input)?;
-    serde_json_canonicalizer::to_vec(input)
-        .map(|canonical| hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(EVIDENCE_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(input, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_evidence(evidence: &PublicationEvidence) -> Result<(), Error> {

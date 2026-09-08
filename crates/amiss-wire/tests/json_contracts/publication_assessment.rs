@@ -1,10 +1,7 @@
 use amiss_wire::{
     de::ErrorKind,
-    digest::{hb, sha256},
-    publication::{
-        self, EVIDENCE_PAYLOAD_SCHEMA, PUBLICATION_DOCUMENT_BYTES, PublicationReason,
-        PublicationVerdict,
-    },
+    digest::sha256,
+    publication::{self, PUBLICATION_DOCUMENT_BYTES, PublicationReason, PublicationVerdict},
     semantic::PRODUCER_VERSION_BYTES,
 };
 
@@ -22,10 +19,7 @@ fn typed_publication_assessment_keeps_bounded_output_and_validated_engine_identi
     evidence.payload.target.canonical_url = "https://preview.example.com/widget/".to_owned();
     evidence.payload.site.input_digest = sha256(b"other site");
     evidence.payload.product.digest = sha256(b"other product");
-    evidence.payload_digest = hb(
-        EVIDENCE_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&evidence.payload).unwrap(),
-    );
+    let evidence = publication::evidence(evidence.payload).unwrap();
     let version = "a".repeat(PRODUCER_VERSION_BYTES);
     let engine = sha256(b"publication evaluator");
     let assessment = publication::assess(&plan, Some(&evidence), &version, engine).unwrap();

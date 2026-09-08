@@ -66,7 +66,10 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
     .ok()?;
     let evidence = evidence_envelope
         .as_ref()
-        .map(|envelope| evidence(&envelope.payload))
+        .map(|envelope| {
+            let mut bytes = Vec::new();
+            amiss_wire::write_json(envelope, &mut bytes, PUBLICATION_DOCUMENT_BYTES).map(|()| bytes)
+        })
         .transpose()
         .ok()?;
     Some(PublicationAuditFixture {
@@ -80,13 +83,12 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
 fn publication_evidence(
     plan: &amiss_wire::publication::PublicationPlanEnvelope,
 ) -> Option<PublicationEvidenceEnvelope> {
-    let mut evidence_envelope = parse_evidence(EVIDENCE).ok()?;
-    evidence_envelope.payload.plan_payload_digest = plan.payload_digest;
-    evidence_envelope.payload.producer = plan.payload.producer.clone();
-    evidence_envelope.payload.docs = plan.payload.docs.clone();
-    evidence_envelope.payload.target = plan.payload.target.clone();
-    evidence_envelope.payload.site = plan.payload.site.clone();
-    evidence_envelope.payload.product = plan.payload.product.clone();
-    let value = evidence(&evidence_envelope.payload).ok()?;
-    parse_evidence(&value).ok()
+    let mut input = parse_evidence(EVIDENCE).ok()?.payload;
+    input.plan_payload_digest = plan.payload_digest;
+    input.producer = plan.payload.producer.clone();
+    input.docs = plan.payload.docs.clone();
+    input.target = plan.payload.target.clone();
+    input.site = plan.payload.site.clone();
+    input.product = plan.payload.product.clone();
+    evidence(input).ok()
 }

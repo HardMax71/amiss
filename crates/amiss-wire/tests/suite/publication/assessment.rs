@@ -7,20 +7,13 @@ use amiss_wire::de::ErrorKind;
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::publication::{
     ASSESSMENT_PAYLOAD_SCHEMA, PublicationReason, PublicationVerdict, assess, evidence,
-    parse_assessment, parse_evidence, plan,
+    parse_assessment, plan,
 };
-
-fn evidence_envelope(
-    evidence_value: &amiss_wire::publication::PublicationEvidence,
-) -> amiss_wire::publication::PublicationEvidenceEnvelope {
-    let value = evidence(evidence_value).unwrap();
-    parse_evidence(&value).unwrap()
-}
 
 #[test]
 fn exact_provider_facts_match_the_publication_plan() {
     let plan = plan(publication_plan()).unwrap();
-    let evidence = evidence_envelope(&publication_evidence());
+    let evidence = evidence(publication_evidence()).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, PublicationVerdict::Matched);
@@ -55,7 +48,7 @@ fn absent_unbound_and_foreign_producers_stay_unproven() {
 
     let mut unbound = publication_evidence();
     unbound.plan_payload_digest = digest('f');
-    let unbound = evidence_envelope(&unbound);
+    let unbound = evidence(unbound).unwrap();
     let unbound_assessment = assess(&plan, Some(&unbound), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         unbound_assessment.payload.reasons,
@@ -65,7 +58,7 @@ fn absent_unbound_and_foreign_producers_stay_unproven() {
     let mut foreign = publication_evidence();
     foreign.producer.context_digest = digest('e');
     foreign.product.digest = digest('d');
-    let foreign = evidence_envelope(&foreign);
+    let foreign = evidence(foreign).unwrap();
     let foreign_assessment = assess(&plan, Some(&foreign), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         foreign_assessment.payload.reasons,
@@ -81,7 +74,7 @@ fn bound_disagreements_are_one_sorted_refutation() {
     mismatched.target.canonical_url = "https://preview.example.com/widget/".to_owned();
     mismatched.site.input_digest = digest('d');
     mismatched.product.digest = digest('e');
-    let evidence = evidence_envelope(&mismatched);
+    let evidence = evidence(mismatched).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, PublicationVerdict::Refuted);
@@ -119,7 +112,7 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     let mut mismatched = publication_evidence();
     mismatched.docs.commit = oid('c', ObjectFormat::Sha1);
     mismatched.target.canonical_url = "https://preview.example.com/widget/".to_owned();
-    let evidence = evidence_envelope(&mismatched);
+    let evidence = evidence(mismatched).unwrap();
     let mut unsorted = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     unsorted.payload.reasons.reverse();
     unsorted.payload_digest = amiss_wire::digest::hb(
