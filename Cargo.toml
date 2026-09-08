@@ -58,7 +58,7 @@ hex = "0.4"
 hex_fmt = "0.3.0"
 hmac = "0.13"
 html5gum = { version = "=0.8.4", default-features = false }
-jsonschema = { version = "0.51", default-features = false, features = ["resolve-file"] }
+jsonschema = { version = "0.52", default-features = false, features = ["resolve-file"] }
 jsonwebtoken = { version = "11.0", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 json-serde = "=0.0.1-alpha.1"
 memchr = "2.8.3"
