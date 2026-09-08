@@ -11,13 +11,14 @@ use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::super::model::{
     BranchProtectionRecord, BranchRecord, CommitRecord, CommitStatusRecord, CreateCommitStatus,
-    CreateReview, PullRefRecord, PullRequestRecord, RefreshData, RepositoryRecord, ReviewRecord,
-    UserRecord,
+    CreateReview, PullRequestRecord, RefreshData, RepositoryRecord, ReviewRecord, UserRecord,
 };
 use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
 use crate::branch::PayloadCommitRecord;
 use crate::commit::{CommitBodyRecord, CommitMetaRecord};
+use crate::issue::IssueState;
+use crate::pull::PullRefRecord;
 use crate::review::ReviewState;
 use crate::{
     DedicatedReviewer, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects, GiteaPullRequest,
@@ -28,6 +29,14 @@ pub(super) const GITEA_PROTECTION: &str =
 
 pub(super) const FORGEJO_PROTECTION: &str =
     include_str!("../../../tests/fixtures/forgejo-protection.json");
+
+static PULL: LazyLock<PullRequestRecord> = LazyLock::new(|| {
+    amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/gitea-pull.json"),
+        u64::MAX,
+    )
+    .unwrap()
+});
 
 pub(super) static USER: LazyLock<UserRecord> = LazyLock::new(|| {
     amiss_wire::read_json(
@@ -423,22 +432,25 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
         pull_request: PullRequestRecord {
             id: 4201,
             number: 42,
-            state: "open".to_owned(),
+            state: IssueState::Open,
             mergeable: true,
             merged: false,
-            merge_base: oid('a').as_str().to_owned(),
+            merge_base: Some(oid('a')),
             head: PullRefRecord {
-                sha: oid('b').as_str().to_owned(),
+                label: "topic".to_owned(),
+                sha: Some(oid('b')),
                 branch: "topic".to_owned(),
                 repo_id: 202,
                 repo: Some(head_repository),
             },
             base: PullRefRecord {
-                sha: oid('a').as_str().to_owned(),
+                label: "main".to_owned(),
+                sha: Some(oid('a')),
                 branch: "main".to_owned(),
                 repo_id: 101,
                 repo: Some(target_repository),
             },
+            ..PULL.clone()
         },
         target_branch: BranchRecord {
             name: "main".to_owned(),

@@ -4,6 +4,7 @@ use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
 use super::super::model::{BranchProtectionRecord, RefreshData, ReviewRecord, UserRecord};
 use super::super::{GiteaClientError, GiteaPullRequest};
 use super::support::{FORGEJO_PROTECTION, Fixture, GITEA_PROTECTION, commit, oid, resolved};
+use crate::issue::IssueState;
 use crate::review::ReviewState;
 
 #[test]
@@ -82,7 +83,7 @@ fn an_unmergeable_pull_request_is_unsettled_state_not_a_verdict() {
 #[test]
 fn a_closed_pull_request_is_closed_even_though_it_cannot_merge() {
     let fixture = Fixture::mutated("gitea", |data| {
-        data.pull_request.state = "closed".to_owned();
+        data.pull_request.state = IssueState::Closed;
         data.pull_request.mergeable = false;
     });
 
@@ -376,7 +377,7 @@ fn requesting_the_dedicated_reviewer_does_not_require_a_commit() {
 #[test]
 fn head_or_base_drift_is_superseded() {
     let stale_head = Fixture::mutated("gitea", |data| {
-        data.pull_request.head.sha = oid('e').as_str().to_owned();
+        data.pull_request.head.sha = Some(oid('e'));
         data.current_head = commit('e', 'f', &['a']);
     });
     assert_eq!(
@@ -389,7 +390,7 @@ fn head_or_base_drift_is_superseded() {
     );
 
     let stale_base = Fixture::mutated("forgejo", |data| {
-        data.pull_request.merge_base = oid('e').as_str().to_owned();
+        data.pull_request.merge_base = Some(oid('e'));
     });
     assert_eq!(
         stale_base
@@ -467,12 +468,34 @@ fn an_open_pull_request_that_claims_merged_is_invalid() {
 /// consistent drift is superseded, an inconsistent response is invalid.
 #[test]
 fn each_consistency_fact_refuses_alone() {
-    let cases: [(&str, DataDeviation); 5] = [
+    let cases: [(&str, DataDeviation); 11] = [
         ("fetched head disagrees with the embedded head", |data| {
             data.current_head = commit('e', 'f', &['a']);
         }),
         ("embedded base disagrees with the target", |data| {
-            data.pull_request.base.sha = oid('e').as_str().to_owned();
+            data.pull_request.base.sha = Some(oid('e'));
+        }),
+        ("embedded base is absent", |data| {
+            data.pull_request.base.sha = None;
+        }),
+        ("embedded head is absent", |data| {
+            data.pull_request.head.sha = None;
+        }),
+        ("merge base is absent", |data| {
+            data.pull_request.merge_base = None;
+        }),
+        ("merge base has a different object format", |data| {
+            data.pull_request.merge_base = Some("a".repeat(64).parse().unwrap());
+        }),
+        (
+            "both head observations have a different object format",
+            |data| {
+                data.current_head.sha = "b".repeat(64).parse().unwrap();
+                data.pull_request.head.sha = Some(data.current_head.sha.clone());
+            },
+        ),
+        ("open and merged state contradict each other", |data| {
+            data.pull_request.merged = true;
         }),
         ("branch tip disagrees with the target", |data| {
             data.target_branch.commit.as_mut().unwrap().id = oid('e');
@@ -510,7 +533,7 @@ fn each_consistency_fact_refuses_alone() {
 #[test]
 fn the_head_repository_gates_open_and_spares_closed() {
     let closed = Fixture::mutated("gitea", |data| {
-        data.pull_request.state = "closed".to_owned();
+        data.pull_request.state = IssueState::Closed;
         data.pull_request.merged = false;
         data.pull_request.mergeable = false;
         data.pull_request.head.repo = None;

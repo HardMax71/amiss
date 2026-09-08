@@ -8,7 +8,6 @@ pub(super) use amiss_controller::{
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use secrecy::SecretString;
-use serde::de::DeserializeOwned;
 
 use crate::GiteaPullRequest;
 use crate::content::ContentResponse;
@@ -132,15 +131,6 @@ impl HttpRest {
         })
     }
 
-    fn get<T: DeserializeOwned>(
-        &self,
-        route: &str,
-        deadline: OperationDeadline,
-    ) -> Result<T, ProviderError> {
-        self.transport
-            .get(route, deadline, |bytes| serde_json::from_slice(bytes))
-    }
-
     fn reviews(
         &self,
         pull_request: GiteaPullRequest<'_>,
@@ -215,8 +205,21 @@ impl GiteaRest for HttpRest {
         let repository: RepositoryRecord = self.transport.get(&prefix, deadline, |bytes| {
             amiss_wire::read_json(bytes, u64::MAX)
         })?;
-        let authoritative: PullRequestRecord =
-            self.get(&format!("{prefix}/pulls/{}", pull_request.number), deadline)?;
+        let authoritative: PullRequestRecord = self.transport.get(
+            &format!("{prefix}/pulls/{}", pull_request.number),
+            deadline,
+            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+        )?;
+        let base_sha = authoritative
+            .base
+            .sha
+            .as_ref()
+            .ok_or(ProviderError::InvalidResponse)?;
+        let head_sha = authoritative
+            .head
+            .sha
+            .as_ref()
+            .ok_or(ProviderError::InvalidResponse)?;
         let target_branch: BranchRecord = self.transport.get(
             &format!(
                 "{prefix}/branches/{}",
@@ -234,10 +237,7 @@ impl GiteaRest for HttpRest {
             |bytes| amiss_wire::read_json(bytes, u64::MAX),
         )?;
         let target: CommitRecord = self.transport.get(
-            &format!(
-                "{prefix}/git/commits/{}",
-                path_segment(&authoritative.base.sha)
-            ),
+            &format!("{prefix}/git/commits/{}", path_segment(base_sha.as_str())),
             deadline,
             |bytes| amiss_wire::read_json(bytes, u64::MAX),
         )?;
@@ -249,14 +249,11 @@ impl GiteaRest for HttpRest {
             deadline,
             |bytes| amiss_wire::read_json(bytes, u64::MAX),
         )?;
-        let current_head = if authoritative.head.sha == candidate.sha.as_str() {
+        let current_head = if *head_sha == candidate.sha {
             candidate.clone()
         } else {
             self.transport.get(
-                &format!(
-                    "{prefix}/git/commits/{}",
-                    path_segment(&authoritative.head.sha)
-                ),
+                &format!("{prefix}/git/commits/{}", path_segment(head_sha.as_str())),
                 deadline,
                 |bytes| amiss_wire::read_json(bytes, u64::MAX),
             )?

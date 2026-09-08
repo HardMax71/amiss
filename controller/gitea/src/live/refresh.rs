@@ -1,9 +1,10 @@
 use amiss_controller::{
     ChangeSnapshot, ChangeState, OidPair, ProviderError, Publication, RunIdentity, RunRefs,
 };
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, RepositoryIdentity};
 
 use crate::identity::parse_change_id;
+use crate::issue::IssueState;
 use crate::{GiteaObjects, GiteaPullRequest};
 
 use super::Config;
@@ -16,41 +17,32 @@ pub(super) fn validate_request(
     config: &Config,
     pull_request: GiteaPullRequest<'_>,
 ) -> Result<(), ProviderError> {
-    valid_response(
-        request_route_matches(config, pull_request)
-            && request_subject_matches(config, pull_request),
-    )
-}
-
-fn request_route_matches(config: &Config, pull_request: GiteaPullRequest<'_>) -> bool {
-    pull_request.reviewer_id == config.reviewer.id
+    let repository = &pull_request.change.repository;
+    (pull_request.reviewer_id == config.reviewer.id
         && pull_request.repository_id > 0
         && pull_request.pull_request_id > 0
         && pull_request.number > 0
         && pull_request.change.provider == config.provider
-}
-
-fn request_subject_matches(config: &Config, pull_request: GiteaPullRequest<'_>) -> bool {
-    let repository = &pull_request.change.repository;
-    RepositoryIdentity::new(
-        repository.host().to_owned(),
-        repository.owner().to_owned(),
-        repository.name().to_owned(),
-    )
-    .as_ref()
-        == Some(repository)
+        && RepositoryIdentity::new(
+            repository.host().to_owned(),
+            repository.owner().to_owned(),
+            repository.name().to_owned(),
+        )
+        .as_ref()
+            == Some(repository)
         && repository.host() == config.provider.instance.as_str()
         && repository.owner() == pull_request.repository_owner
         && repository.name() == pull_request.repository_name
         && !repository.owner().contains('/')
-        && exact_oid(pull_request.candidate_commit.as_str()).as_ref()
-            == Ok(pull_request.candidate_commit)
+        && pull_request.candidate_commit.object_format() == ObjectFormat::Sha1
         && parse_change_id(pull_request.change.change.as_str())
             == Some((
                 pull_request.repository_id,
                 pull_request.pull_request_id,
                 pull_request.number,
-            ))
+            )))
+    .then_some(())
+    .ok_or(ProviderError::InvalidResponse)
 }
 
 pub(super) fn snapshot(
@@ -72,7 +64,12 @@ pub(super) fn snapshot(
     );
 
     let candidate = data.candidate.sha.clone();
-    let current_head = exact_oid(&data.pull_request.head.sha)?;
+    let current_head = data
+        .pull_request
+        .head
+        .sha
+        .as_ref()
+        .ok_or(ProviderError::InvalidResponse)?;
     let fetched_head = &data.current_head.sha;
     let base = data.target.sha.clone();
     let branch_base = &data
@@ -87,10 +84,16 @@ pub(super) fn snapshot(
         .as_ref()
         .ok_or(ProviderError::InvalidResponse)?;
     let base_tree = base_object.tree.clone();
-    let merge_base = exact_oid(&data.pull_request.merge_base)?;
+    let merge_base = data
+        .pull_request
+        .merge_base
+        .as_ref()
+        .ok_or(ProviderError::InvalidResponse)?;
     if candidate != *pull_request.candidate_commit
-        || current_head != *fetched_head
-        || data.pull_request.base.sha != data.target.sha.as_str()
+        || current_head != fetched_head
+        || current_head.object_format() != ObjectFormat::Sha1
+        || merge_base.object_format() != ObjectFormat::Sha1
+        || data.pull_request.base.sha.as_ref() != Some(&data.target.sha)
         || base != *branch_base
         || objects.candidate.id != candidate
         || base_object.id != base
@@ -98,11 +101,10 @@ pub(super) fn snapshot(
         return Err(ProviderError::InvalidResponse);
     }
 
-    let open = match data.pull_request.state.as_str() {
-        "open" if !data.pull_request.merged => true,
-        "closed" => false,
-        _ => return Err(ProviderError::InvalidResponse),
-    };
+    let open = data.pull_request.state == IssueState::Open;
+    if open && data.pull_request.merged {
+        return Err(ProviderError::InvalidResponse);
+    }
     let refs = RunRefs {
         forge: ForgeDialect::Gitea,
         candidate: branch_ref(&data.pull_request.head.branch)?,
@@ -123,8 +125,8 @@ pub(super) fn snapshot(
         },
     )
     .ok_or(ProviderError::InvalidResponse)?;
-    let exact_head = current_head == *pull_request.candidate_commit;
-    let up_to_date = merge_base == base;
+    let exact_head = current_head == pull_request.candidate_commit;
+    let up_to_date = *merge_base == base;
     let state = if !exact_head {
         ChangeState::Superseded
     } else if !authorized {
@@ -195,18 +197,18 @@ fn validate_change(
         .as_ref()
         .map(|head| repository_identity(host, head))
         .transpose()?;
-    valid_response(
-        repository.id == pull_request.repository_id
-            && identity == pull_request.change.repository
-            && repository.object_format_name == ObjectFormat::Sha1
-            && base_repository.id == pull_request.repository_id
-            && base_identity == pull_request.change.repository
-            && authoritative.id == pull_request.pull_request_id
-            && authoritative.number == pull_request.number
-            && authoritative.base.repo_id == pull_request.repository_id
-            && authoritative.head.repo_id > 0
-            && (head_identity.is_some() || authoritative.state == "closed"),
-    )
+    (repository.id == pull_request.repository_id
+        && identity == pull_request.change.repository
+        && repository.object_format_name == ObjectFormat::Sha1
+        && base_repository.id == pull_request.repository_id
+        && base_identity == pull_request.change.repository
+        && authoritative.id == pull_request.pull_request_id
+        && authoritative.number == pull_request.number
+        && u64::try_from(authoritative.base.repo_id) == Ok(pull_request.repository_id)
+        && authoritative.head.repo_id > 0
+        && (head_identity.is_some() || authoritative.state == IssueState::Closed))
+        .then_some(())
+        .ok_or(ProviderError::InvalidResponse)
 }
 
 fn validate_reviews(config: &Config, reviews: &[ReviewRecord]) -> Result<(), ProviderError> {
@@ -309,14 +311,6 @@ pub(super) fn repository_identity(
         return Err(ProviderError::InvalidResponse);
     }
     RepositoryIdentity::new(host.to_owned(), owner, name).ok_or(ProviderError::InvalidResponse)
-}
-
-pub(super) fn exact_oid(raw: &str) -> Result<Oid, ProviderError> {
-    Oid::new(ObjectFormat::Sha1, raw.to_owned()).ok_or(ProviderError::InvalidResponse)
-}
-
-fn valid_response(valid: bool) -> Result<(), ProviderError> {
-    valid.then_some(()).ok_or(ProviderError::InvalidResponse)
 }
 
 fn branch_ref(branch: &str) -> Result<BranchRef, ProviderError> {

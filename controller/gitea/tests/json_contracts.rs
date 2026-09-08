@@ -12,6 +12,9 @@ mod numbers;
 #[path = "json_contracts/protection.rs"]
 mod protection;
 
+#[path = "json_contracts/pulls.rs"]
+mod pulls;
+
 #[path = "json_contracts/repositories.rs"]
 mod repositories;
 
