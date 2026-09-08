@@ -3,11 +3,10 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 
 use amiss_git::{
-    Error, GitLimits, GitResources, ObjectKind, Repository, RepositoryOpenError, parse_commit,
-    parse_tree,
+    Error, GitLimits, GitResources, Repository, RepositoryOpenError, parse_commit, parse_tree,
 };
 use amiss_wire::controls::{GitMode, ResourceName};
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::{ObjectFormat, ObjectKind, Oid};
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
 use sha1_checked::Digest as _;

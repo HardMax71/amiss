@@ -9,6 +9,9 @@ mod numbers;
 #[path = "json_contracts/repositories.rs"]
 mod repositories;
 
+#[path = "json_contracts/refs.rs"]
+mod refs;
+
 #[path = "json_contracts/statuses.rs"]
 mod statuses;
 

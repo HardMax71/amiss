@@ -14,14 +14,7 @@ pub use loose::decode_loose;
 pub(crate) use loose::decode_loose_reusing;
 pub use tree::parse_tree;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
-#[strum(serialize_all = "lowercase")]
-pub enum ObjectKind {
-    Blob,
-    Commit,
-    Tag,
-    Tree,
-}
+pub use amiss_wire::model::ObjectKind;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Object {

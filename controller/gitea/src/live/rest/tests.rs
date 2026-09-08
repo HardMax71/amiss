@@ -5,9 +5,15 @@ use amiss_controller::ForgeNegative;
 use super::super::model::RefRecord;
 use super::{Presence, REF_CEILING, RefFamily, listed_commit, ref_listing};
 
-fn named(reference: &str) -> RefRecord {
-    RefRecord {
-        reference: reference.to_owned(),
+#[test]
+fn ref_responses_cannot_discard_unknown_data() {
+    for input in [
+        include_str!("../../../tests/fixtures/gitea-refs.json"),
+        include_str!("../../../tests/fixtures/forgejo-refs.json"),
+    ] {
+        let changed = input.replace(r#""object":{"#, r#""extra":true,"object":{"#);
+        assert_ne!(changed, input);
+        assert!(serde_json::from_str::<Vec<RefRecord>>(&changed).is_err());
     }
 }
 
@@ -19,6 +25,12 @@ fn named(reference: &str) -> RefRecord {
 /// not proven whole.
 #[test]
 fn a_ref_listing_is_a_fact_only_when_positively_complete() {
+    let records: Vec<RefRecord> = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/gitea-refs.json"),
+        u64::MAX,
+    )
+    .unwrap();
+    let reference = &records[0];
     assert_eq!(
         ref_listing(Err(ForgeNegative::Missing), RefFamily::Heads),
         None
@@ -34,14 +46,23 @@ fn a_ref_listing_is_a_fact_only_when_positively_complete() {
     );
     assert_eq!(
         ref_listing(
-            Ok(vec![named("refs/heads/main"), named("refs/tags/v1")]),
+            Ok(vec![
+                reference.clone(),
+                RefRecord {
+                    reference: "refs/tags/v1".to_owned(),
+                    ..reference.clone()
+                }
+            ]),
             RefFamily::Heads
         ),
         Some(vec!["main".to_owned()]),
         "only the named family's qualifier strips into a candidate"
     );
     let overfull: Vec<RefRecord> = (0..=REF_CEILING)
-        .map(|index| named(&format!("refs/heads/b{index}")))
+        .map(|index| RefRecord {
+            reference: format!("refs/heads/b{index}"),
+            ..reference.clone()
+        })
         .collect();
     assert_eq!(
         ref_listing(Ok(overfull), RefFamily::Heads),
@@ -49,7 +70,10 @@ fn a_ref_listing_is_a_fact_only_when_positively_complete() {
         "past the ceiling nothing proves the set complete"
     );
     let bounded: Vec<RefRecord> = (0..REF_CEILING)
-        .map(|index| named(&format!("refs/heads/b{index}")))
+        .map(|index| RefRecord {
+            reference: format!("refs/heads/b{index}"),
+            ..reference.clone()
+        })
         .collect();
     assert!(ref_listing(Ok(bounded), RefFamily::Heads).is_some());
 }

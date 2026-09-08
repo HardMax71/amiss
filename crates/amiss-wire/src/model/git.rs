@@ -4,6 +4,26 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumIter, EnumString, IntoStaticStr};
 
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    AsRefStr,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+)]
+#[strum(serialize_all = "lowercase")]
+pub enum ObjectKind {
+    Blob,
+    Commit,
+    Tag,
+    Tree,
+}
+
 /// The same-repository URL dialect a run applies: named in the report's
 /// evaluation and selecting the recognition grammar in the resolver.
 #[derive(

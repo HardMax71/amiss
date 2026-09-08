@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub(super) use crate::commit::CommitRecord;
+pub(super) use crate::reference::RefRecord;
 pub(super) use crate::repository::RepositoryRecord;
 pub(super) use crate::status::{CommitStatusRecord, CreateCommitStatus};
 pub(super) use crate::user::UserRecord;
@@ -142,9 +143,3 @@ pub(super) struct CreateReview {
 
 #[derive(Clone, Serialize)]
 pub(super) struct CreateReviewComment {}
-
-#[derive(Deserialize)]
-pub(super) struct RefRecord {
-    #[serde(rename = "ref")]
-    pub reference: String,
-}
