@@ -69,14 +69,13 @@ pub(super) fn set_target_page(pages: &mut Vec<LocaleTargetPage>, page: LocaleTar
 }
 
 pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
-    let planned = locale_plan();
-    let plan_value = plan(&planned).unwrap();
+    let planned = plan(locale_plan()).unwrap();
     LocaleCoverageEvidence {
         schema: EvidencePayloadSchema::Current,
-        plan_payload_digest: parse_plan(&plan_value).unwrap().payload_digest,
-        docs: planned.docs,
-        scope: planned.scope,
-        producer: planned.producer,
+        plan_payload_digest: planned.payload_digest,
+        docs: planned.payload.docs,
+        scope: planned.payload.scope,
+        producer: planned.payload.producer,
         source: LocalePageInventory {
             input_digest: digest('5'),
             product: Nullable::Null,

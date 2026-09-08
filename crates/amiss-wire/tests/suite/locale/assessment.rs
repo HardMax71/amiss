@@ -17,11 +17,6 @@ use amiss_wire::locale::{
     LocaleSourcePage, assess, evidence, parse_assessment, parse_evidence, parse_plan, plan,
 };
 
-fn plan_envelope() -> amiss_wire::locale::LocaleCoveragePlanEnvelope {
-    let value = plan(&locale_plan()).unwrap();
-    parse_plan(&value).unwrap()
-}
-
 fn evidence_envelope(input: &LocaleCoverageEvidence) -> LocaleCoverageEvidenceEnvelope {
     let value = evidence(input).unwrap();
     parse_evidence(&value).unwrap()
@@ -29,7 +24,7 @@ fn evidence_envelope(input: &LocaleCoverageEvidence) -> LocaleCoverageEvidenceEn
 
 #[test]
 fn complete_inventories_report_exact_missing_and_orphan_pages() {
-    let plan = plan_envelope();
+    let plan = plan(locale_plan()).unwrap();
     let mut input = locale_evidence();
     set_target_page(
         &mut input.target.pages,
@@ -74,8 +69,7 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
 fn partial_inventories_only_report_absences_the_other_side_proves() {
     let mut all_source = locale_plan();
     all_source.policy.required = LocalePageRequirement::AllSource;
-    let value = plan(&all_source).unwrap();
-    let all_source = parse_plan(&value).unwrap();
+    let all_source = plan(all_source).unwrap();
 
     let mut partial_source = locale_evidence();
     partial_source.plan_payload_digest = all_source.payload_digest;
@@ -90,7 +84,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
     );
     assert!(assessment.payload.coverage.target_orphaned.is_empty());
 
-    let plan = plan_envelope();
+    let plan = plan(locale_plan()).unwrap();
     let mut partial_target = locale_evidence();
     partial_target.target.complete = false;
     set_target_page(
@@ -128,7 +122,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
 
 #[test]
 fn named_policy_can_be_exhaustive_without_an_unneeded_full_source_inventory() {
-    let plan = plan_envelope();
+    let plan = plan(locale_plan()).unwrap();
     let mut input = locale_evidence();
     input.source.complete = false;
     input.target.pages = page_map(
@@ -145,7 +139,7 @@ fn named_policy_can_be_exhaustive_without_an_unneeded_full_source_inventory() {
 
 #[test]
 fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() {
-    let plan = plan_envelope();
+    let plan = plan(locale_plan()).unwrap();
     let mut allowed = locale_evidence();
     set_target_page(
         &mut allowed.target.pages,
@@ -214,7 +208,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
 
 #[test]
 fn fallback_source_absence_in_a_partial_inventory_stays_unproven() {
-    let plan = plan_envelope();
+    let plan = plan(locale_plan()).unwrap();
     let mut input = locale_evidence();
     input.source.complete = false;
     input
@@ -247,8 +241,7 @@ fn fallback_source_absence_in_a_partial_inventory_stays_unproven() {
 fn all_source_fallback_rules_authorize_each_observed_source_page() {
     let mut input_plan = locale_plan();
     input_plan.policy.fallbacks[0].pages = LocalePageRequirement::AllSource;
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let plan = plan(input_plan).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
     set_target_page(
@@ -277,8 +270,7 @@ fn all_source_fallback_rules_authorize_each_observed_source_page() {
 fn required_target_lineage_distinguishes_current_stale_and_unproven() {
     let mut input_plan = locale_plan();
     input_plan.policy.require_target_lineage = true;
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let plan = plan(input_plan).unwrap();
 
     let mut current = locale_evidence();
     current.plan_payload_digest = plan.payload_digest;
@@ -338,7 +330,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
 
 #[test]
 fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
-    let coverage_plan = plan_envelope();
+    let coverage_plan = plan(locale_plan()).unwrap();
     let mut ignored = locale_evidence();
     set_target_page(
         &mut ignored.target.pages,
@@ -355,8 +347,7 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
 
     let mut input_plan = locale_plan();
     input_plan.policy.require_target_lineage = true;
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let plan = plan(input_plan).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
     let source_page = LocaleSourcePage {
@@ -394,8 +385,7 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
 fn lineage_is_not_inferred_without_an_observed_current_source() {
     let mut input_plan = locale_plan();
     input_plan.policy.require_target_lineage = true;
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let plan = plan(input_plan).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
     input.source.complete = false;
@@ -430,8 +420,7 @@ fn lineage_is_not_inferred_without_an_observed_current_source() {
 fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     let mut input_plan = locale_plan();
     input_plan.product = Nullable::Value(product_resource('c'));
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let plan = plan(input_plan).unwrap();
     let mut aligned = locale_evidence();
     aligned.plan_payload_digest = plan.payload_digest;
     aligned.source.product = Nullable::Value(product_resource('c'));
@@ -490,7 +479,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
 
 #[test]
 fn coverage_only_policy_ignores_unselected_product_receipts() {
-    let plan = plan_envelope();
+    let plan = plan(locale_plan()).unwrap();
     let mut input = locale_evidence();
     input.source.product = Nullable::Value(product_resource('c'));
     input.target.product = Nullable::Value(product_resource('d'));
@@ -509,8 +498,7 @@ fn coverage_only_policy_ignores_unselected_product_receipts() {
 fn all_source_and_named_source_absence_remain_distinct() {
     let mut all_source_plan = locale_plan();
     all_source_plan.policy.required = LocalePageRequirement::AllSource;
-    let value = plan(&all_source_plan).unwrap();
-    let all_source_plan = parse_plan(&value).unwrap();
+    let all_source_plan = plan(all_source_plan).unwrap();
     let mut all_source_evidence = locale_evidence();
     all_source_evidence.plan_payload_digest = all_source_plan.payload_digest;
     all_source_evidence.target.pages = page_map(
@@ -528,7 +516,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
         vec!["legacy/removed"]
     );
 
-    let plan = plan_envelope();
+    let plan = plan(locale_plan()).unwrap();
     let mut source_missing = locale_evidence();
     source_missing
         .source
@@ -552,7 +540,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
 
 #[test]
 fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
-    let plan = plan_envelope();
+    let plan = plan(locale_plan()).unwrap();
     let absent = assess(&plan, None, "0.26.0", digest('a')).unwrap();
     assert_eq!(absent.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
@@ -589,7 +577,7 @@ fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
 
 #[test]
 fn bound_fact_disagreements_refute_without_comparing_foreign_inventories() {
-    let plan = plan_envelope();
+    let plan = plan(locale_plan()).unwrap();
     let mut foreign = locale_evidence();
     foreign.docs.commit = oid('c');
     foreign.scope.target_locale = "fr".to_owned();
@@ -611,13 +599,13 @@ fn bound_fact_disagreements_refute_without_comparing_foreign_inventories() {
 
 #[test]
 fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
-    let mut plan = plan_envelope();
-    plan.payload_digest = digest('f');
-    let error = assess(&plan, None, "0.26.0", digest('a')).unwrap_err();
+    let mut mutated_plan = plan(locale_plan()).unwrap();
+    mutated_plan.payload_digest = digest('f');
+    let error = assess(&mutated_plan, None, "0.26.0", digest('a')).unwrap_err();
     assert_eq!(error.path, "$.plan.payload_digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
-    let valid_plan = plan_envelope();
+    let valid_plan = plan(locale_plan()).unwrap();
     let mut mutated_evidence = evidence_envelope(&locale_evidence());
     mutated_evidence.payload_digest = digest('f');
     let error = assess(&valid_plan, Some(&mutated_evidence), "0.26.0", digest('a')).unwrap_err();

@@ -20,6 +20,7 @@ mod external_reader;
 mod external_snapshots;
 mod input;
 mod locale_assessment;
+mod locale_plan;
 mod policy_presence;
 mod publication_assessment;
 mod publication_evidence;
@@ -275,13 +276,21 @@ fn sidecar_examples_match_their_typed_sources() {
         serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut input)).unwrap()
     );
     input.end().unwrap();
+}
 
+#[test]
+fn locale_examples_match_their_typed_sources() {
+    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let locale_plan_bytes = fs::read(examples.join("locale-coverage-plan.json")).unwrap();
     let locale_plan = locale::parse_plan(&locale_plan_bytes).unwrap();
+    let generated = locale::plan(locale_plan.payload.clone()).unwrap();
+    assert_eq!(generated, locale_plan);
+    let mut input = serde_json::Deserializer::from_slice(&locale_plan_bytes);
     assert_eq!(
-        locale::plan(&locale_plan.payload).unwrap(),
-        serde_json_canonicalizer::to_vec(&json::parse(&locale_plan_bytes).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(&generated).unwrap(),
+        serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut input)).unwrap()
     );
+    input.end().unwrap();
 
     let locale_evidence_bytes = fs::read(examples.join("locale-coverage-evidence.json")).unwrap();
     let locale_evidence = locale::parse_evidence(&locale_evidence_bytes).unwrap();

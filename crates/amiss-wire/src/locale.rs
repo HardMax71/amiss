@@ -6,7 +6,7 @@ use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 use crate::model::ArtifactId;
 use crate::publication::{
@@ -40,9 +40,9 @@ pub const PAGE_KEY_BYTES: usize = crate::semantic::RECORD_KEY_BYTES;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LocaleCoveragePlanEnvelope<T = LocaleCoveragePlan> {
+pub struct LocaleCoveragePlanEnvelope {
     pub schema: PlanEnvelopeSchema,
-    pub payload: T,
+    pub payload: LocaleCoveragePlan,
     pub payload_digest: Digest,
 }
 
@@ -120,39 +120,36 @@ pub fn parse_plan(bytes: &[u8]) -> Result<LocaleCoveragePlanEnvelope, Error> {
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let document: LocaleCoveragePlanEnvelope = de::deserialize_json(bytes)?;
+    verified_json_digest(PLAN_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if plan_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
     Ok(document)
 }
 
-/// Builds the unique digest-bound value for one locale coverage plan.
+/// Binds one owned locale coverage plan to its validated payload digest.
+///
+/// The result stays typed; output callers enforce byte limits with [`crate::write_json`].
 ///
 /// # Errors
 ///
-/// Fails when a field violates the same closed grammar [`parse_plan`] enforces or the encoded
-/// document exceeds its byte ceiling.
-pub fn plan(input: &LocaleCoveragePlan) -> Result<Vec<u8>, Error> {
-    let payload_digest = plan_payload_digest(input)?;
-    let document = LocaleCoveragePlanEnvelope {
+/// Fails when a field violates the same closed grammar [`parse_plan`] enforces.
+pub fn plan(input: LocaleCoveragePlan) -> Result<LocaleCoveragePlanEnvelope, Error> {
+    let payload_digest = plan_payload_digest(&input)?;
+    Ok(LocaleCoveragePlanEnvelope {
         schema: PlanEnvelopeSchema::Current,
         payload: input,
         payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > LOCALE_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    Ok(canonical)
+    })
 }
 
 fn plan_payload_digest(input: &LocaleCoveragePlan) -> Result<Digest, Error> {
     validate_plan(input)?;
-    serde_json_canonicalizer::to_vec(input)
-        .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(input, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_plan(plan: &LocaleCoveragePlan) -> Result<(), Error> {

@@ -7,13 +7,14 @@ use amiss_wire::{
 };
 use serde::{Deserialize, Serialize};
 
-pub(super) fn assert_object_required<T>(
+pub(super) fn assert_object_required<T, U>(
     (document, read): (&T, impl Fn(&[u8]) -> Result<T, Error>),
-    object: &impl Serialize,
+    object: &U,
     positional: impl Serialize,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
     T: Serialize + PartialEq + std::fmt::Debug,
+    U: Serialize + serde::de::DeserializeOwned + PartialEq + std::fmt::Debug,
 {
     let text = serde_json::to_string(document)?;
     for valid in [
@@ -24,9 +25,11 @@ where
     ] {
         assert_eq!(&read(valid.as_bytes())?, document);
     }
+    let positional = serde_json::to_string(&positional)?;
+    assert_eq!(&serde_json::from_str::<U>(&positional)?, object);
     let object = serde_json::to_string(object)?;
     assert_eq!(text.matches(&object).count(), 1);
-    let changed = text.replacen(&object, &serde_json::to_string(&positional)?, 1);
+    let changed = text.replacen(&object, &positional, 1);
     assert_ne!(changed, text);
     assert_eq!(
         read(changed.as_bytes()).err(),
