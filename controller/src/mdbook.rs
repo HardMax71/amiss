@@ -7,12 +7,14 @@ use amiss_wire::model::RepoPathText;
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 use amiss_wire::semantic::{PayloadSchema, SemanticProducer, SemanticSubject};
 use cap_std::fs::Dir;
+use serde::{Serialize, de::DeserializeOwned};
 
+pub mod config;
 mod context;
 mod html;
 mod model;
 
-pub use model::{Book, BookItem, Chapter};
+pub use model::{Book, BookItem, Chapter, RenderContext};
 
 use context::{BuildPages, pages, render_context, site_build_context};
 use html::{page_facts, reachable_sources};
@@ -91,13 +93,14 @@ pub enum MdBookEvidenceError {
 /// The context, renderer version, HTML renderer selection, source mapping,
 /// output path, page bytes, anchor set, link graph, or resulting evidence is
 /// invalid, ambiguous, incomplete, or outside a fixed ceiling.
-pub fn mdbook_site_evidence(
+pub fn mdbook_site_evidence<P: DeserializeOwned + Serialize, R: DeserializeOwned + Serialize>(
     candidate_identity_digest: Digest,
     site: &SiteBuildContext,
     context_bytes: &[u8],
     html_output: &Dir,
 ) -> Result<Vec<u8>, MdBookEvidenceError> {
-    let context = amiss_wire::read_json(context_bytes, MDBOOK_RENDER_CONTEXT_BYTES)?;
+    let context: RenderContext<P, R> =
+        amiss_wire::read_json(context_bytes, MDBOOK_RENDER_CONTEXT_BYTES)?;
     let (expectation, base, repository_book_root) = site_build_context(site)?;
     let (source_directory, items, config_digest) = render_context(&context)?;
     let build = pages(

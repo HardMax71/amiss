@@ -1,37 +1,15 @@
-use std::collections::BTreeMap;
+use serde::{Deserialize, Serialize};
 
-use serde::{Deserialize, Serialize, de::IgnoredAny};
+use super::config::Config;
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct RenderContext {
-    pub(super) version: String,
-    pub(super) root: String,
-    pub(super) config: serde_json::Value,
-    pub(super) book: Book,
-    pub(super) destination: String,
-}
-
-#[derive(Deserialize)]
-pub(super) struct Config {
-    pub(super) book: BookConfig,
-    #[serde(default)]
-    pub(super) output: serde_json::Value,
-}
-
-#[derive(Deserialize)]
-pub(super) struct BookConfig {
-    #[serde(default, deserialize_with = "json_serde::deserialize_some")]
-    pub(super) src: Option<String>,
-}
-
-#[derive(Deserialize)]
-#[expect(
-    clippy::zero_sized_map_values,
-    reason = "only the JSON object shape is needed"
-)]
-pub(super) struct HtmlOutput {
-    pub(super) html: BTreeMap<String, IgnoredAny>,
+pub struct RenderContext<P, R> {
+    pub version: String,
+    pub root: String,
+    pub config: Config<P, R>,
+    pub book: Book,
+    pub destination: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

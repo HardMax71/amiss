@@ -1,10 +1,22 @@
 use std::{borrow::Cow, fs};
 
-use amiss_controller::mdbook::{Book, BookItem, Chapter};
-use amiss_controller::{MdBookEvidenceError, SiteBuildContext, mdbook_site_evidence};
+use amiss_controller::mdbook::config::NoExtensions;
+use amiss_controller::mdbook::{Book, BookItem, Chapter, RenderContext};
+use amiss_controller::{MDBOOK_RENDER_CONTEXT_BYTES, SiteBuildContext, mdbook_site_evidence};
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::digest::hb;
 use cap_std::{ambient_authority, fs::Dir};
+
+#[derive(serde::Deserialize, serde::Serialize)]
+pub(super) struct Renderers {
+    pub(super) capture: Capture,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Capture {
+    pub(super) command: String,
+}
 
 #[test]
 fn mdbook_book_metadata_has_a_closed_lossless_serde_contract() {
@@ -44,6 +56,19 @@ fn mdbook_book_metadata_has_a_closed_lossless_serde_contract() {
     ] {
         assert!(serde_json::from_str::<Book>(invalid).is_err(), "{invalid}");
     }
+    for required in [
+        r#""name":"Introduction","#,
+        r##""content":"# Introduction\n","##,
+        r#""number":[0,2,4294967295],"#,
+        r#""path":"intro.md","#,
+        r#""source_path":"README.md","#,
+        r#""sub_items":["Separator",{"PartTitle":"Part two"}],"#,
+        r#","parent_names":["Root"]"#,
+    ] {
+        let invalid = std::str::from_utf8(input).unwrap().replace(required, "");
+        assert_ne!(invalid.as_bytes(), input);
+        assert!(serde_json::from_str::<Book>(&invalid).is_err(), "{invalid}");
+    }
 }
 
 #[test]
@@ -68,7 +93,8 @@ fn real_mdbook_context_reads_only_the_callers_html_directory() {
         locale: None,
         version: None,
     };
-    let evidence = mdbook_site_evidence(candidate, &site, input, &output).unwrap();
+    let evidence =
+        mdbook_site_evidence::<NoExtensions, Renderers>(candidate, &site, input, &output).unwrap();
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
     assert_eq!(parsed.payload.subject.candidate_identity_digest, candidate);
     assert!(
@@ -84,37 +110,32 @@ fn real_mdbook_context_reads_only_the_callers_html_directory() {
         .unwrap()
         .replace("/operator/book", r"C:\\untrusted\\book");
     assert_ne!(relocated.as_bytes(), input);
-    let relocated_evidence =
-        mdbook_site_evidence(candidate, &site, relocated.as_bytes(), &output).unwrap();
+    let relocated_evidence = mdbook_site_evidence::<NoExtensions, Renderers>(
+        candidate,
+        &site,
+        relocated.as_bytes(),
+        &output,
+    )
+    .unwrap();
     assert_eq!(
         std::str::from_utf8(&relocated_evidence).unwrap(),
         std::str::from_utf8(&evidence).unwrap()
     );
 
-    for (original, replacement) in [
-        (r#""root": "/operator/book","#, ""),
-        (
-            r#""version": "0.5.4","#,
-            r#""version": "0.5.4", "extra": true,"#,
-        ),
-        (r#""items": ["#, r#""extra": true, "items": ["#),
-        (
-            r#""name": "Introduction","#,
-            r#""name": "Introduction", "extra": true,"#,
-        ),
-    ] {
-        let invalid = std::str::from_utf8(input)
-            .unwrap()
-            .replace(original, replacement);
-        assert_ne!(invalid.as_bytes(), input);
-        assert!(
-            matches!(
-                mdbook_site_evidence(candidate, &site, invalid.as_bytes(), &output),
-                Err(MdBookEvidenceError::Context(
-                    amiss_wire::JsonInputError::Shape(_)
-                ))
-            ),
-            "{invalid}"
-        );
-    }
+    let mut context: RenderContext<NoExtensions, Renderers> =
+        amiss_wire::read_json(input, MDBOOK_RENDER_CONTEXT_BYTES).unwrap();
+    context.config.output.additional.capture.command = "jq -cS .".to_owned();
+    let changed = mdbook_site_evidence::<NoExtensions, Renderers>(
+        candidate,
+        &site,
+        &serde_json::to_vec(&context).unwrap(),
+        &output,
+    )
+    .unwrap();
+    let changed = amiss_wire::semantic::parse(&changed).unwrap();
+    assert_eq!(changed.payload.observations, parsed.payload.observations);
+    assert_ne!(
+        changed.payload.producer.input_digest,
+        parsed.payload.producer.input_digest
+    );
 }

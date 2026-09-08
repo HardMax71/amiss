@@ -286,6 +286,12 @@ encoded from the actual output names. The pinned outer context and chapter field
 including required nullable chapter numbers and paths; unknown fields there refuse the input.
 The shared bounded JSON reader also checks that decoding preserves the complete canonical input,
 so positional arrays, discarded fields, and silently inserted defaults cannot replace that contract.
+Book, build, Rust and HTML settings use explicit Serde models. Callers select concrete types for
+their preprocessor and additional renderer settings when calling `mdbook_site_evidence`; use
+`NoExtensions` when neither is configured. Every supplied setting must survive the shared reader's
+lossless check, including settings flattened by Serde. Undeclared plugins and settings are refused.
+Omitted options remain omitted, nullable book metadata stays nullable, and the legacy `playpen`
+spelling remains distinct from `playground` in the configuration identity.
 
 The producer reads only the rendered pages named by the context, with one 16 MiB context
 ceiling and one 16 MiB aggregate HTML ceiling. A no-follow directory capability bounds every page

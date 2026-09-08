@@ -5,10 +5,10 @@ use amiss_wire::digest::{Digest, hb, hj_serde};
 use amiss_wire::model::{ArtifactId, RepoPathText};
 use amiss_wire::semantic::SemanticProducerKind;
 use amiss_wire::semantic::observation::SITE_BUILD_VERSION;
-use serde::Deserialize as _;
+use serde::Serialize;
 use url::Url;
 
-use super::model::{BookItem, Config, HtmlOutput, RenderContext};
+use super::model::{BookItem, RenderContext};
 use super::{MDBOOK_VERSION, MdBookEvidenceError, SiteBuildContext};
 
 const ROUTE_BYTES: usize = 16_384;
@@ -67,22 +67,23 @@ pub(super) fn site_build_context(
     ))
 }
 
-pub(super) fn render_context(
-    context: &RenderContext,
+pub(super) fn render_context<P: Serialize, R: Serialize>(
+    context: &RenderContext<P, R>,
 ) -> Result<(PathBuf, &[BookItem], Digest), MdBookEvidenceError> {
     if context.version != MDBOOK_VERSION {
         return Err(MdBookEvidenceError::UnsupportedBuild);
     }
-    let config = Config::deserialize(&context.config).map_err(amiss_wire::JsonInputError::from)?;
-    let source_directory = config
+    let source_directory = context
+        .config
         .book
         .src
         .as_deref()
         .map(|path| relative_path(path, true))
         .transpose()?
         .unwrap_or_else(|| PathBuf::from("src"));
-    let HtmlOutput { html: _html } = HtmlOutput::deserialize(&config.output)
-        .map_err(|_defect| MdBookEvidenceError::UnsupportedBuild)?;
+    if context.config.output.html.is_none() {
+        return Err(MdBookEvidenceError::UnsupportedBuild);
+    }
     let config_digest = hj_serde(CONFIG_DOMAIN, |mut writer| {
         serde_json_canonicalizer::to_writer(&context.config, &mut writer)
     })

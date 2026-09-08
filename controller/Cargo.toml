@@ -29,7 +29,6 @@ getrandom.workspace = true
 hex.workspace = true
 hmac.workspace = true
 html5gum.workspace = true
-json-serde.workspace = true
 percent-encoding.workspace = true
 processkit = { version = "=3.3.4", features = ["stats"] }
 same-file = "1"

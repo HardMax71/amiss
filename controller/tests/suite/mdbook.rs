@@ -5,7 +5,8 @@
 
 use std::{borrow::Cow, fs};
 
-use amiss_controller::mdbook::{BookItem, Chapter};
+use amiss_controller::mdbook::config::{BookConfig, Config, HtmlConfig, HtmlOutput, NoExtensions};
+use amiss_controller::mdbook::{Book, BookItem, Chapter, RenderContext};
 use amiss_controller::{
     MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, SiteBuildContext,
     mdbook_site_evidence, mdbook_site_expectation,
@@ -32,18 +33,31 @@ fn chapter(path: Option<&str>, source_path: Option<&str>, sub_items: &[BookItem]
 }
 
 fn context(version: &str, html_renderer: bool, items: &[BookItem]) -> Vec<u8> {
-    let output = if html_renderer {
-        json!({"html": {}})
-    } else {
-        json!({"capture": {}})
-    };
-    serde_json::to_vec(&json!({
-        "book": {"items": items},
-        "config": {"book": {"src": "guide"}, "output": output},
-        "destination": "/operator/build/capture",
-        "root": "/operator/checkout/docs",
-        "version": version
-    }))
+    serde_json::to_vec(&RenderContext {
+        book: Book {
+            items: items.to_vec(),
+        },
+        config: Config::<NoExtensions, NoExtensions> {
+            book: BookConfig {
+                title: None,
+                authors: Vec::new(),
+                description: None,
+                src: Some("guide".to_owned()),
+                language: Some("en".to_owned()),
+                text_direction: None,
+            },
+            build: None,
+            rust: None,
+            output: HtmlOutput {
+                html: html_renderer.then(HtmlConfig::default),
+                additional: NoExtensions {},
+            },
+            preprocessor: None,
+        },
+        destination: "/operator/build/capture".to_owned(),
+        root: "/operator/checkout/docs".to_owned(),
+        version: version.to_owned(),
+    })
     .unwrap()
 }
 
@@ -91,7 +105,13 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     let candidate = hb("amiss/test-mdbook-candidate", b"candidate");
     let site = site("docs/book.toml", "/manual/");
 
-    let evidence = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
+    let evidence = mdbook_site_evidence::<NoExtensions, NoExtensions>(
+        candidate,
+        &site,
+        &context,
+        &output(&root),
+    )
+    .unwrap();
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
 
     assert_eq!(parsed.payload.subject.candidate_identity_digest, candidate);
@@ -144,7 +164,13 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
         );
     }
 
-    let repeated = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
+    let repeated = mdbook_site_evidence::<NoExtensions, NoExtensions>(
+        candidate,
+        &site,
+        &context,
+        &output(&root),
+    )
+    .unwrap();
     assert_eq!(evidence, repeated);
 }
 
@@ -159,7 +185,7 @@ fn generated_chapters_need_no_repository_attribution() {
     fs::write(root.path().join("index.html"), "<p>generated index</p>").unwrap();
     let context = context("0.5.4", true, &[chapter(Some("generated.md"), None, &[])]);
 
-    let evidence = mdbook_site_evidence(
+    let evidence = mdbook_site_evidence::<NoExtensions, NoExtensions>(
         hb("amiss/test", b"candidate"),
         &site("book.toml", "/manual/"),
         &context,
@@ -222,7 +248,7 @@ fn completed_links_not_chapter_membership_define_navigation() {
         ],
     );
 
-    let evidence = mdbook_site_evidence(
+    let evidence = mdbook_site_evidence::<NoExtensions, NoExtensions>(
         hb("amiss/test", b"candidate"),
         &site("book.toml", "/manual/"),
         &context,
@@ -296,16 +322,25 @@ fn resolved_renderer_configuration_is_part_of_the_input_identity() {
     let original = context("0.5.4", true, &items);
     let changed = String::from_utf8(original.clone())
         .unwrap()
-        .replace(
-            r#""book":{"src":"guide"}"#,
-            r#""book":{"src":"guide","title":"changed"}"#,
-        )
+        .replace(r#""title":null"#, r#""title":"changed""#)
         .into_bytes();
     assert_ne!(original, changed);
     let candidate = hb("amiss/test", b"candidate");
     let site = site("book.toml", "/");
-    let first = mdbook_site_evidence(candidate, &site, &original, &output(&root)).unwrap();
-    let second = mdbook_site_evidence(candidate, &site, &changed, &output(&root)).unwrap();
+    let first = mdbook_site_evidence::<NoExtensions, NoExtensions>(
+        candidate,
+        &site,
+        &original,
+        &output(&root),
+    )
+    .unwrap();
+    let second = mdbook_site_evidence::<NoExtensions, NoExtensions>(
+        candidate,
+        &site,
+        &changed,
+        &output(&root),
+    )
+    .unwrap();
     let first = amiss_wire::semantic::parse(&first).unwrap();
     let second = amiss_wire::semantic::parse(&second).unwrap();
 
@@ -358,37 +393,17 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
         let bytes = serde_json::to_vec(&changed).unwrap();
         assert!(
             matches!(
-                mdbook_site_evidence(candidate, &site, &bytes, &output(&root)),
+                mdbook_site_evidence::<NoExtensions, NoExtensions>(
+                    candidate,
+                    &site,
+                    &bytes,
+                    &output(&root)
+                ),
                 Err(MdBookEvidenceError::Context(
                     amiss_wire::JsonInputError::Shape(_)
                 ))
             ),
             "{path}: {changed}"
-        );
-    }
-    for required in [
-        "name",
-        "content",
-        "number",
-        "path",
-        "source_path",
-        "sub_items",
-        "parent_names",
-    ] {
-        let mut changed = original.clone();
-        changed["book"]["items"][0]["Chapter"]
-            .as_object_mut()
-            .unwrap()
-            .remove(required);
-        let bytes = serde_json::to_vec(&changed).unwrap();
-        assert!(
-            matches!(
-                mdbook_site_evidence(candidate, &site, &bytes, &output(&root)),
-                Err(MdBookEvidenceError::Context(
-                    amiss_wire::JsonInputError::Shape(_)
-                ))
-            ),
-            "{required}"
         );
     }
     let mut defaulted = original;
@@ -401,7 +416,13 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
         .unwrap()
         .insert(0, json!({ "PartTitle": "Part one" }));
     let bytes = serde_json::to_vec(&defaulted).unwrap();
-    let evidence = mdbook_site_evidence(candidate, &site, &bytes, &output(&root)).unwrap();
+    let evidence = mdbook_site_evidence::<NoExtensions, NoExtensions>(
+        candidate,
+        &site,
+        &bytes,
+        &output(&root),
+    )
+    .unwrap();
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
     assert!(
         parsed.payload.observations.contains(&Cow::Owned(
@@ -414,8 +435,24 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
     );
 }
 
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Preprocessors {
+    outline: Outline,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Outline {
+    labels: std::collections::BTreeMap<String, String>,
+    sections: Vec<Section>,
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Section {
+    children: Vec<Section>,
+}
+
 #[test]
-fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth_limit() {
+fn typed_extensions_keep_canonical_identity_and_the_existing_depth_limit() {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join("chapter.html"), "<h1 id=\"chapter\"></h1>").unwrap();
     fs::write(root.path().join("index.html"), "<p>index</p>").unwrap();
@@ -424,22 +461,50 @@ fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth
         true,
         &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
     );
-    let mut changed: serde_json::Value = serde_json::from_slice(&ordinary).unwrap();
+    let mut changed: RenderContext<Preprocessors, NoExtensions> =
+        amiss_wire::read_json(&ordinary, MDBOOK_RENDER_CONTEXT_BYTES).unwrap();
     let candidate = hb("amiss/test", b"candidate");
     let site = site("book.toml", "/");
-    let baseline = mdbook_site_evidence(candidate, &site, &ordinary, &output(&root)).unwrap();
+    let baseline = mdbook_site_evidence::<Preprocessors, NoExtensions>(
+        candidate,
+        &site,
+        &ordinary,
+        &output(&root),
+    )
+    .unwrap();
     let baseline = amiss_wire::semantic::parse(&baseline).unwrap();
-    let mut nested = json!({ "\u{1f600}": 1, "\u{e000}": 2 });
-    for _ in 0..256 {
-        nested = json!([nested]);
+    let mut sections = Vec::new();
+    for _ in 0..128 {
+        sections = vec![Section { children: sections }];
     }
-    changed["config"]["future-renderer-options"] = nested;
+    changed.config.preprocessor = Some(Preprocessors {
+        outline: Outline {
+            labels: [
+                ("😀".to_owned(), "first".to_owned()),
+                ("\u{e000}".to_owned(), "second".to_owned()),
+            ]
+            .into(),
+            sections,
+        },
+    });
     let compact = serde_json::to_vec(&changed).unwrap();
     let pretty = serde_json::to_vec_pretty(&changed).unwrap();
-    let evidence = mdbook_site_evidence(candidate, &site, &compact, &output(&root)).unwrap();
+    let evidence = mdbook_site_evidence::<Preprocessors, NoExtensions>(
+        candidate,
+        &site,
+        &compact,
+        &output(&root),
+    )
+    .unwrap();
     assert_eq!(
         evidence,
-        mdbook_site_evidence(candidate, &site, &pretty, &output(&root)).unwrap()
+        mdbook_site_evidence::<Preprocessors, NoExtensions>(
+            candidate,
+            &site,
+            &pretty,
+            &output(&root)
+        )
+        .unwrap()
     );
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
     assert_eq!(baseline.payload.observations, parsed.payload.observations);
@@ -447,15 +512,39 @@ fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth
         baseline.payload.producer.input_digest,
         parsed.payload.producer.input_digest
     );
-    let mut nested = json!(null);
-    for _ in 0..513 {
-        nested = json!([nested]);
+    assert!(matches!(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
+            candidate,
+            &site,
+            &compact,
+            &output(&root)
+        ),
+        Err(MdBookEvidenceError::Context(
+            amiss_wire::JsonInputError::Shape(_)
+        ))
+    ));
+    let mut sections = Vec::new();
+    for _ in 0..256 {
+        sections = vec![Section { children: sections }];
     }
-    changed["config"]["future-renderer-options"] = nested;
+    changed
+        .config
+        .preprocessor
+        .as_mut()
+        .unwrap()
+        .outline
+        .sections = sections;
     let bytes = serde_json::to_vec(&changed).unwrap();
     assert!(matches!(
-        mdbook_site_evidence(candidate, &site, &bytes, &output(&root)),
-        Err(MdBookEvidenceError::Context(_))
+        mdbook_site_evidence::<Preprocessors, NoExtensions>(
+            candidate,
+            &site,
+            &bytes,
+            &output(&root)
+        ),
+        Err(MdBookEvidenceError::Context(
+            amiss_wire::JsonInputError::Json(_)
+        ))
     ));
 }
 
@@ -467,16 +556,18 @@ fn version_renderer_and_route_ownership_must_be_exact() {
         serde_json::from_slice(&context("0.5.4", true, &ordinary)).unwrap();
     invalid_renderer["config"]["output"]["html"] = json!([]);
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             hb("amiss/test", b"candidate"),
             &site("book.toml", "/"),
             &serde_json::to_vec(&invalid_renderer).unwrap(),
             &output(&root),
         ),
-        Err(MdBookEvidenceError::UnsupportedBuild)
+        Err(MdBookEvidenceError::Context(
+            amiss_wire::JsonInputError::Shape(_)
+        ))
     ));
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             hb("amiss/test", b"candidate"),
             &site("book.toml", "/"),
             &context("0.5.3", true, &ordinary),
@@ -485,7 +576,7 @@ fn version_renderer_and_route_ownership_must_be_exact() {
         Err(MdBookEvidenceError::UnsupportedBuild)
     ));
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             hb("amiss/test", b"candidate"),
             &site("book.toml", "/"),
             &context("0.5.4", false, &ordinary),
@@ -494,7 +585,7 @@ fn version_renderer_and_route_ownership_must_be_exact() {
         Err(MdBookEvidenceError::UnsupportedBuild)
     ));
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             hb("amiss/test", b"candidate"),
             &site("book.toml", "/"),
             &context(
@@ -521,7 +612,7 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
         &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
     );
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             candidate,
             &site("book.toml", "relative/"),
             &ordinary,
@@ -530,7 +621,7 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
         Err(MdBookEvidenceError::Route)
     ));
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             candidate,
             &site("book.toml", "/"),
             &context(
@@ -543,7 +634,7 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
         Err(MdBookEvidenceError::Path)
     ));
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             candidate,
             &site("book.toml", "/"),
             &ordinary,
@@ -552,7 +643,7 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
         Err(MdBookEvidenceError::Output(_))
     ));
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             candidate,
             &site("book.toml", "/"),
             br#"{"version":"0.5.4","version":"0.5.4"}"#,
@@ -562,7 +653,7 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
     ));
     let oversized_context = vec![b' '; usize::try_from(MDBOOK_RENDER_CONTEXT_BYTES).unwrap() + 1];
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             candidate,
             &site("book.toml", "/"),
             &oversized_context,
@@ -576,7 +667,7 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
     let file = fs::File::create(root.path().join("chapter.html")).unwrap();
     file.set_len(MDBOOK_HTML_BYTES + 1).unwrap();
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             candidate,
             &site("book.toml", "/"),
             &ordinary,
@@ -601,7 +692,7 @@ fn unrepresentable_published_anchor_fails_the_complete_set() {
         &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
     );
     assert!(matches!(
-        mdbook_site_evidence(
+        mdbook_site_evidence::<NoExtensions, NoExtensions>(
             hb("amiss/test", b"candidate"),
             &site("book.toml", "/"),
             &context,
