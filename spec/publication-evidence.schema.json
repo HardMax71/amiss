@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:publication-evidence",
   "title": "Amiss publication evidence",
   "description": "One provider-normalized, digest-bound receipt for a successful deployment. It reports authenticated facts against an operator-owned publication plan; it does not choose the intended docs-to-product relation or establish provider authority by itself.",
   "type": "object",

@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:waiver-bundle",
   "title": "Amiss external waiver bundle",
   "description": "Externally authorized, exact-key, exact-fact, exact-candidate-tree waivers. Wildcards and indistinguishable duplicate occurrences are unrepresentable.",
   "type": "object",

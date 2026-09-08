@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-evaluation-request",
   "title": "Amiss scanner evaluation request",
   "description": "The rolling run-identity request of the wrapper-to-engine wire. It carries caller-canonical forge identities and the nullable URL dialect explicitly, so a self-hosted instance never has to impersonate a public host.",
   "type": "object",

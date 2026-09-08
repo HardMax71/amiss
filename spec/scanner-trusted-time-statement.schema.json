@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-trusted-time-statement",
   "title": "Amiss trusted-time statement",
   "description": "The rolling externally issued clock statement. The typed parser additionally requires evaluation_instant < valid_until <= evaluation_instant + 600 seconds; evaluation binds every identity field to the authenticated invocation.",
   "type": "object",

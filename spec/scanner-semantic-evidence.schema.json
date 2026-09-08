@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-semantic-evidence",
   "title": "Amiss semantic evidence",
   "description": "One trusted producer's bounded observations over an exact candidate. The envelope authenticates no source by itself: authority belongs to the external lane that supplies it, and only compiled consumers assign semantics to observation kinds.",
   "type": "object",

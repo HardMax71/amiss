@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:publication-assessment",
   "title": "Amiss publication assessment",
   "description": "The deterministic offline judgment over one publication plan and optional provider-normalized evidence. Missing, foreign, or wrong-producer evidence stays unproven; only correctly bound evidence can match or refute the planned publication facts.",
   "type": "object",

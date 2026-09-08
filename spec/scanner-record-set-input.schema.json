@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-record-set-input",
   "title": "Amiss record-set input",
   "description": "One specialist-produced normalized record set from which the offline CLI emits a self-asserted semantic template. Producer-defined digests are validated for shape but are not recomputed or authenticated by Amiss.",
   "type": "object",

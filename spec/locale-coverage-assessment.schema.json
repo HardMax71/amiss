@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:locale-coverage-assessment",
   "title": "Amiss locale coverage assessment",
   "description": "The deterministic offline judgment over one locale coverage plan and optional producer-normalized inventories. Every reported page, fallback status, lineage status, and per-locale product verdict follows exact evidence; incomplete results are explicit lower bounds and can never match.",
   "type": "object",

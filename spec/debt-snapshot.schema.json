@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:debt-snapshot",
   "title": "Amiss external adoption-debt snapshot",
   "description": "The rolling externally reviewed exact-fact debt set. It has no magnitude or maximum-measure field: a candidate fact is tolerated only by exact fact-digest equality; absence is resolution.",
   "type": "object",

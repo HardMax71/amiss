@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:locale-coverage-plan",
   "title": "Amiss locale coverage plan",
   "description": "One operator-owned, report-bound plan for comparing source and target page-key inventories, authorizing source fallback, optionally requiring exact target-to-source lineage, and optionally selecting one immutable product resource both locales must describe. It selects policy; it does not assert that inventories exist, pages are translated, or provenance, lineage, and publication alignment are valid.",
   "type": "object",

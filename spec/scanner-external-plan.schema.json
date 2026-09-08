@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-external-plan",
   "title": "Amiss external plan",
   "description": "The pure derivation `amiss external-plan` makes from one complete scanner report: the distinct destinations delegated to evidence that the candidate introduced and the base lost, each with the documents naming it, bound to the report payload digest the derivation verified. The engine never fetches a destination; the plan only names the work an evidence producer may do.",
   "type": "object",

@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:organization-floor",
   "title": "Amiss external organization floor",
   "description": "A bare, externally acquired, digest-bound semantic policy floor for one repository and exact branch scope. It never embeds debt, waiver, scanner-release, action, status-name, or execution-constraint digests; required execution is independently pinned and cross-bound so release rotation does not invalidate semantic debt.",
   "type": "object",

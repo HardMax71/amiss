@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-semantic-template",
   "title": "Amiss semantic evidence template",
   "description": "One self-asserted producer's bounded candidate-independent observations. The scanner binds the template to the exact candidate identity during evaluation; the template has no subject field and authenticates nothing by itself.",
   "type": "object",

@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-execution-constraint",
   "title": "Amiss execution constraint",
   "description": "The rolling externally protected allow-list entry for one scanner action tree, release manifest, bootstrap contract, platform, and required provider status name.",
   "type": "object",

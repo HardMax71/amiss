@@ -1,6 +1,5 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
- "$id": "urn:amiss:schema:scanner-policy",
  "title": "Amiss repository scanner policy",
  "description": "The rolling raise-only repository policy read from exactly .amiss/scanner-policy.json.",
  "type": "object",

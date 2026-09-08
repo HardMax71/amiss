@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:locale-coverage-evidence",
   "title": "Amiss locale coverage evidence",
   "description": "One producer-normalized, digest-bound pair of source and target page-key inventories. Each side independently identifies the immutable product it describes or records that the identity is unavailable. Each target page declares whether it is target-owned or a source fallback; a target-owned page may bind the exact source resource it was based on. No row proves translation quality or semantic equivalence.",
   "type": "object",

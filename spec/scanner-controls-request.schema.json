@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-controls-request",
   "title": "Amiss scanner controls request",
   "description": "The rolling external-input request of the wrapper-to-engine wire. It names provider-neutral authority roles, binds trusted time to an explicit provider plus an opaque provider run identity, and carries only controller-acquired semantic evidence.",
   "type": "object",

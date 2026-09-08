@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:relation-plan",
   "title": "Amiss cross-repository relation plan",
   "description": "One operator-owned, report-bound plan for comparing the same exact projection kind across two independently acquired repository subjects. It binds selection and four immutable Git snapshots; it does not assert that projection evidence exists or that either side is correct.",
   "type": "object",

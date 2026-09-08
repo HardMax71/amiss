@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:relation-evidence",
   "title": "Amiss cross-repository relation evidence",
   "description": "One compact, plan-bound set of independently proven base and candidate projection values for two repository subjects. A null slot is explicitly unproven and carries no partial value. This document contains no relation verdict or claim that either subject is authoritative.",
   "type": "object",

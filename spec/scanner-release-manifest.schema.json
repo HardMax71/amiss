@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-release-manifest",
   "title": "Amiss scanner release manifest",
   "description": "The rolling reviewed release manifest. The typed parser additionally recomputes dependency_lock_digest, requires artifacts to be sorted and unique by platform, requires runtime_files to be sorted and unique by path, and binds the single executable row's path and digest to tree_path and binary_sha256.",
   "type": "object",

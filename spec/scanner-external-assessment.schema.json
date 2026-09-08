@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-external-assessment",
   "title": "Amiss external assessment",
   "description": "The pure judgment `amiss external-assess` makes over one external plan and one evidence file: every introduced destination carries a verdict under the engine's fixed policy, and the subject block binds report, plan, and evidence digests so the whole chain replays. Advisory by design: the artifact carries data and no exit-one verdict.",
   "type": "object",

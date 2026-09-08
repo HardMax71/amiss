@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:scanner-external-evidence",
   "title": "Amiss external evidence",
   "description": "One producer's observations over an external plan's introduced destinations, consumed by `amiss external-assess`. Rows report what was observed, never verdicts; judgment is the engine's fixed policy. A row naming a destination the plan did not introduce, repeating one, or binding another plan invalidates the whole file rather than being skipped, and destinations the file does not cover stay unproven.",
   "type": "object",

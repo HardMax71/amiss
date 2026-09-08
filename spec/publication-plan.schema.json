@@ -1,6 +1,5 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:amiss:schema:publication-plan",
   "title": "Amiss publication plan",
   "description": "One operator-owned, digest-bound relation between a successful scanner report, an exact docs candidate, a completed-site artifact, a publication target, and an immutable product resource. It plans an audit; it is neither deployment evidence nor an attestation.",
   "type": "object",
