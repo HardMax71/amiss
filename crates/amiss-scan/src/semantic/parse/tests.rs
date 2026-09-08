@@ -6,6 +6,7 @@ use amiss_wire::{
     semantic::{self, SemanticEvidenceEnvelope, observation::SiteBuildObservation},
 };
 use std::borrow::Cow;
+use std::sync::Arc;
 
 use super::{ErrorKind, Observation, SuppliedSemanticEvidence, validated_envelope};
 
@@ -21,8 +22,7 @@ fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size(
     .unwrap();
     let candidate = hb("test", b"candidate");
     let limit = usize::try_from(semantic::SEMANTIC_EVIDENCE_BYTES).unwrap();
-    let Observation::Record(observation) =
-        std::sync::Arc::make_mut(&mut template.observations)[0].to_mut()
+    let Observation::Record(observation) = Arc::make_mut(&mut template.observations)[0].to_mut()
     else {
         panic!("the example contains one record set");
     };
@@ -35,8 +35,7 @@ fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size(
     let document = semantic::bind_template(&template, candidate).unwrap();
     let encoded_length = serde_json_canonicalizer::to_vec(&document).unwrap().len();
     drop(document);
-    let Observation::Record(observation) =
-        std::sync::Arc::make_mut(&mut template.observations)[0].to_mut()
+    let Observation::Record(observation) = Arc::make_mut(&mut template.observations)[0].to_mut()
     else {
         panic!("the example remains a record set");
     };
@@ -71,7 +70,7 @@ fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size(
             );
         }
         let Observation::Record(observation) =
-            std::sync::Arc::make_mut(&mut template.observations)[0].to_mut()
+            Arc::make_mut(&mut template.observations)[0].to_mut()
         else {
             panic!("the example remains a record set");
         };
@@ -87,7 +86,7 @@ fn typed_intake_retains_the_original_envelope_allocations() {
     let expected_context_digest = value.payload.producer.context_digest;
     let accepted = validated_envelope(
         SuppliedSemanticEvidence {
-            value,
+            value: value.into(),
             expected_context_digest,
         },
         PATH,
@@ -95,6 +94,34 @@ fn typed_intake_retains_the_original_envelope_allocations() {
     .unwrap();
     assert_eq!(accepted.payload.observations.as_ptr(), observations);
     assert_eq!(accepted.payload.producer.version.as_ptr(), version);
+}
+
+#[test]
+fn typed_intake_can_consume_evidence_while_the_controller_retains_it() {
+    let value = semantic::parse(EXAMPLE).unwrap();
+    let supplied = SuppliedSemanticEvidence {
+        expected_context_digest: value.payload.producer.context_digest,
+        value: value.into(),
+    };
+    let retained = supplied.clone();
+    assert!(Arc::ptr_eq(&supplied.value, &retained.value));
+    let invalid = SuppliedSemanticEvidence {
+        expected_context_digest: hb("test", b"wrong context"),
+        ..retained.clone()
+    };
+    assert_eq!(
+        validated_envelope(invalid, PATH).unwrap_err().kind,
+        ErrorKind::DigestMismatch
+    );
+    let accepted = validated_envelope(supplied, PATH).unwrap();
+    assert_eq!(&accepted, retained.value.as_ref());
+    assert_ne!(
+        accepted.payload.observations.as_ptr(),
+        retained.value.payload.observations.as_ptr()
+    );
+    let observations = retained.value.payload.observations.as_ptr();
+    let accepted = validated_envelope(retained, PATH).unwrap();
+    assert_eq!(accepted.payload.observations.as_ptr(), observations);
 }
 
 #[test]
@@ -132,7 +159,7 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
         assert_eq!(
             validated_envelope(
                 SuppliedSemanticEvidence {
-                    value,
+                    value: value.into(),
                     expected_context_digest
                 },
                 PATH
@@ -148,11 +175,11 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
     stale.payload.complete = !stale.payload.complete;
     for supplied in [
         SuppliedSemanticEvidence {
-            value: stale,
+            value: stale.into(),
             expected_context_digest,
         },
         SuppliedSemanticEvidence {
-            value: original,
+            value: original.into(),
             expected_context_digest: hb("test", b"wrong context"),
         },
     ] {
@@ -190,7 +217,7 @@ fn in_process_intake_keeps_the_exact_encoded_byte_ceiling() {
         let encoded = serde_json::to_vec(&document).unwrap();
         assert_eq!(encoded.len(), length);
         let supplied = SuppliedSemanticEvidence {
-            value: document.clone(),
+            value: document.clone().into(),
             expected_context_digest: document.payload.producer.context_digest,
         };
         let result = validated_envelope(supplied, PATH);

@@ -446,7 +446,7 @@ fn semantic_evidence_is_a_bounded_set_of_envelopes() {
     .unwrap();
     let supplied = SuppliedSemanticEvidence {
         expected_context_digest: value.payload.producer.context_digest,
-        value,
+        value: value.into(),
     };
     let oversized = ControlsRequest {
         semantic_evidence: vec![supplied; SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)],

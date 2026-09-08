@@ -144,7 +144,7 @@ fn bind_input(
     Ok(BoundInput {
         payload_digest: envelope.payload_digest,
         supplied: SuppliedSemanticEvidence {
-            value: SemanticEvidenceEnvelope {
+            value: Arc::new(SemanticEvidenceEnvelope {
                 payload: SemanticEvidence {
                     observations: envelope
                         .payload
@@ -155,7 +155,7 @@ fn bind_input(
                     ..envelope.payload
                 },
                 ..envelope
-            },
+            }),
             expected_context_digest: template.producer.context_digest,
         },
         acquisition_identity,

@@ -1,4 +1,5 @@
 use std::io::{Read, Write};
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -203,7 +204,7 @@ serde_with::with_prefix!(pub(crate) object "");
 #[serde(deny_unknown_fields)]
 pub struct SuppliedSemanticEvidence {
     #[serde(deserialize_with = "object::deserialize")]
-    pub value: SemanticEvidenceEnvelope<'static>,
+    pub value: Arc<SemanticEvidenceEnvelope<'static>>,
     pub expected_context_digest: Digest,
 }
 

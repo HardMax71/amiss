@@ -123,15 +123,15 @@ pub(crate) fn validated_envelope(
     {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    let envelope = supplied.value;
-    amiss_wire::semantic::validate(&envelope)?;
+    let envelope = &supplied.value;
+    amiss_wire::semantic::validate(envelope)?;
     if envelope.payload.producer.context_digest != supplied.expected_context_digest {
         return fail(
             &format!("{path}.expected_context_digest"),
             ErrorKind::DigestMismatch,
         );
     }
-    Ok(envelope)
+    Ok(Arc::unwrap_or_clone(supplied.value))
 }
 
 fn insert_labels(

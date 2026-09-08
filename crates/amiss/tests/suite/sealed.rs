@@ -339,7 +339,7 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     }];
     let controls = ControlsRequest {
         semantic_evidence: vec![SuppliedSemanticEvidence {
-            value: evidence,
+            value: evidence.into(),
             expected_context_digest,
         }],
         ..ControlsRequest::default()
@@ -456,7 +456,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
         controls: ControlsRequest {
             semantic_evidence: vec![SuppliedSemanticEvidence {
-                value: evidence,
+                value: evidence.into(),
                 expected_context_digest: context_digest,
             }],
             ..ControlsRequest::default()
@@ -756,7 +756,7 @@ fn stale_intersphinx_evidence_refuses_the_run() {
         snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
         controls: ControlsRequest {
             semantic_evidence: vec![SuppliedSemanticEvidence {
-                value: stale,
+                value: stale.into(),
                 expected_context_digest,
             }],
             ..ControlsRequest::default()

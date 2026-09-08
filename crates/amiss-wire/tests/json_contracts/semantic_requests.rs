@@ -2,6 +2,7 @@ use amiss_wire::{
     requests::{ControlsRequest, SuppliedSemanticEvidence},
     semantic,
 };
+use std::sync::Arc;
 
 #[test]
 fn sealed_semantic_evidence_decodes_as_an_envelope_not_an_arbitrary_object() {
@@ -9,16 +10,26 @@ fn sealed_semantic_evidence_decodes_as_an_envelope_not_an_arbitrary_object() {
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();
+    let envelope_bytes = serde_json::to_vec(&document).unwrap();
     let request = ControlsRequest {
         semantic_evidence: vec![SuppliedSemanticEvidence {
             expected_context_digest: document.payload.producer.context_digest,
-            value: document,
+            value: document.into(),
         }],
         ..ControlsRequest::default()
     };
     assert_eq!(
         ControlsRequest::parse(&request.canonical_bytes().unwrap()).unwrap(),
         request
+    );
+    let retained = request.clone();
+    assert!(Arc::ptr_eq(
+        &request.semantic_evidence[0].value,
+        &retained.semantic_evidence[0].value
+    ));
+    assert_eq!(
+        serde_json::to_vec(&retained.semantic_evidence[0].value).unwrap(),
+        envelope_bytes
     );
     let document = &request.semantic_evidence[0].value;
     let envelope = serde_json::to_string(document).unwrap();

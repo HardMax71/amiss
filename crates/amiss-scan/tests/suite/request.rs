@@ -115,7 +115,7 @@ fn supplied_semantic(evidence: SemanticEvidence<'static>) -> SuppliedSemanticEvi
     let value = amiss_wire::semantic::envelope(evidence)
         .expect("the envelope contains known observation models");
     SuppliedSemanticEvidence {
-        value,
+        value: value.into(),
         expected_context_digest,
     }
 }
@@ -407,7 +407,9 @@ fn semantic_evidence_must_match_the_independently_supplied_context() {
     );
     let mut request = empty();
     request.semantic_evidence = vec![SuppliedSemanticEvidence {
-        value: amiss_wire::semantic::envelope(evidence).expect("the envelope is valid"),
+        value: amiss_wire::semantic::envelope(evidence)
+            .expect("the envelope is valid")
+            .into(),
         expected_context_digest: hb("test/inventory", b"another inventory"),
     }];
 

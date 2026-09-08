@@ -43,7 +43,7 @@ pub(super) fn capture(staged: &Release) {
     run.wire.push(b'\n');
     run.requests.controls.semantic_evidence = vec![SuppliedSemanticEvidence {
         expected_context_digest: producer.context_digest,
-        value: document,
+        value: document.into(),
     }];
     plant(&run, &run.wire, "0");
     let invocation = invoke(staged, &run, "result", false);
@@ -63,7 +63,7 @@ pub(super) fn capture(staged: &Release) {
     let supplied = run.requests.controls.semantic_evidence.first().unwrap();
     for invalid in semantic_defects(&supplied.value) {
         let mut controls = run.requests.controls.clone();
-        controls.semantic_evidence.first_mut().unwrap().value = invalid;
+        controls.semantic_evidence.first_mut().unwrap().value = invalid.into();
         cases.push((
             "semantic-evidence-invalid",
             controls.canonical_bytes().unwrap(),

@@ -177,7 +177,7 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
         amiss_wire::write_json(&document, &mut bytes, semantic::SEMANTIC_EVIDENCE_BYTES).unwrap();
         let request = ControlsRequest {
             semantic_evidence: vec![SuppliedSemanticEvidence {
-                value: document.clone(),
+                value: document.clone().into(),
                 expected_context_digest: document.payload.producer.context_digest,
             }],
             ..ControlsRequest::default()

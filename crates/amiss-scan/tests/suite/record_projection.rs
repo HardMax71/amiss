@@ -89,7 +89,7 @@ fn semantic_inputs(
     };
     let request = ControlsRequest {
         semantic_evidence: vec![SuppliedSemanticEvidence {
-            value: amiss_wire::semantic::envelope(evidence).unwrap(),
+            value: amiss_wire::semantic::envelope(evidence).unwrap().into(),
             expected_context_digest: context_digest,
         }],
         ..ControlsRequest::default()
