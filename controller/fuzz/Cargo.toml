@@ -17,10 +17,12 @@ amiss-controller-gitea = { path = "../gitea" }
 amiss-controller-github = { path = "../github" }
 amiss-controller-gitlab = { path = "../gitlab" }
 amiss-wire = { path = "../../crates/amiss-wire" }
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 hex.workspace = true
 hmac.workspace = true
 jsonwebtoken.workspace = true
 libfuzzer-sys = { version = "0.4", optional = true }
+serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 

@@ -16,6 +16,7 @@ pub mod review;
 mod source;
 pub mod status;
 pub mod user;
+pub mod webhook;
 
 use amiss_controller::{ChangeLocator, ChangeSnapshot, ProviderError, Publication, ResolvedCommit};
 use amiss_wire::model::Oid;

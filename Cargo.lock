@@ -219,11 +219,13 @@ dependencies = [
  "amiss-controller-gitea",
  "amiss-controller-github",
  "amiss-controller-gitlab",
+ "amiss-fixtures",
  "amiss-wire",
  "hex",
  "hmac",
  "jsonwebtoken",
  "libfuzzer-sys",
+ "serde",
  "serde_json",
  "sha2",
 ]

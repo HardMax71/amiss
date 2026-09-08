@@ -27,6 +27,9 @@ mod reviews;
 #[path = "json_contracts/statuses.rs"]
 mod statuses;
 
+#[path = "json_contracts/webhooks.rs"]
+mod webhooks;
+
 use amiss_controller::{ProviderError, decode_bounded_json};
 use amiss_controller_gitea::content::{
     ContentEncoding, ContentKind, ContentRecord, ContentResponse,

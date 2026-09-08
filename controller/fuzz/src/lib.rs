@@ -1,3 +1,5 @@
+mod gitea;
+
 use amiss_controller_fixtures::clock::TestClock;
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
@@ -116,7 +118,7 @@ pub fn provider_webhooks(data: &[u8]) {
                 "base": {"ref": "main", "repo": repository}
             }
         });
-        let exercise = prepare_webhook(body, data, false, "GitHub");
+        let exercise = prepare_webhook(body, data, "GitHub");
         let provider = provider("github", "github.example.test");
         let trust_set = opaque("github-webhooks");
         let source = GitHubPullRequestSource::new(
@@ -141,25 +143,7 @@ pub fn provider_webhooks(data: &[u8]) {
         );
     }
     {
-        let repository = json!({
-            "id": 11,
-            "name": "widget",
-            "full_name": "acme/widget",
-            "owner": {"login": "acme"}
-        });
-        let body = json!({
-            "action": "opened",
-            "changes": null,
-            "repository": repository,
-            "number": 42,
-            "pull_request": {
-                "id": 33,
-                "number": 42,
-                "head": {"sha": SHA1, "ref": "topic", "repo_id": 11, "repo": repository},
-                "base": {"sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "ref": "main", "repo_id": 11, "repo": repository}
-            }
-        });
-        let exercise = prepare_webhook(body, data, true, "Gitea-family");
+        let exercise = gitea::prepare_webhook(data);
         let provider = provider("gitea", "gitea.example.test");
         let trust_set = opaque("gitea-webhooks");
         let source = GiteaPullRequestSource::new(
@@ -450,29 +434,11 @@ fn authenticate_webhook<S>(
 fn prepare_webhook<'a>(
     mut body: Value,
     data: &'a [u8],
-    gitea: bool,
     family: &'static str,
 ) -> WebhookExercise<'a> {
-    mutate_pull_request(&mut body, data, gitea);
-    let target_matches = body
-        .pointer("/pull_request/base/ref")
-        .and_then(Value::as_str)
-        == Some("main");
-    WebhookExercise {
-        body: serde_json::to_vec(&body).expect("the generated body serializes"),
-        data,
-        target_matches,
-        family,
-    }
-}
-
-fn mutate_pull_request(body: &mut Value, data: &[u8], gitea: bool) {
     let mutation = data.get(1..).unwrap_or_default();
     let (target, replacement) = match selection(data, 10) {
-        1 => (
-            body.pointer_mut("/action"),
-            json!(if gitea { "synchronized" } else { "synchronize" }),
-        ),
+        1 => (body.pointer_mut("/action"), json!("synchronize")),
         2 => (body.pointer_mut("/action"), json!(text(mutation))),
         3 => (body.pointer_mut("/number"), json!(number(mutation))),
         4 => (
@@ -500,6 +466,16 @@ fn mutate_pull_request(body: &mut Value, data: &[u8], gitea: bool) {
     };
     if let Some(target) = target {
         *target = replacement;
+    }
+    let target_matches = body
+        .pointer("/pull_request/base/ref")
+        .and_then(Value::as_str)
+        == Some("main");
+    WebhookExercise {
+        body: serde_json::to_vec(&body).expect("the generated body serializes"),
+        data,
+        target_matches,
+        family,
     }
 }
 

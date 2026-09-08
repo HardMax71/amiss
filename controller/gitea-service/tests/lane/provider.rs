@@ -7,18 +7,17 @@ use amiss_controller::{
     Publication, RunIdentity, RunRefs, UntrustedDelivery,
 };
 use amiss_controller_fixtures::clock::TestClock;
+use amiss_controller_gitea::webhook::{HookIssueAction, PullRequestPayload};
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestSource,
 };
+use amiss_fixtures::GITEA_PULL_WEBHOOK;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
-use serde_json::json;
 use sha2::Sha256;
 
 pub(super) const REVIEWER_ID: u64 = 77;
 pub(super) const REPOSITORY_ID: u64 = 101;
-const PULL_REQUEST_ID: u64 = 4_201;
-const PULL_REQUEST_NUMBER: u64 = 42;
 
 pub(super) struct SignedEvent {
     pub body: Vec<u8>,
@@ -32,43 +31,13 @@ impl SignedEvent {
     }
 
     pub(super) fn for_target(candidate: &Oid, target: &str, secret: &[u8]) -> Self {
-        let body = serde_json::to_vec(&json!({
-            "action": "synchronized",
-            "repository": {
-                "id": REPOSITORY_ID,
-                "name": "widget",
-                "full_name": "acme/widget",
-                "owner": { "id": 12, "login": "acme" }
-            },
-            "number": PULL_REQUEST_NUMBER,
-            "pull_request": {
-                "id": PULL_REQUEST_ID,
-                "number": PULL_REQUEST_NUMBER,
-                "head": {
-                    "sha": candidate.as_str(),
-                    "ref": "topic",
-                    "repo_id": 202,
-                    "repo": {
-                        "id": 202,
-                        "name": "widget",
-                        "full_name": "contributor/widget",
-                        "owner": { "id": 13, "login": "contributor" }
-                    }
-                },
-                "base": {
-                    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-                    "ref": target,
-                    "repo_id": REPOSITORY_ID,
-                    "repo": {
-                        "id": REPOSITORY_ID,
-                        "name": "widget",
-                        "full_name": "acme/widget",
-                        "owner": { "id": 12, "login": "acme" }
-                    }
-                }
-            }
-        }))
-        .unwrap();
+        let mut payload: PullRequestPayload =
+            amiss_wire::read_json(GITEA_PULL_WEBHOOK, u64::MAX).unwrap();
+        payload.action = HookIssueAction::Synchronized;
+        let pull = payload.pull_request.as_mut().unwrap();
+        pull.head.sha = Some(candidate.clone());
+        target.clone_into(&mut pull.base.branch);
+        let body = serde_json::to_vec(&payload).unwrap();
         let mut mac = Hmac::<Sha256>::new_from_slice(secret).unwrap();
         mac.update(&body);
         let signature = hex::encode(mac.finalize().into_bytes()).into_bytes();

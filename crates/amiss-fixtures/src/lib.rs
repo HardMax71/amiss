@@ -23,6 +23,9 @@ use sha1_checked::Digest as _;
 pub const SCANNER_REPORT: &[u8] =
     include_bytes!("../../../spec/examples/scanner-report.canonical.json");
 
+/// Constructed Gitea-family delivery using complete provider response records.
+pub const GITEA_PULL_WEBHOOK: &[u8] = include_bytes!("../data/gitea-pull-webhook.json");
+
 /// Repository-local variables Git exports to hooks. They must not select the
 /// repository, index, object store, or configuration for a fixture command.
 /// Keep this list in sync with `git rev-parse --local-env-vars`; the integration

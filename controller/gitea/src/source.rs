@@ -4,15 +4,13 @@ use amiss_controller::{
     WebhookProof,
 };
 use amiss_wire::digest::hb;
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
-use serde::Deserialize;
+use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 
 use crate::DedicatedReviewer;
-use crate::identity::{
-    branch_ref, canonical_host, canonical_segment, change_id, positive, provider_run,
-};
+use crate::identity::{branch_ref, canonical_host, canonical_segment, change_id, provider_run};
+use crate::repository::RepositoryRecord;
+use crate::webhook::{HookIssueAction, PullRequestChanges, PullRequestPayload};
 
-const SUPPORTED_ACTIONS: [&str; 3] = ["opened", "reopened", "synchronized"];
 const DELIVERY_DOMAIN: &str = "amiss/controller-gitea-family-delivery-v1";
 
 pub struct GiteaPullRequestSource {
@@ -79,9 +77,96 @@ impl GiteaPullRequestSource {
         {
             return Err(ProviderError::Authentication);
         }
-        let facts = PullRequestFacts::decode(input.body, &self.provider, &self.reviewer)
+        // IngressCheck already bounds the signed body before this decoder runs.
+        let payload: PullRequestPayload = amiss_wire::read_json(input.body, u64::MAX)
+            .map_err(|_defect| ProviderError::Authentication)?;
+        let target_edited = matches!(
+            payload.changes.as_ref(),
+            Some(PullRequestChanges::Gitea { reference: Some(previous), .. }
+                | PullRequestChanges::Forgejo { reference: Some(previous), .. })
+                if branch_ref(&previous.from).is_some()
+        );
+        if !(matches!(
+            payload.action,
+            HookIssueAction::Opened | HookIssueAction::Reopened | HookIssueAction::Synchronized
+        ) || payload.action == HookIssueAction::Edited && target_edited)
+        {
+            return Err(ProviderError::Authentication);
+        }
+        let repository = payload
+            .repository
+            .as_ref()
             .ok_or(ProviderError::Authentication)?;
-        Ok((proof, facts))
+        let pull = payload
+            .pull_request
+            .as_ref()
+            .ok_or(ProviderError::Authentication)?;
+        let base = pull
+            .base
+            .repo
+            .as_ref()
+            .ok_or(ProviderError::Authentication)?;
+        if repository.id == 0
+            || pull.id == 0
+            || payload.number == 0
+            || pull.number != payload.number
+            || u64::try_from(pull.base.repo_id) != Ok(repository.id)
+            || repository.id != base.id
+            || repository.name != base.name
+            || repository.full_name != base.full_name
+            || repository.owner.login != base.owner.login
+            || pull.head.repo.is_none()
+            || !repository
+                .full_name
+                .eq_ignore_ascii_case(&format!("{}/{}", repository.owner.login, repository.name))
+        {
+            return Err(ProviderError::Authentication);
+        }
+
+        let change = ChangeLocator {
+            provider: self.provider.clone(),
+            repository: repository_identity(&self.provider, repository)
+                .ok_or(ProviderError::Authentication)?,
+            change: change_id(repository.id, pull.id, payload.number)
+                .ok_or(ProviderError::Authentication)?,
+        };
+        let integration = IntegrationId::new(self.reviewer.id.to_string())
+            .ok_or(ProviderError::Authentication)?;
+        let candidate = pull
+            .head
+            .sha
+            .as_ref()
+            .filter(|oid| oid.object_format() == ObjectFormat::Sha1)
+            .ok_or(ProviderError::Authentication)?;
+        let candidate_ref = branch_ref(&pull.head.branch).ok_or(ProviderError::Authentication)?;
+        let target_ref = branch_ref(&pull.base.branch).ok_or(ProviderError::Authentication)?;
+        let provider_run = provider_run(
+            &integration,
+            &change,
+            candidate,
+            &candidate_ref,
+            &target_ref,
+        )
+        .ok_or(ProviderError::Authentication)?;
+        Ok((
+            proof,
+            PullRequestFacts {
+                delivery: AuthenticatedDelivery {
+                    identity: DeliveryIdentity {
+                        provider: self.provider.clone(),
+                        integration,
+                        delivery: DeliveryId::new(format!(
+                            "body:{}",
+                            hb(DELIVERY_DOMAIN, input.body)
+                        ))
+                        .ok_or(ProviderError::Authentication)?,
+                    },
+                    change,
+                    provider_run,
+                },
+                target_ref,
+            },
+        ))
     }
 }
 
@@ -90,129 +175,13 @@ struct PullRequestFacts {
     target_ref: BranchRef,
 }
 
-impl PullRequestFacts {
-    fn decode(
-        body: &[u8],
-        provider: &ProviderIdentity,
-        reviewer: &DedicatedReviewer,
-    ) -> Option<Self> {
-        let payload: PullRequestPayload = serde_json::from_slice(body).ok()?;
-        if !supported_action(&payload) {
-            return None;
-        }
-        let repository_id = positive(payload.repository.id)?;
-        let pull_request_id = positive(payload.pull_request.id)?;
-        let number = positive(payload.number)?;
-        if payload.pull_request.number != payload.number
-            || payload.pull_request.base.repo_id != payload.repository.id
-            || payload.repository != payload.pull_request.base.repo
-            || !payload.repository.full_name.eq_ignore_ascii_case(&format!(
-                "{}/{}",
-                payload.repository.owner.login, payload.repository.name
-            ))
-        {
-            return None;
-        }
-
-        let repository = repository_identity(provider, &payload.repository)?;
-        let change = ChangeLocator {
-            provider: provider.clone(),
-            repository,
-            change: change_id(repository_id, pull_request_id, number)?,
-        };
-        let integration = IntegrationId::new(reviewer.id.to_string())?;
-        let candidate = Oid::new(ObjectFormat::Sha1, payload.pull_request.head.sha)?;
-        let candidate_ref = branch_ref(&payload.pull_request.head.branch)?;
-        let target_ref = branch_ref(&payload.pull_request.base.branch)?;
-        let provider_run = provider_run(
-            &integration,
-            &change,
-            &candidate,
-            &candidate_ref,
-            &target_ref,
-        )?;
-        Some(Self {
-            delivery: AuthenticatedDelivery {
-                identity: DeliveryIdentity {
-                    provider: provider.clone(),
-                    integration,
-                    delivery: DeliveryId::new(format!("body:{}", hb(DELIVERY_DOMAIN, body)))?,
-                },
-                change,
-                provider_run,
-            },
-            target_ref,
-        })
-    }
-}
-
-fn supported_action(payload: &PullRequestPayload) -> bool {
-    SUPPORTED_ACTIONS.contains(&payload.action.as_str())
-        || payload.action == "edited"
-            && payload
-                .changes
-                .as_ref()
-                .and_then(|changes| changes.reference.as_ref())
-                .is_some_and(|reference| branch_ref(&reference.from).is_some())
-}
-
 fn repository_identity(
     provider: &ProviderIdentity,
-    repository: &Repository,
+    repository: &RepositoryRecord,
 ) -> Option<RepositoryIdentity> {
     RepositoryIdentity::new(
         provider.instance.as_str().to_owned(),
         canonical_segment(&repository.owner.login)?,
         canonical_segment(&repository.name)?,
     )
-}
-
-#[derive(Deserialize)]
-struct PullRequestPayload {
-    action: String,
-    changes: Option<PullRequestChanges>,
-    repository: Repository,
-    number: u64,
-    pull_request: PullRequest,
-}
-
-#[derive(Deserialize)]
-struct PullRequestChanges {
-    #[serde(rename = "ref")]
-    reference: Option<PreviousReference>,
-}
-
-#[derive(Deserialize)]
-struct PreviousReference {
-    from: String,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq)]
-struct Repository {
-    id: u64,
-    name: String,
-    full_name: String,
-    owner: Owner,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq)]
-struct Owner {
-    login: String,
-}
-
-#[derive(Deserialize)]
-struct PullRequest {
-    id: u64,
-    number: u64,
-    head: PullRef,
-    base: PullRef,
-}
-
-#[derive(Deserialize)]
-struct PullRef {
-    sha: String,
-    #[serde(rename = "ref")]
-    branch: String,
-    repo_id: u64,
-    repo: Repository,
 }

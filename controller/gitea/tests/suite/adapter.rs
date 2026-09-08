@@ -4,6 +4,7 @@
 )]
 
 use amiss_controller_fixtures::clock::TestClock;
+use amiss_fixtures::GITEA_PULL_WEBHOOK as BODY;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -14,6 +15,7 @@ use amiss_controller::{
     ProviderNamespace, Publication, ReplayIdentity, ReplayWindow, RunIdentity, RunRefs,
     SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
+use amiss_controller_gitea::webhook::PullRequestPayload;
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestAdapter, GiteaPullRequestSource,
 };
@@ -24,32 +26,6 @@ use sha2::Sha256;
 
 const NOW: i64 = 1_800_000_000_000;
 const SECRET: &[u8] = b"gitea-family-webhook-secret";
-const BODY: &[u8] = br#"{
-  "action":"opened",
-  "repository":{
-    "id":101,
-    "name":"widget",
-    "full_name":"Acme/widget",
-    "owner":{"id":12,"login":"Acme"}
-  },
-  "number":42,
-  "pull_request":{
-    "id":4201,
-    "number":42,
-    "head":{
-      "sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-      "ref":"topic",
-      "repo_id":202,
-      "repo":{"id":202,"name":"widget","full_name":"contributor/widget","owner":{"id":13,"login":"contributor"}}
-    },
-    "base":{
-      "sha":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      "ref":"main",
-      "repo_id":101,
-      "repo":{"id":101,"name":"widget","full_name":"Acme/widget","owner":{"id":12,"login":"Acme"}}
-    }
-  }
-}"#;
 
 type HmacSha256 = Hmac<Sha256>;
 
@@ -112,6 +88,102 @@ fn both_supported_namespaces_bind_the_same_signed_facts() {
 }
 
 #[test]
+fn signed_webhooks_reject_unknown_root_fields() {
+    let adapter = adapter("gitea", dummy_snapshot("gitea"));
+    let body = replaced_once(
+        BODY,
+        r#""action":"opened""#,
+        r#""action":"opened","unexpected":true"#,
+    );
+    assert_eq!(
+        authenticated(&adapter, &body, provider("gitea")),
+        Err(ProviderError::Authentication)
+    );
+}
+
+#[test]
+fn repository_metadata_differences_preserve_the_signed_identity() {
+    let adapter = adapter("gitea", dummy_snapshot("gitea"));
+    let original = authenticated(&adapter, BODY, provider("gitea")).unwrap();
+    let mut payload: PullRequestPayload = amiss_wire::read_json(BODY, u64::MAX).unwrap();
+    let base = payload
+        .pull_request
+        .as_mut()
+        .unwrap()
+        .base
+        .repo
+        .as_mut()
+        .unwrap();
+    base.description = "A different metadata view".to_owned();
+    base.owner.id = 999;
+    let permissions = base.permissions.as_mut().unwrap();
+    permissions.push = !permissions.push;
+    let body = serde_json::to_vec(&payload).unwrap();
+    let changed = authenticated(&adapter, &body, provider("gitea")).unwrap();
+    assert_eq!(changed.delivery().change, original.delivery().change);
+    assert_eq!(
+        changed.delivery().provider_run,
+        original.delivery().provider_run
+    );
+    assert_ne!(
+        changed.delivery().identity.delivery,
+        original.delivery().identity.delivery
+    );
+}
+
+#[test]
+fn signed_webhooks_reject_lost_or_invalid_typed_facts() {
+    let adapter = adapter("gitea", dummy_snapshot("gitea"));
+    for replacement in [String::new(), "b".repeat(64)] {
+        let body = replaced_once(BODY, &"b".repeat(40), &replacement);
+        assert_eq!(
+            authenticated(&adapter, &body, provider("gitea")),
+            Err(ProviderError::Authentication)
+        );
+    }
+    for field in ["before", "after", "changes", "label"] {
+        let body = replaced_once(
+            BODY,
+            r#""action":"opened""#,
+            &format!(r#""action":"opened","{field}":null"#),
+        );
+        assert_eq!(
+            authenticated(&adapter, &body, provider("gitea")),
+            Err(ProviderError::Authentication)
+        );
+    }
+    let body = replaced_once(BODY, r#""commit_id":"""#, r#""commit_id":null"#);
+    assert_eq!(
+        authenticated(&adapter, &body, provider("gitea")),
+        Err(ProviderError::Authentication)
+    );
+    let body = replaced_once(BODY, r#""repo_id":101"#, r#""repo_id":-1"#);
+    assert_eq!(
+        authenticated(&adapter, &body, provider("gitea")),
+        Err(ProviderError::Authentication)
+    );
+    let mut payload: PullRequestPayload = amiss_wire::read_json(BODY, u64::MAX).unwrap();
+    payload.pull_request.as_mut().unwrap().head.repo = None;
+    let body = serde_json::to_vec(&payload).unwrap();
+    assert_eq!(
+        authenticated(&adapter, &body, provider("gitea")),
+        Err(ProviderError::Authentication)
+    );
+    payload.pull_request = None;
+    let body = serde_json::to_vec(&payload).unwrap();
+    assert_eq!(
+        authenticated(&adapter, &body, provider("gitea")),
+        Err(ProviderError::Authentication)
+    );
+    payload.repository = None;
+    let body = serde_json::to_vec(&payload).unwrap();
+    assert_eq!(
+        authenticated(&adapter, &body, provider("gitea")),
+        Err(ProviderError::Authentication)
+    );
+}
+
+#[test]
 fn only_run_defining_actions_are_accepted() {
     let adapter = adapter("gitea", dummy_snapshot("gitea"));
     let original = authenticated(&adapter, BODY, provider("gitea"))
@@ -137,6 +209,17 @@ fn only_run_defining_actions_are_accepted() {
         r#""action":"edited","changes":{"ref":{"from":"develop"}},"#,
     );
     assert!(authenticated(&adapter, &edited, provider("gitea")).is_ok());
+    let gitea_edit = replaced_once(
+        &edited,
+        r#""changes":{"ref""#,
+        r#""changes":{"added_labels":null,"removed_labels":null,"ref""#,
+    );
+    assert!(authenticated(&adapter, &gitea_edit, provider("gitea")).is_ok());
+    let invalid_edit = replaced_once(&gitea_edit, "develop", "bad..branch");
+    assert_eq!(
+        authenticated(&adapter, &invalid_edit, provider("gitea")),
+        Err(ProviderError::Authentication)
+    );
     for action in ["closed", "labeled", "edited"] {
         let body = replaced_once(
             BODY,
