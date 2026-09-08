@@ -20,6 +20,7 @@ mod external_reader;
 mod external_snapshots;
 mod input;
 mod locale_assessment;
+mod locale_evidence;
 mod locale_plan;
 mod policy_presence;
 mod publication_assessment;
@@ -294,10 +295,14 @@ fn locale_examples_match_their_typed_sources() {
 
     let locale_evidence_bytes = fs::read(examples.join("locale-coverage-evidence.json")).unwrap();
     let locale_evidence = locale::parse_evidence(&locale_evidence_bytes).unwrap();
+    let generated = locale::evidence(locale_evidence.payload.clone()).unwrap();
+    assert_eq!(generated, locale_evidence);
+    let mut input = serde_json::Deserializer::from_slice(&locale_evidence_bytes);
     assert_eq!(
-        locale::evidence(&locale_evidence.payload).unwrap(),
-        serde_json_canonicalizer::to_vec(&json::parse(&locale_evidence_bytes).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(&generated).unwrap(),
+        serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut input)).unwrap()
     );
+    input.end().unwrap();
 
     let locale_assessment_bytes =
         fs::read(examples.join("locale-coverage-assessment.json")).unwrap();

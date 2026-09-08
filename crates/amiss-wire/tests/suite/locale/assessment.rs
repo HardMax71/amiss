@@ -1,8 +1,3 @@
-#![expect(
-    clippy::unwrap_used,
-    reason = "locale fixtures construct checked plans and evidence"
-)]
-
 use std::{fs, path::Path};
 
 use super::evidence::{fallback_page, locale_evidence, page_map, set_target_page, target_page};
@@ -11,16 +6,11 @@ use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 
 use amiss_wire::locale::{
-    ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageEvidence,
-    LocaleCoverageEvidenceEnvelope, LocaleCoverageReason, LocaleCoverageVerdict,
-    LocaleFallbackStatus, LocaleLineageStatus, LocalePageRequirement, LocaleProductResult,
-    LocaleSourcePage, assess, evidence, parse_assessment, parse_evidence, parse_plan, plan,
+    self, ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageReason,
+    LocaleCoverageVerdict, LocaleFallbackStatus, LocaleLineageStatus, LocalePageRequirement,
+    LocaleProductResult, LocaleSourcePage, assess, parse_assessment, parse_evidence, parse_plan,
+    plan,
 };
-
-fn evidence_envelope(input: &LocaleCoverageEvidence) -> LocaleCoverageEvidenceEnvelope {
-    let value = evidence(input).unwrap();
-    parse_evidence(&value).unwrap()
-}
 
 #[test]
 fn complete_inventories_report_exact_missing_and_orphan_pages() {
@@ -30,7 +20,7 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
         &mut input.target.pages,
         target_page("legacy/removed", 'b', None),
     );
-    let evidence = evidence_envelope(&input);
+    let evidence = locale::evidence(input).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
@@ -74,7 +64,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
     let mut partial_source = locale_evidence();
     partial_source.plan_payload_digest = all_source.payload_digest;
     partial_source.source.complete = false;
-    let evidence = evidence_envelope(&partial_source);
+    let evidence = locale::evidence(partial_source).unwrap();
     let assessment = assess(&all_source, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert!(!assessment.payload.coverage.complete);
@@ -91,7 +81,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
         &mut partial_target.target.pages,
         target_page("legacy/removed", 'b', None),
     );
-    let evidence = evidence_envelope(&partial_target);
+    let evidence = locale::evidence(partial_target).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert!(!assessment.payload.coverage.complete);
@@ -108,7 +98,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
         .source
         .pages
         .retain(|page| page.key != "reference/api");
-    let evidence = evidence_envelope(&both_partial);
+    let evidence = locale::evidence(both_partial).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
@@ -129,7 +119,7 @@ fn named_policy_can_be_exhaustive_without_an_unneeded_full_source_inventory() {
         &[("guide/getting-started", 'f'), ("reference/api", 'e')],
         |key, digit| target_page(key, digit, None),
     );
-    let evidence = evidence_envelope(&input);
+    let evidence = locale::evidence(input).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
@@ -145,7 +135,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
         &mut allowed.target.pages,
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
-    let evidence = evidence_envelope(&allowed);
+    let evidence = locale::evidence(allowed.clone()).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert_eq!(assessment.payload.coverage.fallbacks.len(), 1);
@@ -159,7 +149,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
         &mut unauthorized.target.pages,
         fallback_page("reference/api", 'b', "preview-copy", '7'),
     );
-    let evidence = evidence_envelope(&unauthorized);
+    let evidence = locale::evidence(unauthorized).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
@@ -176,7 +166,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
         &mut wrong_page.target.pages,
         fallback_page("guide/getting-started", 'b', "source-copy", '6'),
     );
-    let evidence = evidence_envelope(&wrong_page);
+    let evidence = locale::evidence(wrong_page).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
@@ -193,7 +183,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
         &mut stale.target.pages,
         fallback_page("reference/api", 'b', "source-copy", '6'),
     );
-    let evidence = evidence_envelope(&stale);
+    let evidence = locale::evidence(stale).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
@@ -219,7 +209,7 @@ fn fallback_source_absence_in_a_partial_inventory_stays_unproven() {
         &mut input.target.pages,
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
-    let evidence = evidence_envelope(&input);
+    let evidence = locale::evidence(input).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
@@ -252,7 +242,7 @@ fn all_source_fallback_rules_authorize_each_observed_source_page() {
         &mut input.target.pages,
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
-    let evidence = evidence_envelope(&input);
+    let evidence = locale::evidence(input).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
@@ -282,7 +272,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
         &mut current.target.pages,
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
-    let evidence = evidence_envelope(&current);
+    let evidence = locale::evidence(current.clone()).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert_eq!(assessment.payload.coverage.lineage.len(), 1);
@@ -296,7 +286,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
         &mut stale.target.pages,
         target_page("guide/getting-started", '9', Some('5')),
     );
-    let evidence = evidence_envelope(&stale);
+    let evidence = locale::evidence(stale).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
@@ -314,7 +304,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
         &mut unproven.target.pages,
         target_page("guide/getting-started", '9', None),
     );
-    let evidence = evidence_envelope(&unproven);
+    let evidence = locale::evidence(unproven).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
@@ -340,7 +330,7 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
         &mut ignored.target.pages,
         target_page("guide/getting-started", '9', Some('5')),
     );
-    let evidence = evidence_envelope(&ignored);
+    let evidence = locale::evidence(ignored).unwrap();
     let assessment = assess(&coverage_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert!(assessment.payload.coverage.lineage.is_empty());
@@ -371,7 +361,7 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
         &mut input.target.pages,
         target_page("optional/overview", 'd', Some('e')),
     );
-    let evidence = evidence_envelope(&input);
+    let evidence = locale::evidence(input).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
@@ -401,7 +391,7 @@ fn lineage_is_not_inferred_without_an_observed_current_source() {
         &mut input.target.pages,
         target_page("reference/api", 'b', Some('7')),
     );
-    let evidence = evidence_envelope(&input);
+    let evidence = locale::evidence(input).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
@@ -430,7 +420,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
 
-    let evidence = evidence_envelope(&aligned);
+    let evidence = locale::evidence(aligned.clone()).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     let Nullable::Value(product) = assessment.payload.product else {
@@ -441,7 +431,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
 
     let mut missing = aligned.clone();
     missing.source.product = Nullable::Null;
-    let evidence = evidence_envelope(&missing);
+    let evidence = locale::evidence(missing.clone()).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
@@ -453,7 +443,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     let mut mismatched = missing;
     mismatched.source.product = Nullable::Value(product_resource('d'));
     mismatched.target.product = Nullable::Null;
-    let evidence = evidence_envelope(&mismatched);
+    let evidence = locale::evidence(mismatched.clone()).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
@@ -466,7 +456,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     ));
 
     mismatched.target.product = Nullable::Value(product_resource('e'));
-    let evidence = evidence_envelope(&mismatched);
+    let evidence = locale::evidence(mismatched).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         assessment.payload.reasons,
@@ -487,7 +477,7 @@ fn coverage_only_policy_ignores_unselected_product_receipts() {
         &mut input.target.pages,
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
-    let evidence = evidence_envelope(&input);
+    let evidence = locale::evidence(input).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
@@ -505,7 +495,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
         &[("guide/getting-started", '9'), ("legacy/removed", 'a')],
         |key, digit| target_page(key, digit, None),
     );
-    let evidence = evidence_envelope(&all_source_evidence);
+    let evidence = locale::evidence(all_source_evidence).unwrap();
     let assessment = assess(&all_source_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         assessment.payload.coverage.target_missing,
@@ -525,7 +515,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
     source_missing.target.pages = page_map(&[("guide/getting-started", '9')], |key, digit| {
         target_page(key, digit, None)
     });
-    let evidence = evidence_envelope(&source_missing);
+    let evidence = locale::evidence(source_missing).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         assessment.payload.reasons,
@@ -554,7 +544,7 @@ fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
 
     let mut unbound = locale_evidence();
     unbound.plan_payload_digest = digest('f');
-    let evidence = evidence_envelope(&unbound);
+    let evidence = locale::evidence(unbound).unwrap();
     assert_eq!(
         assess(&plan, Some(&evidence), "0.26.0", digest('a'))
             .unwrap()
@@ -566,7 +556,7 @@ fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
     let mut foreign = locale_evidence();
     foreign.producer.context_digest = digest('e');
     foreign.target.pages.clear();
-    let evidence = evidence_envelope(&foreign);
+    let evidence = locale::evidence(foreign).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         assessment.payload.reasons,
@@ -582,7 +572,7 @@ fn bound_fact_disagreements_refute_without_comparing_foreign_inventories() {
     foreign.docs.commit = oid('c');
     foreign.scope.target_locale = "fr".to_owned();
     foreign.target.pages.clear();
-    let evidence = evidence_envelope(&foreign);
+    let evidence = locale::evidence(foreign).unwrap();
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
@@ -606,13 +596,13 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
     let valid_plan = plan(locale_plan()).unwrap();
-    let mut mutated_evidence = evidence_envelope(&locale_evidence());
+    let mut mutated_evidence = locale::evidence(locale_evidence()).unwrap();
     mutated_evidence.payload_digest = digest('f');
     let error = assess(&valid_plan, Some(&mutated_evidence), "0.26.0", digest('a')).unwrap_err();
     assert_eq!(error.path, "$.evidence.payload_digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
-    let evidence = evidence_envelope(&locale_evidence());
+    let evidence = locale::evidence(locale_evidence()).unwrap();
     let document = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     let mut inconsistent = document.clone();
     inconsistent.payload.verdict = LocaleCoverageVerdict::Matched;

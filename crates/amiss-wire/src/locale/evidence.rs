@@ -4,7 +4,7 @@ use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 use crate::model::ArtifactId;
 use crate::publication::{
@@ -21,9 +21,9 @@ pub const PAGE_ITEMS_LIMIT: usize = crate::semantic::SEMANTIC_OBSERVATIONS_LIMIT
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LocaleCoverageEvidenceEnvelope<T = LocaleCoverageEvidence> {
+pub struct LocaleCoverageEvidenceEnvelope {
     pub schema: EvidenceEnvelopeSchema,
-    pub payload: T,
+    pub payload: LocaleCoverageEvidence,
     pub payload_digest: Digest,
 }
 
@@ -112,39 +112,36 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<LocaleCoverageEvidenceEnvelope, Er
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let document: LocaleCoverageEvidenceEnvelope = de::deserialize_json(bytes)?;
+    verified_json_digest(EVIDENCE_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if evidence_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
     Ok(document)
 }
 
-/// Builds the unique digest-bound value for one pair of locale page inventories.
+/// Binds owned locale page inventories to their validated payload digest.
+///
+/// The result stays typed; output callers enforce byte limits with [`crate::write_json`].
 ///
 /// # Errors
 ///
-/// Fails when a public field violates the same closed grammar [`parse_evidence`] enforces or the
-/// encoded document exceeds its byte ceiling.
-pub fn evidence(input: &LocaleCoverageEvidence) -> Result<Vec<u8>, Error> {
-    let payload_digest = evidence_payload_digest(input)?;
-    let document = LocaleCoverageEvidenceEnvelope {
+/// Fails when a field violates the same closed grammar [`parse_evidence`] enforces.
+pub fn evidence(input: LocaleCoverageEvidence) -> Result<LocaleCoverageEvidenceEnvelope, Error> {
+    let payload_digest = evidence_payload_digest(&input)?;
+    Ok(LocaleCoverageEvidenceEnvelope {
         schema: EvidenceEnvelopeSchema::Current,
         payload: input,
         payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EVIDENCE_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    Ok(canonical)
+    })
 }
 
 pub(super) fn evidence_payload_digest(input: &LocaleCoverageEvidence) -> Result<Digest, Error> {
     validate_evidence(input)?;
-    serde_json_canonicalizer::to_vec(input)
-        .map(|canonical| hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(EVIDENCE_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(input, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_evidence(evidence: &LocaleCoverageEvidence) -> Result<(), Error> {
