@@ -4,7 +4,7 @@ use amiss_wire::controls::parse_organization_floor;
 use amiss_wire::digest::{hb, hj_serde};
 use amiss_wire::external::{
     ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
-    ExternalPlanEnvelope, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess, evidence,
+    ExternalPlanEnvelope, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess,
 };
 use amiss_wire::json::{Value, parse};
 use divan::counter::BytesCount;
@@ -114,7 +114,9 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     let mut encoded = countio::Counter::new(std::io::sink());
     serde_json_canonicalizer::to_writer(&plan, &mut encoded)
         .unwrap_or_else(|defect| panic!("benchmark plan: {defect}"));
-    let bytes = encoded.writer_bytes().saturating_add(evidence.len());
+    serde_json_canonicalizer::to_writer(&evidence, &mut encoded)
+        .unwrap_or_else(|defect| panic!("benchmark evidence: {defect}"));
+    let bytes = encoded.writer_bytes();
     bencher.counter(BytesCount::new(bytes)).bench_local(|| {
         assess(
             black_box(&plan),
@@ -125,7 +127,7 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     });
 }
 
-fn assessment_fixture(count: usize) -> (ExternalPlanEnvelope, Vec<u8>) {
+fn assessment_fixture(count: usize) -> (ExternalPlanEnvelope, ExternalEvidence) {
     let destinations: Vec<String> = (0..count)
         .map(|index| format!("https://example.com/resource-{index:05}"))
         .collect();
@@ -160,7 +162,7 @@ fn assessment_fixture(count: usize) -> (ExternalPlanEnvelope, Vec<u8>) {
             checked_at: "bench-instant".to_owned(),
         })
         .collect();
-    let evidence = evidence(&ExternalEvidence {
+    let evidence = ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
         plan_payload_digest: document.payload_digest,
         producer: ExternalEvidenceProducer {
@@ -168,7 +170,6 @@ fn assessment_fixture(count: usize) -> (ExternalPlanEnvelope, Vec<u8>) {
             version: "0.0.0".to_owned(),
         },
         rows,
-    })
-    .unwrap_or_else(|defect| panic!("benchmark evidence is malformed: {defect}"));
+    };
     (document, evidence)
 }

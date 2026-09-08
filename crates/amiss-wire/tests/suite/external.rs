@@ -9,7 +9,8 @@ use amiss_wire::external::{
     ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, EVIDENCE_SCHEMA, ExternalAssessmentEnvelope,
     ExternalDestination, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
     ExternalEvidenceSchema, ExternalPlanEnvelope, ExternalPlanEnvelopeSchema, ExternalRepository,
-    PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod, assess, parse_evidence, parse_plan, plan,
+    ForgeRepository, ForgeTail, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeFailure, ProbeMethod, assess,
+    parse_evidence, parse_plan, plan,
 };
 use amiss_wire::json::Value;
 use amiss_wire::report::{
@@ -625,46 +626,41 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
     }
 }
 
-fn evidence(plan: &ExternalPlanEnvelope, rows: Vec<Value>) -> Vec<u8> {
-    serde_json_canonicalizer::to_vec(&object(vec![
-        ("schema", string(EVIDENCE_SCHEMA)),
-        (
-            "plan_payload_digest",
-            string(&plan.payload_digest.to_string()),
-        ),
-        (
-            "producer",
-            object(vec![
-                ("name", string("amiss-probe")),
-                ("version", string("0.0.0")),
-            ]),
-        ),
-        ("rows", Value::array(rows)),
-    ]))
-    .expect("fixture JSON")
-}
-
-fn probe(destination: &str, method: &str, status: i64) -> Value {
-    object(vec![
-        ("kind", string("http-probe")),
-        ("destination", string(destination)),
-        ("method", string(method)),
-        ("status", Value::Integer(status)),
-        ("checked_at", string("t0")),
-    ])
-}
-
-fn forge_row(destination: &str, repository: &str, tail: Option<&str>) -> Value {
-    let mut members = vec![
-        ("kind", string("forge-api")),
-        ("destination", string(destination)),
-        ("repository", string(repository)),
-        ("checked_at", string("t0")),
-    ];
-    if let Some(tail) = tail {
-        members.push(("tail", string(tail)));
+fn evidence(plan: &ExternalPlanEnvelope, rows: Vec<ExternalEvidenceRow>) -> ExternalEvidence {
+    ExternalEvidence {
+        schema: ExternalEvidenceSchema::Current,
+        plan_payload_digest: plan.payload_digest,
+        producer: ExternalEvidenceProducer {
+            name: "amiss-probe".to_owned(),
+            version: "0.0.0".to_owned(),
+        },
+        rows,
     }
-    object(members)
+}
+
+fn probe(destination: &str, method: ProbeMethod, status: u16) -> ExternalEvidenceRow {
+    ExternalEvidenceRow::HttpProbe {
+        destination: destination.to_owned(),
+        method,
+        status: Some(status),
+        failure: None,
+        final_destination: None,
+        redirect_chain_permanent: None,
+        checked_at: "t0".to_owned(),
+    }
+}
+
+fn forge_row(
+    destination: &str,
+    repository: ForgeRepository,
+    tail: Option<ForgeTail>,
+) -> ExternalEvidenceRow {
+    ExternalEvidenceRow::ForgeApi {
+        destination: destination.to_owned(),
+        repository,
+        tail,
+        checked_at: "t0".to_owned(),
+    }
 }
 
 #[test]
@@ -699,7 +695,7 @@ fn derived_validation_rejects_invalid_evidence_shapes() {
         destination: "https://example.com/a".to_owned(),
         method: ProbeMethod::Get,
         status: Some(42),
-        failure: Some(amiss_wire::external::ProbeFailure::Tls),
+        failure: Some(ProbeFailure::Tls),
         final_destination: None,
         redirect_chain_permanent: Some(false),
         checked_at: String::new(),
@@ -738,23 +734,23 @@ fn the_judgment_policy_is_conservative() {
     let destinations = [
         (
             "https://a.example/gone",
-            probe("https://a.example/gone", "get", 410),
+            probe("https://a.example/gone", ProbeMethod::Get, 410),
         ),
         (
             "https://b.example/head404",
-            probe("https://b.example/head404", "head", 404),
+            probe("https://b.example/head404", ProbeMethod::Head, 404),
         ),
         (
             "https://c.example/ok",
-            probe("https://c.example/ok", "head", 200),
+            probe("https://c.example/ok", ProbeMethod::Head, 200),
         ),
         (
             "https://d.example/wall",
-            probe("https://d.example/wall", "get", 403),
+            probe("https://d.example/wall", ProbeMethod::Get, 403),
         ),
         (
             "https://e.example/limit",
-            probe("https://e.example/limit", "get", 429),
+            probe("https://e.example/limit", ProbeMethod::Get, 429),
         ),
     ];
     let observations = destinations
@@ -827,25 +823,23 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
     .expect("the report yields a plan");
     let observed = evidence(
         &plan,
-        vec![
-            object(vec![
-                ("checked_at", string("t0")),
-                ("destination", string(permanent)),
-                ("final_destination", string(permanent_target)),
-                ("kind", string("http-probe")),
-                ("method", string("head")),
-                ("redirect_chain_permanent", Value::Bool(true)),
-                ("status", Value::Integer(200)),
-            ]),
-            object(vec![
-                ("checked_at", string("t0")),
-                ("destination", string(temporary)),
-                ("final_destination", string(temporary_target)),
-                ("kind", string("http-probe")),
-                ("method", string("head")),
-                ("status", Value::Integer(200)),
-            ]),
-        ],
+        [
+            (permanent, permanent_target, Some(true)),
+            (temporary, temporary_target, None),
+        ]
+        .into_iter()
+        .map(
+            |(destination, target, redirect_chain_permanent)| ExternalEvidenceRow::HttpProbe {
+                destination: destination.to_owned(),
+                method: ProbeMethod::Head,
+                status: Some(200),
+                failure: None,
+                final_destination: Some(target.to_owned()),
+                redirect_chain_permanent,
+                checked_at: "t0".to_owned(),
+            },
+        )
+        .collect(),
     );
     let assessment =
         assess(&plan, &observed, "0.0.0", sample_digest()).expect("the redirects are evidence");
@@ -862,25 +856,19 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
     );
     assert_eq!(verdict(temporary).retarget.as_deref(), None);
 
-    for malformed in [
-        object(vec![
-            ("checked_at", string("t0")),
-            ("destination", string(permanent)),
-            ("kind", string("http-probe")),
-            ("method", string("head")),
-            ("redirect_chain_permanent", Value::Bool(true)),
-            ("status", Value::Integer(200)),
-        ]),
-        object(vec![
-            ("checked_at", string("t0")),
-            ("destination", string(permanent)),
-            ("final_destination", string(permanent_target)),
-            ("kind", string("http-probe")),
-            ("method", string("head")),
-            ("redirect_chain_permanent", Value::Bool(false)),
-            ("status", Value::Integer(200)),
-        ]),
+    for (final_destination, redirect_chain_permanent) in [
+        (None, Some(true)),
+        (Some(permanent_target.to_owned()), Some(false)),
     ] {
+        let malformed = ExternalEvidenceRow::HttpProbe {
+            destination: permanent.to_owned(),
+            method: ProbeMethod::Head,
+            status: Some(200),
+            failure: None,
+            final_destination,
+            redirect_chain_permanent,
+            checked_at: "t0".to_owned(),
+        };
         assert!(matches!(
             assess(
                 &plan,
@@ -905,9 +893,13 @@ fn forge_facts_refute_only_after_visibility_and_resolution() {
     let evidence = evidence(
         &plan,
         vec![
-            forge_row(&shaped("one"), "readable", Some("path-missing")),
-            forge_row(&shaped("two"), "missing", None),
-            forge_row(&shaped("three"), "readable", None),
+            forge_row(
+                &shaped("one"),
+                ForgeRepository::Readable,
+                Some(ForgeTail::PathMissing),
+            ),
+            forge_row(&shaped("two"), ForgeRepository::Missing, None),
+            forge_row(&shaped("three"), ForgeRepository::Readable, None),
         ],
     );
     let assessment =
@@ -931,21 +923,24 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
     )
     .expect("the report yields a plan");
     for rows in [
-        vec![probe("https://other.example/y", "get", 200)],
+        vec![probe("https://other.example/y", ProbeMethod::Get, 200)],
         vec![
-            probe("https://a.example/x", "get", 200),
-            probe("https://a.example/x", "head", 200),
+            probe("https://a.example/x", ProbeMethod::Get, 200),
+            probe("https://a.example/x", ProbeMethod::Head, 200),
         ],
-        vec![forge_row("https://a.example/x", "readable", None)],
+        vec![forge_row(
+            "https://a.example/x",
+            ForgeRepository::Readable,
+            None,
+        )],
     ] {
         assert!(matches!(
             assess(&plan, &evidence(&plan, rows), "0.0.0", sample_digest(),),
             Err(AssessDefect::UnboundEvidence)
         ));
     }
-    let (mut foreign, _) = parse_evidence(&evidence(&plan, Vec::new())).unwrap();
+    let mut foreign = evidence(&plan, Vec::new());
     foreign.plan_payload_digest = sample_digest();
-    let foreign = serde_json_canonicalizer::to_vec(&foreign).unwrap();
     assert!(matches!(
         assess(&plan, &foreign, "0.0.0", sample_digest()),
         Err(AssessDefect::UnboundEvidence)
@@ -960,23 +955,21 @@ fn malformed_evidence_rows_are_refused() {
         sample_digest(),
     )
     .expect("the report yields a plan");
-    let both = object(vec![
-        ("kind", string("http-probe")),
-        ("destination", string("https://a.example/x")),
-        ("method", string("get")),
-        ("status", Value::Integer(200)),
-        ("failure", string("tls")),
-        ("checked_at", string("t0")),
-    ]);
-    let neither = object(vec![
-        ("kind", string("http-probe")),
-        ("destination", string("https://a.example/x")),
-        ("method", string("get")),
-        ("checked_at", string("t0")),
-    ]);
-    let below = probe("https://a.example/x", "get", 42);
-    let above = probe("https://a.example/x", "get", 1000);
-    for bad in [both, neither, below, above] {
+    for (status, failure) in [
+        (Some(200), Some(ProbeFailure::Tls)),
+        (None, None),
+        (Some(42), None),
+        (Some(1000), None),
+    ] {
+        let bad = ExternalEvidenceRow::HttpProbe {
+            destination: "https://a.example/x".to_owned(),
+            method: ProbeMethod::Get,
+            status,
+            failure,
+            final_destination: None,
+            redirect_chain_permanent: None,
+            checked_at: "t0".to_owned(),
+        };
         assert!(matches!(
             assess(&plan, &evidence(&plan, vec![bad]), "0.0.0", sample_digest()),
             Err(AssessDefect::Evidence(_))
@@ -995,15 +988,10 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         sample_digest(),
     )
     .expect("the report yields a plan");
-    let (mut unnamed, _) = parse_evidence(&evidence(&plan, Vec::new())).unwrap();
+    let mut unnamed = evidence(&plan, Vec::new());
     unnamed.producer.version.clear();
     assert!(matches!(
-        assess(
-            &plan,
-            &serde_json_canonicalizer::to_vec(&unnamed).unwrap(),
-            "0.0.0",
-            sample_digest(),
-        ),
+        assess(&plan, &unnamed, "0.0.0", sample_digest(),),
         Err(AssessDefect::Evidence(_))
     ));
 
@@ -1014,7 +1002,7 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         &serde_json_canonicalizer::to_vec(&invalid_plan.payload).unwrap(),
     );
     assert!(matches!(
-        assess(&invalid_plan, b"null", "0.0.0", sample_digest(),),
+        assess(&invalid_plan, &unnamed, "0.0.0", sample_digest(),),
         Err(AssessDefect::Plan(_))
     ));
 }
@@ -1029,7 +1017,14 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
     assert!(matches!(
         assess(
             &plan,
-            &evidence(&plan, vec![forge_row(bare, "readable", Some("resolved"))]),
+            &evidence(
+                &plan,
+                vec![forge_row(
+                    bare,
+                    ForgeRepository::Readable,
+                    Some(ForgeTail::Resolved)
+                )]
+            ),
             "0.0.0",
             sample_digest()
         ),
@@ -1037,7 +1032,10 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
     ));
     let visibility_only = assess(
         &plan,
-        &evidence(&plan, vec![forge_row(bare, "readable", None)]),
+        &evidence(
+            &plan,
+            vec![forge_row(bare, ForgeRepository::Readable, None)],
+        ),
         "0.0.0",
         sample_digest(),
     )
@@ -1056,13 +1054,19 @@ fn the_assessment_binds_the_whole_chain() {
         sample_digest(),
     )
     .expect("the report yields a plan");
-    let rows = vec![probe("https://a.example/x", "get", 200)];
+    let rows = vec![probe("https://a.example/x", ProbeMethod::Get, 200)];
     let evidence = evidence(&plan, rows);
     let assessment =
         assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
     let subject = &assessment.payload.subject;
     assert_eq!(subject.plan_payload_digest, plan.payload_digest);
-    assert_eq!(subject.evidence_digest, hb(EVIDENCE_SCHEMA, &evidence));
+    assert_eq!(
+        subject.evidence_digest,
+        hb(
+            EVIDENCE_SCHEMA,
+            &serde_json_canonicalizer::to_vec(&evidence).unwrap()
+        )
+    );
     let payload = &assessment.payload;
     assert_eq!(
         assessment.payload_digest,

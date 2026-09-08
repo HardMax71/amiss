@@ -10,13 +10,13 @@ use crate::digest::{Digest, hj_serde, verified_json_digest};
 
 use super::evidence::{
     EvidenceDefect, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
-    ForgeRepository, ForgeTail, ProbeMethod, parse_evidence,
+    ForgeRepository, ForgeTail, ProbeMethod,
 };
 use super::plan::{
     ExternalDestination, ExternalEngine, ExternalPlanEnvelope, ExternalRepository,
     validate_plan_envelope,
 };
-use super::{ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA};
+use super::{ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, EVIDENCE_SCHEMA};
 
 /// Why a plan and evidence could not yield an assessment.
 #[derive(Debug, thiserror::Error)]
@@ -209,7 +209,7 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
 /// complete assessment. The same inputs always produce the same output.
 /// The caller writes the returned envelope through [`crate::write_json`] with
 /// the external artifact byte ceiling.
-/// Read untrusted plans through [`super::parse_plan`] before calling this function.
+/// Read untrusted inputs through [`super::parse_plan`] and [`super::parse_evidence`].
 ///
 /// # Errors
 ///
@@ -218,16 +218,20 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
 /// the assessment contract.
 pub fn assess(
     plan: &ExternalPlanEnvelope,
-    evidence_bytes: &[u8],
+    evidence: &ExternalEvidence,
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<ExternalAssessmentEnvelope, AssessDefect> {
     validate_plan_envelope(plan)?;
-    let (evidence, evidence_digest) = parse_evidence(evidence_bytes)?;
+    evidence.validate(&()).map_err(EvidenceDefect::Contract)?;
+    let evidence_digest = hj_serde(EVIDENCE_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(evidence, &mut writer)
+    })
+    .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
     if evidence.plan_payload_digest != plan.payload_digest {
         return Err(AssessDefect::UnboundEvidence);
     }
-    let observed = bound_rows(plan, &evidence)?;
+    let observed = bound_rows(plan, evidence)?;
     let verdicts = verdict_rows(plan, &observed);
     let payload = ExternalAssessment {
         schema: ExternalAssessmentPayloadSchema::Current,
@@ -240,7 +244,7 @@ pub fn assess(
             plan_payload_digest: plan.payload_digest,
             evidence_digest,
         },
-        producer: evidence.producer,
+        producer: evidence.producer.clone(),
         verdicts,
     };
     let payload_digest = assessment_payload_digest(&payload)?;

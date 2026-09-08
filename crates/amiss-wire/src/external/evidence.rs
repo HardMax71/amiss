@@ -7,7 +7,6 @@ use wary::Validate;
 
 use crate::de::{Error, ErrorKind};
 use crate::digest::{Digest, verified_json_digest};
-use crate::json;
 
 use super::{EVIDENCE_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
 
@@ -229,15 +228,7 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<(ExternalEvidence, Digest), Eviden
 /// enforces or the encoded document exceeds its byte ceiling.
 pub fn evidence(input: &ExternalEvidence) -> Result<Vec<u8>, EvidenceDefect> {
     input.validate(&()).map_err(EvidenceDefect::Contract)?;
-    let canonical = serde_json_canonicalizer::to_vec(input)
-        .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return Err(EvidenceDefect::Wire(Error::new(
-            "$",
-            ErrorKind::LimitExceeded,
-        )));
-    }
-    json::parse(&canonical)
-        .map_err(|defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::Json(defect))))?;
-    Ok(canonical)
+    let mut bytes = Vec::new();
+    crate::write_json(input, &mut bytes, EXTERNAL_DOCUMENT_BYTES).map_err(EvidenceDefect::Wire)?;
+    Ok(bytes)
 }

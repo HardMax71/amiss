@@ -13,7 +13,6 @@ const PLAN: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-p
 
 #[test]
 fn evidence_models_reject_unknown_fields() {
-    let plan = external::parse_plan(PLAN).unwrap();
     let mut document: ExternalEvidence = serde_json::from_slice(EVIDENCE).unwrap();
     document.rows.extend([
         ExternalEvidenceRow::HttpProbe {
@@ -55,13 +54,6 @@ fn evidence_models_reject_unknown_fields() {
             "{extended}"
         );
     }
-    let extended = std::str::from_utf8(EVIDENCE)
-        .unwrap()
-        .replacen('{', "{\"future\":true,", 1);
-    assert!(matches!(
-        external::assess(&plan, extended.as_bytes(), "0.0.0", hb("test", b"engine")),
-        Err(AssessDefect::Evidence(_))
-    ));
 }
 
 #[test]
@@ -132,26 +124,28 @@ fn assessments_use_the_verified_evidence_identity() {
         let (parsed, digest) = external::parse_evidence(&bytes).unwrap();
         assert_eq!(parsed, document);
         assert_eq!(digest, expected);
-        let assessment = external::assess(&plan, &bytes, "0.0.0", hb("test", b"engine")).unwrap();
+        let assessment = external::assess(&plan, &parsed, "0.0.0", hb("test", b"engine")).unwrap();
         assert_eq!(assessment.payload.subject.evidence_digest, expected);
     }
     document.producer.version.push_str("-changed");
-    assert_ne!(
-        external::parse_evidence(&external::evidence(&document).unwrap())
-            .unwrap()
-            .1,
-        expected
+    let changed_digest = hb(
+        external::EVIDENCE_SCHEMA,
+        &external::evidence(&document).unwrap(),
     );
+    assert_ne!(changed_digest, expected);
+    let assessment = external::assess(&plan, &document, "0.0.0", hb("test", b"engine")).unwrap();
+    assert_eq!(assessment.payload.subject.evidence_digest, changed_digest);
     let mut trailing = external::evidence(&document).unwrap();
     trailing.extend_from_slice(b" null");
     assert!(matches!(
-        external::assess(&plan, &trailing, "0.0.0", hb("test", b"engine")),
-        Err(AssessDefect::Evidence(_))
+        external::parse_evidence(&trailing),
+        Err(EvidenceDefect::Wire(_))
     ));
 }
 
 #[test]
 fn evidence_keeps_derived_validation_and_nonnull_optional_fields() {
+    let plan = external::parse_plan(PLAN).unwrap();
     let mut document: ExternalEvidence = serde_json::from_slice(EVIDENCE).unwrap();
     let row =
         String::from_utf8(serde_json_canonicalizer::to_vec(&document.rows[0]).unwrap()).unwrap();
@@ -191,6 +185,10 @@ fn evidence_keeps_derived_validation_and_nonnull_optional_fields() {
     assert!(matches!(
         external::evidence(&document),
         Err(EvidenceDefect::Contract(_))
+    ));
+    assert!(matches!(
+        external::assess(&plan, &document, "0.0.0", hb("test", b"engine")),
+        Err(AssessDefect::Evidence(EvidenceDefect::Contract(_)))
     ));
 }
 
@@ -238,6 +236,17 @@ fn evidence_capture_keeps_strict_bounds_and_requires_an_object() {
     let oversized = vec![b' '; usize::try_from(external::EXTERNAL_DOCUMENT_BYTES + 1).unwrap()];
     assert!(matches!(
         external::parse_evidence(&oversized),
+        Err(EvidenceDefect::Wire(Error {
+            kind: ErrorKind::LimitExceeded,
+            ..
+        }))
+    ));
+    drop(oversized);
+    let mut expanded = document;
+    expanded.producer.version =
+        "\0".repeat(usize::try_from(external::EXTERNAL_DOCUMENT_BYTES / 6).unwrap());
+    assert!(matches!(
+        external::evidence(&expanded),
         Err(EvidenceDefect::Wire(Error {
             kind: ErrorKind::LimitExceeded,
             ..

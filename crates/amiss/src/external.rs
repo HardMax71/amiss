@@ -30,6 +30,10 @@ pub(crate) fn run_assess(invocation: &AssessInvocation) -> ExitCode {
             let evidence = crate::input::report_bytes(&invocation.evidence)?;
             let plan = amiss_wire::external::parse_plan(&plan)
                 .map_err(|defect| amiss_wire::external::AssessDefect::Plan(defect).to_string())?;
+            let (evidence, _) =
+                amiss_wire::external::parse_evidence(&evidence).map_err(|defect| {
+                    amiss_wire::external::AssessDefect::Evidence(defect).to_string()
+                })?;
             Ok((plan, evidence))
         },
         |(plan, evidence), version, digest| {

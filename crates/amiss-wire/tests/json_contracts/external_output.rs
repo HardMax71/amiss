@@ -1,8 +1,8 @@
 use amiss_wire::{
     de::ErrorKind,
     external::{
-        EXTERNAL_DOCUMENT_BYTES, ExternalEvidenceProducer, assess, parse_assessment, parse_plan,
-        plan,
+        EXTERNAL_DOCUMENT_BYTES, ExternalEvidenceProducer, assess, parse_assessment,
+        parse_evidence, parse_plan, plan,
     },
     report::validate_envelope,
     write_json,
@@ -32,11 +32,14 @@ fn external_outputs_own_their_data_and_replay_the_committed_artifacts() {
             serde_json_canonicalizer::to_vec(&expected_plan).unwrap()
         );
         assert_eq!(parse_plan(&plan_bytes).unwrap(), planned);
-        let evidence = include_bytes!("../../../../spec/examples/scanner-external-evidence.json");
+        let (evidence, _) = parse_evidence(include_bytes!(
+            "../../../../spec/examples/scanner-external-evidence.json"
+        ))
+        .unwrap();
         let engine = &expected_assessment.payload.engine;
         let assessed = assess(
             &planned,
-            evidence,
+            &evidence,
             &engine.engine_version,
             engine.engine_digest,
         )

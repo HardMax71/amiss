@@ -243,6 +243,7 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
     .expect("the report fixture yields a plan");
     let evidence = verify_external(&matrix_rest(), &plan, "codeberg.org", "0.0.0", "t0")
         .expect("evidence is produced");
+    let (evidence, _) = amiss_wire::external::parse_evidence(&evidence).unwrap();
     let assessment = assess(
         &plan,
         &evidence,

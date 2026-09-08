@@ -605,6 +605,8 @@ fn external_examples_replay_from_the_report_and_evidence() {
 
     let evidence_bytes = fs::read(root.join("spec/examples/scanner-external-evidence.json"))
         .expect("the evidence example is readable");
+    let (evidence, _) = amiss_wire::external::parse_evidence(&evidence_bytes)
+        .expect("the evidence example is accepted");
     let assessment_bytes = fs::read(root.join("spec/examples/scanner-external-assessment.json"))
         .expect("the assessment example is readable");
     let assessment_example = amiss_wire::external::parse_assessment(&assessment_bytes)
@@ -612,7 +614,7 @@ fn external_examples_replay_from_the_report_and_evidence() {
     let engine = &assessment_example.payload.engine;
     let assessment = amiss_wire::external::assess(
         &plan,
-        &evidence_bytes,
+        &evidence,
         &engine.engine_version,
         engine.engine_digest,
     )

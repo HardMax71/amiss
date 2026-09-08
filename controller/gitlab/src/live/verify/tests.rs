@@ -333,6 +333,7 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
     };
     let evidence =
         verify_external(&rest, &plan, "gitlab.com", "0.0.0", "t0").expect("evidence is produced");
+    let (evidence, _) = amiss_wire::external::parse_evidence(&evidence).unwrap();
     let assessment = assess(
         &plan,
         &evidence,

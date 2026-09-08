@@ -27,7 +27,11 @@ fn external_assessment_uses_shared_artifact_refusals_and_bounded_file_reads() {
         fs::write(path, valid).unwrap();
     }
     for (path, valid) in inputs {
+        let extended = std::str::from_utf8(valid)
+            .unwrap()
+            .replacen('{', "{\"future\":true,", 1);
         for malformed in [
+            extended.as_bytes(),
             b"not json".as_slice(),
             br#"{"nested":{"duplicate":1,"duplicate":2}}"#,
             br#"{"nested":{"duplicate":1,"\u0064uplicate":2}}"#,

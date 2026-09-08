@@ -363,12 +363,17 @@ fn prepare_external(
     };
     match adapter.verify_external(&plan, &now.to_string()) {
         Ok(Some(evidence)) => {
-            match amiss_wire::external::assess(
-                &plan,
-                &evidence,
-                &engine.engine_version,
-                engine.engine_digest,
-            ) {
+            let assessed = amiss_wire::external::parse_evidence(&evidence)
+                .map_err(amiss_wire::external::AssessDefect::Evidence)
+                .and_then(|(evidence, _)| {
+                    amiss_wire::external::assess(
+                        &plan,
+                        &evidence,
+                        &engine.engine_version,
+                        engine.engine_digest,
+                    )
+                });
+            match assessed {
                 Ok(assessment) => {
                     let mut assessment_bytes = Vec::new();
                     if amiss_wire::write_json(

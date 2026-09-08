@@ -4,7 +4,7 @@ use amiss_wire::{
     external::{
         ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, AssessmentDefect, ExternalAssessment,
         ExternalAssessmentEnvelope, ExternalReason, ExternalVerdict, ExternalVerdictRow,
-        PLAN_PAYLOAD_SCHEMA, assess, parse_assessment, parse_plan,
+        PLAN_PAYLOAD_SCHEMA, assess, parse_assessment, parse_evidence, parse_plan,
     },
 };
 
@@ -17,15 +17,20 @@ fn assessment_checks_mutable_plan_identity_and_laws_before_evidence() {
         "../../../../spec/examples/scanner-external-plan.json"
     ))
     .unwrap();
-    let evidence = include_bytes!("../../../../spec/examples/scanner-external-evidence.json");
+    let (evidence, _) = parse_evidence(include_bytes!(
+        "../../../../spec/examples/scanner-external-evidence.json"
+    ))
+    .unwrap();
     let engine = hb("test", b"engine");
-    let assessment = assess(&plan, evidence, "0.0.0", engine).unwrap();
+    let assessment = assess(&plan, &evidence, "0.0.0", engine).unwrap();
     assert_eq!(
         assessment.payload.subject.plan_payload_digest,
         plan.payload_digest
     );
+    let mut invalid_evidence = evidence.clone();
+    invalid_evidence.producer.version.clear();
     assert!(matches!(
-        assess(&plan, b"null", "0.0.0", engine),
+        assess(&plan, &invalid_evidence, "0.0.0", engine),
         Err(AssessDefect::Evidence(_))
     ));
 
@@ -50,8 +55,9 @@ fn assessment_checks_mutable_plan_identity_and_laws_before_evidence() {
         ),
         (&out_of_range, "$.payload", ErrorKind::InvalidValue),
     ] {
-        let Err(AssessDefect::Plan(defect)) = assess(input, b"null", "0.0.0", engine) else {
-            panic!("invalid plans must be refused before evidence is read");
+        let Err(AssessDefect::Plan(defect)) = assess(input, &invalid_evidence, "0.0.0", engine)
+        else {
+            panic!("invalid plans must be refused before evidence validation");
         };
         assert_eq!(defect.path, path);
         assert_eq!(defect.kind, kind);
@@ -61,7 +67,7 @@ fn assessment_checks_mutable_plan_identity_and_laws_before_evidence() {
         &serde_json_canonicalizer::to_vec(&changed.payload).unwrap(),
     );
     assert!(matches!(
-        assess(&changed, evidence, "0.0.0", engine),
+        assess(&changed, &evidence, "0.0.0", engine),
         Err(AssessDefect::UnboundEvidence)
     ));
 }
@@ -72,13 +78,12 @@ fn assessment_writer_uses_the_same_derived_validation_as_the_reader() {
         "../../../../spec/examples/scanner-external-plan.json"
     ))
     .unwrap();
+    let (evidence, _) = parse_evidence(include_bytes!(
+        "../../../../spec/examples/scanner-external-evidence.json"
+    ))
+    .unwrap();
     assert!(matches!(
-        assess(
-            &plan,
-            include_bytes!("../../../../spec/examples/scanner-external-evidence.json"),
-            "",
-            hb("test", b"engine"),
-        ),
+        assess(&plan, &evidence, "", hb("test", b"engine"),),
         Err(AssessDefect::Assessment(AssessmentDefect::Contract(_)))
     ));
 }
