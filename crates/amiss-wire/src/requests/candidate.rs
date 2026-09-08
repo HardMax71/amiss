@@ -103,6 +103,7 @@ pub enum CandidateSnapshot {
     Index(#[serde(deserialize_with = "super::object::deserialize")] IndexSnapshotIdentity),
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CandidateIdentity {

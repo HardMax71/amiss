@@ -132,6 +132,32 @@ fn typed_counts_keep_the_safe_integer_boundary() {
 }
 
 #[test]
+fn evaluation_counts_cannot_bypass_the_integer_profile() {
+    let report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
+    let payload =
+        String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
+    let field = "\"index_only_materialized_paths\":0";
+    assert_eq!(payload.matches(field).count(), 1);
+    let changed = payload.replacen(
+        field,
+        "\"index_only_materialized_paths\":9007199254740992",
+        1,
+    );
+    let bytes = std::str::from_utf8(REPORT)
+        .unwrap()
+        .replace(&payload, &changed)
+        .replace(
+            &report.payload_digest.to_string(),
+            &hb(PAYLOAD_SCHEMA, changed.as_bytes()).to_string(),
+        );
+    assert!(serde_json::from_str::<ReportEnvelope>(&bytes).is_err());
+    assert_eq!(
+        validate_envelope(bytes.as_bytes()).map(drop),
+        Err(ReportDefect::NotAReport)
+    );
+}
+
+#[test]
 fn payload_digest_precedes_the_semantic_verdict() {
     let mut report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
     report.payload.result.status = ReportStatus::Fail;

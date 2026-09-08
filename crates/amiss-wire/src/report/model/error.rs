@@ -1,5 +1,6 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::controls::ResourceName;
@@ -36,10 +37,10 @@ pub enum AnalysisPhase {
 #[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
 pub struct AnalysisError<P = RepoPath> {
     pub code: AnalysisErrorCode,
-    #[serde(deserialize_with = "Option::deserialize")]
+    #[serde(with = "As::<Option<TryFromInto<UInt>>>")]
     pub configured_limit: Option<u64>,
     pub description: String,
-    #[serde(deserialize_with = "Option::deserialize")]
+    #[serde(with = "As::<Option<TryFromInto<UInt>>>")]
     pub observed_lower_bound: Option<u64>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub path: Option<P>,

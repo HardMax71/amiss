@@ -1,4 +1,6 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
+use serde_with::{As, TryFromInto};
 
 use crate::model::{BranchRef, ForgeDialect, RepositoryIdentity, UtcInstant};
 use crate::requests::{
@@ -15,6 +17,7 @@ pub struct IdentityPayload<E = ResolvedEvaluation> {
     pub evaluation: E,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Serialize)]
 #[serde(remote = "ResolvedEvaluation")]
 pub struct IdentityEvaluation {

@@ -179,7 +179,8 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
             fragment: Some("historical".to_owned()),
         },
     ];
-    let node_path = [0, 42, usize::MAX];
+    let maximum_index = usize::try_from(amiss_wire::json::MAX_SAFE_INTEGER).unwrap_or(usize::MAX);
+    let node_path = [0, 42, maximum_index];
     let projection_digest = hb("amiss/source-projection", b"projection");
     let raw_destination_digest = hb("amiss/raw-destination", b"destination");
     let historical_intent: serde_json::Value = serde_json::to_value(target_intent(

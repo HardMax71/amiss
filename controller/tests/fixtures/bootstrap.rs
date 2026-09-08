@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use amiss_bootstrap::result::{BootstrapResult, result_bytes, result_exit_code};
 use amiss_wire::controls::parse_execution_constraint;
 use amiss_wire::report::MACHINE_JSON_BYTES;
-use amiss_wire::report::model::{ReportEnvelope, ReportStatus};
+use amiss_wire::report::model::ReportStatus;
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.canonical.json");
 
@@ -204,8 +204,8 @@ fn renewal_gate(args: &RunnerArgs) -> bool {
 }
 
 fn complete(report: &Path, result: &Path, outcome: BootstrapResult, bytes: &[u8]) -> ExitCode {
-    let encoded = (|| -> Result<Vec<u8>, serde_json::Error> {
-        let mut envelope: ReportEnvelope = serde_json::from_slice(bytes)?;
+    let encoded = (|| -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+        let (mut envelope, _verdict) = amiss_wire::report::validate_envelope(bytes)?;
         if outcome == BootstrapResult::Block {
             envelope.payload.result.status = ReportStatus::Fail;
             envelope.payload.result.exit_code = 1;

@@ -1,5 +1,6 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
@@ -51,16 +52,19 @@ pub enum AddressKind {
     RstBlockPath,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StructuralAddress {
     pub address_kind: AddressKind,
     pub construct_index: u64,
     pub duplicate_index: u64,
+    #[serde(with = "As::<Vec<TryFromInto<UInt>>>")]
     pub node_path: Vec<u64>,
     pub schema: StructuralAddressSchema,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SourceSpan {

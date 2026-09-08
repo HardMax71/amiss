@@ -1,5 +1,6 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::controls::{
@@ -128,6 +129,7 @@ pub enum ControlState {
     Unsupported,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ControlStateSource {
@@ -217,6 +219,7 @@ pub enum ProjectionObserved {
     SourceTreeRootNotATree,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RowsProjectionDifference {
@@ -231,12 +234,13 @@ pub struct RowsProjectionDifference {
     pub ordering_only: bool,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum ProjectionDifference<R = RowsProjectionDifference> {
     Count {
         expected_count: u64,
-        #[serde(deserialize_with = "Option::deserialize")]
+        #[serde(with = "As::<Option<TryFromInto<UInt>>>")]
         observed_count: Option<u64>,
     },
     Rows(R),
@@ -276,6 +280,7 @@ pub enum ExceptionDiagnostic {
     },
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Display)]
 #[strum(serialize_all = "kebab-case")]
 #[serde(
@@ -346,13 +351,13 @@ pub enum FindingFactEvidence<
             skip_serializing_if = "Option::is_none"
         )]
         difference: Option<D>,
-        #[serde(deserialize_with = "Option::deserialize")]
+        #[serde(with = "As::<Option<TryFromInto<UInt>>>")]
         expected_bytes: Option<u64>,
         #[serde(deserialize_with = "Option::deserialize")]
         expected_digest: Option<Digest>,
         name: String,
         observed: ProjectionObserved,
-        #[serde(deserialize_with = "Option::deserialize")]
+        #[serde(with = "As::<Option<TryFromInto<UInt>>>")]
         observed_bytes: Option<u64>,
         #[serde(deserialize_with = "Option::deserialize")]
         observed_digest: Option<Digest>,
@@ -471,6 +476,7 @@ pub enum RepresentativeRule {
     LowestLocationThenObservationId,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FindingAggregation {
@@ -510,6 +516,7 @@ pub struct FindingLocation<P = RepoPath> {
     pub span: Option<SourceSpan>,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ByteSpan {

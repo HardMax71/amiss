@@ -1,7 +1,8 @@
 use std::num::NonZeroU64;
 
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::model::RepoPathText;
@@ -59,6 +60,7 @@ pub enum AvailableFeedbackStatus {
     Available,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AvailableFeedback<P = RepoPath> {

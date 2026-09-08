@@ -1,5 +1,6 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind};
@@ -35,6 +36,7 @@ pub enum TrustedTimeController {
 /// A trusted-time statement issued by the required-check clock inside the
 /// externally controlled run. Its evaluation-side bindings remain separate
 /// verification.
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TrustedTimeStatement {
