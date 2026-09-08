@@ -22,6 +22,7 @@ mod input;
 mod policy_presence;
 mod publication_assessment;
 mod publication_evidence;
+mod publication_input;
 mod publication_plan;
 mod relation_assessment;
 mod report_controls;

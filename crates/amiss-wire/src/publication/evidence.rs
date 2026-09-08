@@ -3,7 +3,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 
 use super::{
@@ -82,6 +82,8 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let document: PublicationEvidenceEnvelope = de::deserialize_json(bytes)?;
+    verified_json_digest(EVIDENCE_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if evidence_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }

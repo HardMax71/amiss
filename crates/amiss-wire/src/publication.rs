@@ -3,7 +3,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -127,6 +127,8 @@ pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let document: PublicationPlanEnvelope = de::deserialize_json(bytes)?;
+    verified_json_digest(PLAN_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if plan_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }

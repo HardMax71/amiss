@@ -6,7 +6,7 @@ use strum::{AsRefStr, Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 use crate::semantic::producer_version_valid;
 
@@ -88,6 +88,8 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<PublicationAssessmentEnvelope, E
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let document: PublicationAssessmentEnvelope = de::deserialize_json(bytes)?;
+    verified_json_digest(ASSESSMENT_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if assessment_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
