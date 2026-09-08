@@ -1,4 +1,5 @@
 use std::io::Write as _;
+use wary::Validate as _;
 
 use super::model::{ReportEnvelope, ReportPayload};
 
@@ -14,8 +15,12 @@ pub fn emit_report<P, R, M, E>(
 where
     ReportPayload<P, R, M, E>: serde::Serialize,
 {
-    let mut counter = countio::Counter::new(output);
     let payload = &envelope.payload;
+    payload
+        .feedback
+        .validate(&())
+        .map_err(|defect| std::io::Error::new(std::io::ErrorKind::InvalidData, defect))?;
+    let mut counter = countio::Counter::new(output);
     if payload.documents.is_empty()
         && payload.observations.is_empty()
         && payload.findings.is_empty()

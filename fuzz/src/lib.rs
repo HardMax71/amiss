@@ -4,6 +4,7 @@ use amiss_wire::model::{Adapter, ObjectFormat};
 /// Strict JSON: parsing either rejects or yields a value whose canonical
 /// form reparses to the same value, canonicalization is idempotent, and the
 /// streaming serializer with its counting pass agrees byte for byte.
+/// Accepted typed reports also obey that profile and survive canonical emission.
 ///
 /// # Panics
 ///
@@ -13,7 +14,12 @@ use amiss_wire::model::{Adapter, ObjectFormat};
     reason = "a canonical-output parse failure is a fuzz finding"
 )]
 pub fn json(bytes: &[u8]) {
+    let report = amiss_wire::report::validate_envelope(bytes);
     let Ok(value) = amiss_wire::json::parse(bytes) else {
+        assert!(
+            report.is_err(),
+            "reports cannot bypass the strict JSON profile"
+        );
         return;
     };
     let canonical = serde_json_canonicalizer::to_vec(&value).expect("strict values serialize");
@@ -38,6 +44,21 @@ pub fn json(bytes: &[u8]) {
         canonical.len(),
         "the counting pass reports the exact length"
     );
+    if let Ok((envelope, verdict)) = report {
+        let mut emitted = Vec::new();
+        let written = amiss_wire::report::emit_report(&envelope, &mut emitted)
+            .expect("accepted reports emit");
+        assert_eq!(
+            written,
+            u64::try_from(emitted.len()).expect("bounded output fits u64"),
+            "report emission counts its complete output"
+        );
+        assert_eq!(
+            amiss_wire::report::validate_envelope(&emitted).expect("emitted reports reparse"),
+            (envelope, verdict),
+            "emission preserves the complete typed report and verdict"
+        );
+    }
 }
 
 /// Every control parser over the same bytes: no panic escapes, and parsing

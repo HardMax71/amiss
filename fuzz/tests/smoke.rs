@@ -100,6 +100,9 @@ fn sweep(target: &str, body: fn(&[u8]), seed_state: u64, per_seed: usize) {
 #[test]
 fn json_smoke() {
     sweep("json", amiss_fuzz::json, 0x9E37_79B9_7F4A_7C15, 400);
+    let report = include_bytes!("../../spec/examples/scanner-report.canonical.json");
+    assert!(amiss_wire::report::validate_envelope(report).is_ok());
+    amiss_fuzz::json(report);
 }
 
 #[test]

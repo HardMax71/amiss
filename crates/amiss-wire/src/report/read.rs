@@ -1,8 +1,7 @@
-use serde::Deserialize;
+use wary::Validate as _;
 
 use crate::ExitClass;
 use crate::digest::{hj_serde, verified_json_digest};
-use crate::json;
 
 use super::model::{ReportEnvelope, ReportResult, ReportStatus};
 use super::{ENVELOPE_SCHEMA, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect};
@@ -21,16 +20,11 @@ pub struct CapturedReport {
 /// Refuses oversized or non-strict JSON, invalid report shapes or identities, and
 /// typed normalization before checking the payload digest and result tuple.
 pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportEnvelope, ExitClass), ReportDefect> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES
-        || !matches!(json::parse(bytes), Ok(json::Value::Object(_)))
-    {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES {
         return Err(ReportDefect::NotAReport);
     }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    // The strict gate has already enforced the document depth ceiling.
-    deserializer.disable_recursion_limit();
-    let envelope: ReportEnvelope = ReportEnvelope::deserialize(&mut deserializer)
-        .map_err(|_defect| ReportDefect::NotAReport)?;
+    let envelope: ReportEnvelope =
+        serde_json::from_slice(bytes).map_err(|_defect| ReportDefect::NotAReport)?;
     verified_json_digest(ENVELOPE_SCHEMA, bytes, &envelope)
         .map_err(|_defect| ReportDefect::NotAReport)?;
     let verdict = validate_report(&envelope)?;
@@ -38,6 +32,11 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportEnvelope, ExitClass), Re
 }
 
 pub(crate) fn validate_report(envelope: &ReportEnvelope) -> Result<ExitClass, ReportDefect> {
+    envelope
+        .payload
+        .feedback
+        .validate(&())
+        .map_err(|_defect| ReportDefect::NotAReport)?;
     let digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
         serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
     })
