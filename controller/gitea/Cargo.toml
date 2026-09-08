@@ -12,11 +12,13 @@ publish = false
 amiss-controller = { path = ".." }
 amiss-wire = { path = "../../crates/amiss-wire" }
 json-serde.workspace = true
+js_int.workspace = true
 percent-encoding.workspace = true
 reqwest.workspace = true
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+serde_with.workspace = true
 thiserror.workspace = true
 url.workspace = true
 

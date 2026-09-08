@@ -1,6 +1,8 @@
 use amiss_wire::controls::GitMode;
 use amiss_wire::model::Oid;
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
+use serde_with::{As, TryFromInto};
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -9,6 +11,7 @@ pub enum ContentResponse {
     Directory(Vec<ContentRecord>),
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContentRecord {
@@ -50,8 +53,12 @@ pub struct ContentRecord {
     pub last_commit_message: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lfs_oid: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub lfs_size: Option<u64>,
+    #[serde(
+        default,
+        deserialize_with = "json_serde::deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub lfs_size: Option<UInt>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]

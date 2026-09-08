@@ -3,6 +3,9 @@ use std::io::Cursor;
 #[path = "json_contracts/commits.rs"]
 mod commits;
 
+#[path = "json_contracts/numbers.rs"]
+mod numbers;
+
 #[path = "json_contracts/repositories.rs"]
 mod repositories;
 
@@ -177,7 +180,7 @@ fn declared_entry_kinds_and_optional_metadata_remain_typed() {
     let mut file = original;
     file.last_commit_message = Some("Retain optional metadata".to_owned());
     file.lfs_oid = Some("a".repeat(64));
-    file.lfs_size = Some(17);
+    file.lfs_size = Some(js_int::uint!(17));
     let response = ContentResponse::Entry(file);
     let encoded = serde_json::to_vec(&response).unwrap();
     assert_eq!(

@@ -1,5 +1,7 @@
 use amiss_wire::model::Oid;
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
+use serde_with::{As, TryFromInto};
 
 use crate::user::UserRecord;
 
@@ -84,6 +86,7 @@ pub enum CommitFileStatus {
     Modified,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommitStats {

@@ -1,6 +1,8 @@
 use amiss_wire::assessment::Nullable;
 use amiss_wire::model::ObjectFormat;
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
+use serde_with::{As, TryFromInto};
 
 use crate::user::UserRecord;
 
@@ -13,6 +15,7 @@ pub use settings::{
 };
 pub use transfer::{Organization, PermissionLevel, RepositoryTransfer, RepositoryUnit, Team};
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[expect(
@@ -54,7 +57,7 @@ pub struct RepositoryRecord {
         deserialize_with = "json_serde::deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
-    pub branch_count: Option<u64>,
+    pub branch_count: Option<UInt>,
     pub open_issues_count: u64,
     pub open_pr_counter: u64,
     pub release_counter: u64,

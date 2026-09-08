@@ -1,5 +1,11 @@
+use js_int::{Int, UInt};
 use serde::{Deserialize, Serialize};
+use serde_with::{As, TryFromInto};
 
+#[serde_with::apply(
+    u64 => #[serde(with = "As::<TryFromInto<UInt>>")],
+    i64 => #[serde(with = "As::<TryFromInto<Int>>")],
+)]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[expect(

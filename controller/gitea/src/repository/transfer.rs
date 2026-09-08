@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
+use serde_with::{As, TryFromInto};
 
 use crate::user::{UserRecord, UserVisibility};
 
@@ -15,6 +17,7 @@ pub struct RepositoryTransfer {
     pub teams: Option<Vec<Team>>,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Team {
@@ -38,6 +41,7 @@ pub struct Team {
     pub visibility: Option<UserVisibility>,
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Organization {

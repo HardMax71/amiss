@@ -1,5 +1,5 @@
 use amiss_controller::{ProviderError, decode_bounded_json};
-use amiss_controller_gitea::commit::{CommitFileStatus, CommitRecord, CommitSigner};
+use amiss_controller_gitea::commit::{CommitFileStatus, CommitRecord, CommitSigner, CommitStats};
 
 #[test]
 fn captured_commits_retain_accounts_and_disabled_metadata() {
@@ -39,7 +39,7 @@ fn captured_commits_retain_accounts_and_disabled_metadata() {
         if let Some(stats) = &commit.stats {
             assert_eq!(stats.total, stats.additions + stats.deletions);
         }
-        let page = vec![commit];
+        let mut page = vec![commit];
         let encoded = serde_json::to_vec(&page).unwrap();
         let (decoded, _) = decode_bounded_json::<Vec<CommitRecord>, _>(
             encoded.as_slice(),
@@ -49,6 +49,23 @@ fn captured_commits_retain_accounts_and_disabled_metadata() {
         )
         .unwrap();
         assert_eq!(decoded, page);
+        if metadata {
+            for count in [0, js_int::MAX_SAFE_UINT] {
+                page[0].stats = Some(CommitStats {
+                    total: count,
+                    additions: count,
+                    deletions: count,
+                });
+                let encoded = serde_json::to_vec(&page).unwrap();
+                assert_eq!(
+                    amiss_wire::read_json::<Vec<CommitRecord>>(&encoded, u64::MAX).unwrap(),
+                    page
+                );
+            }
+            super::numbers::assert_integer_contract(&page, js_int::MAX_SAFE_INT).unwrap();
+            page[0].stats.as_mut().unwrap().deletions = js_int::MAX_SAFE_UINT + 1;
+            assert!(serde_json::to_vec(&page).is_err());
+        }
     }
     let mut commit: CommitRecord = amiss_wire::read_json(
         include_bytes!("../fixtures/gitea-commit-full.json"),

@@ -72,11 +72,11 @@ fn transfers_and_repository_settings_are_closed_typed_data() {
         doer: Some(repository.owner.clone()),
         recipient: None,
         teams: Some(vec![Team {
-            id: 42,
+            id: js_int::MAX_SAFE_UINT,
             name: "reviewers".to_owned(),
             description: String::new(),
             organization: Some(Organization {
-                id: 12,
+                id: js_int::MAX_SAFE_UINT,
                 name: "acme".to_owned(),
                 full_name: "Fixture organization".to_owned(),
                 email: "owner@example.com".to_owned(),
@@ -100,6 +100,7 @@ fn transfers_and_repository_settings_are_closed_typed_data() {
             visibility: Some(UserVisibility::Private),
         }]),
     }));
+    super::numbers::assert_integer_contract(&repository, js_int::MAX_SAFE_INT).unwrap();
     let input = serde_json::to_string(&repository).unwrap();
     assert_eq!(
         amiss_wire::read_json::<RepositoryRecord>(input.as_bytes(), u64::MAX).unwrap(),
