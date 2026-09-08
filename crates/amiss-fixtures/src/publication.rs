@@ -1,7 +1,8 @@
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{
-    DocsCandidate, PublicationEvidenceEnvelope, assess, evidence, parse_evidence, parse_plan, plan,
+    DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationEvidenceEnvelope, assess, evidence,
+    parse_evidence, parse_plan, plan,
 };
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
@@ -55,6 +56,13 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
         sha256(b"publication evaluator fixture"),
     )
     .ok()?;
+    let mut assessment_bytes = Vec::new();
+    amiss_wire::write_json(
+        &assessment,
+        &mut assessment_bytes,
+        PUBLICATION_DOCUMENT_BYTES,
+    )
+    .ok()?;
     let evidence = evidence_envelope
         .as_ref()
         .map(|envelope| evidence(&envelope.payload))
@@ -64,7 +72,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
         report,
         plan: plan_bytes,
         evidence,
-        assessment,
+        assessment: assessment_bytes,
     })
 }
 

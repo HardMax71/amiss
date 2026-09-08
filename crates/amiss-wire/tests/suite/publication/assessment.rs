@@ -4,7 +4,6 @@ use super::{digest, oid, publication_plan};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 
-use amiss_wire::json;
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::publication::{
     ASSESSMENT_PAYLOAD_SCHEMA, PublicationReason, PublicationVerdict, assess, evidence,
@@ -23,19 +22,11 @@ fn evidence_envelope(
     parse_evidence(&value).unwrap()
 }
 
-fn assessed(
-    plan: &amiss_wire::publication::PublicationPlanEnvelope,
-    evidence: Option<&amiss_wire::publication::PublicationEvidenceEnvelope>,
-) -> amiss_wire::publication::PublicationAssessmentEnvelope {
-    let value = assess(plan, evidence, "0.26.0", digest('a')).unwrap();
-    parse_assessment(&value).unwrap()
-}
-
 #[test]
 fn exact_provider_facts_match_the_publication_plan() {
     let plan = plan_envelope();
     let evidence = evidence_envelope(&publication_evidence());
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, PublicationVerdict::Matched);
     assert_eq!(assessment.payload.reasons, Vec::new());
@@ -56,7 +47,7 @@ fn exact_provider_facts_match_the_publication_plan() {
 #[test]
 fn absent_unbound_and_foreign_producers_stay_unproven() {
     let plan = plan_envelope();
-    let absent = assessed(&plan, None);
+    let absent = assess(&plan, None, "0.26.0", digest('a')).unwrap();
     assert_eq!(absent.payload.verdict, PublicationVerdict::Unproven);
     assert_eq!(
         absent.payload.reasons,
@@ -70,7 +61,7 @@ fn absent_unbound_and_foreign_producers_stay_unproven() {
     let mut unbound = publication_evidence();
     unbound.plan_payload_digest = digest('f');
     let unbound = evidence_envelope(&unbound);
-    let unbound_assessment = assessed(&plan, Some(&unbound));
+    let unbound_assessment = assess(&plan, Some(&unbound), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         unbound_assessment.payload.reasons,
         vec![PublicationReason::EvidenceUnbound]
@@ -80,7 +71,7 @@ fn absent_unbound_and_foreign_producers_stay_unproven() {
     foreign.producer.context_digest = digest('e');
     foreign.product.digest = digest('d');
     let foreign = evidence_envelope(&foreign);
-    let foreign_assessment = assessed(&plan, Some(&foreign));
+    let foreign_assessment = assess(&plan, Some(&foreign), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         foreign_assessment.payload.reasons,
         vec![PublicationReason::ProducerMismatch]
@@ -96,7 +87,7 @@ fn bound_disagreements_are_one_sorted_refutation() {
     mismatched.site.input_digest = digest('d');
     mismatched.product.digest = digest('e');
     let evidence = evidence_envelope(&mismatched);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, PublicationVerdict::Refuted);
     assert_eq!(
@@ -119,22 +110,14 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
     let valid_plan = plan_envelope();
-    let value = assess(&valid_plan, None, "0.26.0", digest('a')).unwrap();
-    let recorded = parse_assessment(&value).unwrap().payload_digest.to_string();
-    let inconsistent = String::from_utf8(value)
-        .unwrap()
-        .replace("\"unproven\"", "\"matched\"");
-    let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
-    let rebound = inconsistent.replace(
-        &recorded,
-        &amiss_wire::digest::hb(
-            ASSESSMENT_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(inconsistent_value.member("payload").unwrap())
-                .unwrap(),
-        )
-        .to_string(),
+    let mut inconsistent = assess(&valid_plan, None, "0.26.0", digest('a')).unwrap();
+    inconsistent.payload.verdict = PublicationVerdict::Matched;
+    inconsistent.payload_digest = amiss_wire::digest::hb(
+        ASSESSMENT_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&inconsistent.payload).unwrap(),
     );
-    let error = parse_assessment(rebound.as_bytes()).unwrap_err();
+    let error =
+        parse_assessment(&serde_json_canonicalizer::to_vec(&inconsistent).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
@@ -142,22 +125,14 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     mismatched.docs.commit = oid('c', ObjectFormat::Sha1);
     mismatched.target.canonical_url = "https://preview.example.com/widget/".to_owned();
     let evidence = evidence_envelope(&mismatched);
-    let value = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let recorded = parse_assessment(&value).unwrap().payload_digest.to_string();
-    let unsorted = String::from_utf8(value).unwrap().replace(
-        "[\"docs-mismatch\",\"target-mismatch\"]",
-        "[\"target-mismatch\",\"docs-mismatch\"]",
+    let mut unsorted = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
+    unsorted.payload.reasons.reverse();
+    unsorted.payload_digest = amiss_wire::digest::hb(
+        ASSESSMENT_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&unsorted.payload).unwrap(),
     );
-    let unsorted_value = json::parse(unsorted.as_bytes()).unwrap();
-    let rebound = unsorted.replace(
-        &recorded,
-        &amiss_wire::digest::hb(
-            ASSESSMENT_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(unsorted_value.member("payload").unwrap()).unwrap(),
-        )
-        .to_string(),
-    );
-    let error = parse_assessment(rebound.as_bytes()).unwrap_err();
+    let error =
+        parse_assessment(&serde_json_canonicalizer::to_vec(&unsorted).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload.reasons");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 }

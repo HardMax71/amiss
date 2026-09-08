@@ -20,6 +20,7 @@ mod external_reader;
 mod external_snapshots;
 mod input;
 mod policy_presence;
+mod publication_assessment;
 mod report_controls;
 mod report_counts;
 mod report_details;
@@ -247,11 +248,13 @@ fn sidecar_examples_match_their_typed_sources() {
         publication_assessment.payload.engine.engine_digest,
     )
     .unwrap();
+    assert_eq!(replayed, publication_assessment);
+    let mut input = serde_json::Deserializer::from_slice(&publication_assessment_bytes);
     assert_eq!(
-        replayed,
-        serde_json_canonicalizer::to_vec(&json::parse(&publication_assessment_bytes).unwrap())
-            .unwrap()
+        serde_json_canonicalizer::to_vec(&replayed).unwrap(),
+        serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut input)).unwrap()
     );
+    input.end().unwrap();
 
     let locale_plan_bytes = fs::read(examples.join("locale-coverage-plan.json")).unwrap();
     let locale_plan = locale::parse_plan(&locale_plan_bytes).unwrap();

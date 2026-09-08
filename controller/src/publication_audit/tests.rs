@@ -221,11 +221,18 @@ fn rebuilt(
         sha256(b"publication evaluator"),
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
+    let mut assessment_bytes = Vec::new();
+    amiss_wire::write_json(
+        &assessment,
+        &mut assessment_bytes,
+        amiss_wire::publication::PUBLICATION_DOCUMENT_BYTES,
+    )
+    .map_err(|_defect| ArtifactError::Corrupt)?;
     Ok(PublicationAuditFixture {
         report: fixture.report.clone(),
         plan: plan_bytes,
         evidence,
-        assessment,
+        assessment: assessment_bytes,
     })
 }
 

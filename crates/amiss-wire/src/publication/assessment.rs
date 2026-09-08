@@ -6,7 +6,7 @@ use strum::{AsRefStr, Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde};
 use crate::json;
 use crate::semantic::producer_version_valid;
 
@@ -99,6 +99,7 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<PublicationAssessmentEnvelope, E
 /// A missing receipt, a receipt for another plan, or one from another selected
 /// producer stays unproven. Only bound evidence from the selected producer can
 /// match or refute the planned docs, target, site, and product facts.
+/// The result stays typed; output callers enforce byte limits with [`crate::write_json`].
 ///
 /// # Errors
 ///
@@ -110,7 +111,7 @@ pub fn assess(
     evidence: Option<&PublicationEvidenceEnvelope>,
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Vec<u8>, Error> {
+) -> Result<PublicationAssessmentEnvelope, Error> {
     if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -180,25 +181,19 @@ pub fn assess(
         reasons,
     };
     let payload_digest = assessment_payload_digest(&assessment)?;
-    let document = PublicationAssessmentEnvelope {
+    Ok(PublicationAssessmentEnvelope {
         schema: AssessmentEnvelopeSchema::Current,
         payload: assessment,
         payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    Ok(canonical)
+    })
 }
 
 fn assessment_payload_digest(assessment: &PublicationAssessment) -> Result<Digest, Error> {
     validate_assessment(assessment)?;
-    serde_json_canonicalizer::to_vec(assessment)
-        .map(|canonical| hb(ASSESSMENT_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(ASSESSMENT_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(assessment, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_assessment(assessment: &PublicationAssessment) -> Result<(), Error> {
