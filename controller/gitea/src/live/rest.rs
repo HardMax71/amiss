@@ -149,12 +149,13 @@ impl HttpRest {
         let prefix = repository_route(pull_request.repository_owner, pull_request.repository_name);
         let mut reviews = Vec::new();
         for page in 1..=MAX_PAGES {
-            let batch: Vec<ReviewRecord> = self.get(
+            let batch: Vec<ReviewRecord> = self.transport.get(
                 &format!(
                     "{prefix}/pulls/{}/reviews?page={page}&limit={PAGE_SIZE}",
                     pull_request.number
                 ),
                 deadline,
+                |bytes| amiss_wire::read_json(bytes, u64::MAX),
             )?;
             let complete = page_complete(batch.len())?;
             reviews.extend(batch);
@@ -284,8 +285,9 @@ impl GiteaRest for HttpRest {
             pull_request.number
         ))?;
         let request = self.transport.client.post(url).json(review);
-        self.transport
-            .execute(request, deadline, |bytes| serde_json::from_slice(bytes))
+        self.transport.execute(request, deadline, |bytes| {
+            amiss_wire::read_json(bytes, u64::MAX)
+        })
     }
 
     fn commit_statuses(

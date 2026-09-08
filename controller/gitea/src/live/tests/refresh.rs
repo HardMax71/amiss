@@ -4,6 +4,7 @@ use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
 use super::super::model::{BranchProtectionRecord, RefreshData, ReviewRecord, UserRecord};
 use super::super::{GiteaClientError, GiteaPullRequest};
 use super::support::{FORGEJO_PROTECTION, Fixture, GITEA_PROTECTION, commit, oid, resolved};
+use crate::review::ReviewState;
 
 #[test]
 fn typed_resolver_trees_must_still_match_the_repository_object_format() {
@@ -271,11 +272,12 @@ fn unrelated_historical_reviews_cannot_brick_the_lane() {
         data.reviews.push(ReviewRecord {
             id: 0,
             user: None,
-            state: "REMOVED_PROVIDER_STATE".to_owned(),
+            state: ReviewState::RequestReview,
             body: String::new(),
-            commit_id: "not-an-object-id".to_owned(),
+            commit_id: None,
             stale: false,
             dismissed: false,
+            ..super::support::REVIEW.clone()
         });
         data.reviews.push(ReviewRecord {
             id: 0,
@@ -285,11 +287,12 @@ fn unrelated_historical_reviews_cannot_brick_the_lane() {
                 username: "former-reviewer".to_owned(),
                 ..data.reviewer.clone()
             }),
-            state: "REMOVED_PROVIDER_STATE".to_owned(),
+            state: ReviewState::RequestReview,
             body: String::new(),
-            commit_id: "not-an-object-id".to_owned(),
+            commit_id: None,
             stale: false,
             dismissed: false,
+            ..super::support::REVIEW.clone()
         });
     });
     assert_eq!(
@@ -306,8 +309,8 @@ fn unrelated_historical_reviews_cannot_brick_the_lane() {
 fn dedicated_reviewer_rows_are_strict() {
     let cases: [fn(&mut ReviewRecord); 5] = [
         |review| review.id = 0,
-        |review| review.commit_id = "not-an-object-id".to_owned(),
-        |review| review.state = "REMOVED_PROVIDER_STATE".to_owned(),
+        |review| review.commit_id = None,
+        |review| review.commit_id = Some("a".repeat(64).parse().unwrap()),
         |review| review.user.as_mut().unwrap().id = 99,
         |review| review.user.as_mut().unwrap().login = "other".to_owned(),
     ];
@@ -316,11 +319,12 @@ fn dedicated_reviewer_rows_are_strict() {
             let review = ReviewRecord {
                 id: 100,
                 user: Some(data.reviewer.clone()),
-                state: "APPROVED".to_owned(),
+                state: ReviewState::Approved,
                 body: "prior".to_owned(),
-                commit_id: oid('b').as_str().to_owned(),
+                commit_id: Some(oid('b')),
                 stale: false,
                 dismissed: false,
+                ..super::support::REVIEW.clone()
             };
             data.reviews.push(review);
             mutate(data.reviews.last_mut().unwrap());
@@ -330,6 +334,26 @@ fn dedicated_reviewer_rows_are_strict() {
             Err(ProviderError::InvalidResponse)
         );
     }
+}
+
+#[test]
+fn requesting_the_dedicated_reviewer_does_not_require_a_commit() {
+    let fixture = Fixture::mutated("forgejo", |data| {
+        data.reviews.push(ReviewRecord {
+            user: Some(data.reviewer.clone()),
+            state: ReviewState::RequestReview,
+            commit_id: None,
+            ..super::support::REVIEW.clone()
+        });
+    });
+    assert_eq!(
+        fixture
+            .client
+            .refresh(fixture.pull_request())
+            .unwrap()
+            .state,
+        ChangeState::Active
+    );
 }
 
 #[test]

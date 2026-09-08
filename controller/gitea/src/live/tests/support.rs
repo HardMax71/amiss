@@ -17,6 +17,7 @@ use super::super::model::{
 use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
 use crate::commit::{CommitBodyRecord, CommitMetaRecord};
+use crate::review::ReviewState;
 use crate::{
     DedicatedReviewer, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects, GiteaPullRequest,
 };
@@ -82,6 +83,16 @@ pub(super) static STATUS: LazyLock<CommitStatusRecord> = LazyLock::new(|| {
         include_bytes!("../../../tests/fixtures/commit-status.json"),
         u64::MAX,
     )
+    .unwrap()
+});
+
+pub(super) static REVIEW: LazyLock<ReviewRecord> = LazyLock::new(|| {
+    amiss_wire::read_json::<Vec<ReviewRecord>>(
+        include_bytes!("../../../tests/fixtures/gitea-reviews.json"),
+        u64::MAX,
+    )
+    .unwrap()
+    .pop()
     .unwrap()
 });
 
@@ -167,11 +178,12 @@ impl GiteaRest for FakeRest {
                 .unwrap()
                 .saturating_add(100),
             user: Some(state.data.reviewer.clone()),
-            state: review.event.clone(),
+            state: review.event,
             body: review.body.clone(),
-            commit_id: review.commit_id.clone(),
+            commit_id: Some(review.commit_id.clone()),
             stale: false,
             dismissed: false,
+            ..REVIEW.clone()
         };
         state.data.reviews.push(created.clone());
         Ok(created)
@@ -482,11 +494,12 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
                 username: "human".to_owned(),
                 ..USER.clone()
             }),
-            state: "COMMENT".to_owned(),
+            state: ReviewState::Comment,
             body: "looks interesting".to_owned(),
-            commit_id: oid('b').as_str().to_owned(),
+            commit_id: Some(oid('b')),
             stale: false,
             dismissed: false,
+            ..REVIEW.clone()
         }],
     }
 }

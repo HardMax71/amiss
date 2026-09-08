@@ -1,8 +1,9 @@
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 pub(super) use crate::commit::CommitRecord;
 pub(super) use crate::reference::RefRecord;
 pub(super) use crate::repository::RepositoryRecord;
+pub(super) use crate::review::{CreateReview, ReviewRecord};
 pub(super) use crate::status::{CommitStatusRecord, CreateCommitStatus};
 pub(super) use crate::user::UserRecord;
 
@@ -109,17 +110,6 @@ pub(super) struct OverrideProtection {
     pub apply_to_admins: Option<bool>,
 }
 
-#[derive(Clone, Deserialize)]
-pub(super) struct ReviewRecord {
-    pub id: u64,
-    pub user: Option<UserRecord>,
-    pub state: String,
-    pub body: String,
-    pub commit_id: String,
-    pub stale: bool,
-    pub dismissed: bool,
-}
-
 #[derive(Clone)]
 pub(super) struct RefreshData {
     pub reviewer: UserRecord,
@@ -132,14 +122,3 @@ pub(super) struct RefreshData {
     pub current_head: CommitRecord,
     pub reviews: Vec<ReviewRecord>,
 }
-
-#[derive(Clone, Serialize)]
-pub(super) struct CreateReview {
-    pub event: String,
-    pub body: String,
-    pub commit_id: String,
-    pub comments: Vec<CreateReviewComment>,
-}
-
-#[derive(Clone, Serialize)]
-pub(super) struct CreateReviewComment {}

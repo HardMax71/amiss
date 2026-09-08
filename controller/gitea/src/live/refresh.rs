@@ -222,10 +222,9 @@ fn validate_reviews(config: &Config, reviews: &[ReviewRecord]) -> Result<(), Pro
         if !own_id
             || !own_login
             || review.id == 0
-            || exact_oid(&review.commit_id).is_err()
-            || !matches!(
-                review.state.as_str(),
-                "APPROVED" | "PENDING" | "COMMENT" | "REQUEST_CHANGES" | "REQUEST_REVIEW"
+            || !review.commit_id.as_ref().map_or(
+                review.state == crate::review::ReviewState::RequestReview,
+                |commit| commit.object_format() == ObjectFormat::Sha1,
             )
         {
             return Err(ProviderError::InvalidResponse);

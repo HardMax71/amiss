@@ -3,12 +3,11 @@ use amiss_wire::model::{ForgeDialect, ObjectFormat};
 
 use crate::GiteaPullRequest;
 use crate::identity::provider_run;
+use crate::review::ReviewState;
 
 use super::Config;
 use super::model::{CreateReview, ReviewRecord};
 
-const APPROVED: &str = "APPROVED";
-const REQUEST_CHANGES: &str = "REQUEST_CHANGES";
 const MARKER: &str = "amiss-evaluation: ";
 
 pub(super) enum PublicationDecision {
@@ -61,7 +60,7 @@ pub(super) fn publication_decision(
                 .user
                 .as_ref()
                 .is_some_and(|user| user.id == config.reviewer.id)
-                && review.commit_id == expected.commit_id
+                && review.commit_id.as_ref() == Some(&expected.commit_id)
                 && !review.stale
                 && !review.dismissed
         })
@@ -143,19 +142,19 @@ fn expected(publication: &Publication) -> Result<CreateReview, ProviderError> {
     )
     .ok_or(ProviderError::InvalidResponse)?;
     Ok(CreateReview {
-        event: event.to_owned(),
+        event,
         body,
-        commit_id: publication.gate_commit.as_str().to_owned(),
+        commit_id: publication.gate_commit.clone(),
         comments: Vec::new(),
     })
 }
 
-fn conclusion(conclusion: CheckConclusion) -> (&'static str, &'static str) {
+fn conclusion(conclusion: CheckConclusion) -> (&'static str, ReviewState) {
     match conclusion {
-        CheckConclusion::Pass => ("pass", APPROVED),
-        CheckConclusion::Block => ("block", REQUEST_CHANGES),
-        CheckConclusion::Superseded => ("superseded", REQUEST_CHANGES),
-        CheckConclusion::Unavailable(_) => ("unavailable", REQUEST_CHANGES),
+        CheckConclusion::Pass => ("pass", ReviewState::Approved),
+        CheckConclusion::Block => ("block", ReviewState::RequestChanges),
+        CheckConclusion::Superseded => ("superseded", ReviewState::RequestChanges),
+        CheckConclusion::Unavailable(_) => ("unavailable", ReviewState::RequestChanges),
     }
 }
 
@@ -164,5 +163,5 @@ fn matches_expected(review: &ReviewRecord, expected: &CreateReview, config: &Con
         user.id == config.reviewer.id && user.login.eq_ignore_ascii_case(&config.reviewer.login)
     }) && review.state == expected.event
         && amiss_controller::feedback::compatible_provider_feedback(&review.body, &expected.body)
-        && review.commit_id == expected.commit_id
+        && review.commit_id.as_ref() == Some(&expected.commit_id)
 }

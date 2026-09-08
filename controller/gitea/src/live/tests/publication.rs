@@ -10,6 +10,7 @@ use super::super::Config;
 use super::super::model::{CreateReview, ReviewRecord, UserRecord};
 use super::super::publication::{validate_created, validate_publication};
 use super::support::{Fixture, oid, provider, reviewer};
+use crate::review::ReviewState;
 
 #[test]
 fn review_bodies_carry_the_report_feedback_lines() {
@@ -99,8 +100,8 @@ fn reviews_are_exact_commit_bound_and_idempotent() {
     );
     let state = fixture.rest.state.lock().unwrap();
     assert_eq!(state.created.len(), 1);
-    assert_eq!(state.created[0].event, "APPROVED");
-    assert_eq!(state.created[0].commit_id, oid('b').as_str());
+    assert_eq!(state.created[0].event, ReviewState::Approved);
+    assert_eq!(state.created[0].commit_id, oid('b'));
     assert!(state.created[0].body.contains("candidate-tree: dddddddd"));
     drop(state);
 
@@ -115,7 +116,7 @@ fn reviews_are_exact_commit_bound_and_idempotent() {
     );
     let state = fixture.rest.state.lock().unwrap();
     assert_eq!(state.created.len(), 2);
-    assert_eq!(state.created[1].event, "REQUEST_CHANGES");
+    assert_eq!(state.created[1].event, ReviewState::RequestChanges);
     drop(state);
 
     assert_eq!(
@@ -124,7 +125,7 @@ fn reviews_are_exact_commit_bound_and_idempotent() {
     );
     let state = fixture.rest.state.lock().unwrap();
     assert_eq!(state.created.len(), 2);
-    assert_eq!(state.created[1].event, "REQUEST_CHANGES");
+    assert_eq!(state.created[1].event, ReviewState::RequestChanges);
 }
 
 #[test]
@@ -201,7 +202,7 @@ fn a_revoked_control_publishes_the_verdict_that_reports_it() {
     );
     let state = revoked.rest.state.lock().unwrap();
     assert_eq!(state.created.len(), 1);
-    assert_eq!(state.created[0].event, "REQUEST_CHANGES");
+    assert_eq!(state.created[0].event, ReviewState::RequestChanges);
     assert!(
         state.created[0]
             .body
@@ -278,9 +279,9 @@ fn a_publication_is_validated_in_every_field() {
 #[test]
 fn a_created_review_is_exact_fresh_and_owned() {
     let expected = CreateReview {
-        event: "APPROVED".to_owned(),
+        event: ReviewState::Approved,
         body: "body".to_owned(),
-        commit_id: oid('b').as_str().to_owned(),
+        commit_id: oid('b'),
         comments: Vec::new(),
     };
     let review = |id: u64, user: u64, login: &str, stale: bool, dismissed: bool| ReviewRecord {
@@ -291,11 +292,12 @@ fn a_created_review_is_exact_fresh_and_owned() {
             username: login.to_owned(),
             ..super::support::USER.clone()
         }),
-        state: "APPROVED".to_owned(),
+        state: ReviewState::Approved,
         body: "body".to_owned(),
-        commit_id: oid('b').as_str().to_owned(),
+        commit_id: Some(oid('b')),
         stale,
         dismissed,
+        ..super::support::REVIEW.clone()
     };
 
     let sound = review(9, 77, "amiss-controller", false, false);
@@ -304,6 +306,27 @@ fn a_created_review_is_exact_fresh_and_owned() {
     assert_eq!(validate_created(&config(), &expected, &loud_login), Ok(()));
 
     for (reason, broken) in [
+        (
+            "a missing commit",
+            ReviewRecord {
+                commit_id: None,
+                ..sound.clone()
+            },
+        ),
+        (
+            "another commit",
+            ReviewRecord {
+                commit_id: Some(oid('a')),
+                ..sound.clone()
+            },
+        ),
+        (
+            "a different state",
+            ReviewRecord {
+                state: ReviewState::RequestReview,
+                ..sound.clone()
+            },
+        ),
         (
             "an unissued id",
             review(0, 77, "amiss-controller", false, false),

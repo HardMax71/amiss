@@ -8,6 +8,7 @@ mod identity;
 mod live;
 pub mod reference;
 pub mod repository;
+pub mod review;
 mod source;
 pub mod status;
 pub mod user;
