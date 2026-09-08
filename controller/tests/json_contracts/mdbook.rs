@@ -95,6 +95,10 @@ fn real_mdbook_context_reads_only_the_callers_html_directory() {
     };
     let evidence =
         mdbook_site_evidence::<NoExtensions, Renderers>(candidate, &site, input, &output).unwrap();
+    assert_eq!(
+        amiss_wire::digest::sha256(&evidence).to_string(),
+        "sha256:79913d77f4f581200f9b12ef67a59744035140b58cb10568f5df7652cd0bf6e9"
+    );
     let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
     assert_eq!(parsed.payload.subject.candidate_identity_digest, candidate);
     assert!(

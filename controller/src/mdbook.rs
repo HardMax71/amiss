@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use amiss_controller_files::read_bounded_at;
 use amiss_wire::assessment::Nullable;
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::digest::{Digest, hb, hj_serde};
 use amiss_wire::model::RepoPathText;
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 use amiss_wire::semantic::{PayloadSchema, SemanticProducer, SemanticSubject};
@@ -129,14 +129,18 @@ pub fn mdbook_site_evidence<P: DeserializeOwned + Serialize, R: DeserializeOwned
     let navigation = navigation_observation(&build, reachable)?;
     observations.push(navigation.clone());
 
-    let input_digest = serde_json_canonicalizer::to_vec(&SiteInput {
-        mdbook_version: MDBOOK_VERSION,
-        context_digest: expectation.context_digest,
-        config_digest,
-        navigation: &navigation,
-        pages: &inputs,
+    let input_digest = hj_serde(INPUT_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(
+            &SiteInput {
+                mdbook_version: MDBOOK_VERSION,
+                context_digest: expectation.context_digest,
+                config_digest,
+                navigation: &navigation,
+                pages: &inputs,
+            },
+            &mut writer,
+        )
     })
-    .map(|canonical| hb(INPUT_DOMAIN, &canonical))
     .map_err(|_defect| MdBookEvidenceError::Evidence)?;
     let document = amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
         schema: PayloadSchema::Current,

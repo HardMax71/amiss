@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
-use amiss_wire::digest::{Digest, hb, hj_serde};
+use amiss_wire::digest::{Digest, hj_serde};
 use amiss_wire::model::{ArtifactId, RepoPathText};
 use amiss_wire::semantic::SemanticProducerKind;
 use amiss_wire::semantic::observation::SITE_BUILD_VERSION;
@@ -49,9 +49,10 @@ pub(super) fn site_build_context(
         return Err(MdBookEvidenceError::ContextIdentity);
     }
     let base = route_base(&site.route_prefix)?;
-    let context_digest = serde_json_canonicalizer::to_vec(site)
-        .map(|canonical| hb(CONTEXT_DOMAIN, &canonical))
-        .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
+    let context_digest = hj_serde(CONTEXT_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(site, &mut writer)
+    })
+    .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
     let producer_identity = ArtifactId::new("amiss-controller-mdbook-html".to_owned())
         .ok_or(MdBookEvidenceError::Evidence)?;
     Ok((
