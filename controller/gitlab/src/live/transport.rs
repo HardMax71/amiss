@@ -213,8 +213,8 @@ impl Transport {
         }
     }
 
-    /// The same classification over HEAD, for routes whose bodies carry
-    /// whole files: presence is the status, and no byte is read.
+    /// The same classification over HEAD when only status is evidence.
+    /// No response body is requested or read.
     pub(super) fn head_fact(
         &self,
         url: Url,

@@ -7,6 +7,7 @@ mod live;
 mod model;
 mod oidc;
 mod snapshot;
+pub mod tree;
 
 pub use adapter::{GitLabApi, GitLabMergeTrainAdapter, policy_job_accepted};
 pub use fetch_plan::{GitLabFetchPlan, GitLabPlanError, gitlab_fetch_plan};

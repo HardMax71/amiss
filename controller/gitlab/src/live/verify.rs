@@ -10,6 +10,7 @@ use serde::Deserialize;
 
 use super::GitLabClient;
 use super::transport::Budget;
+use crate::tree::TreeObject;
 
 pub(super) const PRODUCER_NAME: &str = "amiss-controller-gitlab";
 
@@ -212,12 +213,10 @@ impl GitLabVerification for GitLabClient {
         budget: Budget,
     ) -> Result<(Visibility, Budget), ProviderError> {
         let url = self.transport.endpoint(["projects", project])?;
-        let (fact, budget) = self
-            .transport
-            .get_fact::<serde::de::IgnoredAny>(url, budget)?;
+        let (fact, budget) = self.transport.head_fact(url, budget)?;
         Ok((
             match fact {
-                Ok(_) => Visibility::Readable,
+                Ok(()) => Visibility::Readable,
                 Err(ForgeNegative::Missing) => Visibility::Missing,
                 Err(ForgeNegative::Denied) => Visibility::Denied,
             },
@@ -302,9 +301,7 @@ impl GitLabVerification for GitLabClient {
             .append_pair("path", path)
             .append_pair("ref", reference)
             .append_pair("per_page", "1");
-        let (fact, budget) = self
-            .transport
-            .get_fact::<Vec<serde::de::IgnoredAny>>(url, budget)?;
+        let (fact, budget) = self.transport.get_fact::<Vec<TreeObject>>(url, budget)?;
         Ok((
             match &fact {
                 // An empty page is either an empty directory or a path the
@@ -325,9 +322,7 @@ impl GitLabVerification for GitLabClient {
         let url =
             self.transport
                 .endpoint(["projects", project, "repository", "commits", revision])?;
-        let (fact, budget) = self
-            .transport
-            .get_fact::<serde::de::IgnoredAny>(url, budget)?;
+        let (fact, budget) = self.transport.head_fact(url, budget)?;
         Ok((presence(&fact), budget))
     }
 }
