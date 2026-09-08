@@ -484,13 +484,14 @@ fn record_input(
     }
     let semantic = bundle
         .semantic
-        .map(|artifact| {
+        .map(|bound| {
+            let artifact = bound.artifact.as_ref().ok_or(ArtifactError::Corrupt)?;
             let size = crate::semantic_artifact::input_artifact_size(
                 artifact,
                 crate::SEMANTIC_INPUT_ARTIFACT_BYTES,
             )
             .map_err(|_defect| ArtifactError::TooLarge)?;
-            super::semantic::validate(&bundle.report.envelope, artifact)?;
+            super::semantic::validate(&bundle.report.envelope, bound)?;
             let bytes = serde_json::to_vec(artifact).map_err(|_defect| ArtifactError::Corrupt)?;
             (u64::try_from(bytes.len()).ok() == Some(size))
                 .then_some(bytes)

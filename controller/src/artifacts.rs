@@ -4,13 +4,12 @@ mod store;
 
 use std::time::Duration;
 
-use crate::semantic_artifact::InputArtifact;
 use amiss_wire::digest::Digest;
 use url::Url;
 
 use crate::{
-    CapturedReport, ControllerEvaluationId, ExternalTally, PublicationAuditBundle,
-    PublicationAuditDigests, RelationAuditBundle, RelationAuditDigests,
+    BoundSemanticEvidence, CapturedReport, ControllerEvaluationId, ExternalTally,
+    PublicationAuditBundle, PublicationAuditDigests, RelationAuditBundle, RelationAuditDigests,
 };
 
 pub(crate) use format::valid_id as valid_artifact_id;
@@ -33,7 +32,7 @@ pub struct ArtifactStoreConfig {
 #[derive(Clone, Copy)]
 pub struct ArtifactBundle<'a> {
     pub report: &'a CapturedReport,
-    pub semantic: Option<&'a InputArtifact>,
+    pub semantic: Option<&'a BoundSemanticEvidence>,
     pub plan: Option<&'a [u8]>,
     pub evidence: Option<&'a [u8]>,
     pub assessment: Option<&'a [u8]>,

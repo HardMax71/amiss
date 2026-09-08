@@ -354,7 +354,9 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     assert!(payload_digests.contains(&evidence_digest));
     assert!(payload_digests.windows(2).all(|pair| pair[0] < pair[1]));
 
-    let artifact = job.semantic_artifact.as_deref().unwrap();
+    let bound = job.semantic_artifact.as_deref().unwrap();
+    assert_eq!(bound.supplied, controls.semantic_evidence);
+    let artifact = bound.artifact.as_ref().unwrap();
     let acquired = artifact
         .inputs
         .iter()

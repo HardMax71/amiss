@@ -213,15 +213,15 @@ fn only_an_accepted_report_keeps_its_semantic_inputs() {
         "/../spec/examples/scanner-semantic-template.json"
     )))
     .unwrap();
-    let semantic = crate::bind_semantic_evidence(
-        &[template],
-        &[],
-        &[],
-        amiss_wire::digest::hb("test", b"candidate"),
-    )
-    .unwrap()
-    .artifact
-    .unwrap();
+    let semantic = Arc::new(
+        crate::bind_semantic_evidence(
+            &[template],
+            &[],
+            &[],
+            amiss_wire::digest::hb("test", b"candidate"),
+        )
+        .unwrap(),
+    );
     let prepare = |bytes| {
         publication(
             &request,

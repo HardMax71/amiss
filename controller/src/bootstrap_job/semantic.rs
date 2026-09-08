@@ -121,7 +121,7 @@ pub fn bind_semantic_evidence(
         };
         input_artifact_size(&artifact, SEMANTIC_INPUT_ARTIFACT_BYTES)
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-        Some(Arc::new(artifact))
+        Some(artifact)
     };
     Ok(BoundSemanticEvidence { supplied, artifact })
 }

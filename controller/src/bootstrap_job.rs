@@ -86,7 +86,7 @@ pub struct AcquiredSemanticTemplate {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BoundSemanticEvidence {
     pub supplied: Vec<SuppliedSemanticEvidence>,
-    pub artifact: Option<Arc<InputArtifact>>,
+    pub artifact: Option<InputArtifact>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -138,7 +138,7 @@ pub struct BootstrapJobInput<'a> {
 pub struct BootstrapJob {
     pub streams: RequestStreams,
     pub constraint: Vec<u8>,
-    pub semantic_artifact: Option<Arc<InputArtifact>>,
+    pub semantic_artifact: Option<Arc<BoundSemanticEvidence>>,
 }
 
 /// Joins one authenticated run to its exact canonical bootstrap inputs. The
@@ -216,7 +216,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
             expected_digest: constraint_digest,
             trust_source: RequestTrust::ExternalRequiredCheck,
         },
-        semantic.supplied,
+        semantic.supplied.clone(),
     )?;
     let streams = RequestStreams {
         evaluation: evaluation
@@ -230,6 +230,6 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     Ok(BootstrapJob {
         streams,
         constraint,
-        semantic_artifact: semantic.artifact,
+        semantic_artifact: semantic.artifact.is_some().then(|| Arc::new(semantic)),
     })
 }

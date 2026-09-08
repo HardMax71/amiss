@@ -1,4 +1,4 @@
-use crate::semantic_artifact::{InputArtifact, input_artifact_size};
+use crate::semantic_artifact::input_artifact_size;
 use std::time::Duration;
 
 use amiss_wire::{
@@ -8,7 +8,7 @@ use amiss_wire::{
 
 use crate::{
     AcceptedDelivery, ArtifactBundle, ArtifactError, ArtifactReference, AuthenticatedDelivery,
-    CheckBinding, ControllerClock, FileArtifactStore, ProviderAdapter,
+    BoundSemanticEvidence, CheckBinding, ControllerClock, FileArtifactStore, ProviderAdapter,
 };
 
 use super::{ControllerError, HandleOutcome};
@@ -273,7 +273,7 @@ pub(super) fn retain_publication(
     policy: crate::ExternalPolicy,
     clock: &dyn ControllerClock,
     mut publication: Publication,
-    semantic_artifact: Option<&InputArtifact>,
+    semantic_artifact: Option<&BoundSemanticEvidence>,
 ) -> Result<Publication, ArtifactError> {
     let report = publication
         .report
@@ -285,7 +285,8 @@ pub(super) fn retain_publication(
             .semantic_digest
             .filter(|_digest| report_matches)
             .zip(semantic_artifact)
-            .map(|(_digest, artifact)| {
+            .map(|(_digest, bound)| {
+                let artifact = bound.artifact.as_ref().ok_or(ArtifactError::Corrupt)?;
                 input_artifact_size(artifact, crate::SEMANTIC_INPUT_ARTIFACT_BYTES)
                     .map_err(|_defect| ArtifactError::TooLarge)?;
                 serde_json::to_vec(artifact)

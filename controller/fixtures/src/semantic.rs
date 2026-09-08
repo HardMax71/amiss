@@ -1,13 +1,15 @@
 use std::sync::Arc;
 
-use amiss_controller::{BootstrapJobError, SemanticEvidenceTemplate, bind_semantic_evidence};
+use amiss_controller::{
+    BootstrapJobError, BoundSemanticEvidence, SemanticEvidenceTemplate, bind_semantic_evidence,
+};
 use amiss_wire::digest::hb;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
 pub struct SemanticInputArtifact {
     pub report: Vec<u8>,
-    pub artifact: Arc<amiss_controller::semantic_artifact::InputArtifact>,
+    pub artifact: Arc<BoundSemanticEvidence>,
 }
 
 /// Builds one report-bound semantic-input audit artifact.
@@ -42,6 +44,6 @@ pub fn semantic_input_artifact() -> Result<SemanticInputArtifact, BootstrapJobEr
     Ok(SemanticInputArtifact {
         report: amiss_fixtures::semantic_report(&payload_digests)
             .ok_or(BootstrapJobError::SemanticEvidence)?,
-        artifact: bound.artifact.ok_or(BootstrapJobError::SemanticEvidence)?,
+        artifact: Arc::new(bound),
     })
 }

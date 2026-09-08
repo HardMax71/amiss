@@ -1,12 +1,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use crate::semantic_artifact::InputArtifact;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 
 use crate::{
-    CapturedReport, ChangeLocator, CheckBinding, CheckPlan, ControllerEvaluationId,
-    DeliveryIdentity, ProviderRunIdentity,
+    BoundSemanticEvidence, CapturedReport, ChangeLocator, CheckBinding, CheckPlan,
+    ControllerEvaluationId, DeliveryIdentity, ProviderRunIdentity,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -120,7 +119,7 @@ pub enum RunnerOutcome {
         identity: Box<RunIdentity>,
         evaluation: Evaluation,
         report: Arc<CapturedReport>,
-        semantic_artifact: Option<Arc<InputArtifact>>,
+        semantic_artifact: Option<Arc<BoundSemanticEvidence>>,
     },
     MissingOutput,
     OversizedOutput,

@@ -40,7 +40,7 @@ fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
     let parsed: InputArtifact = amiss_wire::read_json(&bytes, exact)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
 
-    assert_eq!(&parsed, artifact.as_ref());
+    assert_eq!(parsed, artifact);
     assert_eq!(serde_json_canonicalizer::to_vec(&parsed).unwrap(), bytes);
     assert_eq!(
         input_artifact_size(&artifact, exact)

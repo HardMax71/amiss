@@ -7,7 +7,7 @@ use amiss_controller::{
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::semantic::semantic_input_artifact;
-use amiss_wire::digest::sha256;
+use amiss_wire::digest::{hb, sha256};
 
 mod bounded_input;
 mod external_evidence;
@@ -17,11 +17,12 @@ mod mdbook_config;
 mod relation_binding;
 mod semantic_artifact;
 mod semantic_binding;
+mod semantic_retention;
 
 #[test]
 fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
     let fixture = semantic_input_artifact().unwrap();
-    let encoded = serde_json::to_vec(&fixture.artifact).unwrap();
+    let encoded = serde_json::to_vec(fixture.artifact.artifact.as_ref().unwrap()).unwrap();
     let original = amiss_fixtures::captured_report(fixture.report).unwrap();
     let captured =
         amiss_fixtures::captured_report(serde_json::to_vec_pretty(&original.envelope).unwrap())
@@ -43,20 +44,16 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
     let store = FileArtifactStore::open_with_clock(root.path(), config.clone(), Arc::clone(&clock))
         .unwrap();
     let evaluation = ControllerEvaluationId::new("evaluation/semantic".to_owned()).unwrap();
-    let reference = store
-        .retain(
-            &evaluation,
-            ArtifactBundle {
-                report: &captured,
-                semantic: Some(&fixture.artifact),
-                plan: None,
-                evidence: None,
-                assessment: None,
-                external_tally: None,
-                external_incomplete: false,
-            },
-        )
-        .unwrap();
+    let bundle = ArtifactBundle {
+        report: &captured,
+        semantic: Some(&fixture.artifact),
+        plan: None,
+        evidence: None,
+        assessment: None,
+        external_tally: None,
+        external_incomplete: false,
+    };
+    let reference = store.retain(&evaluation, bundle).unwrap();
     assert_eq!(reference.semantic_digest, Some(sha256(&encoded)));
     assert_eq!(reference.report_digest, sha256(&captured.bytes));
     assert_eq!(
@@ -75,29 +72,41 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
         captured.bytes
     );
     assert_eq!(reopened.find(&evaluation).unwrap(), Some(reference));
-    for (name, digests) in [
+    let rejections = [
         ("missing", vec![]),
-        ("mismatch", vec![amiss_wire::digest::hb("test", b"other")]),
-    ] {
-        let report =
+        ("mismatch", vec![hb("test", b"other")]),
+    ]
+    .into_iter()
+    .map(|(name, digests)| {
+        (
+            name,
             amiss_fixtures::captured_report(amiss_fixtures::semantic_report(&digests).unwrap())
-                .unwrap();
+                .unwrap(),
+            fixture.artifact.as_ref().clone(),
+        )
+    })
+    .chain(
+        semantic_retention::defects(&fixture.artifact)
+            .unwrap()
+            .into_iter()
+            .map(|(name, bound)| (name, captured.clone(), bound)),
+    );
+    for (name, report, bound) in rejections {
         let rejected = ControllerEvaluationId::new(format!("evaluation/{name}")).unwrap();
-        assert!(matches!(
-            reopened.retain(
-                &rejected,
-                ArtifactBundle {
-                    report: &report,
-                    semantic: Some(&fixture.artifact),
-                    plan: None,
-                    evidence: None,
-                    assessment: None,
-                    external_tally: None,
-                    external_incomplete: false,
-                },
+        assert!(
+            matches!(
+                reopened.retain(
+                    &rejected,
+                    ArtifactBundle {
+                        report: &report,
+                        semantic: Some(&bound),
+                        ..bundle
+                    },
+                ),
+                Err(ArtifactError::Corrupt)
             ),
-            Err(ArtifactError::Corrupt)
-        ));
+            "{name}"
+        );
         assert_eq!(reopened.find(&rejected).unwrap(), None);
     }
 }
