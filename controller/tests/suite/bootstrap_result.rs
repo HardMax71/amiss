@@ -16,6 +16,7 @@ use amiss_controller::{
 use amiss_wire::controls::{Profile, parse_execution_constraint};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::report::model::{ReportEnvelope, ReportStatus};
 
 fn oid(value: char) -> Oid {
     Oid::new(ObjectFormat::Sha1, value.to_string().repeat(40)).unwrap()
@@ -104,21 +105,108 @@ fn classify(
 #[test]
 fn pass_and_block_preserve_the_authenticated_run_and_report() {
     let request = request();
-    let report = br#"{"schema":"amiss/scanner-report-envelope"}"#;
     let cases = [
-        (BootstrapResult::Pass, 0, Evaluation::Pass),
-        (BootstrapResult::Block, 1, Evaluation::Block),
+        (
+            BootstrapResult::Pass,
+            0,
+            Evaluation::Pass,
+            ReportStatus::Pass,
+        ),
+        (
+            BootstrapResult::Block,
+            1,
+            Evaluation::Block,
+            ReportStatus::Fail,
+        ),
     ];
 
-    for (result, exit_code, evaluation) in cases {
+    for (result, exit_code, evaluation, status) in cases {
+        let mut envelope: ReportEnvelope =
+            serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+        envelope.payload.result.status = status;
+        envelope.payload.result.exit_code = exit_code;
+        envelope.payload_digest = amiss_wire::digest::hb(
+            amiss_wire::report::PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(&envelope.payload).unwrap(),
+        );
+        let mut bytes = serde_json::to_vec_pretty(&envelope).unwrap();
+        bytes.push(b'\n');
         assert_eq!(
-            classify(&request, exit_code, Some(result_bytes(result)), report,),
+            classify(
+                &request,
+                i32::from(exit_code),
+                Some(result_bytes(result)),
+                &bytes
+            ),
             RunnerOutcome::Complete {
                 identity: Box::new(request.run.clone()),
                 evaluation,
-                report: report.to_vec(),
+                report: Arc::new(amiss_controller::CapturedReport { bytes, envelope }),
                 semantic_artifact: None,
             }
+        );
+    }
+}
+
+#[test]
+fn reports_require_a_complete_digest_true_envelope_and_matching_verdict() {
+    let request = request();
+    let report: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
+    let text = std::str::from_utf8(amiss_fixtures::SCANNER_REPORT).unwrap();
+    let engine = serde_json_canonicalizer::to_string(&report.payload.engine).unwrap();
+    let pass = Some(result_bytes(BootstrapResult::Pass));
+    for broken in [
+        "not json".to_owned(),
+        r#"{"payload":{"feedback":{"existing_count":0,"items":[],"status":"available"}}}"#
+            .to_owned(),
+        text.replace(&format!(r#""engine":{engine},"#), ""),
+        text.replacen('{', r#"{"future":true,"#, 1),
+        text.replacen('{', r#"{"duplicate":0,"duplicate":1,"#, 1),
+        text.replace(
+            &report.payload_digest.to_string(),
+            &amiss_wire::digest::sha256(b"wrong payload").to_string(),
+        ),
+        text.replace(r#""existing_count":0"#, r#""existing_count":-1"#),
+        format!("{text} null"),
+    ] {
+        assert_ne!(broken, text);
+        assert_eq!(
+            classify(&request, 0, pass, broken.as_bytes()),
+            RunnerOutcome::TamperedRuntime
+        );
+    }
+    let mut invalid_utf8 = amiss_fixtures::SCANNER_REPORT.to_vec();
+    invalid_utf8.push(0xff);
+    assert_eq!(
+        classify(&request, 0, pass, &invalid_utf8),
+        RunnerOutcome::TamperedRuntime
+    );
+    assert_eq!(
+        classify(
+            &request,
+            1,
+            Some(result_bytes(BootstrapResult::Block)),
+            amiss_fixtures::SCANNER_REPORT
+        ),
+        RunnerOutcome::TamperedRuntime
+    );
+
+    for (status, complete, exit_code) in [
+        (ReportStatus::Fail, true, 1),
+        (ReportStatus::Incomplete, false, 2),
+        (ReportStatus::Pass, true, 255),
+    ] {
+        let mut envelope = report.clone();
+        envelope.payload.result.status = status;
+        envelope.payload.result.complete = complete;
+        envelope.payload.result.exit_code = exit_code;
+        envelope.payload_digest = amiss_wire::digest::hb(
+            amiss_wire::report::PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(&envelope.payload).unwrap(),
+        );
+        assert_eq!(
+            classify(&request, 0, pass, &serde_json::to_vec(&envelope).unwrap()),
+            RunnerOutcome::TamperedRuntime
         );
     }
 }

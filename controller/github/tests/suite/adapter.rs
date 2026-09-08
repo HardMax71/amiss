@@ -997,7 +997,9 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
         run,
         gate_commit: oid('e'),
         conclusion: CheckConclusion::Pass,
-        report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+        report: Some(
+            amiss_fixtures::captured_report(amiss_fixtures::SCANNER_REPORT.to_vec()).unwrap(),
+        ),
         artifact: None,
     }
 }

@@ -17,16 +17,19 @@ fn review_bodies_carry_the_report_feedback_lines() {
     let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
     let mut publication = fixture.publication(snapshot, "evaluation-1", CheckConclusion::Block);
     publication.report = Some(
-        amiss_fixtures::feedback_report(
-            0,
-            vec![FeedbackItem {
-                action: FeedbackAction::Check,
-                annotation: None,
-                effective_disposition: Disposition::Warn,
-                finding_kinds: vec![FindingKind::DependencyChangedSubjectUnchanged],
-                location_count: std::num::NonZeroU64::new(3).unwrap(),
-                target: Some(RepoPath::Text("docs/guide.md".parse().unwrap())),
-            }],
+        amiss_fixtures::captured_report(
+            amiss_fixtures::feedback_report(
+                0,
+                vec![FeedbackItem {
+                    action: FeedbackAction::Check,
+                    annotation: None,
+                    effective_disposition: Disposition::Warn,
+                    finding_kinds: vec![FindingKind::DependencyChangedSubjectUnchanged],
+                    location_count: std::num::NonZeroU64::new(3).unwrap(),
+                    target: Some(RepoPath::Text("docs/guide.md".parse().unwrap())),
+                }],
+            )
+            .unwrap(),
         )
         .unwrap(),
     );
@@ -35,7 +38,7 @@ fn review_bodies_carry_the_report_feedback_lines() {
         id: artifact_id.clone(),
         locator: format!("https://amiss.example/artifacts/{artifact_id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
-        report_digest: sha256(publication.report.as_deref().unwrap_or_default()),
+        report_digest: sha256(&publication.report.as_ref().unwrap().bytes),
         semantic_digest: Some(sha256(b"semantic input")),
         assessment_digest: None,
         external_tally: None,

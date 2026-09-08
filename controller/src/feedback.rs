@@ -3,7 +3,7 @@ mod tests;
 use amiss_wire::human::{atom, atom_bytes};
 use amiss_wire::report::model::{Feedback, FeedbackAction, FeedbackItem, RepoPath};
 
-use crate::ArtifactReference;
+use crate::{ArtifactReference, CapturedReport};
 
 const DISPLAYED_ITEMS: usize = 10;
 const SEMANTIC_PROJECTION_PREFIXES: [&str; 2] = ["semantic-input: ", "semantic-input-artifact: "];
@@ -19,10 +19,11 @@ const OPTIONAL_PROJECTION_PREFIXES: [&str; 4] = [
 #[must_use]
 pub fn with_feedback(
     text: &str,
-    report: Option<&[u8]>,
+    report: Option<&CapturedReport>,
     artifact: Option<&ArtifactReference>,
 ) -> Option<String> {
-    let report_digest = amiss_wire::digest::sha256(report.unwrap_or_default());
+    let report_digest =
+        amiss_wire::digest::sha256(report.map_or(&[], |report| report.bytes.as_slice()));
     let mut lines = vec![format!("report: {report_digest}")];
     if let Some(artifact) = artifact {
         if report.is_none() || artifact.report_digest != report_digest {
@@ -74,14 +75,11 @@ pub fn compatible_provider_feedback(actual: &str, expected: &str) -> bool {
         || omitting(&OPTIONAL_PROJECTION_PREFIXES)
 }
 
-fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
-    let Some(bytes) = report else {
+fn feedback_lines(report: Option<&CapturedReport>, retained: bool) -> Vec<String> {
+    let Some(report) = report else {
         return Vec::new();
     };
-    let Ok((report, _verdict)) = amiss_wire::report::validate_envelope(bytes) else {
-        return Vec::new();
-    };
-    let Feedback::Available(feedback) = report.payload.feedback else {
+    let Feedback::Available(feedback) = &report.envelope.payload.feedback else {
         return Vec::new();
     };
     let items = &feedback.items;

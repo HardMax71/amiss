@@ -82,7 +82,7 @@ pub use failure::{
 pub use finding::{Disposition, FindingKind, FindingMetadata, FindingScope, FixKind, IntentKind};
 pub use output::emit_report;
 pub(crate) use read::validate_report;
-pub use read::{result_verdict, validate_envelope};
+pub use read::{CapturedReport, result_verdict, validate_envelope};
 pub use sandbox::sandbox_descriptor;
 
 pub const ENGINE_CONTRACT: &str = "amiss/scanner";

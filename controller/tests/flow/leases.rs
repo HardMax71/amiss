@@ -147,7 +147,9 @@ fn a_lost_completion_record_is_distinct_after_publication() {
             run: run.clone(),
             gate_commit: run.commits.candidate.clone(),
             conclusion: CheckConclusion::Pass,
-            report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+            report: Some(
+                amiss_fixtures::captured_report(amiss_fixtures::SCANNER_REPORT.to_vec()).unwrap(),
+            ),
             artifact: None,
         }),
     };
@@ -265,7 +267,9 @@ fn submitted_publication(run: &RunIdentity, delivery: &AuthenticatedDelivery) ->
         run: run.clone(),
         gate_commit: run.commits.candidate.clone(),
         conclusion: CheckConclusion::Pass,
-        report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+        report: Some(
+            amiss_fixtures::captured_report(amiss_fixtures::SCANNER_REPORT.to_vec()).unwrap(),
+        ),
         artifact: None,
     }
 }
@@ -338,7 +342,10 @@ fn a_staged_row_must_echo_the_lease_and_publication_exactly() {
     ));
 
     let mut wrong_publication = staged_publication.clone();
-    wrong_publication.publication.report = Some(b"{}".to_vec());
+    wrong_publication.publication.report = Some(
+        amiss_fixtures::captured_report(amiss_fixtures::feedback_report(0, Vec::new()).unwrap())
+            .unwrap(),
+    );
     let (adapter, ledger) = scripted(Some(wrong_publication), expected.clone());
     let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
     assert!(matches!(

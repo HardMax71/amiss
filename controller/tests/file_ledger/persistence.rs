@@ -54,6 +54,10 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     let mut publication = publication(&delivery, &lease);
+    let mut bytes =
+        serde_json::to_vec_pretty(&publication.report.as_ref().unwrap().envelope).unwrap();
+    bytes.push(b'\n');
+    publication.report = Some(amiss_fixtures::captured_report(bytes).unwrap());
     let mut mismatched = publication.clone();
     mismatched.artifact = Some(ArtifactReference {
         id: "f".repeat(64),
@@ -73,13 +77,22 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
         id: "a".repeat(64),
         locator: format!("https://amiss.example/artifacts/{}/report", "a".repeat(64)),
         expires_at_unix_millis: 2_000,
-        report_digest: sha256(publication.report.as_deref().unwrap()),
+        report_digest: sha256(&publication.report.as_ref().unwrap().bytes),
         semantic_digest: Some(sha256(b"semantic")),
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,
     });
     let frozen = staged(ledger.stage(&delivery, &lease, &publication).unwrap()).unwrap();
+    let captured = publication.report.as_ref().unwrap();
+    assert!(Arc::ptr_eq(
+        captured,
+        frozen.publication.report.as_ref().unwrap()
+    ));
+    assert_eq!(
+        fs::read(ledger_file(directory.path(), ".report").unwrap()).unwrap(),
+        captured.bytes
+    );
 
     assert_eq!(
         ledger.stage(&delivery, &lease, &publication).unwrap(),
@@ -88,10 +101,10 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
     drop(ledger);
 
     let mut reopened = open(directory.path(), &clock);
-    assert_eq!(
-        reopened.claim(&delivery, &check_binding()).unwrap(),
-        DeliveryClaim::Publish(frozen.clone())
-    );
+    let replayed = reopened.claim(&delivery, &check_binding()).unwrap();
+    assert_eq!(replayed, DeliveryClaim::Publish(frozen.clone()));
+    assert!(matches!(replayed, DeliveryClaim::Publish(replayed)
+        if !Arc::ptr_eq(captured, replayed.publication.report.as_ref().unwrap())));
     let report_path = ledger_file(directory.path(), ".report").unwrap();
     assert_eq!(
         reopened.complete(&delivery, &frozen).unwrap(),

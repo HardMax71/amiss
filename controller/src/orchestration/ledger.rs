@@ -1,7 +1,9 @@
 use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use crate::{
-    AcceptedDelivery, ArtifactReference, CheckBinding, ControllerEvaluationId, ProviderRunIdentity,
+    AcceptedDelivery, ArtifactReference, CapturedReport, CheckBinding, ControllerEvaluationId,
+    ProviderRunIdentity,
 };
 
 use super::model::{RunFailure, RunIdentity};
@@ -145,7 +147,7 @@ pub struct Publication {
     pub run: RunIdentity,
     pub gate_commit: amiss_wire::model::Oid,
     pub conclusion: CheckConclusion,
-    pub report: Option<Vec<u8>>,
+    pub report: Option<Arc<CapturedReport>>,
     pub artifact: Option<ArtifactReference>,
 }
 

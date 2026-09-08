@@ -64,7 +64,27 @@ fn literal(arguments: &mut impl Iterator<Item = OsString>, expected: &str) -> Op
 }
 
 fn complete(paths: &OutputPaths, report: &[u8], result: BootstrapResult) -> ExitCode {
-    let written = std::fs::write(&paths.report, report)
+    let Ok((mut report, _verdict)) = amiss_wire::report::validate_envelope(report) else {
+        return ExitCode::from(2);
+    };
+    if result == BootstrapResult::Block {
+        report.payload.result.status = amiss_wire::report::model::ReportStatus::Fail;
+        report.payload.result.exit_code = 1;
+    }
+    let Ok(digest) =
+        amiss_wire::digest::hj_serde(amiss_wire::report::PAYLOAD_SCHEMA, |mut writer| {
+            serde_json_canonicalizer::to_writer(&report.payload, &mut writer)
+        })
+    else {
+        return ExitCode::from(2);
+    };
+    report.payload_digest = digest;
+    let mut bytes = Vec::new();
+    if amiss_wire::write_json(&report, &mut bytes, amiss_wire::report::MACHINE_JSON_BYTES).is_err()
+    {
+        return ExitCode::from(2);
+    }
+    let written = std::fs::write(&paths.report, bytes)
         .and_then(|()| std::fs::write(&paths.result, result_bytes(result)));
     if written.is_err() {
         return ExitCode::from(2);

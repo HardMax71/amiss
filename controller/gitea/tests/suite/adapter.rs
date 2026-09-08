@@ -435,7 +435,9 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
         gate_commit: delivery.provider_run.candidate_commit.clone(),
         run,
         conclusion: CheckConclusion::Pass,
-        report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+        report: Some(
+            amiss_fixtures::captured_report(amiss_fixtures::SCANNER_REPORT.to_vec()).unwrap(),
+        ),
         artifact: None,
     }
 }

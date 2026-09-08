@@ -1,8 +1,24 @@
+use std::sync::Arc;
+
 use amiss_wire::digest::hb;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::report::model::{
     AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackItem, ReportEnvelope,
 };
+
+/// Captures a complete fixture report without changing its source bytes.
+///
+/// # Errors
+/// Refuses malformed envelopes, payload digests and verdicts.
+pub fn captured_report(
+    bytes: Vec<u8>,
+) -> Result<Arc<amiss_wire::report::CapturedReport>, amiss_wire::report::ReportDefect> {
+    let (envelope, _verdict) = amiss_wire::report::validate_envelope(&bytes)?;
+    Ok(Arc::new(amiss_wire::report::CapturedReport {
+        bytes,
+        envelope,
+    }))
+}
 
 /// Builds a complete, digest-true report with the supplied feedback.
 ///

@@ -23,8 +23,7 @@ use amiss_wire::model::{
     BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
 };
 
-const PASS_REPORT: &[u8] = b"{\"runner\":\"pass\"}\n";
-const BLOCK_REPORT: &[u8] = b"{\"runner\":\"block\"}\n";
+const PASS_REPORT: &[u8] = amiss_fixtures::SCANNER_REPORT;
 const STARTED_MARKER: &str = "runner-started";
 const RENEWAL_GATE: &str = "runner-renewal-gate";
 const RESOURCE_RELEASE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -285,20 +284,21 @@ fn run(mode: &str) -> (Harness, RunnerOutcome, Heartbeat) {
 #[test]
 fn pass_and_block_preserve_the_authenticated_identity() {
     let cases = [
-        ("runner-pass", Evaluation::Pass, PASS_REPORT),
-        ("runner-block", Evaluation::Block, BLOCK_REPORT),
+        ("runner-pass", Evaluation::Pass, 0),
+        ("runner-block", Evaluation::Block, 1),
     ];
-    for (mode, evaluation, report) in cases {
+    for (mode, evaluation, exit_code) in cases {
         let (harness, outcome, heartbeat) = run(mode);
-        assert_eq!(
-            outcome,
+        assert!(matches!(outcome,
             RunnerOutcome::Complete {
-                identity: Box::new(harness.request.run.clone()),
-                evaluation,
-                report: report.to_vec(),
+                identity,
+                evaluation: actual,
+                report,
                 semantic_artifact: None,
-            }
-        );
+            } if *identity == harness.request.run && actual == evaluation
+                && report.envelope.payload.result.exit_code == exit_code
+                && amiss_wire::report::validate_envelope(&report.bytes).unwrap().0 == report.envelope
+        ));
         assert!(harness.started());
         assert_eq!(heartbeat.calls, 1);
     }
@@ -457,7 +457,7 @@ fn leader_exit_stops_descendants_before_accepting_the_report() {
         RunnerOutcome::Complete {
             identity: Box::new(harness.request.run.clone()),
             evaluation: Evaluation::Pass,
-            report: PASS_REPORT.to_vec(),
+            report: amiss_fixtures::captured_report(PASS_REPORT.to_vec()).unwrap(),
             semantic_artifact: None,
         }
     );

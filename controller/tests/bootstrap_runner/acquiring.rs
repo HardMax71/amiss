@@ -114,7 +114,7 @@ fn uses_private_exact_roots_and_controller_time() {
         RunnerOutcome::Complete {
             identity: Box::new(harness.request.run.clone()),
             evaluation: Evaluation::Pass,
-            report: PASS_REPORT.to_vec(),
+            report: amiss_fixtures::captured_report(PASS_REPORT.to_vec()).unwrap(),
             semantic_artifact: None,
         }
     );

@@ -34,7 +34,13 @@ impl FileLedger {
         }
         let stored = StoredPublication::new(publication)?;
         row.remove_report()?;
-        row.save_report(publication.report.as_deref(), stored.report())?;
+        row.save_report(
+            publication
+                .report
+                .as_ref()
+                .map(|report| report.bytes.as_slice()),
+            stored.report(),
+        )?;
         record.advance(now)?;
         record.state = State::Staged {
             fence,

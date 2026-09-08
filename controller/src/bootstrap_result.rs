@@ -1,7 +1,9 @@
+use std::sync::Arc;
+
 use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, parse_result, result_exit_code};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
-use crate::{Evaluation, RunRequest, RunnerOutcome};
+use crate::{CapturedReport, Evaluation, RunRequest, RunnerOutcome};
 
 type Classification<T> = Result<T, RunnerOutcome>;
 
@@ -27,8 +29,7 @@ pub fn classify_bootstrap_result(
     exit_code(termination)
         .and_then(|exit_code| result_record(result).map(|result| (exit_code, result)))
         .and_then(verify_exit_code)
-        .and_then(classify_record)
-        .and_then(|evaluation| complete(request, evaluation, report, semantic_artifact))
+        .and_then(|result| complete(request, result, report, semantic_artifact))
         .unwrap_or_else(std::convert::identity)
 }
 
@@ -69,19 +70,25 @@ fn classify_record(result: BootstrapResult) -> Classification<Evaluation> {
 
 fn complete(
     request: &RunRequest,
-    evaluation: Evaluation,
+    result: BootstrapResult,
     report: Vec<u8>,
     semantic_artifact: Option<Vec<u8>>,
 ) -> Classification<RunnerOutcome> {
-    bounded_nonempty(
+    let evaluation = classify_record(result)?;
+    let bytes = bounded_nonempty(
         Some(report),
         MACHINE_JSON_BYTES,
         RunnerOutcome::OversizedOutput,
-    )
-    .map(|report| RunnerOutcome::Complete {
+    )?;
+    let (envelope, _verdict) = amiss_wire::report::validate_envelope(&bytes)
+        .map_err(|_defect| RunnerOutcome::TamperedRuntime)?;
+    if i32::from(envelope.payload.result.exit_code) != result_exit_code(result) {
+        return Err(RunnerOutcome::TamperedRuntime);
+    }
+    Ok(RunnerOutcome::Complete {
         identity: Box::new(request.run.clone()),
         evaluation,
-        report,
+        report: Arc::new(CapturedReport { bytes, envelope }),
         semantic_artifact,
     })
 }

@@ -46,7 +46,8 @@ impl Runner for TestRunner {
         RunnerOutcome::Complete {
             identity: Box::new((self.transform)(request.run.clone())),
             evaluation: Evaluation::Pass,
-            report: br#"{"schema":"test-report"}"#.to_vec(),
+            report: amiss_fixtures::captured_report(amiss_fixtures::SCANNER_REPORT.to_vec())
+                .unwrap(),
             semantic_artifact: None,
         }
     }

@@ -172,7 +172,10 @@ fn a_report_may_fill_the_wire_and_not_pass_it() {
     let complete = |report: Vec<u8>| RunnerOutcome::Complete {
         identity: Box::new(run_identity('b')),
         evaluation: Evaluation::Pass,
-        report,
+        report: Arc::new(crate::CapturedReport {
+            bytes: report,
+            envelope: serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap(),
+        }),
         semantic_artifact: None,
     };
 
@@ -189,7 +192,7 @@ fn a_report_may_fill_the_wire_and_not_pass_it() {
     let full = vec![b'x'; ceiling];
     let (conclusion, report) = runner_conclusion(&expected, Some(complete(full)));
     assert_eq!(conclusion, CheckConclusion::Pass);
-    assert_eq!(report.map(|bytes| bytes.len()), Some(ceiling));
+    assert_eq!(report.map(|report| report.bytes.len()), Some(ceiling));
 
     assert_eq!(
         runner_conclusion(&expected, Some(complete(vec![b'x'; ceiling + 1]))),
@@ -205,14 +208,17 @@ fn a_report_may_fill_the_wire_and_not_pass_it() {
 fn only_an_accepted_report_keeps_its_semantic_inputs() {
     let request = request();
     let initial = snapshot(ChangeState::Active);
-    let prepare = |report| {
+    let prepare = |bytes| {
         publication(
             &request,
             &initial,
             Some(RunnerOutcome::Complete {
                 identity: Box::new(initial.run.clone()),
                 evaluation: Evaluation::Pass,
-                report,
+                report: Arc::new(crate::CapturedReport {
+                    bytes,
+                    envelope: serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap(),
+                }),
                 semantic_artifact: Some(b"semantic".to_vec()),
             }),
         )

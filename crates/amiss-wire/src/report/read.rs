@@ -7,6 +7,13 @@ use crate::json;
 use super::model::{ReportEnvelope, ReportResult, ReportStatus};
 use super::{ENVELOPE_SCHEMA, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect};
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapturedReport {
+    /// Kept byte-exact for retention and identity, not regenerated from the envelope.
+    pub bytes: Vec<u8>,
+    pub envelope: ReportEnvelope,
+}
+
 /// Accepts the active report bytes and returns the complete typed envelope and verdict.
 ///
 /// # Errors

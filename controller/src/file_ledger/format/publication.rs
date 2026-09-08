@@ -1,5 +1,7 @@
 mod tests;
 
+use std::sync::Arc;
+
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::Oid;
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -34,7 +36,7 @@ pub(in crate::file_ledger) struct StoredPublication {
 
 impl StoredPublication {
     pub(in crate::file_ledger) fn new(publication: &Publication) -> Result<Self, FileLedgerError> {
-        validate_artifact_report(publication.artifact.as_ref(), publication.report.as_deref())?;
+        validate_artifact_report(publication)?;
         let report = StoredReport::new(publication.report.as_deref())?;
         Ok(Self {
             provider_run: StoredProviderRun::new(&publication.provider_run),
@@ -64,7 +66,7 @@ impl StoredPublication {
         report: Option<Vec<u8>>,
     ) -> Result<Publication, FileLedgerError> {
         let publication = self.report.attach(self.materialize_metadata()?, report)?;
-        validate_artifact_report(publication.artifact.as_ref(), publication.report.as_deref())?;
+        validate_artifact_report(&publication)?;
         Ok(publication)
     }
 
@@ -161,12 +163,17 @@ impl StoredPublication {
     }
 }
 
-fn validate_artifact_report(
-    artifact: Option<&ArtifactReference>,
-    report: Option<&[u8]>,
-) -> Result<(), FileLedgerError> {
-    match artifact {
-        Some(reference) if !crate::artifacts::reference_matches_report(reference, report) => {
+fn validate_artifact_report(publication: &Publication) -> Result<(), FileLedgerError> {
+    match &publication.artifact {
+        Some(reference)
+            if !crate::artifacts::reference_matches_report(
+                reference,
+                publication
+                    .report
+                    .as_ref()
+                    .map(|report| report.bytes.as_slice()),
+            ) =>
+        {
             Err(FileLedgerError::Corrupt)
         }
         None | Some(_) => Ok(()),
@@ -219,13 +226,19 @@ impl StoredReport {
         report: Option<Vec<u8>>,
     ) -> Result<Publication, FileLedgerError> {
         self.verify(report.as_deref())?;
-        publication.report = report;
+        publication.report = report
+            .map(|bytes| {
+                amiss_wire::report::validate_envelope(&bytes)
+                    .map(|(envelope, _verdict)| Arc::new(crate::CapturedReport { bytes, envelope }))
+            })
+            .transpose()
+            .map_err(|_defect| FileLedgerError::Corrupt)?;
         Ok(publication)
     }
 
-    fn new(report: Option<&[u8]>) -> Result<Self, FileLedgerError> {
+    fn new(report: Option<&crate::CapturedReport>) -> Result<Self, FileLedgerError> {
         match report {
-            Some(bytes) => ReportRef::new(bytes).map(|reference| Self::Blob { reference }),
+            Some(report) => ReportRef::new(&report.bytes).map(|reference| Self::Blob { reference }),
             None => Ok(Self::Absent),
         }
     }

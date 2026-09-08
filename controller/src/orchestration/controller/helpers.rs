@@ -141,7 +141,11 @@ pub(super) fn publish_staged<L: DeliveryLedger>(
     if let Some(reference) = &staged.publication.artifact {
         if !crate::artifacts::reference_matches_report(
             reference,
-            staged.publication.report.as_deref(),
+            staged
+                .publication
+                .report
+                .as_ref()
+                .map(|report| report.bytes.as_slice()),
         ) {
             return Err(ControllerError::Artifact(ArtifactError::Conflict));
         }
@@ -275,7 +279,7 @@ pub(super) fn retain_publication(
         .as_deref()
         .ok_or(ArtifactError::Corrupt)?;
     let artifact = if let Some(reference) = store.find(&publication.evaluation_id)? {
-        if reference.report_digest != amiss_wire::digest::sha256(report)
+        if reference.report_digest != amiss_wire::digest::sha256(&report.bytes)
             || reference.semantic_digest.is_some_and(|digest| {
                 Some(digest) != semantic_artifact.map(amiss_wire::digest::sha256)
             })
@@ -288,12 +292,12 @@ pub(super) fn retain_publication(
         let external = if policy == crate::ExternalPolicy::Off {
             PreparedExternal::default()
         } else {
-            prepare_external(adapter, clock, report)
+            prepare_external(adapter, clock, &report.envelope)
         };
         store.retain(
             &publication.evaluation_id,
             ArtifactBundle {
-                report,
+                report: &report.bytes,
                 semantic: semantic_artifact,
                 plan: external.plan.as_deref(),
                 evidence: external.evidence.as_deref(),
@@ -336,18 +340,17 @@ struct PreparedExternal {
 fn prepare_external(
     adapter: &dyn ProviderAdapter,
     clock: &dyn ControllerClock,
-    report: &[u8],
+    report: &amiss_wire::report::model::ReportEnvelope,
 ) -> PreparedExternal {
-    let planned = amiss_wire::report::validate_envelope(report).and_then(|(report, _verdict)| {
-        let engine = &report.payload.engine;
-        let plan =
-            amiss_wire::external::plan(&report, &engine.engine_version, engine.engine_digest)?;
-        let mut bytes = Vec::new();
-        amiss_wire::write_json(&plan, &mut bytes, EXTERNAL_DOCUMENT_BYTES)
-            .map_err(|_defect| amiss_wire::external::PlanDefect::MalformedExternal)?;
-        Ok((plan, bytes, report.payload.engine))
-    });
-    let Ok((plan, plan_bytes, engine)) = planned else {
+    let engine = &report.payload.engine;
+    let planned = amiss_wire::external::plan(report, &engine.engine_version, engine.engine_digest)
+        .and_then(|plan| {
+            let mut bytes = Vec::new();
+            amiss_wire::write_json(&plan, &mut bytes, EXTERNAL_DOCUMENT_BYTES)
+                .map_err(|_defect| amiss_wire::external::PlanDefect::MalformedExternal)?;
+            Ok((plan, bytes))
+        });
+    let Ok((plan, plan_bytes)) = planned else {
         return PreparedExternal {
             incomplete: true,
             ..PreparedExternal::default()

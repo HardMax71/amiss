@@ -366,10 +366,20 @@ fn completion_answers_for_the_staged_publication_alone() {
             staged.fence = LeaseFence::new(staged.fence.get().saturating_add(1)).unwrap();
         }),
         ("another report", false, |staged| {
-            staged.publication.report = Some(vec![9, 9, 9, 9, 9]);
+            staged.publication.report = Some(
+                amiss_fixtures::captured_report(
+                    amiss_fixtures::feedback_report(0, Vec::new()).unwrap(),
+                )
+                .unwrap(),
+            );
         }),
         ("another report after completion", true, |staged| {
-            staged.publication.report = Some(vec![9, 9, 9, 9, 9]);
+            staged.publication.report = Some(
+                amiss_fixtures::captured_report(
+                    amiss_fixtures::feedback_report(0, Vec::new()).unwrap(),
+                )
+                .unwrap(),
+            );
         }),
         ("another evaluation after completion", true, |staged| {
             staged.evaluation_id =

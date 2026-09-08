@@ -4,8 +4,8 @@ use std::time::Duration;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 
 use crate::{
-    ChangeLocator, CheckBinding, CheckPlan, ControllerEvaluationId, DeliveryIdentity,
-    ProviderRunIdentity,
+    CapturedReport, ChangeLocator, CheckBinding, CheckPlan, ControllerEvaluationId,
+    DeliveryIdentity, ProviderRunIdentity,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -118,7 +118,7 @@ pub enum RunnerOutcome {
     Complete {
         identity: Box<RunIdentity>,
         evaluation: Evaluation,
-        report: Vec<u8>,
+        report: Arc<CapturedReport>,
         semantic_artifact: Option<Vec<u8>>,
     },
     MissingOutput,

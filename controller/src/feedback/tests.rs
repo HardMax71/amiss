@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use amiss_fixtures::captured_report;
 use amiss_fixtures::feedback_report;
 use amiss_wire::report::model::{
     Feedback, FeedbackAction, FeedbackItem, RepoPath, RepoPathBytes, ReportEnvelope,
@@ -23,32 +24,35 @@ fn item(action: FeedbackAction, target: Option<RepoPath>, places: u64) -> Feedba
 
 #[test]
 fn feedback_projects_counts_labels_and_atom_targets() {
-    let bytes = feedback_report(
-        2,
-        vec![
-            item(
-                FeedbackAction::Fix,
-                Some(RepoPath::Text("docs/new.md".parse().unwrap())),
-                1,
-            ),
-            item(
-                FeedbackAction::Check,
-                Some(RepoPath::Bytes(RepoPathBytes {
-                    bytes_hex: "ff".to_owned(),
-                })),
-                2,
-            ),
-            item(FeedbackAction::Existing, None, 3),
-            item(
-                FeedbackAction::Fix,
-                Some(RepoPath::Text("docs/second.md".parse().unwrap())),
-                4,
-            ),
-        ],
+    let captured = captured_report(
+        feedback_report(
+            2,
+            vec![
+                item(
+                    FeedbackAction::Fix,
+                    Some(RepoPath::Text("docs/new.md".parse().unwrap())),
+                    1,
+                ),
+                item(
+                    FeedbackAction::Check,
+                    Some(RepoPath::Bytes(RepoPathBytes {
+                        bytes_hex: "ff".to_owned(),
+                    })),
+                    2,
+                ),
+                item(FeedbackAction::Existing, None, 3),
+                item(
+                    FeedbackAction::Fix,
+                    Some(RepoPath::Text("docs/second.md".parse().unwrap())),
+                    4,
+                ),
+            ],
+        )
+        .unwrap(),
     )
     .unwrap();
     assert_eq!(
-        feedback_lines(Some(&bytes), false),
+        feedback_lines(Some(&captured), false),
         vec![
             "findings: fix 2, check 1, existing 2".to_owned(),
             "- Fix target \"docs/new.md\" affected places 1".to_owned(),
@@ -61,29 +65,27 @@ fn feedback_projects_counts_labels_and_atom_targets() {
 
 #[test]
 fn a_hostile_target_cannot_carry_control_bytes_into_provider_markdown() {
-    let bytes = feedback_report(
-        0,
-        vec![item(
-            FeedbackAction::Fix,
-            Some(RepoPath::Text(
-                "docs/\u{1b}[31m::error::x.md".parse().unwrap(),
-            )),
-            1,
-        )],
+    let captured = captured_report(
+        feedback_report(
+            0,
+            vec![item(
+                FeedbackAction::Fix,
+                Some(RepoPath::Text(
+                    "docs/\u{1b}[31m::error::x.md".parse().unwrap(),
+                )),
+                1,
+            )],
+        )
+        .unwrap(),
     )
     .unwrap();
-    let lines = feedback_lines(Some(&bytes), false);
+    let lines = feedback_lines(Some(&captured), false);
     let joined = lines.join("\n");
     assert!(!joined.contains('\u{1b}'), "raw ESC leaked: {joined:?}");
     assert!(
         joined.contains("\\u001b"),
         "the atom law spells the escape: {joined:?}"
     );
-
-    let forged = std::str::from_utf8(&bytes)
-        .unwrap()
-        .replace(r#""action":"fix""#, r#""action":"fix\n\n- [x] done""#);
-    assert!(feedback_lines(Some(forged.as_bytes()), false).is_empty());
 }
 
 #[test]
@@ -99,15 +101,15 @@ fn eleven_items_show_ten_and_one_overflow_line() {
             )
         })
         .collect();
-    let bytes = feedback_report(0, items).unwrap();
-    let lines = feedback_lines(Some(&bytes), false);
+    let captured = captured_report(feedback_report(0, items).unwrap()).unwrap();
+    let lines = feedback_lines(Some(&captured), false);
     assert_eq!(lines.len(), 12, "counts line, ten items, one overflow");
     assert_eq!(
         lines.last().map(String::as_str),
         Some("- 1 more item not displayed")
     );
     assert_eq!(
-        feedback_lines(Some(&bytes), true)
+        feedback_lines(Some(&captured), true)
             .last()
             .map(String::as_str),
         Some("- 1 more item in the retained report")
@@ -115,22 +117,8 @@ fn eleven_items_show_ten_and_one_overflow_line() {
 }
 
 #[test]
-fn unreadable_or_absent_feedback_adds_nothing() {
+fn unavailable_or_absent_feedback_adds_nothing() {
     assert_eq!(feedback_lines(None, false), Vec::<String>::new());
-    assert_eq!(
-        feedback_lines(Some(b"not json"), false),
-        Vec::<String>::new()
-    );
-    assert_eq!(
-        feedback_lines(Some(br#"{"schema":"amiss/report"}"#), false),
-        Vec::<String>::new()
-    );
-    let unavailable = br#"{"payload":{"feedback":{"status":"unavailable"}}}"#;
-    assert_eq!(
-        feedback_lines(Some(unavailable), false),
-        Vec::<String>::new()
-    );
-
     let mut report: ReportEnvelope =
         serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
     report.payload.feedback = Feedback::Unavailable(UnavailableFeedback {
@@ -140,60 +128,25 @@ fn unreadable_or_absent_feedback_adds_nothing() {
         amiss_wire::report::PAYLOAD_SCHEMA,
         &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
     );
-    let bytes = serde_json::to_vec(&report).unwrap();
-    assert!(amiss_wire::report::validate_envelope(&bytes).is_ok());
-    assert!(feedback_lines(Some(&bytes), false).is_empty());
-}
-
-#[test]
-fn feedback_requires_the_complete_report_and_its_payload_digest() {
-    let bytes = feedback_report(0, vec![item(FeedbackAction::Fix, None, 1)]).unwrap();
-    let report: ReportEnvelope = serde_json::from_slice(&bytes).unwrap();
-    assert!(!feedback_lines(Some(&bytes), false).is_empty());
-    let text = std::str::from_utf8(&bytes).unwrap();
-    let engine = serde_json_canonicalizer::to_string(&report.payload.engine).unwrap();
-    for broken in [
-        r#"{"payload":{"feedback":{"existing_count":0,"items":[],"status":"available"}}}"#
-            .to_owned(),
-        text.replace(&format!(r#""engine":{engine},"#), ""),
-        text.replacen('{', r#"{"future":true,"#, 1),
-        text.replace(
-            &report.payload_digest.to_string(),
-            &amiss_wire::digest::sha256(b"wrong payload").to_string(),
-        ),
-    ] {
-        assert_ne!(broken, text);
-        assert!(feedback_lines(Some(broken.as_bytes()), false).is_empty());
-        assert_eq!(
-            with_feedback("summary", Some(broken.as_bytes()), None),
-            Some(format!(
-                "summary\nreport: {}",
-                amiss_wire::digest::sha256(broken.as_bytes())
-            ))
-        );
-    }
-
-    let mut report = report;
-    report.payload.result.exit_code = 255;
-    report.payload_digest = amiss_wire::digest::hb(
-        amiss_wire::report::PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
-    );
-    assert!(feedback_lines(Some(&serde_json::to_vec(&report).unwrap()), false).is_empty());
+    let captured = captured_report(serde_json::to_vec(&report).unwrap()).unwrap();
+    assert!(feedback_lines(Some(&captured), false).is_empty());
 }
 
 #[test]
 fn feedback_keeps_the_original_report_bytes_for_artifact_binding() {
-    let bytes = feedback_report(0, vec![item(FeedbackAction::Check, None, 1)]).unwrap();
-    let report: ReportEnvelope = serde_json::from_slice(&bytes).unwrap();
+    let captured =
+        captured_report(feedback_report(0, vec![item(FeedbackAction::Check, None, 1)]).unwrap())
+            .unwrap();
+    let report = &captured.envelope;
     let mut pretty = serde_json::to_vec_pretty(&report).unwrap();
     pretty.push(b'\n');
-    assert_ne!(bytes, pretty);
+    assert_ne!(captured.bytes, pretty);
+    let pretty = captured_report(pretty).unwrap();
     let artifact = ArtifactReference {
         id: "a".repeat(64),
         locator: "https://amiss.example/artifacts/fixture/report".to_owned(),
         expires_at_unix_millis: 1_800_000_000_000,
-        report_digest: amiss_wire::digest::sha256(&pretty),
+        report_digest: amiss_wire::digest::sha256(&pretty.bytes),
         semantic_digest: None,
         assessment_digest: None,
         external_tally: None,
@@ -203,40 +156,9 @@ fn feedback_keeps_the_original_report_bytes_for_artifact_binding() {
     assert!(summary.contains(&format!("report: {}", artifact.report_digest)));
     assert!(summary.contains("findings: fix 0, check 1, existing 0"));
     assert_eq!(
-        with_feedback("summary", Some(&bytes), Some(&artifact)),
+        with_feedback("summary", Some(&captured), Some(&artifact)),
         None
     );
-}
-
-#[test]
-fn malformed_feedback_cannot_turn_into_plausible_counts_or_labels() {
-    let items = vec![item(FeedbackAction::Fix, None, 1); 11];
-    let items_field = format!(
-        r#""items":{}"#,
-        serde_json_canonicalizer::to_string(&items).unwrap()
-    );
-    let bytes = feedback_report(0, items).unwrap();
-    let text = std::str::from_utf8(&bytes).unwrap();
-    for (original, invalid) in [
-        (r#""status":"available""#, r#""status":"future""#),
-        (items_field.as_str(), r#""items":null"#),
-        (r#""existing_count":0"#, r#""existing_count":-1"#),
-        (r#""action":"fix""#, r#""action":"fixme""#),
-        (r#""location_count":1"#, r#""location_count":-1"#),
-        (r#""location_count":1"#, r#""location_count":0"#),
-        (r#""target":null"#, r#""target":42"#),
-        (r#","target":null"#, ""),
-    ] {
-        let changed = text.replace(original, invalid);
-        assert_ne!(changed, text, "{original}");
-        assert!(
-            feedback_lines(Some(changed.as_bytes()), false).is_empty(),
-            "{invalid}"
-        );
-    }
-    let (before, after) = text.rsplit_once(r#""location_count":1"#).unwrap();
-    let changed = format!(r#"{before}"location_count":0{after}"#);
-    assert!(feedback_lines(Some(changed.as_bytes()), false).is_empty());
 }
 
 #[test]
@@ -262,16 +184,16 @@ fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
             items[index].target = Some(RepoPath::Bytes(RepoPathBytes {
                 bytes_hex: invalid.clone(),
             }));
-            let bytes = feedback_report(0, items).unwrap();
+            let captured = captured_report(feedback_report(0, items).unwrap()).unwrap();
             assert!(
-                feedback_lines(Some(&bytes), false).is_empty(),
+                feedback_lines(Some(&captured), false).is_empty(),
                 "accepted byte target {invalid:?} at item {index}"
             );
             assert_eq!(
-                with_feedback("summary", Some(&bytes), None),
+                with_feedback("summary", Some(&captured), None),
                 Some(format!(
                     "summary\nreport: {}",
-                    amiss_wire::digest::sha256(&bytes)
+                    amiss_wire::digest::sha256(&captured.bytes)
                 ))
             );
         }
@@ -279,9 +201,11 @@ fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
     let target = Some(RepoPath::Bytes(RepoPathBytes {
         bytes_hex: "ff".repeat(4096),
     }));
-    let bytes = feedback_report(0, vec![item(FeedbackAction::Fix, target, 1)]).unwrap();
+    let captured =
+        captured_report(feedback_report(0, vec![item(FeedbackAction::Fix, target, 1)]).unwrap())
+            .unwrap();
     assert_eq!(
-        feedback_lines(Some(&bytes), false),
+        feedback_lines(Some(&captured), false),
         vec![
             "findings: fix 1, check 0, existing 0".to_owned(),
             format!(
@@ -293,49 +217,17 @@ fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
 }
 
 #[test]
-fn the_strict_profile_also_covers_fields_the_projection_ignores() {
-    let bytes = feedback_report(0, vec![item(FeedbackAction::Fix, None, 1)]).unwrap();
-    let text = std::str::from_utf8(&bytes).unwrap();
-    let prefix = text.strip_suffix('}').unwrap();
-    for invalid in [
-        r#"{"duplicate":0,"duplicate":1}"#,
-        "9007199254740992",
-        "0.5",
-    ] {
-        let invalid = format!("{prefix},\"future\":{invalid}}}");
-        assert!(
-            feedback_lines(Some(invalid.as_bytes()), false).is_empty(),
-            "{invalid}"
-        );
-    }
-    assert!(feedback_lines(Some(format!("{text} null").as_bytes()), false).is_empty());
-    let mut invalid_utf8 = bytes;
-    invalid_utf8.push(0xff);
-    assert!(feedback_lines(Some(&invalid_utf8), false).is_empty());
-}
-
-#[test]
-fn large_exact_counts_are_preserved_but_unknown_feedback_fields_are_rejected() {
+fn large_exact_counts_are_preserved() {
     let max_safe = 9_007_199_254_740_991;
-    let bytes =
-        feedback_report(max_safe, vec![item(FeedbackAction::Check, None, max_safe)]).unwrap();
+    let captured = captured_report(
+        feedback_report(max_safe, vec![item(FeedbackAction::Check, None, max_safe)]).unwrap(),
+    )
+    .unwrap();
     let expected = vec![
         "findings: fix 0, check 1, existing 9007199254740991".to_owned(),
         "- Check target - affected places 9007199254740991".to_owned(),
     ];
-    assert_eq!(feedback_lines(Some(&bytes), false), expected);
-    let text = std::str::from_utf8(&bytes).unwrap();
-    for object in ["\"feedback\":{", "\"items\":[{"] {
-        let extended = text.replace(object, &format!("{object}\"future\":true,"));
-        assert_ne!(text, extended);
-        assert!(feedback_lines(Some(extended.as_bytes()), false).is_empty());
-    }
-    let nested = format!("{}0{}", "[".repeat(256), "]".repeat(256));
-    let extended = text.replace(
-        "\"status\":\"available\"",
-        &format!("\"status\":\"available\",\"future\":{nested}"),
-    );
-    assert!(feedback_lines(Some(extended.as_bytes()), false).is_empty());
+    assert_eq!(feedback_lines(Some(&captured), false), expected);
 }
 
 #[test]
@@ -347,21 +239,24 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
             amiss_wire::digest::sha256(&[])
         ))
     );
-    let bytes = feedback_report(
-        0,
-        vec![item(
-            FeedbackAction::Fix,
-            Some(RepoPath::Text("docs/new.md".parse().unwrap())),
-            1,
-        )],
+    let captured = captured_report(
+        feedback_report(
+            0,
+            vec![item(
+                FeedbackAction::Fix,
+                Some(RepoPath::Text("docs/new.md".parse().unwrap())),
+                1,
+            )],
+        )
+        .unwrap(),
     )
     .unwrap();
     assert_eq!(
-        with_feedback("summary", Some(&bytes), None),
+        with_feedback("summary", Some(&captured), None),
         Some(format!(
             "summary\nreport: {}\nfindings: fix 1, check 0, existing 0\n\
              - Fix target \"docs/new.md\" affected places 1",
-            amiss_wire::digest::sha256(&bytes)
+            amiss_wire::digest::sha256(&captured.bytes)
         ))
     );
 
@@ -370,13 +265,13 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         id: id.clone(),
         locator: format!("https://amiss.example/artifacts/{id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
-        report_digest: amiss_wire::digest::sha256(&bytes),
+        report_digest: amiss_wire::digest::sha256(&captured.bytes),
         semantic_digest: Some(amiss_wire::digest::sha256(b"semantic input")),
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,
     };
-    let projected = with_feedback("summary", Some(&bytes), Some(&artifact)).unwrap();
+    let projected = with_feedback("summary", Some(&captured), Some(&artifact)).unwrap();
     assert!(projected.contains(&format!("artifact: {}", artifact.locator)));
     assert!(projected.contains("artifact-auth: bearer"));
     assert!(projected.contains("artifact-expires-unix-millis: 1800000000000"));
@@ -395,7 +290,7 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         unproven: 2,
         reachable: 3,
     });
-    let projected = with_feedback("summary", Some(&bytes), Some(&assessed)).unwrap();
+    let projected = with_feedback("summary", Some(&captured), Some(&assessed)).unwrap();
     assert!(
         projected.contains("external-assessment: refuted 1 unproven 2 reachable 3"),
         "{projected}"
@@ -409,7 +304,7 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
 
     let mut incomplete = artifact.clone();
     incomplete.external_incomplete = true;
-    let projected = with_feedback("summary", Some(&bytes), Some(&incomplete)).unwrap();
+    let projected = with_feedback("summary", Some(&captured), Some(&incomplete)).unwrap();
     assert!(
         projected.contains("external-assessment: incomplete"),
         "{projected}"
@@ -418,7 +313,7 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
     let mut mismatched = artifact;
     mismatched.report_digest = amiss_wire::digest::sha256(b"different");
     assert_eq!(
-        with_feedback("summary", Some(&bytes), Some(&mismatched)),
+        with_feedback("summary", Some(&captured), Some(&mismatched)),
         None
     );
 }

@@ -31,6 +31,7 @@ mod webhook;
 pub use acquiring_runner::{AcquiringRunner, Acquisition, AcquisitionTarget};
 pub use acquisition::{AcquireError, AcquiredRoots, verify_acquired};
 pub use amiss_bootstrap::BOOTSTRAP_EXECUTABLE_BYTES;
+pub use amiss_wire::report::CapturedReport;
 pub use artifacts::{
     ArtifactAuditBundle, ArtifactAuditDigests, ArtifactAuditReference, ArtifactBundle,
     ArtifactCleanup, ArtifactComponent, ArtifactError, ArtifactReference, ArtifactStoreConfig,

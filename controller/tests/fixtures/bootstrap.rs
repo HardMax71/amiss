@@ -9,6 +9,9 @@ use std::time::{Duration, Instant};
 use amiss_bootstrap::result::{BootstrapResult, result_bytes, result_exit_code};
 use amiss_wire::controls::parse_execution_constraint;
 use amiss_wire::report::MACHINE_JSON_BYTES;
+use amiss_wire::report::model::{ReportEnvelope, ReportStatus};
+
+const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.canonical.json");
 
 const MALFORMED_RESULT: &[u8] = b"not-an-amiss-bootstrap-result\n";
 const STARTED_MARKER: &str = "runner-started";
@@ -166,33 +169,17 @@ fn read_mode(path: &Path) -> Option<Mode> {
 
 fn run(mode: Mode, args: &RunnerArgs) -> ExitCode {
     match mode {
-        Mode::Pass => complete(
-            &args.report,
-            &args.result,
-            BootstrapResult::Pass,
-            b"{\"runner\":\"pass\"}\n",
-        ),
-        Mode::Block => complete(
-            &args.report,
-            &args.result,
-            BootstrapResult::Block,
-            b"{\"runner\":\"block\"}\n",
-        ),
+        Mode::Pass => complete(&args.report, &args.result, BootstrapResult::Pass, REPORT),
+        Mode::Block => complete(&args.report, &args.result, BootstrapResult::Block, REPORT),
         Mode::MissingResult => ExitCode::SUCCESS,
         Mode::OversizedOutput => oversized(&args.report, &args.result),
         Mode::Timeout => timeout(args),
-        Mode::ClearedEnvironment if cleared_environment() => complete(
-            &args.report,
-            &args.result,
-            BootstrapResult::Pass,
-            b"{\"runner\":\"pass\"}\n",
-        ),
-        Mode::RenewedPass if renewal_gate(args) => complete(
-            &args.report,
-            &args.result,
-            BootstrapResult::Pass,
-            b"{\"runner\":\"pass\"}\n",
-        ),
+        Mode::ClearedEnvironment if cleared_environment() => {
+            complete(&args.report, &args.result, BootstrapResult::Pass, REPORT)
+        }
+        Mode::RenewedPass if renewal_gate(args) => {
+            complete(&args.report, &args.result, BootstrapResult::Pass, REPORT)
+        }
         Mode::ExitWithChild => exit_with_child(args),
         // Neither an exit code nor a timeout: the third termination.
         Mode::Signalled => std::process::abort(),
@@ -217,7 +204,24 @@ fn renewal_gate(args: &RunnerArgs) -> bool {
 }
 
 fn complete(report: &Path, result: &Path, outcome: BootstrapResult, bytes: &[u8]) -> ExitCode {
-    if write_output(report, bytes).is_err() || write_output(result, result_bytes(outcome)).is_err()
+    let encoded = (|| -> Result<Vec<u8>, serde_json::Error> {
+        let mut envelope: ReportEnvelope = serde_json::from_slice(bytes)?;
+        if outcome == BootstrapResult::Block {
+            envelope.payload.result.status = ReportStatus::Fail;
+            envelope.payload.result.exit_code = 1;
+        }
+        envelope.payload_digest = amiss_wire::digest::hb(
+            amiss_wire::report::PAYLOAD_SCHEMA,
+            &serde_json_canonicalizer::to_vec(&envelope.payload)?,
+        );
+        let mut bytes = serde_json_canonicalizer::to_vec(&envelope)?;
+        bytes.push(b'\n');
+        Ok(bytes)
+    })();
+    let Ok(bytes) = encoded else {
+        return ExitCode::from(2);
+    };
+    if write_output(report, &bytes).is_err() || write_output(result, result_bytes(outcome)).is_err()
     {
         return ExitCode::from(2);
     }
@@ -261,18 +265,13 @@ fn exit_with_child(args: &RunnerArgs) -> ExitCode {
     if !spawn_grandchild(args) {
         return malformed(&args.result);
     }
-    complete(
-        &args.report,
-        &args.result,
-        BootstrapResult::Pass,
-        b"{\"runner\":\"pass\"}\n",
-    )
+    complete(&args.report, &args.result, BootstrapResult::Pass, REPORT)
 }
 
 fn replace_outputs(args: &RunnerArgs) -> ExitCode {
     let replaced = std::fs::remove_file(&args.report)
         .and_then(|()| std::fs::remove_file(&args.result))
-        .and_then(|()| write_new(&args.report, b"{\"runner\":\"pass\"}\n"))
+        .and_then(|()| write_new(&args.report, REPORT))
         .and_then(|()| write_new(&args.result, result_bytes(BootstrapResult::Pass)))
         .and_then(|()| write_new(&args.repository.join(REPLACED_MARKER), b"replaced\n"));
     if replaced.is_err() {

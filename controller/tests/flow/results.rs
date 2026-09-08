@@ -95,7 +95,10 @@ fn oversized_report_is_not_accepted_for_publication() {
     let outcome = RunnerOutcome::Complete {
         identity: Box::new(run.clone()),
         evaluation: Evaluation::Pass,
-        report: vec![b'x'; oversized],
+        report: Arc::new(amiss_controller::CapturedReport {
+            bytes: vec![b'x'; oversized],
+            envelope: serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap(),
+        }),
         semantic_artifact: None,
     };
     let adapter = Arc::new(FakeAdapter::new(

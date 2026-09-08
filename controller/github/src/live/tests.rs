@@ -312,7 +312,7 @@ fn publication_reuses_only_one_exact_owned_check() {
 fn previous_artifact_metadata_projections_are_compatible_summaries() {
     let fixture = Fixture::new();
     let mut publication = fixture.publication(CheckConclusion::Pass);
-    let mut completed = artifact_reference(publication.report.as_deref().unwrap_or_default());
+    let mut completed = artifact_reference(&publication.report.as_ref().unwrap().bytes);
     let artifact_root = completed
         .locator
         .strip_suffix("/report")
@@ -324,9 +324,9 @@ fn previous_artifact_metadata_projections_are_compatible_summaries() {
         unproven: 2,
         reachable: 3,
     });
-    let mut incomplete = artifact_reference(publication.report.as_deref().unwrap_or_default());
+    let mut incomplete = artifact_reference(&publication.report.as_ref().unwrap().bytes);
     incomplete.external_incomplete = true;
-    let mut semantic = artifact_reference(publication.report.as_deref().unwrap_or_default());
+    let mut semantic = artifact_reference(&publication.report.as_ref().unwrap().bytes);
     semantic.semantic_digest = Some(sha256(b"semantic input"));
     let mut retained_assessment = completed.clone();
     retained_assessment.semantic_digest = Some(sha256(b"semantic input"));
@@ -508,21 +508,24 @@ fn publication_summary_carries_the_report_feedback_lines() {
     let fixture = Fixture::new();
     let mut publication = fixture.publication(CheckConclusion::Block);
     publication.report = Some(
-        amiss_fixtures::feedback_report(
-            1,
-            vec![FeedbackItem {
-                action: FeedbackAction::Fix,
-                annotation: None,
-                effective_disposition: Disposition::Fail,
-                finding_kinds: vec![FindingKind::ExplicitTargetMissing],
-                location_count: std::num::NonZeroU64::new(2).unwrap(),
-                target: Some(RepoPath::Text("docs/new.md".parse().unwrap())),
-            }],
+        amiss_fixtures::captured_report(
+            amiss_fixtures::feedback_report(
+                1,
+                vec![FeedbackItem {
+                    action: FeedbackAction::Fix,
+                    annotation: None,
+                    effective_disposition: Disposition::Fail,
+                    finding_kinds: vec![FindingKind::ExplicitTargetMissing],
+                    location_count: std::num::NonZeroU64::new(2).unwrap(),
+                    target: Some(RepoPath::Text("docs/new.md".parse().unwrap())),
+                }],
+            )
+            .unwrap(),
         )
         .unwrap(),
     );
     publication.artifact = Some(artifact_reference(
-        publication.report.as_deref().unwrap_or_default(),
+        &publication.report.as_ref().unwrap().bytes,
     ));
     publication.artifact.as_mut().unwrap().semantic_digest = Some(sha256(b"semantic input"));
     let expected =
@@ -538,7 +541,7 @@ fn publication_summary_carries_the_report_feedback_lines() {
     );
     let digest_line = format!(
         "report: {}",
-        sha256(publication.report.as_deref().unwrap_or_default())
+        sha256(&publication.report.as_ref().unwrap().bytes)
     );
     assert!(
         summary.contains(&digest_line),
@@ -616,7 +619,7 @@ fn publication_conclusions_and_create_response_are_exact() {
             ),
             format!(
                 "report: {}",
-                sha256(publication.report.as_deref().unwrap_or_default())
+                sha256(&publication.report.as_ref().unwrap().bytes)
             ),
         ];
         for binding in bindings {
@@ -806,7 +809,9 @@ impl Fixture {
             run: snapshot.run,
             gate_commit,
             conclusion,
-            report: Some(br#"{"schema":"amiss/report"}"#.to_vec()),
+            report: Some(
+                amiss_fixtures::captured_report(amiss_fixtures::SCANNER_REPORT.to_vec()).unwrap(),
+            ),
             artifact: None,
         }
     }

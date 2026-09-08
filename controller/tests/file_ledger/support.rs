@@ -217,7 +217,9 @@ pub(super) fn publication(delivery: &AcceptedDelivery, lease: &DeliveryLease) ->
         gate_commit: run.commits.candidate.clone(),
         run,
         conclusion: CheckConclusion::Pass,
-        report: Some(vec![0, 1, 2, 0xfe, 0xff]),
+        report: Some(
+            amiss_fixtures::captured_report(amiss_fixtures::SCANNER_REPORT.to_vec()).unwrap(),
+        ),
         artifact: None,
     }
 }

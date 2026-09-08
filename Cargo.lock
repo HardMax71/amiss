@@ -166,6 +166,7 @@ version = "0.27.0"
 dependencies = [
  "amiss-bootstrap",
  "amiss-wire",
+ "serde_json_canonicalizer",
 ]
 
 [[package]]

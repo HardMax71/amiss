@@ -1,5 +1,8 @@
 mod tests;
 
+use std::sync::Arc;
+
+use crate::CapturedReport;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use super::ledger::{CheckConclusion, Publication};
@@ -75,7 +78,7 @@ pub(super) fn finalize_publication(
 fn runner_conclusion(
     expected: &RunIdentity,
     outcome: Option<RunnerOutcome>,
-) -> (CheckConclusion, Option<Vec<u8>>) {
+) -> (CheckConclusion, Option<Arc<CapturedReport>>) {
     match outcome {
         Some(RunnerOutcome::Complete { identity, .. })
             if identity.change != expected.change
@@ -91,12 +94,12 @@ fn runner_conclusion(
         Some(RunnerOutcome::Complete { identity, .. }) if identity.trees != expected.trees => {
             (CheckConclusion::Unavailable(RunFailure::WrongTree), None)
         }
-        Some(RunnerOutcome::Complete { report, .. }) if report.is_empty() => (
+        Some(RunnerOutcome::Complete { report, .. }) if report.bytes.is_empty() => (
             CheckConclusion::Unavailable(RunFailure::MissingOutput),
             None,
         ),
         Some(RunnerOutcome::Complete { report, .. })
-            if u64::try_from(report.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES =>
+            if u64::try_from(report.bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES =>
         {
             (
                 CheckConclusion::Unavailable(RunFailure::OversizedOutput),
