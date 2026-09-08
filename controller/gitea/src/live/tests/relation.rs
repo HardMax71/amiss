@@ -18,6 +18,7 @@ use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
+use crate::status::CommitStatusState;
 use crate::{GiteaObjectRequest, GiteaObjects};
 
 use super::super::model::{
@@ -246,7 +247,7 @@ fn both_families_resolve_heads_and_publish_idempotent_statuses() {
         assert_eq!(state.created_statuses.len(), 1);
         let created = &state.created_statuses[0];
         assert_eq!(created.context, target.required_status_name);
-        assert_eq!(created.state, "failure");
+        assert_eq!(created.state, CommitStatusState::Failure);
         assert!(created.target_url.is_empty());
         assert!(
             created
@@ -268,11 +269,14 @@ fn all_relation_verdicts_map_to_the_two_provider_states() {
     let fixture = Fixture::new("gitea");
     let (mut status, target) = status_fixture(&fixture);
     for (verdict, expected) in [
-        (RelationVerdict::Aligned, "success"),
-        (RelationVerdict::IntroducedDrift, "failure"),
-        (RelationVerdict::PreExistingDrift, "failure"),
-        (RelationVerdict::ResolvedDrift, "success"),
-        (RelationVerdict::Unproven, "failure"),
+        (RelationVerdict::Aligned, CommitStatusState::Success),
+        (RelationVerdict::IntroducedDrift, CommitStatusState::Failure),
+        (
+            RelationVerdict::PreExistingDrift,
+            CommitStatusState::Failure,
+        ),
+        (RelationVerdict::ResolvedDrift, CommitStatusState::Success),
+        (RelationVerdict::Unproven, CommitStatusState::Failure),
     ] {
         let ArtifactAuditDigests::Relation(mut audit) = status.audit.audit else {
             panic!("the fixture carries a relation audit");
@@ -303,22 +307,22 @@ fn commit_status_requests_and_responses_use_the_native_wire_shape() {
         serde_json::from_str(include_str!("../../../tests/fixtures/commit-status.json")).unwrap();
     assert_eq!(decoded.id, 42);
     assert_eq!(decoded.creator.unwrap().id, 77);
-    assert_eq!(decoded.status, "success");
+    assert_eq!(decoded.status, CommitStatusState::Success);
+
+    let input = include_str!("../../../tests/fixtures/commit-status.json");
+    let unknown = input.replacen('{', r#"{"unknown":true,"#, 1);
+    assert!(serde_json::from_str::<CommitStatusRecord>(&unknown).is_err());
 
     let request = CreateCommitStatus {
-        state: "failure".to_owned(),
+        state: CommitStatusState::Failure,
         target_url: String::new(),
         description: format!("{MARKER}{}", sha256(b"projection")),
         context: "Amiss cross-repository".to_owned(),
     };
     assert_eq!(
-        serde_json::to_value(request).unwrap(),
-        serde_json::json!({
-            "state": "failure",
-            "target_url": "",
-            "description": format!("{MARKER}{}", sha256(b"projection")),
-            "context": "Amiss cross-repository"
-        })
+        serde_json::from_slice::<CreateCommitStatus>(&serde_json::to_vec(&request).unwrap())
+            .unwrap(),
+        request
     );
 }
 
@@ -341,7 +345,7 @@ fn a_new_owned_evaluation_advances_the_context_but_conflicts_do_not() {
 
     {
         let mut state = fixture.rest.state.lock().unwrap();
-        state.statuses[0].status = "success".to_owned();
+        state.statuses[0].status = CommitStatusState::Success;
     }
     assert_eq!(
         fixture.client.publish_relation_status(&newer, &target),
@@ -571,9 +575,10 @@ fn record(fixture: &Fixture, expected: &CreateCommitStatus) -> CommitStatusRecor
             username: fixture.client.config.reviewer.login.clone(),
             ..super::support::USER.clone()
         }),
-        status: expected.state.clone(),
+        status: expected.state,
         target_url: expected.target_url.clone(),
         description: expected.description.clone(),
         context: expected.context.clone(),
+        ..super::support::STATUS.clone()
     }
 }

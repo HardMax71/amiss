@@ -7,8 +7,6 @@ use reqwest::StatusCode;
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use secrecy::{ExposeSecret as _, SecretString};
-use serde::Serialize;
-use serde::de::DeserializeOwned;
 use url::Url;
 
 use super::super::{GiteaClientError, GiteaTimeouts};
@@ -19,7 +17,7 @@ const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;
 const GITEA_JSON: &str = "application/json";
 
 pub(super) struct Transport {
-    client: Client,
+    pub(super) client: Client,
     api_base: String,
     authorization: SecretString,
     operation_timeout: Duration,
@@ -62,19 +60,6 @@ impl Transport {
         self.execute(self.client.get(self.url(route)?), deadline, decode)
     }
 
-    pub(super) fn post<T: DeserializeOwned>(
-        &self,
-        route: &str,
-        body: &impl Serialize,
-        deadline: OperationDeadline,
-    ) -> Result<T, ProviderError> {
-        self.execute(
-            self.client.post(self.url(route)?).json(body),
-            deadline,
-            |bytes| serde_json::from_slice(bytes),
-        )
-    }
-
     /// A verification GET whose negative answers are facts: the absence or
     /// refusal of what the route names, distinct from a failed call.
     pub(super) fn get_fact<T, E>(
@@ -100,7 +85,7 @@ impl Transport {
         }
     }
 
-    fn execute<T, E>(
+    pub(super) fn execute<T, E>(
         &self,
         request: RequestBuilder,
         deadline: OperationDeadline,
@@ -129,7 +114,7 @@ impl Transport {
             .header(AUTHORIZATION, authorization))
     }
 
-    fn url(&self, route: &str) -> Result<Url, ProviderError> {
+    pub(super) fn url(&self, route: &str) -> Result<Url, ProviderError> {
         if !route.starts_with('/') || route.starts_with("//") {
             return Err(ProviderError::InvalidResponse);
         }

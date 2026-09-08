@@ -9,6 +9,9 @@ mod numbers;
 #[path = "json_contracts/repositories.rs"]
 mod repositories;
 
+#[path = "json_contracts/statuses.rs"]
+mod statuses;
+
 use amiss_controller::{ProviderError, decode_bounded_json};
 use amiss_controller_gitea::content::{
     ContentEncoding, ContentKind, ContentRecord, ContentResponse,

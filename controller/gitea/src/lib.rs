@@ -8,6 +8,7 @@ mod identity;
 mod live;
 pub mod repository;
 mod source;
+pub mod status;
 pub mod user;
 
 use amiss_controller::{ChangeLocator, ChangeSnapshot, ProviderError, Publication, ResolvedCommit};

@@ -8,6 +8,7 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::relation::RelationSnapshot;
 
+use crate::status::CommitStatusState;
 use crate::{GiteaObjectRequest, GiteaObjectResolver, fetch_plan::repository_url};
 
 use super::model::{CommitRecord, CommitStatusRecord, CreateCommitStatus, RepositoryRecord};
@@ -122,9 +123,9 @@ pub(super) fn relation_commit_status(
         .map_err(|_defect| ProviderError::InvalidResponse)?;
     Ok(CreateCommitStatus {
         state: if publication.passing {
-            "success".to_owned()
+            CommitStatusState::Success
         } else {
-            "failure".to_owned()
+            CommitStatusState::Failure
         },
         target_url: String::new(),
         description: format!(
@@ -182,7 +183,10 @@ fn owned_relation_status(config: &Config, status: &CommitStatusRecord) -> bool {
     owned_reviewer(config, status)
         && status.id > 0
         && status.target_url.is_empty()
-        && matches!(status.status.as_str(), "success" | "failure")
+        && matches!(
+            status.status,
+            CommitStatusState::Success | CommitStatusState::Failure
+        )
         && status
             .description
             .strip_prefix(MARKER)

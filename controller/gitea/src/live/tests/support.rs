@@ -77,6 +77,14 @@ pub(super) static USER: LazyLock<UserRecord> = LazyLock::new(|| {
     .unwrap()
 });
 
+pub(super) static STATUS: LazyLock<CommitStatusRecord> = LazyLock::new(|| {
+    amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/commit-status.json"),
+        u64::MAX,
+    )
+    .unwrap()
+});
+
 static COMMIT: LazyLock<CommitRecord> = LazyLock::new(|| {
     amiss_wire::read_json(
         include_bytes!("../../../tests/fixtures/gitea-commit-full.json"),
@@ -192,10 +200,11 @@ impl GiteaRest for FakeRest {
                 .unwrap()
                 .saturating_add(200),
             creator: Some(state.data.reviewer.clone()),
-            status: status.state.clone(),
+            status: status.state,
             target_url: status.target_url.clone(),
             description: status.description.clone(),
             context: status.context.clone(),
+            ..STATUS.clone()
         };
         state.statuses.insert(0, created.clone());
         Ok(created)

@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub(super) use crate::commit::CommitRecord;
 pub(super) use crate::repository::RepositoryRecord;
+pub(super) use crate::status::{CommitStatusRecord, CreateCommitStatus};
 pub(super) use crate::user::UserRecord;
 
 #[derive(Clone, Deserialize)]
@@ -118,16 +119,6 @@ pub(super) struct ReviewRecord {
     pub dismissed: bool,
 }
 
-#[derive(Clone, Deserialize)]
-pub(super) struct CommitStatusRecord {
-    pub id: u64,
-    pub creator: Option<UserRecord>,
-    pub status: String,
-    pub target_url: String,
-    pub description: String,
-    pub context: String,
-}
-
 #[derive(Clone)]
 pub(super) struct RefreshData {
     pub reviewer: UserRecord,
@@ -151,14 +142,6 @@ pub(super) struct CreateReview {
 
 #[derive(Clone, Serialize)]
 pub(super) struct CreateReviewComment {}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-pub(super) struct CreateCommitStatus {
-    pub state: String,
-    pub target_url: String,
-    pub description: String,
-    pub context: String,
-}
 
 #[derive(Deserialize)]
 pub(super) struct RefRecord {

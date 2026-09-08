@@ -278,15 +278,14 @@ impl GiteaRest for HttpRest {
         review: &CreateReview,
         deadline: OperationDeadline,
     ) -> Result<ReviewRecord, ProviderError> {
-        self.transport.post(
-            &format!(
-                "{}/pulls/{}/reviews",
-                repository_route(pull_request.repository_owner, pull_request.repository_name,),
-                pull_request.number
-            ),
-            review,
-            deadline,
-        )
+        let url = self.transport.url(&format!(
+            "{}/pulls/{}/reviews",
+            repository_route(pull_request.repository_owner, pull_request.repository_name),
+            pull_request.number
+        ))?;
+        let request = self.transport.client.post(url).json(review);
+        self.transport
+            .execute(request, deadline, |bytes| serde_json::from_slice(bytes))
     }
 
     fn commit_statuses(
@@ -298,12 +297,13 @@ impl GiteaRest for HttpRest {
         let prefix = repository_route(repository.owner(), repository.name());
         let mut statuses = Vec::new();
         for page in 1..=MAX_PAGES {
-            let batch: Vec<CommitStatusRecord> = self.get(
+            let batch: Vec<CommitStatusRecord> = self.transport.get(
                 &format!(
                     "{prefix}/statuses/{}?sort=highestindex&page={page}&limit={PAGE_SIZE}",
                     path_segment(commit.as_str())
                 ),
                 deadline,
+                |bytes| amiss_wire::read_json(bytes, u64::MAX),
             )?;
             let complete = page_complete(batch.len())?;
             statuses.extend(batch);
@@ -321,15 +321,15 @@ impl GiteaRest for HttpRest {
         status: &CreateCommitStatus,
         deadline: OperationDeadline,
     ) -> Result<CommitStatusRecord, ProviderError> {
-        self.transport.post(
-            &format!(
-                "{}/statuses/{}",
-                repository_route(repository.owner(), repository.name()),
-                path_segment(commit.as_str())
-            ),
-            status,
-            deadline,
-        )
+        let url = self.transport.url(&format!(
+            "{}/statuses/{}",
+            repository_route(repository.owner(), repository.name()),
+            path_segment(commit.as_str())
+        ))?;
+        let request = self.transport.client.post(url).json(status);
+        self.transport.execute(request, deadline, |bytes| {
+            amiss_wire::read_json(bytes, u64::MAX)
+        })
     }
 }
 
