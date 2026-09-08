@@ -127,7 +127,10 @@ impl Transport {
 
 fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
     let declared = response.content_length();
-    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES).map(|(value, _length)| value)
+    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, |bytes| {
+        serde_json::from_slice(bytes)
+    })
+    .map(|(value, _length)| value)
 }
 
 fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GiteaClientError> {

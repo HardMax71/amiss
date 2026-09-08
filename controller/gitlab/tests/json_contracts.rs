@@ -8,7 +8,10 @@ use amiss_wire::controls::GitMode;
 fn tree_responses_retain_every_field_from_the_live_contract() {
     let input = include_bytes!("fixtures/tree.json");
     let (rows, length): (Vec<TreeObject>, _) =
-        decode_bounded_json(Cursor::new(input), None, input.len()).unwrap();
+        decode_bounded_json(Cursor::new(input), None, input.len(), |bytes| {
+            serde_json::from_slice(bytes)
+        })
+        .unwrap();
     assert_eq!(length, input.len());
     assert_eq!(
         rows,
@@ -21,7 +24,10 @@ fn tree_responses_retain_every_field_from_the_live_contract() {
     );
     let encoded = serde_json::to_vec(&rows).unwrap();
     let (replayed, _): (Vec<TreeObject>, _) =
-        decode_bounded_json(Cursor::new(&encoded), None, encoded.len()).unwrap();
+        decode_bounded_json(Cursor::new(&encoded), None, encoded.len(), |bytes| {
+            serde_json::from_slice(bytes)
+        })
+        .unwrap();
     assert_eq!(rows, replayed);
     for (kind, mode) in [
         ("blob", GitMode::RegularFile),
@@ -34,7 +40,10 @@ fn tree_responses_retain_every_field_from_the_live_contract() {
             .replace("\"tree\"", &format!("\"{kind}\""))
             .replace("040000", mode.as_ref());
         let (rows, _): (Vec<TreeObject>, _) =
-            decode_bounded_json(Cursor::new(input.as_bytes()), None, input.len()).unwrap();
+            decode_bounded_json(Cursor::new(input.as_bytes()), None, input.len(), |bytes| {
+                serde_json::from_slice(bytes)
+            })
+            .unwrap();
         assert_eq!(rows.len(), 1);
     }
 }
@@ -65,10 +74,11 @@ fn tree_responses_refuse_unknown_or_malformed_rows() {
         assert_ne!(invalid, input);
         assert!(
             matches!(
-                decode_bounded_json::<Vec<TreeObject>>(
+                decode_bounded_json::<Vec<TreeObject>, _>(
                     Cursor::new(invalid.as_bytes()),
                     None,
-                    invalid.len()
+                    invalid.len(),
+                    |bytes| serde_json::from_slice(bytes)
                 ),
                 Err(ProviderError::InvalidResponse)
             ),
@@ -84,10 +94,11 @@ fn tree_responses_refuse_unknown_or_malformed_rows() {
     ] {
         assert!(
             matches!(
-                decode_bounded_json::<Vec<TreeObject>>(
+                decode_bounded_json::<Vec<TreeObject>, _>(
                     Cursor::new(invalid.as_bytes()),
                     None,
-                    invalid.len()
+                    invalid.len(),
+                    |bytes| serde_json::from_slice(bytes)
                 ),
                 Err(ProviderError::InvalidResponse)
             ),

@@ -313,7 +313,10 @@ fn decode_response<T: DeserializeOwned>(
     budget: Budget,
 ) -> Result<(T, Budget), ProviderError> {
     let declared = response.content_length();
-    let (value, length) = decode_bounded_json(response, declared, budget.response_bytes)?;
+    let (value, length) =
+        decode_bounded_json(response, declared, budget.response_bytes, |bytes| {
+            serde_json::from_slice(bytes)
+        })?;
     Ok((value, consume_bytes(budget, length)?))
 }
 

@@ -63,6 +63,11 @@ The entries retain every requested field and reject unknown fields, invalid obje
 invalid modes. An empty tree page remains unproven. This is forge API evidence; the
 arbitrary-URL probe's GET confirmation policy is unchanged.
 
+Provider transports check declared and actual response sizes before passing the complete
+body to the selected JSON decoder. An oversized or rejected body is an invalid response;
+a failed read is an unavailable provider. The transport limit applies whichever typed
+reader a route uses.
+
 Every verdict row echoes the plan's document attribution, and the subject block binds
 report, plan, and evidence digests, so the same three inputs always reproduce the same
 assessment, digest included, and a lane can replay the whole chain from artifacts alone.

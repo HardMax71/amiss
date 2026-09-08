@@ -15,7 +15,10 @@ fn real_effective_rules_keep_source_and_unattributed_review_policy() -> Result<(
         {"type":"required_status_checks","parameters":{"strict_required_status_checks_policy":true,"do_not_enforce_on_create":false,"required_status_checks":[{"context":"gates"},{"context":"self-scan"},{"context":"platform-tests (ubuntu-latest)"},{"context":"coverage"},{"context":"json-contract-drift"}]},"ruleset_source_type":"Repository","ruleset_source":"HardMax71/amiss","ruleset_id":18948623}
     ]"#;
     let (rules, count): (Vec<BranchRule>, _) =
-        decode_bounded_json(input.as_slice(), None, input.len()).unwrap();
+        decode_bounded_json(input.as_slice(), None, input.len(), |bytes| {
+            serde_json::from_slice(bytes)
+        })
+        .unwrap();
     assert_eq!(count, input.len());
     assert_eq!(rules.len(), 4);
     for rule in &rules {
@@ -51,7 +54,10 @@ fn real_effective_rules_keep_source_and_unattributed_review_policy() -> Result<(
     );
     let encoded = serde_json::to_vec(&rules).unwrap();
     let (replayed, _): (Vec<BranchRule>, _) =
-        decode_bounded_json(encoded.as_slice(), None, encoded.len()).unwrap();
+        decode_bounded_json(encoded.as_slice(), None, encoded.len(), |bytes| {
+            serde_json::from_slice(bytes)
+        })
+        .unwrap();
     assert_eq!(replayed, rules);
     Ok(())
 }
@@ -84,14 +90,20 @@ fn every_published_rule_shape_is_typed() {
         {"type":"max_file_size","parameters":{"max_file_size":100}}
     ]"#;
     let (rules, _): (Vec<BranchRule>, _) =
-        decode_bounded_json(input.as_slice(), None, input.len()).unwrap();
+        decode_bounded_json(input.as_slice(), None, input.len(), |bytes| {
+            serde_json::from_slice(bytes)
+        })
+        .unwrap();
     assert_eq!(rules.len(), 23);
     for rule in &rules {
         rule.validate(&()).unwrap();
     }
     let encoded = serde_json::to_vec(&rules).unwrap();
     let (replayed, _): (Vec<BranchRule>, _) =
-        decode_bounded_json(encoded.as_slice(), None, encoded.len()).unwrap();
+        decode_bounded_json(encoded.as_slice(), None, encoded.len(), |bytes| {
+            serde_json::from_slice(bytes)
+        })
+        .unwrap();
     assert_eq!(replayed, rules);
 }
 
@@ -112,7 +124,9 @@ fn required_status_parameters_refuse_malformed_data_at_ingress() {
         r#"{"type":"required_status_checks","parameters":{"required_status_checks":[],"strict_required_status_checks_policy":true,"strict_required_status_checks_policy":false}}"#,
     ] {
         assert_eq!(
-            decode_bounded_json::<BranchRule>(input.as_bytes(), None, input.len()),
+            decode_bounded_json::<BranchRule, _>(input.as_bytes(), None, input.len(), |bytes| {
+                serde_json::from_slice(bytes)
+            }),
             Err(ProviderError::InvalidResponse),
             "{input}"
         );
@@ -135,7 +149,9 @@ fn rule_tags_and_nested_parameters_are_closed() {
         r#"{"type":"max_file_size","parameters":{"max_file_size":-1}}"#,
     ] {
         assert_eq!(
-            decode_bounded_json::<BranchRule>(input.as_bytes(), None, input.len()),
+            decode_bounded_json::<BranchRule, _>(input.as_bytes(), None, input.len(), |bytes| {
+                serde_json::from_slice(bytes)
+            }),
             Err(ProviderError::InvalidResponse),
             "{input}"
         );
@@ -148,7 +164,10 @@ fn rule_tags_and_nested_parameters_are_closed() {
         r#"{"type":"deletion","ruleset_source_type":"Organization"}"#,
     ] {
         let (rule, _): (BranchRule, _) =
-            decode_bounded_json(input.as_bytes(), None, input.len()).unwrap();
+            decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
+                serde_json::from_slice(bytes)
+            })
+            .unwrap();
         rule.validate(&()).unwrap();
     }
 }
@@ -206,7 +225,10 @@ fn derived_rule_validation_checks_parameter_ranges() {
         ),
     ] {
         let (rule, _): (BranchRule, _) =
-            decode_bounded_json(input.as_bytes(), None, input.len()).unwrap();
+            decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
+                serde_json::from_slice(bytes)
+            })
+            .unwrap();
         assert_eq!(rule.validate(&()).is_ok(), valid, "{input}");
     }
 }

@@ -292,7 +292,10 @@ fn github_headers(
 
 pub(super) fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
     let declared = response.content_length();
-    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES).map(|(value, _length)| value)
+    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, |bytes| {
+        serde_json::from_slice(bytes)
+    })
+    .map(|(value, _length)| value)
 }
 
 fn artifact_location(headers: &HeaderMap) -> Result<Url, ProviderError> {
