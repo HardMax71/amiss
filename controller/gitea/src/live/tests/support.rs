@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use amiss_controller::{
@@ -70,24 +70,13 @@ pub(super) const FORGEJO_PROTECTION: &str = r#"{
   "apply_to_admins":true
 }"#;
 
-pub(super) const GITEA_REPOSITORY: &str = r#"{
-  "id":101,
-  "name":"widget",
-  "full_name":"acme/widget",
-  "owner":{"id":12,"login":"acme"},
-  "default_branch":"main",
-  "object_format_name":"sha1",
-  "allow_manual_merge":false
-}"#;
-
-pub(super) const FORGEJO_REPOSITORY: &str = r#"{
-  "id":101,
-  "name":"widget",
-  "full_name":"acme/widget",
-  "owner":{"id":12,"login":"acme"},
-  "default_branch":"main",
-  "object_format_name":"sha1"
-}"#;
+pub(super) static USER: LazyLock<UserRecord> = LazyLock::new(|| {
+    amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/gitea-user.json"),
+        u64::MAX,
+    )
+    .unwrap()
+});
 
 #[derive(Clone)]
 pub(super) struct FakeRest {
@@ -396,22 +385,27 @@ fn protection_for(namespace: &str) -> BranchProtectionRecord {
 }
 
 fn repository_for(namespace: &str) -> RepositoryRecord {
-    let raw = if namespace == "gitea" {
-        GITEA_REPOSITORY
-    } else {
-        FORGEJO_REPOSITORY
-    };
-    serde_json::from_str(raw).unwrap()
+    RepositoryRecord {
+        id: 101,
+        name: "widget".to_owned(),
+        full_name: "acme/widget".to_owned(),
+        owner: UserRecord {
+            id: 12,
+            login: "acme".to_owned(),
+            username: "acme".to_owned(),
+            ..USER.clone()
+        },
+        default_branch: "main".to_owned(),
+        object_format_name: "sha1".to_owned(),
+        allow_manual_merge: (namespace == "gitea").then_some(false),
+    }
 }
 
 fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord) -> RefreshData {
     let target_repository = pull_repository(101, "acme", "widget");
     let head_repository = pull_repository(202, "contributor", "widget");
     RefreshData {
-        reviewer: UserRecord {
-            id: 77,
-            login: "amiss-controller".to_owned(),
-        },
+        reviewer: USER.clone(),
         repository,
         pull_request: PullRequestRecord {
             id: 4201,
@@ -451,6 +445,8 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
             user: Some(UserRecord {
                 id: 88,
                 login: "human".to_owned(),
+                username: "human".to_owned(),
+                ..USER.clone()
             }),
             state: "COMMENT".to_owned(),
             body: "looks interesting".to_owned(),
@@ -469,6 +465,8 @@ fn pull_repository(id: u64, owner: &str, name: &str) -> PullRepositoryRecord {
         owner: UserRecord {
             id: id.saturating_add(1),
             login: owner.to_owned(),
+            username: owner.to_owned(),
+            ..USER.clone()
         },
     }
 }

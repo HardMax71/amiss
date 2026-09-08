@@ -74,6 +74,11 @@ nullable fields without inventing missing modes or timestamps. Unknown fields an
 malformed object IDs, duplicate keys and positional objects are rejected before content
 can prove presence. The returned links are metadata, not URLs the verifier follows.
 
+The Gitea-family adapter also retains complete user profiles, including the compatibility
+username and optional Forgejo pronouns. Authenticated-user lookup uses the bounded lossless
+reader before checking the dedicated reviewer's identity. Unknown fields, missing profile
+keys and unknown visibility values cannot be silently discarded or defaulted.
+
 Every verdict row echoes the plan's document attribution, and the subject block binds
 report, plan, and evidence digests, so the same three inputs always reproduce the same
 assessment, digest included, and a lane can replay the whole chain from artifacts alone.

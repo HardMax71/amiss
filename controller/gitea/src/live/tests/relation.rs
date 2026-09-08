@@ -151,18 +151,8 @@ fn commit_status_requests_and_responses_use_the_native_wire_shape() {
     assert_eq!(head.sha, "b".repeat(40));
     assert_eq!(head.commit.tree.sha, "d".repeat(40));
 
-    let decoded: CommitStatusRecord = serde_json::from_value(serde_json::json!({
-        "id": 42,
-        "creator": {"id": 77, "login": "amiss-controller"},
-        "status": "success",
-        "target_url": "",
-        "description": "amiss-relation-v1: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "context": "Amiss cross-repository",
-        "created_at": "2026-08-31T12:00:00Z",
-        "updated_at": "2026-08-31T12:00:00Z",
-        "url": "https://forge.example/api/v1/repos/acme/widget/statuses/".to_owned() + &"b".repeat(40)
-    }))
-    .unwrap();
+    let decoded: CommitStatusRecord =
+        serde_json::from_str(include_str!("../../../tests/fixtures/commit-status.json")).unwrap();
     assert_eq!(decoded.id, 42);
     assert_eq!(decoded.creator.unwrap().id, 77);
     assert_eq!(decoded.status, "success");
@@ -221,6 +211,8 @@ fn foreign_or_malformed_latest_contexts_are_not_overwritten() {
     latest.creator = Some(UserRecord {
         id: 88,
         login: "another-writer".to_owned(),
+        username: "another-writer".to_owned(),
+        ..super::support::USER.clone()
     });
     assert!(matches!(
         status_decision(&fixture.client.config, expected.clone(), &[latest]),
@@ -312,10 +304,9 @@ fn a_relation_target_must_name_the_configured_reviewer_and_flat_repository() {
 #[test]
 fn the_relation_credential_must_authenticate_as_the_dedicated_reviewer() {
     let fixture = Fixture::mutated("gitea", |data| {
-        data.reviewer = UserRecord {
-            id: 88,
-            login: "another-writer".to_owned(),
-        };
+        data.reviewer.id = 88;
+        data.reviewer.login = "another-writer".to_owned();
+        data.reviewer.username = "another-writer".to_owned();
     });
     let (status, target) = status_fixture(&fixture);
     assert_eq!(
@@ -429,6 +420,8 @@ fn record(fixture: &Fixture, expected: &CreateCommitStatus) -> CommitStatusRecor
         creator: Some(UserRecord {
             id: fixture.client.config.reviewer.id,
             login: fixture.client.config.reviewer.login.clone(),
+            username: fixture.client.config.reviewer.login.clone(),
+            ..super::support::USER.clone()
         }),
         status: expected.state.clone(),
         target_url: expected.target_url.clone(),

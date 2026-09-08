@@ -1,10 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Deserialize)]
-pub(super) struct UserRecord {
-    pub id: u64,
-    pub login: String,
-}
+pub(super) use crate::user::UserRecord;
 
 #[derive(Clone, Deserialize)]
 pub(super) struct RepositoryRecord {

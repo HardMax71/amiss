@@ -6,6 +6,7 @@ mod fetch_plan;
 mod identity;
 mod live;
 mod source;
+pub mod user;
 
 use amiss_controller::{ChangeLocator, ChangeSnapshot, ProviderError, Publication};
 use amiss_wire::model::Oid;

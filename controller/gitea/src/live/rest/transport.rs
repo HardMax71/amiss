@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, decode_bounded_json};
 use reqwest::StatusCode;
-use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::Serialize;
@@ -53,12 +53,13 @@ impl Transport {
         OperationDeadline::after(self.operation_timeout)
     }
 
-    pub(super) fn get<T: DeserializeOwned>(
+    pub(super) fn get<T, E>(
         &self,
         route: &str,
         deadline: OperationDeadline,
+        decode: impl FnOnce(&[u8]) -> Result<T, E>,
     ) -> Result<T, ProviderError> {
-        self.execute(self.client.get(self.url(route)?), deadline)
+        self.execute(self.client.get(self.url(route)?), deadline, decode)
     }
 
     pub(super) fn post<T: DeserializeOwned>(
@@ -67,7 +68,11 @@ impl Transport {
         body: &impl Serialize,
         deadline: OperationDeadline,
     ) -> Result<T, ProviderError> {
-        self.execute(self.client.post(self.url(route)?).json(body), deadline)
+        self.execute(
+            self.client.post(self.url(route)?).json(body),
+            deadline,
+            |bytes| serde_json::from_slice(bytes),
+        )
     }
 
     /// A verification GET whose negative answers are facts: the absence or
@@ -95,10 +100,11 @@ impl Transport {
         }
     }
 
-    fn execute<T: DeserializeOwned>(
+    fn execute<T, E>(
         &self,
         request: RequestBuilder,
         deadline: OperationDeadline,
+        decode: impl FnOnce(&[u8]) -> Result<T, E>,
     ) -> Result<T, ProviderError> {
         let response = self
             .authorized(request)?
@@ -109,7 +115,9 @@ impl Transport {
         if !status.is_success() {
             return Err(map_status(status));
         }
-        decode_body(response)
+        let declared = response.content_length();
+        decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, decode)
+            .map(|(value, _length)| value)
     }
 
     fn authorized(&self, request: RequestBuilder) -> Result<RequestBuilder, ProviderError> {
@@ -128,14 +136,6 @@ impl Transport {
         Url::parse(&format!("{}{route}", self.api_base))
             .map_err(|_defect| ProviderError::InvalidResponse)
     }
-}
-
-fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
-    let declared = response.content_length();
-    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, |bytes| {
-        serde_json::from_slice(bytes)
-    })
-    .map(|(value, _length)| value)
 }
 
 fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GiteaClientError> {

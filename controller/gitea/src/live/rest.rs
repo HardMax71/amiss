@@ -137,7 +137,8 @@ impl HttpRest {
         route: &str,
         deadline: OperationDeadline,
     ) -> Result<T, ProviderError> {
-        self.transport.get(route, deadline)
+        self.transport
+            .get(route, deadline, |bytes| serde_json::from_slice(bytes))
     }
 
     fn reviews(
@@ -171,7 +172,9 @@ impl GiteaRest for HttpRest {
     }
 
     fn current_user(&self, deadline: OperationDeadline) -> Result<UserRecord, ProviderError> {
-        self.get("/user", deadline)
+        self.transport.get("/user", deadline, |bytes| {
+            amiss_wire::read_json(bytes, u64::MAX)
+        })
     }
 
     fn relation_head(

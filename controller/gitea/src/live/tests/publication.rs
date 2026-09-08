@@ -287,6 +287,8 @@ fn a_created_review_is_exact_fresh_and_owned() {
         user: Some(UserRecord {
             id: user,
             login: login.to_owned(),
+            username: login.to_owned(),
+            ..super::support::USER.clone()
         }),
         state: "APPROVED".to_owned(),
         body: "body".to_owned(),

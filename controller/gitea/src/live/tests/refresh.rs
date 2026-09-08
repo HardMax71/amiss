@@ -3,10 +3,7 @@ use amiss_wire::model::ForgeDialect;
 
 use super::super::model::{BranchProtectionRecord, RefreshData, ReviewRecord, UserRecord};
 use super::super::{GiteaClientError, GiteaPullRequest};
-use super::support::{
-    FORGEJO_PROTECTION, FORGEJO_REPOSITORY, Fixture, GITEA_PROTECTION, GITEA_REPOSITORY, commit,
-    oid, resolved,
-};
+use super::support::{FORGEJO_PROTECTION, Fixture, GITEA_PROTECTION, commit, oid, resolved};
 
 #[test]
 fn exact_live_snapshot_accepts_gitea_and_forgejo() {
@@ -75,13 +72,13 @@ fn a_resolver_that_disagrees_with_the_rest_body_fails_closed() {
 
 #[test]
 fn protection_capabilities_are_wire_shaped_not_namespace_shaped() {
-    for (namespace, protection, repository) in [
-        ("gitea", FORGEJO_PROTECTION, FORGEJO_REPOSITORY),
-        ("forgejo", GITEA_PROTECTION, GITEA_REPOSITORY),
+    for (namespace, protection, allow_manual_merge) in [
+        ("gitea", FORGEJO_PROTECTION, None),
+        ("forgejo", GITEA_PROTECTION, Some(false)),
     ] {
         let fixture = Fixture::mutated(namespace, |data| {
             data.protection = serde_json::from_str(protection).unwrap();
-            data.repository = serde_json::from_str(repository).unwrap();
+            data.repository.allow_manual_merge = allow_manual_merge;
         });
         assert_eq!(
             fixture
@@ -238,6 +235,8 @@ fn unrelated_historical_reviews_cannot_brick_the_lane() {
             user: Some(UserRecord {
                 id: 99,
                 login: "former-reviewer".to_owned(),
+                username: "former-reviewer".to_owned(),
+                ..data.reviewer.clone()
             }),
             state: "REMOVED_PROVIDER_STATE".to_owned(),
             body: String::new(),
@@ -269,10 +268,7 @@ fn dedicated_reviewer_rows_are_strict() {
         let fixture = Fixture::mutated("forgejo", |data| {
             let review = ReviewRecord {
                 id: 100,
-                user: Some(UserRecord {
-                    id: 77,
-                    login: "amiss-controller".to_owned(),
-                }),
+                user: Some(data.reviewer.clone()),
                 state: "APPROVED".to_owned(),
                 body: "prior".to_owned(),
                 commit_id: oid('b').as_str().to_owned(),
