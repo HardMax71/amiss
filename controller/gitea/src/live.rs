@@ -213,10 +213,15 @@ impl<R: GiteaRest> Client<R> {
             repository_id: pull_request.repository_id,
             repository_url: repository_url(&repository),
             candidate_commit: pull_request.candidate_commit.clone(),
-            base_commit: data.target.sha.clone(),
+            base_commit: Some(data.target.sha.clone()),
             timeout: deadline.remaining()?,
         })?;
-        if !agrees(&objects.candidate, &data.candidate) || !agrees(&objects.base, &data.target) {
+        if !agrees(&objects.candidate, &data.candidate)
+            || !objects
+                .base
+                .as_ref()
+                .is_some_and(|base| agrees(base, &data.target))
+        {
             return Err(ProviderError::InvalidResponse);
         }
         Ok(objects)

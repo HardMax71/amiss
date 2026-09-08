@@ -6,6 +6,25 @@ use super::super::{GiteaClientError, GiteaPullRequest};
 use super::support::{FORGEJO_PROTECTION, Fixture, GITEA_PROTECTION, commit, oid, resolved};
 
 #[test]
+fn a_pull_request_snapshot_requires_an_independent_base_proof() {
+    let fixture = Fixture::new("gitea");
+    let state = fixture.rest.state.lock().unwrap();
+    let objects = crate::GiteaObjects {
+        candidate: resolved('b', 'd', &['a']),
+        base: None,
+    };
+    assert_eq!(
+        super::super::refresh::snapshot(
+            &fixture.client.config,
+            fixture.pull_request(),
+            &state.data,
+            &objects,
+        ),
+        Err(ProviderError::InvalidResponse)
+    );
+}
+
+#[test]
 fn exact_live_snapshot_accepts_gitea_and_forgejo() {
     for namespace in ["gitea", "forgejo"] {
         let fixture = Fixture::new(namespace);
@@ -52,7 +71,7 @@ fn a_closed_pull_request_is_closed_even_though_it_cannot_merge() {
 fn a_tree_comes_from_the_git_object_never_from_the_commit_that_names_it() {
     let fixture = Fixture::resolving("gitea", |objects| {
         objects.candidate = resolved('b', 'e', &['a']);
-        objects.base = resolved('a', 'f', &[]);
+        objects.base = Some(resolved('a', 'f', &[]));
     });
 
     let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
@@ -489,7 +508,7 @@ fn route_identities_refuse_zero_alone() {
 #[test]
 fn a_base_resolver_that_disagrees_fails_closed() {
     let fixture = Fixture::resolving("gitea", |objects| {
-        objects.base = resolved('c', 'c', &[]);
+        objects.base = Some(resolved('c', 'c', &[]));
     });
     assert!(fixture.client.refresh(fixture.pull_request()).is_err());
 }

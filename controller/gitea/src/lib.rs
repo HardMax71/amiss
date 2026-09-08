@@ -30,7 +30,7 @@ pub struct GiteaCommit {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GiteaObjects {
     pub candidate: GiteaCommit,
-    pub base: GiteaCommit,
+    pub base: Option<GiteaCommit>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -38,7 +38,7 @@ pub struct GiteaObjectRequest {
     pub repository_id: u64,
     pub repository_url: String,
     pub candidate_commit: Oid,
-    pub base_commit: Oid,
+    pub base_commit: Option<Oid>,
     pub timeout: std::time::Duration,
 }
 

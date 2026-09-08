@@ -127,12 +127,15 @@ impl GiteaRest for FakeRest {
         repository: &RepositoryIdentity,
         target: &BranchRef,
         _deadline: OperationDeadline,
-    ) -> Result<CommitRecord, ProviderError> {
+    ) -> Result<(RepositoryRecord, CommitRecord), ProviderError> {
         let mut state = self.state.lock().unwrap();
         state
             .relation_requests
             .push((repository.clone(), target.clone()));
-        Ok(state.data.current_head.clone())
+        Ok((
+            state.data.repository.clone(),
+            state.data.current_head.clone(),
+        ))
     }
 
     fn refresh_data(
@@ -267,7 +270,10 @@ impl Fixture {
                 review_name: "amiss".to_owned(),
             },
             rest: rest.clone(),
-            objects: Arc::new(FakeObjects { objects }),
+            objects: Arc::new(FakeObjects {
+                objects,
+                requests: Mutex::new(Vec::new()),
+            }),
         };
         Self {
             change,
@@ -372,24 +378,29 @@ pub(super) fn resolved(commit: char, tree: char, parents: &[char]) -> GiteaCommi
 fn resolved_objects() -> GiteaObjects {
     GiteaObjects {
         candidate: resolved('b', 'd', &['a']),
-        base: resolved('a', 'c', &[]),
+        base: Some(resolved('a', 'c', &[])),
     }
 }
 
-#[derive(Clone)]
 pub(super) struct FakeObjects {
-    objects: GiteaObjects,
+    pub(super) objects: GiteaObjects,
+    pub(super) requests: Mutex<Vec<GiteaObjectRequest>>,
 }
 
 pub(super) fn objects() -> Arc<dyn GiteaObjectResolver> {
     Arc::new(FakeObjects {
         objects: resolved_objects(),
+        requests: Mutex::new(Vec::new()),
     })
 }
 
 impl GiteaObjectResolver for FakeObjects {
-    fn resolve(&self, _request: &GiteaObjectRequest) -> Result<GiteaObjects, ProviderError> {
-        Ok(self.objects.clone())
+    fn resolve(&self, request: &GiteaObjectRequest) -> Result<GiteaObjects, ProviderError> {
+        self.requests.lock().unwrap().push(request.clone());
+        Ok(GiteaObjects {
+            candidate: self.objects.candidate.clone(),
+            base: request.base_commit.as_ref().and(self.objects.base.clone()),
+        })
     }
 }
 

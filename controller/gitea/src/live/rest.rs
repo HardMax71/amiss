@@ -84,7 +84,7 @@ pub(super) trait GiteaRest: Send + Sync {
         repository: &RepositoryIdentity,
         target: &BranchRef,
         deadline: OperationDeadline,
-    ) -> Result<CommitRecord, ProviderError>;
+    ) -> Result<(RepositoryRecord, CommitRecord), ProviderError>;
 
     fn refresh_data(
         &self,
@@ -182,21 +182,25 @@ impl GiteaRest for HttpRest {
         repository: &RepositoryIdentity,
         target: &BranchRef,
         deadline: OperationDeadline,
-    ) -> Result<CommitRecord, ProviderError> {
+    ) -> Result<(RepositoryRecord, CommitRecord), ProviderError> {
         let branch = target
             .as_str()
             .strip_prefix("refs/heads/")
             .filter(|branch| !branch.is_empty())
             .ok_or(ProviderError::InvalidResponse)?;
-        self.transport.get(
+        let prefix = repository_route(repository.owner(), repository.name());
+        let repository = self.transport.get(&prefix, deadline, |bytes| {
+            amiss_wire::read_json(bytes, u64::MAX)
+        })?;
+        let commit = self.transport.get(
             &format!(
-                "{}/git/commits/{}?stat=false&verification=false&files=false",
-                repository_route(repository.owner(), repository.name()),
+                "{prefix}/git/commits/{}?stat=false&verification=false&files=false",
                 path_segment(branch)
             ),
             deadline,
             |bytes| amiss_wire::read_json(bytes, u64::MAX),
-        )
+        )?;
+        Ok((repository, commit))
     }
 
     fn refresh_data(

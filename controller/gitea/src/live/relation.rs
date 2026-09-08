@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use amiss_controller::{
     IntegrationId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
     RelationSubject, RelationSubjectHead, relation_status_publication,
@@ -6,10 +8,12 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::relation::RelationSnapshot;
 
-use super::model::{CommitStatusRecord, CreateCommitStatus};
-use super::refresh::validate_reviewer;
+use crate::{GiteaObjectRequest, GiteaObjectResolver, fetch_plan::repository_url};
+
+use super::model::{CommitRecord, CommitStatusRecord, CreateCommitStatus, RepositoryRecord};
+use super::refresh::{exact_oid, repository_identity, validate_reviewer};
 use super::rest::GiteaRest;
-use super::{Client, Config};
+use super::{Client, Config, agrees};
 
 const STATUS_DOMAIN: &str = "amiss/controller-gitea-relation-status-v1";
 pub(super) const MARKER: &str = "amiss-relation-v1: ";
@@ -27,20 +31,19 @@ impl<R: GiteaRest> Client<R> {
         validate_relation_scope(&self.config, &subject.scope, subject.object_format)?;
         let deadline = self.rest.deadline()?;
         validate_reviewer(&self.config, &self.rest.current_user(deadline)?)?;
-        let head = self
-            .rest
-            .relation_head(&subject.scope.repository, &subject.target, deadline)?;
-        if head.sha.object_format() != subject.object_format
-            || head.commit.tree.sha.object_format() != subject.object_format
-        {
-            return Err(ProviderError::InvalidResponse);
-        }
+        let (repository, head) =
+            self.rest
+                .relation_head(&subject.scope.repository, &subject.target, deadline)?;
+        let candidate = resolve_snapshot(
+            subject,
+            &repository,
+            &head,
+            self.objects.as_ref(),
+            deadline.remaining()?,
+        )?;
         Ok(RelationSubjectHead {
             subject: subject.clone(),
-            candidate: RelationSnapshot {
-                commit: head.sha,
-                tree: head.commit.tree.sha,
-            },
+            candidate,
         })
     }
 
@@ -75,6 +78,37 @@ impl<R: GiteaRest> Client<R> {
             }
         }
     }
+}
+
+pub(super) fn resolve_snapshot(
+    subject: &RelationSubject,
+    repository: &RepositoryRecord,
+    head: &CommitRecord,
+    resolver: &dyn GiteaObjectResolver,
+    timeout: Duration,
+) -> Result<RelationSnapshot, ProviderError> {
+    let identity = &subject.scope.repository;
+    if repository_identity(identity.host(), repository)? != *identity
+        || repository.object_format_name != subject.object_format
+        || head.sha.object_format() != subject.object_format
+        || head.commit.tree.sha.object_format() != subject.object_format
+    {
+        return Err(ProviderError::InvalidResponse);
+    }
+    let objects = resolver.resolve(&GiteaObjectRequest {
+        repository_id: repository.id,
+        repository_url: repository_url(identity),
+        candidate_commit: head.sha.clone(),
+        base_commit: None,
+        timeout,
+    })?;
+    if objects.base.is_some() || !agrees(&objects.candidate, head) {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(RelationSnapshot {
+        commit: head.sha.clone(),
+        tree: exact_oid(&objects.candidate.tree)?,
+    })
 }
 
 pub(super) fn relation_commit_status(

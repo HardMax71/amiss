@@ -4,6 +4,9 @@
     reason = "fixed provider fixtures must fail loudly"
 )]
 
+use std::sync::Mutex;
+use std::time::Duration;
+
 use amiss_controller::{
     ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, IntegrationId, LeaseFence,
     PlanScope, ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
@@ -14,11 +17,157 @@ use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
-use super::super::model::{CommitRecord, CommitStatusRecord, CreateCommitStatus, UserRecord};
-use super::super::relation::{
-    MARKER, StatusDecision, relation_commit_status, status_decision, validate_created,
+use crate::{GiteaCommit, GiteaObjectRequest, GiteaObjects};
+
+use super::super::model::{
+    CommitRecord, CommitStatusRecord, CreateCommitStatus, RepositoryRecord, UserRecord,
 };
-use super::support::Fixture;
+use super::super::relation::{
+    MARKER, StatusDecision, relation_commit_status, resolve_snapshot, status_decision,
+    validate_created,
+};
+use super::support::{FakeObjects, Fixture, oid, resolved};
+
+#[test]
+fn relation_trees_come_from_exact_git_objects_not_api_metadata() {
+    for namespace in ["gitea", "forgejo"] {
+        let fixture = Fixture::new(namespace);
+        let subject = subject_fixture(&fixture);
+        let mut state = fixture.rest.state.lock().unwrap();
+        state.data.current_head.commit.tree.sha = state.data.current_head.sha.clone();
+        state.data.repository.clone_url = "https://attacker.invalid/repository.git".to_owned();
+        let objects = FakeObjects {
+            objects: GiteaObjects {
+                candidate: resolved('b', 'd', &['a']),
+                base: None,
+            },
+            requests: Mutex::new(Vec::new()),
+        };
+        assert_eq!(
+            resolve_snapshot(
+                &subject,
+                &state.data.repository,
+                &state.data.current_head,
+                &objects,
+                Duration::from_secs(3),
+            ),
+            Ok(RelationSnapshot {
+                commit: oid('b'),
+                tree: oid('d')
+            })
+        );
+        assert_eq!(
+            *objects.requests.lock().unwrap(),
+            [GiteaObjectRequest {
+                repository_id: 101,
+                repository_url: "https://forge.example/acme/widget.git".to_owned(),
+                candidate_commit: oid('b'),
+                base_commit: None,
+                timeout: Duration::from_secs(3),
+            }]
+        );
+    }
+}
+
+#[test]
+fn a_foreign_relation_repository_is_rejected_before_object_resolution() {
+    let fixture = Fixture::new("gitea");
+    let subject = subject_fixture(&fixture);
+    let state = fixture.rest.state.lock().unwrap();
+    let repository = &state.data.repository;
+    let objects = FakeObjects {
+        objects: GiteaObjects {
+            candidate: resolved('b', 'd', &['a']),
+            base: None,
+        },
+        requests: Mutex::new(Vec::new()),
+    };
+    for malformed in [
+        RepositoryRecord {
+            id: 0,
+            ..repository.clone()
+        },
+        RepositoryRecord {
+            name: "other".to_owned(),
+            ..repository.clone()
+        },
+        RepositoryRecord {
+            full_name: "acme/other".to_owned(),
+            ..repository.clone()
+        },
+        RepositoryRecord {
+            owner: UserRecord {
+                login: "other".to_owned(),
+                ..repository.owner.clone()
+            },
+            ..repository.clone()
+        },
+        RepositoryRecord {
+            object_format_name: ObjectFormat::Sha256,
+            ..repository.clone()
+        },
+    ] {
+        assert_eq!(
+            resolve_snapshot(
+                &subject,
+                &malformed,
+                &state.data.current_head,
+                &objects,
+                Duration::from_secs(3),
+            ),
+            Err(ProviderError::InvalidResponse)
+        );
+    }
+    assert!(objects.requests.lock().unwrap().is_empty());
+}
+
+#[test]
+fn an_independent_relation_proof_must_agree_with_the_exact_commit_and_parents() {
+    let fixture = Fixture::new("forgejo");
+    let subject = subject_fixture(&fixture);
+    let state = fixture.rest.state.lock().unwrap();
+    let correct = resolved('b', 'd', &['a']);
+    for candidate in [
+        GiteaCommit {
+            id: oid('c').as_str().to_owned(),
+            ..correct.clone()
+        },
+        GiteaCommit {
+            parents: Vec::new(),
+            ..correct.clone()
+        },
+        GiteaCommit {
+            parents: vec![oid('c').as_str().to_owned()],
+            ..correct.clone()
+        },
+        GiteaCommit {
+            tree: "not-an-object-id".to_owned(),
+            ..correct.clone()
+        },
+        GiteaCommit {
+            tree: "d".repeat(64),
+            ..correct
+        },
+    ] {
+        let objects = FakeObjects {
+            objects: GiteaObjects {
+                candidate,
+                base: None,
+            },
+            requests: Mutex::new(Vec::new()),
+        };
+        assert_eq!(
+            resolve_snapshot(
+                &subject,
+                &state.data.repository,
+                &state.data.current_head,
+                &objects,
+                Duration::from_secs(3),
+            ),
+            Err(ProviderError::InvalidResponse)
+        );
+    }
+}
 
 #[test]
 fn wrong_format_commit_or_tree_is_not_a_finality_fact() {
@@ -81,8 +230,8 @@ fn both_families_resolve_heads_and_publish_idempotent_statuses() {
             Ok(RelationSubjectHead {
                 subject: subject.clone(),
                 candidate: RelationSnapshot {
-                    commit: super::support::oid('b'),
-                    tree: super::support::oid('d'),
+                    commit: oid('b'),
+                    tree: oid('d'),
                 },
             })
         );

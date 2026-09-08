@@ -25,16 +25,21 @@ fn a_request_for_another_repository_never_fetches() -> Result<(), Box<dyn std::e
     )
     .ok_or("the resolver is not configurable")?;
 
-    let mut foreign = request(7)?;
-    foreign.repository_url = "https://attacker.invalid/acme/widget.git".to_owned();
-    assert_eq!(
-        objects.resolve(&foreign),
-        Err(ProviderError::InvalidResponse)
-    );
-    assert_eq!(
-        objects.resolve(&request(8)?),
-        Err(ProviderError::InvalidResponse)
-    );
+    for base_commit in [None, request(7)?.base_commit] {
+        let mut foreign = request(7)?;
+        foreign.base_commit = base_commit;
+        foreign.repository_url = "https://attacker.invalid/acme/widget.git".to_owned();
+        assert_eq!(
+            objects.resolve(&foreign),
+            Err(ProviderError::InvalidResponse)
+        );
+        foreign.repository_url = REPOSITORY_URL.to_owned();
+        foreign.repository_id = 8;
+        assert_eq!(
+            objects.resolve(&foreign),
+            Err(ProviderError::InvalidResponse)
+        );
+    }
     Ok(())
 }
 
@@ -60,7 +65,7 @@ fn request(repository_id: u64) -> Result<GiteaObjectRequest, Box<dyn std::error:
         repository_id,
         repository_url: REPOSITORY_URL.to_owned(),
         candidate_commit: oid(&"a".repeat(40))?,
-        base_commit: oid(&"b".repeat(40))?,
+        base_commit: Some(oid(&"b".repeat(40))?),
         timeout: Duration::from_secs(1),
     })
 }

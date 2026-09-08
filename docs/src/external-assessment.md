@@ -84,7 +84,11 @@ metadata through the same reader. Disabled metadata remains explicit null, while
 lists must be supplied. A nonempty malformed page cannot prove commit presence; an empty
 successful page remains unknown. Object IDs stay typed through refresh and relation
 consumers. Parsing an API tree identifier does not establish that it names the actual Git
-tree; refresh continues to use independently resolved Git objects.
+tree. Refresh and relation-head resolution use independently resolved Git objects.
+Relation resolution binds the repository identity and the exact API-resolved commit to
+the configured Git source, verifies commit/parent agreement, and takes the tree from Git.
+It does not resolve the moving branch again or follow a returned clone URL. A relation
+needs one commit proof; pull-request checks still require both candidate and base proofs.
 
 Repository visibility and refresh decode complete repository records, also reused for
 pull-request repositories and fork parents. Provider-specific omission and explicit null

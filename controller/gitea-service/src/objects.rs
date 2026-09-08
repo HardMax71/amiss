@@ -46,22 +46,29 @@ impl GiteaObjectResolver for GiteaGitObjects {
         {
             return Err(ProviderError::InvalidResponse);
         }
-        let [candidate, base] = self.source.resolve(
-            [
-                ResolveWant {
-                    oid: &request.candidate_commit,
-                    reference: CANDIDATE_REF,
-                },
-                ResolveWant {
-                    oid: &request.base_commit,
-                    reference: BASE_REF,
-                },
-            ],
-            request.timeout,
-        )?;
+        let candidate = ResolveWant {
+            oid: &request.candidate_commit,
+            reference: CANDIDATE_REF,
+        };
+        let (candidate, base) = if let Some(base) = &request.base_commit {
+            let [candidate, base] = self.source.resolve(
+                [
+                    candidate,
+                    ResolveWant {
+                        oid: base,
+                        reference: BASE_REF,
+                    },
+                ],
+                request.timeout,
+            )?;
+            (candidate, Some(base))
+        } else {
+            let [candidate] = self.source.resolve([candidate], request.timeout)?;
+            (candidate, None)
+        };
         Ok(GiteaObjects {
             candidate: commit(candidate),
-            base: commit(base),
+            base: base.map(commit),
         })
     }
 }

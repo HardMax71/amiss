@@ -82,14 +82,18 @@ pub(super) fn snapshot(
         .ok_or(ProviderError::InvalidResponse)
         .and_then(|commit| exact_oid(&commit.id))?;
     let candidate_tree = exact_oid(&objects.candidate.tree)?;
-    let base_tree = exact_oid(&objects.base.tree)?;
+    let base_object = objects
+        .base
+        .as_ref()
+        .ok_or(ProviderError::InvalidResponse)?;
+    let base_tree = exact_oid(&base_object.tree)?;
     let merge_base = exact_oid(&data.pull_request.merge_base)?;
     if candidate != *pull_request.candidate_commit
         || current_head != *fetched_head
         || data.pull_request.base.sha != data.target.sha.as_str()
         || base != branch_base
         || objects.candidate.id != candidate.as_str()
-        || objects.base.id != base.as_str()
+        || base_object.id != base.as_str()
     {
         return Err(ProviderError::InvalidResponse);
     }
@@ -177,27 +181,23 @@ fn validate_change(
     repository: &RepositoryRecord,
     authoritative: &PullRequestRecord,
 ) -> Result<(), ProviderError> {
-    let repository_identity = repository_identity(
-        config,
-        &repository.owner.login,
-        &repository.name,
-        &repository.full_name,
-    )?;
+    let host = config.provider.instance.as_str();
+    let identity = repository_identity(host, repository)?;
     let base_repository = authoritative
         .base
         .repo
         .as_ref()
         .ok_or(ProviderError::InvalidResponse)?;
-    let base_identity = pull_repository_identity(config, base_repository)?;
+    let base_identity = repository_identity(host, base_repository)?;
     let head_identity = authoritative
         .head
         .repo
         .as_ref()
-        .map(|head| pull_repository_identity(config, head))
+        .map(|head| repository_identity(host, head))
         .transpose()?;
     valid_response(
         repository.id == pull_request.repository_id
-            && repository_identity == pull_request.change.repository
+            && identity == pull_request.change.repository
             && repository.object_format_name == ObjectFormat::Sha1
             && base_repository.id == pull_request.repository_id
             && base_identity == pull_request.change.repository
@@ -345,34 +345,20 @@ fn extensions_satisfy(
         .all(allowlist)
 }
 
-fn repository_identity(
-    config: &Config,
-    owner: &str,
-    name: &str,
-    full_name: &str,
-) -> Result<RepositoryIdentity, ProviderError> {
-    let owner = owner.to_ascii_lowercase();
-    let name = name.to_ascii_lowercase();
-    if !full_name.eq_ignore_ascii_case(&format!("{owner}/{name}")) {
-        return Err(ProviderError::InvalidResponse);
-    }
-    RepositoryIdentity::new(config.provider.instance.as_str().to_owned(), owner, name)
-        .ok_or(ProviderError::InvalidResponse)
-}
-
-fn pull_repository_identity(
-    config: &Config,
+pub(super) fn repository_identity(
+    host: &str,
     repository: &RepositoryRecord,
 ) -> Result<RepositoryIdentity, ProviderError> {
-    (repository.id > 0)
-        .then_some(())
-        .ok_or(ProviderError::InvalidResponse)?;
-    repository_identity(
-        config,
-        &repository.owner.login,
-        &repository.name,
-        &repository.full_name,
-    )
+    let owner = repository.owner.login.to_ascii_lowercase();
+    let name = repository.name.to_ascii_lowercase();
+    if repository.id == 0
+        || !repository
+            .full_name
+            .eq_ignore_ascii_case(&format!("{owner}/{name}"))
+    {
+        return Err(ProviderError::InvalidResponse);
+    }
+    RepositoryIdentity::new(host.to_owned(), owner, name).ok_or(ProviderError::InvalidResponse)
 }
 
 pub(super) fn exact_oid(raw: &str) -> Result<Oid, ProviderError> {
