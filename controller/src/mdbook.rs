@@ -13,6 +13,8 @@ mod context;
 mod html;
 mod model;
 
+pub use model::{Book, BookItem, Chapter};
+
 use context::{BuildPages, pages, render_context, site_build_context};
 use html::{page_facts, reachable_sources};
 

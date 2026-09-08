@@ -5,6 +5,7 @@
 
 use std::{borrow::Cow, fs};
 
+use amiss_controller::mdbook::{BookItem, Chapter};
 use amiss_controller::{
     MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, SiteBuildContext,
     mdbook_site_evidence, mdbook_site_expectation,
@@ -18,25 +19,19 @@ use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use serde_json::json;
 
-fn chapter(
-    path: Option<&str>,
-    source_path: Option<&str>,
-    sub_items: &[serde_json::Value],
-) -> serde_json::Value {
-    json!({
-        "Chapter": {
-            "content": "ignored by the evidence projection",
-            "name": "fixture",
-            "number": null,
-            "parent_names": [],
-            "path": path,
-            "source_path": source_path,
-            "sub_items": sub_items
-        }
+fn chapter(path: Option<&str>, source_path: Option<&str>, sub_items: &[BookItem]) -> BookItem {
+    BookItem::Chapter(Chapter {
+        content: "not interpreted by the evidence projection".to_owned(),
+        name: "fixture".to_owned(),
+        number: None,
+        parent_names: Vec::new(),
+        path: path.map(str::to_owned),
+        source_path: source_path.map(str::to_owned),
+        sub_items: sub_items.to_vec(),
     })
 }
 
-fn context(version: &str, html_renderer: bool, items: &[serde_json::Value]) -> Vec<u8> {
+fn context(version: &str, html_renderer: bool, items: &[BookItem]) -> Vec<u8> {
     let output = if html_renderer {
         json!({"html": {}})
     } else {
@@ -90,7 +85,7 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
         true,
         &[
             chapter(Some("intro.md"), Some("README.md"), &[nested]),
-            json!("Separator"),
+            BookItem::Separator,
         ],
     );
     let candidate = hb("amiss/test-mdbook-candidate", b"candidate");
@@ -349,6 +344,12 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
         ("/book/items/0/Chapter/path", json!(false)),
         ("/book/items/0/Chapter/source_path", json!([])),
         ("/book/items/0/Chapter/sub_items", json!(null)),
+        ("/book/items/0/Chapter/name", json!(false)),
+        ("/book/items/0/Chapter/content", json!([])),
+        ("/book/items/0/Chapter/number", json!([4_294_967_296_u64])),
+        ("/book/items/0/Chapter/parent_names", json!([false])),
+        ("/root", json!(null)),
+        ("/destination", json!([])),
         ("/config/book/src", json!(null)),
         ("/config/book/src", json!(false)),
     ] {
@@ -363,7 +364,15 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
             "{path}: {changed}"
         );
     }
-    for required in ["path", "source_path", "sub_items"] {
+    for required in [
+        "name",
+        "content",
+        "number",
+        "path",
+        "source_path",
+        "sub_items",
+        "parent_names",
+    ] {
         let mut changed = original.clone();
         changed["book"]["items"][0]["Chapter"]
             .as_object_mut()
@@ -420,8 +429,7 @@ fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth
     for _ in 0..256 {
         nested = json!([nested]);
     }
-    changed["config"]["future-renderer-options"] = nested.clone();
-    changed["book"]["items"][0]["Chapter"]["future-metadata"] = nested;
+    changed["config"]["future-renderer-options"] = nested;
     let compact = serde_json::to_vec(&changed).unwrap();
     let pretty = serde_json::to_vec_pretty(&changed).unwrap();
     let evidence = mdbook_site_evidence(candidate, &site, &compact, &output(&root)).unwrap();

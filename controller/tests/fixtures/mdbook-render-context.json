@@ -1,0 +1,33 @@
+{
+  "version": "0.5.4",
+  "root": "/operator/book",
+  "book": {
+    "items": [
+      {
+        "Chapter": {
+          "name": "Introduction",
+          "content": "# Introduction\n\nA renderer contract probe.\n",
+          "number": null,
+          "sub_items": [],
+          "path": "intro.md",
+          "source_path": "intro.md",
+          "parent_names": []
+        }
+      }
+    ]
+  },
+  "config": {
+    "book": {
+      "title": "Typed context probe",
+      "authors": ["Amiss"],
+      "description": null,
+      "language": "en",
+      "text-direction": null
+    },
+    "output": {
+      "capture": { "command": "jq -c ." },
+      "html": { "additional-css": [] }
+    }
+  },
+  "destination": "/operator/book/book/capture"
+}

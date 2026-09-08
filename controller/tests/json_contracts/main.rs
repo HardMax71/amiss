@@ -11,6 +11,7 @@ use amiss_wire::digest::sha256;
 
 mod external_evidence;
 mod failure_tags;
+mod mdbook;
 mod relation_binding;
 mod semantic_binding;
 

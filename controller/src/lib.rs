@@ -17,7 +17,7 @@ mod file_ledger;
 mod identity;
 mod ingress;
 mod intersphinx;
-mod mdbook;
+pub mod mdbook;
 mod orchestration;
 mod plans;
 mod provider;

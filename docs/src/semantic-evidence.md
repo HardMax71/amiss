@@ -282,7 +282,8 @@ and `source_path`, rather than reconstructing routes from `SUMMARY.md`, so the b
 original repository source, when one exists, remain distinct after preprocessing. The first
 rendered chapter's independent `index.html` copy is read separately. Every other route follows the
 HTML renderer's `.html` path rule beneath one trusted publication prefix, with URI path segments
-encoded from the actual output names.
+encoded from the actual output names. The pinned outer context and chapter fields are checked,
+including required nullable chapter numbers and paths; unknown fields there refuse the input.
 
 The producer reads only the rendered pages named by the context, with one 16 MiB context
 ceiling and one 16 MiB aggregate HTML ceiling. A no-follow directory capability bounds every page

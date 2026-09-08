@@ -1,12 +1,15 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, de::IgnoredAny};
+use serde::{Deserialize, Serialize, de::IgnoredAny};
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub(super) struct RenderContext {
     pub(super) version: String,
+    pub(super) root: String,
     pub(super) config: serde_json::Value,
     pub(super) book: Book,
+    pub(super) destination: String,
 }
 
 #[derive(Deserialize)]
@@ -31,23 +34,30 @@ pub(super) struct HtmlOutput {
     pub(super) html: BTreeMap<String, IgnoredAny>,
 }
 
-#[derive(Deserialize)]
-pub(super) struct Book {
-    pub(super) items: Vec<BookItem>,
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Book {
+    pub items: Vec<BookItem>,
 }
 
-#[derive(Deserialize)]
-pub(super) enum BookItem {
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+pub enum BookItem {
     Chapter(Chapter),
     Separator,
     PartTitle(String),
 }
 
-#[derive(Deserialize)]
-pub(super) struct Chapter {
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Chapter {
+    pub name: String,
+    pub content: String,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub(super) path: Option<String>,
+    pub number: Option<Vec<u32>>,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub(super) source_path: Option<String>,
-    pub(super) sub_items: Vec<BookItem>,
+    pub path: Option<String>,
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub source_path: Option<String>,
+    pub sub_items: Vec<BookItem>,
+    pub parent_names: Vec<String>,
 }
