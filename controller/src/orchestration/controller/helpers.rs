@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use amiss_wire::{external::ExternalVerdict, model::Oid};
+use amiss_wire::{
+    external::{EXTERNAL_DOCUMENT_BYTES, ExternalVerdict},
+    model::Oid,
+};
 
 use crate::{
     AcceptedDelivery, ArtifactBundle, ArtifactError, ArtifactReference, AuthenticatedDelivery,
@@ -340,12 +343,8 @@ fn prepare_external(
         let plan =
             amiss_wire::external::plan(&report, &engine.engine_version, engine.engine_digest)?;
         let mut bytes = Vec::new();
-        amiss_wire::write_json(
-            &plan,
-            &mut bytes,
-            amiss_wire::external::EXTERNAL_DOCUMENT_BYTES,
-        )
-        .map_err(|_defect| amiss_wire::external::PlanDefect::MalformedExternal)?;
+        amiss_wire::write_json(&plan, &mut bytes, EXTERNAL_DOCUMENT_BYTES)
+            .map_err(|_defect| amiss_wire::external::PlanDefect::MalformedExternal)?;
         Ok((plan, bytes, report.payload.engine))
     });
     let Ok((plan, plan_bytes, engine)) = planned else {
@@ -354,81 +353,66 @@ fn prepare_external(
             ..PreparedExternal::default()
         };
     };
-    let Some(now) = clock.now_unix_millis() else {
-        return PreparedExternal {
-            plan: Some(plan_bytes),
-            incomplete: true,
-            ..PreparedExternal::default()
-        };
+    let prepared = PreparedExternal {
+        plan: Some(plan_bytes),
+        evidence: None,
+        assessment: None,
+        tally: None,
+        incomplete: true,
     };
-    match adapter.verify_external(&plan, &now.to_string()) {
-        Ok(Some(evidence)) => {
-            let assessed = amiss_wire::external::parse_evidence(&evidence)
-                .map_err(amiss_wire::external::AssessDefect::Evidence)
-                .and_then(|(evidence, _)| {
-                    amiss_wire::external::assess(
-                        &plan,
-                        &evidence,
-                        &engine.engine_version,
-                        engine.engine_digest,
-                    )
-                });
-            match assessed {
-                Ok(assessment) => {
-                    let mut assessment_bytes = Vec::new();
-                    if amiss_wire::write_json(
-                        &assessment,
-                        &mut assessment_bytes,
-                        amiss_wire::external::EXTERNAL_DOCUMENT_BYTES,
-                    )
-                    .is_err()
-                    {
-                        return PreparedExternal {
-                            plan: Some(plan_bytes),
-                            evidence: Some(evidence),
-                            incomplete: true,
-                            ..PreparedExternal::default()
-                        };
-                    }
-                    let mut tally = super::ExternalTally::default();
-                    for row in assessment.payload.verdicts {
-                        match row.verdict {
-                            ExternalVerdict::Refuted => {
-                                tally.refuted = tally.refuted.saturating_add(1);
-                            }
-                            ExternalVerdict::Unproven => {
-                                tally.unproven = tally.unproven.saturating_add(1);
-                            }
-                            ExternalVerdict::Reachable => {
-                                tally.reachable = tally.reachable.saturating_add(1);
-                            }
-                        }
-                    }
-                    PreparedExternal {
-                        plan: Some(plan_bytes),
-                        evidence: Some(evidence),
-                        assessment: Some(assessment_bytes),
-                        tally: Some(tally),
-                        incomplete: false,
-                    }
-                }
-                Err(_defect) => PreparedExternal {
-                    plan: Some(plan_bytes),
-                    evidence: Some(evidence),
-                    incomplete: true,
-                    ..PreparedExternal::default()
-                },
+    let Some(now) = clock.now_unix_millis() else {
+        return prepared;
+    };
+    let evidence = match adapter.verify_external(&plan, &now.to_string()) {
+        Ok(Some(evidence)) => evidence,
+        Ok(None) => {
+            return PreparedExternal {
+                incomplete: false,
+                ..prepared
+            };
+        }
+        Err(_defect) => return prepared,
+    };
+    let mut evidence_bytes = Vec::new();
+    if amiss_wire::write_json(&evidence, &mut evidence_bytes, EXTERNAL_DOCUMENT_BYTES).is_err() {
+        return prepared;
+    }
+    let prepared = PreparedExternal {
+        evidence: Some(evidence_bytes),
+        ..prepared
+    };
+    let Ok(assessment) = amiss_wire::external::assess(
+        &plan,
+        &evidence,
+        &engine.engine_version,
+        engine.engine_digest,
+    ) else {
+        return prepared;
+    };
+    let mut assessment_bytes = Vec::new();
+    if amiss_wire::write_json(&assessment, &mut assessment_bytes, EXTERNAL_DOCUMENT_BYTES).is_err()
+    {
+        return prepared;
+    }
+    let mut tally = super::ExternalTally::default();
+    for row in assessment.payload.verdicts {
+        match row.verdict {
+            ExternalVerdict::Refuted => {
+                tally.refuted = tally.refuted.saturating_add(1);
+            }
+            ExternalVerdict::Unproven => {
+                tally.unproven = tally.unproven.saturating_add(1);
+            }
+            ExternalVerdict::Reachable => {
+                tally.reachable = tally.reachable.saturating_add(1);
             }
         }
-        Ok(None) => PreparedExternal {
-            plan: Some(plan_bytes),
-            ..PreparedExternal::default()
-        },
-        Err(_defect) => PreparedExternal {
-            plan: Some(plan_bytes),
-            incomplete: true,
-            ..PreparedExternal::default()
-        },
+    }
+    PreparedExternal {
+        assessment: Some(assessment_bytes),
+        tally: Some(tally),
+        incomplete: false,
+        ..prepared
     }
 }
 

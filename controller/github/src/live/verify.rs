@@ -11,7 +11,7 @@ use super::rest::{GitHubVerification, Presence, RefFamily};
 pub(super) const PRODUCER_NAME: &str = "amiss-controller-github";
 
 /// Verifies the plan's introduced destinations shaped for this host through
-/// the forge API and returns the evidence file. Facts only, never verdicts:
+/// the forge API and returns typed evidence. Facts only, never verdicts:
 /// an answer the API refused or could not give omits the field it would
 /// have filled, and a standing unavailability ends the walk early with the
 /// rows already learned, since partial evidence beats none and a skipped
@@ -22,7 +22,7 @@ pub(super) fn verify_external<R: GitHubVerification>(
     host: &str,
     producer_version: &str,
     checked_at: &str,
-) -> Result<Vec<u8>, ProviderError> {
+) -> Result<amiss_wire::external::ExternalEvidence, ProviderError> {
     forge_evidence(
         plan,
         ForgeProducer {

@@ -92,7 +92,7 @@ pub trait GiteaApi: Send + Sync {
         &self,
         _plan: &amiss_wire::external::ExternalPlanEnvelope,
         _checked_at: &str,
-    ) -> Result<Option<Vec<u8>>, ProviderError> {
+    ) -> Result<Option<amiss_wire::external::ExternalEvidence>, ProviderError> {
         Ok(None)
     }
 }

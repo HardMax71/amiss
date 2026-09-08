@@ -211,11 +211,9 @@ fn every_visibility_and_resolution_becomes_its_fact() {
             "https://github.com/acme/widgets/tree/feature/x/docs/ readable resolved".to_owned(),
         ],
     );
-    let (document, _digest) =
-        amiss_wire::external::parse_evidence(&evidence).expect("the evidence is valid");
-    assert_eq!(document.producer.name, PRODUCER_NAME);
+    assert_eq!(evidence.producer.name, PRODUCER_NAME);
     assert_eq!(
-        document.plan_payload_digest, plan.payload_digest,
+        evidence.plan_payload_digest, plan.payload_digest,
         "the evidence binds the exact plan"
     );
 }
@@ -329,7 +327,6 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
     };
     let evidence =
         verify_external(&rest, &plan, "github.com", "0.0.0", "t0").expect("evidence is produced");
-    let (evidence, _) = amiss_wire::external::parse_evidence(&evidence).unwrap();
     let assessment = assess(
         &plan,
         &evidence,

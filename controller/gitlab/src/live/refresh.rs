@@ -26,7 +26,7 @@ impl GitLabApi for GitLabClient {
         &self,
         plan: &amiss_wire::external::ExternalPlanEnvelope,
         checked_at: &str,
-    ) -> Result<Option<Vec<u8>>, ProviderError> {
+    ) -> Result<Option<amiss_wire::external::ExternalEvidence>, ProviderError> {
         super::verify::verify_external(
             self,
             plan,

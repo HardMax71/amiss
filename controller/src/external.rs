@@ -2,11 +2,12 @@ mod tests;
 
 use amiss_wire::external::{
     ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
-    ExternalPlanEnvelope, ExternalRepository, evidence, validate_plan_envelope,
+    ExternalPlanEnvelope, ExternalRepository, validate_plan_envelope,
 };
 pub use amiss_wire::external::{ForgeRepository as ForgeVisibility, ForgeTail};
 use amiss_wire::model::ForgeDialect;
 use strum::AsRefStr;
+use wary::Validate;
 
 use crate::ProviderError;
 
@@ -69,18 +70,19 @@ pub fn forge_repository_evidence(
 
 /// Verifies the introduced forge destinations belonging to one dialect and
 /// host, preserving partial evidence when the provider becomes unavailable.
+/// Callers enforce the artifact byte ceiling when writing the returned facts.
 ///
 /// # Errors
 ///
-/// Returns [`ProviderError::InvalidResponse`] when the plan is not bound or an
-/// evidence file cannot be formed, and propagates non-availability provider
+/// Returns [`ProviderError::InvalidResponse`] when the plan is not bound or
+/// evidence violates its contract, and propagates non-availability provider
 /// defects returned while preparing or inspecting the provider.
 pub fn forge_evidence<S>(
     plan: &ExternalPlanEnvelope,
     producer: ForgeProducer<'_>,
     prepare: impl FnOnce() -> Result<S, ProviderError>,
     mut inspect: impl FnMut(&mut S, &ExternalRepository) -> Result<ForgeEvidence, ProviderError>,
-) -> Result<Vec<u8>, ProviderError> {
+) -> Result<ExternalEvidence, ProviderError> {
     validate_plan_envelope(plan).map_err(|_defect| ProviderError::InvalidResponse)?;
     let mut state = prepare()?;
     let mut rows = Vec::new();
@@ -112,7 +114,7 @@ pub fn forge_evidence<S>(
             break;
         }
     }
-    evidence(&ExternalEvidence {
+    let evidence = ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
         plan_payload_digest: plan.payload_digest,
         producer: ExternalEvidenceProducer {
@@ -120,6 +122,9 @@ pub fn forge_evidence<S>(
             version: producer.version.to_owned(),
         },
         rows,
-    })
-    .map_err(|_defect| ProviderError::InvalidResponse)
+    };
+    evidence
+        .validate(&())
+        .map_err(|_defect| ProviderError::InvalidResponse)?;
+    Ok(evidence)
 }

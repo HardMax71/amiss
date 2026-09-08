@@ -52,7 +52,7 @@ fn an_invalid_plan_spends_no_provider_budget() {
         assert_eq!(prepared, accepted);
         assert_eq!(inspected, accepted);
         if accepted {
-            let (evidence, _) = amiss_wire::external::parse_evidence(&result.unwrap()).unwrap();
+            let evidence = result.unwrap();
             assert_eq!(evidence.plan_payload_digest, plan.payload_digest);
             assert_eq!(evidence.rows.len(), 1);
         } else {

@@ -3,13 +3,14 @@ use std::sync::atomic::Ordering;
 use std::time::Duration;
 
 use amiss_controller::{
-    ArtifactStoreConfig, ChangeState, CheckConclusion, Controller, Evaluation, ExternalPolicy,
-    ExternalTally, FileArtifactStore, FileLedger, FileLedgerConfig, HandleOutcome, ProviderError,
-    ReplayWindow, RunnerOutcome, SystemClock, check_plan,
+    ArtifactComponent, ArtifactStoreConfig, ChangeState, CheckConclusion, Controller, Evaluation,
+    ExternalPolicy, ExternalTally, FileArtifactStore, FileLedger, FileLedgerConfig, HandleOutcome,
+    ProviderError, ReplayWindow, RunnerOutcome, check_plan,
 };
+use amiss_controller_fixtures::clock::TestClock;
 use amiss_wire::external::{
     ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
-    ForgeRepository, ForgeTail, evidence,
+    ForgeRepository, ForgeTail,
 };
 
 use crate::support::{
@@ -38,7 +39,7 @@ fn external_outcome(run: &amiss_controller::RunIdentity) -> RunnerOutcome {
     }
 }
 
-fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Vec<u8> {
+fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> ExternalEvidence {
     let report = amiss_fixtures::external_report(&[DESTINATION]).unwrap();
     let (report, _verdict) = amiss_wire::report::validate_envelope(&report).unwrap();
     let plan = amiss_wire::external::plan(
@@ -47,7 +48,7 @@ fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Ve
         report.payload.engine.engine_digest,
     )
     .unwrap();
-    evidence(&ExternalEvidence {
+    ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
         plan_payload_digest: plan.payload_digest,
         producer: ExternalEvidenceProducer {
@@ -60,8 +61,7 @@ fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Ve
             tail,
             checked_at: "t0".to_owned(),
         }],
-    })
-    .unwrap()
+    }
 }
 
 fn set_external_policy<L, R>(controller: &mut Controller<L, R>, external_policy: ExternalPolicy) {
@@ -73,7 +73,7 @@ fn set_external_policy<L, R>(controller: &mut Controller<L, R>, external_policy:
 
 fn published_with(
     external_policy: ExternalPolicy,
-    verify: impl IntoIterator<Item = Result<Option<Vec<u8>>, ProviderError>>,
+    verify: impl IntoIterator<Item = Result<Option<ExternalEvidence>, ProviderError>>,
     sink: Option<&Arc<RecordingSink>>,
 ) -> (Arc<FakeAdapter>, HandleOutcome) {
     let provider = provider();
@@ -94,7 +94,7 @@ fn published_with(
     set_external_policy(&mut controller, external_policy);
     let root = tempfile::tempdir().unwrap();
     let artifacts = Arc::new(
-        FileArtifactStore::open_with_clock(root.path(), artifact_config(), Arc::new(SystemClock))
+        FileArtifactStore::open_with_clock(root.path(), artifact_config(), TestClock::new())
             .unwrap(),
     );
     controller = controller.with_artifact_store(artifacts);
@@ -138,23 +138,44 @@ fn a_published_delivery_is_advisorily_assessed() {
 
 #[test]
 fn an_incomplete_verification_never_blocks() {
-    let sink = Arc::new(RecordingSink::default());
-    let (adapter, outcome) = published_with(
-        ExternalPolicy::BlockConfirmedRefutations,
-        [Err(ProviderError::Unavailable)],
-        Some(&sink),
-    );
-    assert!(matches!(
-        outcome,
-        HandleOutcome::Published {
+    let mut invalid = scripted_evidence(ForgeRepository::Readable, Some(ForgeTail::PathMissing));
+    invalid.producer.version.clear();
+    let mut foreign = scripted_evidence(ForgeRepository::Readable, Some(ForgeTail::PathMissing));
+    foreign.plan_payload_digest = amiss_wire::digest::hb("foreign", b"plan");
+    let mut oversized = scripted_evidence(ForgeRepository::Readable, Some(ForgeTail::PathMissing));
+    oversized.producer.version =
+        "\0".repeat(usize::try_from(amiss_wire::external::EXTERNAL_DOCUMENT_BYTES / 6).unwrap());
+    for (result, incomplete) in [
+        (Err(ProviderError::Unavailable), true),
+        (Ok(None), false),
+        (Ok(Some(invalid)), true),
+        (Ok(Some(foreign)), true),
+        (Ok(Some(oversized)), true),
+    ] {
+        let sink = Arc::new(RecordingSink::default());
+        let (adapter, outcome) = published_with(
+            ExternalPolicy::BlockConfirmedRefutations,
+            [result],
+            Some(&sink),
+        );
+        let HandleOutcome::Published {
             conclusion: CheckConclusion::Pass,
-            artifact: Some(_),
-        }
-    ));
-    assert_eq!(adapter.verify_count.load(Ordering::Relaxed), 1);
-    assert!(sink.tallies.lock().unwrap().is_empty());
-    assert_eq!(sink.incomplete.load(Ordering::Relaxed), 1);
-    assert_eq!(adapter.publications().len(), 1);
+            artifact: Some(reference),
+        } = outcome
+        else {
+            panic!("incomplete evidence must preserve the report and plan without blocking");
+        };
+        assert_eq!(reference.external_incomplete, incomplete);
+        assert!(reference.external_tally.is_none());
+        assert!(reference.assessment_digest.is_none());
+        assert_eq!(adapter.verify_count.load(Ordering::Relaxed), 1);
+        assert!(sink.tallies.lock().unwrap().is_empty());
+        assert_eq!(
+            sink.incomplete.load(Ordering::Relaxed),
+            usize::from(incomplete)
+        );
+        assert_eq!(adapter.publications().len(), 1);
+    }
 }
 
 #[test]
@@ -235,7 +256,7 @@ fn the_final_refresh_supersedes_a_retained_external_decision() {
     set_external_policy(&mut controller, ExternalPolicy::BlockConfirmedRefutations);
     let root = tempfile::tempdir().unwrap();
     controller = controller.with_artifact_store(Arc::new(
-        FileArtifactStore::open_with_clock(root.path(), artifact_config(), Arc::new(SystemClock))
+        FileArtifactStore::open_with_clock(root.path(), artifact_config(), TestClock::new())
             .unwrap(),
     ));
 
@@ -255,6 +276,7 @@ fn a_lost_reply_and_service_restart_reuse_the_frozen_artifact() {
     let change = locator(&provider, repository("amiss"));
     let run = run(change.clone(), 'b', 'd');
     let authenticated = delivery(&provider, change, 'b');
+    let evidence_input = scripted_evidence(ForgeRepository::Readable, Some(ForgeTail::PathMissing));
     let adapter = Arc::new(
         FakeAdapter::new(
             authenticated.clone(),
@@ -263,10 +285,7 @@ fn a_lost_reply_and_service_restart_reuse_the_frozen_artifact() {
                 Ok(snapshot(ChangeState::Active, run.clone())),
             ],
         )
-        .with_verify_results([Ok(Some(scripted_evidence(
-            ForgeRepository::Readable,
-            Some(ForgeTail::PathMissing),
-        )))])
+        .with_verify_results([Ok(Some(evidence_input.clone()))])
         .with_publish_results([Err(ProviderError::Unavailable)]),
     );
     let ledger_root = tempfile::tempdir().unwrap();
@@ -275,13 +294,12 @@ fn a_lost_reply_and_service_restart_reuse_the_frozen_artifact() {
     let ledger_config = FileLedgerConfig::new(Duration::from_mins(1), 8, replay).unwrap();
     let artifact_config = artifact_config();
     let ledger =
-        FileLedger::open_with_clock(ledger_root.path(), ledger_config, Arc::new(SystemClock))
-            .unwrap();
+        FileLedger::open_with_clock(ledger_root.path(), ledger_config, TestClock::new()).unwrap();
     let artifacts = Arc::new(
         FileArtifactStore::open_with_clock(
             artifact_root.path(),
             artifact_config.clone(),
-            Arc::new(SystemClock),
+            TestClock::new(),
         )
         .unwrap(),
     );
@@ -299,25 +317,24 @@ fn a_lost_reply_and_service_restart_reuse_the_frozen_artifact() {
     let first = adapter.publications().remove(0);
     let retained = first.artifact.clone().unwrap();
     let assessment = artifacts
-        .read(
-            &retained.id,
-            amiss_controller::ArtifactComponent::Assessment,
-        )
+        .read(&retained.id, ArtifactComponent::Assessment)
         .unwrap();
+    let evidence = artifacts
+        .read(&retained.id, ArtifactComponent::Evidence)
+        .unwrap();
+    let (parsed_evidence, digest) = amiss_wire::external::parse_evidence(&evidence).unwrap();
+    assert_eq!(parsed_evidence, evidence_input);
+    let parsed_assessment = amiss_wire::external::parse_assessment(&assessment).unwrap();
+    assert_eq!(parsed_assessment.payload.subject.evidence_digest, digest);
     drop(controller);
     drop(artifacts);
 
     let retry_adapter = Arc::new(FakeAdapter::new(authenticated, []));
     let reopened_ledger =
-        FileLedger::open_with_clock(ledger_root.path(), ledger_config, Arc::new(SystemClock))
-            .unwrap();
+        FileLedger::open_with_clock(ledger_root.path(), ledger_config, TestClock::new()).unwrap();
     let reopened_artifacts = Arc::new(
-        FileArtifactStore::open_with_clock(
-            artifact_root.path(),
-            artifact_config,
-            Arc::new(SystemClock),
-        )
-        .unwrap(),
+        FileArtifactStore::open_with_clock(artifact_root.path(), artifact_config, TestClock::new())
+            .unwrap(),
     );
     let mut restarted = controller_with_ledger(
         Arc::clone(&retry_adapter),
@@ -337,15 +354,15 @@ fn a_lost_reply_and_service_restart_reuse_the_frozen_artifact() {
     assert_eq!(adapter.verify_count.load(Ordering::Relaxed), 1);
     assert_eq!(retry_adapter.verify_count.load(Ordering::Relaxed), 0);
     assert_eq!(retry_adapter.publications(), vec![first]);
-    assert_eq!(
-        reopened_artifacts
-            .read(
-                &retained.id,
-                amiss_controller::ArtifactComponent::Assessment
-            )
-            .unwrap(),
-        assessment
-    );
+    for (component, bytes) in [
+        (ArtifactComponent::Evidence, evidence),
+        (ArtifactComponent::Assessment, assessment),
+    ] {
+        assert_eq!(
+            reopened_artifacts.read(&retained.id, component).unwrap(),
+            bytes
+        );
+    }
     assert!(matches!(
         restarted.handle(retry_adapter.input()).unwrap(),
         HandleOutcome::Duplicate {

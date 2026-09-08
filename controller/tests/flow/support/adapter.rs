@@ -7,6 +7,7 @@ use amiss_controller::{
     IngressCheck, OpaqueId, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace,
     Publication, SignedTimePolicy, UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring,
 };
+use amiss_wire::external::ExternalEvidence;
 
 const FLOW_SIGNATURE: &[u8] =
     b"sha256=ac6a690197321dcf9b6291614f70f95fc93f096f646a1209c6d9de950ba0cb43";
@@ -24,7 +25,7 @@ pub(crate) struct FakeAdapter {
     refreshes: Mutex<VecDeque<Result<ChangeSnapshot, ProviderError>>>,
     publications: Mutex<Vec<Publication>>,
     publish_results: Mutex<VecDeque<Result<(), ProviderError>>>,
-    verify_results: Mutex<VecDeque<Result<Option<Vec<u8>>, ProviderError>>>,
+    verify_results: Mutex<VecDeque<Result<Option<ExternalEvidence>, ProviderError>>>,
     pub(crate) authentication_count: AtomicUsize,
     pub(crate) refresh_count: AtomicUsize,
     pub(crate) verify_count: AtomicUsize,
@@ -71,7 +72,7 @@ impl FakeAdapter {
 
     pub(crate) fn with_verify_results(
         self,
-        results: impl IntoIterator<Item = Result<Option<Vec<u8>>, ProviderError>>,
+        results: impl IntoIterator<Item = Result<Option<ExternalEvidence>, ProviderError>>,
     ) -> Self {
         *self.verify_results.lock().unwrap() = results.into_iter().collect();
         self
@@ -135,7 +136,7 @@ impl ProviderAdapter for FakeAdapter {
         &self,
         _plan: &amiss_wire::external::ExternalPlanEnvelope,
         _checked_at: &str,
-    ) -> Result<Option<Vec<u8>>, ProviderError> {
+    ) -> Result<Option<ExternalEvidence>, ProviderError> {
         self.verify_count.fetch_add(1, Ordering::Relaxed);
         self.verify_results
             .lock()

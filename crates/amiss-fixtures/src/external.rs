@@ -1,4 +1,4 @@
-use amiss_wire::json::Value;
+use amiss_wire::external::{ExternalEvidence, ExternalEvidenceRow};
 use amiss_wire::report::{
     PAYLOAD_SCHEMA,
     model::{ObservationComparison, ReportEnvelope},
@@ -81,16 +81,21 @@ pub fn external_plan(destinations: &[&str]) -> Option<amiss_wire::external::Exte
 
 /// Flattens forge evidence rows into the facts provider tests compare.
 #[must_use]
-pub fn external_facts(evidence: &[u8]) -> Option<Vec<String>> {
-    let evidence = amiss_wire::json::parse(evidence).ok()?;
-    let Value::Array(rows) = evidence.member("rows")? else {
-        return None;
-    };
-    rows.iter()
+pub fn external_facts(evidence: &ExternalEvidence) -> Option<Vec<String>> {
+    evidence
+        .rows
+        .iter()
         .map(|row| {
-            let destination = row.text("destination")?;
-            let repository = row.text("repository")?;
-            Some(match row.text("tail") {
+            let ExternalEvidenceRow::ForgeApi {
+                destination,
+                repository,
+                tail,
+                ..
+            } = row
+            else {
+                return None;
+            };
+            Some(match tail {
                 Some(tail) => format!("{destination} {repository} {tail}"),
                 None => format!("{destination} {repository}"),
             })

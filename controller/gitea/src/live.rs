@@ -153,7 +153,7 @@ impl GiteaApi for GiteaClient {
         &self,
         plan: &amiss_wire::external::ExternalPlanEnvelope,
         checked_at: &str,
-    ) -> Result<Option<Vec<u8>>, ProviderError> {
+    ) -> Result<Option<amiss_wire::external::ExternalEvidence>, ProviderError> {
         verify::verify_external(
             &self.client.rest,
             plan,

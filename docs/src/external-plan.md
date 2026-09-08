@@ -37,10 +37,12 @@ checks its payload digest and plan laws before preparing or querying the provide
 decode the plan again. Assessment consumes that same typed plan and typed evidence. It rechecks
 plan integrity before applying evidence's derived validation, then hashes the actual evidence
 object so a changed public field cannot reuse an old identity. The CLI decodes both files at
-ingress, while controller plan encoding serves artifact retention only. Provider evidence still
-arrives as bytes and is decoded before assessment. Untrusted input keeps the reader's grammar
-and byte limits; the evidence writer uses the shared bounded canonical writer without reparsing
-the JSON it just produced.
+ingress. All three forge adapters return the existing typed evidence directly, with derived
+validation and partial facts preserved. The controller encodes plan and evidence for retention
+through the bounded canonical writer; evidence exceeding the byte ceiling leaves the plan and
+report available with an incomplete verification. Assessment failures retain bounded evidence
+without producing a verdict tally. Untrusted files keep the reader's grammar and byte limits;
+the evidence writer never reparses the JSON it just produced.
 
 Each row carries the destination exactly as the report recorded it, after the format's
 own decoding, the address an evidence producer would request; its lowercased scheme; and the sorted

@@ -97,7 +97,7 @@ pub trait ProviderAdapter: Send + Sync {
     ) -> Result<(), ProviderError>;
 
     /// Verifies an external plan's introduced destinations before the final
-    /// provider refresh, returning this provider's evidence file or `None`
+    /// provider refresh, returning this provider's typed evidence or `None`
     /// when it has no verifier.
     ///
     /// # Errors
@@ -107,7 +107,7 @@ pub trait ProviderAdapter: Send + Sync {
         &self,
         _plan: &amiss_wire::external::ExternalPlanEnvelope,
         _checked_at: &str,
-    ) -> Result<Option<Vec<u8>>, ProviderError> {
+    ) -> Result<Option<amiss_wire::external::ExternalEvidence>, ProviderError> {
         Ok(None)
     }
 }

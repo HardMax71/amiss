@@ -45,6 +45,7 @@ tempfile.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "time"] }
 url.workspace = true
+wary.workspace = true
 
 [dev-dependencies]
 amiss-controller-fixtures.workspace = true
