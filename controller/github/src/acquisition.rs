@@ -125,7 +125,7 @@ pub fn github_fetch_plan(request: &RunRequest) -> Result<GitHubFetchPlan, GitHub
             &request.plan.execution.action_tree_oid,
         ]
         .into_iter()
-        .all(exact_sha1);
+        .all(|oid| oid.object_format() == ObjectFormat::Sha1);
     let refs_valid = [
         run.refs.candidate.as_str(),
         run.refs.target.as_str(),
@@ -273,10 +273,6 @@ pub(crate) fn github_host(host: &str) -> bool {
                     .iter()
                     .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
         })
-}
-
-pub(crate) fn exact_sha1(oid: &Oid) -> bool {
-    Oid::new(ObjectFormat::Sha1, oid.as_str().to_owned()).as_ref() == Some(oid)
 }
 
 fn repository_url(repository: &RepositoryIdentity) -> Result<String, GitHubAcquireError> {

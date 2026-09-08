@@ -107,15 +107,15 @@ fn commit_controls(
         CandidateBlock::Commit(candidate_tree.1.clone()),
     );
     let object_format = repo.object_format();
-    let Some(tree_oid) = Oid::new(object_format, candidate_tree.0.as_str().to_owned()) else {
+    if candidate_tree.0.object_format() != object_format {
         return Err(failure(
             ControlsUnavailableReason::NotParsed,
             detail(&Error::Internal, None),
         ));
-    };
+    }
     let tree_identity = amiss_wire::model::TreeIdentity {
         object_format,
-        tree_oid,
+        tree_oid: candidate_tree.0.clone(),
     };
     let external = external_gate(
         setup_shell,

@@ -159,6 +159,65 @@ fn commit_identity_construction_matches_the_published_preimage() {
         None,
         "an index request cannot be relabeled as a commit-pair identity"
     );
+    let sha256 = Oid::new(ObjectFormat::Sha256, "a".repeat(64)).unwrap();
+    assert_eq!(
+        commit_candidate_identity_digest(&evaluation, &sha256, &oid('4')),
+        None
+    );
+    assert_eq!(
+        commit_candidate_identity_digest(&evaluation, &oid('2'), &sha256),
+        None
+    );
+    let wide = EvaluationRequest::commit_pair(
+        Profile::Enforce,
+        ObjectFormat::Sha256,
+        sha256.clone(),
+        sha256.clone(),
+    );
+    assert!(commit_candidate_identity_digest(&wide, &sha256, &sha256).is_some());
+    assert_eq!(
+        commit_candidate_identity_digest(&wide, &oid('2'), &sha256),
+        None
+    );
+    assert_eq!(
+        commit_candidate_identity_digest(&wide, &sha256, &oid('4')),
+        None
+    );
+}
+
+#[test]
+fn candidate_identity_rejects_inconsistent_evaluation_fields() {
+    type Mutation = fn(&mut EvaluationRequest);
+    let cases: [Mutation; 8] = [
+        |request| request.repository = None,
+        |request| request.forge = Some(ForgeDialect::Github),
+        |request| request.candidate_ref = None,
+        |request| request.target_ref = None,
+        |request| request.default_branch_ref = None,
+        |request| request.candidate_commit = None,
+        |request| request.mode = RequestMode::Index,
+        |request| request.base_commit = Oid::new(ObjectFormat::Sha256, "a".repeat(64)).unwrap(),
+    ];
+    let original =
+        EvaluationRequest::parse(&request_example("scanner-evaluation-request.json")).unwrap();
+    for mutate in cases {
+        let mut request = original.clone();
+        mutate(&mut request);
+        assert!(request.canonical_bytes().is_err());
+        assert_eq!(
+            commit_candidate_identity_digest(&request, &oid('2'), &oid('4')),
+            None
+        );
+    }
+    let mut request = original;
+    request.repository = Some(
+        serde_json::from_str(r#"{"host":"bad/host","owner":"acme","name":"widget"}"#).unwrap(),
+    );
+    assert!(request.canonical_bytes().is_err());
+    assert_eq!(
+        commit_candidate_identity_digest(&request, &oid('2'), &oid('4')),
+        None
+    );
 }
 
 #[test]

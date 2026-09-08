@@ -112,7 +112,7 @@ impl EvaluationRequest {
     }
 }
 
-fn validate_evaluation(request: &EvaluationRequest) -> Result<(), Error> {
+pub(super) fn validate_evaluation(request: &EvaluationRequest) -> Result<(), Error> {
     if request.repository.as_ref().is_some_and(|repository| {
         RepositoryIdentity::new(
             repository.host().to_owned(),

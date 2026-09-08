@@ -660,18 +660,21 @@ fn publication_is_bound_before_provider_io() {
     let fixture = Fixture::new();
     let mut publication = fixture.publication(CheckConclusion::Pass);
     publication.provider_run.candidate_commit = oid('e');
-    let rest = FakeRest::with_runs(fixture.data.clone(), Vec::new());
-    let client = Client {
-        config: fixture.config.clone(),
-        rest,
-    };
-
-    assert_eq!(
-        client.publish(fixture.request(), &publication),
-        Err(ProviderError::InvalidResponse)
-    );
-    assert_eq!(client.rest.checks.load(Ordering::Relaxed), 0);
-    assert_eq!(client.rest.creates.load(Ordering::Relaxed), 0);
+    let mut wrong_gate = fixture.publication(CheckConclusion::Pass);
+    wrong_gate.gate_commit = Oid::new(ObjectFormat::Sha256, "a".repeat(64)).unwrap();
+    for publication in [publication, wrong_gate] {
+        let rest = FakeRest::with_runs(fixture.data.clone(), Vec::new());
+        let client = Client {
+            config: fixture.config.clone(),
+            rest,
+        };
+        assert_eq!(
+            client.publish(fixture.request(), &publication),
+            Err(ProviderError::InvalidResponse)
+        );
+        assert_eq!(client.rest.checks.load(Ordering::Relaxed), 0);
+        assert_eq!(client.rest.creates.load(Ordering::Relaxed), 0);
+    }
 }
 
 #[test]
@@ -1069,6 +1072,15 @@ fn oid(value: char) -> Oid {
 fn refresh_rejects_a_request_wrong_in_one_field() {
     let fixture = Fixture::new();
     assert!(super::refresh::validate_request(&fixture.config, fixture.request()).is_ok());
+    let wide_oid = Oid::new(ObjectFormat::Sha256, "a".repeat(64)).unwrap();
+    let wide_request = GitHubPullRequest {
+        candidate_commit: &wide_oid,
+        ..fixture.request()
+    };
+    assert_eq!(
+        super::refresh::validate_request(&fixture.config, wide_request),
+        Err(ProviderError::InvalidResponse)
+    );
 
     let elsewhere = ChangeLocator {
         provider: ProviderIdentity {

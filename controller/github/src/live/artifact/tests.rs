@@ -132,6 +132,11 @@ fn request_and_download_metadata_are_independently_exact() {
         validate_workflow_request(&config, &expectation, &candidate),
         Ok(())
     );
+    let wide_oid = Oid::new(ObjectFormat::Sha256, "a".repeat(64)).unwrap();
+    assert_eq!(
+        validate_workflow_request(&config, &expectation, &wide_oid),
+        Err(ProviderError::InvalidResponse)
+    );
     expectation.provider =
         ProviderIdentity::new("gitea".to_owned(), "github.com".to_owned()).unwrap();
     assert_eq!(

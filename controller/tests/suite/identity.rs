@@ -1,4 +1,30 @@
-use amiss_controller::{DeliveryId, ProviderIdentity, ProviderNamespace, ProviderRunAttempt};
+use amiss_controller::{
+    DeliveryId, ProviderIdentity, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
+    ProviderRunIdentity,
+};
+use amiss_wire::model::{ObjectFormat, Oid};
+
+#[test]
+fn provider_run_preserves_typed_ids_and_checks_the_declared_format()
+-> Result<(), Box<dyn std::error::Error>> {
+    for (format, length) in [(ObjectFormat::Sha1, 40), (ObjectFormat::Sha256, 64)] {
+        let candidate: Oid = serde_json::from_str(&format!("\"{}\"", "a".repeat(length)))?;
+        for declared in [ObjectFormat::Sha1, ObjectFormat::Sha256] {
+            let run = ProviderRunIdentity::new(
+                ProviderRunId::new("run/1".to_owned()).ok_or("run id")?,
+                ProviderRunAttempt::new(1).ok_or("attempt")?,
+                declared,
+                candidate.clone(),
+            );
+            assert_eq!(run.is_some(), declared == format);
+            if let Some(run) = run {
+                assert_eq!(run.candidate_commit, candidate);
+                assert_eq!(run.object_format, format);
+            }
+        }
+    }
+    Ok(())
+}
 
 #[test]
 fn provider_namespace_is_open_but_canonical() {

@@ -1,4 +1,4 @@
-use amiss_controller::{RunIdentity, RunRequest};
+use amiss_controller::RunRequest;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::identity::{canonical_host, parse_change_id, positive, provider_run};
@@ -61,7 +61,16 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
         && request.plan.execution.action_object_format == ObjectFormat::Sha1;
     let binding_valid = request.provider_run == expected_run
         && request.provider_run.candidate_commit == run.commits.candidate
-        && exact_oids(run, request);
+        && [
+            &run.commits.base,
+            &run.commits.candidate,
+            &run.trees.base,
+            &run.trees.candidate,
+            &request.plan.execution.action_commit_oid,
+            &request.plan.execution.action_tree_oid,
+        ]
+        .into_iter()
+        .all(|oid| oid.object_format() == ObjectFormat::Sha1);
     let refs_valid = [
         run.refs.candidate.as_str(),
         run.refs.target.as_str(),
@@ -82,19 +91,6 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
     })
 }
 
-fn exact_oids(run: &RunIdentity, request: &RunRequest) -> bool {
-    [
-        &run.commits.base,
-        &run.commits.candidate,
-        &run.trees.base,
-        &run.trees.candidate,
-        &request.plan.execution.action_commit_oid,
-        &request.plan.execution.action_tree_oid,
-    ]
-    .into_iter()
-    .all(exact_sha1)
-}
-
 fn canonical_repository(repository: &RepositoryIdentity) -> bool {
     RepositoryIdentity::new(
         repository.host().to_owned(),
@@ -105,10 +101,6 @@ fn canonical_repository(repository: &RepositoryIdentity) -> bool {
         == Some(repository)
         && !repository.owner().contains('/')
         && canonical_host(repository.host())
-}
-
-fn exact_sha1(oid: &Oid) -> bool {
-    Oid::new(ObjectFormat::Sha1, oid.as_str().to_owned()).as_ref() == Some(oid)
 }
 
 pub fn repository_url(repository: &RepositoryIdentity) -> String {

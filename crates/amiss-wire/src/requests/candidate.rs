@@ -133,14 +133,15 @@ pub fn commit_candidate_identity_digest(
     base_tree: &Oid,
     candidate_tree: &Oid,
 ) -> Option<Digest> {
-    evaluation.canonical_bytes().ok()?;
-    let candidate_commit = match (evaluation.mode, evaluation.candidate_commit.as_ref()) {
-        (RequestMode::CommitPair, Some(candidate)) => candidate.clone(),
-        (RequestMode::CommitPair | RequestMode::Index, None | Some(_)) => return None,
-    };
+    super::evaluation::validate_evaluation(evaluation).ok()?;
     let object_format = evaluation.object_format;
-    let base_tree = Oid::new(object_format, base_tree.as_str().to_owned())?;
-    let candidate_tree = Oid::new(object_format, candidate_tree.as_str().to_owned())?;
+    if evaluation.mode != RequestMode::CommitPair
+        || base_tree.object_format() != object_format
+        || candidate_tree.object_format() != object_format
+    {
+        return None;
+    }
+    let candidate_commit = evaluation.candidate_commit.clone()?;
     let identity = CandidateIdentity {
         schema: CandidateIdentitySchema::Current,
         mode: RequestMode::CommitPair,
@@ -166,13 +167,13 @@ pub fn commit_candidate_identity_digest(
             kind: GitSnapshotKind::GitCommit,
             object_format,
             commit_oid: evaluation.base_commit.clone(),
-            tree_oid: base_tree,
+            tree_oid: base_tree.clone(),
         },
         candidate: CandidateSnapshot::Git(GitSnapshotIdentity {
             commit_oid: candidate_commit,
             kind: GitSnapshotKind::GitCommit,
             object_format,
-            tree_oid: candidate_tree,
+            tree_oid: candidate_tree.clone(),
         }),
         materialization: SnapshotMaterialization::GitObjects,
         skip_worktree_paths: 0,

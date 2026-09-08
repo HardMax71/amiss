@@ -32,14 +32,6 @@ pub struct OidPair {
     pub candidate: Oid,
 }
 
-impl OidPair {
-    fn well_formed(&self, object_format: ObjectFormat) -> bool {
-        [&self.base, &self.candidate]
-            .into_iter()
-            .all(|oid| Oid::new(object_format, oid.as_str().to_owned()).is_some())
-    }
-}
-
 /// The exact identity one evaluation runs as. Everything here is data; the
 /// binding laws live in `validate_change` and the runner recheck.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -60,10 +52,15 @@ impl RunIdentity {
         commits: OidPair,
         trees: OidPair,
     ) -> Option<Self> {
-        if !commits.well_formed(object_format) || !trees.well_formed(object_format) {
-            return None;
-        }
-        Some(Self {
+        let formats_match = [
+            &commits.base,
+            &commits.candidate,
+            &trees.base,
+            &trees.candidate,
+        ]
+        .into_iter()
+        .all(|oid| oid.object_format() == object_format);
+        formats_match.then_some(Self {
             change,
             refs,
             object_format,

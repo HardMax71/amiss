@@ -14,19 +14,6 @@ pub(super) fn validate_request(
     pull_request: GitHubPullRequest<'_>,
 ) -> Result<(), ProviderError> {
     let repository = &pull_request.change.repository;
-    let exact_candidate = Oid::new(
-        ObjectFormat::Sha1,
-        pull_request.candidate_commit.as_str().to_owned(),
-    )
-    .as_ref()
-        == Some(pull_request.candidate_commit);
-    let canonical_repository = RepositoryIdentity::new(
-        repository.host().to_owned(),
-        repository.owner().to_owned(),
-        repository.name().to_owned(),
-    )
-    .as_ref()
-        == Some(repository);
     let exact_change = crate::parse_change_id(pull_request.change.change.as_str())
         == Some((
             pull_request.repository_id,
@@ -41,10 +28,9 @@ pub(super) fn validate_request(
         || repository.host() != config.provider.instance.as_str()
         || repository.owner() != pull_request.repository_owner
         || repository.name() != pull_request.repository_name
-        || repository.owner().contains('/')
-        || !canonical_repository
+        || !crate::acquisition::canonical_github_repository(repository)
         || !exact_change
-        || !exact_candidate
+        || pull_request.candidate_commit.object_format() != ObjectFormat::Sha1
     {
         return Err(ProviderError::InvalidResponse);
     }

@@ -106,8 +106,7 @@ impl ProviderRunIdentity {
         object_format: ObjectFormat,
         candidate_commit: Oid,
     ) -> Option<Self> {
-        Oid::new(object_format, candidate_commit.as_str().to_owned())?;
-        Some(Self {
+        (candidate_commit.object_format() == object_format).then_some(Self {
             run_id,
             attempt,
             object_format,

@@ -5,9 +5,9 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use amiss_controller::AcquisitionTarget;
-use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::RepositoryIdentity;
 
-use super::{GitHubAcquireError, active, canonical_github_repository, exact_sha1, github_host};
+use super::{GitHubAcquireError, active, canonical_github_repository, github_host};
 
 #[test]
 fn every_refusal_names_itself() {
@@ -68,12 +68,4 @@ fn a_github_host_is_lowercase_dns_with_bounded_labels() {
     ] {
         assert!(!github_host(invalid), "{invalid}");
     }
-}
-
-#[test]
-fn only_a_sha1_oid_is_exact_sha1() {
-    let sha1 = Oid::new(ObjectFormat::Sha1, "a".repeat(40)).expect("sha1");
-    assert!(exact_sha1(&sha1));
-    let sha256 = Oid::new(ObjectFormat::Sha256, "b".repeat(64)).expect("sha256");
-    assert!(!exact_sha1(&sha256));
 }

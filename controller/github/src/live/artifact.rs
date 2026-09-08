@@ -2,7 +2,7 @@ mod tests;
 
 use amiss_controller::{AcquiredSemanticTemplate, ProviderError, WorkflowArtifactExpectation};
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::model::Oid;
+use amiss_wire::model::{ObjectFormat, Oid};
 use serde::{Deserialize, Serialize};
 
 use super::model::OwnerRecord;
@@ -92,9 +92,9 @@ pub(super) fn validate_workflow_request(
 ) -> Result<(), ProviderError> {
     (config.provider == expectation.provider
         && crate::workflow_artifact::valid_github_expectation(expectation)
-        && crate::acquisition::exact_sha1(candidate))
-    .then_some(())
-    .ok_or(ProviderError::InvalidResponse)
+        && candidate.object_format() == ObjectFormat::Sha1)
+        .then_some(())
+        .ok_or(ProviderError::InvalidResponse)
 }
 
 pub(super) fn select_workflow_run(

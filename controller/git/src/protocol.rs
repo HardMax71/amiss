@@ -4,7 +4,7 @@ use std::num::NonZeroU32;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::ObjectFormat;
 use gix::protocol::fetch::negotiate::{Action, Round};
 use gix::protocol::fetch::{Arguments, Negotiate};
 use gix::protocol::transport::client::TransportWithoutIO as _;
@@ -100,9 +100,7 @@ fn exact_wants(wants: &[ExactWant<'_>]) -> Result<Vec<Wanted>, GitFetchError> {
     wants
         .iter()
         .map(|want| {
-            let exact_sha1 = Oid::new(ObjectFormat::Sha1, want.oid.as_str().to_owned()).as_ref()
-                == Some(want.oid);
-            if !exact_sha1 || !private_ref(want.reference) {
+            if want.oid.object_format() != ObjectFormat::Sha1 || !private_ref(want.reference) {
                 return Err(GitFetchError("an exact Git want is invalid"));
             }
             gix::ObjectId::from_hex(want.oid.as_str().as_bytes())

@@ -234,33 +234,31 @@ pub(super) fn validate_staged<E>(
     if staged.publication.check != *check {
         return Err(ControllerError::DeliveryBindingConflict);
     }
-    validate_run(delivery, &staged.publication.run)?;
-    validate_gate_commit(&staged.publication.run, &staged.publication.gate_commit)
+    validate_run(
+        delivery,
+        &staged.publication.run,
+        &staged.publication.gate_commit,
+    )
 }
 
 pub(super) fn validate_change<E>(
     delivery: &AuthenticatedDelivery,
     snapshot: &ChangeSnapshot,
 ) -> Result<(), ControllerError<E>> {
-    validate_run(delivery, &snapshot.run)?;
-    validate_gate_commit(&snapshot.run, &snapshot.gate_commit)
-}
-
-fn validate_gate_commit<E>(run: &RunIdentity, gate_commit: &Oid) -> Result<(), ControllerError<E>> {
-    Oid::new(run.object_format, gate_commit.as_str().to_owned())
-        .ok_or(ControllerError::WrongProviderRun)?;
-    Ok(())
+    validate_run(delivery, &snapshot.run, &snapshot.gate_commit)
 }
 
 fn validate_run<E>(
     delivery: &AuthenticatedDelivery,
     run: &RunIdentity,
+    gate_commit: &Oid,
 ) -> Result<(), ControllerError<E>> {
     if run.change != delivery.change {
         return Err(ControllerError::WrongChangeIdentity);
     }
     if run.object_format != delivery.provider_run.object_format
         || run.commits.candidate != delivery.provider_run.candidate_commit
+        || gate_commit.object_format() != run.object_format
     {
         return Err(ControllerError::WrongProviderRun);
     }

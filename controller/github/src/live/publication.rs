@@ -29,13 +29,7 @@ pub(super) fn validate_publication(
     )
     .ok_or(ProviderError::InvalidResponse)?;
     let event_bound = publication.provider_run == expected_run;
-    let exact_gate = amiss_wire::model::Oid::new(
-        ObjectFormat::Sha1,
-        publication.gate_commit.as_str().to_owned(),
-    )
-    .as_ref()
-        == Some(&publication.gate_commit);
-    let exact = exact_gate
+    let exact = publication.gate_commit.object_format() == ObjectFormat::Sha1
         && publication.provider_run.candidate_commit == *pull_request.candidate_commit
         && publication.run.change == *pull_request.change
         && publication.run.object_format == ObjectFormat::Sha1

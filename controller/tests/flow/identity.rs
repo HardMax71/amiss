@@ -4,7 +4,7 @@ use amiss_controller::{
     ChangeState, CheckConclusion, ControllerError, HandleOutcome, OidPair, RunFailure, RunIdentity,
     RunRefs,
 };
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 
 use crate::support::{
     FakeAdapter, complete, controller, delivery, locator, oid, provider, repository, run,
@@ -116,4 +116,39 @@ fn run_identity_rejects_oids_from_another_object_format() {
     );
 
     assert!(invalid.is_none());
+    let expected = run(locator(&provider, repository("amiss")), 'b', 'd');
+    for index in 0..4 {
+        let mut ids = [oid('a'), oid('b'), oid('c'), oid('d')];
+        *ids.get_mut(index).unwrap() = Oid::new(ObjectFormat::Sha256, "e".repeat(64)).unwrap();
+        let [base, candidate, base_tree, candidate_tree] = ids;
+        assert!(
+            RunIdentity::new(
+                expected.change.clone(),
+                expected.refs.clone(),
+                ObjectFormat::Sha1,
+                OidPair { base, candidate },
+                OidPair {
+                    base: base_tree,
+                    candidate: candidate_tree
+                },
+            )
+            .is_none(),
+            "slot {index}"
+        );
+    }
+    let wide = Oid::new(ObjectFormat::Sha256, "a".repeat(64)).unwrap();
+    let pair = OidPair {
+        base: wide.clone(),
+        candidate: wide,
+    };
+    assert!(
+        RunIdentity::new(
+            expected.change,
+            expected.refs,
+            ObjectFormat::Sha256,
+            pair.clone(),
+            pair
+        )
+        .is_some()
+    );
 }

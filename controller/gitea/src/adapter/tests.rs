@@ -96,7 +96,7 @@ fn a_delivery_answers_for_every_field_alone() {
         namespace: ProviderNamespace::new("gitea".to_owned()).expect("a namespace"),
         instance: ProviderInstance::new("other.example".to_owned()).expect("an instance"),
     };
-    let rows: [(&str, Deviation); 6] = [
+    let rows: [(&str, Deviation); 7] = [
         ("another delivery provider", |delivery| {
             delivery.identity.provider = ProviderIdentity {
                 namespace: ProviderNamespace::new("forgejo".to_owned()).expect("a namespace"),
@@ -123,6 +123,10 @@ fn a_delivery_answers_for_every_field_alone() {
         }),
         ("another object format", |delivery| {
             delivery.provider_run.object_format = ObjectFormat::Sha256;
+        }),
+        ("a candidate from another format", |delivery| {
+            delivery.provider_run.candidate_commit =
+                Oid::new(ObjectFormat::Sha256, "a".repeat(64)).expect("an object id");
         }),
         ("a run nobody minted", |delivery| {
             delivery.provider_run.run_id =

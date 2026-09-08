@@ -82,6 +82,26 @@ fn rejects_wrong_host_identity_change_and_object_format() {
         gitea_fetch_plan(&wrong_format),
         Err(GiteaPlanError::InvalidRequest)
     );
+
+    for index in 0..6 {
+        let mut wrong_oid = request("gitea");
+        let execution = &mut Arc::make_mut(&mut wrong_oid.plan).execution;
+        let ids = [
+            &mut wrong_oid.run.commits.base,
+            &mut wrong_oid.run.commits.candidate,
+            &mut wrong_oid.run.trees.base,
+            &mut wrong_oid.run.trees.candidate,
+            &mut execution.action_commit_oid,
+            &mut execution.action_tree_oid,
+        ];
+        *ids.into_iter().nth(index).unwrap() =
+            Oid::new(ObjectFormat::Sha256, "f".repeat(64)).unwrap();
+        assert_eq!(
+            gitea_fetch_plan(&wrong_oid),
+            Err(GiteaPlanError::InvalidRequest),
+            "slot {index}"
+        );
+    }
 }
 
 #[test]
