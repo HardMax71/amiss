@@ -28,7 +28,7 @@ use self::model::{CommitRecord, RefreshData};
 use self::publication::{
     PublicationDecision, publication_decision, publishable, validate_created, validate_publication,
 };
-use self::refresh::{exact_oid, publication_target_is_current, snapshot, validate_request};
+use self::refresh::{publication_target_is_current, snapshot, validate_request};
 use self::rest::{GiteaRest, HttpRest, OperationDeadline};
 
 const MAX_TOKEN_BYTES: usize = 4_096;
@@ -200,6 +200,9 @@ impl<R: GiteaRest> Client<R> {
         data: &RefreshData,
         deadline: OperationDeadline,
     ) -> Result<GiteaObjects, ProviderError> {
+        if data.target.sha.object_format() != pull_request.candidate_commit.object_format() {
+            return Err(ProviderError::InvalidResponse);
+        }
         let repository = RepositoryIdentity::new(
             self.config.provider.instance.as_str().to_owned(),
             pull_request.repository_owner.to_owned(),
@@ -210,7 +213,7 @@ impl<R: GiteaRest> Client<R> {
             repository_id: pull_request.repository_id,
             repository_url: repository_url(&repository),
             candidate_commit: pull_request.candidate_commit.clone(),
-            base_commit: exact_oid(&data.target.sha)?,
+            base_commit: data.target.sha.clone(),
             timeout: deadline.remaining()?,
         })?;
         if !agrees(&objects.candidate, &data.candidate) || !agrees(&objects.base, &data.target) {
@@ -259,11 +262,11 @@ struct Config {
 }
 
 fn agrees(resolved: &crate::GiteaCommit, record: &CommitRecord) -> bool {
-    resolved.id == record.sha
+    resolved.id == record.sha.as_str()
         && resolved.parents.len() == record.parents.len()
         && resolved
             .parents
             .iter()
             .zip(&record.parents)
-            .all(|(resolved, record)| *resolved == record.sha)
+            .all(|(resolved, record)| *resolved == record.sha.as_str())
 }

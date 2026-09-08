@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+pub(super) use crate::commit::CommitRecord;
 pub(super) use crate::user::UserRecord;
 
 #[derive(Clone, Deserialize)]
@@ -122,24 +123,6 @@ pub(super) struct OverrideProtection {
     pub ignore_stale_approvals: bool,
     pub block_admin_merge_override: Option<bool>,
     pub apply_to_admins: Option<bool>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct CommitRecord {
-    pub sha: String,
-    pub commit: CommitBodyRecord,
-    #[serde(default)]
-    pub parents: Vec<CommitMetaRecord>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct CommitBodyRecord {
-    pub tree: CommitMetaRecord,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct CommitMetaRecord {
-    pub sha: String,
 }
 
 #[derive(Clone, Deserialize)]

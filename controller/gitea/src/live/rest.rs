@@ -188,13 +188,14 @@ impl GiteaRest for HttpRest {
             .strip_prefix("refs/heads/")
             .filter(|branch| !branch.is_empty())
             .ok_or(ProviderError::InvalidResponse)?;
-        self.get(
+        self.transport.get(
             &format!(
                 "{}/git/commits/{}?stat=false&verification=false&files=false",
                 repository_route(repository.owner(), repository.name()),
                 path_segment(branch)
             ),
             deadline,
+            |bytes| amiss_wire::read_json(bytes, u64::MAX),
         )
     }
 
@@ -223,29 +224,32 @@ impl GiteaRest for HttpRest {
             ),
             deadline,
         )?;
-        let target: CommitRecord = self.get(
+        let target: CommitRecord = self.transport.get(
             &format!(
                 "{prefix}/git/commits/{}",
                 path_segment(&authoritative.base.sha)
             ),
             deadline,
+            |bytes| amiss_wire::read_json(bytes, u64::MAX),
         )?;
-        let candidate: CommitRecord = self.get(
+        let candidate: CommitRecord = self.transport.get(
             &format!(
                 "{prefix}/git/commits/{}",
                 path_segment(pull_request.candidate_commit.as_str())
             ),
             deadline,
+            |bytes| amiss_wire::read_json(bytes, u64::MAX),
         )?;
-        let current_head = if authoritative.head.sha == candidate.sha {
+        let current_head = if authoritative.head.sha == candidate.sha.as_str() {
             candidate.clone()
         } else {
-            self.get(
+            self.transport.get(
                 &format!(
                     "{prefix}/git/commits/{}",
                     path_segment(&authoritative.head.sha)
                 ),
                 deadline,
+                |bytes| amiss_wire::read_json(bytes, u64::MAX),
             )?
         };
         let reviews = self.reviews(pull_request, deadline)?;
@@ -418,7 +422,9 @@ impl GiteaVerification for HttpRest {
             path_segment(revision),
         );
         self.transport
-            .get_fact(&route, deadline, |bytes| serde_json::from_slice(bytes))
+            .get_fact(&route, deadline, |bytes| {
+                amiss_wire::read_json(bytes, u64::MAX)
+            })
             .map(listed_commit)
     }
 }
@@ -445,7 +451,7 @@ fn ref_listing(fact: ForgeFact<Vec<RefRecord>>, family: RefFamily) -> Option<Vec
 /// The commit list route answers 200 with an empty array for an empty
 /// repository, whatever the revision asked: only a listed commit is
 /// presence, and the empty page is no fact.
-fn listed_commit(fact: ForgeFact<Vec<serde::de::IgnoredAny>>) -> Presence {
+fn listed_commit(fact: ForgeFact<Vec<CommitRecord>>) -> Presence {
     match fact {
         Ok(commits) if commits.is_empty() => Presence::Unknown,
         Ok(_) => Presence::Present,

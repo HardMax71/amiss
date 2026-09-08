@@ -71,10 +71,10 @@ pub(super) fn snapshot(
         &data.protection,
     );
 
-    let candidate = exact_oid(&data.candidate.sha)?;
+    let candidate = data.candidate.sha.clone();
     let current_head = exact_oid(&data.pull_request.head.sha)?;
-    let fetched_head = exact_oid(&data.current_head.sha)?;
-    let base = exact_oid(&data.target.sha)?;
+    let fetched_head = &data.current_head.sha;
+    let base = data.target.sha.clone();
     let branch_base = data
         .target_branch
         .commit
@@ -85,8 +85,8 @@ pub(super) fn snapshot(
     let base_tree = exact_oid(&objects.base.tree)?;
     let merge_base = exact_oid(&data.pull_request.merge_base)?;
     if candidate != *pull_request.candidate_commit
-        || current_head != fetched_head
-        || data.pull_request.base.sha != data.target.sha
+        || current_head != *fetched_head
+        || data.pull_request.base.sha != data.target.sha.as_str()
         || base != branch_base
         || objects.candidate.id != candidate.as_str()
         || objects.base.id != base.as_str()

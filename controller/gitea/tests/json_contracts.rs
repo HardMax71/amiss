@@ -1,5 +1,8 @@
 use std::io::Cursor;
 
+#[path = "json_contracts/commits.rs"]
+mod commits;
+
 use amiss_controller::{ProviderError, decode_bounded_json};
 use amiss_controller_gitea::content::{
     ContentEncoding, ContentKind, ContentRecord, ContentResponse,

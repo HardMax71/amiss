@@ -1,7 +1,5 @@
 #![cfg(test)]
 
-use serde::de::IgnoredAny;
-
 use amiss_controller::ForgeNegative;
 
 use super::super::model::RefRecord;
@@ -64,7 +62,12 @@ fn a_ref_listing_is_a_fact_only_when_positively_complete() {
 #[test]
 fn an_empty_commit_page_is_no_fact() {
     assert_eq!(listed_commit(Ok(Vec::new())), Presence::Unknown);
-    assert_eq!(listed_commit(Ok(vec![IgnoredAny])), Presence::Present);
+    let commit = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/gitea-commit-full.json"),
+        u64::MAX,
+    )
+    .unwrap();
+    assert_eq!(listed_commit(Ok(vec![commit])), Presence::Present);
     assert_eq!(listed_commit(Err(ForgeNegative::Missing)), Presence::Absent);
     assert_eq!(listed_commit(Err(ForgeNegative::Denied)), Presence::Unknown);
 }

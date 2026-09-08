@@ -79,6 +79,13 @@ username and optional Forgejo pronouns. Authenticated-user lookup uses the bound
 reader before checking the dedicated reviewer's identity. Unknown fields, missing profile
 keys and unknown visibility values cannot be silently discarded or defaulted.
 
+Commit lookups retain the complete commit, parent, account, file, statistics and signature
+metadata through the same reader. Disabled metadata remains explicit null, while parent
+lists must be supplied. A nonempty malformed page cannot prove commit presence; an empty
+successful page remains unknown. Object IDs stay typed through refresh and relation
+consumers. Parsing an API tree identifier does not establish that it names the actual Git
+tree; refresh continues to use independently resolved Git objects.
+
 Every verdict row echoes the plan's document attribution, and the subject block binds
 report, plan, and evidence digests, so the same three inputs always reproduce the same
 assessment, digest included, and a lane can replay the whole chain from artifacts alone.

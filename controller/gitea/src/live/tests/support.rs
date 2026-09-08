@@ -10,13 +10,13 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::super::model::{
-    BranchProtectionRecord, BranchRecord, CommitBodyRecord, CommitMetaRecord, CommitRecord,
-    CommitStatusRecord, CreateCommitStatus, CreateReview, PayloadCommitRecord, PullRefRecord,
-    PullRepositoryRecord, PullRequestRecord, RefreshData, RepositoryRecord, ReviewRecord,
-    UserRecord,
+    BranchProtectionRecord, BranchRecord, CommitRecord, CommitStatusRecord, CreateCommitStatus,
+    CreateReview, PayloadCommitRecord, PullRefRecord, PullRepositoryRecord, PullRequestRecord,
+    RefreshData, RepositoryRecord, ReviewRecord, UserRecord,
 };
 use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
+use crate::commit::{CommitBodyRecord, CommitMetaRecord};
 use crate::{
     DedicatedReviewer, GiteaCommit, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects,
     GiteaPullRequest,
@@ -73,6 +73,14 @@ pub(super) const FORGEJO_PROTECTION: &str = r#"{
 pub(super) static USER: LazyLock<UserRecord> = LazyLock::new(|| {
     amiss_wire::read_json(
         include_bytes!("../../../tests/fixtures/gitea-user.json"),
+        u64::MAX,
+    )
+    .unwrap()
+});
+
+static COMMIT: LazyLock<CommitRecord> = LazyLock::new(|| {
+    amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/gitea-commit-full.json"),
         u64::MAX,
     )
     .unwrap()
@@ -323,16 +331,26 @@ pub(super) fn oid(value: char) -> Oid {
 
 pub(super) fn commit(commit: char, tree: char, parents: &[char]) -> CommitRecord {
     CommitRecord {
-        sha: oid(commit).as_str().to_owned(),
+        sha: oid(commit),
         commit: CommitBodyRecord {
             tree: CommitMetaRecord {
-                sha: oid(tree).as_str().to_owned(),
+                sha: oid(tree),
+                ..COMMIT.commit.tree.clone()
             },
+            ..COMMIT.commit.clone()
         },
-        parents: parent_names(parents)
-            .into_iter()
-            .map(|sha| CommitMetaRecord { sha })
+        parents: parents
+            .iter()
+            .map(|parent| CommitMetaRecord {
+                sha: oid(*parent),
+                url: format!(
+                    "https://forge.example/api/v1/repos/acme/widget/git/commits/{}",
+                    oid(*parent)
+                ),
+                created: "0001-01-01T00:00:00Z".to_owned(),
+            })
             .collect(),
+        ..COMMIT.clone()
     }
 }
 

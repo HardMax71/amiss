@@ -11,7 +11,7 @@ use amiss_controller::{
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
 use super::super::model::{CommitRecord, CommitStatusRecord, CreateCommitStatus, UserRecord};
@@ -21,12 +21,12 @@ use super::super::relation::{
 use super::support::Fixture;
 
 #[test]
-fn malformed_commit_or_tree_is_not_a_finality_fact() {
+fn wrong_format_commit_or_tree_is_not_a_finality_fact() {
     let malformed_commit = Fixture::mutated("gitea", |data| {
-        data.current_head.sha = "not-an-oid".to_owned();
+        data.current_head.sha = Oid::new(ObjectFormat::Sha256, "a".repeat(64)).unwrap();
     });
     let malformed_tree = Fixture::mutated("forgejo", |data| {
-        data.current_head.commit.tree.sha = "not-an-oid".to_owned();
+        data.current_head.commit.tree.sha = Oid::new(ObjectFormat::Sha256, "a".repeat(64)).unwrap();
     });
     for fixture in [malformed_commit, malformed_tree] {
         assert_eq!(
@@ -142,14 +142,16 @@ fn all_relation_verdicts_map_to_the_two_provider_states() {
 
 #[test]
 fn commit_status_requests_and_responses_use_the_native_wire_shape() {
-    let head: CommitRecord = serde_json::from_value(serde_json::json!({
-        "sha": "b".repeat(40),
-        "commit": {"tree": {"sha": "d".repeat(40)}},
-        "parents": [{"sha": "a".repeat(40)}]
-    }))
+    let head: CommitRecord = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/gitea-commit-full.json"),
+        u64::MAX,
+    )
     .unwrap();
-    assert_eq!(head.sha, "b".repeat(40));
-    assert_eq!(head.commit.tree.sha, "d".repeat(40));
+    assert_eq!(
+        head.sha.as_str(),
+        "555f1ae516acccb818f1510af58e6098f24f3c42"
+    );
+    assert_eq!(head.commit.tree.sha, head.sha);
 
     let decoded: CommitStatusRecord =
         serde_json::from_str(include_str!("../../../tests/fixtures/commit-status.json")).unwrap();
