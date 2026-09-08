@@ -208,6 +208,20 @@ fn a_report_may_fill_the_wire_and_not_pass_it() {
 fn only_an_accepted_report_keeps_its_semantic_inputs() {
     let request = request();
     let initial = snapshot(ChangeState::Active);
+    let template = amiss_wire::semantic::parse_template(include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../spec/examples/scanner-semantic-template.json"
+    )))
+    .unwrap();
+    let semantic = crate::bind_semantic_evidence(
+        &[template],
+        &[],
+        &[],
+        amiss_wire::digest::hb("test", b"candidate"),
+    )
+    .unwrap()
+    .artifact
+    .unwrap();
     let prepare = |bytes| {
         publication(
             &request,
@@ -219,14 +233,12 @@ fn only_an_accepted_report_keeps_its_semantic_inputs() {
                     bytes,
                     envelope: serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap(),
                 }),
-                semantic_artifact: Some(b"semantic".to_vec()),
+                semantic_artifact: Some(Arc::clone(&semantic)),
             }),
         )
     };
 
-    assert_eq!(
-        prepare(b"report".to_vec()).semantic_artifact,
-        Some(b"semantic".to_vec())
-    );
+    let artifact = prepare(b"report".to_vec()).semantic_artifact.unwrap();
+    assert!(Arc::ptr_eq(&artifact, &semantic));
     assert_eq!(prepare(Vec::new()).semantic_artifact, None);
 }

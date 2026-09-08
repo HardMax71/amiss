@@ -1,3 +1,4 @@
+use crate::semantic_artifact::{InputArtifact, input_artifact_size};
 use std::time::Duration;
 
 use amiss_wire::{
@@ -272,17 +273,30 @@ pub(super) fn retain_publication(
     policy: crate::ExternalPolicy,
     clock: &dyn ControllerClock,
     mut publication: Publication,
-    semantic_artifact: Option<&[u8]>,
+    semantic_artifact: Option<&InputArtifact>,
 ) -> Result<Publication, ArtifactError> {
     let report = publication
         .report
         .as_deref()
         .ok_or(ArtifactError::Corrupt)?;
     let artifact = if let Some(reference) = store.find(&publication.evaluation_id)? {
-        if reference.report_digest != amiss_wire::digest::sha256(&report.bytes)
-            || reference.semantic_digest.is_some_and(|digest| {
-                Some(digest) != semantic_artifact.map(amiss_wire::digest::sha256)
+        let report_matches = reference.report_digest == amiss_wire::digest::sha256(&report.bytes);
+        let semantic_digest = reference
+            .semantic_digest
+            .filter(|_digest| report_matches)
+            .zip(semantic_artifact)
+            .map(|(_digest, artifact)| {
+                input_artifact_size(artifact, crate::SEMANTIC_INPUT_ARTIFACT_BYTES)
+                    .map_err(|_defect| ArtifactError::TooLarge)?;
+                serde_json::to_vec(artifact)
+                    .map(|bytes| amiss_wire::digest::sha256(&bytes))
+                    .map_err(|_defect| ArtifactError::Corrupt)
             })
+            .transpose()?;
+        if !report_matches
+            || reference
+                .semantic_digest
+                .is_some_and(|digest| Some(digest) != semantic_digest)
         {
             return Err(ArtifactError::Conflict);
         }

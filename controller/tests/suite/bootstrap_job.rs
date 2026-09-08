@@ -354,19 +354,14 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     assert!(payload_digests.contains(&evidence_digest));
     assert!(payload_digests.windows(2).all(|pair| pair[0] < pair[1]));
 
-    let artifact_bytes = job.semantic_artifact.as_deref().unwrap();
-    let artifact: amiss_controller::semantic_artifact::InputArtifact<'static> =
-        amiss_wire::read_json(
-            artifact_bytes,
-            amiss_controller::SEMANTIC_INPUT_ARTIFACT_BYTES,
-        )
-        .unwrap();
+    let artifact = job.semantic_artifact.as_deref().unwrap();
     let acquired = artifact
         .inputs
         .iter()
         .find(|input| input.acquisition_identity.as_ref() == Some(&source.acquisition_identity))
         .unwrap();
     assert_eq!(acquired.template_bytes.as_ref(), source.bytes.as_ref());
+    assert!(Arc::ptr_eq(&acquired.template_bytes, &source.bytes));
     assert_eq!(acquired.envelope_bytes.as_ref(), evidence_bytes);
     assert_eq!(
         acquired.template_digest,

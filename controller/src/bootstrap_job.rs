@@ -15,6 +15,7 @@ use amiss_wire::requests::{
     SuppliedSemanticEvidence, SuppliedTime, commit_candidate_identity_digest,
 };
 
+use crate::semantic_artifact::InputArtifact;
 use crate::{OpaqueId, ProviderIdentity, RunRequest};
 
 pub use amiss_wire::semantic::SemanticEvidenceTemplate;
@@ -85,7 +86,7 @@ pub struct AcquiredSemanticTemplate {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BoundSemanticEvidence {
     pub supplied: Vec<SuppliedSemanticEvidence>,
-    pub artifact: Option<Vec<u8>>,
+    pub artifact: Option<Arc<InputArtifact>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
@@ -137,7 +138,7 @@ pub struct BootstrapJobInput<'a> {
 pub struct BootstrapJob {
     pub streams: RequestStreams,
     pub constraint: Vec<u8>,
-    pub semantic_artifact: Option<Vec<u8>>,
+    pub semantic_artifact: Option<Arc<InputArtifact>>,
 }
 
 /// Joins one authenticated run to its exact canonical bootstrap inputs. The

@@ -6,8 +6,8 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
-use super::{bind_input, input_artifact};
-use crate::semantic_artifact::InputArtifact;
+use super::bind_semantic_evidence;
+use crate::semantic_artifact::{InputArtifact, input_artifact_size};
 use crate::{BootstrapJobError, SemanticEvidenceTemplate};
 
 #[test]
@@ -26,28 +26,30 @@ fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
         complete: true,
         observations: Arc::from([]),
     };
-    let template_bytes = amiss_wire::semantic::template(template.clone())
-        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    let input = bind_input(
-        &template,
-        None,
-        template_bytes.into(),
+    let bound = bind_semantic_evidence(
+        &[template],
+        &[],
+        &[],
         hb("amiss/test-candidate", b"candidate"),
     )?;
-    let artifact = input_artifact(std::slice::from_ref(&input), u64::MAX)?;
+    let artifact = bound.artifact.ok_or(BootstrapJobError::SemanticEvidence)?;
+    let bytes =
+        serde_json::to_vec(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     let exact =
-        u64::try_from(artifact.len()).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    let parsed: InputArtifact<'static> = amiss_wire::read_json(&artifact, exact)
+        u64::try_from(bytes.len()).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let parsed: InputArtifact = amiss_wire::read_json(&bytes, exact)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
 
-    assert_eq!(serde_json_canonicalizer::to_vec(&parsed).unwrap(), artifact);
+    assert_eq!(&parsed, artifact.as_ref());
+    assert_eq!(serde_json_canonicalizer::to_vec(&parsed).unwrap(), bytes);
     assert_eq!(
-        input_artifact(std::slice::from_ref(&input), exact)?,
-        artifact
+        input_artifact_size(&artifact, exact)
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?,
+        exact
     );
-    assert_eq!(
-        input_artifact(std::slice::from_ref(&input), exact.saturating_sub(1)),
-        Err(BootstrapJobError::SemanticEvidence)
-    );
+    assert!(matches!(
+        input_artifact_size(&artifact, exact.saturating_sub(1)),
+        Err(amiss_wire::JsonInputError::LimitExceeded)
+    ));
     Ok(())
 }

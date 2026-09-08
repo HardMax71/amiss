@@ -14,7 +14,9 @@ use super::{
     AcquiredSemanticTemplate, BootstrapJobError, BoundSemanticEvidence,
     SEMANTIC_INPUT_ARTIFACT_BYTES, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
 };
-use crate::semantic_artifact::{InputArtifact, InputArtifactRow, InputArtifactSchema};
+use crate::semantic_artifact::{
+    InputArtifact, InputArtifactRow, InputArtifactSchema, input_artifact_size,
+};
 
 struct BoundInput {
     payload_digest: Digest,
@@ -94,15 +96,34 @@ pub fn bind_semantic_evidence(
     {
         return Err(BootstrapJobError::SemanticEvidence);
     }
-    let artifact = if bound.is_empty() {
+    let (supplied, inputs): (Vec<_>, Vec<_>) = bound
+        .into_iter()
+        .map(|input| {
+            (
+                input.supplied,
+                InputArtifactRow {
+                    acquisition_identity: input.acquisition_identity,
+                    envelope_bytes: input.envelope_bytes.into(),
+                    envelope_digest: input.envelope_digest,
+                    payload_digest: input.payload_digest,
+                    template_bytes: input.template_bytes,
+                    template_digest: input.template_digest,
+                },
+            )
+        })
+        .unzip();
+    let artifact = if inputs.is_empty() {
         None
     } else {
-        Some(input_artifact(&bound, SEMANTIC_INPUT_ARTIFACT_BYTES)?)
+        let artifact = InputArtifact {
+            inputs,
+            schema: InputArtifactSchema::Current,
+        };
+        input_artifact_size(&artifact, SEMANTIC_INPUT_ARTIFACT_BYTES)
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+        Some(Arc::new(artifact))
     };
-    Ok(BoundSemanticEvidence {
-        supplied: bound.into_iter().map(|input| input.supplied).collect(),
-        artifact,
-    })
+    Ok(BoundSemanticEvidence { supplied, artifact })
 }
 
 fn bind_input(
@@ -143,48 +164,4 @@ fn bind_input(
         envelope_digest: sha256(&envelope_bytes),
         envelope_bytes,
     })
-}
-
-fn input_artifact(inputs: &[BoundInput], limit: u64) -> Result<Vec<u8>, BootstrapJobError> {
-    let mut artifact = InputArtifact {
-        inputs: inputs
-            .iter()
-            .map(|input| InputArtifactRow {
-                acquisition_identity: input.acquisition_identity.as_ref(),
-                envelope_bytes: Cow::Borrowed(&[]),
-                envelope_digest: input.envelope_digest,
-                payload_digest: input.payload_digest,
-                template_bytes: Cow::Borrowed(&[]),
-                template_digest: input.template_digest,
-            })
-            .collect(),
-        schema: InputArtifactSchema::Current,
-    };
-    let mut metadata = countio::Counter::new(std::io::sink());
-    serde_json::to_writer(&mut metadata, &artifact)
-        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    let mut projected_length = u64::try_from(metadata.writer_bytes())
-        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    for input in inputs {
-        let template_length = base64::encoded_len(input.template_bytes.len(), true)
-            .and_then(|length| u64::try_from(length).ok())
-            .ok_or(BootstrapJobError::SemanticEvidence)?;
-        let envelope_length = base64::encoded_len(input.envelope_bytes.len(), true)
-            .and_then(|length| u64::try_from(length).ok())
-            .ok_or(BootstrapJobError::SemanticEvidence)?;
-        projected_length = projected_length
-            .checked_add(template_length)
-            .and_then(|length| length.checked_add(envelope_length))
-            .filter(|length| *length <= limit)
-            .ok_or(BootstrapJobError::SemanticEvidence)?;
-    }
-    for (row, input) in artifact.inputs.iter_mut().zip(inputs) {
-        row.template_bytes = Cow::Borrowed(&input.template_bytes);
-        row.envelope_bytes = Cow::Borrowed(&input.envelope_bytes);
-    }
-    let bytes =
-        serde_json::to_vec(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    (u64::try_from(bytes.len()).ok() == Some(projected_length))
-        .then_some(bytes)
-        .ok_or(BootstrapJobError::SemanticEvidence)
 }

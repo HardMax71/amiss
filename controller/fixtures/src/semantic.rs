@@ -7,7 +7,7 @@ use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
 pub struct SemanticInputArtifact {
     pub report: Vec<u8>,
-    pub artifact: Vec<u8>,
+    pub artifact: Arc<amiss_controller::semantic_artifact::InputArtifact>,
 }
 
 /// Builds one report-bound semantic-input audit artifact.

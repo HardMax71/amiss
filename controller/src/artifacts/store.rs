@@ -70,13 +70,13 @@ impl FileArtifactStore {
         evaluation_id: &ControllerEvaluationId,
         bundle: ArtifactBundle<'_>,
     ) -> Result<ArtifactReference, ArtifactError> {
-        let input = record_input(bundle)?;
+        let (input, semantic) = record_input(bundle)?;
         let payloads = [
             (
                 ArtifactComponent::Report,
                 Some(bundle.report.bytes.as_slice()),
             ),
-            (ArtifactComponent::Semantic, bundle.semantic),
+            (ArtifactComponent::Semantic, semantic.as_deref()),
             (ArtifactComponent::Plan, bundle.plan),
             (ArtifactComponent::Evidence, bundle.evidence),
             (ArtifactComponent::Assessment, bundle.assessment),
@@ -471,7 +471,9 @@ fn require_trusted(state: &State) -> Result<(), ArtifactError> {
     state.trusted.then_some(()).ok_or(ArtifactError::Corrupt)
 }
 
-fn record_input(bundle: ArtifactBundle<'_>) -> Result<RecordInput, ArtifactError> {
+fn record_input(
+    bundle: ArtifactBundle<'_>,
+) -> Result<(RecordInput, Option<Vec<u8>>), ArtifactError> {
     let valid = bundle.assessment.is_some() == bundle.external_tally.is_some()
         && (!bundle.external_incomplete || bundle.assessment.is_none())
         && bundle
@@ -480,18 +482,33 @@ fn record_input(bundle: ArtifactBundle<'_>) -> Result<RecordInput, ArtifactError
     if !valid {
         return Err(ArtifactError::Corrupt);
     }
-    if let Some(semantic) = bundle.semantic {
-        super::semantic::validate(&bundle.report.envelope, semantic)?;
-    }
-    Ok(RecordInput {
-        report: Blob::new(&bundle.report.bytes)?,
-        semantic: bundle.semantic.map(Blob::new).transpose()?,
-        plan: bundle.plan.map(Blob::new).transpose()?,
-        evidence: bundle.evidence.map(Blob::new).transpose()?,
-        assessment: bundle.assessment.map(Blob::new).transpose()?,
-        external_tally: bundle.external_tally,
-        external_incomplete: bundle.external_incomplete,
-        publication_audit: None,
-        relation_audit: None,
-    })
+    let semantic = bundle
+        .semantic
+        .map(|artifact| {
+            let size = crate::semantic_artifact::input_artifact_size(
+                artifact,
+                crate::SEMANTIC_INPUT_ARTIFACT_BYTES,
+            )
+            .map_err(|_defect| ArtifactError::TooLarge)?;
+            super::semantic::validate(&bundle.report.envelope, artifact)?;
+            let bytes = serde_json::to_vec(artifact).map_err(|_defect| ArtifactError::Corrupt)?;
+            (u64::try_from(bytes.len()).ok() == Some(size))
+                .then_some(bytes)
+                .ok_or(ArtifactError::Corrupt)
+        })
+        .transpose()?;
+    Ok((
+        RecordInput {
+            report: Blob::new(&bundle.report.bytes)?,
+            semantic: semantic.as_deref().map(Blob::new).transpose()?,
+            plan: bundle.plan.map(Blob::new).transpose()?,
+            evidence: bundle.evidence.map(Blob::new).transpose()?,
+            assessment: bundle.assessment.map(Blob::new).transpose()?,
+            external_tally: bundle.external_tally,
+            external_incomplete: bundle.external_incomplete,
+            publication_audit: None,
+            relation_audit: None,
+        },
+        semantic,
+    ))
 }

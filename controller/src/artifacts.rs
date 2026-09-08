@@ -4,6 +4,7 @@ mod store;
 
 use std::time::Duration;
 
+use crate::semantic_artifact::InputArtifact;
 use amiss_wire::digest::Digest;
 use url::Url;
 
@@ -32,7 +33,7 @@ pub struct ArtifactStoreConfig {
 #[derive(Clone, Copy)]
 pub struct ArtifactBundle<'a> {
     pub report: &'a CapturedReport,
-    pub semantic: Option<&'a [u8]>,
+    pub semantic: Option<&'a InputArtifact>,
     pub plan: Option<&'a [u8]>,
     pub evidence: Option<&'a [u8]>,
     pub assessment: Option<&'a [u8]>,

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::semantic_artifact::InputArtifact;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 
 use crate::{
@@ -119,7 +120,7 @@ pub enum RunnerOutcome {
         identity: Box<RunIdentity>,
         evaluation: Evaluation,
         report: Arc<CapturedReport>,
-        semantic_artifact: Option<Vec<u8>>,
+        semantic_artifact: Option<Arc<InputArtifact>>,
     },
     MissingOutput,
     OversizedOutput,

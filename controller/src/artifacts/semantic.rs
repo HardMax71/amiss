@@ -10,31 +10,25 @@ use crate::semantic_artifact::InputArtifact;
 
 use super::ArtifactError;
 
-pub(super) fn validate(report: &ReportEnvelope, artifact: &[u8]) -> Result<(), ArtifactError> {
-    if artifact.is_empty() {
-        return Err(ArtifactError::Corrupt);
-    }
-    if u64::try_from(artifact.len()).unwrap_or(u64::MAX) > crate::SEMANTIC_INPUT_ARTIFACT_BYTES {
-        return Err(ArtifactError::TooLarge);
-    }
+pub(super) fn validate(
+    report: &ReportEnvelope,
+    artifact: &InputArtifact,
+) -> Result<(), ArtifactError> {
     let report_evidence = match &report.payload.controls {
         Controls::Resolved(controls) => controls.semantic_evidence.as_deref().unwrap_or_default(),
         Controls::Unavailable(_) => &[],
     };
-    let decoded: InputArtifact<'static> =
-        amiss_wire::read_json(artifact, crate::SEMANTIC_INPUT_ARTIFACT_BYTES)
-            .map_err(|_defect| ArtifactError::Corrupt)?;
-    if decoded.inputs.is_empty()
-        || decoded.inputs.len() > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT
+    if artifact.inputs.is_empty()
+        || artifact.inputs.len() > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT
     {
         return Err(ArtifactError::Corrupt);
     }
 
     let mut acquisition_identities = BTreeSet::new();
     let mut candidate_identity = None;
-    let mut payload_digests = Vec::with_capacity(decoded.inputs.len());
-    for row in decoded.inputs {
-        if let Some(identity) = row.acquisition_identity
+    let mut payload_digests = Vec::with_capacity(artifact.inputs.len());
+    for row in &artifact.inputs {
+        if let Some(identity) = &row.acquisition_identity
             && !acquisition_identities.insert(identity)
         {
             return Err(ArtifactError::Corrupt);

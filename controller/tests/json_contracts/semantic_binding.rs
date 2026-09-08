@@ -70,12 +70,7 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
         assert!(previous.is_none_or(|digest| digest != document.payload_digest));
         previous = Some(document.payload_digest);
 
-        let artifact: amiss_controller::semantic_artifact::InputArtifact<'static> =
-            amiss_wire::read_json(
-                &bound.artifact.unwrap(),
-                amiss_controller::SEMANTIC_INPUT_ARTIFACT_BYTES,
-            )
-            .unwrap();
+        let artifact = bound.artifact.unwrap();
         let row = &artifact.inputs[0];
         assert_eq!(row.payload_digest, document.payload_digest);
         assert_eq!(

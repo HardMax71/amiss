@@ -3,6 +3,7 @@ mod tests;
 use std::sync::Arc;
 
 use crate::CapturedReport;
+use crate::semantic_artifact::InputArtifact;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use super::ledger::{CheckConclusion, Publication};
@@ -12,7 +13,7 @@ use super::model::{
 
 pub(super) struct PreparedPublication {
     pub(super) publication: Publication,
-    pub(super) semantic_artifact: Option<Vec<u8>>,
+    pub(super) semantic_artifact: Option<Arc<InputArtifact>>,
 }
 
 pub(super) fn publication(

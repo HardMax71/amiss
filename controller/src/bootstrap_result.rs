@@ -3,6 +3,7 @@ use std::sync::Arc;
 use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, parse_result, result_exit_code};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
+use crate::semantic_artifact::InputArtifact;
 use crate::{CapturedReport, Evaluation, RunRequest, RunnerOutcome};
 
 type Classification<T> = Result<T, RunnerOutcome>;
@@ -24,7 +25,7 @@ pub fn classify_bootstrap_result(
     termination: BootstrapTermination,
     result: Option<Vec<u8>>,
     report: Vec<u8>,
-    semantic_artifact: Option<Vec<u8>>,
+    semantic_artifact: Option<Arc<InputArtifact>>,
 ) -> RunnerOutcome {
     exit_code(termination)
         .and_then(|exit_code| result_record(result).map(|result| (exit_code, result)))
@@ -72,7 +73,7 @@ fn complete(
     request: &RunRequest,
     result: BootstrapResult,
     report: Vec<u8>,
-    semantic_artifact: Option<Vec<u8>>,
+    semantic_artifact: Option<Arc<InputArtifact>>,
 ) -> Classification<RunnerOutcome> {
     let evaluation = classify_record(result)?;
     let bytes = bounded_nonempty(

@@ -21,13 +21,14 @@ mod semantic_binding;
 #[test]
 fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
     let fixture = semantic_input_artifact().unwrap();
+    let encoded = serde_json::to_vec(&fixture.artifact).unwrap();
     let original = amiss_fixtures::captured_report(fixture.report).unwrap();
     let captured =
         amiss_fixtures::captured_report(serde_json::to_vec_pretty(&original.envelope).unwrap())
             .unwrap();
     assert_ne!(original.bytes, captured.bytes);
     assert_eq!(
-        sha256(&fixture.artifact).to_string(),
+        sha256(&encoded).to_string(),
         "sha256:6e84784cf279b723c750b0151d38bfa74caf9166995267f037dad6303aa9d595"
     );
     let root = tempfile::tempdir().unwrap();
@@ -56,13 +57,13 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
             },
         )
         .unwrap();
-    assert_eq!(reference.semantic_digest, Some(sha256(&fixture.artifact)));
+    assert_eq!(reference.semantic_digest, Some(sha256(&encoded)));
     assert_eq!(reference.report_digest, sha256(&captured.bytes));
     assert_eq!(
         store
             .read(&reference.id, ArtifactComponent::Semantic)
             .unwrap(),
-        fixture.artifact
+        encoded
     );
     drop(store);
     let reopened = FileArtifactStore::open_with_clock(root.path(), config, clock).unwrap();
