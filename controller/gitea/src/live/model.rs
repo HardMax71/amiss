@@ -1,5 +1,6 @@
 use serde::Deserialize;
 
+pub(super) use crate::branch::BranchRecord;
 pub(super) use crate::commit::CommitRecord;
 pub(super) use crate::reference::RefRecord;
 pub(super) use crate::repository::RepositoryRecord;
@@ -26,20 +27,6 @@ pub(super) struct PullRefRecord {
     pub branch: String,
     pub repo_id: u64,
     pub repo: Option<RepositoryRecord>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct BranchRecord {
-    pub name: String,
-    pub commit: Option<PayloadCommitRecord>,
-    pub protected: bool,
-    pub required_approvals: i64,
-    pub effective_branch_protection_name: String,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct PayloadCommitRecord {
-    pub id: String,
 }
 
 #[derive(Clone, Deserialize)]

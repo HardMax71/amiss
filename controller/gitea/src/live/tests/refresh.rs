@@ -245,7 +245,7 @@ fn wrong_identity_tree_and_review_rule_fail_closed() {
     let cases: [fn(&mut RefreshData); 9] = [
         |data| data.repository.id = 999,
         |data| data.pull_request.base.repo_id = 999,
-        |data| data.target_branch.commit.as_mut().unwrap().id = oid('e').as_str().to_owned(),
+        |data| data.target_branch.commit.as_mut().unwrap().id = oid('e'),
         |data| data.candidate.parents.clear(),
         |data| data.reviewer.id = 999,
         |data| data.pull_request.head.repo_id = 0,
@@ -450,7 +450,7 @@ fn an_open_pull_request_that_claims_merged_is_invalid() {
 /// consistent drift is superseded, an inconsistent response is invalid.
 #[test]
 fn each_consistency_fact_refuses_alone() {
-    let cases: [(&str, DataDeviation); 3] = [
+    let cases: [(&str, DataDeviation); 5] = [
         ("fetched head disagrees with the embedded head", |data| {
             data.current_head = commit('e', 'f', &['a']);
         }),
@@ -458,7 +458,13 @@ fn each_consistency_fact_refuses_alone() {
             data.pull_request.base.sha = oid('e').as_str().to_owned();
         }),
         ("branch tip disagrees with the target", |data| {
-            data.target_branch.commit.as_mut().unwrap().id = oid('e').as_str().to_owned();
+            data.target_branch.commit.as_mut().unwrap().id = oid('e');
+        }),
+        ("branch tip is absent", |data| {
+            data.target_branch.commit = None;
+        }),
+        ("branch tip has a different object format", |data| {
+            data.target_branch.commit.as_mut().unwrap().id = "a".repeat(64).parse().unwrap();
         }),
     ];
     for (reason, mutate) in cases {

@@ -11,11 +11,12 @@ use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::super::model::{
     BranchProtectionRecord, BranchRecord, CommitRecord, CommitStatusRecord, CreateCommitStatus,
-    CreateReview, PayloadCommitRecord, PullRefRecord, PullRequestRecord, RefreshData,
-    RepositoryRecord, ReviewRecord, UserRecord,
+    CreateReview, PullRefRecord, PullRequestRecord, RefreshData, RepositoryRecord, ReviewRecord,
+    UserRecord,
 };
 use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
+use crate::branch::PayloadCommitRecord;
 use crate::commit::{CommitBodyRecord, CommitMetaRecord};
 use crate::review::ReviewState;
 use crate::{
@@ -99,6 +100,14 @@ pub(super) static REVIEW: LazyLock<ReviewRecord> = LazyLock::new(|| {
 static COMMIT: LazyLock<CommitRecord> = LazyLock::new(|| {
     amiss_wire::read_json(
         include_bytes!("../../../tests/fixtures/gitea-commit-full.json"),
+        u64::MAX,
+    )
+    .unwrap()
+});
+
+pub(super) static BRANCH: LazyLock<BranchRecord> = LazyLock::new(|| {
+    amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/gitea-branch.json"),
         u64::MAX,
     )
     .unwrap()
@@ -476,11 +485,13 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
         target_branch: BranchRecord {
             name: "main".to_owned(),
             commit: Some(PayloadCommitRecord {
-                id: oid('a').as_str().to_owned(),
+                id: oid('a'),
+                ..BRANCH.commit.clone().unwrap()
             }),
             protected: true,
             required_approvals: 1,
             effective_branch_protection_name: "main".to_owned(),
+            ..BRANCH.clone()
         },
         protection,
         target: commit('a', 'c', &[]),

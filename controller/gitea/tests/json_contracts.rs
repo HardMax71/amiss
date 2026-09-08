@@ -1,5 +1,8 @@
 use std::io::Cursor;
 
+#[path = "json_contracts/branches.rs"]
+mod branches;
+
 #[path = "json_contracts/commits.rs"]
 mod commits;
 

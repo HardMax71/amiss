@@ -75,12 +75,12 @@ pub(super) fn snapshot(
     let current_head = exact_oid(&data.pull_request.head.sha)?;
     let fetched_head = &data.current_head.sha;
     let base = data.target.sha.clone();
-    let branch_base = data
+    let branch_base = &data
         .target_branch
         .commit
         .as_ref()
-        .ok_or(ProviderError::InvalidResponse)
-        .and_then(|commit| exact_oid(&commit.id))?;
+        .ok_or(ProviderError::InvalidResponse)?
+        .id;
     let candidate_tree = objects.candidate.tree.clone();
     let base_object = objects
         .base
@@ -91,7 +91,7 @@ pub(super) fn snapshot(
     if candidate != *pull_request.candidate_commit
         || current_head != *fetched_head
         || data.pull_request.base.sha != data.target.sha.as_str()
-        || base != branch_base
+        || base != *branch_base
         || objects.candidate.id != candidate
         || base_object.id != base
     {

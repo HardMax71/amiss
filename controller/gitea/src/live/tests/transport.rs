@@ -49,6 +49,7 @@ fn effective_rule_name_selects_the_protection_resource() {
         protected: true,
         required_approvals: 1,
         effective_branch_protection_name: name.to_owned(),
+        ..super::support::BRANCH.clone()
     };
     assert_eq!(
         protection_rule_path(&branch("release/*")),

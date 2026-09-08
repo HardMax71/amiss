@@ -217,12 +217,13 @@ impl GiteaRest for HttpRest {
         })?;
         let authoritative: PullRequestRecord =
             self.get(&format!("{prefix}/pulls/{}", pull_request.number), deadline)?;
-        let target_branch: BranchRecord = self.get(
+        let target_branch: BranchRecord = self.transport.get(
             &format!(
                 "{prefix}/branches/{}",
                 path_segment(&authoritative.base.branch)
             ),
             deadline,
+            |bytes| amiss_wire::read_json(bytes, u64::MAX),
         )?;
         let protection: BranchProtectionRecord = self.get(
             &format!(
