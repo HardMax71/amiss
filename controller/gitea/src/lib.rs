@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod adapter;
+pub mod content;
 mod fetch_plan;
 mod identity;
 mod live;

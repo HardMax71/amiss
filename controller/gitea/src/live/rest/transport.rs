@@ -72,10 +72,11 @@ impl Transport {
 
     /// A verification GET whose negative answers are facts: the absence or
     /// refusal of what the route names, distinct from a failed call.
-    pub(super) fn get_fact<T: DeserializeOwned>(
+    pub(super) fn get_fact<T, E>(
         &self,
         route: &str,
         deadline: OperationDeadline,
+        decode: impl FnOnce(&[u8]) -> Result<T, E>,
     ) -> Result<ForgeFact<T>, ProviderError> {
         let request = self.client.get(self.url(route)?);
         let response = self
@@ -85,7 +86,11 @@ impl Transport {
             .map_err(|error| map_error(&error))?;
         let status = response.status();
         match classified(status).ok_or_else(|| map_status(status))? {
-            Ok(()) => decode_body(response).map(Ok),
+            Ok(()) => {
+                let declared = response.content_length();
+                decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, decode)
+                    .map(|(value, _length)| Ok(value))
+            }
             Err(negative) => Ok(Err(negative)),
         }
     }

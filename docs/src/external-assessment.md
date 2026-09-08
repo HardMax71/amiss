@@ -68,6 +68,12 @@ body to the selected JSON decoder. An oversized or rejected body is an invalid r
 a failed read is an unavailable provider. The transport limit applies whichever typed
 reader a route uses.
 
+Gitea and Forgejo content checks keep GET because HEAD support differs between deployments.
+They decode complete file or directory responses, retaining the declared metadata and
+nullable fields without inventing missing modes or timestamps. Unknown fields and kinds,
+malformed object IDs, duplicate keys and positional objects are rejected before content
+can prove presence. The returned links are metadata, not URLs the verifier follows.
+
 Every verdict row echoes the plan's document attribution, and the subject block binds
 report, plan, and evidence digests, so the same three inputs always reproduce the same
 assessment, digest included, and a lane can replay the whole chain from artifacts alone.

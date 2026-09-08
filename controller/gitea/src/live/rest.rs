@@ -11,6 +11,7 @@ use secrecy::SecretString;
 use serde::de::DeserializeOwned;
 
 use crate::GiteaPullRequest;
+use crate::content::ContentResponse;
 
 use super::model::{
     BranchProtectionRecord, BranchRecord, CommitRecord, CommitStatusRecord, CreateCommitStatus,
@@ -334,10 +335,11 @@ impl GiteaVerification for HttpRest {
     ) -> Result<Visibility, ProviderError> {
         let route = format!("/repos/{}/{}", path_segment(owner), path_segment(name));
         Ok(
-            match self
-                .transport
-                .get_fact::<serde::de::IgnoredAny>(&route, deadline)?
-            {
+            match self.transport.get_fact::<serde::de::IgnoredAny, _>(
+                &route,
+                deadline,
+                |bytes| serde_json::from_slice(bytes),
+            )? {
                 Ok(_) => Visibility::Readable,
                 Err(ForgeNegative::Missing) => Visibility::Missing,
                 Err(ForgeNegative::Denied) => Visibility::Denied,
@@ -362,7 +364,9 @@ impl GiteaVerification for HttpRest {
         );
         Ok(ref_listing(
             self.transport
-                .get_fact::<Vec<RefRecord>>(&route, deadline)?,
+                .get_fact::<Vec<RefRecord>, _>(&route, deadline, |bytes| {
+                    serde_json::from_slice(bytes)
+                })?,
             family,
         ))
     }
@@ -385,7 +389,9 @@ impl GiteaVerification for HttpRest {
         );
         let fact = self
             .transport
-            .get_fact::<serde::de::IgnoredAny>(&route, deadline)?;
+            .get_fact::<ContentResponse, _>(&route, deadline, |bytes| {
+                amiss_wire::read_json(bytes, u64::MAX)
+            })?;
         Ok(fact.map_or_else(
             |negative| match negative {
                 ForgeNegative::Missing => Presence::Absent,
@@ -408,7 +414,9 @@ impl GiteaVerification for HttpRest {
             path_segment(name),
             path_segment(revision),
         );
-        self.transport.get_fact(&route, deadline).map(listed_commit)
+        self.transport
+            .get_fact(&route, deadline, |bytes| serde_json::from_slice(bytes))
+            .map(listed_commit)
     }
 }
 
