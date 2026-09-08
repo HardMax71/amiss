@@ -11,7 +11,7 @@ use amiss_wire::relation::RelationSnapshot;
 use crate::{GiteaObjectRequest, GiteaObjectResolver, fetch_plan::repository_url};
 
 use super::model::{CommitRecord, CommitStatusRecord, CreateCommitStatus, RepositoryRecord};
-use super::refresh::{exact_oid, repository_identity, validate_reviewer};
+use super::refresh::{repository_identity, validate_reviewer};
 use super::rest::GiteaRest;
 use super::{Client, Config, agrees};
 
@@ -102,12 +102,15 @@ pub(super) fn resolve_snapshot(
         base_commit: None,
         timeout,
     })?;
-    if objects.base.is_some() || !agrees(&objects.candidate, head) {
+    if objects.base.is_some()
+        || !agrees(&objects.candidate, head)
+        || objects.candidate.tree.object_format() != subject.object_format
+    {
         return Err(ProviderError::InvalidResponse);
     }
     Ok(RelationSnapshot {
         commit: head.sha.clone(),
-        tree: exact_oid(&objects.candidate.tree)?,
+        tree: objects.candidate.tree,
     })
 }
 

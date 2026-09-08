@@ -23,7 +23,7 @@ use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
-use crate::support::identity::{HOST, now_seconds};
+use crate::support::identity::{HOST, TestClock, now_seconds, oid};
 use crate::support::oidc::{accept, claims, oidc};
 use crate::support::refresh::{publication, valid_refresh};
 
@@ -129,11 +129,21 @@ fn wrong_job_pipeline_and_commit_topology_are_invalid_provider_data() {
     wrong_runner.job.runner_id = 88;
     cases.push(wrong_runner);
     let mut wrong_source_parent = valid.clone();
-    wrong_source_parent.gate.parents = vec!["a".repeat(40), "d".repeat(40)];
+    wrong_source_parent.gate.parents = vec![oid('a'), oid('d')];
     cases.push(wrong_source_parent);
     let mut extra_parent = valid.clone();
-    extra_parent.gate.parents.push("d".repeat(40));
+    extra_parent.gate.parents.push(oid('d'));
     cases.push(extra_parent);
+    let foreign = amiss_wire::model::Oid::new(ObjectFormat::Sha256, "d".repeat(64)).unwrap();
+    let mut wrong_tree_format = valid.clone();
+    wrong_tree_format.gate.tree = foreign.clone();
+    cases.push(wrong_tree_format);
+    let mut wrong_base_format = valid.clone();
+    wrong_base_format.base.tree = foreign.clone();
+    cases.push(wrong_base_format);
+    let mut wrong_parent_format = valid.clone();
+    wrong_parent_format.base.parents.push(foreign);
+    cases.push(wrong_parent_format);
     let mut wrong_project = valid;
     wrong_project.project.http_url_to_repo = "https://gitlab.example/acme/other.git".to_owned();
     cases.push(wrong_project);
@@ -337,7 +347,7 @@ fn policy_job_resolves_only_its_ephemeral_relation_candidate() {
             subject: subject.clone(),
             candidate: RelationSnapshot {
                 commit: delivery.provider_run.candidate_commit.clone(),
-                tree: crate::support::identity::oid('e'),
+                tree: oid('e'),
             },
         })
     );
@@ -428,7 +438,7 @@ fn fixture() -> (
     amiss_controller::AuthenticatedDelivery,
     GitLabRefresh,
 ) {
-    let now = now_seconds();
+    let now = u64::try_from(TestClock::DEFAULT / 1_000).unwrap();
     let source = oidc();
     let delivery = accept(&source, &claims(now), BODY, now)
         .unwrap()

@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use amiss_controller::ResolvedCommit;
 use amiss_wire::model::Oid;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -20,8 +21,8 @@ pub struct GitLabRefresh {
     pub train: Option<GitLabTrainCar>,
     pub merge_request: GitLabMergeRequest,
     pub target: GitLabBranch,
-    pub gate: GitLabCommit,
-    pub base: GitLabCommit,
+    pub gate: ResolvedCommit,
+    pub base: ResolvedCommit,
     pub protections: Vec<GitLabProtection>,
 }
 
@@ -112,13 +113,6 @@ pub struct GitLabBranch {
     pub commit: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GitLabCommit {
-    pub id: String,
-    pub tree: String,
-    pub parents: Vec<String>,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 pub struct GitLabProtection {
     pub name: String,
@@ -147,6 +141,6 @@ pub struct GitLabObjectRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitLabObjects {
-    pub gate: GitLabCommit,
-    pub base: GitLabCommit,
+    pub gate: ResolvedCommit,
+    pub base: ResolvedCommit,
 }

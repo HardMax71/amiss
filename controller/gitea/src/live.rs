@@ -266,12 +266,10 @@ struct Config {
     review_name: String,
 }
 
-fn agrees(resolved: &crate::GiteaCommit, record: &CommitRecord) -> bool {
-    resolved.id == record.sha.as_str()
-        && resolved.parents.len() == record.parents.len()
+fn agrees(resolved: &amiss_controller::ResolvedCommit, record: &CommitRecord) -> bool {
+    resolved.id == record.sha
         && resolved
             .parents
             .iter()
-            .zip(&record.parents)
-            .all(|(resolved, record)| *resolved == record.sha.as_str())
+            .eq(record.parents.iter().map(|parent| &parent.sha))
 }

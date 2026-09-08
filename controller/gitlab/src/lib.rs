@@ -13,7 +13,7 @@ pub use adapter::{GitLabApi, GitLabMergeTrainAdapter, policy_job_accepted};
 pub use fetch_plan::{GitLabFetchPlan, GitLabPlanError, gitlab_fetch_plan};
 pub use live::{GitLabClient, GitLabClientError, GitLabObjectResolver, GitLabTimeouts};
 pub use model::{
-    GitLabAccess, GitLabBranch, GitLabCommit, GitLabJob, GitLabMergeChecks, GitLabMergeRequest,
+    GitLabAccess, GitLabBranch, GitLabJob, GitLabMergeChecks, GitLabMergeRequest,
     GitLabObjectRequest, GitLabObjects, GitLabPipeline, GitLabProject, GitLabProtection,
     GitLabRefresh, GitLabRefreshQuery, GitLabTrainCar, GitLabTrainSettings,
 };

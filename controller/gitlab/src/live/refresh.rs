@@ -240,8 +240,13 @@ pub(super) fn resolved_matches_claim(
         .parents
         .first()
         .ok_or(ProviderError::InvalidResponse)?;
-    if objects.gate.id != commit.id
-        || objects.gate.parents != commit.parent_ids
+    if objects.gate.id.as_str() != commit.id
+        || !objects
+            .gate
+            .parents
+            .iter()
+            .map(amiss_wire::model::Oid::as_str)
+            .eq(commit.parent_ids.iter().map(String::as_str))
         || &objects.base.id != resolved_base
     {
         return Err(ProviderError::InvalidResponse);

@@ -4,10 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use amiss_controller::ProviderError;
-use amiss_controller_gitlab::{
-    GitLabCommit, GitLabObjectRequest, GitLabObjectResolver, GitLabObjects,
-};
-use amiss_controller_service::{GitObjectSource, ResolveWant, ResolvedCommit};
+use amiss_controller_gitlab::{GitLabObjectRequest, GitLabObjectResolver, GitLabObjects};
+use amiss_controller_service::{GitObjectSource, ResolveWant};
 use secrecy::SecretString;
 
 const PREFIX: &str = "amiss-gitlab-objects-";
@@ -58,17 +56,6 @@ impl GitLabObjectResolver for GitLabGitObjects {
             ],
             request.timeout,
         )?;
-        Ok(GitLabObjects {
-            gate: commit(gate),
-            base: commit(base),
-        })
-    }
-}
-
-fn commit(resolved: ResolvedCommit) -> GitLabCommit {
-    GitLabCommit {
-        id: resolved.id,
-        tree: resolved.tree,
-        parents: resolved.parents,
+        Ok(GitLabObjects { gate, base })
     }
 }

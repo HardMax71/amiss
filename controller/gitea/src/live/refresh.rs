@@ -81,19 +81,19 @@ pub(super) fn snapshot(
         .as_ref()
         .ok_or(ProviderError::InvalidResponse)
         .and_then(|commit| exact_oid(&commit.id))?;
-    let candidate_tree = exact_oid(&objects.candidate.tree)?;
+    let candidate_tree = objects.candidate.tree.clone();
     let base_object = objects
         .base
         .as_ref()
         .ok_or(ProviderError::InvalidResponse)?;
-    let base_tree = exact_oid(&base_object.tree)?;
+    let base_tree = base_object.tree.clone();
     let merge_base = exact_oid(&data.pull_request.merge_base)?;
     if candidate != *pull_request.candidate_commit
         || current_head != *fetched_head
         || data.pull_request.base.sha != data.target.sha.as_str()
         || base != branch_base
-        || objects.candidate.id != candidate.as_str()
-        || base_object.id != base.as_str()
+        || objects.candidate.id != candidate
+        || base_object.id != base
     {
         return Err(ProviderError::InvalidResponse);
     }

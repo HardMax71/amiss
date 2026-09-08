@@ -19,21 +19,19 @@ pub(crate) fn snapshot(
     query: &GitLabRefreshQuery,
     refresh: &GitLabRefresh,
 ) -> Result<ChangeSnapshot, ProviderError> {
-    let gate = exact_oid(&refresh.gate.id)?;
-    let gate_tree = exact_oid(&refresh.gate.tree)?;
-    let base = exact_oid(&refresh.base.id)?;
-    let base_tree = exact_oid(&refresh.base.tree)?;
+    let gate = refresh.gate.id.clone();
+    let gate_tree = refresh.gate.tree.clone();
+    let base = refresh.base.id.clone();
+    let base_tree = refresh.base.tree.clone();
     let target = exact_oid(&refresh.target.commit)?;
     let source = exact_oid(&refresh.merge_request.sha)?;
     let [first_parent, second_parent] = refresh.gate.parents.as_slice() else {
         return Err(ProviderError::InvalidResponse);
     };
-    let first_parent = exact_oid(first_parent)?;
-    let second_parent = exact_oid(second_parent)?;
     let parents_valid = [&refresh.base, &refresh.gate]
         .into_iter()
         .flat_map(|commit| &commit.parents)
-        .all(|parent| exact_oid(parent).is_ok());
+        .all(|parent| parent.object_format() == ObjectFormat::Sha1);
     let records_valid = validate_project(delivery, policy, query, refresh)?
         && refresh.job.id == query.job_id
         && refresh.job.name == policy.job_name
@@ -56,8 +54,8 @@ pub(crate) fn snapshot(
         && refresh.merge_request.target_branch == policy.target_branch
         && refresh.target.name == policy.target_branch
         && gate == query.gate_commit
-        && first_parent == base
-        && second_parent == source
+        && *first_parent == base
+        && *second_parent == source
         && target != gate
         && parents_valid;
     if !records_valid {

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::time::{Duration, Instant};
 
-use amiss_controller::ProviderError;
+use amiss_controller::{ProviderError, ResolvedCommit};
 use amiss_controller_git::{
     DEFAULT_GIT_FETCH_LIMITS, ExactFetch, ExactWant, GitCredential, GitFetchBounds, fetch_exact,
 };
@@ -13,13 +13,6 @@ use amiss_wire::model::{ObjectFormat, Oid};
 use secrecy::SecretString;
 
 const MAX_USERNAME_BYTES: usize = 256;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResolvedCommit {
-    pub id: String,
-    pub tree: String,
-    pub parents: Vec<String>,
-}
 
 #[derive(Clone, Copy)]
 pub struct ResolveWant<'a> {
@@ -86,8 +79,7 @@ impl GitObjectSource {
         timeout: Duration,
     ) -> Result<[ResolvedCommit; N], ProviderError> {
         let exact = wants.iter().all(|want| {
-            Oid::new(ObjectFormat::Sha1, want.oid.as_str().to_owned()).as_ref() == Some(want.oid)
-                && !want.reference.is_empty()
+            want.oid.object_format() == ObjectFormat::Sha1 && !want.reference.is_empty()
         });
         if !exact || timeout.is_zero() {
             return Err(ProviderError::InvalidResponse);
@@ -164,13 +156,9 @@ fn read_commit(
         .map_err(|_defect| ProviderError::InvalidResponse)?;
     active(deadline)?;
     Ok(ResolvedCommit {
-        id: oid.as_str().to_owned(),
-        tree: commit.tree.as_str().to_owned(),
-        parents: commit
-            .parents
-            .into_iter()
-            .map(|parent| parent.as_str().to_owned())
-            .collect(),
+        id: oid.clone(),
+        tree: commit.tree,
+        parents: commit.parents,
     })
 }
 

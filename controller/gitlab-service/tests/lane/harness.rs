@@ -300,7 +300,7 @@ impl LaneCase {
         let mut third = first.clone();
         match self {
             Self::WrongTree => {
-                "dddddddddddddddddddddddddddddddddddddddd".clone_into(&mut second.gate.tree);
+                second.gate.tree = Oid::new(ObjectFormat::Sha1, "d".repeat(40)).unwrap();
                 second.clone_into(&mut third);
                 [second.clone(), second, third]
             }

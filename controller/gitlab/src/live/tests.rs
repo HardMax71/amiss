@@ -4,7 +4,7 @@
     reason = "fixed pagination boundaries must fail loudly"
 )]
 
-use amiss_controller::ProviderError;
+use amiss_controller::{ProviderError, ResolvedCommit};
 
 use super::model::{CommitResponse, ProjectResponse};
 use super::refresh::validated_repository_url;
@@ -131,11 +131,14 @@ fn rest_commit(id: &str, parents: &[&str]) -> CommitResponse {
     }
 }
 
-fn resolved(id: &str, parents: &[&str], tree: char) -> crate::GitLabCommit {
-    crate::GitLabCommit {
-        id: id.to_owned(),
-        tree: tree.to_string().repeat(40),
-        parents: parents.iter().map(|parent| (*parent).to_owned()).collect(),
+fn resolved(id: &str, parents: &[&str], tree: char) -> ResolvedCommit {
+    ResolvedCommit {
+        id: crate::identity::exact_sha1(id).unwrap(),
+        tree: crate::identity::exact_sha1(&tree.to_string().repeat(40)).unwrap(),
+        parents: parents
+            .iter()
+            .map(|parent| crate::identity::exact_sha1(parent).unwrap())
+            .collect(),
     }
 }
 
@@ -184,8 +187,7 @@ fn resolved_objects_must_repeat_the_claim_exactly() {
     let base_hex = "a".repeat(40);
     let other_hex = "c".repeat(40);
     let claim = rest_commit(&gate_hex, &[&base_hex]);
-    let objects =
-        |gate: crate::GitLabCommit, base: crate::GitLabCommit| crate::GitLabObjects { gate, base };
+    let objects = |gate: ResolvedCommit, base: ResolvedCommit| crate::GitLabObjects { gate, base };
 
     assert_eq!(
         resolved_matches_claim(

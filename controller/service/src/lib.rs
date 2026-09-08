@@ -46,7 +46,7 @@ pub use inbox::{
 pub use lane::{check_lane, repository_admission};
 pub use launcher::service_main;
 pub use limits::InboxLimits;
-pub use objects::{GitObjectSource, ResolveWant, ResolvedCommit};
+pub use objects::{GitObjectSource, ResolveWant};
 pub use operations::{Operations, ServiceComponent, ServiceEvent};
 pub use probe::EndpointDrain;
 pub use queued::{

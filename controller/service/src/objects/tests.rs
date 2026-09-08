@@ -21,11 +21,14 @@ fn local_object_proof_reads_exact_commit_trees_and_parents()
         Instant::now() + Duration::from_secs(5),
     )?;
 
-    assert_eq!(read_candidate.id, pair.candidate);
-    assert_eq!(read_base.id, pair.base);
-    assert_eq!(read_candidate.parents, [read_base.id.as_str()]);
-    assert_eq!(read_candidate.tree, pair.candidate_tree);
-    assert_eq!(read_base.tree, pair.base_tree);
+    assert_eq!(read_candidate.id, candidate);
+    assert_eq!(read_base.id, base);
+    assert_eq!(
+        read_candidate.parents.as_slice(),
+        std::slice::from_ref(&read_base.id)
+    );
+    assert_eq!(read_candidate.tree.as_str(), pair.candidate_tree);
+    assert_eq!(read_base.tree.as_str(), pair.base_tree);
     assert!(read_base.parents.is_empty());
     Ok(())
 }

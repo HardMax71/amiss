@@ -1,11 +1,10 @@
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, CheckBinding, CheckConclusion, ControllerEvaluationId,
-    Publication,
+    Publication, ResolvedCommit,
 };
 use amiss_controller_gitlab::{
-    GitLabAccess, GitLabBranch, GitLabCommit, GitLabJob, GitLabMergeChecks, GitLabMergeRequest,
-    GitLabPipeline, GitLabProject, GitLabProtection, GitLabRefresh, GitLabTrainCar,
-    GitLabTrainSettings,
+    GitLabAccess, GitLabBranch, GitLabJob, GitLabMergeChecks, GitLabMergeRequest, GitLabPipeline,
+    GitLabProject, GitLabProtection, GitLabRefresh, GitLabTrainCar, GitLabTrainSettings,
 };
 use amiss_wire::digest::hb;
 
@@ -81,14 +80,14 @@ pub fn valid_refresh(delivery: &AuthenticatedDelivery) -> GitLabRefresh {
             name: "main".to_owned(),
             commit: oid('d').as_str().to_owned(),
         },
-        gate: GitLabCommit {
-            id: gate,
-            tree: oid('e').as_str().to_owned(),
-            parents: vec![oid('a').as_str().to_owned(), oid('c').as_str().to_owned()],
+        gate: ResolvedCommit {
+            id: delivery.provider_run.candidate_commit.clone(),
+            tree: oid('e'),
+            parents: vec![oid('a'), oid('c')],
         },
-        base: GitLabCommit {
-            id: oid('a').as_str().to_owned(),
-            tree: oid('f').as_str().to_owned(),
+        base: ResolvedCommit {
+            id: oid('a'),
+            tree: oid('f'),
             parents: Vec::new(),
         },
         protections: vec![GitLabProtection {

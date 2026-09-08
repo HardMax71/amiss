@@ -2,6 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use amiss_wire::model::Oid;
+
 use crate::{
     ChangeLocator, ChangeSnapshot, DeliveryIdentity, IngressCheck, ProviderNamespace,
     ProviderRunIdentity, Publication, VerifiedDelivery,
@@ -12,6 +14,13 @@ pub struct AuthenticatedDelivery {
     pub identity: DeliveryIdentity,
     pub change: ChangeLocator,
     pub provider_run: ProviderRunIdentity,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolvedCommit {
+    pub id: Oid,
+    pub tree: Oid,
+    pub parents: Vec<Oid>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]

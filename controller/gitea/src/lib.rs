@@ -10,7 +10,7 @@ pub mod repository;
 mod source;
 pub mod user;
 
-use amiss_controller::{ChangeLocator, ChangeSnapshot, ProviderError, Publication};
+use amiss_controller::{ChangeLocator, ChangeSnapshot, ProviderError, Publication, ResolvedCommit};
 use amiss_wire::model::Oid;
 
 pub use adapter::GiteaPullRequestAdapter;
@@ -21,16 +21,9 @@ pub use live::{GiteaClient, GiteaClientError, GiteaObjectResolver, GiteaTimeouts
 pub use source::GiteaPullRequestSource;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GiteaCommit {
-    pub id: String,
-    pub tree: String,
-    pub parents: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GiteaObjects {
-    pub candidate: GiteaCommit,
-    pub base: Option<GiteaCommit>,
+    pub candidate: ResolvedCommit,
+    pub base: Option<ResolvedCommit>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -3,14 +3,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use amiss_controller::{
-    OpaqueId, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    OpaqueId, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, ResolvedCommit,
 };
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitlab::{
-    GitLabAccess, GitLabApi, GitLabBranch, GitLabCommit, GitLabJob, GitLabMergeChecks,
-    GitLabMergeRequest, GitLabOidc, GitLabPipeline, GitLabProject, GitLabProtection, GitLabRefresh,
-    GitLabRefreshQuery, GitLabTrainCar, GitLabTrainSettings, OidcPublicKey, PolicyBinding,
-    RunnerTrust,
+    GitLabAccess, GitLabApi, GitLabBranch, GitLabJob, GitLabMergeChecks, GitLabMergeRequest,
+    GitLabOidc, GitLabPipeline, GitLabProject, GitLabProtection, GitLabRefresh, GitLabRefreshQuery,
+    GitLabTrainCar, GitLabTrainSettings, OidcPublicKey, PolicyBinding, RunnerTrust,
 };
 use amiss_wire::model::{ObjectFormat, Oid};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
@@ -225,14 +224,14 @@ pub(super) fn refresh(repositories: &Repositories) -> GitLabRefresh {
             name: "main".to_owned(),
             commit: base.clone(),
         },
-        gate: GitLabCommit {
-            id: gate,
-            tree: trees.candidate.as_str().to_owned(),
-            parents: vec![base.clone(), source],
+        gate: ResolvedCommit {
+            id: commits.candidate.clone(),
+            tree: trees.candidate.clone(),
+            parents: vec![commits.base.clone(), oid('c')],
         },
-        base: GitLabCommit {
-            id: base,
-            tree: trees.base.as_str().to_owned(),
+        base: ResolvedCommit {
+            id: commits.base.clone(),
+            tree: trees.base.clone(),
             parents: Vec::new(),
         },
         protections: vec![GitLabProtection {

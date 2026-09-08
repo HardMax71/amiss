@@ -1,9 +1,37 @@
 use amiss_controller::{ChangeState, ProviderError};
-use amiss_wire::model::ForgeDialect;
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
 
 use super::super::model::{BranchProtectionRecord, RefreshData, ReviewRecord, UserRecord};
 use super::super::{GiteaClientError, GiteaPullRequest};
 use super::support::{FORGEJO_PROTECTION, Fixture, GITEA_PROTECTION, commit, oid, resolved};
+
+#[test]
+fn typed_resolver_trees_must_still_match_the_repository_object_format() {
+    let fixture = Fixture::new("gitea");
+    let state = fixture.rest.state.lock().unwrap();
+    let foreign = Oid::new(ObjectFormat::Sha256, "d".repeat(64)).unwrap();
+    for (candidate_tree, base_tree) in [(foreign.clone(), oid('c')), (oid('d'), foreign)] {
+        let objects = crate::GiteaObjects {
+            candidate: amiss_controller::ResolvedCommit {
+                tree: candidate_tree,
+                ..resolved('b', 'd', &['a'])
+            },
+            base: Some(amiss_controller::ResolvedCommit {
+                tree: base_tree,
+                ..resolved('a', 'c', &[])
+            }),
+        };
+        assert_eq!(
+            super::super::refresh::snapshot(
+                &fixture.client.config,
+                fixture.pull_request(),
+                &state.data,
+                &objects,
+            ),
+            Err(ProviderError::InvalidResponse)
+        );
+    }
+}
 
 #[test]
 fn a_pull_request_snapshot_requires_an_independent_base_proof() {
@@ -418,7 +446,7 @@ fn each_consistency_fact_refuses_alone() {
         );
     }
     let resolver = Fixture::resolving("gitea", |objects| {
-        objects.candidate.id = oid('e').as_str().to_owned();
+        objects.candidate.id = oid('e');
     });
     assert_eq!(
         resolver

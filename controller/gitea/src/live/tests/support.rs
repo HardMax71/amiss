@@ -4,7 +4,7 @@ use std::time::Duration;
 use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, CheckBinding, CheckConclusion,
     ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId, ProviderError,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, Publication,
+    ProviderIdentity, ProviderInstance, ProviderNamespace, Publication, ResolvedCommit,
 };
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
@@ -18,8 +18,7 @@ use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
 use crate::commit::{CommitBodyRecord, CommitMetaRecord};
 use crate::{
-    DedicatedReviewer, GiteaCommit, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects,
-    GiteaPullRequest,
+    DedicatedReviewer, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects, GiteaPullRequest,
 };
 
 pub(super) const GITEA_PROTECTION: &str = r#"{
@@ -360,18 +359,11 @@ pub(super) fn commit(commit: char, tree: char, parents: &[char]) -> CommitRecord
     }
 }
 
-fn parent_names(parents: &[char]) -> Vec<String> {
-    parents
-        .iter()
-        .map(|parent| oid(*parent).as_str().to_owned())
-        .collect()
-}
-
-pub(super) fn resolved(commit: char, tree: char, parents: &[char]) -> GiteaCommit {
-    GiteaCommit {
-        id: oid(commit).as_str().to_owned(),
-        tree: oid(tree).as_str().to_owned(),
-        parents: parent_names(parents),
+pub(super) fn resolved(commit: char, tree: char, parents: &[char]) -> ResolvedCommit {
+    ResolvedCommit {
+        id: oid(commit),
+        tree: oid(tree),
+        parents: parents.iter().map(|parent| oid(*parent)).collect(),
     }
 }
 

@@ -10,14 +10,15 @@ use std::time::Duration;
 use amiss_controller::{
     ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, IntegrationId, LeaseFence,
     PlanScope, ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
-    RelationStatusTargets, RelationSubject, RelationSubjectHead, validate_relation_audit,
+    RelationStatusTargets, RelationSubject, RelationSubjectHead, ResolvedCommit,
+    validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
-use crate::{GiteaCommit, GiteaObjectRequest, GiteaObjects};
+use crate::{GiteaObjectRequest, GiteaObjects};
 
 use super::super::model::{
     CommitRecord, CommitStatusRecord, CreateCommitStatus, RepositoryRecord, UserRecord,
@@ -128,24 +129,20 @@ fn an_independent_relation_proof_must_agree_with_the_exact_commit_and_parents() 
     let state = fixture.rest.state.lock().unwrap();
     let correct = resolved('b', 'd', &['a']);
     for candidate in [
-        GiteaCommit {
-            id: oid('c').as_str().to_owned(),
+        ResolvedCommit {
+            id: oid('c'),
             ..correct.clone()
         },
-        GiteaCommit {
+        ResolvedCommit {
             parents: Vec::new(),
             ..correct.clone()
         },
-        GiteaCommit {
-            parents: vec![oid('c').as_str().to_owned()],
+        ResolvedCommit {
+            parents: vec![oid('c')],
             ..correct.clone()
         },
-        GiteaCommit {
-            tree: "not-an-object-id".to_owned(),
-            ..correct.clone()
-        },
-        GiteaCommit {
-            tree: "d".repeat(64),
+        ResolvedCommit {
+            tree: Oid::new(ObjectFormat::Sha256, "d".repeat(64)).unwrap(),
             ..correct
         },
     ] {
