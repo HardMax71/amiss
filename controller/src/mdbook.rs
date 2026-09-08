@@ -7,7 +7,6 @@ use amiss_wire::model::RepoPathText;
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 use amiss_wire::semantic::{PayloadSchema, SemanticProducer, SemanticSubject};
 use cap_std::fs::Dir;
-use serde::Deserialize as _;
 
 mod context;
 mod html;
@@ -57,10 +56,8 @@ struct CollectedPages {
 
 #[derive(Debug, thiserror::Error)]
 pub enum MdBookEvidenceError {
-    #[error("the mdBook renderer context exceeds its byte ceiling")]
-    ContextBytes,
-    #[error("the mdBook renderer context is not strict JSON")]
-    Context(#[source] amiss_wire::json::Error),
+    #[error("the mdBook renderer context is invalid")]
+    Context(#[from] amiss_wire::JsonInputError),
     #[error("the mdBook renderer context has an invalid shape")]
     ContextShape,
     #[error("the mdBook build is not supported by this producer")]
@@ -100,15 +97,7 @@ pub fn mdbook_site_evidence(
     context_bytes: &[u8],
     html_output: &Dir,
 ) -> Result<Vec<u8>, MdBookEvidenceError> {
-    if u64::try_from(context_bytes.len()).unwrap_or(u64::MAX) > MDBOOK_RENDER_CONTEXT_BYTES {
-        return Err(MdBookEvidenceError::ContextBytes);
-    }
-    amiss_wire::json::parse(context_bytes).map_err(MdBookEvidenceError::Context)?;
-    let mut deserializer = serde_json::Deserializer::from_slice(context_bytes);
-    // The strict JSON gate has already enforced the document depth ceiling.
-    deserializer.disable_recursion_limit();
-    let context = model::RenderContext::deserialize(&mut deserializer)
-        .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
+    let context = amiss_wire::read_json(context_bytes, MDBOOK_RENDER_CONTEXT_BYTES)?;
     let (expectation, base, repository_book_root) = site_build_context(site)?;
     let (source_directory, items, config_digest) = render_context(&context)?;
     let build = pages(

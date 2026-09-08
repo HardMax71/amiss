@@ -73,8 +73,7 @@ pub(super) fn render_context(
     if context.version != MDBOOK_VERSION {
         return Err(MdBookEvidenceError::UnsupportedBuild);
     }
-    let config = Config::deserialize(&context.config)
-        .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
+    let config = Config::deserialize(&context.config).map_err(amiss_wire::JsonInputError::from)?;
     let source_directory = config
         .book
         .src

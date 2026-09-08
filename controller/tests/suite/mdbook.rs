@@ -359,7 +359,9 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
         assert!(
             matches!(
                 mdbook_site_evidence(candidate, &site, &bytes, &output(&root)),
-                Err(MdBookEvidenceError::ContextShape)
+                Err(MdBookEvidenceError::Context(
+                    amiss_wire::JsonInputError::Shape(_)
+                ))
             ),
             "{path}: {changed}"
         );
@@ -382,7 +384,9 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
         assert!(
             matches!(
                 mdbook_site_evidence(candidate, &site, &bytes, &output(&root)),
-                Err(MdBookEvidenceError::ContextShape)
+                Err(MdBookEvidenceError::Context(
+                    amiss_wire::JsonInputError::Shape(_)
+                ))
             ),
             "{required}"
         );
@@ -564,7 +568,9 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
             &oversized_context,
             &output(&root),
         ),
-        Err(MdBookEvidenceError::ContextBytes)
+        Err(MdBookEvidenceError::Context(
+            amiss_wire::JsonInputError::LimitExceeded
+        ))
     ));
 
     let file = fs::File::create(root.path().join("chapter.html")).unwrap();

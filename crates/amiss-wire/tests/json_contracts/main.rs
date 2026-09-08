@@ -18,6 +18,7 @@ mod external_output;
 mod external_plan_ingress;
 mod external_reader;
 mod external_snapshots;
+mod input;
 mod policy_presence;
 mod report_controls;
 mod report_counts;

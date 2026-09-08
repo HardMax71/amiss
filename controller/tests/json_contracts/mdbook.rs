@@ -110,7 +110,9 @@ fn real_mdbook_context_reads_only_the_callers_html_directory() {
         assert!(
             matches!(
                 mdbook_site_evidence(candidate, &site, invalid.as_bytes(), &output),
-                Err(MdBookEvidenceError::ContextShape)
+                Err(MdBookEvidenceError::Context(
+                    amiss_wire::JsonInputError::Shape(_)
+                ))
             ),
             "{invalid}"
         );

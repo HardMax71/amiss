@@ -6,6 +6,7 @@ pub mod digest;
 pub mod external;
 pub mod extraction;
 pub mod human;
+mod input;
 pub mod json;
 pub mod locale;
 pub mod manifest;
@@ -19,6 +20,7 @@ pub mod resolution;
 pub mod semantic;
 pub mod uri;
 
+pub use input::{JsonInputError, read_json};
 pub use output::write_json;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
