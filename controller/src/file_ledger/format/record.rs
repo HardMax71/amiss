@@ -3,7 +3,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId};
 
-use super::model::{StoredCheck, StoredDelivery, StoredReplayKeep, materialize_check, store_check};
+use super::model::{
+    StoredChange, StoredCheck, StoredDelivery, StoredDeliveryIdentity, StoredProviderRun,
+    StoredReplayKeep, materialize_check, store_check,
+};
 use super::publication::StoredPublication;
 use crate::file_ledger::FileLedgerError;
 
@@ -31,11 +34,21 @@ impl Record {
         now: i64,
         expires_at_unix_millis: i64,
     ) -> Self {
+        let authenticated = delivery.delivery();
         Self {
             schema: RECORD_SCHEMA.to_owned(),
             generation: 1,
             last_seen_unix_millis: now,
-            binding: StoredDelivery::new(delivery.delivery()),
+            binding: StoredDelivery {
+                identity: StoredDeliveryIdentity::new(&authenticated.identity),
+                change: StoredChange::new(&authenticated.change),
+                provider_run: StoredProviderRun {
+                    run_id: authenticated.provider_run.run_id.as_str().to_owned(),
+                    attempt: authenticated.provider_run.attempt.get(),
+                    object_format: authenticated.provider_run.object_format,
+                    candidate_commit: authenticated.provider_run.candidate_commit.clone(),
+                },
+            },
             replay_keep: StoredReplayKeep::new(delivery.replay_keep()),
             check: store_check(check),
             evaluation_id: evaluation_id.as_str().to_owned(),
@@ -51,10 +64,10 @@ impl Record {
         &self,
         delivery: &AcceptedDelivery,
         check: &CheckBinding,
-    ) -> bool {
-        self.binding == StoredDelivery::new(delivery.delivery())
+    ) -> Result<bool, FileLedgerError> {
+        Ok(self.binding.materialize()? == *delivery.delivery()
             && self.replay_keep == StoredReplayKeep::new(delivery.replay_keep())
-            && self.check == store_check(check)
+            && self.check == store_check(check))
     }
 
     pub(in crate::file_ledger) fn matches_key(&self, key: &str) -> Result<bool, FileLedgerError> {

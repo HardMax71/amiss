@@ -9,11 +9,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ArtifactReference, AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, ExternalTally,
-    Publication,
+    Publication, RunIdentity,
 };
 
 use super::model::{
-    StoredCheck, StoredConclusion, StoredProviderRun, StoredRun, materialize_check, store_check,
+    StoredChange, StoredCheck, StoredConclusion, StoredProviderRun, StoredRun, materialize_check,
+    store_check,
 };
 use crate::file_ledger::FileLedgerError;
 
@@ -27,7 +28,7 @@ pub(in crate::file_ledger) struct StoredPublication {
     check: StoredCheck,
     run: StoredRun,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    gate_commit: Option<String>,
+    pub(in crate::file_ledger) gate_commit: Option<Oid>,
     conclusion: StoredConclusion,
     report: StoredReport,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -39,11 +40,22 @@ impl StoredPublication {
         validate_artifact_report(publication)?;
         let report = StoredReport::new(publication.report.as_deref())?;
         Ok(Self {
-            provider_run: StoredProviderRun::new(&publication.provider_run),
+            provider_run: StoredProviderRun {
+                run_id: publication.provider_run.run_id.as_str().to_owned(),
+                attempt: publication.provider_run.attempt.get(),
+                object_format: publication.provider_run.object_format,
+                candidate_commit: publication.provider_run.candidate_commit.clone(),
+            },
             evaluation_id: publication.evaluation_id.as_str().to_owned(),
             check: store_check(&publication.check),
-            run: StoredRun::new(&publication.run),
-            gate_commit: Some(publication.gate_commit.as_str().to_owned()),
+            run: StoredRun {
+                change: StoredChange::new(&publication.run.change),
+                refs: publication.run.refs.clone(),
+                object_format: publication.run.object_format,
+                commits: publication.run.commits.clone(),
+                trees: publication.run.trees.clone(),
+            },
+            gate_commit: Some(publication.gate_commit.clone()),
             conclusion: StoredConclusion::new(publication.conclusion),
             report,
             artifact: publication.artifact.as_ref().map(StoredArtifact::new),
@@ -57,20 +69,35 @@ impl StoredPublication {
         }
     }
 
-    pub(in crate::file_ledger) const fn has_gate_commit(&self) -> bool {
-        self.gate_commit.is_some()
-    }
-
     pub(in crate::file_ledger) fn materialize(
         &self,
         report: Option<Vec<u8>>,
     ) -> Result<Publication, FileLedgerError> {
-        let publication = self.report.attach(self.materialize_metadata()?, report)?;
+        let metadata = self.materialize_metadata()?;
+        let gate_commit = metadata.gate_commit.ok_or(FileLedgerError::Corrupt)?;
+        self.report.verify(report.as_deref())?;
+        let report = report
+            .map(|bytes| {
+                amiss_wire::report::validate_envelope(&bytes)
+                    .map(|(envelope, _verdict)| Arc::new(crate::CapturedReport { bytes, envelope }))
+            })
+            .transpose()
+            .map_err(|_defect| FileLedgerError::Corrupt)?;
+        let publication = Publication {
+            provider_run: metadata.provider_run,
+            evaluation_id: metadata.evaluation_id,
+            check: metadata.check,
+            run: metadata.run,
+            gate_commit,
+            conclusion: metadata.conclusion,
+            report,
+            artifact: metadata.artifact,
+        };
         validate_artifact_report(&publication)?;
         Ok(publication)
     }
 
-    pub(super) fn materialize_metadata(&self) -> Result<Publication, FileLedgerError> {
+    pub(super) fn materialize_metadata(&self) -> Result<Publication<Option<Oid>>, FileLedgerError> {
         if let Some(reference) = self.report() {
             reference.validate()?;
         }
@@ -103,19 +130,28 @@ impl StoredPublication {
             }
             None => None,
         };
-        let run = self.run.materialize()?;
-        let gate_commit = self
+        let run = RunIdentity::new(
+            self.run.change.materialize()?,
+            self.run.refs.clone(),
+            self.run.object_format,
+            self.run.commits.clone(),
+            self.run.trees.clone(),
+        )
+        .ok_or(FileLedgerError::Corrupt)?;
+        if self
             .gate_commit
             .as_ref()
-            .and_then(|commit| Oid::new(run.object_format, commit.clone()))
-            .ok_or(FileLedgerError::Corrupt)?;
+            .is_some_and(|commit| commit.object_format() != run.object_format)
+        {
+            return Err(FileLedgerError::Corrupt);
+        }
         Ok(Publication {
             provider_run: self.provider_run.materialize()?,
             evaluation_id: ControllerEvaluationId::new(self.evaluation_id.clone())
                 .ok_or(FileLedgerError::Corrupt)?,
             check: materialize_check(&self.check)?,
             run,
-            gate_commit,
+            gate_commit: self.gate_commit.clone(),
             conclusion: self.conclusion.materialize(),
             report: None,
             artifact,
@@ -128,34 +164,16 @@ impl StoredPublication {
         delivery: &AuthenticatedDelivery,
         expected_check: &CheckBinding,
     ) -> Result<(), FileLedgerError> {
-        if self.artifact.is_some() && self.report().is_none() {
+        if self.artifact.is_some() && (self.report().is_none() || self.gate_commit.is_none()) {
             return Err(FileLedgerError::Corrupt);
         }
-        if self.has_gate_commit() {
-            self.materialize_metadata()?;
-        } else {
-            if self.artifact.is_some() {
-                return Err(FileLedgerError::Corrupt);
-            }
-            if let Some(reference) = self.report() {
-                reference.validate()?;
-            }
-        }
-        let provider_run = self.provider_run.materialize()?;
-        let evaluation_id = ControllerEvaluationId::new(self.evaluation_id.clone())
-            .ok_or(FileLedgerError::Corrupt)?;
-        let check = materialize_check(&self.check)?;
-        let run = self.run.materialize()?;
-        if self
-            .gate_commit
-            .as_ref()
-            .is_some_and(|commit| Oid::new(run.object_format, commit.clone()).is_none())
-            || evaluation_id.as_str() != expected_evaluation_id
-            || provider_run != delivery.provider_run
-            || run.change != delivery.change
-            || run.object_format != delivery.provider_run.object_format
-            || run.commits.candidate != delivery.provider_run.candidate_commit
-            || check != *expected_check
+        let publication = self.materialize_metadata()?;
+        if publication.evaluation_id.as_str() != expected_evaluation_id
+            || publication.provider_run != delivery.provider_run
+            || publication.run.change != delivery.change
+            || publication.run.object_format != delivery.provider_run.object_format
+            || publication.run.commits.candidate != delivery.provider_run.candidate_commit
+            || publication.check != *expected_check
         {
             return Err(FileLedgerError::Corrupt);
         }
@@ -220,22 +238,6 @@ enum StoredReport {
 }
 
 impl StoredReport {
-    fn attach(
-        &self,
-        mut publication: Publication,
-        report: Option<Vec<u8>>,
-    ) -> Result<Publication, FileLedgerError> {
-        self.verify(report.as_deref())?;
-        publication.report = report
-            .map(|bytes| {
-                amiss_wire::report::validate_envelope(&bytes)
-                    .map(|(envelope, _verdict)| Arc::new(crate::CapturedReport { bytes, envelope }))
-            })
-            .transpose()
-            .map_err(|_defect| FileLedgerError::Corrupt)?;
-        Ok(publication)
-    }
-
     fn new(report: Option<&crate::CapturedReport>) -> Result<Self, FileLedgerError> {
         match report {
             Some(report) => ReportRef::new(&report.bytes).map(|reference| Self::Blob { reference }),

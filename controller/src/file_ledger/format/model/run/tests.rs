@@ -1,0 +1,101 @@
+#![cfg(test)]
+
+use super::{StoredProviderRun, StoredRun};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
+use strum::IntoEnumIterator;
+
+const PROVIDER_RUN: &str = concat!(
+    r#"{"run_id":"run/11","attempt":1,"object_format":"sha1","#,
+    r#""candidate_commit":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}"#,
+);
+
+const RUN: &str = concat!(
+    r#"{"change":{"provider":{"namespace":"gitea","instance":"forge.example.test"},"#,
+    r#""repository":{"host":"forge.example.test","owner":"owner","name":"amiss"},"#,
+    r#""change":"42"},"refs":{"forge":"gitea","candidate":"refs/heads/topic","#,
+    r#""target":"refs/heads/main","default_branch":"refs/heads/main"},"object_format":"sha1","#,
+    r#""commits":{"base":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","#,
+    r#""candidate":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"},"#,
+    r#""trees":{"base":"cccccccccccccccccccccccccccccccccccccccc","#,
+    r#""candidate":"dddddddddddddddddddddddddddddddddddddddd"}}"#,
+);
+
+#[test]
+fn stored_run_fields_preserve_the_existing_byte_layout() {
+    let provider_run: StoredProviderRun = serde_json::from_str(PROVIDER_RUN).unwrap();
+    let run: StoredRun = serde_json::from_str(RUN).unwrap();
+    provider_run.materialize().unwrap();
+    assert_eq!(serde_json::to_string(&provider_run).unwrap(), PROVIDER_RUN);
+    assert_eq!(serde_json::to_string(&run).unwrap(), RUN);
+}
+
+#[test]
+fn stored_runs_preserve_sha256_ids_for_every_forge() {
+    let mut provider_run: StoredProviderRun = serde_json::from_str(PROVIDER_RUN).unwrap();
+    let mut run: StoredRun = serde_json::from_str(RUN).unwrap();
+    provider_run.object_format = ObjectFormat::Sha256;
+    provider_run.candidate_commit = Oid::new(ObjectFormat::Sha256, "b".repeat(64)).unwrap();
+    run.object_format = ObjectFormat::Sha256;
+    for (oid, digit) in [
+        (&mut run.commits.base, 'a'),
+        (&mut run.commits.candidate, 'b'),
+        (&mut run.trees.base, 'c'),
+        (&mut run.trees.candidate, 'd'),
+    ] {
+        *oid = Oid::new(ObjectFormat::Sha256, digit.to_string().repeat(64)).unwrap();
+    }
+    for forge in ForgeDialect::iter() {
+        run.refs.forge = forge;
+        let bytes = serde_json::to_vec(&run).unwrap();
+        let stored: StoredRun = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(stored, run);
+    }
+    let bytes = serde_json::to_vec(&provider_run).unwrap();
+    let stored: StoredProviderRun = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(stored, provider_run);
+    assert_eq!(
+        stored.materialize().unwrap(),
+        provider_run.materialize().unwrap()
+    );
+}
+
+#[test]
+fn stored_run_fields_reject_invalid_and_mixed_format_ids() {
+    for original in ['a', 'b', 'c', 'd'] {
+        for replacement in ["A".repeat(40), "a".repeat(39)] {
+            let mutation = RUN.replace(&original.to_string().repeat(40), &replacement);
+            assert_ne!(mutation, RUN);
+            assert!(
+                serde_json::from_str::<StoredRun>(&mutation).is_err(),
+                "{original}: {replacement}"
+            );
+        }
+    }
+    for replacement in ["e".repeat(64), "B".repeat(40), "b".repeat(39)] {
+        let mutation = PROVIDER_RUN.replace(&"b".repeat(40), &replacement);
+        assert!(
+            serde_json::from_str::<StoredProviderRun>(&mutation)
+                .ok()
+                .and_then(|run| run.materialize().ok())
+                .is_none(),
+            "{replacement}"
+        );
+    }
+}
+
+#[test]
+fn stored_run_fields_reject_bad_refs_and_format_declarations() {
+    for (before, after) in [
+        ("refs/heads/topic", "refs/heads/topic..bad"),
+        ("refs/heads/main", "refs/heads/.hidden"),
+        (r#""sha1""#, r#""unknown""#),
+        (r#""gitea""#, r#""unknown""#),
+    ] {
+        let mutation = RUN.replace(before, after);
+        assert_ne!(mutation, RUN);
+        assert!(
+            serde_json::from_str::<StoredRun>(&mutation).is_err(),
+            "{before}: {after}"
+        );
+    }
+}

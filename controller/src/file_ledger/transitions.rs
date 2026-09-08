@@ -23,14 +23,14 @@ impl DeliveryLedger for FileLedger {
             }
             return self.claim_new(&row, delivery, check);
         };
-        if !record.matches(delivery, check) {
+        if !record.matches(delivery, check)? {
             return Ok(DeliveryClaim::BindingConflict);
         }
         let evaluation_id = record.evaluation_id()?;
         match record.state.clone() {
             State::Running { .. } => self.claim_running(&row, record, evaluation_id, check),
             State::Staged { fence, publication } => {
-                if publication.has_gate_commit() {
+                if publication.gate_commit.is_some() {
                     Ok(DeliveryClaim::Publish(staged(
                         &row,
                         evaluation_id,
@@ -61,7 +61,7 @@ impl DeliveryLedger for FileLedger {
         let Some(mut record) = row.load()? else {
             return Ok(LeaseRenewal::Lost);
         };
-        if !record.matches(delivery, &lease.check) {
+        if !record.matches(delivery, &lease.check)? {
             return Ok(LeaseRenewal::Lost);
         }
         let State::Running {
@@ -111,7 +111,7 @@ impl DeliveryLedger for FileLedger {
             return Ok(StageOutcome::Lost);
         };
         let evaluation_id = record.evaluation_id()?;
-        if !record.matches(delivery, &lease.check)
+        if !record.matches(delivery, &lease.check)?
             || publication.check != lease.check
             || !publication_matches(delivery.delivery(), &evaluation_id, publication)
         {
@@ -150,7 +150,7 @@ fn complete_record(
     record: &mut format::Record,
 ) -> Result<LeaseCompletion, FileLedgerError> {
     let evaluation_id = record.evaluation_id()?;
-    if !record.matches(delivery, &staged_publication.publication.check)
+    if !record.matches(delivery, &staged_publication.publication.check)?
         || staged_publication.evaluation_id != evaluation_id
     {
         return Ok(LeaseCompletion::Lost);

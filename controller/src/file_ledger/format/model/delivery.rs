@@ -31,20 +31,12 @@ impl<'a> StoredDeliveryKey<'a> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger::format) struct StoredDelivery {
-    identity: StoredDeliveryIdentity,
-    change: StoredChange,
-    provider_run: StoredProviderRun,
+    pub(in crate::file_ledger::format) identity: StoredDeliveryIdentity,
+    pub(in crate::file_ledger::format) change: StoredChange,
+    pub(in crate::file_ledger::format) provider_run: StoredProviderRun,
 }
 
 impl StoredDelivery {
-    pub(in crate::file_ledger::format) fn new(delivery: &AuthenticatedDelivery) -> Self {
-        Self {
-            identity: StoredDeliveryIdentity::new(&delivery.identity),
-            change: StoredChange::new(&delivery.change),
-            provider_run: StoredProviderRun::new(&delivery.provider_run),
-        }
-    }
-
     pub(in crate::file_ledger::format) fn materialize(
         &self,
     ) -> MaterializeResult<AuthenticatedDelivery> {
@@ -58,14 +50,14 @@ impl StoredDelivery {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct StoredDeliveryIdentity {
+pub(in crate::file_ledger::format) struct StoredDeliveryIdentity {
     provider: StoredProvider,
     integration: String,
     delivery: String,
 }
 
 impl StoredDeliveryIdentity {
-    fn new(identity: &DeliveryIdentity) -> Self {
+    pub(in crate::file_ledger::format) fn new(identity: &DeliveryIdentity) -> Self {
         Self {
             provider: StoredProvider::new(&identity.provider),
             integration: identity.integration.as_str().to_owned(),

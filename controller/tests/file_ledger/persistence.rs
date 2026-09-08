@@ -502,7 +502,7 @@ enum Reached {
     Done,
 }
 
-fn refuses_edited_state(reached: Reached, edit: fn(&str) -> String, reason: &str) {
+fn refuses_edited_state(reached: Reached, edit: impl FnOnce(&str) -> String, reason: &str) {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
     let delivery = delivery("42");
@@ -525,12 +525,43 @@ fn refuses_edited_state(reached: Reached, edit: fn(&str) -> String, reason: &str
     );
 }
 
+#[test]
+fn stored_run_formats_are_checked_at_record_ingress() {
+    for pair in ["commits", "trees"] {
+        for member in ["base", "candidate"] {
+            refuses_edited_state(
+                Reached::Staged,
+                |text| {
+                    let at = text.find(&format!(r#""{pair}":"#)).unwrap();
+                    let (head, tail) = text.split_at(at);
+                    let needle = format!(r#""{member}":""#);
+                    let edited =
+                        replace_string(tail, &needle, &format!("{needle}{}", "a".repeat(24)));
+                    format!("{head}{edited}")
+                },
+                &format!("{pair}.{member} has a valid ID for another object format"),
+            );
+        }
+    }
+    refuses_edited_state(
+        Reached::Staged,
+        |text| {
+            replace_last(
+                text,
+                r#""object_format":"sha1""#,
+                r#""object_format":"sha256""#,
+            )
+        },
+        "the declared run format must agree with all IDs",
+    );
+}
+
 /// Every row carries one impossible field behind a valid seal, so the refusal
 /// is the record validator's own rather than the frame's.
 #[test]
 fn one_impossible_field_fails_the_record_closed() {
     type Defect = fn(&str) -> String;
-    let rows: [(&str, Reached, Defect); 15] = [
+    let rows: [(&str, Reached, Defect); 16] = [
         ("a foreign schema", Reached::Running, |text| {
             replace_string(text, "file-record-v3", "file-record-v0")
         }),
@@ -570,6 +601,17 @@ fn one_impossible_field_fails_the_record_closed() {
             "a gate commit off the object format",
             Reached::Staged,
             |text| replace_last(text, r#""gate_commit":""#, r#""gate_commit":"z"#),
+        ),
+        (
+            "a well-formed gate commit for another object format",
+            Reached::Staged,
+            |text| {
+                replace_last(
+                    text,
+                    r#""gate_commit":""#,
+                    r#""gate_commit":"aaaaaaaaaaaaaaaaaaaaaaaa"#,
+                )
+            },
         ),
         ("another evaluation", Reached::Staged, |text| {
             replace_last(text, r#""evaluation_id":""#, r#""evaluation_id":"other-"#)

@@ -8,7 +8,9 @@ use crate::file_ledger::FileLedgerError;
 
 pub(super) use check::{StoredCheck, materialize as materialize_check, store as store_check};
 pub(super) use conclusion::StoredConclusion;
-pub(super) use delivery::{StoredDelivery, StoredDeliveryKey};
+pub(super) use delivery::{
+    StoredChange, StoredDelivery, StoredDeliveryIdentity, StoredDeliveryKey,
+};
 pub(super) use replay::StoredReplayKeep;
 pub(super) use run::{StoredProviderRun, StoredRun};
 

@@ -140,12 +140,12 @@ pub enum CheckConclusion {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Publication {
+pub struct Publication<Gate = amiss_wire::model::Oid> {
     pub provider_run: ProviderRunIdentity,
     pub evaluation_id: ControllerEvaluationId,
     pub check: CheckBinding,
     pub run: RunIdentity,
-    pub gate_commit: amiss_wire::model::Oid,
+    pub gate_commit: Gate,
     pub conclusion: CheckConclusion,
     pub report: Option<Arc<CapturedReport>>,
     pub artifact: Option<ArtifactReference>,
