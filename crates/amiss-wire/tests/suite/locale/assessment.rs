@@ -1,7 +1,6 @@
 #![expect(
-    clippy::panic,
     clippy::unwrap_used,
-    reason = "tests replay checked locale contracts and mutate their canonical JSON"
+    reason = "locale fixtures construct checked plans and evidence"
 )]
 
 use std::{fs, path::Path};
@@ -11,12 +10,11 @@ use super::{digest, locale_plan, oid, product_resource};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 
-use amiss_wire::json::{self, Value};
 use amiss_wire::locale::{
-    ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessmentEnvelope, LocaleCoverageEvidence,
+    ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageEvidence,
     LocaleCoverageEvidenceEnvelope, LocaleCoverageReason, LocaleCoverageVerdict,
-    LocaleFallbackStatus, LocaleLineageStatus, LocalePageRequirement, LocaleSourcePage, assess,
-    evidence, parse_assessment, parse_evidence, parse_plan, plan,
+    LocaleFallbackStatus, LocaleLineageStatus, LocalePageRequirement, LocaleProductResult,
+    LocaleSourcePage, assess, evidence, parse_assessment, parse_evidence, parse_plan, plan,
 };
 
 fn plan_envelope() -> amiss_wire::locale::LocaleCoveragePlanEnvelope {
@@ -29,14 +27,6 @@ fn evidence_envelope(input: &LocaleCoverageEvidence) -> LocaleCoverageEvidenceEn
     parse_evidence(&value).unwrap()
 }
 
-fn assessed(
-    plan: &amiss_wire::locale::LocaleCoveragePlanEnvelope,
-    evidence: Option<&LocaleCoverageEvidenceEnvelope>,
-) -> LocaleCoverageAssessmentEnvelope {
-    let value = assess(plan, evidence, "0.26.0", digest('a')).unwrap();
-    parse_assessment(&value).unwrap()
-}
-
 #[test]
 fn complete_inventories_report_exact_missing_and_orphan_pages() {
     let plan = plan_envelope();
@@ -46,7 +36,7 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
         target_page("legacy/removed", 'b', None),
     );
     let evidence = evidence_envelope(&input);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
@@ -91,7 +81,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
     partial_source.plan_payload_digest = all_source.payload_digest;
     partial_source.source.complete = false;
     let evidence = evidence_envelope(&partial_source);
-    let assessment = assessed(&all_source, Some(&evidence));
+    let assessment = assess(&all_source, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert!(!assessment.payload.coverage.complete);
     assert_eq!(
@@ -108,7 +98,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
         target_page("legacy/removed", 'b', None),
     );
     let evidence = evidence_envelope(&partial_target);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert!(!assessment.payload.coverage.complete);
     assert!(assessment.payload.coverage.target_missing.is_empty());
@@ -125,7 +115,7 @@ fn partial_inventories_only_report_absences_the_other_side_proves() {
         .pages
         .retain(|page| page.key != "reference/api");
     let evidence = evidence_envelope(&both_partial);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
         assessment.payload.reasons,
@@ -146,7 +136,7 @@ fn named_policy_can_be_exhaustive_without_an_unneeded_full_source_inventory() {
         |key, digit| target_page(key, digit, None),
     );
     let evidence = evidence_envelope(&input);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert!(assessment.payload.coverage.complete);
@@ -162,7 +152,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
     let evidence = evidence_envelope(&allowed);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert_eq!(assessment.payload.coverage.fallbacks.len(), 1);
     assert_eq!(
@@ -176,7 +166,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
         fallback_page("reference/api", 'b', "preview-copy", '7'),
     );
     let evidence = evidence_envelope(&unauthorized);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
@@ -193,7 +183,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
         fallback_page("guide/getting-started", 'b', "source-copy", '6'),
     );
     let evidence = evidence_envelope(&wrong_page);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
@@ -210,7 +200,7 @@ fn fallback_provenance_must_match_one_authorized_class_page_and_source_digest() 
         fallback_page("reference/api", 'b', "source-copy", '6'),
     );
     let evidence = evidence_envelope(&stale);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
@@ -236,7 +226,7 @@ fn fallback_source_absence_in_a_partial_inventory_stays_unproven() {
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
     let evidence = evidence_envelope(&input);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
@@ -270,7 +260,7 @@ fn all_source_fallback_rules_authorize_each_observed_source_page() {
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
     let evidence = evidence_envelope(&input);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert!(
@@ -301,7 +291,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
     let evidence = evidence_envelope(&current);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert_eq!(assessment.payload.coverage.lineage.len(), 1);
     assert_eq!(
@@ -315,7 +305,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
         target_page("guide/getting-started", '9', Some('5')),
     );
     let evidence = evidence_envelope(&stale);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
@@ -333,7 +323,7 @@ fn required_target_lineage_distinguishes_current_stale_and_unproven() {
         target_page("guide/getting-started", '9', None),
     );
     let evidence = evidence_envelope(&unproven);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
         assessment.payload.reasons,
@@ -359,7 +349,7 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
         target_page("guide/getting-started", '9', Some('5')),
     );
     let evidence = evidence_envelope(&ignored);
-    let assessment = assessed(&coverage_plan, Some(&evidence));
+    let assessment = assess(&coverage_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert!(assessment.payload.coverage.lineage.is_empty());
 
@@ -391,7 +381,7 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
         target_page("optional/overview", 'd', Some('e')),
     );
     let evidence = evidence_envelope(&input);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
@@ -422,7 +412,7 @@ fn lineage_is_not_inferred_without_an_observed_current_source() {
         target_page("reference/api", 'b', Some('7')),
     );
     let evidence = evidence_envelope(&input);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
@@ -452,7 +442,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     );
 
     let evidence = evidence_envelope(&aligned);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     let Nullable::Value(product) = assessment.payload.product else {
         panic!("selected product comparison was omitted");
@@ -463,7 +453,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     let mut missing = aligned.clone();
     missing.source.product = Nullable::Null;
     let evidence = evidence_envelope(&missing);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
         assessment.payload.reasons,
@@ -475,7 +465,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     mismatched.source.product = Nullable::Value(product_resource('d'));
     mismatched.target.product = Nullable::Null;
     let evidence = evidence_envelope(&mismatched);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
         assessment.payload.reasons,
@@ -488,7 +478,7 @@ fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
 
     mismatched.target.product = Nullable::Value(product_resource('e'));
     let evidence = evidence_envelope(&mismatched);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         assessment.payload.reasons,
         vec![
@@ -509,7 +499,7 @@ fn coverage_only_policy_ignores_unselected_product_receipts() {
         fallback_page("reference/api", 'b', "source-copy", '7'),
     );
     let evidence = evidence_envelope(&input);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Matched);
     assert_eq!(assessment.payload.product, Nullable::Null);
@@ -528,7 +518,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
         |key, digit| target_page(key, digit, None),
     );
     let evidence = evidence_envelope(&all_source_evidence);
-    let assessment = assessed(&all_source_plan, Some(&evidence));
+    let assessment = assess(&all_source_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         assessment.payload.coverage.target_missing,
         vec!["reference/api"]
@@ -548,7 +538,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
         target_page(key, digit, None)
     });
     let evidence = evidence_envelope(&source_missing);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::SourceMissing]
@@ -563,7 +553,7 @@ fn all_source_and_named_source_absence_remain_distinct() {
 #[test]
 fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
     let plan = plan_envelope();
-    let absent = assessed(&plan, None);
+    let absent = assess(&plan, None, "0.26.0", digest('a')).unwrap();
     assert_eq!(absent.payload.verdict, LocaleCoverageVerdict::Unproven);
     assert_eq!(
         absent.payload.reasons,
@@ -578,7 +568,10 @@ fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
     unbound.plan_payload_digest = digest('f');
     let evidence = evidence_envelope(&unbound);
     assert_eq!(
-        assessed(&plan, Some(&evidence)).payload.reasons,
+        assess(&plan, Some(&evidence), "0.26.0", digest('a'))
+            .unwrap()
+            .payload
+            .reasons,
         vec![LocaleCoverageReason::EvidenceUnbound]
     );
 
@@ -586,7 +579,7 @@ fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
     foreign.producer.context_digest = digest('e');
     foreign.target.pages.clear();
     let evidence = evidence_envelope(&foreign);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
     assert_eq!(
         assessment.payload.reasons,
         vec![LocaleCoverageReason::ProducerMismatch]
@@ -602,7 +595,7 @@ fn bound_fact_disagreements_refute_without_comparing_foreign_inventories() {
     foreign.scope.target_locale = "fr".to_owned();
     foreign.target.pages.clear();
     let evidence = evidence_envelope(&foreign);
-    let assessment = assessed(&plan, Some(&evidence));
+    let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
     assert_eq!(assessment.payload.verdict, LocaleCoverageVerdict::Refuted);
     assert_eq!(
@@ -632,76 +625,36 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
     let evidence = evidence_envelope(&locale_evidence());
-    let bytes = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let value = json::parse(&bytes).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let inconsistent = String::from_utf8(bytes)
-        .unwrap()
-        .replace("\"refuted\"", "\"matched\"");
-    let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
-    let rebound = inconsistent.replace(
-        recorded,
-        &amiss_wire::digest::hb(
+    let document = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
+    let mut inconsistent = document.clone();
+    inconsistent.payload.verdict = LocaleCoverageVerdict::Matched;
+    let mut inconsistent_product = document.clone();
+    inconsistent_product.payload.product = Nullable::Value(LocaleProductResult {
+        source: LocaleCoverageVerdict::Refuted,
+        target: LocaleCoverageVerdict::Matched,
+    });
+    let mut unsorted = document;
+    unsorted.payload.coverage.target_missing =
+        vec!["reference/z".to_owned(), "reference/a".to_owned()];
+    for (mut document, path, kind) in [
+        (inconsistent, "$.payload", ErrorKind::Inconsistent),
+        (inconsistent_product, "$.payload", ErrorKind::Inconsistent),
+        (
+            unsorted,
+            "$.payload.coverage.target_missing",
+            ErrorKind::UnsortedSet,
+        ),
+    ] {
+        document.payload_digest = amiss_wire::digest::hb(
             ASSESSMENT_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(inconsistent_value.member("payload").unwrap())
-                .unwrap(),
-        )
-        .to_string(),
-    );
-    let error = parse_assessment(rebound.as_bytes()).unwrap_err();
-    assert_eq!(error.path, "$.payload");
-    assert_eq!(error.kind, ErrorKind::Inconsistent);
-
-    let mut inconsistent_product = value.clone();
-    *member_mut(member_mut(&mut inconsistent_product, "payload"), "product") = Value::object(vec![
-        ("source".to_owned(), Value::string("refuted")),
-        ("target".to_owned(), Value::string("matched")),
-    ]);
-    let error = parse_assessment(&sealed(inconsistent_product)).unwrap_err();
-    assert_eq!(error.path, "$.payload");
-    assert_eq!(error.kind, ErrorKind::Inconsistent);
-
-    let mut unsorted = value;
-    let target_missing = member_mut(member_mut(&mut unsorted, "payload"), "coverage");
-    *member_mut(target_missing, "target_missing") = Value::array(vec![
-        Value::string("reference/z"),
-        Value::string("reference/a"),
-    ]);
-    let error = parse_assessment(&sealed(unsorted)).unwrap_err();
-    assert_eq!(error.path, "$.payload.coverage.target_missing");
-    assert_eq!(error.kind, ErrorKind::UnsortedSet);
-}
-
-#[test]
-fn nullable_assessment_fields_are_required() {
-    let bytes = assess(&plan_envelope(), None, "0.26.0", digest('a')).unwrap();
-
-    let mut missing_product: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(
-        missing_product["payload"]
-            .as_object_mut()
-            .unwrap()
-            .remove("product")
-            .is_some()
-    );
-    let error =
-        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_product).unwrap()).unwrap_err();
-    assert_eq!(error.path, "$.payload.product");
-    assert_eq!(error.kind, ErrorKind::MissingField);
-
-    let mut missing_evidence_digest: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(
-        missing_evidence_digest["payload"]["subject"]
-            .as_object_mut()
-            .unwrap()
-            .remove("evidence_payload_digest")
-            .is_some()
-    );
-    let error =
-        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_evidence_digest).unwrap())
-            .unwrap_err();
-    assert_eq!(error.path, "$.payload.subject.evidence_payload_digest");
-    assert_eq!(error.kind, ErrorKind::MissingField);
+            &serde_json_canonicalizer::to_vec(&document.payload).unwrap(),
+        );
+        let mut bytes = Vec::new();
+        amiss_wire::write_json(&document, &mut bytes, ASSESSMENT_DOCUMENT_BYTES).unwrap();
+        let error = parse_assessment(&bytes).unwrap_err();
+        assert_eq!(error.path, path);
+        assert_eq!(error.kind, kind);
+    }
 }
 
 #[test]
@@ -720,28 +673,5 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
     )
     .unwrap();
 
-    assert_eq!(
-        replayed,
-        serde_json_canonicalizer::to_vec(&json::parse(&published_bytes).unwrap()).unwrap()
-    );
-}
-
-fn sealed(mut value: Value) -> Vec<u8> {
-    let digest = amiss_wire::digest::hb(
-        ASSESSMENT_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap(),
-    );
-    *member_mut(&mut value, "payload_digest") = Value::string(digest.to_string());
-    serde_json_canonicalizer::to_vec(&value).unwrap()
-}
-
-fn member_mut<'a>(value: &'a mut Value, name: &str) -> &'a mut Value {
-    let Value::Object(members) = value else {
-        panic!("the checked writer produced a non-object value");
-    };
-    members
-        .iter_mut()
-        .find(|(key, _value)| key == name)
-        .map(|(_key, value)| value)
-        .unwrap()
+    assert_eq!(replayed, published);
 }

@@ -6,7 +6,7 @@ use strum::{Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 use crate::model::ArtifactId;
 use crate::semantic::producer_version_valid;
@@ -170,6 +170,8 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<LocaleCoverageAssessmentEnvelope
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let document: LocaleCoverageAssessmentEnvelope = de::deserialize_json(bytes)?;
+    verified_json_digest(ASSESSMENT_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if assessment_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -185,6 +187,7 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<LocaleCoverageAssessmentEnvelope
 /// current source resource. A selected product compares each inventory's independently observed
 /// publication resource with the exact plan resource. A matched result is emitted only when every
 /// selected comparison is exhaustive.
+/// The result stays typed; output callers enforce byte limits with [`crate::write_json`].
 ///
 /// # Errors
 ///
@@ -195,7 +198,7 @@ pub fn assess(
     evidence: Option<&LocaleCoverageEvidenceEnvelope>,
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Vec<u8>, Error> {
+) -> Result<LocaleCoverageAssessmentEnvelope, Error> {
     if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -279,18 +282,11 @@ pub fn assess(
         product: outcome.product.map_or(Nullable::Null, Nullable::Value),
     };
     let payload_digest = assessment_payload_digest(&assessment)?;
-    let document = LocaleCoverageAssessmentEnvelope {
+    Ok(LocaleCoverageAssessmentEnvelope {
         schema: AssessmentEnvelopeSchema::Current,
         payload: assessment,
         payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    Ok(canonical)
+    })
 }
 
 fn compare_coverage(
@@ -628,9 +624,10 @@ fn classify_coverage(
 
 fn assessment_payload_digest(assessment: &LocaleCoverageAssessment) -> Result<Digest, Error> {
     validate_assessment(assessment)?;
-    serde_json_canonicalizer::to_vec(assessment)
-        .map(|canonical| hb(ASSESSMENT_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(ASSESSMENT_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(assessment, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_assessment(assessment: &LocaleCoverageAssessment) -> Result<(), Error> {

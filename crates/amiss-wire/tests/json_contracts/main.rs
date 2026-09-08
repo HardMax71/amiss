@@ -19,6 +19,7 @@ mod external_plan_ingress;
 mod external_reader;
 mod external_snapshots;
 mod input;
+mod locale_assessment;
 mod policy_presence;
 mod publication_assessment;
 mod publication_evidence;
@@ -299,10 +300,13 @@ fn sidecar_examples_match_their_typed_sources() {
         locale_assessment.payload.engine.engine_digest,
     )
     .unwrap();
+    assert_eq!(replayed, locale_assessment);
+    let mut input = serde_json::Deserializer::from_slice(&locale_assessment_bytes);
     assert_eq!(
-        replayed,
-        serde_json_canonicalizer::to_vec(&json::parse(&locale_assessment_bytes).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(&replayed).unwrap(),
+        serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut input)).unwrap()
     );
+    input.end().unwrap();
 }
 
 #[test]
