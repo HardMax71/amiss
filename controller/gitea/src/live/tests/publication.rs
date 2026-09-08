@@ -194,7 +194,7 @@ fn a_revoked_control_publishes_the_verdict_that_reports_it() {
         "evaluation-1",
         CheckConclusion::Unavailable(RunFailure::AuthorizationRevoked),
     );
-    let revoked = Fixture::mutated("gitea", |data| data.protection.writes.enable_push = true);
+    let revoked = Fixture::mutated("gitea", |data| data.protection.enable_push = true);
 
     assert_eq!(
         revoked.client.publish(revoked.pull_request(), &publication),
@@ -215,7 +215,7 @@ fn a_revoked_control_withholds_an_approval() {
     let fixture = Fixture::new("gitea");
     let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
     let publication = fixture.publication(snapshot, "evaluation-1", CheckConclusion::Pass);
-    let revoked = Fixture::mutated("gitea", |data| data.protection.writes.enable_push = true);
+    let revoked = Fixture::mutated("gitea", |data| data.protection.enable_push = true);
 
     assert_eq!(
         revoked.client.publish(revoked.pull_request(), &publication),

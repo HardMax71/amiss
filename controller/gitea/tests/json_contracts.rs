@@ -9,6 +9,9 @@ mod commits;
 #[path = "json_contracts/numbers.rs"]
 mod numbers;
 
+#[path = "json_contracts/protection.rs"]
+mod protection;
+
 #[path = "json_contracts/repositories.rs"]
 mod repositories;
 

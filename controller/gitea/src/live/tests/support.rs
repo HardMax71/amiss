@@ -23,53 +23,11 @@ use crate::{
     DedicatedReviewer, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects, GiteaPullRequest,
 };
 
-pub(super) const GITEA_PROTECTION: &str = r#"{
-  "rule_name":"main",
-  "enable_push":false,
-  "enable_push_whitelist":false,
-  "push_whitelist_usernames":[],
-  "push_whitelist_teams":[],
-  "push_whitelist_deploy_keys":false,
-  "protected_file_patterns":"",
-  "unprotected_file_patterns":"",
-  "enable_force_push":false,
-  "enable_force_push_allowlist":false,
-  "force_push_allowlist_usernames":[],
-  "force_push_allowlist_teams":[],
-  "force_push_allowlist_deploy_keys":false,
-  "enable_bypass_allowlist":false,
-  "bypass_allowlist_usernames":[],
-  "bypass_allowlist_teams":[],
-  "required_approvals":1,
-  "enable_approvals_whitelist":true,
-  "approvals_whitelist_username":["amiss-controller"],
-  "approvals_whitelist_teams":[],
-  "block_on_rejected_reviews":true,
-  "block_on_outdated_branch":true,
-  "dismiss_stale_approvals":true,
-  "ignore_stale_approvals":false,
-  "block_admin_merge_override":true
-}"#;
+pub(super) const GITEA_PROTECTION: &str =
+    include_str!("../../../tests/fixtures/gitea-protection.json");
 
-pub(super) const FORGEJO_PROTECTION: &str = r#"{
-  "rule_name":"main",
-  "enable_push":false,
-  "enable_push_whitelist":false,
-  "push_whitelist_usernames":[],
-  "push_whitelist_teams":[],
-  "push_whitelist_deploy_keys":false,
-  "protected_file_patterns":"",
-  "unprotected_file_patterns":"",
-  "required_approvals":1,
-  "enable_approvals_whitelist":true,
-  "approvals_whitelist_username":["amiss-controller"],
-  "approvals_whitelist_teams":[],
-  "block_on_rejected_reviews":true,
-  "block_on_outdated_branch":true,
-  "dismiss_stale_approvals":true,
-  "ignore_stale_approvals":false,
-  "apply_to_admins":true
-}"#;
+pub(super) const FORGEJO_PROTECTION: &str =
+    include_str!("../../../tests/fixtures/forgejo-protection.json");
 
 pub(super) static USER: LazyLock<UserRecord> = LazyLock::new(|| {
     amiss_wire::read_json(

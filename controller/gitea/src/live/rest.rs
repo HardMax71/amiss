@@ -225,12 +225,13 @@ impl GiteaRest for HttpRest {
             deadline,
             |bytes| amiss_wire::read_json(bytes, u64::MAX),
         )?;
-        let protection: BranchProtectionRecord = self.get(
+        let protection: BranchProtectionRecord = self.transport.get(
             &format!(
                 "{prefix}/branch_protections/{}",
                 protection_rule_path(&target_branch)?
             ),
             deadline,
+            |bytes| amiss_wire::read_json(bytes, u64::MAX),
         )?;
         let target: CommitRecord = self.transport.get(
             &format!(

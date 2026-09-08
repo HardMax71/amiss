@@ -2,6 +2,7 @@ use serde::Deserialize;
 
 pub(super) use crate::branch::BranchRecord;
 pub(super) use crate::commit::CommitRecord;
+pub(super) use crate::protection::BranchProtectionRecord;
 pub(super) use crate::reference::RefRecord;
 pub(super) use crate::repository::RepositoryRecord;
 pub(super) use crate::review::{CreateReview, ReviewRecord};
@@ -27,74 +28,6 @@ pub(super) struct PullRefRecord {
     pub branch: String,
     pub repo_id: u64,
     pub repo: Option<RepositoryRecord>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct BranchProtectionRecord {
-    pub rule_name: String,
-    #[serde(flatten)]
-    pub writes: WriteProtection,
-    #[serde(flatten)]
-    pub force: ForceProtection,
-    #[serde(flatten)]
-    pub bypass: BypassProtection,
-    #[serde(flatten)]
-    pub approvals: ApprovalProtection,
-    #[serde(flatten)]
-    pub reviews: ReviewProtection,
-    #[serde(flatten)]
-    pub overrides: OverrideProtection,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct WriteProtection {
-    pub enable_push: bool,
-    pub enable_push_whitelist: bool,
-    pub push_whitelist_usernames: Vec<String>,
-    pub push_whitelist_teams: Vec<String>,
-    pub push_whitelist_deploy_keys: bool,
-    #[serde(rename = "protected_file_patterns")]
-    pub _protected_file_patterns: String,
-    pub unprotected_file_patterns: String,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct ForceProtection {
-    pub enable_force_push: Option<bool>,
-    pub enable_force_push_allowlist: Option<bool>,
-    pub force_push_allowlist_usernames: Option<Vec<String>>,
-    pub force_push_allowlist_teams: Option<Vec<String>>,
-    pub force_push_allowlist_deploy_keys: Option<bool>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct BypassProtection {
-    pub enable_bypass_allowlist: Option<bool>,
-    pub bypass_allowlist_usernames: Option<Vec<String>>,
-    pub bypass_allowlist_teams: Option<Vec<String>>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct ApprovalProtection {
-    pub required_approvals: i64,
-    pub enable_approvals_whitelist: bool,
-    #[serde(rename = "approvals_whitelist_username")]
-    pub approvals_whitelist_usernames: Vec<String>,
-    pub approvals_whitelist_teams: Vec<String>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct ReviewProtection {
-    pub block_on_rejected_reviews: bool,
-    pub block_on_outdated_branch: bool,
-    pub dismiss_stale_approvals: bool,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct OverrideProtection {
-    pub ignore_stale_approvals: bool,
-    pub block_admin_merge_override: Option<bool>,
-    pub apply_to_admins: Option<bool>,
 }
 
 #[derive(Clone)]

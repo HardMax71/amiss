@@ -7,6 +7,7 @@ pub mod content;
 mod fetch_plan;
 mod identity;
 mod live;
+pub mod protection;
 pub mod reference;
 pub mod repository;
 pub mod review;

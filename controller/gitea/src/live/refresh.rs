@@ -240,108 +240,59 @@ fn protection_authorizes(
     branch: &super::model::BranchRecord,
     protection: &BranchProtectionRecord,
 ) -> bool {
-    let exact_reviewer = protection
-        .approvals
-        .approvals_whitelist_usernames
-        .as_slice()
-        == [config.reviewer.login.as_str()]
-        || protection.approvals.approvals_whitelist_usernames.len() == 1
-            && protection
-                .approvals
-                .approvals_whitelist_usernames
-                .first()
-                .is_some_and(|login| login.eq_ignore_ascii_case(&config.reviewer.login));
-    let admin_enforced = matches!(
-        (
-            protection.overrides.block_admin_merge_override,
-            protection.overrides.apply_to_admins,
-        ),
-        (Some(true), None) | (None, Some(true))
-    );
-    let gitea_shape = protection.overrides.block_admin_merge_override == Some(true)
-        && protection.overrides.apply_to_admins.is_none()
+    let flags = [
+        protection.enable_force_push,
+        protection.enable_force_push_allowlist,
+        protection.force_push_allowlist_deploy_keys,
+        protection.enable_bypass_allowlist,
+    ];
+    let allowlists = [
+        protection.force_push_allowlist_usernames.as_deref(),
+        protection.force_push_allowlist_teams.as_deref(),
+        protection.bypass_allowlist_usernames.as_deref(),
+        protection.bypass_allowlist_teams.as_deref(),
+    ];
+    let exact_reviewer = protection.approvals_whitelist_usernames.len() == 1
+        && protection
+            .approvals_whitelist_usernames
+            .first()
+            .is_some_and(|login| login.eq_ignore_ascii_case(&config.reviewer.login));
+    let gitea_shape = protection.block_admin_merge_override == Some(true)
+        && protection.apply_to_admins.is_none()
+        && protection.priority.is_some()
+        && protection.block_on_codeowner_reviews.is_some()
         && repository.allow_manual_merge == Some(false)
-        && gitea_extensions_closed(&protection.force, &protection.bypass);
-    let forgejo_shape = protection.overrides.block_admin_merge_override.is_none()
-        && protection.overrides.apply_to_admins == Some(true)
+        && flags.iter().all(|value| *value == Some(false))
+        && allowlists
+            .iter()
+            .all(|value| value.is_some_and(<[String]>::is_empty));
+    let forgejo_shape = protection.block_admin_merge_override.is_none()
+        && protection.apply_to_admins == Some(true)
+        && protection.priority.is_none()
+        && protection.block_on_codeowner_reviews.is_none()
         && repository.allow_manual_merge.is_none()
-        && forgejo_extensions_absent(&protection.force, &protection.bypass);
+        && flags.iter().all(Option::is_none)
+        && allowlists.iter().all(Option::is_none);
     branch.name == pull_request.base.branch
         && branch.protected
         && branch.required_approvals == 1
         && !branch.effective_branch_protection_name.is_empty()
         && branch.effective_branch_protection_name == protection.rule_name
-        && direct_push_closed(&protection.writes)
-        && (gitea_shape || forgejo_shape)
-        && protection.approvals.required_approvals == 1
-        && protection.approvals.enable_approvals_whitelist
-        && exact_reviewer
-        && protection.approvals.approvals_whitelist_teams.is_empty()
-        && protection.reviews.block_on_rejected_reviews
-        && protection.reviews.block_on_outdated_branch
-        && protection.reviews.dismiss_stale_approvals
-        && !protection.overrides.ignore_stale_approvals
-        && admin_enforced
-}
-
-fn direct_push_closed(protection: &super::model::WriteProtection) -> bool {
-    !protection.enable_push
+        && !protection.enable_push
         && !protection.enable_push_whitelist
         && protection.push_whitelist_usernames.is_empty()
         && protection.push_whitelist_teams.is_empty()
         && !protection.push_whitelist_deploy_keys
         && protection.unprotected_file_patterns.is_empty()
-}
-
-fn gitea_extensions_closed(
-    force: &super::model::ForceProtection,
-    bypass: &super::model::BypassProtection,
-) -> bool {
-    extensions_satisfy(
-        force,
-        bypass,
-        |value| value == Some(false),
-        |value| value.is_some_and(<[String]>::is_empty),
-    )
-}
-
-fn forgejo_extensions_absent(
-    force: &super::model::ForceProtection,
-    bypass: &super::model::BypassProtection,
-) -> bool {
-    extensions_satisfy(force, bypass, absent_flag, absent_allowlist)
-}
-
-fn absent_flag(value: Option<bool>) -> bool {
-    value.is_none()
-}
-
-fn absent_allowlist(value: Option<&[String]>) -> bool {
-    value.is_none()
-}
-
-fn extensions_satisfy(
-    force: &super::model::ForceProtection,
-    bypass: &super::model::BypassProtection,
-    flag: impl Fn(Option<bool>) -> bool,
-    allowlist: impl Fn(Option<&[String]>) -> bool,
-) -> bool {
-    [
-        force.enable_force_push,
-        force.enable_force_push_allowlist,
-        force.force_push_allowlist_deploy_keys,
-        bypass.enable_bypass_allowlist,
-    ]
-    .into_iter()
-    .all(flag)
-        && [
-            force.force_push_allowlist_usernames.as_deref(),
-            force.force_push_allowlist_teams.as_deref(),
-            bypass.bypass_allowlist_usernames.as_deref(),
-            bypass.bypass_allowlist_teams.as_deref(),
-        ]
-        .into_iter()
-        .all(allowlist)
+        && (gitea_shape || forgejo_shape)
+        && protection.required_approvals == 1
+        && protection.enable_approvals_whitelist
+        && exact_reviewer
+        && protection.approvals_whitelist_teams.is_empty()
+        && protection.block_on_rejected_reviews
+        && protection.block_on_outdated_branch
+        && protection.dismiss_stale_approvals
+        && !protection.ignore_stale_approvals
 }
 
 pub(super) fn repository_identity(

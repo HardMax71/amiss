@@ -178,14 +178,14 @@ fn admin_enforcement_rejects_absent_false_and_dual_fields() {
 #[test]
 fn common_push_escape_hatches_revoke_both_wire_shapes() {
     let escapes: [fn(&mut RefreshData); 7] = [
-        |data| data.protection.writes.enable_push = true,
-        |data| data.protection.writes.enable_push_whitelist = true,
+        |data| data.protection.enable_push = true,
+        |data| data.protection.enable_push_whitelist = true,
         |data| {
-            data.protection.writes.push_whitelist_usernames = vec!["writer".to_owned()];
+            data.protection.push_whitelist_usernames = vec!["writer".to_owned()];
         },
-        |data| data.protection.writes.push_whitelist_teams = vec!["writers".to_owned()],
-        |data| data.protection.writes.push_whitelist_deploy_keys = true,
-        |data| data.protection.writes.unprotected_file_patterns = "docs/**".to_owned(),
+        |data| data.protection.push_whitelist_teams = vec!["writers".to_owned()],
+        |data| data.protection.push_whitelist_deploy_keys = true,
+        |data| data.protection.unprotected_file_patterns = "docs/**".to_owned(),
         |data| data.repository.allow_manual_merge = Some(true),
     ];
     for mutate in escapes {
@@ -198,23 +198,23 @@ fn common_push_escape_hatches_revoke_both_wire_shapes() {
 #[test]
 fn gitea_force_and_bypass_escape_hatches_revoke() {
     let escapes: [fn(&mut RefreshData); 9] = [
-        |data| data.protection.force.enable_force_push = Some(true),
-        |data| data.protection.force.enable_force_push_allowlist = Some(true),
+        |data| data.protection.enable_force_push = Some(true),
+        |data| data.protection.enable_force_push_allowlist = Some(true),
         |data| {
-            data.protection.force.force_push_allowlist_usernames = Some(vec!["writer".to_owned()]);
+            data.protection.force_push_allowlist_usernames = Some(vec!["writer".to_owned()]);
         },
         |data| {
-            data.protection.force.force_push_allowlist_teams = Some(vec!["writers".to_owned()]);
+            data.protection.force_push_allowlist_teams = Some(vec!["writers".to_owned()]);
         },
-        |data| data.protection.force.force_push_allowlist_deploy_keys = Some(true),
-        |data| data.protection.bypass.enable_bypass_allowlist = Some(true),
+        |data| data.protection.force_push_allowlist_deploy_keys = Some(true),
+        |data| data.protection.enable_bypass_allowlist = Some(true),
         |data| {
-            data.protection.bypass.bypass_allowlist_usernames = Some(vec!["admin".to_owned()]);
+            data.protection.bypass_allowlist_usernames = Some(vec!["admin".to_owned()]);
         },
         |data| {
-            data.protection.bypass.bypass_allowlist_teams = Some(vec!["admins".to_owned()]);
+            data.protection.bypass_allowlist_teams = Some(vec!["admins".to_owned()]);
         },
-        |data| data.protection.force.enable_force_push = None,
+        |data| data.protection.enable_force_push = None,
     ];
     for mutate in escapes {
         assert_revoked(&Fixture::mutated("gitea", mutate));
@@ -224,9 +224,27 @@ fn gitea_force_and_bypass_escape_hatches_revoke() {
 #[test]
 fn forgejo_shape_rejects_injected_gitea_capabilities() {
     let fixture = Fixture::mutated("forgejo", |data| {
-        data.protection.force.enable_force_push = Some(false);
+        data.protection.enable_force_push = Some(false);
     });
     assert_revoked(&fixture);
+}
+
+#[test]
+fn protection_metadata_must_match_the_observed_wire_shape() {
+    let missing: [fn(&mut RefreshData); 2] = [
+        |data| data.protection.priority = None,
+        |data| data.protection.block_on_codeowner_reviews = None,
+    ];
+    let injected: [fn(&mut RefreshData); 2] = [
+        |data| data.protection.priority = Some(0.into()),
+        |data| data.protection.block_on_codeowner_reviews = Some(false),
+    ];
+    for mutate in missing {
+        assert_revoked(&Fixture::mutated("gitea", mutate));
+    }
+    for mutate in injected {
+        assert_revoked(&Fixture::mutated("forgejo", mutate));
+    }
 }
 
 #[test]
@@ -250,11 +268,10 @@ fn wrong_identity_tree_and_review_rule_fail_closed() {
         |data| data.reviewer.id = 999,
         |data| data.pull_request.head.repo_id = 0,
         |data| {
-            data.protection.approvals.approvals_whitelist_usernames =
-                vec!["someone-else".to_owned()];
+            data.protection.approvals_whitelist_usernames = vec!["someone-else".to_owned()];
         },
-        |data| data.protection.reviews.block_on_outdated_branch = false,
-        |data| data.protection.reviews.dismiss_stale_approvals = false,
+        |data| data.protection.block_on_outdated_branch = false,
+        |data| data.protection.dismiss_stale_approvals = false,
     ];
     for mutate in cases {
         let fixture = Fixture::mutated("gitea", mutate);
@@ -517,20 +534,30 @@ fn the_head_repository_gates_open_and_spares_closed() {
 #[test]
 fn the_reviewer_whitelist_matches_case_insensitively_but_exactly_once() {
     let cased = Fixture::mutated("gitea", |data| {
-        data.protection.approvals.approvals_whitelist_usernames =
-            vec!["Amiss-Controller".to_owned()];
+        data.protection.approvals_whitelist_usernames = vec!["Amiss-Controller".to_owned()];
     });
     assert_eq!(
         cased.client.refresh(cased.pull_request()).unwrap().state,
         ChangeState::Active,
         "a case-differing single-entry whitelist still authorizes"
     );
+    for provider in ["gitea", "forgejo"] {
+        for reviewers in [
+            Vec::new(),
+            vec!["amiss-controller".to_owned(), "Amiss-Controller".to_owned()],
+        ] {
+            let fixture = Fixture::mutated(provider, |data| {
+                data.protection.approvals_whitelist_usernames = reviewers;
+            });
+            assert_revoked(&fixture);
+        }
+    }
 }
 
 #[test]
 fn an_injected_allowlist_revokes_the_forgejo_shape() {
     let injected = Fixture::mutated("forgejo", |data| {
-        data.protection.force.force_push_allowlist_usernames = Some(Vec::new());
+        data.protection.force_push_allowlist_usernames = Some(Vec::new());
     });
     assert_eq!(
         injected
