@@ -3,6 +3,7 @@ mod tests;
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use secrecy::{SecretSlice, SecretString};
 use serde::Serialize;
+use wary::Validate as _;
 
 pub(super) use amiss_controller::OperationDeadline;
 use amiss_controller::{
@@ -22,11 +23,11 @@ use super::artifact::{
     validate_workflow_request,
 };
 use super::model::{
-    BranchRule, CheckRunPage, CheckRunRecord, CommitRecord, CreateCheckRun, GateCommitRecord,
-    GitCommitRecord, PullRequestRecord, RefRecord, RefreshData, RepositoryCommitRecord,
-    RepositoryRecord,
+    CheckRunPage, CheckRunRecord, CommitRecord, CreateCheckRun, GateCommitRecord, GitCommitRecord,
+    PullRequestRecord, RefRecord, RefreshData, RepositoryCommitRecord, RepositoryRecord,
 };
 use super::relation::GitHubRelationRest;
+use super::rules::BranchRule;
 use super::{GitHubClientError, GitHubTimeouts};
 
 mod transport;
@@ -207,6 +208,10 @@ impl HttpRest {
             };
             let route = query_route(&route, &query)?;
             let batch: Vec<BranchRule> = self.transport.get(&route, deadline)?;
+            for rule in &batch {
+                rule.validate(&())
+                    .map_err(|_defect| ProviderError::InvalidResponse)?;
+            }
             let complete = page_complete(batch.len())?;
             rules.extend(batch);
             if complete {

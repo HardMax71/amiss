@@ -18,12 +18,12 @@ use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use crate::GitHubPullRequest;
 
 use super::model::{
-    BranchRule, CheckRunApp, CheckRunOutputRecord, CheckRunRecord, CommitRecord, CreateCheckRun,
-    OwnerRecord, PullRefRecord, PullRepositoryRecord, PullRequestRecord, RefreshData,
-    RepositoryRecord,
+    CheckRunApp, CheckRunOutputRecord, CheckRunRecord, CommitRecord, CreateCheckRun, OwnerRecord,
+    PullRefRecord, PullRepositoryRecord, PullRequestRecord, RefreshData, RepositoryRecord,
 };
 use super::publication::{CheckRunDecision, publication_decision, validate_created};
 use super::rest::{GitHubRest, OperationDeadline};
+use super::rules::{BranchRule, RequiredStatus, RequiredStatusParameters, RuleParameters};
 use super::{Client, Config};
 
 const APP_ID: u64 = 99;
@@ -156,13 +156,16 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
     let fixture = Fixture::new();
     let cases = [
         Vec::new(),
-        vec![required_rule(None)],
-        vec![required_rule(Some(APP_ID + 1))],
-        vec![required_rule(Some(APP_ID)), required_rule(Some(APP_ID + 1))],
-        vec![required_rule_with_policy(Some(APP_ID), false)],
+        vec![required_rule(None, true)],
+        vec![required_rule(Some(APP_ID + 1), true)],
         vec![
-            required_rule(Some(APP_ID)),
-            required_rule_with_policy(Some(APP_ID), false),
+            required_rule(Some(APP_ID), true),
+            required_rule(Some(APP_ID + 1), true),
+        ],
+        vec![required_rule(Some(APP_ID), false)],
+        vec![
+            required_rule(Some(APP_ID), true),
+            required_rule(Some(APP_ID), false),
         ],
     ];
     for rules in cases {
@@ -173,15 +176,45 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
         assert_eq!(snapshot.run.commits.candidate, fixture.candidate);
     }
 
-    let mut malformed = fixture.data.clone();
-    malformed.rules = vec![BranchRule {
-        kind: "required_status_checks".to_owned(),
-        parameters: Some(serde_json::json!({"unexpected": []})),
-    }];
-    assert_eq!(
-        super::refresh::snapshot(&fixture.config, fixture.request(), &malformed),
-        Err(ProviderError::InvalidResponse)
-    );
+    for (checks, state) in [
+        (Vec::new(), ChangeState::AuthorizationRevoked),
+        (
+            vec![("another/check", Some(APP_ID))],
+            ChangeState::AuthorizationRevoked,
+        ),
+        (
+            vec![("amiss/provider", Some(APP_ID)), ("another/check", None)],
+            ChangeState::Active,
+        ),
+        (
+            vec![("amiss/provider", Some(APP_ID)); 2],
+            ChangeState::Active,
+        ),
+        (
+            vec![("amiss/provider", Some(APP_ID)), ("amiss/provider", None)],
+            ChangeState::AuthorizationRevoked,
+        ),
+    ] {
+        let mut data = fixture.data.clone();
+        data.rules = vec![BranchRule::RequiredStatusChecks(RuleParameters {
+            ruleset_source_type: None,
+            ruleset_source: None,
+            ruleset_id: None,
+            parameters: RequiredStatusParameters {
+                strict_required_status_checks_policy: true,
+                do_not_enforce_on_create: None,
+                required_status_checks: checks
+                    .into_iter()
+                    .map(|(context, integration_id)| RequiredStatus {
+                        context: context.to_owned(),
+                        integration_id,
+                    })
+                    .collect(),
+            },
+        })];
+        let snapshot = super::refresh::snapshot(&fixture.config, fixture.request(), &data).unwrap();
+        assert_eq!(snapshot.state, state);
+    }
 
     let mut unknown_state = fixture.data.clone();
     unknown_state.pull_request.state = "unknown".to_owned();
@@ -946,25 +979,24 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             tree: oid('d').as_str().to_owned(),
             parents: vec![oid('a').as_str().to_owned(), candidate.as_str().to_owned()],
         },
-        rules: vec![required_rule(Some(APP_ID))],
+        rules: vec![required_rule(Some(APP_ID), true)],
     }
 }
 
-fn required_rule(integration_id: Option<u64>) -> BranchRule {
-    required_rule_with_policy(integration_id, true)
-}
-
-fn required_rule_with_policy(integration_id: Option<u64>, strict: bool) -> BranchRule {
-    BranchRule {
-        kind: "required_status_checks".to_owned(),
-        parameters: Some(serde_json::json!({
-            "strict_required_status_checks_policy": strict,
-            "required_status_checks": [{
-                "context": "amiss/provider",
-                "integration_id": integration_id
-            }]
-        })),
-    }
+fn required_rule(integration_id: Option<u64>, strict: bool) -> BranchRule {
+    BranchRule::RequiredStatusChecks(RuleParameters {
+        ruleset_source_type: None,
+        ruleset_source: None,
+        ruleset_id: None,
+        parameters: RequiredStatusParameters {
+            strict_required_status_checks_policy: strict,
+            do_not_enforce_on_create: None,
+            required_status_checks: vec![RequiredStatus {
+                context: "amiss/provider".to_owned(),
+                integration_id,
+            }],
+        },
+    })
 }
 
 fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {

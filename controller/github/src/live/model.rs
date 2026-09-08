@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+
+use super::rules::BranchRule;
 
 #[derive(Clone, Deserialize)]
 pub(super) struct RepositoryRecord {
@@ -69,26 +70,6 @@ pub(super) struct GitCommitRecord {
 #[derive(Deserialize)]
 pub(super) struct GitObjectRecord {
     pub sha: String,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct BranchRule {
-    #[serde(rename = "type")]
-    pub kind: String,
-    #[serde(default)]
-    pub parameters: Option<Value>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct RequiredStatusParameters {
-    pub required_status_checks: Vec<RequiredStatus>,
-    pub strict_required_status_checks_policy: bool,
-}
-
-#[derive(Deserialize)]
-pub(super) struct RequiredStatus {
-    pub context: String,
-    pub integration_id: Option<u64>,
 }
 
 #[derive(Clone)]
