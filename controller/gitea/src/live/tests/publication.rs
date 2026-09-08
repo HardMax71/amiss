@@ -3,6 +3,8 @@ use amiss_controller::{
 };
 use amiss_wire::digest::sha256;
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
+use amiss_wire::report::model::{FeedbackAction, FeedbackItem, RepoPath};
+use amiss_wire::report::{Disposition, FindingKind};
 
 use super::super::Config;
 use super::super::model::{CreateReview, ReviewRecord, UserRecord};
@@ -15,21 +17,17 @@ fn review_bodies_carry_the_report_feedback_lines() {
     let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
     let mut publication = fixture.publication(snapshot, "evaluation-1", CheckConclusion::Block);
     publication.report = Some(
-        serde_json::to_vec(&serde_json::json!({
-            "payload": { "feedback": {
-                "existing_count": 0,
-                "items": [{
-                    "action": "check",
-                    "annotation": null,
-                    "effective_disposition": "warn",
-                    "finding_kinds": ["dependency-changed-subject-unchanged"],
-                    "location_count": 3,
-                    "target": "docs/guide.md"
-                }],
-                "status": "available"
-            } },
-            "schema": "amiss/scanner-report-envelope"
-        }))
+        amiss_fixtures::feedback_report(
+            0,
+            vec![FeedbackItem {
+                action: FeedbackAction::Check,
+                annotation: None,
+                effective_disposition: Disposition::Warn,
+                finding_kinds: vec![FindingKind::DependencyChangedSubjectUnchanged],
+                location_count: std::num::NonZeroU64::new(3).unwrap(),
+                target: Some(RepoPath::Text("docs/guide.md".parse().unwrap())),
+            }],
+        )
         .unwrap(),
     );
     let artifact_id = "b".repeat(64);

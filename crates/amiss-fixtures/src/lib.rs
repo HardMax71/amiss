@@ -1,11 +1,13 @@
 mod external;
 mod publication;
+mod report;
 mod semantic;
 
 pub mod requests;
 
 pub use external::{external_facts, external_plan, external_report};
 pub use publication::{PublicationAuditFixture, publication_audit};
+pub use report::feedback_report;
 pub use semantic::{SiteObservation, semantic_report, site_observation};
 
 use std::collections::BTreeMap;

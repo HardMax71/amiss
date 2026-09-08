@@ -14,6 +14,8 @@ use amiss_controller::{
 };
 use amiss_wire::digest::{hb, sha256};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::report::model::{FeedbackAction, FeedbackItem, RepoPath};
+use amiss_wire::report::{Disposition, FindingKind};
 
 use crate::GitHubPullRequest;
 
@@ -506,21 +508,17 @@ fn publication_summary_carries_the_report_feedback_lines() {
     let fixture = Fixture::new();
     let mut publication = fixture.publication(CheckConclusion::Block);
     publication.report = Some(
-        serde_json::to_vec(&serde_json::json!({
-            "payload": { "feedback": {
-                "existing_count": 1,
-                "items": [{
-                    "action": "fix",
-                    "annotation": null,
-                    "effective_disposition": "fail",
-                    "finding_kinds": ["explicit-target-missing"],
-                    "location_count": 2,
-                    "target": "docs/new.md"
-                }],
-                "status": "available"
-            } },
-            "schema": "amiss/scanner-report-envelope"
-        }))
+        amiss_fixtures::feedback_report(
+            1,
+            vec![FeedbackItem {
+                action: FeedbackAction::Fix,
+                annotation: None,
+                effective_disposition: Disposition::Fail,
+                finding_kinds: vec![FindingKind::ExplicitTargetMissing],
+                location_count: std::num::NonZeroU64::new(2).unwrap(),
+                target: Some(RepoPath::Text("docs/new.md".parse().unwrap())),
+            }],
+        )
         .unwrap(),
     );
     publication.artifact = Some(artifact_reference(
