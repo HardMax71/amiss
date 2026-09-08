@@ -3,7 +3,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde};
 use crate::json;
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -29,9 +29,9 @@ pub const PUBLICATION_URI_BYTES: usize = 16_384;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct PublicationPlanEnvelope<T = PublicationPlan> {
+pub struct PublicationPlanEnvelope {
     pub schema: PlanEnvelopeSchema,
-    pub payload: T,
+    pub payload: PublicationPlan,
     pub payload_digest: Digest,
 }
 
@@ -133,26 +133,20 @@ pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
     Ok(document)
 }
 
-/// Builds the unique digest-bound value for one publication plan.
+/// Binds one owned publication plan to its validated payload digest.
+///
+/// The result stays typed; output callers enforce byte limits with [`crate::write_json`].
 ///
 /// # Errors
 ///
-/// Fails when a public field violates the same closed grammar [`parse_plan`]
-/// enforces or the encoded document exceeds its byte ceiling.
-pub fn plan(input: &PublicationPlan) -> Result<Vec<u8>, Error> {
-    let payload_digest = plan_payload_digest(input)?;
-    let document = PublicationPlanEnvelope {
+/// Fails when a public field violates the same grammar [`parse_plan`] enforces.
+pub fn plan(input: PublicationPlan) -> Result<PublicationPlanEnvelope, Error> {
+    let payload_digest = plan_payload_digest(&input)?;
+    Ok(PublicationPlanEnvelope {
         schema: PlanEnvelopeSchema::Current,
         payload: input,
         payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    Ok(canonical)
+    })
 }
 
 pub(super) fn plan_payload_digest(input: &PublicationPlan) -> Result<Digest, Error> {
@@ -164,9 +158,10 @@ pub(super) fn plan_payload_digest(input: &PublicationPlan) -> Result<Digest, Err
         &input.product,
         &input.producer,
     )?;
-    serde_json_canonicalizer::to_vec(input)
-        .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(input, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 #[derive(Clone, Copy)]

@@ -11,9 +11,7 @@ use amiss_wire::publication::{
 };
 
 pub(super) fn publication_evidence() -> PublicationEvidence {
-    let planned = publication_plan();
-    let planned_value = plan(&planned).unwrap();
-    let planned = parse_plan(&planned_value).unwrap();
+    let planned = plan(publication_plan()).unwrap();
     PublicationEvidence {
         schema: EvidencePayloadSchema::Current,
         plan_payload_digest: planned.payload_digest,

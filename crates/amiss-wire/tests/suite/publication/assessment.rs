@@ -7,13 +7,8 @@ use amiss_wire::de::ErrorKind;
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::publication::{
     ASSESSMENT_PAYLOAD_SCHEMA, PublicationReason, PublicationVerdict, assess, evidence,
-    parse_assessment, parse_evidence, parse_plan, plan,
+    parse_assessment, parse_evidence, plan,
 };
-
-fn plan_envelope() -> amiss_wire::publication::PublicationPlanEnvelope {
-    let value = plan(&publication_plan()).unwrap();
-    parse_plan(&value).unwrap()
-}
 
 fn evidence_envelope(
     evidence_value: &amiss_wire::publication::PublicationEvidence,
@@ -24,7 +19,7 @@ fn evidence_envelope(
 
 #[test]
 fn exact_provider_facts_match_the_publication_plan() {
-    let plan = plan_envelope();
+    let plan = plan(publication_plan()).unwrap();
     let evidence = evidence_envelope(&publication_evidence());
     let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
 
@@ -46,7 +41,7 @@ fn exact_provider_facts_match_the_publication_plan() {
 
 #[test]
 fn absent_unbound_and_foreign_producers_stay_unproven() {
-    let plan = plan_envelope();
+    let plan = plan(publication_plan()).unwrap();
     let absent = assess(&plan, None, "0.26.0", digest('a')).unwrap();
     assert_eq!(absent.payload.verdict, PublicationVerdict::Unproven);
     assert_eq!(
@@ -80,7 +75,7 @@ fn absent_unbound_and_foreign_producers_stay_unproven() {
 
 #[test]
 fn bound_disagreements_are_one_sorted_refutation() {
-    let plan = plan_envelope();
+    let plan = plan(publication_plan()).unwrap();
     let mut mismatched = publication_evidence();
     mismatched.docs.commit = oid('c', ObjectFormat::Sha1);
     mismatched.target.canonical_url = "https://preview.example.com/widget/".to_owned();
@@ -103,13 +98,13 @@ fn bound_disagreements_are_one_sorted_refutation() {
 
 #[test]
 fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
-    let mut plan = plan_envelope();
-    plan.payload_digest = digest('f');
-    let error = assess(&plan, None, "0.26.0", digest('a')).unwrap_err();
+    let mut broken = plan(publication_plan()).unwrap();
+    broken.payload_digest = digest('f');
+    let error = assess(&broken, None, "0.26.0", digest('a')).unwrap_err();
     assert_eq!(error.path, "$.plan.payload_digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
-    let valid_plan = plan_envelope();
+    let valid_plan = plan(publication_plan()).unwrap();
     let mut inconsistent = assess(&valid_plan, None, "0.26.0", digest('a')).unwrap();
     inconsistent.payload.verdict = PublicationVerdict::Matched;
     inconsistent.payload_digest = amiss_wire::digest::hb(

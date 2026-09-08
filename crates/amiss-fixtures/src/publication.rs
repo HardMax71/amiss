@@ -42,8 +42,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
             "sha256:8c8f4c8087edf216675ffbfc5a75a6c67dc48103be696b74174758a3e5db187a",
         )?,
     };
-    let plan_bytes = plan(&plan_envelope.payload).ok()?;
-    let plan_envelope = parse_plan(&plan_bytes).ok()?;
+    let plan_envelope = plan(plan_envelope.payload).ok()?;
     let evidence_envelope = if with_evidence {
         Some(publication_evidence(&plan_envelope)?)
     } else {
@@ -56,6 +55,8 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
         sha256(b"publication evaluator fixture"),
     )
     .ok()?;
+    let mut plan_bytes = Vec::new();
+    amiss_wire::write_json(&plan_envelope, &mut plan_bytes, PUBLICATION_DOCUMENT_BYTES).ok()?;
     let mut assessment_bytes = Vec::new();
     amiss_wire::write_json(
         &assessment,

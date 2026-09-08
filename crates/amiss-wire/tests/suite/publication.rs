@@ -3,11 +3,8 @@
     reason = "tests build known-valid publication identities and inspect exact refusals"
 )]
 
-use std::{fs, path::Path};
-
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{
     CompletedSite, DocsCandidate, PLAN_PAYLOAD_SCHEMA, PlanPayloadSchema, PublicationPlan,
@@ -78,46 +75,39 @@ fn publication_plan() -> PublicationPlan {
 #[test]
 fn publication_plan_round_trips_with_its_payload_digest() {
     let expected = publication_plan();
-    let bytes = plan(&expected).unwrap();
-    let value = json::parse(&bytes).unwrap();
+    let envelope = plan(expected.clone()).unwrap();
+    let mut bytes = Vec::new();
+    amiss_wire::write_json(
+        &envelope,
+        &mut bytes,
+        amiss_wire::publication::PUBLICATION_DOCUMENT_BYTES,
+    )
+    .unwrap();
     let parsed = parse_plan(&bytes).unwrap();
 
+    assert_eq!(parsed, envelope);
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
         hb(
             PLAN_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap()
+            &serde_json_canonicalizer::to_vec(&expected).unwrap()
         )
     );
-    assert_eq!(
-        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap(),
-        bytes
-    );
-
-    let example_bytes = fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/publication-plan.json"),
-    )
-    .unwrap();
-    let example = parse_plan(&example_bytes).unwrap();
-    let written = plan(&example.payload).unwrap();
-    assert_eq!(
-        written,
-        serde_json_canonicalizer::to_vec(&json::parse(&example_bytes).unwrap()).unwrap()
-    );
+    assert_eq!(serde_json_canonicalizer::to_vec(&parsed).unwrap(), bytes);
 }
 
 #[test]
 fn publication_plan_refuses_ambiguous_resources_and_git_objects() {
     let mut mismatched_git = publication_plan();
     mismatched_git.docs.tree = oid('b', ObjectFormat::Sha256);
-    let error = plan(&mismatched_git).unwrap_err();
+    let error = plan(mismatched_git).unwrap_err();
     assert_eq!(error.path, "$.payload.docs.tree_oid");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let mut fragment = publication_plan();
     fragment.target.canonical_url = "https://docs.example.com/#candidate".to_owned();
-    let error = plan(&fragment).unwrap_err();
+    let error = plan(fragment).unwrap_err();
     assert_eq!(error.path, "$.payload.target.canonical_url");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
@@ -128,25 +118,27 @@ fn publication_plan_refuses_ambiguous_resources_and_git_objects() {
     ] {
         let mut invalid_authority = publication_plan();
         invalid_authority.target.canonical_url = invalid.to_owned();
-        let error = plan(&invalid_authority).unwrap_err();
+        let error = plan(invalid_authority).unwrap_err();
         assert_eq!(error.path, "$.payload.target.canonical_url");
         assert_eq!(error.kind, ErrorKind::InvalidValue);
     }
 
     let mut relative_resource = publication_plan();
     relative_resource.product.uri = "registry.example.com/widget:latest".to_owned();
-    let error = plan(&relative_resource).unwrap_err();
+    let error = plan(relative_resource).unwrap_err();
     assert_eq!(error.path, "$.payload.product.uri");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
 #[test]
 fn publication_plan_refuses_repository_values_that_bypass_construction() {
-    let value = plan(&publication_plan()).unwrap();
-    let mut document: serde_json::Value = serde_json::from_slice(&value).unwrap();
-    document["payload"]["docs"]["repository"]["host"] = serde_json::json!("invalid/host");
-    let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
-    document["payload_digest"] = serde_json::json!(hb(PLAN_PAYLOAD_SCHEMA, &payload).to_string());
+    let mut document = plan(publication_plan()).unwrap();
+    document.payload.docs.repository =
+        serde_json::from_str(r#"{"host":"invalid/host","owner":"acme","name":"widget"}"#).unwrap();
+    document.payload_digest = hb(
+        PLAN_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&document.payload).unwrap(),
+    );
 
     let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload.docs.repository");
@@ -155,88 +147,86 @@ fn publication_plan_refuses_repository_values_that_bypass_construction() {
 
 #[test]
 fn publication_plan_reports_derived_shape_errors_at_their_fields() {
-    let bytes = plan(&publication_plan()).unwrap();
-    for (pointer, replacement, expected_path, expected_kind) in [
+    let document = plan(publication_plan()).unwrap();
+    let text = serde_json::to_string(&document).unwrap();
+    for (field, original, replacement, expected_path, expected_kind) in [
         (
-            "/payload/report_payload_digest",
-            serde_json::Value::String(format!("sha256:{}", "z".repeat(64))),
+            "report_payload_digest",
+            serde_json::to_string(&document.payload.report_payload_digest).unwrap(),
+            serde_json::to_string(&format!("sha256:{}", "z".repeat(64))).unwrap(),
             "$.payload.report_payload_digest",
             ErrorKind::InvalidValue,
         ),
         (
-            "/payload/report_payload_digest",
-            serde_json::Value::Bool(false),
+            "report_payload_digest",
+            serde_json::to_string(&document.payload.report_payload_digest).unwrap(),
+            "false".to_owned(),
             "$.payload.report_payload_digest",
             ErrorKind::WrongType,
         ),
         (
-            "/payload/docs/commit_oid",
-            serde_json::Value::String("z".repeat(40)),
+            "commit_oid",
+            serde_json::to_string(&document.payload.docs.commit).unwrap(),
+            serde_json::to_string(&"z".repeat(40)).unwrap(),
             "$.payload.docs.commit_oid",
             ErrorKind::InvalidValue,
         ),
         (
-            "/payload/target/provider",
-            serde_json::Value::String("invalid identity".to_owned()),
+            "provider",
+            serde_json::to_string(&document.payload.target.provider).unwrap(),
+            r#""invalid identity""#.to_owned(),
             "$.payload.target.provider",
             ErrorKind::InvalidValue,
         ),
         (
-            "/payload/schema",
-            serde_json::Value::String("unknown".to_owned()),
+            "schema",
+            serde_json::to_string(&document.payload.schema).unwrap(),
+            r#""unknown""#.to_owned(),
             "$.payload.schema",
             ErrorKind::InvalidValue,
         ),
     ] {
-        let mut document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        *document.pointer_mut(pointer).unwrap() = replacement;
-        let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
-        document["payload_digest"] =
-            serde_json::json!(hb(PLAN_PAYLOAD_SCHEMA, &payload).to_string());
-
-        let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+        let changed = text.replacen(
+            &format!("\"{field}\":{original}"),
+            &format!("\"{field}\":{replacement}"),
+            1,
+        );
+        assert_ne!(changed, text);
+        let error = parse_plan(changed.as_bytes()).unwrap_err();
         assert_eq!(error.path, expected_path);
         assert_eq!(error.kind, expected_kind);
     }
 
-    let mut document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    document["payload"]
-        .as_object_mut()
-        .unwrap()
-        .remove("schema");
-    let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
-    document["payload_digest"] = serde_json::json!(hb(PLAN_PAYLOAD_SCHEMA, &payload).to_string());
-    let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+    let missing = text.replacen(
+        &format!(
+            "\"schema\":{},",
+            serde_json::to_string(&document.payload.schema).unwrap()
+        ),
+        "",
+        1,
+    );
+    assert_ne!(missing, text);
+    let error = parse_plan(missing.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.schema");
     assert_eq!(error.kind, ErrorKind::MissingField);
 }
 
 #[test]
 fn publication_plan_refuses_tampering_and_open_shapes() {
-    let bytes = plan(&publication_plan()).unwrap();
-    let parsed = parse_plan(&bytes).unwrap();
-    let recorded = parsed.payload_digest.to_string();
-    let document = String::from_utf8(bytes).unwrap();
-    let tampered = document.replace(&recorded, &digest('f').to_string());
-    let error = parse_plan(tampered.as_bytes()).unwrap_err();
+    let mut document = plan(publication_plan()).unwrap();
+    let text = serde_json::to_string(&document).unwrap();
+    document.payload_digest = digest('f');
+    let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload_digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
-    let open = document.replacen(
+    let open = text.replacen(
         "\"report_payload_digest\":",
         "\"unknown\":true,\"report_payload_digest\":",
         1,
     );
-    let open_value = json::parse(open.as_bytes()).unwrap();
-    let rebound = open.replace(
-        &recorded,
-        &hb(
-            PLAN_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(open_value.member("payload").unwrap()).unwrap(),
-        )
-        .to_string(),
-    );
-    let error = parse_plan(rebound.as_bytes()).unwrap_err();
+    assert_ne!(open, text);
+    let error = parse_plan(open.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.unknown");
     assert_eq!(error.kind, ErrorKind::UnknownField);
 }
