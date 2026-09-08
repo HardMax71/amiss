@@ -3,21 +3,25 @@ mod tests;
 use std::collections::BTreeSet;
 
 use amiss_wire::assessment::Nullable;
-use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::digest::sha256;
+use amiss_wire::report::model::{Controls, ReportEnvelope};
 use base64::Engine as _;
 
 use crate::semantic_artifact::InputArtifact;
 
 use super::ArtifactError;
 
-pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactError> {
+pub(super) fn validate(report: &ReportEnvelope, artifact: &[u8]) -> Result<(), ArtifactError> {
     if artifact.is_empty() {
         return Err(ArtifactError::Corrupt);
     }
     if u64::try_from(artifact.len()).unwrap_or(u64::MAX) > crate::SEMANTIC_INPUT_ARTIFACT_BYTES {
         return Err(ArtifactError::TooLarge);
     }
-    let report_digests = report_digests(report)?;
+    let report_evidence = match &report.payload.controls {
+        Controls::Resolved(controls) => controls.semantic_evidence.as_deref().unwrap_or_default(),
+        Controls::Unavailable(_) => &[],
+    };
     let decoded: InputArtifact =
         serde_json::from_slice(artifact).map_err(|_defect| ArtifactError::Corrupt)?;
     if decoded.inputs.is_empty()
@@ -76,23 +80,11 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
     if payload_digests
         .windows(2)
         .any(|pair| matches!(pair, [left, right] if left >= right))
-        || payload_digests != report_digests
+        || !payload_digests.iter().copied().eq(report_evidence
+            .iter()
+            .map(|evidence| evidence.payload_digest))
     {
         return Err(ArtifactError::Corrupt);
     }
     Ok(())
-}
-
-fn report_digests(report: &[u8]) -> Result<Vec<Digest>, ArtifactError> {
-    let (report, _verdict) =
-        amiss_wire::report::validate_envelope(report).map_err(|_defect| ArtifactError::Corrupt)?;
-    let amiss_wire::report::model::Controls::Resolved(controls) = report.payload.controls else {
-        return Ok(Vec::new());
-    };
-    Ok(controls
-        .semantic_evidence
-        .unwrap_or_default()
-        .into_iter()
-        .map(|evidence| evidence.payload_digest)
-        .collect())
 }

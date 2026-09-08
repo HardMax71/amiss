@@ -9,7 +9,7 @@ use amiss_controller::{
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::relation::relation_audit;
-use amiss_fixtures::publication_audit;
+use amiss_fixtures::{SCANNER_REPORT, captured_report, publication_audit};
 
 fn config() -> ArtifactStoreConfig {
     ArtifactStoreConfig {
@@ -30,12 +30,15 @@ fn exact_components_survive_restart_under_one_stable_locator() {
         FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
             .unwrap();
     let evaluation = ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap();
-    let report = br#"{"payload":{"feedback":{"items":[],"status":"available"}}}"#;
+    let canonical = captured_report(SCANNER_REPORT.to_vec()).unwrap();
+    let report = captured_report(serde_json::to_vec_pretty(&canonical.envelope).unwrap()).unwrap();
+    assert_ne!(report.bytes, canonical.bytes);
+    assert_eq!(report.envelope, canonical.envelope);
     let plan = br#"{"schema":"amiss/external-plan-envelope"}"#;
     let evidence = br#"{"schema":"amiss/external-evidence"}"#;
     let assessment = br#"{"schema":"amiss/external-assessment-envelope"}"#;
     let bundle = ArtifactBundle {
-        report,
+        report: &report,
         semantic: None,
         plan: Some(plan),
         evidence: Some(evidence),
@@ -48,11 +51,15 @@ fn exact_components_survive_restart_under_one_stable_locator() {
         external_incomplete: false,
     };
     let retained = store.retain(&evaluation, bundle).unwrap();
+    assert_eq!(
+        retained.report_digest,
+        amiss_wire::digest::sha256(&report.bytes)
+    );
 
     assert_eq!(store.retain(&evaluation, bundle).unwrap(), retained);
     assert_eq!(
         store.read(&retained.id, ArtifactComponent::Report).unwrap(),
-        report
+        report.bytes
     );
     assert_eq!(
         store.read(&retained.id, ArtifactComponent::Plan).unwrap(),
@@ -77,6 +84,12 @@ fn exact_components_survive_restart_under_one_stable_locator() {
         FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
             .unwrap();
     reopened.verify(&retained).unwrap();
+    assert_eq!(
+        reopened
+            .read(&retained.id, ArtifactComponent::Report)
+            .unwrap(),
+        report.bytes
+    );
     assert_eq!(reopened.find(&evaluation).unwrap(), Some(retained));
 }
 
@@ -230,6 +243,7 @@ fn invalid_audits_create_no_evaluation_binding() {
 
 #[test]
 fn expiry_removes_bytes_and_clock_rollback_cannot_restore_them() {
+    let report = captured_report(SCANNER_REPORT.to_vec()).unwrap();
     let root = tempfile::tempdir().unwrap();
     let clock = TestClock::at(1_000);
     let controller_clock: Arc<dyn ControllerClock> = clock.clone();
@@ -241,7 +255,7 @@ fn expiry_removes_bytes_and_clock_rollback_cannot_restore_them() {
         .retain(
             &evaluation,
             ArtifactBundle {
-                report: br#"{"schema":"amiss/report"}"#,
+                report: &report,
                 semantic: None,
                 plan: None,
                 evidence: None,
@@ -269,6 +283,10 @@ fn expiry_removes_bytes_and_clock_rollback_cannot_restore_them() {
 
 #[test]
 fn one_evaluation_cannot_be_rebound_and_missing_components_are_explicit() {
+    let report = captured_report(SCANNER_REPORT.to_vec()).unwrap();
+    let rebound = captured_report(serde_json::to_vec_pretty(&report.envelope).unwrap()).unwrap();
+    assert_eq!(report.envelope, rebound.envelope);
+    assert_ne!(report.bytes, rebound.bytes);
     let root = tempfile::tempdir().unwrap();
     let clock: Arc<dyn ControllerClock> = TestClock::at(1_000);
     let store = FileArtifactStore::open_with_clock(root.path(), config(), clock).unwrap();
@@ -277,7 +295,7 @@ fn one_evaluation_cannot_be_rebound_and_missing_components_are_explicit() {
         .retain(
             &evaluation,
             ArtifactBundle {
-                report: br#"{"result":"first"}"#,
+                report: &report,
                 semantic: None,
                 plan: None,
                 evidence: None,
@@ -292,7 +310,7 @@ fn one_evaluation_cannot_be_rebound_and_missing_components_are_explicit() {
         store.retain(
             &evaluation,
             ArtifactBundle {
-                report: br#"{"result":"second"}"#,
+                report: &rebound,
                 semantic: None,
                 plan: None,
                 evidence: None,
@@ -311,6 +329,7 @@ fn one_evaluation_cannot_be_rebound_and_missing_components_are_explicit() {
 
 #[test]
 fn capacity_is_strict_without_eviction() {
+    let report = captured_report(SCANNER_REPORT.to_vec()).unwrap();
     let root = tempfile::tempdir().unwrap();
     let clock: Arc<dyn ControllerClock> = TestClock::at(1_000);
     let mut limits = config();
@@ -321,7 +340,7 @@ fn capacity_is_strict_without_eviction() {
         .retain(
             &first,
             ArtifactBundle {
-                report: br#"{"result":"first"}"#,
+                report: &report,
                 semantic: None,
                 plan: None,
                 evidence: None,
@@ -336,7 +355,7 @@ fn capacity_is_strict_without_eviction() {
         store.retain(
             &second,
             ArtifactBundle {
-                report: br#"{"result":"second"}"#,
+                report: &report,
                 semantic: None,
                 plan: None,
                 evidence: None,
@@ -349,12 +368,13 @@ fn capacity_is_strict_without_eviction() {
     ));
     assert_eq!(
         store.read(&retained.id, ArtifactComponent::Report).unwrap(),
-        br#"{"result":"first"}"#
+        report.bytes
     );
 }
 
 #[test]
 fn corrupted_payload_prevents_reopening_the_store() {
+    let report = captured_report(SCANNER_REPORT.to_vec()).unwrap();
     let root = tempfile::tempdir().unwrap();
     let clock: Arc<dyn ControllerClock> = TestClock::at(1_000);
     let store =
@@ -363,7 +383,7 @@ fn corrupted_payload_prevents_reopening_the_store() {
         .retain(
             &ControllerEvaluationId::new("evaluation/corrupt".to_owned()).unwrap(),
             ArtifactBundle {
-                report: br#"{"result":"exact"}"#,
+                report: &report,
                 semantic: None,
                 plan: None,
                 evidence: None,
@@ -387,6 +407,7 @@ fn corrupted_payload_prevents_reopening_the_store() {
 
 #[test]
 fn one_oversized_record_is_not_misreported_as_recoverable_capacity() {
+    let report = captured_report(SCANNER_REPORT.to_vec()).unwrap();
     let root = tempfile::tempdir().unwrap();
     let clock: Arc<dyn ControllerClock> = TestClock::at(1_000);
     let mut limits = config();
@@ -396,7 +417,7 @@ fn one_oversized_record_is_not_misreported_as_recoverable_capacity() {
         store.retain(
             &ControllerEvaluationId::new("evaluation/oversized".to_owned()).unwrap(),
             ArtifactBundle {
-                report: br#"{"result":"too-large-for-this-record"}"#,
+                report: &report,
                 semantic: None,
                 plan: None,
                 evidence: None,

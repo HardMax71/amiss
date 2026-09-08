@@ -100,9 +100,7 @@ async fn retained_bytes_require_the_exact_bearer_and_expire_at_the_boundary()
     let clock = TestClock::at(1_000);
     let controller_clock: Arc<dyn ControllerClock> = clock.clone();
     let service = open_artifact_service(config, controller_clock)?;
-    let report = serde_json::to_vec(&json!({
-        "feedback": (0..11).collect::<Vec<_>>()
-    }))?;
+    let report = amiss_fixtures::captured_report(amiss_fixtures::SCANNER_REPORT.to_vec())?;
     let retained = service.store.retain(
         &ControllerEvaluationId::new("evaluation/http".to_owned()).unwrap(),
         ArtifactBundle {
@@ -155,7 +153,7 @@ async fn retained_bytes_require_the_exact_bearer_and_expire_at_the_boundary()
     );
     assert_eq!(
         to_bytes(response.into_body(), 1_048_576).await?,
-        report.as_slice()
+        report.bytes.as_slice()
     );
 
     let queried = app

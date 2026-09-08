@@ -297,7 +297,7 @@ pub(super) fn retain_publication(
         store.retain(
             &publication.evaluation_id,
             ArtifactBundle {
-                report: &report.bytes,
+                report,
                 semantic: semantic_artifact,
                 plan: external.plan.as_deref(),
                 evidence: external.evidence.as_deref(),

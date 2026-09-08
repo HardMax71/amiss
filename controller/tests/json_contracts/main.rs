@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use amiss_controller::{
-    ArtifactBundle, ArtifactComponent, ArtifactStoreConfig, ControllerClock,
+    ArtifactBundle, ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock,
     ControllerEvaluationId, FileArtifactStore,
 };
 use amiss_controller_fixtures::clock::TestClock;
@@ -20,6 +20,11 @@ mod semantic_binding;
 #[test]
 fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
     let fixture = semantic_input_artifact().unwrap();
+    let original = amiss_fixtures::captured_report(fixture.report).unwrap();
+    let captured =
+        amiss_fixtures::captured_report(serde_json::to_vec_pretty(&original.envelope).unwrap())
+            .unwrap();
+    assert_ne!(original.bytes, captured.bytes);
     assert_eq!(
         sha256(&fixture.artifact).to_string(),
         "sha256:6e84784cf279b723c750b0151d38bfa74caf9166995267f037dad6303aa9d595"
@@ -40,7 +45,7 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
         .retain(
             &evaluation,
             ArtifactBundle {
-                report: &fixture.report,
+                report: &captured,
                 semantic: Some(&fixture.artifact),
                 plan: None,
                 evidence: None,
@@ -51,6 +56,7 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
         )
         .unwrap();
     assert_eq!(reference.semantic_digest, Some(sha256(&fixture.artifact)));
+    assert_eq!(reference.report_digest, sha256(&captured.bytes));
     assert_eq!(
         store
             .read(&reference.id, ArtifactComponent::Semantic)
@@ -60,5 +66,36 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
     drop(store);
     let reopened = FileArtifactStore::open_with_clock(root.path(), config, clock).unwrap();
     reopened.verify(&reference).unwrap();
+    assert_eq!(
+        reopened
+            .read(&reference.id, ArtifactComponent::Report)
+            .unwrap(),
+        captured.bytes
+    );
     assert_eq!(reopened.find(&evaluation).unwrap(), Some(reference));
+    for (name, digests) in [
+        ("missing", vec![]),
+        ("mismatch", vec![amiss_wire::digest::hb("test", b"other")]),
+    ] {
+        let report =
+            amiss_fixtures::captured_report(amiss_fixtures::semantic_report(&digests).unwrap())
+                .unwrap();
+        let rejected = ControllerEvaluationId::new(format!("evaluation/{name}")).unwrap();
+        assert!(matches!(
+            reopened.retain(
+                &rejected,
+                ArtifactBundle {
+                    report: &report,
+                    semantic: Some(&fixture.artifact),
+                    plan: None,
+                    evidence: None,
+                    assessment: None,
+                    external_tally: None,
+                    external_incomplete: false,
+                },
+            ),
+            Err(ArtifactError::Corrupt)
+        ));
+        assert_eq!(reopened.find(&rejected).unwrap(), None);
+    }
 }

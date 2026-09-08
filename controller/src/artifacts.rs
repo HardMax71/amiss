@@ -8,8 +8,8 @@ use amiss_wire::digest::Digest;
 use url::Url;
 
 use crate::{
-    ControllerEvaluationId, ExternalTally, PublicationAuditBundle, PublicationAuditDigests,
-    RelationAuditBundle, RelationAuditDigests,
+    CapturedReport, ControllerEvaluationId, ExternalTally, PublicationAuditBundle,
+    PublicationAuditDigests, RelationAuditBundle, RelationAuditDigests,
 };
 
 pub(crate) use format::valid_id as valid_artifact_id;
@@ -31,7 +31,7 @@ pub struct ArtifactStoreConfig {
 
 #[derive(Clone, Copy)]
 pub struct ArtifactBundle<'a> {
-    pub report: &'a [u8],
+    pub report: &'a CapturedReport,
     pub semantic: Option<&'a [u8]>,
     pub plan: Option<&'a [u8]>,
     pub evidence: Option<&'a [u8]>,

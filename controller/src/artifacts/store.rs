@@ -72,7 +72,10 @@ impl FileArtifactStore {
     ) -> Result<ArtifactReference, ArtifactError> {
         let input = record_input(bundle)?;
         let payloads = [
-            (ArtifactComponent::Report, Some(bundle.report)),
+            (
+                ArtifactComponent::Report,
+                Some(bundle.report.bytes.as_slice()),
+            ),
             (ArtifactComponent::Semantic, bundle.semantic),
             (ArtifactComponent::Plan, bundle.plan),
             (ArtifactComponent::Evidence, bundle.evidence),
@@ -478,10 +481,10 @@ fn record_input(bundle: ArtifactBundle<'_>) -> Result<RecordInput, ArtifactError
         return Err(ArtifactError::Corrupt);
     }
     if let Some(semantic) = bundle.semantic {
-        super::semantic::validate(bundle.report, semantic)?;
+        super::semantic::validate(&bundle.report.envelope, semantic)?;
     }
     Ok(RecordInput {
-        report: Blob::new(bundle.report)?,
+        report: Blob::new(&bundle.report.bytes)?,
         semantic: bundle.semantic.map(Blob::new).transpose()?,
         plan: bundle.plan.map(Blob::new).transpose()?,
         evidence: bundle.evidence.map(Blob::new).transpose()?,

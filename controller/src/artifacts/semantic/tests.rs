@@ -55,16 +55,19 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
         schema: InputArtifactSchema::Current,
     })
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    let report =
-        amiss_fixtures::semantic_report(&[payload_digest]).ok_or(ArtifactError::Corrupt)?;
+    let report = amiss_fixtures::captured_report(
+        amiss_fixtures::semantic_report(&[payload_digest]).ok_or(ArtifactError::Corrupt)?,
+    )
+    .map_err(|_defect| ArtifactError::Corrupt)?;
 
-    validate(&report, &artifact)?;
+    validate(&report.envelope, &artifact)?;
+    let other_report = amiss_fixtures::captured_report(
+        amiss_fixtures::semantic_report(&[hb("amiss/test-other", b"other")])
+            .ok_or(ArtifactError::Corrupt)?,
+    )
+    .map_err(|_defect| ArtifactError::Corrupt)?;
     assert!(matches!(
-        validate(
-            &amiss_fixtures::semantic_report(&[hb("amiss/test-other", b"other")])
-                .ok_or(ArtifactError::Corrupt)?,
-            &artifact
-        ),
+        validate(&other_report.envelope, &artifact),
         Err(ArtifactError::Corrupt)
     ));
 
@@ -95,7 +98,10 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
         *tampered.pointer_mut(path).ok_or(ArtifactError::Corrupt)? = value;
         let tampered = serde_json::to_vec(&tampered).map_err(|_defect| ArtifactError::Corrupt)?;
         assert!(
-            matches!(validate(&report, &tampered), Err(ArtifactError::Corrupt)),
+            matches!(
+                validate(&report.envelope, &tampered),
+                Err(ArtifactError::Corrupt)
+            ),
             "{path}"
         );
     }
