@@ -24,6 +24,7 @@ use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 
+mod ingress;
 mod reader;
 
 /// The frozen dossier examples: the indented readable envelope and its exact
