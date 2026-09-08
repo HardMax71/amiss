@@ -1,6 +1,7 @@
 mod tests;
 
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+use reqwest::Method;
 use secrecy::{SecretSlice, SecretString};
 use serde::Serialize;
 use wary::Validate as _;
@@ -32,7 +33,7 @@ use super::{GitHubClientError, GitHubTimeouts};
 
 mod transport;
 
-use self::transport::Transport;
+use self::transport::{Transport, decode_body};
 
 const PAGE_SIZE: usize = 100;
 const PAGE_SIZE_U8: u8 = 100;
@@ -240,11 +241,8 @@ impl HttpRest {
         deadline: OperationDeadline,
     ) -> Result<Presence, ProviderError> {
         Ok(
-            match self
-                .transport
-                .get_fact::<serde::de::IgnoredAny>(route, deadline)?
-            {
-                Ok(_) => Presence::Present,
+            match self.transport.request_fact(Method::HEAD, route, deadline)? {
+                Ok(_response) => Presence::Present,
                 Err(ForgeNegative::Missing) => Presence::Absent,
                 Err(ForgeNegative::Denied) => Presence::Unknown,
             },
@@ -429,9 +427,9 @@ impl GitHubVerification for HttpRest {
         Ok(
             match self
                 .transport
-                .get_fact::<serde::de::IgnoredAny>(&route, deadline)?
+                .request_fact(Method::HEAD, &route, deadline)?
             {
-                Ok(_) => Visibility::Readable,
+                Ok(_response) => Visibility::Readable,
                 Err(ForgeNegative::Missing) => Visibility::Missing,
                 Err(ForgeNegative::Denied) => Visibility::Denied,
             },
@@ -463,13 +461,11 @@ impl GitHubVerification for HttpRest {
                     page,
                 },
             )?;
-            let records = match self
-                .transport
-                .get_fact::<Vec<RefRecord>>(&paged, deadline)?
-            {
-                Ok(records) => records,
-                Err(ForgeNegative::Missing | ForgeNegative::Denied) => return Ok(None),
-            };
+            let records: Vec<RefRecord> =
+                match self.transport.request_fact(Method::GET, &paged, deadline)? {
+                    Ok(response) => decode_body(response)?,
+                    Err(ForgeNegative::Missing | ForgeNegative::Denied) => return Ok(None),
+                };
             if records.len() > PAGE_SIZE {
                 return Err(ProviderError::InvalidResponse);
             }

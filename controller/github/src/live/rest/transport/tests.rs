@@ -7,14 +7,15 @@ use amiss_controller::{ForgeNegative, ProviderError};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
 use reqwest::blocking::Client;
-use reqwest::header::{HeaderMap, LOCATION};
+use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, LOCATION};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::Deserialize;
 
 use super::{
     AppCredential, MAX_API_BASE_BYTES, MAX_ARTIFACT_LOCATION_BYTES, MAX_RESPONSE_BYTES,
-    MintedToken, OperationDeadline, Transport, app_jwt, artifact_location, classified, map_error,
-    map_status, rate_limited, read_artifact_body, settled, validate_api_base,
+    MintedToken, OperationDeadline, Transport, app_jwt, artifact_location, classified,
+    github_headers, map_error, map_status, rate_limited, read_artifact_body, settled,
+    validate_api_base,
 };
 use crate::live::rules::BranchRule;
 use crate::{GitHubClientError, GitHubTimeouts};
@@ -384,4 +385,47 @@ fn verification_statuses_classify_facts_apart_from_failures() {
         Err(ProviderError::AuthorizationRevoked)
     );
     assert_eq!(classified(302, &plain), Err(ProviderError::InvalidResponse));
+    assert_eq!(classified(304, &plain), Err(ProviderError::InvalidResponse));
+    assert_eq!(classified(405, &plain), Err(ProviderError::InvalidResponse));
+    assert_eq!(classified(501, &plain), Err(ProviderError::Unavailable));
+    limited.clear();
+    limited.insert("x-ratelimit-remaining", "0".parse().unwrap());
+    assert_eq!(classified(403, &limited), Err(ProviderError::Unavailable));
+}
+
+#[test]
+fn authentication_preserves_the_request_and_keeps_the_credential_sensitive() {
+    let client = Client::new();
+    let url = "https://api.github.com/repos/example/demo/contents/docs?ref=release%2Fx";
+    let token = SecretString::from("installation-test-token");
+    for method in [
+        reqwest::Method::HEAD,
+        reqwest::Method::GET,
+        reqwest::Method::POST,
+    ] {
+        let request = github_headers(
+            client.request(method.clone(), url),
+            &token,
+            ProviderError::AuthorizationRevoked,
+        )
+        .unwrap()
+        .build()
+        .unwrap();
+        assert_eq!(request.method(), method);
+        assert_eq!(request.url().as_str(), url);
+        assert!(request.body().is_none());
+        assert_eq!(request.headers()[ACCEPT], "application/vnd.github+json");
+        assert_eq!(request.headers()["x-github-api-version"], "2022-11-28");
+        let authorization = &request.headers()[AUTHORIZATION];
+        assert!(authorization.is_sensitive());
+        assert_eq!(authorization, "Bearer installation-test-token");
+    }
+    assert!(
+        github_headers(
+            client.head(url),
+            &SecretString::from("invalid\ncredential"),
+            ProviderError::AuthorizationRevoked,
+        )
+        .is_err_and(|error| error == ProviderError::AuthorizationRevoked)
+    );
 }

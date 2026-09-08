@@ -5,11 +5,11 @@ use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
-use reqwest::StatusCode;
 use reqwest::blocking::{Client, RequestBuilder, Response};
 use reqwest::header::{
     ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue, LOCATION, RETRY_AFTER,
 };
+use reqwest::{Method, StatusCode};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -163,24 +163,23 @@ impl Transport {
         self.execute(self.client.post(self.url(route)?).json(body), deadline)
     }
 
-    /// A verification GET whose negative answers are facts: the absence or
+    /// A verification request whose negative answers are facts: the absence or
     /// refusal of what the route names, distinct from a failed call. A
     /// rate-limited refusal stays an error, since no fact was learned.
-    pub(super) fn get_fact<T: DeserializeOwned>(
+    pub(super) fn request_fact(
         &self,
+        method: Method,
         route: &str,
         deadline: OperationDeadline,
-    ) -> Result<ForgeFact<T>, ProviderError> {
+    ) -> Result<ForgeFact<Response>, ProviderError> {
         let token = self.token(deadline)?;
-        let request = self.client.get(self.url(route)?);
+        let request = self.client.request(method, self.url(route)?);
         let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
             .timeout(deadline.remaining()?)
             .send()
             .map_err(|error| map_error(&error))?;
-        match classified(response.status().as_u16(), response.headers())? {
-            Ok(()) => decode_body(response).map(Ok),
-            Err(negative) => Ok(Err(negative)),
-        }
+        classified(response.status().as_u16(), response.headers())
+            .map(|fact| fact.map(|()| response))
     }
 
     fn execute<T: DeserializeOwned>(
@@ -291,7 +290,7 @@ fn github_headers(
         .header(AUTHORIZATION, authorization))
 }
 
-fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
+pub(super) fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
     let declared = response.content_length();
     decode_bounded_json(response, declared, MAX_RESPONSE_BYTES).map(|(value, _length)| value)
 }

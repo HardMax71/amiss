@@ -53,8 +53,11 @@ all-301/308 chain lands as a `retarget` suggestion on the row, never a finding o
 automatic edit. And `reachable` claims exactly what it says: something answered, not that
 the content is still right.
 
-GitLab project visibility and file or commit presence use status-only API HEAD requests.
-Tree presence still requires a GET with a nonempty array of typed entries from the
+GitHub repository, content and commit presence, and GitLab project visibility and file or
+commit presence, use status-only API HEAD requests. These checks use the authenticated
+response status without requesting a JSON body; rate limits and unsupported methods are
+errors, not evidence that a target is missing. Ref listings still decode GET responses.
+GitLab tree presence still requires a GET with a nonempty array of typed entries from the
 [repository tree API](https://docs.gitlab.com/api/repositories/#list-all-repository-trees-in-a-project).
 The entries retain every requested field and reject unknown fields, invalid object IDs and
 invalid modes. An empty tree page remains unproven. This is forge API evidence; the
