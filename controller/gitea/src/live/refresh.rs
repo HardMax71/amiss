@@ -8,8 +8,8 @@ use crate::{GiteaObjects, GiteaPullRequest};
 
 use super::Config;
 use super::model::{
-    BranchProtectionRecord, PullRepositoryRecord, PullRequestRecord, RefreshData, RepositoryRecord,
-    ReviewRecord, UserRecord,
+    BranchProtectionRecord, PullRequestRecord, RefreshData, RepositoryRecord, ReviewRecord,
+    UserRecord,
 };
 
 pub(super) fn validate_request(
@@ -198,7 +198,7 @@ fn validate_change(
     valid_response(
         repository.id == pull_request.repository_id
             && repository_identity == pull_request.change.repository
-            && repository.object_format_name == "sha1"
+            && repository.object_format_name == ObjectFormat::Sha1
             && base_repository.id == pull_request.repository_id
             && base_identity == pull_request.change.repository
             && authoritative.id == pull_request.pull_request_id
@@ -362,7 +362,7 @@ fn repository_identity(
 
 fn pull_repository_identity(
     config: &Config,
-    repository: &PullRepositoryRecord,
+    repository: &RepositoryRecord,
 ) -> Result<RepositoryIdentity, ProviderError> {
     (repository.id > 0)
         .then_some(())

@@ -6,6 +6,7 @@ pub mod content;
 mod fetch_plan;
 mod identity;
 mod live;
+pub mod repository;
 mod source;
 pub mod user;
 

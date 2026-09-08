@@ -11,8 +11,8 @@ use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::super::model::{
     BranchProtectionRecord, BranchRecord, CommitRecord, CommitStatusRecord, CreateCommitStatus,
-    CreateReview, PayloadCommitRecord, PullRefRecord, PullRepositoryRecord, PullRequestRecord,
-    RefreshData, RepositoryRecord, ReviewRecord, UserRecord,
+    CreateReview, PayloadCommitRecord, PullRefRecord, PullRequestRecord, RefreshData,
+    RepositoryRecord, ReviewRecord, UserRecord,
 };
 use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
@@ -403,25 +403,27 @@ fn protection_for(namespace: &str) -> BranchProtectionRecord {
 }
 
 fn repository_for(namespace: &str) -> RepositoryRecord {
-    RepositoryRecord {
-        id: 101,
-        name: "widget".to_owned(),
-        full_name: "acme/widget".to_owned(),
-        owner: UserRecord {
-            id: 12,
-            login: "acme".to_owned(),
-            username: "acme".to_owned(),
-            ..USER.clone()
-        },
-        default_branch: "main".to_owned(),
-        object_format_name: "sha1".to_owned(),
-        allow_manual_merge: (namespace == "gitea").then_some(false),
-    }
+    let input = if namespace == "gitea" {
+        include_bytes!("../../../tests/fixtures/gitea-repository.json").as_slice()
+    } else {
+        include_bytes!("../../../tests/fixtures/forgejo-repository.json").as_slice()
+    };
+    amiss_wire::read_json(input, u64::MAX).unwrap()
 }
 
 fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord) -> RefreshData {
-    let target_repository = pull_repository(101, "acme", "widget");
-    let head_repository = pull_repository(202, "contributor", "widget");
+    let target_repository = repository.clone();
+    let head_repository = RepositoryRecord {
+        id: 202,
+        full_name: "contributor/widget".to_owned(),
+        owner: UserRecord {
+            id: 203,
+            login: "contributor".to_owned(),
+            username: "contributor".to_owned(),
+            ..USER.clone()
+        },
+        ..repository.clone()
+    };
     RefreshData {
         reviewer: USER.clone(),
         repository,
@@ -472,20 +474,6 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
             stale: false,
             dismissed: false,
         }],
-    }
-}
-
-fn pull_repository(id: u64, owner: &str, name: &str) -> PullRepositoryRecord {
-    PullRepositoryRecord {
-        id,
-        name: name.to_owned(),
-        full_name: format!("{owner}/{name}"),
-        owner: UserRecord {
-            id: id.saturating_add(1),
-            login: owner.to_owned(),
-            username: owner.to_owned(),
-            ..USER.clone()
-        },
     }
 }
 

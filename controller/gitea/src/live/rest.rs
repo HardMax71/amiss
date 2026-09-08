@@ -207,7 +207,9 @@ impl GiteaRest for HttpRest {
     ) -> Result<RefreshData, ProviderError> {
         let prefix = repository_route(pull_request.repository_owner, pull_request.repository_name);
         let reviewer = self.current_user(deadline)?;
-        let repository: RepositoryRecord = self.get(&prefix, deadline)?;
+        let repository: RepositoryRecord = self.transport.get(&prefix, deadline, |bytes| {
+            amiss_wire::read_json(bytes, u64::MAX)
+        })?;
         let authoritative: PullRequestRecord =
             self.get(&format!("{prefix}/pulls/{}", pull_request.number), deadline)?;
         let target_branch: BranchRecord = self.get(
@@ -342,11 +344,11 @@ impl GiteaVerification for HttpRest {
     ) -> Result<Visibility, ProviderError> {
         let route = format!("/repos/{}/{}", path_segment(owner), path_segment(name));
         Ok(
-            match self.transport.get_fact::<serde::de::IgnoredAny, _>(
-                &route,
-                deadline,
-                |bytes| serde_json::from_slice(bytes),
-            )? {
+            match self
+                .transport
+                .get_fact::<RepositoryRecord, _>(&route, deadline, |bytes| {
+                    amiss_wire::read_json(bytes, u64::MAX)
+                })? {
                 Ok(_) => Visibility::Readable,
                 Err(ForgeNegative::Missing) => Visibility::Missing,
                 Err(ForgeNegative::Denied) => Visibility::Denied,

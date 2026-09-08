@@ -86,6 +86,12 @@ successful page remains unknown. Object IDs stay typed through refresh and relat
 consumers. Parsing an API tree identifier does not establish that it names the actual Git
 tree; refresh continues to use independently resolved Git objects.
 
+Repository visibility and refresh decode complete repository records, also reused for
+pull-request repositories and fork parents. Provider-specific omission and explicit null
+remain distinct. Tracker settings and transfer teams are typed, including unit permissions;
+unknown nested fields or permission names are rejected. Returned URLs remain metadata,
+not alternate fetch destinations.
+
 Every verdict row echoes the plan's document attribution, and the subject block binds
 report, plan, and evidence digests, so the same three inputs always reproduce the same
 assessment, digest included, and a lane can replay the whole chain from artifacts alone.

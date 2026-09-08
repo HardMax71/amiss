@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 amiss-controller = { path = ".." }
 amiss-wire = { path = "../../crates/amiss-wire" }
+json-serde.workspace = true
 percent-encoding.workspace = true
 reqwest.workspace = true
 secrecy.workspace = true

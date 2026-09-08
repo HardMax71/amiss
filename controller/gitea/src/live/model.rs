@@ -1,18 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 pub(super) use crate::commit::CommitRecord;
+pub(super) use crate::repository::RepositoryRecord;
 pub(super) use crate::user::UserRecord;
-
-#[derive(Clone, Deserialize)]
-pub(super) struct RepositoryRecord {
-    pub id: u64,
-    pub name: String,
-    pub full_name: String,
-    pub owner: UserRecord,
-    pub default_branch: String,
-    pub object_format_name: String,
-    pub allow_manual_merge: Option<bool>,
-}
 
 #[derive(Clone, Deserialize)]
 pub(super) struct PullRequestRecord {
@@ -32,15 +22,7 @@ pub(super) struct PullRefRecord {
     #[serde(rename = "ref")]
     pub branch: String,
     pub repo_id: u64,
-    pub repo: Option<PullRepositoryRecord>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct PullRepositoryRecord {
-    pub id: u64,
-    pub name: String,
-    pub full_name: String,
-    pub owner: UserRecord,
+    pub repo: Option<RepositoryRecord>,
 }
 
 #[derive(Clone, Deserialize)]
