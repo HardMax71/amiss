@@ -8,7 +8,6 @@ use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::requests::SuppliedSemanticEvidence;
 use amiss_wire::semantic::{SemanticEvidence, SemanticEvidenceEnvelope};
-use base64::Engine as _;
 
 use super::plan::normalized_expectations;
 use super::{
@@ -152,10 +151,10 @@ fn input_artifact(inputs: &[BoundInput], limit: u64) -> Result<Vec<u8>, Bootstra
             .iter()
             .map(|input| InputArtifactRow {
                 acquisition_identity: input.acquisition_identity.as_ref(),
-                envelope_bytes_base64: String::new(),
+                envelope_bytes: Cow::Borrowed(&[]),
                 envelope_digest: input.envelope_digest,
                 payload_digest: input.payload_digest,
-                template_bytes_base64: String::new(),
+                template_bytes: Cow::Borrowed(&[]),
                 template_digest: input.template_digest,
             })
             .collect(),
@@ -180,10 +179,8 @@ fn input_artifact(inputs: &[BoundInput], limit: u64) -> Result<Vec<u8>, Bootstra
             .ok_or(BootstrapJobError::SemanticEvidence)?;
     }
     for (row, input) in artifact.inputs.iter_mut().zip(inputs) {
-        row.template_bytes_base64 =
-            base64::engine::general_purpose::STANDARD.encode(&input.template_bytes);
-        row.envelope_bytes_base64 =
-            base64::engine::general_purpose::STANDARD.encode(&input.envelope_bytes);
+        row.template_bytes = Cow::Borrowed(&input.template_bytes);
+        row.envelope_bytes = Cow::Borrowed(&input.envelope_bytes);
     }
     let bytes =
         serde_json::to_vec(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;

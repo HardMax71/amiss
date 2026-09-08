@@ -3,11 +3,11 @@
 use std::sync::Arc;
 
 use amiss_wire::digest::hb;
-use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
 use super::{bind_input, input_artifact};
+use crate::semantic_artifact::InputArtifact;
 use crate::{BootstrapJobError, SemanticEvidenceTemplate};
 
 #[test]
@@ -37,7 +37,8 @@ fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
     let artifact = input_artifact(std::slice::from_ref(&input), u64::MAX)?;
     let exact =
         u64::try_from(artifact.len()).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    let parsed = json::parse(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let parsed: InputArtifact<'static> = amiss_wire::read_json(&artifact, exact)
+        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
 
     assert_eq!(serde_json_canonicalizer::to_vec(&parsed).unwrap(), artifact);
     assert_eq!(

@@ -24,7 +24,7 @@ mod provider;
 mod publication_audit;
 mod relation_audit;
 mod relations;
-mod semantic_artifact;
+pub mod semantic_artifact;
 mod spelling;
 mod webhook;
 

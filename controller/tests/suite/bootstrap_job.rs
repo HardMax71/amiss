@@ -22,7 +22,6 @@ use amiss_wire::controls::{
     parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_waiver_bundle,
 };
 use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::{self, Value};
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
     UtcInstant,
@@ -31,7 +30,6 @@ use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestTrust, SnapshotRequest,
     SuppliedControl, commit_candidate_identity_digest,
 };
-use base64::Engine as _;
 
 mod plan_identity;
 
@@ -312,10 +310,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
     assert!(controls.organization_floor.is_some());
     assert!(controls.debt_snapshot.is_some());
     assert!(controls.waiver_bundle.is_some());
-    let semantic = amiss_wire::semantic::parse(
-        &serde_json::to_vec(&controls.semantic_evidence.first().unwrap().value).unwrap(),
-    )
-    .unwrap();
+    let semantic = &controls.semantic_evidence.first().unwrap().value;
     assert_eq!(
         semantic.payload.subject.candidate_identity_digest,
         statement.candidate_identity_digest
@@ -352,11 +347,7 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     let payload_digests = controls
         .semantic_evidence
         .iter()
-        .map(|supplied| {
-            amiss_wire::semantic::parse(&serde_json::to_vec(&supplied.value).unwrap())
-                .unwrap()
-                .payload_digest
-        })
+        .map(|supplied| supplied.value.payload_digest)
         .collect::<Vec<_>>();
 
     assert_eq!(controls.semantic_evidence.len(), 2);
@@ -364,37 +355,28 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     assert!(payload_digests.windows(2).all(|pair| pair[0] < pair[1]));
 
     let artifact_bytes = job.semantic_artifact.as_deref().unwrap();
-    let artifact = json::parse(artifact_bytes).unwrap();
-    let Value::Array(inputs) = artifact.member("inputs").unwrap() else {
-        panic!("the semantic artifact contains its input rows")
-    };
-    let acquired = inputs
+    let artifact: amiss_controller::semantic_artifact::InputArtifact<'static> =
+        amiss_wire::read_json(
+            artifact_bytes,
+            amiss_controller::SEMANTIC_INPUT_ARTIFACT_BYTES,
+        )
+        .unwrap();
+    let acquired = artifact
+        .inputs
         .iter()
-        .find(|input| input.text("acquisition_identity") == Some("test-site-artifact"))
+        .find(|input| input.acquisition_identity.as_ref() == Some(&source.acquisition_identity))
         .unwrap();
-    let retained_template = base64::engine::general_purpose::STANDARD
-        .decode(acquired.text("template_bytes_base64").unwrap())
-        .unwrap();
-    let retained_envelope = base64::engine::general_purpose::STANDARD
-        .decode(acquired.text("envelope_bytes_base64").unwrap())
-        .unwrap();
-    let template_digest = amiss_wire::digest::sha256(&source.bytes).to_string();
-    let envelope_digest = amiss_wire::digest::sha256(&retained_envelope).to_string();
-    let payload_digest = evidence_digest.to_string();
-    assert_eq!(retained_template, source.bytes.as_ref());
-    assert_eq!(retained_envelope, evidence_bytes);
+    assert_eq!(acquired.template_bytes.as_ref(), source.bytes.as_ref());
+    assert_eq!(acquired.envelope_bytes.as_ref(), evidence_bytes);
     assert_eq!(
-        acquired.text("template_digest"),
-        Some(template_digest.as_str())
+        acquired.template_digest,
+        amiss_wire::digest::sha256(&source.bytes)
     );
     assert_eq!(
-        acquired.text("envelope_digest"),
-        Some(envelope_digest.as_str())
+        acquired.envelope_digest,
+        amiss_wire::digest::sha256(&evidence_bytes)
     );
-    assert_eq!(
-        acquired.text("payload_digest"),
-        Some(payload_digest.as_str())
-    );
+    assert_eq!(acquired.payload_digest, evidence_digest);
 }
 
 #[test]

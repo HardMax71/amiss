@@ -5,7 +5,6 @@ use std::sync::Arc;
 use amiss_wire::digest::{hb, sha256};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
-use base64::Engine as _;
 
 use super::validate;
 use crate::semantic_artifact::{InputArtifact, InputArtifactRow, InputArtifactSchema};
@@ -29,6 +28,9 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
     let mut template_bytes = amiss_wire::semantic::template(template.clone())
         .map_err(|_defect| ArtifactError::Corrupt)?;
     template_bytes.push(b'\n');
+    if template_bytes.len().is_multiple_of(3) {
+        template_bytes.push(b'\n');
+    }
     let envelope = amiss_wire::semantic::bind_template(&template, candidate)
         .map_err(|_defect| ArtifactError::Corrupt)?;
     let mut envelope_bytes = Vec::new();
@@ -44,12 +46,10 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
             acquisition_identity: Some(
                 ArtifactId::new("test-artifact".to_owned()).ok_or(ArtifactError::Corrupt)?,
             ),
-            envelope_bytes_base64: base64::engine::general_purpose::STANDARD
-                .encode(&envelope_bytes),
+            envelope_bytes: envelope_bytes.as_slice().into(),
             envelope_digest: sha256(&envelope_bytes),
             payload_digest,
-            template_bytes_base64: base64::engine::general_purpose::STANDARD
-                .encode(&template_bytes),
+            template_bytes: template_bytes.as_slice().into(),
             template_digest: sha256(&template_bytes),
         }],
         schema: InputArtifactSchema::Current,
@@ -61,6 +61,13 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
     .map_err(|_defect| ArtifactError::Corrupt)?;
 
     validate(&report.envelope, &artifact)?;
+    let padded = std::str::from_utf8(&artifact).map_err(|_defect| ArtifactError::Corrupt)?;
+    let unpadded = padded.replace("=\"", "\"");
+    assert_ne!(unpadded, padded);
+    assert!(matches!(
+        validate(&report.envelope, unpadded.as_bytes()),
+        Err(ArtifactError::Corrupt)
+    ));
     let other_report = amiss_fixtures::captured_report(
         amiss_fixtures::semantic_report(&[hb("amiss/test-other", b"other")])
             .ok_or(ArtifactError::Corrupt)?,
@@ -71,39 +78,13 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
         Err(ArtifactError::Corrupt)
     ));
 
-    for (path, value) in [
-        ("/schema", serde_json::json!("another-artifact")),
-        (
-            "/schema",
-            serde_json::json!({ "amiss/controller-semantic-input-artifact-v1": null }),
-        ),
-        (
-            "/inputs/0/acquisition_identity",
-            serde_json::json!("../bad"),
-        ),
-        (
-            "/inputs/0/template_digest",
-            serde_json::json!(hb("amiss/test-other", b"other")),
-        ),
-        ("/inputs/0/envelope_digest", serde_json::json!("SHA256:bad")),
-        ("/inputs/0/payload_digest", serde_json::json!(null)),
-        ("/inputs/0/template_bytes_base64", serde_json::json!("A")),
-        (
-            "/inputs/0/envelope_bytes_base64",
-            serde_json::json!("not base64"),
-        ),
-    ] {
-        let mut tampered: serde_json::Value =
-            serde_json::from_slice(&artifact).map_err(|_defect| ArtifactError::Corrupt)?;
-        *tampered.pointer_mut(path).ok_or(ArtifactError::Corrupt)? = value;
-        let tampered = serde_json::to_vec(&tampered).map_err(|_defect| ArtifactError::Corrupt)?;
-        assert!(
-            matches!(
-                validate(&report.envelope, &tampered),
-                Err(ArtifactError::Corrupt)
-            ),
-            "{path}"
-        );
-    }
+    let mut tampered: InputArtifact<'static> =
+        amiss_wire::read_json(&artifact, u64::MAX).map_err(|_defect| ArtifactError::Corrupt)?;
+    tampered.inputs[0].template_digest = hb("amiss/test-other", b"other");
+    let tampered = serde_json::to_vec(&tampered).map_err(|_defect| ArtifactError::Corrupt)?;
+    assert!(matches!(
+        validate(&report.envelope, &tampered),
+        Err(ArtifactError::Corrupt)
+    ));
     Ok(())
 }

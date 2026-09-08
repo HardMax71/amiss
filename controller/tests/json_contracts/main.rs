@@ -15,6 +15,7 @@ mod failure_tags;
 mod mdbook;
 mod mdbook_config;
 mod relation_binding;
+mod semantic_artifact;
 mod semantic_binding;
 
 #[test]

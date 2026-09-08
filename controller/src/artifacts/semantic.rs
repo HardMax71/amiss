@@ -5,7 +5,6 @@ use std::collections::BTreeSet;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::sha256;
 use amiss_wire::report::model::{Controls, ReportEnvelope};
-use base64::Engine as _;
 
 use crate::semantic_artifact::InputArtifact;
 
@@ -22,8 +21,9 @@ pub(super) fn validate(report: &ReportEnvelope, artifact: &[u8]) -> Result<(), A
         Controls::Resolved(controls) => controls.semantic_evidence.as_deref().unwrap_or_default(),
         Controls::Unavailable(_) => &[],
     };
-    let decoded: InputArtifact =
-        serde_json::from_slice(artifact).map_err(|_defect| ArtifactError::Corrupt)?;
+    let decoded: InputArtifact<'static> =
+        amiss_wire::read_json(artifact, crate::SEMANTIC_INPUT_ARTIFACT_BYTES)
+            .map_err(|_defect| ArtifactError::Corrupt)?;
     if decoded.inputs.is_empty()
         || decoded.inputs.len() > amiss_wire::requests::SEMANTIC_EVIDENCE_REQUEST_LIMIT
     {
@@ -39,21 +39,15 @@ pub(super) fn validate(report: &ReportEnvelope, artifact: &[u8]) -> Result<(), A
         {
             return Err(ArtifactError::Corrupt);
         }
-        let template_bytes = base64::engine::general_purpose::STANDARD
-            .decode(row.template_bytes_base64)
-            .map_err(|_defect| ArtifactError::Corrupt)?;
-        let envelope_bytes = base64::engine::general_purpose::STANDARD
-            .decode(row.envelope_bytes_base64)
-            .map_err(|_defect| ArtifactError::Corrupt)?;
-        if sha256(&template_bytes) != row.template_digest
-            || sha256(&envelope_bytes) != row.envelope_digest
+        if sha256(&row.template_bytes) != row.template_digest
+            || sha256(&row.envelope_bytes) != row.envelope_digest
         {
             return Err(ArtifactError::Corrupt);
         }
 
-        let template = amiss_wire::semantic::parse_template(&template_bytes)
+        let template = amiss_wire::semantic::parse_template(&row.template_bytes)
             .map_err(|_defect| ArtifactError::Corrupt)?;
-        let envelope = amiss_wire::semantic::parse(&envelope_bytes)
+        let envelope = amiss_wire::semantic::parse(&row.envelope_bytes)
             .map_err(|_defect| ArtifactError::Corrupt)?;
         let candidate = envelope.payload.subject.candidate_identity_digest;
         if envelope.payload_digest != row.payload_digest
@@ -72,7 +66,7 @@ pub(super) fn validate(report: &ReportEnvelope, artifact: &[u8]) -> Result<(), A
             amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES,
         )
         .map_err(|_defect| ArtifactError::Corrupt)?;
-        if rebound != envelope_bytes {
+        if rebound != row.envelope_bytes.as_ref() {
             return Err(ArtifactError::Corrupt);
         }
         payload_digests.push(row.payload_digest);
