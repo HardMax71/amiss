@@ -15,7 +15,7 @@ use amiss_wire::model::{
 };
 use amiss_wire::relation::{
     RelationIdentity, RelationPlanEnvelope, RelationSnapshot, RelationSubject as PlannedSubject,
-    RelationVerdict, assess, parse_evidence, parse_plan, plan,
+    RelationVerdict, assess, parse_evidence, plan,
 };
 
 use super::{RelationProjectionError, RelationProjectionRequest, project_relation_evidence};
@@ -145,7 +145,8 @@ fn fixture(aggregate_records: u64) -> Fixture {
             },
         }
     });
-    let value = plan(&amiss_wire::relation::RelationPlan {
+    let plan = plan(amiss_wire::relation::RelationPlan {
+        schema: amiss_wire::relation::PlanPayloadSchema::Current,
         report_payload_digest: sha256(b"accepted report payload"),
         relation: RelationIdentity {
             identity: registered.identity.clone(),
@@ -157,7 +158,6 @@ fn fixture(aggregate_records: u64) -> Fixture {
         subjects,
     })
     .expect("relation plan");
-    let plan = parse_plan(&value).expect("parsed relation plan");
     Fixture {
         source,
         documentation,
@@ -220,8 +220,7 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
         first_line: 1,
         last_line: 1,
     });
-    let changed = plan(&changed).expect("rewritten plan");
-    let changed = parse_plan(&changed).expect("parsed rewritten plan");
+    let changed = plan(changed).expect("rewritten plan");
     assert_eq!(
         project_relation_evidence(RelationProjectionRequest {
             transition: &fixture.transition,
@@ -234,8 +233,7 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
 
     let mut changed = fixture.plan.payload.clone();
     changed.relation.context_digest = sha256(b"substituted operator relation context");
-    let changed = plan(&changed).expect("rewritten plan");
-    let changed = parse_plan(&changed).expect("parsed rewritten plan");
+    let changed = plan(changed).expect("rewritten plan");
     assert_eq!(
         project_relation_evidence(RelationProjectionRequest {
             transition: &fixture.transition,

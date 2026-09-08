@@ -5,6 +5,31 @@ use amiss_controller_fixtures::relation::relation_audit;
 use amiss_wire::{controls::ProjectionKind, digest::sha256};
 
 #[test]
+fn typed_audit_plans_keep_digest_and_frozen_transition_checks() {
+    use amiss_controller::{RelationAcquisitionError, relation_audit_plan, verify_relation_plan};
+    use amiss_wire::relation::plan_payload_digest;
+
+    let fixture = relation_audit(false).unwrap();
+    let mut plan = relation_audit_plan(&fixture.transition, &fixture.report).unwrap();
+    verify_relation_plan(&plan, &fixture.transition).unwrap();
+    let recorded = plan.payload_digest;
+    plan.payload_digest = sha256(b"substituted payload digest");
+    assert_eq!(
+        verify_relation_plan(&plan, &fixture.transition),
+        Err(RelationAcquisitionError::InvalidTransition)
+    );
+    plan.payload_digest = recorded;
+    verify_relation_plan(&plan, &fixture.transition).unwrap();
+
+    plan.payload.relation.context_digest = sha256(b"substituted operator context");
+    plan.payload_digest = plan_payload_digest(&plan.payload).unwrap();
+    assert_eq!(
+        verify_relation_plan(&plan, &fixture.transition),
+        Err(RelationAcquisitionError::InvalidTransition)
+    );
+}
+
+#[test]
 fn every_projection_source_preserves_durable_schedule_bytes() {
     let cases = [
         (

@@ -10,10 +10,15 @@ use amiss_wire::relation::{RelationVerdict, assess, parse_assessment, parse_plan
 fn one_exact_chain_binds_every_byte_to_the_trigger_and_operator_plan() -> Result<(), ArtifactError>
 {
     let fixture = relation_audit(true).ok_or(ArtifactError::Corrupt)?;
-    assert_eq!(
-        relation_audit_plan(&fixture.transition, &fixture.report)?,
-        fixture.plan
-    );
+    let plan = relation_audit_plan(&fixture.transition, &fixture.report)?;
+    let mut bytes = Vec::new();
+    amiss_wire::write_json(
+        &plan,
+        &mut bytes,
+        amiss_wire::relation::RELATION_DOCUMENT_BYTES,
+    )
+    .map_err(|_defect| ArtifactError::Corrupt)?;
+    assert_eq!(bytes, fixture.plan);
     let audit = validate_relation_audit(bundle(&fixture))?;
 
     assert_eq!(audit.report_digest, sha256(&fixture.report));
@@ -151,13 +156,19 @@ fn with_null_report_target(
 
     let mut rebound = parse_plan(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     rebound.payload.report_payload_digest = report_payload_digest;
-    fixture.plan = plan(&rebound.payload).map_err(|_defect| ArtifactError::Corrupt)?;
-    let rebound = parse_plan(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
+    let rebound = plan(rebound.payload).map_err(|_defect| ArtifactError::Corrupt)?;
     let assessment = assess(
         &rebound,
         None,
         &recorded.payload.engine.engine_version,
         recorded.payload.engine.engine_digest,
+    )
+    .map_err(|_defect| ArtifactError::Corrupt)?;
+    fixture.plan.clear();
+    amiss_wire::write_json(
+        &rebound,
+        &mut fixture.plan,
+        amiss_wire::relation::RELATION_DOCUMENT_BYTES,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
     fixture.assessment.clear();

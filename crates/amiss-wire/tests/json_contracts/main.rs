@@ -25,6 +25,7 @@ mod publication_evidence;
 mod publication_input;
 mod publication_plan;
 mod relation_assessment;
+mod relation_plan;
 mod report_controls;
 mod report_counts;
 mod report_details;
@@ -202,16 +203,18 @@ fn the_external_examples_match_their_typed_sources() {
 fn sidecar_examples_match_their_typed_sources() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let contract = relation_fixture::relation_contract();
-    let generated_plan = relation::plan(&contract.plan).unwrap();
+    let generated_plan = relation::plan(contract.plan).unwrap();
     let committed_plan = fs::read(examples.join("relation-plan.json")).unwrap();
     assert_eq!(
-        relation::parse_plan(&committed_plan).unwrap().payload,
-        contract.plan
+        relation::parse_plan(&committed_plan).unwrap(),
+        generated_plan
     );
+    let mut source = serde_json::Deserializer::from_slice(&committed_plan);
     assert_eq!(
-        generated_plan,
-        serde_json_canonicalizer::to_vec(&json::parse(&committed_plan).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(&generated_plan).unwrap(),
+        serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut source)).unwrap()
     );
+    source.end().unwrap();
 
     let generated_evidence = relation::evidence(&contract.evidence).unwrap();
     let committed_evidence = fs::read(examples.join("relation-evidence.json")).unwrap();

@@ -1,7 +1,7 @@
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::relation::{
-    self, RELATION_DOCUMENT_BYTES, RelationVerdict, assess, parse_assessment, parse_evidence,
-    parse_plan,
+    self, RELATION_DOCUMENT_BYTES, RelationPlanEnvelope, RelationVerdict, assess, parse_assessment,
+    parse_evidence, parse_plan,
 };
 
 use crate::audit_report::accepted_report;
@@ -25,7 +25,7 @@ pub struct RelationAuditDigests {
     pub verdict: RelationVerdict,
 }
 
-/// Builds the unique canonical audit plan for one accepted trigger report and frozen relation.
+/// Builds the typed audit plan for one accepted trigger report and frozen relation.
 ///
 /// # Errors
 ///
@@ -34,9 +34,9 @@ pub struct RelationAuditDigests {
 pub fn relation_audit_plan(
     transition: &RelationTransition,
     report: &[u8],
-) -> Result<Vec<u8>, ArtifactError> {
+) -> Result<RelationPlanEnvelope, ArtifactError> {
     let plan = checked_relation_plan(transition, report)?.0;
-    relation::plan(&plan).map_err(|_defect| ArtifactError::Corrupt)
+    relation::plan(plan).map_err(|_defect| ArtifactError::Corrupt)
 }
 
 /// Validates one complete relation audit against its accepted trigger report
@@ -140,6 +140,7 @@ fn checked_relation_plan(
         .ok_or(ArtifactError::Corrupt)?;
     Ok((
         relation::RelationPlan {
+            schema: relation::PlanPayloadSchema::Current,
             report_payload_digest: report.payload_digest,
             relation: relation::RelationIdentity {
                 identity: registered.identity.clone(),

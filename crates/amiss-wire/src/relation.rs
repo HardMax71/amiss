@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
 
 use crate::controls::{ProjectionKind, ProjectionSource, check_projection_source};
 use crate::de::{Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 use crate::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -25,21 +27,40 @@ pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/relation-plan-envelope";
 pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/relation-plan-payload";
 pub const RELATION_DOCUMENT_BYTES: u64 = 65_536;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationPlanEnvelope {
+    pub schema: PlanEnvelopeSchema,
     pub payload: RelationPlan,
     pub payload_digest: Digest,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+pub enum PlanEnvelopeSchema {
+    #[strum(serialize = "amiss/relation-plan-envelope")]
+    Current,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationPlan {
+    pub schema: PlanPayloadSchema,
     pub report_payload_digest: Digest,
     pub relation: RelationIdentity,
     pub coordination: ArtifactId,
     pub trigger_role: ArtifactId,
     pub projection: ProjectionKind,
     pub subjects: [RelationSubject; 2],
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+pub enum PlanPayloadSchema {
+    #[strum(serialize = "amiss/relation-plan-payload")]
+    Current,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,20 +91,6 @@ pub struct RelationSnapshot {
     pub tree: Oid,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum PlanEnvelope<T> {
-    #[serde(rename = "amiss/relation-plan-envelope")]
-    Current { payload: T, payload_digest: Digest },
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum PlanPayload<T> {
-    #[serde(rename = "amiss/relation-plan-payload")]
-    Current(T),
-}
-
 /// Parses one closed, digest-bound cross-repository relation plan.
 ///
 /// # Errors
@@ -96,48 +103,43 @@ pub fn parse_plan(bytes: &[u8]) -> Result<RelationPlanEnvelope, Error> {
         return fail("$", ErrorKind::LimitExceeded);
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let document: PlanEnvelope<PlanPayload<RelationPlan>> = serde_json::from_slice(bytes)
+    let document: RelationPlanEnvelope = serde_json::from_slice(bytes)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let PlanEnvelope::Current {
-        payload,
-        payload_digest,
-    } = document;
-    let PlanPayload::Current(payload) = payload;
-    if plan_payload_digest(&payload)? != payload_digest {
+    verified_json_digest(PLAN_ENVELOPE_SCHEMA, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    if plan_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
+    Ok(document)
+}
+
+/// Binds one owned cross-repository relation plan to its validated payload digest.
+///
+/// The result stays typed; output callers enforce byte limits with [`crate::write_json`].
+///
+/// # Errors
+///
+/// Fails when a public field violates the same closed grammar [`parse_plan`] enforces.
+pub fn plan(input: RelationPlan) -> Result<RelationPlanEnvelope, Error> {
+    let payload_digest = plan_payload_digest(&input)?;
     Ok(RelationPlanEnvelope {
-        payload,
+        schema: PlanEnvelopeSchema::Current,
+        payload: input,
         payload_digest,
     })
 }
 
-/// Builds the unique digest-bound value for one cross-repository relation plan.
+/// Validates a complete relation plan and hashes its canonical payload without encoding an artifact.
 ///
 /// # Errors
 ///
-/// Fails when a public field violates the same closed grammar [`parse_plan`]
-/// enforces or the encoded document exceeds its byte ceiling.
-pub fn plan(input: &RelationPlan) -> Result<Vec<u8>, Error> {
-    let payload_digest = plan_payload_digest(input)?;
-    let document = PlanEnvelope::Current {
-        payload: PlanPayload::Current(input),
-        payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    Ok(canonical)
-}
-
-pub(super) fn plan_payload_digest(input: &RelationPlan) -> Result<Digest, Error> {
+/// Fails on invalid subjects, identities, projection sources or inconsistent Git object formats.
+pub fn plan_payload_digest(input: &RelationPlan) -> Result<Digest, Error> {
     validate_plan(input)?;
-    serde_json_canonicalizer::to_vec(&PlanPayload::Current(input))
-        .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+    hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(input, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_plan(plan: &RelationPlan) -> Result<(), Error> {

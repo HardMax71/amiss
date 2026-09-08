@@ -1,7 +1,42 @@
 use std::collections::BTreeMap;
 
-use amiss_wire::{JsonInputError, read_json};
+use amiss_wire::{
+    JsonInputError,
+    de::{Error, ErrorKind},
+    read_json,
+};
 use serde::{Deserialize, Serialize};
+
+pub(super) fn assert_object_required<T>(
+    (document, read): (&T, impl Fn(&[u8]) -> Result<T, Error>),
+    object: &impl Serialize,
+    positional: impl Serialize,
+) -> Result<(), Box<dyn std::error::Error>>
+where
+    T: Serialize + PartialEq + std::fmt::Debug,
+{
+    let text = serde_json::to_string(document)?;
+    for valid in [
+        serde_json::to_string_pretty(document)?,
+        String::from_utf8(serde_json_canonicalizer::to_vec(document)?)?,
+        format!(" \n\t{}\r ", text.replace("schema", r"\u0073chema")),
+        text.replace('/', r"\/"),
+    ] {
+        assert_eq!(&read(valid.as_bytes())?, document);
+    }
+    let object = serde_json::to_string(object)?;
+    assert_eq!(text.matches(&object).count(), 1);
+    let changed = text.replacen(&object, &serde_json::to_string(&positional)?, 1);
+    assert_ne!(changed, text);
+    assert_eq!(
+        read(changed.as_bytes()).err(),
+        Some(Error {
+            path: "$".to_owned(),
+            kind: ErrorKind::InvalidValue,
+        })
+    );
+    Ok(())
+}
 
 #[derive(Debug, PartialEq, Eq, Deserialize, Serialize)]
 struct Document {
