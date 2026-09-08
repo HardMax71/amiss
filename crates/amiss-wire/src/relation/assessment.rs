@@ -4,7 +4,7 @@ use strum::{AsRefStr, Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, Nullable};
 use crate::de::{Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj_serde};
 use crate::json;
 use crate::semantic::producer_version_valid;
 
@@ -55,33 +55,41 @@ pub enum RelationReason {
     ProjectionUnproven,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RelationAssessmentEnvelope {
+    pub schema: AssessmentEnvelopeSchema,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: RelationAssessment,
     pub payload_digest: Digest,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+pub enum AssessmentEnvelopeSchema {
+    #[strum(serialize = "amiss/relation-assessment-envelope")]
+    Current,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationAssessment {
+    pub schema: AssessmentPayloadSchema,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub engine: AssessmentEngine,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub subject: AssessmentSubject,
     pub verdict: RelationVerdict,
     pub reason: Nullable<RelationReason>,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum AssessmentEnvelope<T> {
-    #[serde(rename = "amiss/relation-assessment-envelope")]
-    Current { payload: T, payload_digest: Digest },
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum AssessmentPayload<T> {
-    #[serde(rename = "amiss/relation-assessment-payload")]
-    Current(T),
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+pub enum AssessmentPayloadSchema {
+    #[strum(serialize = "amiss/relation-assessment-payload")]
+    Current,
 }
 
 /// Parses one closed, digest-bound relation transition assessment.
@@ -96,24 +104,13 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<RelationAssessmentEnvelope, Erro
         return fail("$", ErrorKind::LimitExceeded);
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let document: AssessmentEnvelope<AssessmentPayload<RelationAssessment>> =
-        serde_json::from_slice(bytes)
-            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let AssessmentEnvelope::Current {
-        payload,
-        payload_digest,
-    } = document;
-    let AssessmentPayload::Current(payload) = payload;
-    validate_assessment(&payload)?;
-    let canonical = serde_json_canonicalizer::to_vec(&AssessmentPayload::Current(&payload))
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
-    if hb(ASSESSMENT_PAYLOAD_SCHEMA, &canonical) != payload_digest {
+    let mut input = serde_json::Deserializer::from_slice(bytes);
+    let document: RelationAssessmentEnvelope = crate::requests::object::deserialize(&mut input)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    if assessment_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
-    Ok(RelationAssessmentEnvelope {
-        payload,
-        payload_digest,
-    })
+    Ok(document)
 }
 
 /// Judges the equality transition of two relation subjects.
@@ -121,6 +118,7 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<RelationAssessmentEnvelope, Erro
 /// All four projection slots must be complete before the assessment can
 /// distinguish aligned, introduced, pre-existing, and resolved drift. The
 /// result compares roles symmetrically and never assigns either one authority.
+/// The result stays typed; output callers enforce byte limits with [`crate::write_json`].
 ///
 /// # Errors
 ///
@@ -132,7 +130,7 @@ pub fn assess(
     evidence: Option<&RelationEvidenceEnvelope>,
     engine_version: &str,
     engine_digest: Digest,
-) -> Result<Vec<u8>, Error> {
+) -> Result<RelationAssessmentEnvelope, Error> {
     if plan_payload_digest(&plan.payload)? != plan.payload_digest {
         return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -181,6 +179,7 @@ pub fn assess(
         |verdict| (verdict, None),
     );
     let assessment = RelationAssessment {
+        schema: AssessmentPayloadSchema::Current,
         engine: AssessmentEngine {
             engine_version: engine_version.to_owned(),
             engine_digest,
@@ -195,21 +194,20 @@ pub fn assess(
         verdict,
         reason: reason.map_or(Nullable::Null, Nullable::Value),
     };
-    validate_assessment(&assessment)?;
-    let payload = AssessmentPayload::Current(&assessment);
-    let canonical_payload = serde_json_canonicalizer::to_vec(&payload)
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
-    let document = AssessmentEnvelope::Current {
-        payload,
-        payload_digest: hb(ASSESSMENT_PAYLOAD_SCHEMA, &canonical_payload),
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    Ok(canonical)
+    let payload_digest = assessment_payload_digest(&assessment)?;
+    Ok(RelationAssessmentEnvelope {
+        schema: AssessmentEnvelopeSchema::Current,
+        payload: assessment,
+        payload_digest,
+    })
+}
+
+fn assessment_payload_digest(assessment: &RelationAssessment) -> Result<Digest, Error> {
+    validate_assessment(assessment)?;
+    hj_serde(ASSESSMENT_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(assessment, &mut writer)
+    })
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_assessment(assessment: &RelationAssessment) -> Result<(), Error> {

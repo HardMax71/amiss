@@ -10,8 +10,9 @@ mod assessment;
 mod evidence;
 
 pub use assessment::{
-    ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, RelationAssessment,
-    RelationAssessmentEnvelope, RelationReason, RelationVerdict, assess, parse_assessment,
+    ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, AssessmentEnvelopeSchema,
+    AssessmentPayloadSchema, RelationAssessment, RelationAssessmentEnvelope, RelationReason,
+    RelationVerdict, assess, parse_assessment,
 };
 
 pub use evidence::{

@@ -153,11 +153,18 @@ fn with_null_report_target(
     rebound.payload.report_payload_digest = report_payload_digest;
     fixture.plan = plan(&rebound.payload).map_err(|_defect| ArtifactError::Corrupt)?;
     let rebound = parse_plan(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
-    fixture.assessment = assess(
+    let assessment = assess(
         &rebound,
         None,
         &recorded.payload.engine.engine_version,
         recorded.payload.engine.engine_digest,
+    )
+    .map_err(|_defect| ArtifactError::Corrupt)?;
+    fixture.assessment.clear();
+    amiss_wire::write_json(
+        &assessment,
+        &mut fixture.assessment,
+        amiss_wire::relation::RELATION_DOCUMENT_BYTES,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
     Ok(fixture)

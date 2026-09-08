@@ -21,6 +21,7 @@ mod external_snapshots;
 mod input;
 mod policy_presence;
 mod publication_assessment;
+mod relation_assessment;
 mod report_controls;
 mod report_counts;
 mod report_details;

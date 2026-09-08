@@ -15,7 +15,7 @@ use amiss_wire::model::{
 };
 use amiss_wire::relation::{
     RelationIdentity, RelationPlanEnvelope, RelationSnapshot, RelationSubject as PlannedSubject,
-    RelationVerdict, assess, parse_assessment, parse_evidence, parse_plan, plan,
+    RelationVerdict, assess, parse_evidence, parse_plan, plan,
 };
 
 use super::{RelationProjectionError, RelationProjectionRequest, project_relation_evidence};
@@ -208,13 +208,7 @@ fn four_exact_repository_projections_produce_the_plan_bound_transition() {
         sha256(b"relation evaluator"),
     )
     .expect("transition assessment");
-    assert_eq!(
-        parse_assessment(&assessment)
-            .expect("parsed assessment")
-            .payload
-            .verdict,
-        RelationVerdict::IntroducedDrift
-    );
+    assert_eq!(assessment.payload.verdict, RelationVerdict::IntroducedDrift);
 }
 
 #[test]

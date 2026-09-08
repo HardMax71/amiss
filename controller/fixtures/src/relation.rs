@@ -10,8 +10,8 @@ use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection}
 use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationProjectedValue, RelationProjectionSlot,
-    assess, evidence, parse_evidence, parse_plan,
+    RELATION_DOCUMENT_BYTES, RelationEvidence, RelationEvidenceSubject, RelationProjectedValue,
+    RelationProjectionSlot, assess, evidence, parse_evidence, parse_plan,
 };
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
@@ -53,12 +53,14 @@ pub fn relation_audit_with_coordination(
         sha256(b"relation evaluator fixture"),
     )
     .ok()?;
+    let mut assessment_bytes = Vec::new();
+    amiss_wire::write_json(&assessment, &mut assessment_bytes, RELATION_DOCUMENT_BYTES).ok()?;
     Some(RelationAuditFixture {
         transition,
         report,
         plan,
         evidence,
-        assessment,
+        assessment: assessment_bytes,
     })
 }
 

@@ -78,7 +78,6 @@ pub fn validate_relation_audit(
         assessment.payload.engine.engine_digest,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    let replayed = parse_assessment(&replayed).map_err(|_defect| ArtifactError::Corrupt)?;
     if replayed.payload_digest != assessment.payload_digest {
         return Err(ArtifactError::Corrupt);
     }

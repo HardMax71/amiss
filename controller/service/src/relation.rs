@@ -12,7 +12,7 @@ use amiss_controller_git::{
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::ArtifactId;
-use amiss_wire::relation::{assess, parse_evidence, parse_plan};
+use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, assess, parse_evidence, parse_plan};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoordinatedRelation {
@@ -149,12 +149,14 @@ pub fn execute_relation_audit(
         roots: request.roots,
     })?;
     let evidence = parse_evidence(&evidence_bytes)?;
-    let assessment_bytes = assess(
+    let assessment = assess(
         &plan,
         Some(&evidence),
         request.engine_version,
         request.engine_digest,
     )?;
+    let mut assessment_bytes = Vec::new();
+    amiss_wire::write_json(&assessment, &mut assessment_bytes, RELATION_DOCUMENT_BYTES)?;
     let bundle = RelationAuditBundle {
         transition: &request.pending.transition,
         report: request.report,

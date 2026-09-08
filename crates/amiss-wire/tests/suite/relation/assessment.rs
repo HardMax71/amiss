@@ -1,15 +1,12 @@
 use crate::relation_fixture::{digest, identity, projected, relation_contract};
 
-use std::{fs, path::Path};
-
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hb;
-use amiss_wire::json;
 use amiss_wire::relation::{
-    ASSESSMENT_PAYLOAD_SCHEMA, RelationAssessmentEnvelope, RelationEvidence,
-    RelationEvidenceEnvelope, RelationPlanEnvelope, RelationProjectionSlot, RelationReason,
-    RelationVerdict, assess, evidence, parse_assessment, parse_evidence, parse_plan, plan,
+    ASSESSMENT_PAYLOAD_SCHEMA, RelationEvidence, RelationEvidenceEnvelope, RelationPlanEnvelope,
+    RelationProjectionSlot, RelationReason, RelationVerdict, assess, evidence, parse_assessment,
+    parse_evidence, parse_plan, plan,
 };
 
 fn plan_envelope() -> RelationPlanEnvelope {
@@ -18,13 +15,6 @@ fn plan_envelope() -> RelationPlanEnvelope {
 
 fn evidence_envelope(input: &RelationEvidence) -> RelationEvidenceEnvelope {
     parse_evidence(&evidence(input).unwrap()).unwrap()
-}
-
-fn assessed(
-    plan: &RelationPlanEnvelope,
-    evidence: Option<&RelationEvidenceEnvelope>,
-) -> RelationAssessmentEnvelope {
-    parse_assessment(&assess(plan, evidence, "0.26.0", digest('a')).unwrap()).unwrap()
 }
 
 #[test]
@@ -49,7 +39,7 @@ fn complete_projection_pairs_classify_all_four_equality_transitions() {
         (resolved, RelationVerdict::ResolvedDrift),
     ] {
         let evidence = evidence_envelope(&input);
-        let assessment = assessed(&plan, Some(&evidence));
+        let assessment = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
         assert_eq!(assessment.payload.verdict, expected);
         assert_eq!(assessment.payload.reason, Nullable::Null);
         assert_eq!(
@@ -71,7 +61,10 @@ fn digest_and_length_jointly_define_projected_value_equality() {
 
     let evidence = evidence_envelope(&input);
     assert_eq!(
-        assessed(&plan, Some(&evidence)).payload.verdict,
+        assess(&plan, Some(&evidence), "0.26.0", digest('a'))
+            .unwrap()
+            .payload
+            .verdict,
         RelationVerdict::IntroducedDrift
     );
 }
@@ -100,7 +93,7 @@ fn absent_unbound_misrouted_and_partial_evidence_stays_unproven() {
         (Some(misrouted), RelationReason::RoleMismatch),
         (Some(partial), RelationReason::ProjectionUnproven),
     ] {
-        let assessment = assessed(&plan, evidence.as_ref());
+        let assessment = assess(&plan, evidence.as_ref(), "0.26.0", digest('a')).unwrap();
         assert_eq!(assessment.payload.verdict, RelationVerdict::Unproven);
         assert_eq!(assessment.payload.reason, Nullable::Value(expected));
         assert_eq!(
@@ -130,86 +123,31 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
     let evidence = evidence_envelope(&input);
-    let bytes = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let value = json::parse(&bytes).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let inconsistent = String::from_utf8(bytes)
-        .unwrap()
-        .replace("\"introduced-drift\"", "\"unproven\"");
-    let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
-    let rebound = inconsistent.replace(
-        recorded,
-        &hb(
-            ASSESSMENT_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(inconsistent_value.member("payload").unwrap())
-                .unwrap(),
-        )
-        .to_string(),
+    let mut inconsistent = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
+    inconsistent.payload.verdict = RelationVerdict::Unproven;
+    inconsistent.payload_digest = hb(
+        ASSESSMENT_PAYLOAD_SCHEMA,
+        &serde_json_canonicalizer::to_vec(&inconsistent.payload).unwrap(),
     );
-    let error = parse_assessment(rebound.as_bytes()).unwrap_err();
+    let error =
+        parse_assessment(&serde_json_canonicalizer::to_vec(&inconsistent).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 }
 
 #[test]
 fn nullable_assessment_fields_are_required() {
-    let bytes = assess(&plan_envelope(), None, "0.26.0", digest('a')).unwrap();
-
-    let mut missing_reason: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(
-        missing_reason["payload"]
-            .as_object_mut()
-            .unwrap()
-            .remove("reason")
-            .is_some()
-    );
-    let payload = serde_json_canonicalizer::to_vec(&missing_reason["payload"]).unwrap();
-    missing_reason["payload_digest"] =
-        serde_json::json!(hb(ASSESSMENT_PAYLOAD_SCHEMA, &payload).to_string());
-    assert_eq!(
-        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_reason).unwrap())
-            .unwrap_err()
-            .kind,
-        ErrorKind::InvalidValue
-    );
-
-    let mut missing_evidence_digest: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(
-        missing_evidence_digest["payload"]["subject"]
-            .as_object_mut()
-            .unwrap()
-            .remove("evidence_payload_digest")
-            .is_some()
-    );
-    let payload = serde_json_canonicalizer::to_vec(&missing_evidence_digest["payload"]).unwrap();
-    missing_evidence_digest["payload_digest"] =
-        serde_json::json!(hb(ASSESSMENT_PAYLOAD_SCHEMA, &payload).to_string());
-    assert_eq!(
-        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_evidence_digest).unwrap())
-            .unwrap_err()
-            .kind,
-        ErrorKind::InvalidValue
-    );
-}
-
-#[test]
-fn the_published_assessment_replays_from_its_plan_and_evidence() {
-    let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
-    let plan = parse_plan(&fs::read(examples.join("relation-plan.json")).unwrap()).unwrap();
-    let evidence =
-        parse_evidence(&fs::read(examples.join("relation-evidence.json")).unwrap()).unwrap();
-    let published_bytes = fs::read(examples.join("relation-assessment.json")).unwrap();
-    let published = parse_assessment(&published_bytes).unwrap();
-    let replayed = assess(
-        &plan,
-        Some(&evidence),
-        &published.payload.engine.engine_version,
-        published.payload.engine.engine_digest,
-    )
-    .unwrap();
-
-    assert_eq!(
-        replayed,
-        serde_json_canonicalizer::to_vec(&json::parse(&published_bytes).unwrap()).unwrap()
-    );
+    let assessment = assess(&plan_envelope(), None, "0.26.0", digest('a')).unwrap();
+    let text = String::from_utf8(serde_json_canonicalizer::to_vec(&assessment).unwrap()).unwrap();
+    for member in [
+        r#""reason":"evidence-absent","#,
+        r#""evidence_payload_digest":null,"#,
+    ] {
+        let missing = text.replacen(member, "", 1);
+        assert_ne!(missing, text);
+        assert_eq!(
+            parse_assessment(missing.as_bytes()).unwrap_err().kind,
+            ErrorKind::InvalidValue
+        );
+    }
 }
