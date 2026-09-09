@@ -6,7 +6,7 @@ use strum::{Display, EnumString};
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb, hj_serde};
-use crate::model::{Oid, RepoPathText};
+use crate::model::{Oid, RepoPath, RepoPathText};
 use crate::resolution::Target;
 
 use super::{
@@ -38,16 +38,36 @@ pub enum ReferenceScopeKind {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    o2o_macros::o2o,
 )]
+#[from_ref(crate::report::model::RepositoryIntentKind)]
 pub enum TargetIntentKind {
     #[strum(serialize = "repository-path")]
     RepositoryPath,
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
+    o2o_macros::o2o,
 )]
+#[from_ref(crate::report::model::ReferenceOccurrenceKind)]
 pub enum OccurrenceKind {
     #[strum(serialize = "source-projection")]
     SourceProjection,
@@ -104,11 +124,14 @@ pub struct FindingKeyInput {
     pub scope: FindingScope,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, o2o_macros::o2o)]
+#[try_from_ref(crate::resolution::Missing::<RepoPath>, ())]
 #[serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum MissingResolution {
     PathNotFound {
+        #[from(~.try_into()?)]
         path: RepoPathText,
+        #[from(~.as_ref().map(TryInto::try_into).transpose()?)]
         #[serde(deserialize_with = "Option::deserialize")]
         near: Option<RepoPathText>,
         #[serde(
@@ -116,24 +139,32 @@ pub enum MissingResolution {
             skip_serializing_if = "Option::is_none",
             deserialize_with = "json_serde::deserialize_some"
         )]
+        #[from(Some(~.as_ref().map(TryInto::try_into).transpose()?.map_or(Nullable::Null, Nullable::Value)))]
         same_object_at: Option<Nullable<RepoPathText>>,
     },
     LineFragmentOutOfRange {
+        #[from(~.try_into()?)]
         path: RepoPathText,
     },
     HeadingAnchorNotFound {
+        #[from(~.try_into()?)]
         path: RepoPathText,
+        #[from(~.clone())]
         #[serde(deserialize_with = "Option::deserialize")]
         near: Option<String>,
     },
     LabelNotDeclared,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, o2o_macros::o2o)]
+#[try_from_ref(crate::resolution::Resolution::<RepoPath>, () | _ => Err(())?)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum StructuralResolution {
-    Missing(MissingResolution),
-    TypeMismatch { target: Target<RepoPathText> },
+    Missing(#[from(~.try_into()?)] MissingResolution),
+    TypeMismatch {
+        #[from(~.try_into()?)]
+        target: Target<RepoPathText>,
+    },
 }
 
 #[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]

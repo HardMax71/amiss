@@ -136,8 +136,11 @@ fn a_minted_snapshot_clears_its_own_reader_and_schema() {
         validator.iter_errors(&document).next().is_none(),
         "the minted file clears the public schema"
     );
-    assert_eq!(document["items"][0]["owner"], "team:docs-platform");
-    assert_eq!(document["organization_floor_digest"], floor_digest());
+    assert_eq!(snapshot.items[0].owner.as_str(), "team:docs-platform");
+    assert_eq!(
+        snapshot.organization_floor_digest.to_string(),
+        floor_digest()
+    );
 }
 
 /// The centerpiece: the same evaluation that failed the finding tolerates it
@@ -151,6 +154,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
     let (code, _stdout, _stderr) = amiss(&shown);
     assert_eq!(code, 0);
     let snapshot = parse_debt_snapshot(&fs::read(&path).unwrap()).unwrap();
+    let accepted = snapshot.items[0].clone();
 
     let repo = Repository::open(minted.chain.root(), ObjectFormat::Sha1).unwrap();
     let base = Oid::new(ObjectFormat::Sha1, minted.base.clone()).unwrap();
@@ -249,12 +253,20 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         errors_retained: 64,
     };
     let built = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate).unwrap();
-    let report: serde_json::Value =
-        serde_json::from_slice(&amiss_scan::report::wire(&built).unwrap()).unwrap();
+    let payload = &built.envelope.payload;
+    assert_eq!(payload.summary.findings.debt_tolerated, 1);
+    let finding = payload
+        .findings
+        .iter()
+        .find(|finding| finding.finding_key == accepted.finding_key)
+        .unwrap();
     assert_eq!(
-        report["payload"]["summary"]["findings"]["debt_tolerated"], 1,
-        "{}",
-        report["payload"]["summary"]
+        finding.candidate_fact_digest,
+        Some(accepted.accepted_fact_digest)
+    );
+    assert_eq!(
+        serde_json_canonicalizer::to_vec(finding.candidate_fact.as_ref().unwrap()).unwrap(),
+        serde_json_canonicalizer::to_vec(&accepted.accepted_fact).unwrap()
     );
     assert_eq!(built.exit_code, 0, "tolerated debt does not block");
 }

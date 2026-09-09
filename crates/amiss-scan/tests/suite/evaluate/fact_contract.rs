@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 
 use amiss_scan::evaluate::structural_facts;
+use amiss_wire::controls::StructuralResolution;
+use amiss_wire::model::RepoPathText;
 
 use super::*;
 
@@ -57,6 +59,94 @@ fn adoption_facts_match_evaluation_for_each_shape_and_multiplicity() -> Result<(
         }
     }
     Ok(())
+}
+
+#[test]
+fn typed_adoption_preserves_every_structural_resolution() {
+    for text in [
+        "docs/guide.md".to_owned(),
+        "docs/quoted-\"β\n.md".to_owned(),
+        format!("docs/{}", "x".repeat(4091)),
+    ] {
+        let path = RepoPath::new(text.clone()).unwrap();
+        assert_eq!(RepoPathText::try_from(&path).unwrap().as_str(), text);
+        let resolutions = structural_resolutions(&path);
+        assert_eq!(resolutions.len(), 13);
+        for resolution in resolutions {
+            let accepted = StructuralResolution::try_from(&resolution).unwrap();
+            let original = serde_json_canonicalizer::to_vec(&resolution).unwrap();
+            assert_eq!(
+                serde_json_canonicalizer::to_vec(&accepted).unwrap(),
+                original,
+                "{resolution:?}"
+            );
+            assert_eq!(
+                accepted,
+                serde_json::from_slice::<StructuralResolution>(&original).unwrap()
+            );
+        }
+    }
+}
+
+#[test]
+fn typed_adoption_rejects_nontext_paths_in_each_resolution_slot() {
+    let text = RepoPath::new("docs/guide.md".to_owned()).unwrap();
+    for raw in [
+        b"docs/raw-\xff.md".to_vec(),
+        [b"docs/".as_slice(), &vec![0xff; 4091]].concat(),
+    ] {
+        let path = RepoPath::from_bytes(raw).unwrap();
+        assert!(RepoPathText::try_from(&path).is_err());
+        for resolution in structural_resolutions(&path) {
+            assert_eq!(
+                StructuralResolution::try_from(&resolution).is_ok(),
+                matches!(resolution, Resolution::Missing(Missing::LabelNotDeclared)),
+                "{resolution:?}"
+            );
+        }
+        for (near, same_object_at) in [
+            (Some(path.clone()), None),
+            (None, Some(path.clone())),
+            (Some(text.clone()), Some(path.clone())),
+        ] {
+            let resolution = Resolution::Missing(Missing::PathNotFound {
+                path: text.clone(),
+                near,
+                same_object_at,
+            });
+            assert!(StructuralResolution::try_from(&resolution).is_err());
+        }
+    }
+}
+
+#[test]
+fn typed_adoption_rejects_nonstructural_evidence() {
+    let path = RepoPath::new("docs/guide.md".to_owned()).unwrap();
+    for resolution in [
+        Resolution::Resolved {
+            target: Target::Tree { path: path.clone() },
+        },
+        Resolution::DeclaredUntracked(amiss_wire::resolution::DeclaredUntracked {
+            path: path.clone(),
+            declared_by: path.clone(),
+        }),
+        Resolution::UnsupportedTarget(UnsupportedTarget::Symlink { path }),
+        Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
+        Resolution::UnsupportedVersion {
+            scope: VersionScope::UnknownPath {},
+        },
+        Resolution::Invalid {
+            reason: InvalidReference::Syntax,
+        },
+        Resolution::External {
+            reason: amiss_wire::resolution::ExternalReference::Url,
+        },
+    ] {
+        assert!(
+            StructuralResolution::try_from(&resolution).is_err(),
+            "{resolution:?}"
+        );
+    }
 }
 
 fn structural_resolutions(path: &RepoPath) -> Vec<Resolution> {

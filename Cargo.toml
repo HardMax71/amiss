@@ -64,6 +64,7 @@ jsonwebtoken = { version = "11.0", default-features = false, features = ["aws_lc
 json-serde = "=0.0.1-alpha.1"
 js_int = { version = "=0.2.2", default-features = false, features = ["serde"] }
 memchr = "2.8.3"
+o2o-macros = { version = "=0.5.5", default-features = false, features = ["syn2"] }
 pem = "4.0.0"
 percent-encoding = "2"
 quick-xml = "0.42"

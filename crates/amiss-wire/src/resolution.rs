@@ -1,5 +1,5 @@
 use crate::digest::Digest;
-use crate::model::Oid;
+use crate::model::{Oid, RepoPathText};
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumDiscriminants, EnumIter, EnumString};
@@ -61,9 +61,12 @@ impl BlobContent {
 }
 
 /// A located ordinary blob and the evidence read from it.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, o2o_macros::o2o)]
+#[ref_try_into(BlobTarget::<RepoPathText>, ())]
+#[where_clause(for<'a> &'a P: TryInto<RepoPathText, Error = ()>)]
 #[serde(deny_unknown_fields)]
 pub struct BlobTarget<P> {
+    #[into((&~).try_into()?)]
     pub path: P,
     pub mode: BlobMode,
     pub content: BlobContent,
@@ -77,14 +80,21 @@ pub enum TaggedBlobTarget<P> {
 
 /// A located target. A tree has no blob content; a blob always carries a
 /// valid blob mode and one exact content-evidence shape.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize, o2o_macros::o2o,
+)]
+#[ref_try_into(Target::<RepoPathText>, ())]
+#[where_clause(for<'a> &'a P: TryInto<RepoPathText, Error = ()>)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 #[strum_discriminants(name(TargetTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub enum Target<P> {
-    Tree { path: P },
-    Blob(BlobTarget<P>),
+    Tree {
+        #[into(~.try_into()?)]
+        path: P,
+    },
+    Blob(#[into(~.try_into()?)] BlobTarget<P>),
 }
 
 impl<P> Target<P> {

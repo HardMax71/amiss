@@ -7,8 +7,19 @@ use serde_with::{DeserializeFromStr, DisplayFromStr, SerializeDisplay, serde_as}
 
 /// A repository path whose bytes are valid UTF-8, mirroring the schema's
 /// `RepoPathText`: the form every configuration surface is confined to.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
-pub struct RepoPathText(String);
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    SerializeDisplay,
+    DeserializeFromStr,
+    o2o_macros::o2o,
+)]
+#[try_from_ref(RepoPath, ())]
+pub struct RepoPathText(#[from(@.as_str().ok_or(())?.to_owned())] String);
 
 impl RepoPathText {
     #[must_use]

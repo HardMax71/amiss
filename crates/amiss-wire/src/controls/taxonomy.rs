@@ -123,7 +123,9 @@ pub enum PromotableFindingKind {
     IntoStaticStr,
     SerializeDisplay,
     DeserializeFromStr,
+    o2o_macros::o2o,
 )]
+#[try_from_ref(crate::report::FindingKind, () | _ => Err(())?)]
 #[strum(serialize_all = "kebab-case")]
 pub enum EligibleFindingKind {
     ExplicitTargetMissing,

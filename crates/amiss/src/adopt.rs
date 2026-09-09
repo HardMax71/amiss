@@ -3,15 +3,22 @@ use std::process::ExitCode;
 
 use amiss_scan::report::Built;
 use amiss_wire::controls::{
-    DebtItem, DebtSnapshot, DebtSnapshotSchema, canonical_debt_snapshot, parse_fact,
+    DebtItem, DebtSnapshot, DebtSnapshotSchema, EligibleFindingKind, Fact, FactEvidence,
+    FactEvidenceKind, FindingKeyInput, FindingOccurrence, FindingScope, ReferenceScopeKind,
+    TargetIntent, canonical_debt_snapshot,
 };
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, OwnerId, TreeIdentity, UtcInstant};
-use amiss_wire::report::model::{Evaluation, ReportPayload, Snapshot};
-use amiss_wire::report::{Disposition, FindingKind};
+use amiss_wire::report::Disposition;
+use amiss_wire::report::model::{
+    Evaluation, FindingFactEvidence, FindingKeyScope, ReportPayload, RepositoryIntentPath,
+    RepositoryTargetIntent, Snapshot,
+};
 use amiss_wire::requests::CandidateSnapshot;
 
 use crate::invocation::{Adoption, Invocation, ProviderIdentity};
+
+mod tests;
 
 #[expect(
     clippy::print_stdout,
@@ -32,7 +39,7 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         return ExitCode::FAILURE;
     }
     let payload = &built.envelope.payload;
-    let Ok((items, ineligible, factless)) = items(payload, adoption) else {
+    let Ok((items, ineligible, factless)) = items(built, adoption) else {
         println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
         return ExitCode::from(2);
     };
@@ -68,24 +75,21 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
 /// Every blocking, debt-eligible finding becomes one item carrying the fact
 /// the adoption accepts; blocking rows outside the eligible kinds are
 /// counted and left to be fixed instead.
-fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
-    payload: &ReportPayload<P, R, M, E>,
-    adoption: &Adoption,
-) -> Result<(Vec<DebtItem>, usize, usize), ()> {
+fn items(built: &Built, adoption: &Adoption) -> Result<(Vec<DebtItem>, usize, usize), ()> {
     let owner = OwnerId::new(adoption.owner.clone()).ok_or(())?;
     let created_at = UtcInstant::new(adoption.created_at.clone()).ok_or(())?;
     let expires_at = UtcInstant::new(adoption.expires_at.clone()).ok_or(())?;
     let mut rows = Vec::new();
     let mut ineligible = 0_usize;
     let mut factless = 0_usize;
-    for row in &payload.findings {
-        if row.effective_disposition != Disposition::Fail {
-            continue;
-        }
-        if !matches!(
-            row.kind,
-            FindingKind::ExplicitTargetMissing | FindingKind::ExplicitTargetTypeMismatch
-        ) {
+    for row in built
+        .envelope
+        .payload
+        .findings
+        .iter()
+        .filter(|row| row.effective_disposition == Disposition::Fail)
+    {
+        if EligibleFindingKind::try_from(&row.kind).is_err() {
             ineligible = ineligible.saturating_add(1);
             continue;
         }
@@ -94,13 +98,64 @@ fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
             factless = factless.saturating_add(1);
             continue;
         };
+        let (
+            FindingKeyScope::Reference {
+                document,
+                normalized_target_intent:
+                    RepositoryTargetIntent {
+                        commit_oid,
+                        fragment_digest,
+                        kind: intent_kind,
+                        path: RepositoryIntentPath::Path(path),
+                        query_digest,
+                        target_kind,
+                    },
+                occurrence,
+                source_construct,
+            },
+            FindingFactEvidence::Reference {
+                occurrence_multiplicity,
+                resolution,
+            },
+        ) = (&fact.key_input.scope, &fact.evidence)
+        else {
+            return Err(());
+        };
         let key = row.finding_key.to_string();
         let full = key.strip_prefix("sha256:").ok_or(())?;
         rows.push(DebtItem {
             debt_id: ArtifactId::new(format!("debt/{full}")).ok_or(())?,
             finding_key: row.finding_key,
-            accepted_fact: parse_fact(&serde_json::to_vec(fact).map_err(|_defect| ())?)
-                .map_err(|_defect| ())?,
+            accepted_fact: Fact {
+                schema: fact.schema,
+                finding_kind: (&fact.finding_kind).try_into()?,
+                key_input: FindingKeyInput {
+                    finding_kind: (&fact.key_input.finding_kind).try_into()?,
+                    schema: fact.key_input.schema,
+                    scope: FindingScope {
+                        document: document.try_into()?,
+                        kind: ReferenceScopeKind::Reference,
+                        normalized_target_intent: TargetIntent {
+                            commit_oid: commit_oid.clone(),
+                            fragment_digest: *fragment_digest,
+                            kind: intent_kind.into(),
+                            path: path.try_into()?,
+                            query_digest: *query_digest,
+                            target_kind: *target_kind,
+                        },
+                        occurrence: FindingOccurrence {
+                            kind: (&occurrence.kind).into(),
+                            source_projection_digest: occurrence.source_projection_digest,
+                        },
+                        source_construct: *source_construct,
+                    },
+                },
+                evidence: FactEvidence {
+                    kind: FactEvidenceKind::Reference,
+                    resolution: resolution.try_into()?,
+                    occurrence_multiplicity: *occurrence_multiplicity,
+                },
+            },
             accepted_fact_digest: fact_digest,
             owner: owner.clone(),
             reason: adoption.reason.clone(),
