@@ -158,8 +158,8 @@ fn expectation() -> WorkflowArtifactExpectation {
     WorkflowArtifactExpectation {
         provider: provider(),
         repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
-        workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
-        event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+        workflow_identity: OpaqueId::try_from("docs-evidence.yml".to_owned()).unwrap(),
+        event: OpaqueId::try_from("pull_request".to_owned()).unwrap(),
         artifact_name: "amiss-semantic-evidence".to_owned(),
         payload_file: RepoPathText::new(PAYLOAD_FILE.to_owned()).unwrap(),
         archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,

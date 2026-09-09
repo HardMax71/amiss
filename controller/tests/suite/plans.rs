@@ -34,7 +34,7 @@ fn plan() -> CheckPlan {
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example.internal".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("gitlab.example.internal".to_owned()).unwrap(),
     }
 }
 
@@ -48,7 +48,7 @@ fn repository() -> RepositoryIdentity {
 }
 
 fn integration() -> IntegrationId {
-    IntegrationId::new("project-hook/7".to_owned()).unwrap()
+    IntegrationId::try_from("project-hook/7".to_owned()).unwrap()
 }
 
 fn delivery() -> AuthenticatedDelivery {
@@ -57,15 +57,15 @@ fn delivery() -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
             integration: integration(),
-            delivery: DeliveryId::new("webhook/9".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("webhook/9".to_owned()).unwrap(),
         },
         change: ChangeLocator {
             provider,
             repository: repository(),
-            change: ChangeId::new("merge-request/42".to_owned()).unwrap(),
+            change: ChangeId::try_from("merge-request/42".to_owned()).unwrap(),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("pipeline/11".to_owned()).unwrap(),
+            ProviderRunId::try_from("pipeline/11".to_owned()).unwrap(),
             ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
@@ -96,7 +96,7 @@ fn plans_resolve_only_from_the_complete_authenticated_scope() {
     );
 
     let mut other = delivery();
-    other.identity.integration = IntegrationId::new("project-hook/8".to_owned()).unwrap();
+    other.identity.integration = IntegrationId::try_from("project-hook/8".to_owned()).unwrap();
     assert_eq!(
         resolve_plan(&registry, &other).unwrap_err(),
         PlanError::Missing

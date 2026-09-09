@@ -253,7 +253,8 @@ fn normalize_delivery(
 }
 
 fn exact_body_id(body: &[u8]) -> Result<DeliveryId, IngressError> {
-    DeliveryId::new(format!("body:{}", hb(EXACT_BODY_DOMAIN, body))).ok_or(IngressError::Replay)
+    DeliveryId::try_from(format!("body:{}", hb(EXACT_BODY_DOMAIN, body)))
+        .map_err(|_error| IngressError::Replay)
 }
 
 fn check_window(

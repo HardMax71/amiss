@@ -65,7 +65,7 @@ fn rejects_wrong_host_identity_change_and_object_format() {
     );
 
     let mut zero_integration = request();
-    let zero = IntegrationId::new("0".to_owned()).unwrap();
+    let zero = IntegrationId::try_from("0".to_owned()).unwrap();
     zero_integration.provider_run = provider_run(
         &zero,
         &zero_integration.run.change,
@@ -81,7 +81,7 @@ fn rejects_wrong_host_identity_change_and_object_format() {
     );
 
     let mut wrong_change = request();
-    wrong_change.run.change.change = ChangeId::new("pull/42".to_owned()).unwrap();
+    wrong_change.run.change.change = ChangeId::try_from("pull/42".to_owned()).unwrap();
     assert_eq!(
         github_fetch_plan(&wrong_change),
         Err(GitHubAcquireError::InvalidRequest)
@@ -239,8 +239,8 @@ fn workflow_artifact(request: &RunRequest) -> WorkflowArtifactExpectation {
     WorkflowArtifactExpectation {
         provider: request.delivery.provider.clone(),
         repository: request.run.change.repository.clone(),
-        workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
-        event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+        workflow_identity: OpaqueId::try_from("docs-evidence.yml".to_owned()).unwrap(),
+        event: OpaqueId::try_from("pull_request".to_owned()).unwrap(),
         artifact_name: "amiss-semantic-evidence".to_owned(),
         payload_file: RepoPathText::new("amiss/semantic-template.json".to_owned()).unwrap(),
         archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
@@ -275,15 +275,15 @@ fn set_workflow_artifacts(
 fn request() -> RunRequest {
     let provider = ProviderIdentity {
         namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("github.com".to_owned()).unwrap(),
     };
     let repository = RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap();
     let change = ChangeLocator {
         provider: provider.clone(),
         repository,
-        change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
+        change: ChangeId::try_from("repository/101/pull/4201/number/42".to_owned()).unwrap(),
     };
-    let integration = IntegrationId::new("7".to_owned()).unwrap();
+    let integration = IntegrationId::try_from("7".to_owned()).unwrap();
     let refs = RunRefs {
         forge: ForgeDialect::Github,
         candidate: branch("topic"),
@@ -304,10 +304,10 @@ fn request() -> RunRequest {
         delivery: DeliveryIdentity {
             provider,
             integration,
-            delivery: DeliveryId::new("signed-body".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("signed-body".to_owned()).unwrap(),
         },
         provider_run,
-        evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation/1".to_owned()).unwrap(),
         check: check_binding(&plan).unwrap(),
         plan,
         run: RunIdentity::new(
@@ -363,7 +363,7 @@ fn provider_run(
     ])
     .unwrap();
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!("pr:{}", hb(RUN_DOMAIN, &fields))).unwrap(),
+        ProviderRunId::try_from(format!("pr:{}", hb(RUN_DOMAIN, &fields))).unwrap(),
         ProviderRunAttempt::try_from(1).unwrap(),
         ObjectFormat::Sha1,
         candidate.clone(),

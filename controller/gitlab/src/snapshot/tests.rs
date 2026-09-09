@@ -25,7 +25,7 @@ fn query() -> GitLabRefreshQuery {
 
 fn policy() -> PolicyBinding {
     PolicyBinding {
-        integration: OpaqueId::new("policy/1".to_owned()).expect("an integration id"),
+        integration: OpaqueId::try_from("policy/1".to_owned()).expect("an integration id"),
         project_id: 101,
         project_path: "platform/security".to_owned(),
         target_branch: "main".to_owned(),

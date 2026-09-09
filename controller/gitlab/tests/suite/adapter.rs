@@ -164,7 +164,7 @@ fn every_binding_clause_of_the_refresh_query_stands_alone() {
     let (source, delivery, valid) = fixture();
     let elsewhere = ProviderIdentity {
         namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("other.example".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("other.example".to_owned()).unwrap(),
     };
 
     let mut foreign_identity = delivery.clone();
@@ -172,12 +172,13 @@ fn every_binding_clause_of_the_refresh_query_stands_alone() {
     let mut foreign_change = delivery.clone();
     foreign_change.change.provider = elsewhere;
     let mut other_integration = delivery.clone();
-    other_integration.identity.integration = OpaqueId::new("policy/2".to_owned()).unwrap();
+    other_integration.identity.integration = OpaqueId::try_from("policy/2".to_owned()).unwrap();
     let mut other_repository = delivery.clone();
     other_repository.change.repository =
         RepositoryIdentity::new(HOST.to_owned(), "acme".to_owned(), "other".to_owned()).unwrap();
     let mut other_project = delivery.clone();
-    other_project.change.change = ChangeId::new("project/102/merge-request/42".to_owned()).unwrap();
+    other_project.change.change =
+        ChangeId::try_from("project/102/merge-request/42".to_owned()).unwrap();
     let mut retried = delivery.clone();
     retried.provider_run.attempt = ProviderRunAttempt::try_from(2).unwrap();
     let mut wider_format = delivery.clone();
@@ -308,7 +309,7 @@ fn publication_performs_a_final_authoritative_refresh() {
         Err(ProviderError::AuthorizationRevoked)
     );
     let mut wrong_run = pass;
-    wrong_run.provider_run.run_id = OpaqueId::new("pipeline/999/job/303".to_owned()).unwrap();
+    wrong_run.provider_run.run_id = OpaqueId::try_from("pipeline/999/job/303".to_owned()).unwrap();
     assert_eq!(
         drifted.publish(&delivery, &wrong_run),
         Err(ProviderError::InvalidResponse)
@@ -329,7 +330,7 @@ fn policy_job_resolves_only_its_ephemeral_relation_candidate() {
         },
         target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
         object_format: ObjectFormat::Sha1,
-        credential: OpaqueId::new("credential/gitlab".to_owned()).unwrap(),
+        credential: OpaqueId::try_from("credential/gitlab".to_owned()).unwrap(),
         source: ProjectionSource::RecordSet(RecordSetSelection {
             set: ArtifactId::new("rust/public-api".to_owned()).unwrap(),
         }),
@@ -402,7 +403,7 @@ fn malformed_relation_bindings_are_rejected_before_provider_io() {
 
 #[test]
 fn only_a_published_pass_can_succeed_the_policy_job() {
-    let evaluation_id = OpaqueId::new("evaluation/1".to_owned()).unwrap();
+    let evaluation_id = OpaqueId::try_from("evaluation/1".to_owned()).unwrap();
     assert!(policy_job_accepted(&HandleOutcome::Published {
         conclusion: CheckConclusion::Pass,
         artifact: None,
@@ -460,7 +461,7 @@ fn relation_status(
             integration: delivery.identity.integration.clone(),
             repository: delivery.change.repository.clone(),
         },
-        credential: OpaqueId::new("credential/gitlab".to_owned()).unwrap(),
+        credential: OpaqueId::try_from("credential/gitlab".to_owned()).unwrap(),
         candidate_commit: delivery.provider_run.candidate_commit.clone(),
         required_status_name: "amiss:policy".to_owned(),
     };

@@ -98,7 +98,7 @@ impl Harness {
         .unwrap();
         let route = DeliveryRoute {
             provider: provider(),
-            trust_set: OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+            trust_set: OpaqueId::try_from("gitlab-oidc".to_owned()).unwrap(),
             signed_time: SignedTimePolicy::Required(Duration::from_mins(5)),
         };
         let source = source();

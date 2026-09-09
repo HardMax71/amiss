@@ -18,7 +18,7 @@ use super::{FakeAdapter, FakeRunner, MemoryLedger};
 pub(crate) fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("forgejo".to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example.test".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("forge.example.test".to_owned()).unwrap(),
     }
 }
 
@@ -38,7 +38,7 @@ pub(crate) fn locator(
     ChangeLocator {
         provider: provider.clone(),
         repository,
-        change: ChangeId::new("42".to_owned()).unwrap(),
+        change: ChangeId::try_from("42".to_owned()).unwrap(),
     }
 }
 
@@ -50,12 +50,12 @@ pub(crate) fn delivery(
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("delivery-9".to_owned()).unwrap(),
+            integration: IntegrationId::try_from("installation-7".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("delivery-9".to_owned()).unwrap(),
         },
         change,
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("provider-run-11".to_owned()).unwrap(),
+            ProviderRunId::try_from("provider-run-11".to_owned()).unwrap(),
             ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             oid(candidate_commit),

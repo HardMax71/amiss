@@ -64,7 +64,7 @@ fn delivery_id(raw: &[u8]) -> Result<DeliveryId, WebhookError> {
         return Err(WebhookError::Headers);
     }
     let value = std::str::from_utf8(raw).map_err(|_defect| WebhookError::Headers)?;
-    DeliveryId::new(value.to_owned()).ok_or(WebhookError::Headers)
+    DeliveryId::try_from(value.to_owned()).map_err(|_error| WebhookError::Headers)
 }
 
 fn timestamp_millis(raw: &[u8]) -> Result<i64, WebhookError> {

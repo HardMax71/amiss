@@ -56,10 +56,10 @@ fn request_scope_is_checked_before_provider_io() {
     let defects: [fn(&mut RelationSubject); 6] = [
         |subject| {
             subject.scope.provider.instance =
-                ProviderInstance::new("github.example".to_owned()).unwrap();
+                ProviderInstance::try_from("github.example".to_owned()).unwrap();
         },
         |subject| {
-            subject.scope.integration = IntegrationId::new("8".to_owned()).unwrap();
+            subject.scope.integration = IntegrationId::try_from("8".to_owned()).unwrap();
         },
         |subject| {
             subject.scope.repository = RepositoryIdentity::new(
@@ -192,7 +192,7 @@ fn relation_status_mutations_are_rejected_before_reconciliation() {
     ));
 
     let mut foreign = target.clone();
-    foreign.scope.integration = IntegrationId::new("8".to_owned()).unwrap();
+    foreign.scope.integration = IntegrationId::try_from("8".to_owned()).unwrap();
     let mut foreign_status = status.clone();
     foreign_status.targets.destinations[0] = foreign.clone();
     assert!(matches!(
@@ -256,7 +256,7 @@ fn fixture() -> (Config, RelationSubject) {
         .find(|subject| subject.scope.provider.namespace.as_str() == "github")
         .unwrap()
         .clone();
-    subject.scope.integration = IntegrationId::new(INSTALLATION_ID.to_string()).unwrap();
+    subject.scope.integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
     (
         Config {
             provider: subject.scope.provider.clone(),
@@ -279,7 +279,7 @@ fn status_fixture() -> (Config, RelationStatusRecord, RelationStatusTarget) {
         .find(|subject| subject.scope.provider.namespace.as_str() == "github")
         .unwrap()
         .clone();
-    subject.scope.integration = IntegrationId::new(INSTALLATION_ID.to_string()).unwrap();
+    subject.scope.integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
     let frozen = fixture
         .transition
         .subjects

@@ -82,8 +82,8 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
         objects,
     )
     .map_err(|defect| ConfigError::caused_by("GitLab API configuration is invalid", defect))?;
-    let trust_set = TrustSetId::new(raw.gitlab.oidc.trust_set)
-        .ok_or(ConfigError::invalid("GitLab OIDC trust set is invalid"))?;
+    let trust_set = TrustSetId::try_from(raw.gitlab.oidc.trust_set)
+        .map_err(|_error| ConfigError::invalid("GitLab OIDC trust set is invalid"))?;
     let source = Arc::new(
         GitLabOidc::new(
             provider.clone(),

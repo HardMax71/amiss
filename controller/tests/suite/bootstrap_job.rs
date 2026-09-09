@@ -88,7 +88,7 @@ fn repository() -> RepositoryIdentity {
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example.internal".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("gitlab.example.internal".to_owned()).unwrap(),
     }
 }
 
@@ -98,22 +98,22 @@ fn run_request(policy: PolicyControls) -> RunRequest {
     let change = ChangeLocator {
         provider: provider.clone(),
         repository: repository(),
-        change: ChangeId::new("merge-request/42".to_owned()).unwrap(),
+        change: ChangeId::try_from("merge-request/42".to_owned()).unwrap(),
     };
     RunRequest {
         delivery: DeliveryIdentity {
             provider,
-            integration: IntegrationId::new("project-hook/7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("webhook/9".to_owned()).unwrap(),
+            integration: IntegrationId::try_from("project-hook/7".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("webhook/9".to_owned()).unwrap(),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("pipeline/987654321:job-42".to_owned()).unwrap(),
+            ProviderRunId::try_from("pipeline/987654321:job-42".to_owned()).unwrap(),
             ProviderRunAttempt::try_from(2).unwrap(),
             ObjectFormat::Sha1,
             oid('3'),
         )
         .unwrap(),
-        evaluation_id: ControllerEvaluationId::new("evaluation/11".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation/11".to_owned()).unwrap(),
         check: check_binding(&plan).unwrap(),
         plan,
         run: RunIdentity::new(
@@ -254,8 +254,8 @@ fn workflow_acquisition(
         WorkflowArtifactExpectation {
             provider: provider(),
             repository: repository(),
-            workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
-            event: OpaqueId::new("merge_request_event".to_owned()).unwrap(),
+            workflow_identity: OpaqueId::try_from("docs-evidence.yml".to_owned()).unwrap(),
+            event: OpaqueId::try_from("merge_request_event".to_owned()).unwrap(),
             artifact_name: artifact_name.to_owned(),
             payload_file: RepoPathText::new("amiss/semantic-template.json".to_owned()).unwrap(),
             archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,

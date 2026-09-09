@@ -74,7 +74,9 @@ fn identities_display_their_spellings() {
         "github"
     );
     assert_eq!(
-        OpaqueId::new("delivery/1".to_owned()).unwrap().to_string(),
+        OpaqueId::try_from("delivery/1".to_owned())
+            .unwrap()
+            .to_string(),
         "delivery/1"
     );
 }

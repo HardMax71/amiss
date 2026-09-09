@@ -338,21 +338,21 @@ impl LaneCase {
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("github.com".to_owned()).unwrap(),
     }
 }
 
 fn route(provider: &ProviderIdentity) -> DeliveryRoute {
     DeliveryRoute {
         provider: provider.clone(),
-        trust_set: OpaqueId::new("github-provider-lane-keys".to_owned()).unwrap(),
+        trust_set: OpaqueId::try_from("github-provider-lane-keys".to_owned()).unwrap(),
         signed_time: SignedTimePolicy::ReplayOnly,
     }
 }
 
 fn webhook() -> amiss_controller::GitHubWebhook {
     let key = WebhookKey::new(
-        OpaqueId::new("current".to_owned()).unwrap(),
+        OpaqueId::try_from("current".to_owned()).unwrap(),
         SECRET.to_vec(),
         0,
         None,
@@ -360,7 +360,7 @@ fn webhook() -> amiss_controller::GitHubWebhook {
     .unwrap();
     amiss_controller::GitHubWebhook::new(
         WebhookKeyring::new(
-            OpaqueId::new("github-provider-lane-keys".to_owned()).unwrap(),
+            OpaqueId::try_from("github-provider-lane-keys".to_owned()).unwrap(),
             vec![key],
         )
         .unwrap(),

@@ -6,32 +6,22 @@ use crate::{
     ProviderIdentity, ProviderInstance, ProviderNamespace,
 };
 
+use super::MaterializeResult;
 use super::run::StoredProviderRun;
-use super::{MaterializeResult, checked};
+use crate::file_ledger::FileLedgerError;
 
 #[derive(Serialize)]
 pub(in crate::file_ledger::format) struct StoredDeliveryKey<'a> {
-    provider_namespace: &'a str,
-    provider_instance: &'a str,
-    integration: &'a str,
-    delivery: &'a str,
-}
-
-impl<'a> StoredDeliveryKey<'a> {
-    pub(in crate::file_ledger::format) fn new(identity: &'a DeliveryIdentity) -> Self {
-        Self {
-            provider_namespace: identity.provider.namespace.as_str(),
-            provider_instance: identity.provider.instance.as_str(),
-            integration: identity.integration.as_str(),
-            delivery: identity.delivery.as_str(),
-        }
-    }
+    pub(in crate::file_ledger::format) provider_namespace: &'a ProviderNamespace,
+    pub(in crate::file_ledger::format) provider_instance: &'a ProviderInstance,
+    pub(in crate::file_ledger::format) integration: &'a IntegrationId,
+    pub(in crate::file_ledger::format) delivery: &'a DeliveryId,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger::format) struct StoredDelivery {
-    pub(in crate::file_ledger::format) identity: StoredDeliveryIdentity,
+    pub(in crate::file_ledger::format) identity: DeliveryIdentity,
     pub(in crate::file_ledger::format) change: StoredChange,
     pub(in crate::file_ledger::format) provider_run: StoredProviderRun,
 }
@@ -41,7 +31,7 @@ impl StoredDelivery {
         &self,
     ) -> MaterializeResult<AuthenticatedDelivery> {
         Ok(AuthenticatedDelivery {
-            identity: self.identity.materialize()?,
+            identity: self.identity.clone(),
             change: self.change.materialize()?,
             provider_run: self.provider_run.materialize()?,
         })
@@ -50,75 +40,26 @@ impl StoredDelivery {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(in crate::file_ledger::format) struct StoredDeliveryIdentity {
-    provider: StoredProvider,
-    integration: String,
-    delivery: String,
-}
-
-impl StoredDeliveryIdentity {
-    pub(in crate::file_ledger::format) fn new(identity: &DeliveryIdentity) -> Self {
-        Self {
-            provider: StoredProvider::new(&identity.provider),
-            integration: identity.integration.as_str().to_owned(),
-            delivery: identity.delivery.as_str().to_owned(),
-        }
-    }
-
-    fn materialize(&self) -> MaterializeResult<DeliveryIdentity> {
-        Ok(DeliveryIdentity {
-            provider: self.provider.materialize()?,
-            integration: checked(IntegrationId::new(self.integration.clone()))?,
-            delivery: checked(DeliveryId::new(self.delivery.clone()))?,
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct StoredProvider {
-    namespace: ProviderNamespace,
-    instance: String,
-}
-
-impl StoredProvider {
-    fn new(provider: &ProviderIdentity) -> Self {
-        Self {
-            namespace: provider.namespace.clone(),
-            instance: provider.instance.as_str().to_owned(),
-        }
-    }
-
-    fn materialize(&self) -> MaterializeResult<ProviderIdentity> {
-        Ok(ProviderIdentity {
-            namespace: self.namespace.clone(),
-            instance: checked(ProviderInstance::new(self.instance.clone()))?,
-        })
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub(in crate::file_ledger::format) struct StoredChange {
-    provider: StoredProvider,
+    provider: ProviderIdentity,
     repository: StoredRepository,
-    change: String,
+    change: ChangeId,
 }
 
 impl StoredChange {
     pub(in crate::file_ledger::format) fn new(change: &ChangeLocator) -> Self {
         Self {
-            provider: StoredProvider::new(&change.provider),
+            provider: change.provider.clone(),
             repository: StoredRepository::new(&change.repository),
-            change: change.change.as_str().to_owned(),
+            change: change.change.clone(),
         }
     }
 
     pub(in crate::file_ledger::format) fn materialize(&self) -> MaterializeResult<ChangeLocator> {
         Ok(ChangeLocator {
-            provider: self.provider.materialize()?,
+            provider: self.provider.clone(),
             repository: self.repository.materialize()?,
-            change: checked(ChangeId::new(self.change.clone()))?,
+            change: self.change.clone(),
         })
     }
 }
@@ -141,10 +82,7 @@ impl StoredRepository {
     }
 
     fn materialize(&self) -> MaterializeResult<RepositoryIdentity> {
-        checked(RepositoryIdentity::new(
-            self.host.clone(),
-            self.owner.clone(),
-            self.name.clone(),
-        ))
+        RepositoryIdentity::new(self.host.clone(), self.owner.clone(), self.name.clone())
+            .ok_or(FileLedgerError::Corrupt)
     }
 }

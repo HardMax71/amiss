@@ -2,12 +2,6 @@ use std::sync::LazyLock;
 
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
-fn bounded(raw: String, maximum: usize, valid: impl Fn(u8) -> bool) -> Option<String> {
-    let bytes = raw.as_bytes();
-    (!bytes.is_empty() && bytes.len() <= maximum && bytes.iter().all(|byte| valid(*byte)))
-        .then_some(raw)
-}
-
 static PROVIDER_NAMESPACE: LazyLock<Result<regex_lite::Regex, regex_lite::Error>> =
     LazyLock::new(|| regex_lite::Regex::new(r"\A[a-z0-9][a-z0-9.-]{0,63}\z"));
 
@@ -20,11 +14,19 @@ validated_newtype::validated_newtype! {
     error "invalid provider namespace"
 }
 
-/// One provider-issued opaque identifier: bounded printable bytes the
-/// controller stores and compares but never interprets. Which role a value
-/// plays is said by the field that holds it, not by a wrapper type.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, derive_more::Display)]
-pub struct OpaqueId(String);
+static OPAQUE_ID: LazyLock<Result<regex_lite::Regex, regex_lite::Error>> =
+    LazyLock::new(|| regex_lite::Regex::new(r"\A[A-Za-z0-9._:/@+-]{1,256}\z"));
+
+validated_newtype::validated_newtype! {
+    /// One provider-issued opaque identifier: bounded printable bytes the
+    /// controller stores and compares but never interprets. Which role a value
+    /// plays is said by the field that holds it, not by a wrapper type.
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, derive_more::Display)]
+    #[serde(transparent)]
+    String => pub OpaqueId
+    if |raw: &str| OPAQUE_ID.as_ref().is_ok_and(|pattern| pattern.is_match(raw));
+    error "invalid opaque identifier"
+}
 
 pub type ProviderInstance = OpaqueId;
 pub type IntegrationId = OpaqueId;
@@ -32,20 +34,6 @@ pub type DeliveryId = OpaqueId;
 pub type ChangeId = OpaqueId;
 pub type ProviderRunId = OpaqueId;
 pub type ControllerEvaluationId = OpaqueId;
-
-impl OpaqueId {
-    pub fn new(raw: String) -> Option<Self> {
-        bounded(raw, 256, |byte| {
-            byte.is_ascii_alphanumeric()
-                || matches!(byte, b'.' | b'_' | b':' | b'/' | b'@' | b'+' | b'-')
-        })
-        .map(Self)
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
 
 validated_newtype::validated_newtype! {
     /// A provider run attempt: one-based and inside the exact-integer range
@@ -84,7 +72,8 @@ impl ProviderRunIdentity {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProviderIdentity {
     pub namespace: ProviderNamespace,
     pub instance: ProviderInstance,
@@ -94,12 +83,13 @@ impl ProviderIdentity {
     pub fn new(namespace: String, instance: String) -> Option<Self> {
         Some(Self {
             namespace: ProviderNamespace::try_from(namespace).ok()?,
-            instance: ProviderInstance::new(instance)?,
+            instance: ProviderInstance::try_from(instance).ok()?,
         })
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DeliveryIdentity {
     pub provider: ProviderIdentity,
     pub integration: IntegrationId,

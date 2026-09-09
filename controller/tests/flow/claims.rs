@@ -115,7 +115,7 @@ fn a_replay_cannot_switch_to_a_new_check_plan() {
 fn authenticated_provider_must_match_the_routed_instance() {
     let actual = provider();
     let mut expected = actual.clone();
-    expected.instance = ProviderInstance::new("other.example.test".to_owned()).unwrap();
+    expected.instance = ProviderInstance::try_from("other.example.test".to_owned()).unwrap();
     let change = locator(&actual, repository("amiss"));
     let run = run(change.clone(), 'b', 'd');
     let adapter = Arc::new(

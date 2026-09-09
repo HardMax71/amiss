@@ -129,11 +129,11 @@ fn failed_authentication_never_touches_the_delivery_record() {
     .unwrap();
     let provider = ProviderIdentity {
         namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("gitlab.example".to_owned()).unwrap(),
     };
     let route = DeliveryRoute {
         provider,
-        trust_set: OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+        trust_set: OpaqueId::try_from("gitlab-oidc".to_owned()).unwrap(),
         signed_time: SignedTimePolicy::Required(Duration::from_mins(5)),
     };
     let adapter: Arc<dyn ProviderAdapter> = Arc::new(RejectingAdapter {

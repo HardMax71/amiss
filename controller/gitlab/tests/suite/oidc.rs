@@ -239,7 +239,7 @@ fn anchors(kids: &[String]) -> std::collections::BTreeMap<String, amiss_controll
         .map(|kid| {
             (
                 kid.clone(),
-                OpaqueId::new(format!("gitlab-key/{kid}")).unwrap(),
+                OpaqueId::try_from(format!("gitlab-key/{kid}")).unwrap(),
             )
         })
         .collect()
@@ -506,9 +506,10 @@ fn every_route_clause_stands_alone() {
     assert!(verify_routed(&source, &route(), now).is_ok());
 
     let mut other_provider = route();
-    other_provider.provider.instance = ProviderInstance::new("other.example".to_owned()).unwrap();
+    other_provider.provider.instance =
+        ProviderInstance::try_from("other.example".to_owned()).unwrap();
     let mut other_trust_set = route();
-    other_trust_set.trust_set = OpaqueId::new("gitlab-webhook".to_owned()).unwrap();
+    other_trust_set.trust_set = OpaqueId::try_from("gitlab-webhook".to_owned()).unwrap();
     let mut replay_only = route();
     replay_only.signed_time = SignedTimePolicy::ReplayOnly;
 

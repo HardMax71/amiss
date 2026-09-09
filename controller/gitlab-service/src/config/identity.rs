@@ -15,8 +15,8 @@ pub(super) fn provider(instance: String) -> Result<ProviderIdentity, ConfigError
 }
 
 pub(super) fn policy(raw: RawPolicy) -> Result<PolicyBinding, ConfigError> {
-    let integration = IntegrationId::new(raw.integration)
-        .ok_or(ConfigError::invalid("GitLab policy integration is invalid"))?;
+    let integration = IntegrationId::try_from(raw.integration)
+        .map_err(|_error| ConfigError::invalid("GitLab policy integration is invalid"))?;
     let config_commit = Oid::new(ObjectFormat::Sha1, raw.config_commit)
         .ok_or(ConfigError::invalid("GitLab policy commit is invalid"))?;
     let runner_count = raw.self_hosted_runner_ids.len();
@@ -53,8 +53,8 @@ pub(super) fn policy(raw: RawPolicy) -> Result<PolicyBinding, ConfigError> {
 pub(super) fn keys(raw: Vec<RawOidcKey>) -> Result<Vec<OidcPublicKey>, ConfigError> {
     raw.into_iter()
         .map(|key| {
-            let anchor = TrustAnchorId::new(key.anchor)
-                .ok_or(ConfigError::invalid("GitLab OIDC trust anchor is invalid"))?;
+            let anchor = TrustAnchorId::try_from(key.anchor)
+                .map_err(|_error| ConfigError::invalid("GitLab OIDC trust anchor is invalid"))?;
             let pem = read_regular(&key.public_key_file, PUBLIC_KEY_BYTES)?;
             OidcPublicKey::from_rsa_pem(key.kid, anchor, &pem).map_err(|defect| {
                 ConfigError::caused_by("GitLab OIDC public key is invalid", defect)

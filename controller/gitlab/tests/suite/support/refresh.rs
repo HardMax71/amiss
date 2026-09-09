@@ -112,7 +112,7 @@ pub fn publication(
     let digest = hb("amiss/controller-gitlab-test", b"fixture");
     Publication {
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation/1".to_owned()).unwrap(),
         check: CheckBinding {
             plan_digest: digest,
             required_status_name: "amiss".to_owned(),

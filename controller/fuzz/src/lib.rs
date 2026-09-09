@@ -530,7 +530,7 @@ fn provider(namespace: &str, host: &str) -> ProviderIdentity {
     reason = "fixed fuzz-fixture identifiers must remain valid"
 )]
 fn opaque(value: &str) -> OpaqueId {
-    OpaqueId::new(value.to_owned()).expect("the fixed opaque ID is valid")
+    OpaqueId::try_from(value.to_owned()).expect("the fixed opaque ID is valid")
 }
 
 #[expect(

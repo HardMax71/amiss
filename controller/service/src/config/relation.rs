@@ -114,12 +114,13 @@ fn load_subject(raw: SubjectFile) -> Result<RelationSubject, ConfigError> {
         role: raw.role,
         scope: PlanScope {
             provider,
-            integration: IntegrationId::new(raw.scope.integration).ok_or_else(invalid)?,
+            integration: IntegrationId::try_from(raw.scope.integration)
+                .map_err(|_error| invalid())?,
             repository,
         },
         target: raw.target,
         object_format: raw.object_format,
-        credential: OpaqueId::new(raw.credential).ok_or_else(invalid)?,
+        credential: OpaqueId::try_from(raw.credential).map_err(|_error| invalid())?,
         source: raw.source,
         limits: raw.limits,
     })

@@ -46,7 +46,7 @@ fn action_execution(action: &CommitPair, action_tree: Oid) -> ExecutionConstrain
 fn request(repository_pair: &CommitPair, action: &CommitPair) -> RunRequest {
     let provider = ProviderIdentity {
         namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example.internal".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("gitlab.example.internal".to_owned()).unwrap(),
     };
     let execution = action_execution(action, tree(action, &action.candidate));
     let plan =
@@ -54,24 +54,24 @@ fn request(repository_pair: &CommitPair, action: &CommitPair) -> RunRequest {
     RunRequest {
         delivery: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new("project-hook/7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("webhook/9".to_owned()).unwrap(),
+            integration: IntegrationId::try_from("project-hook/7".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("webhook/9".to_owned()).unwrap(),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("pipeline/987654321:job-42".to_owned()).unwrap(),
+            ProviderRunId::try_from("pipeline/987654321:job-42".to_owned()).unwrap(),
             ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             oid(&repository_pair.candidate),
         )
         .unwrap(),
-        evaluation_id: ControllerEvaluationId::new("evaluation/11".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation/11".to_owned()).unwrap(),
         check: check_binding(&plan).unwrap(),
         plan,
         run: RunIdentity::new(
             ChangeLocator {
                 provider,
                 repository: repository(),
-                change: ChangeId::new("merge-request/42".to_owned()).unwrap(),
+                change: ChangeId::try_from("merge-request/42".to_owned()).unwrap(),
             },
             RunRefs {
                 forge: ForgeDialect::Gitlab,

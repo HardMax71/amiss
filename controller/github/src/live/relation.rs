@@ -107,8 +107,8 @@ fn validate_relation_scope(
     scope: &PlanScope,
     object_format: ObjectFormat,
 ) -> Result<(), ProviderError> {
-    let integration = IntegrationId::new(config.installation_id.to_string())
-        .ok_or(ProviderError::InvalidResponse)?;
+    let integration = IntegrationId::try_from(config.installation_id.to_string())
+        .map_err(|_error| ProviderError::InvalidResponse)?;
     (scope.provider == config.provider
         && scope.integration == integration
         && scope.repository.host() == config.provider.instance.as_str()

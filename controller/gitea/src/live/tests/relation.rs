@@ -190,7 +190,7 @@ fn subject_scope_is_rejected_before_head_resolution() {
     let fixture = Fixture::new("gitea");
     let subject = subject_fixture(&fixture);
     let mut wrong_integration = subject.clone();
-    wrong_integration.scope.integration = IntegrationId::new("88".to_owned()).unwrap();
+    wrong_integration.scope.integration = IntegrationId::try_from("88".to_owned()).unwrap();
     let mut nested_owner = subject.clone();
     nested_owner.scope.repository = RepositoryIdentity::new(
         "forge.example".to_owned(),
@@ -424,7 +424,7 @@ fn a_relation_target_must_name_the_configured_reviewer_and_flat_repository() {
     let fixture = Fixture::new("gitea");
     let (status, target) = status_fixture(&fixture);
     let mut wrong_integration = target.clone();
-    wrong_integration.scope.integration = IntegrationId::new("88".to_owned()).unwrap();
+    wrong_integration.scope.integration = IntegrationId::try_from("88".to_owned()).unwrap();
     let mut nested = target.clone();
     nested.scope.repository = RepositoryIdentity::new(
         "forge.example".to_owned(),
@@ -492,7 +492,7 @@ fn subject_fixture(fixture: &Fixture) -> RelationSubject {
         .clone();
     subject.scope = PlanScope {
         provider: fixture.client.config.provider.clone(),
-        integration: IntegrationId::new("77".to_owned()).unwrap(),
+        integration: IntegrationId::try_from("77".to_owned()).unwrap(),
         repository: RepositoryIdentity::new(
             "forge.example".to_owned(),
             "acme".to_owned(),
@@ -512,7 +512,7 @@ fn status_fixture(fixture: &Fixture) -> (RelationStatusRecord, RelationStatusTar
         role: source.role.clone(),
         scope: PlanScope {
             provider: fixture.client.config.provider.clone(),
-            integration: IntegrationId::new("77".to_owned()).unwrap(),
+            integration: IntegrationId::try_from("77".to_owned()).unwrap(),
             repository: RepositoryIdentity::new(
                 "forge.example".to_owned(),
                 "acme".to_owned(),

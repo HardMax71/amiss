@@ -16,6 +16,7 @@ mod ledger_digests;
 mod ledger_run;
 mod mdbook;
 mod mdbook_config;
+mod opaque_id;
 mod provider_namespace;
 mod relation_binding;
 mod run_attempt;
@@ -47,7 +48,8 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
     };
     let store = FileArtifactStore::open_with_clock(root.path(), config.clone(), Arc::clone(&clock))
         .unwrap();
-    let evaluation = ControllerEvaluationId::new("evaluation/semantic".to_owned()).unwrap();
+    let evaluation =
+        ControllerEvaluationId::try_from("Evaluation/Semantic@A+B_C:D-E.F".to_owned()).unwrap();
     let bundle = ArtifactBundle {
         report: &captured,
         semantic: Some(&fixture.artifact),
@@ -96,7 +98,7 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
             .map(|(name, bound)| (name, captured.clone(), bound)),
     );
     for (name, report, bound) in rejections {
-        let rejected = ControllerEvaluationId::new(format!("evaluation/{name}")).unwrap();
+        let rejected = ControllerEvaluationId::try_from(format!("evaluation/{name}")).unwrap();
         assert!(
             matches!(
                 reopened.retain(

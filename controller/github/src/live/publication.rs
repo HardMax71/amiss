@@ -18,8 +18,8 @@ pub(super) fn validate_publication(
     pull_request: GitHubPullRequest<'_>,
     publication: &Publication,
 ) -> Result<(), ProviderError> {
-    let integration = IntegrationId::new(config.installation_id.to_string())
-        .ok_or(ProviderError::InvalidResponse)?;
+    let integration = IntegrationId::try_from(config.installation_id.to_string())
+        .map_err(|_error| ProviderError::InvalidResponse)?;
     let expected_run = crate::provider_run(
         &integration,
         pull_request.change,

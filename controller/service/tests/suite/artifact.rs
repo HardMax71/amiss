@@ -102,7 +102,7 @@ async fn retained_bytes_require_the_exact_bearer_and_expire_at_the_boundary()
     let service = open_artifact_service(config, controller_clock)?;
     let report = amiss_fixtures::captured_report(amiss_fixtures::SCANNER_REPORT.to_vec())?;
     let retained = service.store.retain(
-        &ControllerEvaluationId::new("evaluation/http".to_owned()).unwrap(),
+        &ControllerEvaluationId::try_from("evaluation/http".to_owned()).unwrap(),
         ArtifactBundle {
             report: &report,
             semantic: None,
@@ -207,8 +207,7 @@ async fn publication_audit_components_survive_authenticated_service_restart()
     let publication = publication_audit(true)
         .ok_or_else(|| std::io::Error::other("invalid publication fixture"))?;
     let publication_reference = service.store.retain_audit(
-        &ControllerEvaluationId::new("evaluation/publication-http".to_owned())
-            .ok_or_else(|| std::io::Error::other("invalid fixture evaluation"))?,
+        &ControllerEvaluationId::try_from("evaluation/publication-http".to_owned())?,
         ArtifactAuditBundle::Publication(PublicationAuditBundle {
             report: &publication.report,
             plan: &publication.plan,

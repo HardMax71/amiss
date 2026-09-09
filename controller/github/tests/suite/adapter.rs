@@ -528,7 +528,7 @@ fn rejects_body_tampering_and_wrong_routes() {
 
     let wrong_provider = ProviderIdentity {
         namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.enterprise.test".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("github.enterprise.test".to_owned()).unwrap(),
     };
     assert_eq!(
         authenticated(
@@ -600,7 +600,7 @@ fn refresh_marks_ref_drift_superseded() {
     assert_eq!(wrong_api.state.refreshes.load(Ordering::Relaxed), 1);
 
     let mut invalid_delivery = delivery.clone();
-    invalid_delivery.provider_run.run_id = OpaqueId::new("unbound".to_owned()).unwrap();
+    invalid_delivery.provider_run.run_id = OpaqueId::try_from("unbound".to_owned()).unwrap();
     let refused_api = FakeApi::new(snapshot(&delivery, "topic", "main"));
     let refused_adapter = adapter(refused_api.clone());
     assert_eq!(
@@ -651,7 +651,7 @@ fn every_clause_binding_the_delivery_stands_alone() {
     let delivery = verified.delivery().clone();
     let elsewhere = ProviderIdentity {
         namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.example".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("github.example".to_owned()).unwrap(),
     };
 
     let mut foreign_identity = delivery.clone();
@@ -716,8 +716,8 @@ fn workflow_artifact(workflow_identity: &str) -> WorkflowArtifactExpectation {
             "widget".to_owned(),
         )
         .unwrap(),
-        workflow_identity: OpaqueId::new(workflow_identity.to_owned()).unwrap(),
-        event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+        workflow_identity: OpaqueId::try_from(workflow_identity.to_owned()).unwrap(),
+        event: OpaqueId::try_from("pull_request".to_owned()).unwrap(),
         artifact_name: "amiss-semantic-evidence".to_owned(),
         payload_file: RepoPathText::new("amiss/semantic-template.json".to_owned()).unwrap(),
         archive_byte_limit: 1_048_576,
@@ -789,9 +789,9 @@ fn workflow_payload() -> serde_json::Value {
 }
 
 fn webhook() -> GitHubWebhook {
-    let trust_set = OpaqueId::new("github-webhooks".to_owned()).unwrap();
+    let trust_set = OpaqueId::try_from("github-webhooks".to_owned()).unwrap();
     let key = WebhookKey::new(
-        OpaqueId::new("current".to_owned()).unwrap(),
+        OpaqueId::try_from("current".to_owned()).unwrap(),
         SECRET.to_vec(),
         0,
         None,
@@ -815,7 +815,7 @@ fn observed(pull_request: GitHubPullRequest<'_>) -> ApiRequest {
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("github.com".to_owned()).unwrap(),
     }
 }
 
@@ -846,7 +846,7 @@ fn try_authenticate_with_signature(
 ) -> Result<amiss_controller::VerifiedDelivery, ProviderError> {
     let route = DeliveryRoute {
         provider: route_provider,
-        trust_set: OpaqueId::new("github-webhooks".to_owned()).unwrap(),
+        trust_set: OpaqueId::try_from("github-webhooks".to_owned()).unwrap(),
         signed_time,
     };
     let mut headers = Vec::with_capacity(unsigned.len().saturating_add(1));
@@ -895,7 +895,7 @@ fn authenticate_target(
     }];
     let route = DeliveryRoute {
         provider: provider(),
-        trust_set: OpaqueId::new("github-webhooks".to_owned()).unwrap(),
+        trust_set: OpaqueId::try_from("github-webhooks".to_owned()).unwrap(),
         signed_time: SignedTimePolicy::ReplayOnly,
     };
     let check = policy()
@@ -957,7 +957,7 @@ fn dummy_snapshot() -> ChangeSnapshot {
     let change = amiss_controller::ChangeLocator {
         provider,
         repository,
-        change: OpaqueId::new("42".to_owned()).unwrap(),
+        change: OpaqueId::try_from("42".to_owned()).unwrap(),
     };
     ChangeSnapshot {
         state: ChangeState::Active,
@@ -988,7 +988,7 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
     let digest = hb("amiss/controller-github-test", b"fixture");
     Publication {
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation-1".to_owned()).unwrap(),
         check: CheckBinding {
             plan_digest: digest,
             required_status_name: "amiss".to_owned(),

@@ -130,8 +130,8 @@ impl GiteaPullRequestSource {
             change: change_id(repository.id, pull.id, payload.number)
                 .ok_or(ProviderError::Authentication)?,
         };
-        let integration = IntegrationId::new(self.reviewer.id.to_string())
-            .ok_or(ProviderError::Authentication)?;
+        let integration = IntegrationId::try_from(self.reviewer.id.to_string())
+            .map_err(|_error| ProviderError::Authentication)?;
         let candidate = pull
             .head
             .sha
@@ -155,11 +155,11 @@ impl GiteaPullRequestSource {
                     identity: DeliveryIdentity {
                         provider: self.provider.clone(),
                         integration,
-                        delivery: DeliveryId::new(format!(
+                        delivery: DeliveryId::try_from(format!(
                             "body:{}",
                             hb(DELIVERY_DOMAIN, input.body)
                         ))
-                        .ok_or(ProviderError::Authentication)?,
+                        .map_err(|_error| ProviderError::Authentication)?,
                     },
                     change,
                     provider_run,

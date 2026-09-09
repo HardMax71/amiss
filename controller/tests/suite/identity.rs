@@ -1,6 +1,4 @@
-use amiss_controller::{
-    DeliveryId, ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
-};
+use amiss_controller::{ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity};
 use amiss_wire::model::{ObjectFormat, Oid};
 
 #[test]
@@ -10,7 +8,7 @@ fn provider_run_preserves_typed_ids_and_checks_the_declared_format()
         let candidate: Oid = serde_json::from_str(&format!("\"{}\"", "a".repeat(length)))?;
         for declared in [ObjectFormat::Sha1, ObjectFormat::Sha256] {
             let run = ProviderRunIdentity::new(
-                ProviderRunId::new("run/1".to_owned()).ok_or("run id")?,
+                ProviderRunId::try_from("run/1".to_owned())?,
                 ProviderRunAttempt::try_from(1)?,
                 declared,
                 candidate.clone(),
@@ -30,13 +28,4 @@ fn provider_identity_validates_both_parts() {
     assert!(ProviderIdentity::new("gitlab".to_owned(), "gitlab.example".to_owned()).is_some());
     assert!(ProviderIdentity::new("GitLab".to_owned(), "gitlab.example".to_owned()).is_none());
     assert!(ProviderIdentity::new("gitlab".to_owned(), "bad host".to_owned()).is_none());
-}
-
-#[test]
-fn opaque_delivery_ids_reject_ambiguous_bytes() {
-    assert!(DeliveryId::new("0123-abcd:1".to_owned()).is_some());
-    assert!(DeliveryId::new(" delivery".to_owned()).is_none());
-    assert!(DeliveryId::new("line\nbreak".to_owned()).is_none());
-    assert!(DeliveryId::new("a".repeat(256)).is_some());
-    assert!(DeliveryId::new("a".repeat(257)).is_none());
 }

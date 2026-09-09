@@ -72,14 +72,14 @@ impl GitLabApi for FakeGitLab {
 pub(super) fn source() -> Arc<GitLabOidc> {
     let key = OidcPublicKey::from_rsa_pem(
         KID.to_owned(),
-        OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
+        OpaqueId::try_from("gitlab-key/current".to_owned()).unwrap(),
         &RSA_KEYS.public_pem,
     )
     .unwrap();
     Arc::new(
         GitLabOidc::new(
             provider(),
-            OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+            OpaqueId::try_from("gitlab-oidc".to_owned()).unwrap(),
             format!("https://{HOST}"),
             AUDIENCE.to_owned(),
             policy(),
@@ -92,7 +92,7 @@ pub(super) fn source() -> Arc<GitLabOidc> {
 
 pub(super) fn policy() -> PolicyBinding {
     PolicyBinding {
-        integration: OpaqueId::new("pipeline-execution-policy/1".to_owned()).unwrap(),
+        integration: OpaqueId::try_from("pipeline-execution-policy/1".to_owned()).unwrap(),
         project_id: PROJECT_ID,
         project_path: PROJECT_PATH.to_owned(),
         target_branch: "main".to_owned(),
@@ -109,7 +109,7 @@ pub(super) fn policy() -> PolicyBinding {
 pub(super) fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new(HOST.to_owned()).unwrap(),
+        instance: ProviderInstance::try_from(HOST.to_owned()).unwrap(),
     }
 }
 

@@ -16,11 +16,11 @@ static SIGNED_ROUTE: LazyLock<DeliveryRoute> =
     LazyLock::new(|| route(SignedTimePolicy::Required(Duration::from_mins(5))));
 
 pub(crate) fn anchor(value: &str) -> TrustAnchorId {
-    TrustAnchorId::new(value.to_owned()).unwrap()
+    TrustAnchorId::try_from(value.to_owned()).unwrap()
 }
 
 pub(crate) fn trust_set() -> TrustSetId {
-    TrustSetId::new("primary-webhooks".to_owned()).unwrap()
+    TrustSetId::try_from("primary-webhooks".to_owned()).unwrap()
 }
 
 pub(crate) fn key(
@@ -88,7 +88,7 @@ fn route(signed_time: SignedTimePolicy) -> DeliveryRoute {
     DeliveryRoute {
         provider: ProviderIdentity {
             namespace: ProviderNamespace::try_from("test".to_owned()).unwrap(),
-            instance: ProviderInstance::new("forge.example.test".to_owned()).unwrap(),
+            instance: ProviderInstance::try_from("forge.example.test".to_owned()).unwrap(),
         },
         trust_set: trust_set(),
         signed_time,

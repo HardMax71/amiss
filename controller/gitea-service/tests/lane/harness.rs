@@ -323,14 +323,14 @@ fn provider_setup(
 fn route(provider: &amiss_controller::ProviderIdentity) -> DeliveryRoute {
     DeliveryRoute {
         provider: provider.clone(),
-        trust_set: OpaqueId::new("gitea-family-provider-lane-keys".to_owned()).unwrap(),
+        trust_set: OpaqueId::try_from("gitea-family-provider-lane-keys".to_owned()).unwrap(),
         signed_time: SignedTimePolicy::ReplayOnly,
     }
 }
 
 fn webhook() -> GiteaWebhook {
     let key = WebhookKey::new(
-        OpaqueId::new("current".to_owned()).unwrap(),
+        OpaqueId::try_from("current".to_owned()).unwrap(),
         SECRET.to_vec(),
         0,
         None,
@@ -338,7 +338,7 @@ fn webhook() -> GiteaWebhook {
     .unwrap();
     GiteaWebhook::new(
         WebhookKeyring::new(
-            OpaqueId::new("gitea-family-provider-lane-keys".to_owned()).unwrap(),
+            OpaqueId::try_from("gitea-family-provider-lane-keys".to_owned()).unwrap(),
             vec![key],
         )
         .unwrap(),

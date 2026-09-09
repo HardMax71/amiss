@@ -26,7 +26,7 @@ pub(crate) fn provider_run(
     ])
     .ok()?;
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!("pr:{}", hb(RUN_DOMAIN, &fields)))?,
+        ProviderRunId::try_from(format!("pr:{}", hb(RUN_DOMAIN, &fields))).ok()?,
         ProviderRunAttempt::try_from(1).ok()?,
         ObjectFormat::Sha1,
         candidate.clone(),
@@ -38,9 +38,10 @@ pub(crate) fn positive(value: u64) -> Option<u64> {
 }
 
 pub(crate) fn change_id(repository_id: u64, pull_request_id: u64, number: u64) -> Option<ChangeId> {
-    ChangeId::new(format!(
+    ChangeId::try_from(format!(
         "repository/{repository_id}/pull/{pull_request_id}/number/{number}"
     ))
+    .ok()
 }
 
 pub(crate) fn parse_change_id(raw: &str) -> Option<(u64, u64, u64)> {

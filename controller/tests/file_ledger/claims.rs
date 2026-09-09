@@ -299,11 +299,11 @@ fn a_lease_and_a_publication_are_matched_field_by_field() {
     let publications: [(&str, Deviate); 4] = [
         ("another evaluation", |publication| {
             publication.evaluation_id =
-                ControllerEvaluationId::new("other-evaluation".to_owned()).unwrap();
+                ControllerEvaluationId::try_from("other-evaluation".to_owned()).unwrap();
         }),
         ("another provider run", |publication| {
             publication.provider_run = ProviderRunIdentity::new(
-                ProviderRunId::new("other-run".to_owned()).unwrap(),
+                ProviderRunId::try_from("other-run".to_owned()).unwrap(),
                 ProviderRunAttempt::try_from(1).unwrap(),
                 ObjectFormat::Sha1,
                 publication.provider_run.candidate_commit.clone(),
@@ -311,7 +311,7 @@ fn a_lease_and_a_publication_are_matched_field_by_field() {
             .unwrap();
         }),
         ("another change", |publication| {
-            publication.run.change.change = ChangeId::new("99".to_owned()).unwrap();
+            publication.run.change.change = ChangeId::try_from("99".to_owned()).unwrap();
         }),
         ("another candidate commit", |publication| {
             publication.run.commits.candidate =
@@ -360,7 +360,7 @@ fn completion_answers_for_the_staged_publication_alone() {
     let rows: [(&str, bool, Restage); 5] = [
         ("another evaluation", false, |staged| {
             staged.evaluation_id =
-                ControllerEvaluationId::new("other-evaluation".to_owned()).unwrap();
+                ControllerEvaluationId::try_from("other-evaluation".to_owned()).unwrap();
         }),
         ("another fence", false, |staged| {
             staged.fence = LeaseFence::new(staged.fence.get().saturating_add(1)).unwrap();
@@ -383,7 +383,7 @@ fn completion_answers_for_the_staged_publication_alone() {
         }),
         ("another evaluation after completion", true, |staged| {
             staged.evaluation_id =
-                ControllerEvaluationId::new("other-evaluation".to_owned()).unwrap();
+                ControllerEvaluationId::try_from("other-evaluation".to_owned()).unwrap();
         }),
     ];
     for (reason, complete_first, deviate) in rows {

@@ -28,7 +28,7 @@ static RSA_KEYS: LazyLock<RsaKeys> =
 
 pub fn oidc() -> Arc<GitLabOidc> {
     let policy = PolicyBinding {
-        integration: OpaqueId::new("policy/1".to_owned()).unwrap(),
+        integration: OpaqueId::try_from("policy/1".to_owned()).unwrap(),
         project_id: 101,
         project_path: PROJECT_PATH.to_owned(),
         target_branch: "main".to_owned(),
@@ -43,7 +43,7 @@ pub fn oidc() -> Arc<GitLabOidc> {
     Arc::new(
         GitLabOidc::new(
             provider(),
-            OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+            OpaqueId::try_from("gitlab-oidc".to_owned()).unwrap(),
             format!("https://{HOST}"),
             AUDIENCE.to_owned(),
             policy,
@@ -56,7 +56,7 @@ pub fn oidc() -> Arc<GitLabOidc> {
 
 pub fn policy_binding() -> PolicyBinding {
     PolicyBinding {
-        integration: OpaqueId::new("policy/1".to_owned()).unwrap(),
+        integration: OpaqueId::try_from("policy/1".to_owned()).unwrap(),
         project_id: 101,
         project_path: PROJECT_PATH.to_owned(),
         target_branch: "main".to_owned(),
@@ -85,7 +85,7 @@ pub fn keys_with(kid: &str) -> Vec<OidcPublicKey> {
 pub fn try_key(kid: &str) -> Result<OidcPublicKey, GitLabConfigError> {
     OidcPublicKey::from_rsa_pem(
         kid.to_owned(),
-        OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
+        OpaqueId::try_from("gitlab-key/current".to_owned()).unwrap(),
         &RSA_KEYS.public_pem,
     )
 }
@@ -98,7 +98,7 @@ pub fn accepts(
 ) -> bool {
     GitLabOidc::new(
         provider(),
-        OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+        OpaqueId::try_from("gitlab-oidc".to_owned()).unwrap(),
         issuer.to_owned(),
         audience.to_owned(),
         policy,
@@ -111,7 +111,7 @@ pub fn accepts(
 fn public_key() -> OidcPublicKey {
     OidcPublicKey::from_rsa_pem(
         KID.to_owned(),
-        OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
+        OpaqueId::try_from("gitlab-key/current".to_owned()).unwrap(),
         &RSA_KEYS.public_pem,
     )
     .unwrap()
@@ -280,7 +280,7 @@ fn verify_token(
 pub fn route() -> DeliveryRoute {
     DeliveryRoute {
         provider: provider(),
-        trust_set: OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+        trust_set: OpaqueId::try_from("gitlab-oidc".to_owned()).unwrap(),
         signed_time: SignedTimePolicy::Required(Duration::from_mins(5)),
     }
 }

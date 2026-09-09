@@ -166,14 +166,14 @@ fn subject(
         scope: PlanScope {
             provider: ProviderIdentity {
                 namespace: ProviderNamespace::try_from(provider.to_owned()).ok()?,
-                instance: ProviderInstance::new(instance.to_owned())?,
+                instance: ProviderInstance::try_from(instance.to_owned()).ok()?,
             },
-            integration: IntegrationId::new(format!("integration/{role}"))?,
+            integration: IntegrationId::try_from(format!("integration/{role}")).ok()?,
             repository,
         },
         target: BranchRef::new("refs/heads/main".to_owned())?,
         object_format: ObjectFormat::Sha1,
-        credential: OpaqueId::new(format!("credential/{role}"))?,
+        credential: OpaqueId::try_from(format!("credential/{role}")).ok()?,
         source: ProjectionSource::RecordSet(RecordSetSelection {
             set: ArtifactId::new(set.to_owned())?,
         }),

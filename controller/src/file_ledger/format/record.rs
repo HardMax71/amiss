@@ -4,9 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId};
 
-use super::model::{
-    StoredChange, StoredDelivery, StoredDeliveryIdentity, StoredProviderRun, StoredReplayKeep,
-};
+use super::model::{StoredChange, StoredDelivery, StoredProviderRun, StoredReplayKeep};
 use super::publication::StoredPublication;
 use crate::file_ledger::FileLedgerError;
 
@@ -21,7 +19,7 @@ pub(in crate::file_ledger) struct Record {
     binding: StoredDelivery,
     replay_keep: StoredReplayKeep,
     check: CheckBinding,
-    evaluation_id: String,
+    pub(in crate::file_ledger) evaluation_id: ControllerEvaluationId,
     pub(in crate::file_ledger) state: State,
 }
 
@@ -40,10 +38,10 @@ impl Record {
             generation: 1,
             last_seen_unix_millis: now,
             binding: StoredDelivery {
-                identity: StoredDeliveryIdentity::new(&authenticated.identity),
+                identity: authenticated.identity.clone(),
                 change: StoredChange::new(&authenticated.change),
                 provider_run: StoredProviderRun {
-                    run_id: authenticated.provider_run.run_id.as_str().to_owned(),
+                    run_id: authenticated.provider_run.run_id.clone(),
                     attempt: authenticated.provider_run.attempt,
                     object_format: authenticated.provider_run.object_format,
                     candidate_commit: authenticated.provider_run.candidate_commit.clone(),
@@ -51,7 +49,7 @@ impl Record {
             },
             replay_keep: StoredReplayKeep::new(delivery.replay_keep()),
             check: check.clone(),
-            evaluation_id: evaluation_id.as_str().to_owned(),
+            evaluation_id: evaluation_id.clone(),
             state: State::Running {
                 owner,
                 fence: 1,
@@ -72,12 +70,6 @@ impl Record {
 
     pub(in crate::file_ledger) fn matches_key(&self, key: &str) -> Result<bool, FileLedgerError> {
         Ok(super::delivery_key(&self.binding.materialize()?.identity)? == key)
-    }
-
-    pub(in crate::file_ledger) fn evaluation_id(
-        &self,
-    ) -> Result<ControllerEvaluationId, FileLedgerError> {
-        ControllerEvaluationId::new(self.evaluation_id.clone()).ok_or(FileLedgerError::Corrupt)
     }
 
     pub(in crate::file_ledger) fn advance(&mut self, now: i64) -> Result<(), FileLedgerError> {

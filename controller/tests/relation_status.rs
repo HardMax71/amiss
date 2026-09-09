@@ -73,7 +73,7 @@ fn retain(
 ) -> ArtifactAuditReference {
     store
         .retain_audit(
-            &ControllerEvaluationId::new(evaluation.to_owned()).unwrap(),
+            &ControllerEvaluationId::try_from(evaluation.to_owned()).unwrap(),
             ArtifactAuditBundle::Relation(bundle(fixture)),
         )
         .unwrap()
@@ -436,7 +436,7 @@ fn delivery_claim_recovers_the_oldest_fence_before_newer_work() {
     assert_eq!(recovered.status, older_status);
     assert_eq!(recovered.target, target);
     recovered.target.credential =
-        amiss_controller::OpaqueId::new("credential/rebound".to_owned()).unwrap();
+        amiss_controller::OpaqueId::try_from("credential/rebound".to_owned()).unwrap();
     assert!(matches!(
         contender.acknowledge_status_destination(recovered),
         Err(RelationScheduleStoreError::Status(
@@ -515,7 +515,7 @@ fn reopening_status_rejects_missing_rebound_and_expired_authorities() {
 
     let mut credential_rebound = fixture.transition.relation.plan.as_ref().clone();
     credential_rebound.subjects[0].credential =
-        amiss_controller::OpaqueId::new("credential/rebound".to_owned()).unwrap();
+        amiss_controller::OpaqueId::try_from("credential/rebound".to_owned()).unwrap();
     let mut limits_rebound = fixture.transition.relation.plan.as_ref().clone();
     limits_rebound.aggregate_limits.acquisition_objects += 1;
     for rebound in [credential_rebound, limits_rebound] {

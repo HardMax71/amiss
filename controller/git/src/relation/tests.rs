@@ -25,7 +25,7 @@ fn artifact(raw: &str) -> ArtifactId {
 }
 
 fn opaque(raw: &str) -> OpaqueId {
-    OpaqueId::new(raw.to_owned()).expect("fixed opaque identity")
+    OpaqueId::try_from(raw.to_owned()).expect("fixed opaque identity")
 }
 
 fn subject(role: &str, repository: &str) -> RelationSubject {
@@ -34,9 +34,9 @@ fn subject(role: &str, repository: &str) -> RelationSubject {
         scope: PlanScope {
             provider: ProviderIdentity {
                 namespace: ProviderNamespace::try_from("github".to_owned()).expect("namespace"),
-                instance: ProviderInstance::new("github.com".to_owned()).expect("instance"),
+                instance: ProviderInstance::try_from("github.com".to_owned()).expect("instance"),
             },
-            integration: IntegrationId::new(format!("installation/{repository}"))
+            integration: IntegrationId::try_from(format!("installation/{repository}"))
                 .expect("integration"),
             repository: RepositoryIdentity::github("acme".to_owned(), repository.to_owned())
                 .expect("repository"),

@@ -149,7 +149,9 @@ impl RawConfig {
         )?;
         let scope = PlanScope {
             provider: provider.clone(),
-            integration: reviewer_integration(reviewer.id)?,
+            integration: IntegrationId::try_from(reviewer.id.to_string()).map_err(|_error| {
+                ConfigError::invalid("dedicated reviewer integration is invalid")
+            })?,
             repository,
         };
         let review_name = plan.execution.required_status_name.clone();
@@ -203,8 +205,8 @@ fn webhook_binding(
     provider: &ProviderIdentity,
     keys: Vec<WebhookKeyFile>,
 ) -> Result<(DeliveryRoute, GiteaWebhook), ConfigError> {
-    let trust_set = TrustSetId::new("gitea-family-webhook-keys".to_owned())
-        .ok_or(ConfigError::invalid("trust set identity is invalid"))?;
+    let trust_set = TrustSetId::try_from("gitea-family-webhook-keys".to_owned())
+        .map_err(|_error| ConfigError::invalid("trust set identity is invalid"))?;
     let route = DeliveryRoute {
         provider: provider.clone(),
         trust_set: trust_set.clone(),
@@ -283,12 +285,6 @@ fn target_branch(raw: &str) -> Result<BranchRef, ConfigError> {
         .ok_or(ConfigError::invalid(
             "Gitea-family target branch is invalid",
         ))
-}
-
-fn reviewer_integration(id: u64) -> Result<IntegrationId, ConfigError> {
-    IntegrationId::new(id.to_string()).ok_or(ConfigError::invalid(
-        "dedicated reviewer integration is invalid",
-    ))
 }
 
 fn load_token(path: &Path) -> Result<SecretString, ConfigError> {

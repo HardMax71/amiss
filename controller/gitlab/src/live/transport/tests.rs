@@ -113,7 +113,7 @@ fn status_mapping_is_fail_closed_and_debug_redacts_the_token() {
 fn provider() -> amiss_controller::ProviderIdentity {
     amiss_controller::ProviderIdentity {
         namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("gitlab.example".to_owned()).unwrap(),
     }
 }
 

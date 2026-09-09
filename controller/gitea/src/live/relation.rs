@@ -206,8 +206,8 @@ fn validate_relation_scope(
     scope: &PlanScope,
     object_format: ObjectFormat,
 ) -> Result<(), ProviderError> {
-    let integration =
-        IntegrationId::new(config.reviewer.id.to_string()).ok_or(ProviderError::InvalidResponse)?;
+    let integration = IntegrationId::try_from(config.reviewer.id.to_string())
+        .map_err(|_error| ProviderError::InvalidResponse)?;
     let repository = &scope.repository;
     (scope.provider == config.provider
         && scope.integration == integration

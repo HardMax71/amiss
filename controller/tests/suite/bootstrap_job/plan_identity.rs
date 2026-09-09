@@ -125,7 +125,7 @@ fn every_workflow_identity_member_changes_the_frozen_binding() {
         },
         |artifact| {
             artifact.provider.instance =
-                ProviderInstance::new("gitlab.other.internal".to_owned()).unwrap();
+                ProviderInstance::try_from("gitlab.other.internal".to_owned()).unwrap();
             artifact.repository = RepositoryIdentity::new(
                 "gitlab.other.internal".to_owned(),
                 "platform/security".to_owned(),
@@ -149,8 +149,8 @@ fn every_workflow_identity_member_changes_the_frozen_binding() {
             )
             .unwrap();
         },
-        |artifact| artifact.workflow_identity = OpaqueId::new("other.yml".to_owned()).unwrap(),
-        |artifact| artifact.event = OpaqueId::new("push".to_owned()).unwrap(),
+        |artifact| artifact.workflow_identity = OpaqueId::try_from("other.yml".to_owned()).unwrap(),
+        |artifact| artifact.event = OpaqueId::try_from("push".to_owned()).unwrap(),
         |artifact| artifact.artifact_name = "other \"β\"".to_owned(),
         |artifact| {
             artifact.payload_file = RepoPathText::new("other/template.json".to_owned()).unwrap();

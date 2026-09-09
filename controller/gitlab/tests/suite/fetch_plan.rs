@@ -73,18 +73,19 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
         "a non-canonical owner cannot enter a run request"
     );
     let mut wrong_change = request.clone();
-    wrong_change.run.change.change = ChangeId::new("merge-request/42".to_owned()).unwrap();
+    wrong_change.run.change.change = ChangeId::try_from("merge-request/42".to_owned()).unwrap();
     let mut wrong_run = request.clone();
-    wrong_run.provider_run.run_id = ProviderRunId::new("pipeline/0/job/303".to_owned()).unwrap();
+    wrong_run.provider_run.run_id =
+        ProviderRunId::try_from("pipeline/0/job/303".to_owned()).unwrap();
     let mut wrong_delivery = request.clone();
-    wrong_delivery.delivery.delivery = DeliveryId::new("signed-body".to_owned()).unwrap();
+    wrong_delivery.delivery.delivery = DeliveryId::try_from("signed-body".to_owned()).unwrap();
     let mut wrong_forge = request.clone();
     wrong_forge.run.refs.forge = ForgeDialect::Github;
     let mut wrong_format = request.clone();
     wrong_format.run.object_format = ObjectFormat::Sha256;
     let mut wrong_instance = request.clone();
     wrong_instance.delivery.provider.instance =
-        ProviderInstance::new("other.example".to_owned()).unwrap();
+        ProviderInstance::try_from("other.example".to_owned()).unwrap();
     let mut wrong_action = request;
     replace_action_repository(&mut wrong_action, repository("other.example", "hardmax71"));
 

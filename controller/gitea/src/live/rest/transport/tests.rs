@@ -102,7 +102,7 @@ fn a_repository_route_names_its_owner_and_repository() {
     let change = ChangeLocator {
         provider: ProviderIdentity {
             namespace: ProviderNamespace::try_from("gitea".to_owned()).unwrap(),
-            instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+            instance: ProviderInstance::try_from("forge.example".to_owned()).unwrap(),
         },
         repository: RepositoryIdentity::new(
             "forge.example".to_owned(),
@@ -110,7 +110,7 @@ fn a_repository_route_names_its_owner_and_repository() {
             "widget".to_owned(),
         )
         .unwrap(),
-        change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
+        change: ChangeId::try_from("repository/101/pull/4201/number/42".to_owned()).unwrap(),
     };
     let candidate = Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap();
     let pull_request = crate::GiteaPullRequest {

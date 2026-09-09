@@ -55,7 +55,7 @@ fn rejects_wrong_host_identity_change_and_object_format() {
     );
 
     let mut wrong_change = request("forgejo");
-    wrong_change.run.change.change = ChangeId::new("pull/42".to_owned()).unwrap();
+    wrong_change.run.change.change = ChangeId::try_from("pull/42".to_owned()).unwrap();
     assert_eq!(
         gitea_fetch_plan(&wrong_change),
         Err(GiteaPlanError::InvalidRequest)
@@ -116,15 +116,15 @@ fn tree_claims_do_not_change_the_provider_fetch_plan() {
 fn request(namespace: &str) -> RunRequest {
     let provider = ProviderIdentity {
         namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("forge.example".to_owned()).unwrap(),
     };
     let repository = repository("acme", "widget");
     let change = ChangeLocator {
         provider: provider.clone(),
         repository,
-        change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
+        change: ChangeId::try_from("repository/101/pull/4201/number/42".to_owned()).unwrap(),
     };
-    let integration = IntegrationId::new("77".to_owned()).unwrap();
+    let integration = IntegrationId::try_from("77".to_owned()).unwrap();
     let refs = RunRefs {
         forge: ForgeDialect::Gitea,
         candidate: branch("topic"),
@@ -145,10 +145,10 @@ fn request(namespace: &str) -> RunRequest {
         delivery: DeliveryIdentity {
             provider,
             integration,
-            delivery: DeliveryId::new("signed-body".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("signed-body".to_owned()).unwrap(),
         },
         provider_run,
-        evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation/1".to_owned()).unwrap(),
         check: check_binding(&plan).unwrap(),
         plan,
         run: RunIdentity::new(
@@ -200,7 +200,7 @@ fn provider_run(
     ])
     .unwrap();
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!("pr:{}", hb(RUN_DOMAIN, &fields))).unwrap(),
+        ProviderRunId::try_from(format!("pr:{}", hb(RUN_DOMAIN, &fields))).unwrap(),
         ProviderRunAttempt::try_from(1).unwrap(),
         ObjectFormat::Sha1,
         candidate.clone(),
@@ -263,7 +263,7 @@ fn each_demand_on_a_repository_identity_refuses_by_itself() {
     );
 
     let mut underscored = request("gitea");
-    let instance = ProviderInstance::new("forge_example".to_owned()).unwrap();
+    let instance = ProviderInstance::try_from("forge_example".to_owned()).unwrap();
     underscored.delivery.provider.instance = instance.clone();
     underscored.run.change.provider.instance = instance;
     underscored.run.change.repository = RepositoryIdentity::new(

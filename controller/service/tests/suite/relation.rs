@@ -58,15 +58,15 @@ fn delivery(transition: &RelationTransition) -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: subject.scope.provider.clone(),
             integration: subject.scope.integration.clone(),
-            delivery: DeliveryId::new("delivery/relation".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("delivery/relation".to_owned()).unwrap(),
         },
         change: ChangeLocator {
             provider: subject.scope.provider.clone(),
             repository: subject.scope.repository.clone(),
-            change: ChangeId::new("change/relation".to_owned()).unwrap(),
+            change: ChangeId::try_from("change/relation".to_owned()).unwrap(),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("run/relation".to_owned()).unwrap(),
+            ProviderRunId::try_from("run/relation".to_owned()).unwrap(),
             ProviderRunAttempt::try_from(1).unwrap(),
             subject.object_format,
             frozen.commits.candidate.clone(),
@@ -178,8 +178,7 @@ fn current_relation_work_projects_assesses_retains_and_stages_exactly()
     else {
         return Err(std::io::Error::other("new relation work was not scheduled").into());
     };
-    let evaluation_id = ControllerEvaluationId::new("evaluation/relation-service".to_owned())
-        .ok_or_else(|| std::io::Error::other("invalid evaluation identity"))?;
+    let evaluation_id = ControllerEvaluationId::try_from("evaluation/relation-service".to_owned())?;
     let staged = execute_relation_audit(
         &stores.artifacts,
         &stores.schedules,
@@ -234,8 +233,7 @@ fn superseded_relation_work_spends_no_projection_or_artifact_capacity()
         stores.schedules.schedule(next)?,
         RelationAdmission::Scheduled(_)
     ));
-    let evaluation_id = ControllerEvaluationId::new("evaluation/relation-stale".to_owned())
-        .ok_or_else(|| std::io::Error::other("invalid evaluation identity"))?;
+    let evaluation_id = ControllerEvaluationId::try_from("evaluation/relation-stale".to_owned())?;
 
     assert!(matches!(
         execute_relation_audit(
@@ -271,8 +269,7 @@ fn relation_outbox_retries_after_restart_and_acknowledges_only_success()
     else {
         return Err(std::io::Error::other("new relation work was not scheduled").into());
     };
-    let evaluation_id = ControllerEvaluationId::new("evaluation/relation-outbox".to_owned())
-        .ok_or_else(|| std::io::Error::other("invalid evaluation identity"))?;
+    let evaluation_id = ControllerEvaluationId::try_from("evaluation/relation-outbox".to_owned())?;
     let staged = execute_relation_audit(
         &artifacts,
         &schedules,

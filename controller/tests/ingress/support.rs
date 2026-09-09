@@ -35,13 +35,13 @@ pub(crate) const GITLAB_HEADERS: &[DeliveryHeader<'_>] = &[
 ];
 
 pub(crate) fn opaque(value: &str) -> OpaqueId {
-    OpaqueId::new(value.to_owned()).unwrap()
+    OpaqueId::try_from(value.to_owned()).unwrap()
 }
 
 pub(crate) fn provider(instance: &str) -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("forge".to_owned()).unwrap(),
-        instance: ProviderInstance::new(instance.to_owned()).unwrap(),
+        instance: ProviderInstance::try_from(instance.to_owned()).unwrap(),
     }
 }
 
@@ -79,8 +79,8 @@ pub(crate) fn split_delivery(
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("untrusted-placeholder".to_owned()).unwrap(),
+            integration: IntegrationId::try_from("installation-7".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("untrusted-placeholder".to_owned()).unwrap(),
         },
         change: ChangeLocator {
             provider: change_provider.clone(),
@@ -90,10 +90,10 @@ pub(crate) fn split_delivery(
                 "amiss".to_owned(),
             )
             .unwrap(),
-            change: ChangeId::new("42".to_owned()).unwrap(),
+            change: ChangeId::try_from("42".to_owned()).unwrap(),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("run-11".to_owned()).unwrap(),
+            ProviderRunId::try_from("run-11".to_owned()).unwrap(),
             ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap(),

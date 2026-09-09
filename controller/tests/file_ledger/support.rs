@@ -66,7 +66,7 @@ fn gitlab_provider() -> ProviderIdentity {
 fn provider_in(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example.test".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("forge.example.test".to_owned()).unwrap(),
     }
 }
 
@@ -89,7 +89,7 @@ pub(super) fn bounded_delivery_at(
     issued_at: i64,
 ) -> AcceptedDelivery {
     let provider = gitlab_provider();
-    let trust_set = OpaqueId::new("webhooks-main".to_owned()).unwrap();
+    let trust_set = OpaqueId::try_from("webhooks-main".to_owned()).unwrap();
     let route = DeliveryRoute {
         provider: provider.clone(),
         trust_set: trust_set.clone(),
@@ -129,7 +129,7 @@ pub(super) fn bounded_delivery_at(
         )
         .unwrap();
     let key = WebhookKey::new(
-        OpaqueId::new("gitlab-current".to_owned()).unwrap(),
+        OpaqueId::try_from("gitlab-current".to_owned()).unwrap(),
         WEBHOOK_SECRET.to_vec(),
         0,
         None,
@@ -161,8 +161,8 @@ fn authenticated_delivery(
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: DeliveryId::new(delivery_id.to_owned()).unwrap(),
+            integration: IntegrationId::try_from("installation-7".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from(delivery_id.to_owned()).unwrap(),
         },
         change: change(provider, change_id),
         provider_run: provider_run(),
@@ -189,13 +189,13 @@ fn change(provider: ProviderIdentity, change_id: &str) -> ChangeLocator {
             "amiss".to_owned(),
         )
         .unwrap(),
-        change: ChangeId::new(change_id.to_owned()).unwrap(),
+        change: ChangeId::try_from(change_id.to_owned()).unwrap(),
     }
 }
 
 fn provider_run() -> ProviderRunIdentity {
     ProviderRunIdentity::new(
-        ProviderRunId::new("provider-run-11".to_owned()).unwrap(),
+        ProviderRunId::try_from("provider-run-11".to_owned()).unwrap(),
         ProviderRunAttempt::try_from(1).unwrap(),
         ObjectFormat::Sha1,
         oid('b'),

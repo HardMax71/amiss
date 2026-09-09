@@ -20,8 +20,8 @@ pub(super) fn validate_publication(
     pull_request: GiteaPullRequest<'_>,
     publication: &Publication,
 ) -> Result<(), ProviderError> {
-    let integration =
-        IntegrationId::new(config.reviewer.id.to_string()).ok_or(ProviderError::InvalidResponse)?;
+    let integration = IntegrationId::try_from(config.reviewer.id.to_string())
+        .map_err(|_error| ProviderError::InvalidResponse)?;
     let expected_run = provider_run(
         &integration,
         pull_request.change,

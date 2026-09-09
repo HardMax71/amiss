@@ -31,7 +31,7 @@ fn artifact(raw: &str) -> ArtifactId {
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("github.com".to_owned()).unwrap(),
     }
 }
 
@@ -42,7 +42,7 @@ fn repository(name: &str) -> RepositoryIdentity {
 fn scope(name: &str) -> PlanScope {
     PlanScope {
         provider: provider(),
-        integration: IntegrationId::new(format!("installation/{name}")).unwrap(),
+        integration: IntegrationId::try_from(format!("installation/{name}")).unwrap(),
         repository: repository(name),
     }
 }
@@ -62,7 +62,7 @@ fn subject(role: &str, repository: &str, set: &str) -> RelationSubject {
         scope: scope(repository),
         target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
         object_format: ObjectFormat::Sha1,
-        credential: OpaqueId::new(format!("git/{repository}")).unwrap(),
+        credential: OpaqueId::try_from(format!("git/{repository}")).unwrap(),
         source: ProjectionSource::RecordSet(RecordSetSelection { set: artifact(set) }),
         limits: limits(100, 1_048_576),
     }
@@ -105,15 +105,15 @@ fn delivery(repository: &str, object_format: ObjectFormat) -> AuthenticatedDeliv
         identity: DeliveryIdentity {
             provider: scope.provider.clone(),
             integration: scope.integration,
-            delivery: DeliveryId::new("delivery/1".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("delivery/1".to_owned()).unwrap(),
         },
         change: ChangeLocator {
             provider: scope.provider,
             repository: scope.repository,
-            change: ChangeId::new("pull/7".to_owned()).unwrap(),
+            change: ChangeId::try_from("pull/7".to_owned()).unwrap(),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("run/9".to_owned()).unwrap(),
+            ProviderRunId::try_from("run/9".to_owned()).unwrap(),
             ProviderRunAttempt::try_from(1).unwrap(),
             object_format,
             Oid::new(object_format, hex).unwrap(),
@@ -234,7 +234,7 @@ fn an_inconsistent_authenticated_identity_never_selects_a_relation() {
     let registry = relation_registry(vec![plan("relation/api", "service", "handbook")]).unwrap();
     let mut inconsistent = delivery("service", ObjectFormat::Sha1);
     inconsistent.change.provider.instance =
-        ProviderInstance::new("elsewhere.test".to_owned()).unwrap();
+        ProviderInstance::try_from("elsewhere.test".to_owned()).unwrap();
     assert!(relations_for_delivery(&registry, &inconsistent).is_err());
 }
 
@@ -293,13 +293,13 @@ fn credential_router_freezes_one_authority_for_every_required_identity() {
     );
 
     let mut missing = source.clone();
-    missing.credential = OpaqueId::new("git/unknown".to_owned()).unwrap();
+    missing.credential = OpaqueId::try_from("git/unknown".to_owned()).unwrap();
     assert_eq!(
         relation_authority(&router, &missing.credential, &missing.scope).err(),
         Some(RelationCredentialError::Missing)
     );
     let mut rebound = source;
-    rebound.scope.integration = IntegrationId::new("installation/other".to_owned()).unwrap();
+    rebound.scope.integration = IntegrationId::try_from("installation/other".to_owned()).unwrap();
     assert_eq!(
         relation_authority(&router, &rebound.credential, &rebound.scope).err(),
         Some(RelationCredentialError::Rebound)
@@ -318,7 +318,7 @@ fn credential_router_rejects_missing_unused_and_repeated_rows() {
     );
 
     let mut unused = credential_route(&source, "unused");
-    unused.identity = OpaqueId::new("git/unused".to_owned()).unwrap();
+    unused.identity = OpaqueId::try_from("git/unused".to_owned()).unwrap();
     assert_eq!(
         relation_credential_router(
             &registry,
@@ -428,8 +428,9 @@ fn one_provider_repository_status_key_has_one_relation_owner() {
         .iter_mut()
         .find(|subject| subject.role.as_str() == "documentation")
         .unwrap();
-    documentation.scope.integration = IntegrationId::new("installation/other".to_owned()).unwrap();
-    documentation.credential = OpaqueId::new("git/other".to_owned()).unwrap();
+    documentation.scope.integration =
+        IntegrationId::try_from("installation/other".to_owned()).unwrap();
+    documentation.credential = OpaqueId::try_from("git/other".to_owned()).unwrap();
     assert_eq!(
         relation_registry(vec![first.clone(), second.clone()]).err(),
         Some(RelationRegistryError::DuplicateDestination)
@@ -621,7 +622,7 @@ fn status_targets_fail_closed_on_moved_or_malformed_finality() {
     );
 
     let mut rebound = heads.clone();
-    rebound[0].subject.credential = OpaqueId::new("git/other".to_owned()).unwrap();
+    rebound[0].subject.credential = OpaqueId::try_from("git/other".to_owned()).unwrap();
     assert_eq!(
         relation_status_targets(&pending, rebound).unwrap_err(),
         RelationStatusError::InvalidHeads

@@ -97,16 +97,16 @@ fn relation_delivery(
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new(integration.to_owned()).unwrap(),
-            delivery: DeliveryId::new("delivery/1".to_owned()).unwrap(),
+            integration: IntegrationId::try_from(integration.to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("delivery/1".to_owned()).unwrap(),
         },
         change: ChangeLocator {
             provider,
             repository,
-            change: ChangeId::new("change/1".to_owned()).unwrap(),
+            change: ChangeId::try_from("change/1".to_owned()).unwrap(),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("run/1".to_owned()).unwrap(),
+            ProviderRunId::try_from("run/1".to_owned()).unwrap(),
             ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),

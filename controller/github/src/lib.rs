@@ -367,7 +367,8 @@ fn bind_pull_request(
         repository,
         change: change_id(repository_id, pull_request_id, number).ok_or(Authentication)?,
     };
-    let integration = IntegrationId::new(installation_id.to_string()).ok_or(Authentication)?;
+    let integration =
+        IntegrationId::try_from(installation_id.to_string()).map_err(|_error| Authentication)?;
     let candidate =
         Oid::new(ObjectFormat::Sha1, binding.candidate.to_owned()).ok_or(Authentication)?;
     let candidate_ref = github_ref(binding.candidate_branch).ok_or(Authentication)?;
@@ -385,7 +386,8 @@ fn bind_pull_request(
             identity: DeliveryIdentity {
                 provider: provider.clone(),
                 integration,
-                delivery: DeliveryId::new("signed-body".to_owned()).ok_or(Authentication)?,
+                delivery: DeliveryId::try_from("signed-body".to_owned())
+                    .map_err(|_error| Authentication)?,
             },
             change,
             provider_run,
@@ -568,7 +570,7 @@ fn provider_run(
     ])
     .ok()?;
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!("pr:{}", hb(RUN_DOMAIN, &fields)))?,
+        ProviderRunId::try_from(format!("pr:{}", hb(RUN_DOMAIN, &fields))).ok()?,
         ProviderRunAttempt::try_from(1).ok()?,
         ObjectFormat::Sha1,
         candidate.clone(),
@@ -580,9 +582,10 @@ fn positive(value: u64) -> Option<u64> {
 }
 
 fn change_id(repository_id: u64, pull_request_id: u64, number: u64) -> Option<ChangeId> {
-    ChangeId::new(format!(
+    ChangeId::try_from(format!(
         "repository/{repository_id}/pull/{pull_request_id}/number/{number}"
     ))
+    .ok()
 }
 
 fn parse_change_id(raw: &str) -> Option<(u64, u64, u64)> {

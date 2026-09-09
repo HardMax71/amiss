@@ -22,7 +22,7 @@ fn branch(name: &str) -> BranchRef {
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("gitea".to_owned()).expect("a namespace"),
-        instance: ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
+        instance: ProviderInstance::try_from("forge.example".to_owned()).expect("an instance"),
     }
 }
 
@@ -40,9 +40,10 @@ fn delivery() -> AuthenticatedDelivery {
             "widget".to_owned(),
         )
         .expect("an identity"),
-        change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).expect("a change"),
+        change: ChangeId::try_from("repository/101/pull/4201/number/42".to_owned())
+            .expect("a change"),
     };
-    let integration = IntegrationId::new("77".to_owned()).expect("an integration");
+    let integration = IntegrationId::try_from("77".to_owned()).expect("an integration");
     let provider_run = crate::identity::provider_run(
         &integration,
         &change,
@@ -55,7 +56,7 @@ fn delivery() -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider,
             integration,
-            delivery: DeliveryId::new("signed-body".to_owned()).expect("a delivery id"),
+            delivery: DeliveryId::try_from("signed-body".to_owned()).expect("a delivery id"),
         },
         change,
         provider_run,
@@ -94,19 +95,21 @@ fn a_delivery_answers_for_every_field_alone() {
 
     let elsewhere = ProviderIdentity {
         namespace: ProviderNamespace::try_from("gitea".to_owned()).expect("a namespace"),
-        instance: ProviderInstance::new("other.example".to_owned()).expect("an instance"),
+        instance: ProviderInstance::try_from("other.example".to_owned()).expect("an instance"),
     };
     let rows: [(&str, Deviation); 7] = [
         ("another delivery provider", |delivery| {
             delivery.identity.provider = ProviderIdentity {
                 namespace: ProviderNamespace::try_from("forgejo".to_owned()).expect("a namespace"),
-                instance: ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
+                instance: ProviderInstance::try_from("forge.example".to_owned())
+                    .expect("an instance"),
             };
         }),
         ("another change provider", |delivery| {
             delivery.change.provider = ProviderIdentity {
                 namespace: ProviderNamespace::try_from("forgejo".to_owned()).expect("a namespace"),
-                instance: ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
+                instance: ProviderInstance::try_from("forge.example".to_owned())
+                    .expect("an instance"),
             };
         }),
         ("a nested owner", |delivery| {
@@ -130,7 +133,7 @@ fn a_delivery_answers_for_every_field_alone() {
         }),
         ("a run nobody minted", |delivery| {
             delivery.provider_run.run_id =
-                amiss_controller::ProviderRunId::new("pr:not-a-digest".to_owned())
+                amiss_controller::ProviderRunId::try_from("pr:not-a-digest".to_owned())
                     .expect("a run id");
         }),
     ];

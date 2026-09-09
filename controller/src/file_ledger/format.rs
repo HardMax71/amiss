@@ -33,7 +33,15 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Record, FileLedgerError> {
 
 pub(super) fn delivery_key(identity: &DeliveryIdentity) -> Result<String, FileLedgerError> {
     let digest = hj_serde(KEY_DOMAIN, |writer| {
-        serde_json::to_writer(writer, &StoredDeliveryKey::new(identity))
+        serde_json::to_writer(
+            writer,
+            &StoredDeliveryKey {
+                provider_namespace: &identity.provider.namespace,
+                provider_instance: &identity.provider.instance,
+                integration: &identity.integration,
+                delivery: &identity.delivery,
+            },
+        )
     })
     .map_err(|_defect| FileLedgerError::Corrupt)?;
     Ok(hex::encode(digest.as_bytes()))
@@ -43,12 +51,12 @@ pub(super) fn evaluation_id(
     identity: &DeliveryIdentity,
     nonce: &[u8; 16],
 ) -> Result<ControllerEvaluationId, FileLedgerError> {
-    ControllerEvaluationId::new(format!(
+    ControllerEvaluationId::try_from(format!(
         "eval:{}:{}",
         delivery_key(identity)?,
         hex::encode(nonce)
     ))
-    .ok_or(FileLedgerError::Corrupt)
+    .map_err(|_error| FileLedgerError::Corrupt)
 }
 
 pub(super) fn staged_digest(
@@ -57,7 +65,7 @@ pub(super) fn staged_digest(
     publication: &StoredPublication,
 ) -> Result<Digest, FileLedgerError> {
     let value = StagedDigest {
-        evaluation_id: evaluation_id.as_str(),
+        evaluation_id,
         fence,
         publication,
     };
@@ -69,7 +77,7 @@ pub(super) fn staged_digest(
 
 #[derive(Serialize)]
 struct StagedDigest<'a> {
-    evaluation_id: &'a str,
+    evaluation_id: &'a ControllerEvaluationId,
     fence: u64,
     publication: &'a StoredPublication,
 }

@@ -26,7 +26,8 @@ fn branch(name: &str) -> BranchRef {
 fn run_identity(candidate: char) -> RunIdentity {
     let provider = ProviderIdentity {
         namespace: crate::ProviderNamespace::try_from("gitea".to_owned()).expect("a namespace"),
-        instance: crate::ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
+        instance: crate::ProviderInstance::try_from("forge.example".to_owned())
+            .expect("an instance"),
     };
     let change = ChangeLocator {
         provider,
@@ -36,7 +37,7 @@ fn run_identity(candidate: char) -> RunIdentity {
             "widget".to_owned(),
         )
         .expect("an identity"),
-        change: ChangeId::new("pull/42".to_owned()).expect("a change"),
+        change: ChangeId::try_from("pull/42".to_owned()).expect("a change"),
     };
     RunIdentity::new(
         change,
@@ -75,20 +76,20 @@ fn request() -> super::super::model::RunRequest {
             provider: ProviderIdentity {
                 namespace: crate::ProviderNamespace::try_from("gitea".to_owned())
                     .expect("a namespace"),
-                instance: crate::ProviderInstance::new("forge.example".to_owned())
+                instance: crate::ProviderInstance::try_from("forge.example".to_owned())
                     .expect("an instance"),
             },
-            integration: IntegrationId::new("77".to_owned()).expect("an integration"),
-            delivery: DeliveryId::new("signed-body".to_owned()).expect("a delivery"),
+            integration: IntegrationId::try_from("77".to_owned()).expect("an integration"),
+            delivery: DeliveryId::try_from("signed-body".to_owned()).expect("a delivery"),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("pr:run".to_owned()).expect("a run id"),
+            ProviderRunId::try_from("pr:run".to_owned()).expect("a run id"),
             ProviderRunAttempt::try_from(1).expect("an attempt"),
             ObjectFormat::Sha1,
             oid('b'),
         )
         .expect("a provider run"),
-        evaluation_id: crate::ControllerEvaluationId::new("evaluation/1".to_owned())
+        evaluation_id: crate::ControllerEvaluationId::try_from("evaluation/1".to_owned())
             .expect("an evaluation id"),
         check: check_binding(&plan).expect("a binding"),
         plan,

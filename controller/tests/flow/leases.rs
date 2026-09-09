@@ -218,7 +218,7 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
     let run = run(change.clone(), 'b', 'd');
     let expected = lease();
     let changed_evaluation = DeliveryLease {
-        evaluation_id: ControllerEvaluationId::new("evaluation-02".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation-02".to_owned()).unwrap(),
         ..expected.clone()
     };
     let changed_fence = DeliveryLease {
@@ -262,7 +262,7 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
 fn submitted_publication(run: &RunIdentity, delivery: &AuthenticatedDelivery) -> Publication {
     Publication {
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation-01".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation-01".to_owned()).unwrap(),
         check: binding(),
         run: run.clone(),
         gate_commit: run.commits.candidate.clone(),
@@ -324,7 +324,7 @@ fn a_staged_row_must_echo_the_lease_and_publication_exactly() {
 
     let mut wrong_evaluation = staged_publication.clone();
     wrong_evaluation.evaluation_id =
-        ControllerEvaluationId::new("evaluation-02".to_owned()).unwrap();
+        ControllerEvaluationId::try_from("evaluation-02".to_owned()).unwrap();
     let (adapter, ledger) = scripted(Some(wrong_evaluation), expected.clone());
     let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
     assert!(matches!(

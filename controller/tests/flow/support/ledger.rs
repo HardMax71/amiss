@@ -191,7 +191,7 @@ pub(crate) fn lease() -> DeliveryLease {
 
 fn lease_with(check: CheckBinding) -> DeliveryLease {
     DeliveryLease {
-        evaluation_id: ControllerEvaluationId::new("evaluation-01".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation-01".to_owned()).unwrap(),
         check,
         fence: LeaseFence::new(1).unwrap(),
         expires_at_unix_millis: 1_800_000_100_000,

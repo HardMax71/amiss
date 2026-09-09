@@ -73,7 +73,7 @@ impl Blob {
 pub(super) struct Record {
     schema: String,
     pub(super) id: String,
-    pub(super) evaluation_id: String,
+    pub(super) evaluation_id: ControllerEvaluationId,
     pub(super) created_at_unix_millis: i64,
     pub(super) expires_at_unix_millis: i64,
     pub(super) report: Blob,
@@ -127,7 +127,7 @@ impl Record {
         let mut record = Self {
             schema: RECORD_SCHEMA.to_owned(),
             id: String::new(),
-            evaluation_id: evaluation_id.as_str().to_owned(),
+            evaluation_id: evaluation_id.clone(),
             created_at_unix_millis,
             expires_at_unix_millis,
             report: input.report,
@@ -176,7 +176,6 @@ impl Record {
                 && !self.external_incomplete;
         if self.schema != RECORD_SCHEMA
             || !valid_id(&self.id)
-            || super::evaluation_id(&self.evaluation_id).is_err()
             || self.created_at_unix_millis < 0
             || self.created_at_unix_millis.checked_add(retention_millis)
                 != Some(self.expires_at_unix_millis)
@@ -270,7 +269,7 @@ impl Record {
     fn expected_id(&self) -> Result<String, ArtifactError> {
         #[derive(Serialize)]
         struct Identity<'a> {
-            evaluation_id: &'a str,
+            evaluation_id: &'a ControllerEvaluationId,
             report: &'a Blob,
             plan: &'a Option<Blob>,
             evidence: &'a Option<Blob>,

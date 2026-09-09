@@ -203,7 +203,7 @@ pub(super) fn snapshot(
 pub(super) fn provider(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("forge.example".to_owned()).unwrap(),
     }
 }
 

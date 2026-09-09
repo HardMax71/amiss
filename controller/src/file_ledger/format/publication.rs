@@ -22,7 +22,7 @@ const REPORT_DOMAIN: &str = "amiss/controller-report-blob-v1";
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger) struct StoredPublication {
     provider_run: StoredProviderRun,
-    evaluation_id: String,
+    evaluation_id: ControllerEvaluationId,
     check: CheckBinding,
     run: StoredRun,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -39,12 +39,12 @@ impl StoredPublication {
         let report = StoredReport::new(publication.report.as_deref())?;
         Ok(Self {
             provider_run: StoredProviderRun {
-                run_id: publication.provider_run.run_id.as_str().to_owned(),
+                run_id: publication.provider_run.run_id.clone(),
                 attempt: publication.provider_run.attempt,
                 object_format: publication.provider_run.object_format,
                 candidate_commit: publication.provider_run.candidate_commit.clone(),
             },
-            evaluation_id: publication.evaluation_id.as_str().to_owned(),
+            evaluation_id: publication.evaluation_id.clone(),
             check: publication.check.clone(),
             run: StoredRun {
                 change: StoredChange::new(&publication.run.change),
@@ -127,8 +127,7 @@ impl StoredPublication {
         }
         Ok(Publication {
             provider_run: self.provider_run.materialize()?,
-            evaluation_id: ControllerEvaluationId::new(self.evaluation_id.clone())
-                .ok_or(FileLedgerError::Corrupt)?,
+            evaluation_id: self.evaluation_id.clone(),
             check: self.check.clone(),
             run,
             gate_commit: self.gate_commit.clone(),
@@ -140,7 +139,7 @@ impl StoredPublication {
 
     pub(super) fn validate_binding(
         &self,
-        expected_evaluation_id: &str,
+        expected_evaluation_id: &ControllerEvaluationId,
         delivery: &AuthenticatedDelivery,
         expected_check: &CheckBinding,
     ) -> Result<(), FileLedgerError> {
@@ -148,7 +147,7 @@ impl StoredPublication {
             return Err(FileLedgerError::Corrupt);
         }
         let publication = self.materialize_metadata()?;
-        if publication.evaluation_id.as_str() != expected_evaluation_id
+        if publication.evaluation_id != *expected_evaluation_id
             || publication.provider_run != delivery.provider_run
             || publication.run.change != delivery.change
             || publication.run.object_format != delivery.provider_run.object_format

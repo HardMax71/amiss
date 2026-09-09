@@ -14,7 +14,7 @@ pub fn run_request(delivery: &AuthenticatedDelivery, snapshot: &ChangeSnapshot) 
     RunRequest {
         delivery: delivery.identity.clone(),
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation/1".to_owned()).unwrap(),
         check: check_binding(&plan).unwrap(),
         plan,
         run: snapshot.run.clone(),

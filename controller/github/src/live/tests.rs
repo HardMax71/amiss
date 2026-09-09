@@ -142,7 +142,8 @@ fn refresh_rejects_wrong_ids_and_github_path_shapes() {
     );
 
     let mut inconsistent = fixture.change.clone();
-    inconsistent.change = ChangeId::new("repository/101/pull/4201/number/43".to_owned()).unwrap();
+    inconsistent.change =
+        ChangeId::try_from("repository/101/pull/4201/number/43".to_owned()).unwrap();
     let request = GitHubPullRequest {
         change: &inconsistent,
         ..fixture.request()
@@ -394,7 +395,7 @@ fn a_token_answers_only_for_its_own_installation() {
     let app = GitHubApp::new(
         ProviderIdentity {
             namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-            instance: ProviderInstance::new("ghes.invalid".to_owned()).unwrap(),
+            instance: ProviderInstance::try_from("ghes.invalid".to_owned()).unwrap(),
         },
         APP_ID,
         INSTALLATION_ID,
@@ -790,7 +791,7 @@ impl Fixture {
     fn publication(&self, conclusion: CheckConclusion) -> Publication {
         let snapshot = super::refresh::snapshot(&self.config, self.request(), &self.data).unwrap();
         let digest = hb("amiss/controller-github-live-test", b"fixture");
-        let integration = IntegrationId::new(INSTALLATION_ID.to_string()).unwrap();
+        let integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
         let provider_run = crate::provider_run(
             &integration,
             &self.change,
@@ -802,7 +803,7 @@ impl Fixture {
         let gate_commit = snapshot.gate_commit.clone();
         Publication {
             provider_run,
-            evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),
+            evaluation_id: ControllerEvaluationId::try_from("evaluation-1".to_owned()).unwrap(),
             check: CheckBinding {
                 plan_digest: digest,
                 required_status_name: self.config.required_status_name.clone(),
@@ -1055,12 +1056,12 @@ fn decision_error(
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("github.com".to_owned()).unwrap(),
     }
 }
 
 fn change_id() -> ChangeId {
-    OpaqueId::new("repository/101/pull/4201/number/42".to_owned()).unwrap()
+    OpaqueId::try_from("repository/101/pull/4201/number/42".to_owned()).unwrap()
 }
 
 fn oid(value: char) -> Oid {
@@ -1084,7 +1085,7 @@ fn refresh_rejects_a_request_wrong_in_one_field() {
     let elsewhere = ChangeLocator {
         provider: ProviderIdentity {
             namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-            instance: ProviderInstance::new("github.example".to_owned()).unwrap(),
+            instance: ProviderInstance::try_from("github.example".to_owned()).unwrap(),
         },
         repository: fixture.change.repository.clone(),
         change: change_id(),

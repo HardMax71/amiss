@@ -28,8 +28,8 @@ pub fn load_webhook_keyring(
     let keys = raw
         .into_iter()
         .map(|key| {
-            let anchor = TrustAnchorId::new(key.id)
-                .ok_or(ConfigError::invalid("webhook key identity is invalid"))?;
+            let anchor = TrustAnchorId::try_from(key.id)
+                .map_err(|_error| ConfigError::invalid("webhook key identity is invalid"))?;
             let secret = read_regular(&key.secret_file, WEBHOOK_SECRET_BYTES)?;
             WebhookKey::new(
                 anchor,

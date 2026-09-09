@@ -234,9 +234,9 @@ impl Fixture {
         let change = ChangeLocator {
             provider: provider.clone(),
             repository,
-            change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
+            change: ChangeId::try_from("repository/101/pull/4201/number/42".to_owned()).unwrap(),
         };
-        let integration = IntegrationId::new("77".to_owned()).unwrap();
+        let integration = IntegrationId::try_from("77".to_owned()).unwrap();
         let provider_run = crate::identity::provider_run(
             &integration,
             &change,
@@ -249,7 +249,7 @@ impl Fixture {
             identity: DeliveryIdentity {
                 provider: provider.clone(),
                 integration,
-                delivery: DeliveryId::new("signed-body".to_owned()).unwrap(),
+                delivery: DeliveryId::try_from("signed-body".to_owned()).unwrap(),
             },
             change: change.clone(),
             provider_run,
@@ -301,7 +301,7 @@ impl Fixture {
         let digest = hb("amiss/controller-gitea-live-test", b"fixture");
         Publication {
             provider_run: self.delivery.provider_run.clone(),
-            evaluation_id: ControllerEvaluationId::new(evaluation.to_owned()).unwrap(),
+            evaluation_id: ControllerEvaluationId::try_from(evaluation.to_owned()).unwrap(),
             check: CheckBinding {
                 plan_digest: digest,
                 required_status_name: "amiss".to_owned(),
@@ -325,7 +325,7 @@ pub(super) fn reviewer() -> DedicatedReviewer {
 pub(super) fn provider(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("forge.example".to_owned()).unwrap(),
     }
 }
 

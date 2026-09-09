@@ -132,9 +132,9 @@ fn load_workflow_artifacts(
             Ok(WorkflowArtifactExpectation {
                 provider: provider.clone(),
                 repository: repository.clone(),
-                workflow_identity: OpaqueId::new(file.workflow_identity.clone())
-                    .ok_or_else(invalid)?,
-                event: OpaqueId::new(file.event.clone()).ok_or_else(invalid)?,
+                workflow_identity: OpaqueId::try_from(file.workflow_identity.clone())
+                    .map_err(|_error| invalid())?,
+                event: OpaqueId::try_from(file.event.clone()).map_err(|_error| invalid())?,
                 artifact_name: file.artifact_name.clone(),
                 payload_file: RepoPathText::new(file.payload_file.clone()).ok_or_else(invalid)?,
                 archive_byte_limit: file.archive_byte_limit,

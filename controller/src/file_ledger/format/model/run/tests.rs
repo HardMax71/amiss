@@ -25,7 +25,7 @@ fn stored_ledger_identity_preimages_are_stable() {
     use crate::file_ledger::format::{StoredPublication, delivery_key, staged_digest};
     use crate::{ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId};
 
-    let evaluation = ControllerEvaluationId::new("eval/ledger".to_owned()).unwrap();
+    let evaluation = ControllerEvaluationId::try_from("eval/ledger".to_owned()).unwrap();
     let raw = format!(
         r#"{{"provider_run":{PROVIDER_RUN},"evaluation_id":"eval/ledger","check":{{"plan_digest":"sha256:{plan}","required_status_name":"amiss/enforce","execution_constraint_digest":"sha256:{constraint}"}},"run":{RUN},"gate_commit":"{gate}","conclusion":{{"conclusion":"pass"}},"report":{{"report":"absent"}}}}"#,
         plan = "a".repeat(64),
@@ -33,11 +33,16 @@ fn stored_ledger_identity_preimages_are_stable() {
         gate = "b".repeat(40),
     );
     let stored: StoredPublication = serde_json::from_str(&raw).unwrap();
+    for replacement in ["\"\"", "\"eval invalid\"", "null", "[]"] {
+        let mutation = raw.replace("\"eval/ledger\"", replacement);
+        assert_ne!(mutation, raw);
+        assert!(serde_json::from_str::<StoredPublication>(&mutation).is_err());
+    }
     let publication = stored.materialize(None).unwrap();
     let identity = DeliveryIdentity {
         provider: publication.run.change.provider,
-        integration: IntegrationId::new("integration/7".to_owned()).unwrap(),
-        delivery: DeliveryId::new("delivery/42".to_owned()).unwrap(),
+        integration: IntegrationId::try_from("integration/7".to_owned()).unwrap(),
+        delivery: DeliveryId::try_from("delivery/42".to_owned()).unwrap(),
     };
     assert_eq!(
         delivery_key(&identity).unwrap(),
@@ -81,6 +86,43 @@ fn stored_provider_attempts_are_checked_before_materialization() {
     let restored = stored.materialize().unwrap();
     assert_eq!(*restored.attempt, 9_007_199_254_740_991);
     assert_eq!(serde_json::to_string(&stored).unwrap(), maximum);
+}
+
+#[test]
+fn stored_opaque_identities_are_checked_before_materialization() {
+    for raw in [
+        "\"\"",
+        "\"has space\"",
+        "\"bad%id\"",
+        "\"a\\n\"",
+        "null",
+        "42",
+    ] {
+        let mutation = PROVIDER_RUN.replace("\"run/11\"", raw);
+        assert!(
+            serde_json::from_str::<StoredProviderRun>(&mutation).is_err(),
+            "{mutation}"
+        );
+        for original in ["\"forge.example.test\"", "\"42\""] {
+            let mutation = RUN.replacen(original, raw, 1);
+            assert_ne!(mutation, RUN);
+            assert!(
+                serde_json::from_str::<StoredRun>(&mutation).is_err(),
+                "{mutation}"
+            );
+        }
+    }
+    for (length, accepted) in [(256, true), (257, false)] {
+        let spelling = "A".repeat(length);
+        let mutation = PROVIDER_RUN.replace("run/11", &spelling);
+        let parsed = serde_json::from_str::<StoredProviderRun>(&mutation);
+        assert_eq!(parsed.is_ok(), accepted);
+        if accepted {
+            let stored = parsed.unwrap();
+            assert_eq!(stored.materialize().unwrap().run_id.as_str(), spelling);
+            assert_eq!(serde_json::to_string(&stored).unwrap(), mutation);
+        }
+    }
 }
 
 #[test]

@@ -73,26 +73,26 @@ pub(crate) fn authenticated_facts(
             .ok_or(ProviderError::Authentication)?,
     };
     let provider_run = ProviderRunIdentity::new(
-        ProviderRunId::new(format!(
+        ProviderRunId::try_from(format!(
             "pipeline/{}/job/{}",
             claims.pipeline_id, claims.job_id
         ))
-        .ok_or(ProviderError::Authentication)?,
+        .map_err(|_error| ProviderError::Authentication)?,
         ProviderRunAttempt::try_from(1).map_err(|_error| ProviderError::Authentication)?,
         ObjectFormat::Sha1,
         gate,
     )
     .ok_or(ProviderError::Authentication)?;
     let digest = amiss_wire::digest::hb("amiss/gitlab-oidc-jti-v1", claims.jti.as_bytes());
-    let replay = DeliveryId::new(format!("oidc/runner/{}/jti/{digest}", claims.runner_id))
-        .ok_or(ProviderError::Authentication)?;
+    let replay = DeliveryId::try_from(format!("oidc/runner/{}/jti/{digest}", claims.runner_id))
+        .map_err(|_error| ProviderError::Authentication)?;
     Ok(AuthenticatedFacts {
         delivery: AuthenticatedDelivery {
             identity: DeliveryIdentity {
                 provider: provider.clone(),
                 integration: policy.integration.clone(),
-                delivery: DeliveryId::new("pending".to_owned())
-                    .ok_or(ProviderError::Authentication)?,
+                delivery: DeliveryId::try_from("pending".to_owned())
+                    .map_err(|_error| ProviderError::Authentication)?,
             },
             change,
             provider_run,
@@ -103,9 +103,10 @@ pub(crate) fn authenticated_facts(
 }
 
 fn change_id(project_id: u64, merge_request_iid: u64) -> Option<ChangeId> {
-    ChangeId::new(format!(
+    ChangeId::try_from(format!(
         "project/{project_id}/merge-request/{merge_request_iid}"
     ))
+    .ok()
 }
 
 #[derive(Deserialize)]

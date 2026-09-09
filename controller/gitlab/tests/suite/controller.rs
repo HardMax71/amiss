@@ -74,7 +74,8 @@ fn signed_policy_request_runs_once_and_replay_cannot_pass_again() {
 fn controller_classifies_wrong_identity_and_wrong_tree_without_passing() {
     let now = now_seconds();
     let wrong_identity = run_once(now, |mut identity| {
-        identity.change.change = OpaqueId::new("project/101/merge-request/99".to_owned()).unwrap();
+        identity.change.change =
+            OpaqueId::try_from("project/101/merge-request/99".to_owned()).unwrap();
         identity
     });
     assert_eq!(

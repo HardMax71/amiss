@@ -72,7 +72,7 @@ fn every_workflow_run_binding_clause_fails_closed() {
     }
 
     let mut numeric = expectation.clone();
-    numeric.workflow_identity = OpaqueId::new("123".to_owned()).unwrap();
+    numeric.workflow_identity = OpaqueId::try_from("123".to_owned()).unwrap();
     assert_eq!(
         select_workflow_run(&config, &numeric, &candidate, run_page(&candidate)).err(),
         Some(ProviderError::InvalidResponse)
@@ -183,8 +183,8 @@ fn fixture() -> (Config, WorkflowArtifactExpectation, Oid) {
         WorkflowArtifactExpectation {
             provider,
             repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
-            workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
-            event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+            workflow_identity: OpaqueId::try_from("docs-evidence.yml".to_owned()).unwrap(),
+            event: OpaqueId::try_from("pull_request".to_owned()).unwrap(),
             artifact_name: "amiss-semantic-evidence".to_owned(),
             payload_file: RepoPathText::new(PAYLOAD_FILE.to_owned()).unwrap(),
             archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,

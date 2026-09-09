@@ -383,8 +383,8 @@ fn signature(body: &[u8]) -> Vec<u8> {
 }
 
 fn verifier() -> GitHubWebhook {
-    let trust_set = OpaqueId::new("webhooks-main".to_owned()).unwrap();
-    let anchor = OpaqueId::new("anchor-current".to_owned()).unwrap();
+    let trust_set = OpaqueId::try_from("webhooks-main".to_owned()).unwrap();
+    let anchor = OpaqueId::try_from("anchor-current".to_owned()).unwrap();
     let key = WebhookKey::new(anchor, SECRET.to_vec(), 0, None).unwrap();
     GitHubWebhook::new(WebhookKeyring::new(trust_set, vec![key]).unwrap())
 }
@@ -392,7 +392,7 @@ fn verifier() -> GitHubWebhook {
 fn route() -> DeliveryRoute {
     DeliveryRoute {
         provider: provider(),
-        trust_set: OpaqueId::new("webhooks-main".to_owned()).unwrap(),
+        trust_set: OpaqueId::try_from("webhooks-main".to_owned()).unwrap(),
         signed_time: SignedTimePolicy::ReplayOnly,
     }
 }
@@ -400,7 +400,7 @@ fn route() -> DeliveryRoute {
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
         namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("github.com".to_owned()).unwrap(),
     }
 }
 
@@ -409,12 +409,12 @@ fn authenticated() -> AuthenticatedDelivery {
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("placeholder".to_owned()).unwrap(),
+            integration: IntegrationId::try_from("installation-7".to_owned()).unwrap(),
+            delivery: DeliveryId::try_from("placeholder".to_owned()).unwrap(),
         },
         change: change(provider),
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("provider-run-11".to_owned()).unwrap(),
+            ProviderRunId::try_from("provider-run-11".to_owned()).unwrap(),
             ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             oid('b'),
@@ -432,7 +432,7 @@ fn change(provider: ProviderIdentity) -> ChangeLocator {
             "amiss".to_owned(),
         )
         .unwrap(),
-        change: ChangeId::new("42".to_owned()).unwrap(),
+        change: ChangeId::try_from("42".to_owned()).unwrap(),
     }
 }
 

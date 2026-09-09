@@ -346,7 +346,7 @@ fn reviewer() -> DedicatedReviewer {
 
 fn webhook() -> GiteaWebhook {
     let key = WebhookKey::new(
-        amiss_controller::OpaqueId::new("current".to_owned()).unwrap(),
+        amiss_controller::OpaqueId::try_from("current".to_owned()).unwrap(),
         SECRET.to_vec(),
         0,
         None,
@@ -354,7 +354,7 @@ fn webhook() -> GiteaWebhook {
     .unwrap();
     GiteaWebhook::new(
         WebhookKeyring::new(
-            amiss_controller::OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
+            amiss_controller::OpaqueId::try_from("gitea-webhooks".to_owned()).unwrap(),
             vec![key],
         )
         .unwrap(),
@@ -389,7 +389,7 @@ fn authenticate_with_signature(
     };
     let route = DeliveryRoute {
         provider: route_provider,
-        trust_set: amiss_controller::OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
+        trust_set: amiss_controller::OpaqueId::try_from("gitea-webhooks".to_owned()).unwrap(),
         signed_time,
     };
     let headers = [DeliveryHeader {
@@ -428,7 +428,7 @@ fn signature(body: &[u8]) -> Vec<u8> {
 fn provider(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
         namespace: self::namespace(namespace),
-        instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+        instance: ProviderInstance::try_from("forge.example".to_owned()).unwrap(),
     }
 }
 
@@ -478,7 +478,7 @@ fn dummy_snapshot(namespace: &str) -> ChangeSnapshot {
     let change = amiss_controller::ChangeLocator {
         provider,
         repository,
-        change: amiss_controller::OpaqueId::new("42".to_owned()).unwrap(),
+        change: amiss_controller::OpaqueId::try_from("42".to_owned()).unwrap(),
     };
     ChangeSnapshot {
         state: ChangeState::Active,
@@ -509,7 +509,7 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
     let digest = hb("amiss/controller-gitea-test", b"fixture");
     Publication {
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),
+        evaluation_id: ControllerEvaluationId::try_from("evaluation-1".to_owned()).unwrap(),
         check: CheckBinding {
             plan_digest: digest,
             required_status_name: "amiss".to_owned(),
@@ -544,7 +544,7 @@ fn the_signed_target_binds_the_lane() {
     let attempt = |target: &str| -> Result<(), ProviderError> {
         let route = DeliveryRoute {
             provider: provider("gitea"),
-            trust_set: amiss_controller::OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
+            trust_set: amiss_controller::OpaqueId::try_from("gitea-webhooks".to_owned()).unwrap(),
             signed_time: SignedTimePolicy::ReplayOnly,
         };
         let signed = signature(BODY);

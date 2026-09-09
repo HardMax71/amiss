@@ -25,8 +25,10 @@ fn accepts_a_standard_webhooks_vector() -> Result<(), IngressError> {
     assert_eq!(
         proof.replay(),
         &ReplayIdentity::Authenticated(
-            amiss_controller::DeliveryId::new("f5e5f430-f57b-4e6e-9fac-d9128cd7232f".to_owned(),)
-                .unwrap(),
+            amiss_controller::DeliveryId::try_from(
+                "f5e5f430-f57b-4e6e-9fac-d9128cd7232f".to_owned(),
+            )
+            .unwrap(),
         )
     );
     assert_eq!(proof.issued_at_unix_millis(), Some(NOW));

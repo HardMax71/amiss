@@ -36,8 +36,8 @@ impl FakeAdapter {
         authenticated: AuthenticatedDelivery,
         refreshes: impl IntoIterator<Item = Result<ChangeSnapshot, ProviderError>>,
     ) -> Self {
-        let trust_set = OpaqueId::new("webhooks-main".to_owned()).unwrap();
-        let anchor = OpaqueId::new("anchor-current".to_owned()).unwrap();
+        let trust_set = OpaqueId::try_from("webhooks-main".to_owned()).unwrap();
+        let anchor = OpaqueId::try_from("anchor-current".to_owned()).unwrap();
         let key = WebhookKey::new(anchor, FLOW_SECRET.to_vec(), 0, None).unwrap();
         Self {
             namespace: authenticated.identity.provider.namespace.clone(),

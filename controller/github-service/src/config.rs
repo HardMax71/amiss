@@ -88,8 +88,8 @@ impl RawConfig {
         )?);
         validate_github_plan(&scope.provider, &plan)?;
         let limits = load_limits(&self.limits, self.webhook_path)?;
-        let trust_set = TrustSetId::new("github-webhook-keys".to_owned())
-            .ok_or(ConfigError::invalid("trust set identity is invalid"))?;
+        let trust_set = TrustSetId::try_from("github-webhook-keys".to_owned())
+            .map_err(|_error| ConfigError::invalid("trust set identity is invalid"))?;
         let route = DeliveryRoute {
             provider: scope.provider.clone(),
             trust_set: trust_set.clone(),
@@ -273,8 +273,8 @@ fn validate_github_plan(provider: &ProviderIdentity, plan: &CheckPlan) -> Result
 
 fn positive_id(raw: u64) -> Result<IntegrationId, ConfigError> {
     positive(raw)?;
-    IntegrationId::new(raw.to_string())
-        .ok_or(ConfigError::invalid("installation identity is invalid"))
+    IntegrationId::try_from(raw.to_string())
+        .map_err(|_error| ConfigError::invalid("installation identity is invalid"))
 }
 
 fn positive(raw: u64) -> Result<u64, ConfigError> {

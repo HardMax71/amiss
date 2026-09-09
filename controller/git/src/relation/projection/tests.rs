@@ -45,15 +45,16 @@ fn subject(role: &str, repository_name: &str, source_path: &str) -> RelationSubj
         scope: PlanScope {
             provider: ProviderIdentity {
                 namespace: ProviderNamespace::try_from("github".to_owned()).expect("namespace"),
-                instance: ProviderInstance::new("github.com".to_owned()).expect("instance"),
+                instance: ProviderInstance::try_from("github.com".to_owned()).expect("instance"),
             },
-            integration: IntegrationId::new(format!("installation/{repository_name}"))
+            integration: IntegrationId::try_from(format!("installation/{repository_name}"))
                 .expect("integration"),
             repository: repository(repository_name),
         },
         target: BranchRef::new("refs/heads/main".to_owned()).expect("branch"),
         object_format: ObjectFormat::Sha1,
-        credential: OpaqueId::new(format!("credential/{repository_name}")).expect("credential"),
+        credential: OpaqueId::try_from(format!("credential/{repository_name}"))
+            .expect("credential"),
         source: ProjectionSource::BlobLines(BlobLineSelection {
             path: path(source_path),
             first_line: 1,
