@@ -96,11 +96,11 @@ name = "amiss-api"
 version = "0.27.0"
 dependencies = [
  "amiss-controller-files",
+ "amiss-fixtures",
  "amiss-wire",
  "rustdoc-types",
  "serde",
  "serde_json",
- "serde_json_canonicalizer",
  "tempfile",
  "thiserror 2.0.20",
  "trustfall",
@@ -432,6 +432,7 @@ version = "0.27.0"
 dependencies = [
  "amiss-wire",
  "flate2",
+ "serde-transcode",
  "serde_json",
  "serde_json_canonicalizer",
  "sha1-checked",
@@ -514,6 +515,7 @@ dependencies = [
 name = "amiss-wire"
 version = "0.27.0"
 dependencies = [
+ "amiss-fixtures",
  "countio",
  "datealgo",
  "digest-io",

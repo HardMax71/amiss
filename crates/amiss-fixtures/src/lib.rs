@@ -29,6 +29,19 @@ pub const GITEA_PULL_WEBHOOK: &[u8] = include_bytes!("../data/gitea-pull-webhook
 /// Constructed GitLab policy-job claims matching the provider's complete token fields.
 pub const GITLAB_POLICY_CLAIMS: &[u8] = include_bytes!("../data/gitlab-policy-claims.json");
 
+/// Canonicalizes complete fixture JSON independently of the model under test.
+///
+/// # Errors
+///
+/// Returns the library error for invalid JSON, trailing content, or serialization failure.
+pub fn canonical_json(bytes: &[u8]) -> serde_json::Result<Vec<u8>> {
+    let mut source = serde_json::Deserializer::from_slice(bytes);
+    let canonical =
+        serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut source))?;
+    source.end()?;
+    Ok(canonical)
+}
+
 /// Repository-local variables Git exports to hooks. They must not select the
 /// repository, index, object store, or configuration for a fixture command.
 /// Keep this list in sync with `git rev-parse --local-env-vars`; the integration

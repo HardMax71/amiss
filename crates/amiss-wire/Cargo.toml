@@ -34,6 +34,7 @@ validated_newtype.workspace = true
 wary.workspace = true
 
 [dev-dependencies]
+amiss-fixtures = { path = "../amiss-fixtures" }
 divan.workspace = true
 strum.workspace = true
 

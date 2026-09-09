@@ -54,17 +54,11 @@ fn context_refuses_ambiguous_sets_and_unscoped_names() {
 fn typed_context_preserves_canonical_bytes_and_every_digest_input() {
     let bytes = context(r#"["default","serde"]"#, "x86_64-unknown-linux-gnu");
     let (parsed, digest) = parse(&bytes).unwrap();
-    let strict = amiss_wire::json::parse(&bytes).unwrap();
-    assert_eq!(
-        serde_json::to_vec(&parsed).unwrap(),
-        serde_json_canonicalizer::to_vec(&strict).unwrap()
-    );
+    let canonical = amiss_fixtures::canonical_json(&bytes).unwrap();
+    assert_eq!(serde_json::to_vec(&parsed).unwrap(), canonical);
     assert_eq!(
         digest,
-        amiss_wire::digest::hb(
-            super::DIGEST_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&strict).unwrap()
-        )
+        amiss_wire::digest::hb(super::DIGEST_DOMAIN, &canonical)
     );
     assert_eq!(
         parse(&serde_json::to_vec_pretty(&parsed).unwrap()).unwrap(),
@@ -96,13 +90,10 @@ fn typed_context_preserves_canonical_bytes_and_every_digest_input() {
         let bytes = serde_json::to_vec(&changed).unwrap();
         let (_, changed_digest) = parse(&bytes).unwrap();
         assert_ne!(changed_digest, digest, "{field}");
-        let strict = amiss_wire::json::parse(&bytes).unwrap();
+        let canonical = amiss_fixtures::canonical_json(&bytes).unwrap();
         assert_eq!(
             changed_digest,
-            amiss_wire::digest::hb(
-                super::DIGEST_DOMAIN,
-                &serde_json_canonicalizer::to_vec(&strict).unwrap()
-            ),
+            amiss_wire::digest::hb(super::DIGEST_DOMAIN, &canonical),
             "{field}"
         );
     }

@@ -4,6 +4,23 @@ use amiss_wire::{
 };
 
 #[test]
+fn the_example_oracle_rejects_incomplete_or_trailing_json() {
+    for invalid in [
+        b"".as_slice(),
+        b"{",
+        b"[1,]",
+        b"{} null",
+        b"[] trailing",
+        b"\"\xff\"",
+    ] {
+        assert!(
+            amiss_fixtures::canonical_json(invalid).is_err(),
+            "{invalid:?}"
+        );
+    }
+}
+
+#[test]
 fn strict_values_serialize_as_json_without_enum_or_pair_wrappers() {
     for (input, expected) in [
         ("null", "null"),
@@ -27,10 +44,7 @@ fn strict_values_serialize_as_json_without_enum_or_pair_wrappers() {
         let value = parse(input.as_bytes()).unwrap();
         let bytes = serde_json_canonicalizer::to_vec(&value).unwrap();
         assert_eq!(bytes, expected.as_bytes(), "{input}");
-        let mut deserializer = serde_json::Deserializer::from_str(input);
-        let transcoded =
-            serde_json_canonicalizer::to_vec(&serde_transcode::Transcoder::new(&mut deserializer))
-                .unwrap();
+        let transcoded = amiss_fixtures::canonical_json(input.as_bytes()).unwrap();
         assert_eq!(transcoded, bytes, "{input}");
         assert_eq!(parse(&bytes).unwrap(), value);
         let mut counter = countio::Counter::new(std::io::sink());

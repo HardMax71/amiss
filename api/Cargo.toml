@@ -25,7 +25,7 @@ trustfall-rustdoc-adapter.workspace = true
 wary.workspace = true
 
 [dev-dependencies]
-serde_json_canonicalizer.workspace = true
+amiss-fixtures = { path = "../crates/amiss-fixtures" }
 tempfile.workspace = true
 
 [lints]
