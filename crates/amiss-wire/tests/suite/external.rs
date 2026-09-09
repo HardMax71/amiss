@@ -4,7 +4,7 @@
 )]
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::digest::{hb, hj_serde};
 use amiss_wire::external::{
     ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, EVIDENCE_SCHEMA, ExternalAssessmentEnvelope,
     ExternalDestination, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
@@ -12,180 +12,56 @@ use amiss_wire::external::{
     ForgeRepository, ForgeTail, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeFailure, ProbeMethod, assess,
     parse_evidence, parse_plan, plan,
 };
-use amiss_wire::json::Value;
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::{
     PAYLOAD_SCHEMA,
-    model::{ReportEnvelope, ReportStatus},
+    model::{
+        Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath,
+        ReportEnvelope, ReportStatus, Resolution,
+    },
     validate_envelope,
 };
+use amiss_wire::resolution::VersionScope;
 
-const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
+static REPORT: std::sync::LazyLock<ReportEnvelope> = std::sync::LazyLock::new(|| {
+    serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).expect("the report example is valid")
+});
 
-fn object(members: Vec<(&str, Value)>) -> Value {
-    let mut members: Vec<(String, Value)> = members
-        .into_iter()
-        .map(|(key, value)| (key.to_owned(), value))
-        .collect();
-    members.sort_by(|left, right| left.0.cmp(&right.0));
-    Value::object(members)
-}
-
-fn string(value: &str) -> Value {
-    Value::string(value)
-}
-
-fn external_occurrence(document: &str, destination: &str) -> Value {
-    object(vec![
-        ("document", string(document)),
-        ("external_destination", string(destination)),
-        ("intent", object(vec![("external_scheme", string("https"))])),
-        (
-            "resolution",
-            object(vec![
-                ("kind", string("external")),
-                ("reason", string("url")),
-            ]),
-        ),
-    ])
-}
-
-fn resolved_occurrence(document: &str) -> Value {
-    object(vec![
-        ("document", string(document)),
-        ("resolution", object(vec![("kind", string("resolved"))])),
-    ])
-}
-
-fn row(base: Value, candidate: Value) -> Value {
-    object(vec![("base", base), ("candidate", candidate)])
-}
-
-fn report(observations: Vec<Value>) -> ReportEnvelope {
-    let mut document: serde_json::Value =
-        serde_json::from_slice(REPORT).expect("the report example is valid JSON");
-    let examples = document
-        .pointer("/payload/observations")
-        .and_then(serde_json::Value::as_array)
-        .expect("the report example has observations");
-    let resolved = examples
-        .first()
-        .and_then(|row| row.get("candidate"))
-        .expect("the report example has a resolved occurrence")
-        .clone();
-    let external = examples
+fn external_occurrence(document: &str, destination: &str) -> Occurrence {
+    let mut occurrence = REPORT
+        .payload
+        .observations
         .get(1)
-        .expect("the report example has an external comparison")
-        .clone();
-    let external_occurrence = external
-        .get("candidate")
-        .expect("the external comparison has a candidate")
-        .clone();
-    let rows = observations
-        .into_iter()
-        .map(|row| {
-            let supplied = serde_json::to_value(&row).expect("the test comparison is JSON");
-            let mut comparison = external.clone();
-            for side in ["base", "candidate"] {
-                let expanded = expand_occurrence(
-                    supplied.get(side).expect("the comparison has both sides"),
-                    &resolved,
-                    &external_occurrence,
-                );
-                *comparison
-                    .get_mut(side)
-                    .expect("the example comparison has both sides") = expanded;
-            }
-            comparison
-        })
-        .collect();
-    *document
-        .pointer_mut("/payload/observations")
-        .expect("the report example has observations") = serde_json::Value::Array(rows);
-    let bytes = refresh_payload_digest(&mut document, PAYLOAD_SCHEMA);
-    validate_envelope(&bytes)
-        .expect("the completed test report is accepted")
-        .0
-}
-
-fn expand_occurrence(
-    supplied: &serde_json::Value,
-    resolved: &serde_json::Value,
-    external: &serde_json::Value,
-) -> serde_json::Value {
-    if supplied.is_null() {
-        return serde_json::Value::Null;
-    }
-    let is_resolved = supplied
-        .pointer("/resolution/kind")
-        .and_then(|kind| kind.as_str())
-        == Some("resolved");
-    let mut occurrence = if is_resolved {
-        resolved.clone()
-    } else {
-        external.clone()
-    };
-    let supplied = supplied
-        .as_object()
-        .expect("the supplied occurrence is an object");
-    let occurrence_object = occurrence
-        .as_object_mut()
-        .expect("the example occurrence is an object");
-    occurrence_object.insert(
-        "document".to_owned(),
-        supplied
-            .get("document")
-            .expect("the supplied occurrence has a document")
-            .clone(),
-    );
-    match supplied.get("external_destination") {
-        Some(destination) => {
-            occurrence_object.insert("external_destination".to_owned(), destination.clone());
-        }
-        None => {
-            occurrence_object.remove("external_destination");
-        }
-    }
-    if let Some(intent) = supplied
-        .get("intent")
-        .and_then(serde_json::Value::as_object)
-    {
-        let target = occurrence_object
-            .get_mut("intent")
-            .and_then(serde_json::Value::as_object_mut)
-            .expect("the example occurrence has an intent");
-        target.extend(intent.clone());
-    }
-    if !is_resolved {
-        occurrence_object.insert(
-            "resolution".to_owned(),
-            supplied
-                .get("resolution")
-                .expect("the supplied occurrence has a resolution")
-                .clone(),
-        );
-    }
+        .expect("external comparison")
+        .candidate
+        .clone()
+        .expect("external fixture");
+    occurrence.document = RepoPath::Text(document.parse().expect("fixture path"));
+    occurrence.external_destination = Some(destination.to_owned());
     occurrence
 }
 
-fn sample_digest() -> Digest {
-    hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&Value::Null).expect("fixture JSON"),
-    )
-}
-
-fn refresh_payload_digest(document: &mut serde_json::Value, domain: &str) -> Vec<u8> {
-    let payload = document
-        .get("payload")
-        .expect("the plan document holds its payload");
-    let canonical = serde_json_canonicalizer::to_vec(payload)
-        .expect("the plan payload is canonically serializable");
-    let digest = hb(domain, &canonical).to_string();
-    let recorded = document
-        .get_mut("payload_digest")
-        .expect("the plan document holds its digest");
-    *recorded = serde_json::Value::String(digest);
-    serde_json_canonicalizer::to_vec(document).expect("the plan document is serializable")
+fn report(observations: Vec<(Option<Occurrence>, Option<Occurrence>)>) -> ReportEnvelope {
+    let mut report = REPORT.clone();
+    let comparison = report
+        .payload
+        .observations
+        .get(1)
+        .expect("external comparison")
+        .clone();
+    report.payload.observations = observations
+        .into_iter()
+        .map(|(base, candidate)| ObservationComparison {
+            base,
+            candidate,
+            ..comparison.clone()
+        })
+        .collect();
+    report.payload_digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&report.payload, &mut writer)
+    })
+    .expect("fixture payload");
+    report
 }
 
 fn destinations(rows: &[ExternalDestination]) -> Vec<(String, Vec<String>)> {
@@ -196,28 +72,33 @@ fn destinations(rows: &[ExternalDestination]) -> Vec<(String, Vec<String>)> {
 
 #[test]
 fn the_delta_is_set_wise_and_document_attributed() {
+    let mut local = REPORT.payload.observations[0]
+        .candidate
+        .clone()
+        .expect("local fixture");
+    local.document = RepoPath::Text("docs/a.md".parse().unwrap());
     let plan = plan(
         &report(vec![
-            row(
-                external_occurrence("docs/a.md", "https://old.example/g"),
-                Value::Null,
+            (
+                Some(external_occurrence("docs/a.md", "https://old.example/g")),
+                None,
             ),
-            row(
-                Value::Null,
-                external_occurrence("docs/a.md", "https://new.example/n"),
+            (
+                None,
+                Some(external_occurrence("docs/a.md", "https://new.example/n")),
             ),
-            row(
-                Value::Null,
-                external_occurrence("docs/b.md", "https://new.example/n"),
+            (
+                None,
+                Some(external_occurrence("docs/b.md", "https://new.example/n")),
             ),
-            row(
-                external_occurrence("docs/a.md", "https://kept.example/k"),
-                external_occurrence("docs/a.md", "https://kept.example/k"),
+            (
+                Some(external_occurrence("docs/a.md", "https://kept.example/k")),
+                Some(external_occurrence("docs/a.md", "https://kept.example/k")),
             ),
-            row(resolved_occurrence("docs/a.md"), Value::Null),
+            (Some(local), None),
         ]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     assert_eq!(
@@ -240,28 +121,23 @@ fn the_delta_is_set_wise_and_document_attributed() {
 #[test]
 fn trusted_semantic_resolutions_never_enter_the_network_plan() {
     let observations = [
-        ("docs/a.md", "intersphinx-inventory"),
-        ("docs/b.md", "site-build"),
+        ("docs/a.md", ExternalResolutionReason::IntersphinxInventory),
+        ("docs/b.md", ExternalResolutionReason::SiteBuild),
     ]
     .into_iter()
     .map(|(document, reason)| {
-        row(
-            Value::Null,
-            object(vec![
-                ("document", string(document)),
-                (
-                    "resolution",
-                    object(vec![
-                        ("kind", string("external")),
-                        ("reason", string(reason)),
-                    ]),
-                ),
-            ]),
-        )
+        let mut occurrence = REPORT.payload.observations[1]
+            .candidate
+            .clone()
+            .expect("external fixture");
+        occurrence.document = RepoPath::Text(document.parse().unwrap());
+        occurrence.external_destination = None;
+        occurrence.resolution = Resolution::External { reason };
+        (None, Some(occurrence))
     })
     .collect();
-    let plan =
-        plan(&report(observations), "0.0.0", sample_digest()).expect("the report yields a plan");
+    let plan = plan(&report(observations), "0.0.0", hb(PAYLOAD_SCHEMA, b"null"))
+        .expect("the report yields a plan");
     assert_eq!(destinations(&plan.payload.introduced), Vec::new());
     assert_eq!(plan.payload.retained_count, 0);
 }
@@ -272,17 +148,17 @@ fn trusted_semantic_resolutions_never_enter_the_network_plan() {
 fn a_destination_moving_documents_is_retained() {
     let plan = plan(
         &report(vec![
-            row(
-                external_occurrence("docs/a.md", "https://kept.example/k"),
-                Value::Null,
+            (
+                Some(external_occurrence("docs/a.md", "https://kept.example/k")),
+                None,
             ),
-            row(
-                Value::Null,
-                external_occurrence("docs/b.md", "https://kept.example/k"),
+            (
+                None,
+                Some(external_occurrence("docs/b.md", "https://kept.example/k")),
             ),
         ]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     assert_eq!(destinations(&plan.payload.introduced), Vec::new());
@@ -294,32 +170,21 @@ fn a_destination_moving_documents_is_retained() {
 fn unavailable_exact_history_enters_the_same_setwise_plan() {
     let destination =
         "https://github.com/acme/widgets/blob/0123456789012345678901234567890123456789/docs/a.md";
-    let historical = object(vec![
-        ("document", string("docs/a.md")),
-        ("external_destination", string(destination)),
-        ("intent", object(Vec::new())),
-        (
-            "resolution",
-            object(vec![
-                ("kind", string("unsupported-version")),
-                (
-                    "scope",
-                    object(vec![
-                        ("kind", string("known-commit")),
-                        (
-                            "commit_oid",
-                            string("0123456789012345678901234567890123456789"),
-                        ),
-                        ("path", string("docs/a.md")),
-                    ]),
-                ),
-            ]),
-        ),
-    ]);
+    let mut historical = external_occurrence("docs/a.md", destination);
+    historical.resolution = Resolution::UnsupportedVersion {
+        scope: VersionScope::KnownCommit {
+            commit_oid: Oid::new(
+                ObjectFormat::Sha1,
+                "0123456789012345678901234567890123456789".to_owned(),
+            )
+            .unwrap(),
+            path: RepoPath::Text("docs/a.md".parse().unwrap()),
+        },
+    };
     let introduced_plan = plan(
-        &report(vec![row(Value::Null, historical.clone())]),
+        &report(vec![(None, Some(historical.clone()))]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     assert_eq!(
@@ -335,23 +200,19 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
     );
 
     let retained_plan = plan(
-        &report(vec![row(historical.clone(), historical.clone())]),
+        &report(vec![(Some(historical.clone()), Some(historical.clone()))]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     assert_eq!(destinations(&retained_plan.payload.introduced), Vec::new());
     assert_eq!(destinations(&retained_plan.payload.removed), Vec::new());
     assert_eq!(retained_plan.payload.retained_count, 1);
 
-    let Value::Object(historical) = historical else {
-        panic!("the occurrence is an object");
-    };
-    let mut historical = historical.into_vec();
-    historical.retain(|(name, _)| name != "external_destination");
-    let source = report(vec![row(Value::Null, Value::object(historical))]);
+    historical.external_destination = None;
+    let source = report(vec![(None, Some(historical))]);
     assert_eq!(
-        plan(&source, "0.0.0", sample_digest()),
+        plan(&source, "0.0.0", hb(PAYLOAD_SCHEMA, b"null")),
         Err(PlanDefect::MalformedExternal)
     );
 }
@@ -359,7 +220,8 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
 #[test]
 fn the_envelope_binds_the_source_digest_and_its_own() {
     let source = report(Vec::new());
-    let derived = plan(&source, "0.0.0", sample_digest()).expect("an empty report yields a plan");
+    let derived =
+        plan(&source, "0.0.0", hb(PAYLOAD_SCHEMA, b"null")).expect("an empty report yields a plan");
     assert_eq!(derived.schema, ExternalPlanEnvelopeSchema::Current);
     let recomputed = hb(
         PLAN_PAYLOAD_SCHEMA,
@@ -378,9 +240,15 @@ fn the_envelope_binds_the_source_digest_and_its_own() {
 #[test]
 fn the_plan_model_reads_the_checked_writer() {
     let written = plan(
-        &report(introduced("https://github.com/acme/widgets")),
+        &report(vec![(
+            None,
+            Some(external_occurrence(
+                "docs/a.md",
+                "https://github.com/acme/widgets",
+            )),
+        )]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     let bytes = serde_json_canonicalizer::to_vec(&written).unwrap();
@@ -395,49 +263,69 @@ fn the_plan_model_reads_the_checked_writer() {
 #[test]
 fn known_optional_plan_fields_do_not_accept_null() {
     let written = plan(
-        &report(introduced("https://github.com/acme/widgets/blob/main/a.md")),
+        &report(vec![(
+            None,
+            Some(external_occurrence(
+                "docs/a.md",
+                "https://github.com/acme/widgets/blob/main/a.md",
+            )),
+        )]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
-    let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
-    let repository = document
-        .pointer_mut("/payload/introduced/0/repository")
-        .and_then(serde_json::Value::as_object_mut)
-        .expect("the introduced destination has a repository shape");
-    repository.insert("form".to_owned(), serde_json::Value::Null);
-    let error =
-        parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA)).unwrap_err();
+    let payload = serde_json::to_string(&written.payload).unwrap();
+    let malformed_payload = payload.replace(r#""form":"blob""#, r#""form":null"#);
+    assert_ne!(malformed_payload, payload);
+    let digest = hb(
+        PLAN_PAYLOAD_SCHEMA,
+        &amiss_fixtures::canonical_json(malformed_payload.as_bytes()).unwrap(),
+    );
+    let bytes = serde_json::to_string(&written).unwrap();
+    assert_eq!(bytes.matches(&payload).count(), 1);
+    assert_eq!(
+        bytes.matches(&written.payload_digest.to_string()).count(),
+        1
+    );
+    let bytes = bytes
+        .replace(&payload, &malformed_payload)
+        .replace(&written.payload_digest.to_string(), &digest.to_string());
+    let error = parse_plan(bytes.as_bytes()).unwrap_err();
     assert_eq!(error.kind, ErrorKind::WrongType);
     assert_eq!(error.path, "$.payload.introduced[0].repository.form");
 }
 
 #[test]
 fn malformed_known_plan_fields_are_refused_after_binding() {
-    let written = plan(
-        &report(introduced("https://example.com/manual")),
+    let mut written = plan(
+        &report(vec![(
+            None,
+            Some(external_occurrence(
+                "docs/a.md",
+                "https://example.com/manual",
+            )),
+        )]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
-    let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
-    let destination = document
-        .pointer_mut("/payload/introduced/0/destination")
-        .expect("the introduced row holds a destination");
-    *destination = serde_json::Value::String(String::new());
-    let error =
-        parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA)).unwrap_err();
+    written.payload.introduced[0].destination.clear();
+    written.payload_digest = hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&written.payload, &mut writer)
+    })
+    .unwrap();
+    let error = parse_plan(&serde_json_canonicalizer::to_vec(&written).unwrap()).unwrap_err();
     assert_eq!(error.kind, ErrorKind::InvalidValue);
     assert_eq!(error.path, "$.payload.introduced[0].destination");
 }
 
 #[test]
 fn a_tampered_payload_is_refused() {
-    let mut envelope: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
+    let mut envelope = REPORT.clone();
     envelope.payload.result.finding_count += 1;
     let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&envelope).unwrap()).unwrap();
     assert_eq!(
-        plan(&envelope, "0.0.0", sample_digest()),
+        plan(&envelope, "0.0.0", hb(PAYLOAD_SCHEMA, b"null")),
         Err(PlanDefect::DigestMismatch)
     );
     let result = serde_json::to_string(&envelope.payload.result).unwrap();
@@ -460,7 +348,7 @@ fn an_incomplete_report_is_refused() {
         &serde_json_canonicalizer::to_vec(&envelope.payload).unwrap(),
     );
     assert_eq!(
-        plan(&envelope, "0.0.0", sample_digest()),
+        plan(&envelope, "0.0.0", hb(PAYLOAD_SCHEMA, b"null")),
         Err(PlanDefect::Incomplete)
     );
 }
@@ -487,13 +375,6 @@ fn repository_of<'a>(
         .iter()
         .find(|row| row.destination == destination)
         .and_then(|row| row.repository.as_ref())
-}
-
-fn introduced(destination: &str) -> Vec<Value> {
-    vec![row(
-        Value::Null,
-        external_occurrence("docs/a.md", destination),
-    )]
 }
 
 #[test]
@@ -537,8 +418,15 @@ fn a_known_host_destination_carries_its_forge_shape() {
         ),
     ];
     for (destination, expected) in cases {
-        let plan = plan(&report(introduced(destination)), "0.0.0", sample_digest())
-            .expect("the report yields a plan");
+        let plan = plan(
+            &report(vec![(
+                None,
+                Some(external_occurrence("docs/a.md", destination)),
+            )]),
+            "0.0.0",
+            hb(PAYLOAD_SCHEMA, b"null"),
+        )
+        .expect("the report yields a plan");
         let repository = repository_of(&plan, destination)
             .unwrap_or_else(|| panic!("{destination} carries no shape"));
         assert_eq!(
@@ -563,8 +451,15 @@ fn an_unrecognizable_destination_stays_unshaped() {
         "https://gitlab.com/acme/widgets/blob/main/a.md",
         "https://gitlab.com/group/sub/widgets",
     ] {
-        let plan = plan(&report(introduced(destination)), "0.0.0", sample_digest())
-            .expect("the report yields a plan");
+        let plan = plan(
+            &report(vec![(
+                None,
+                Some(external_occurrence("docs/a.md", destination)),
+            )]),
+            "0.0.0",
+            hb(PAYLOAD_SCHEMA, b"null"),
+        )
+        .expect("the report yields a plan");
         assert_eq!(
             repository_of(&plan, destination),
             None,
@@ -580,41 +475,49 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
     let cases = [
         (
             "ghes.corp.example",
-            "github",
+            ForgeDialect::Github,
             "https://ghes.corp.example/other/repo/blob/main/x.md",
             r#"{"dialect":"github","form":"blob","host":"ghes.corp.example","name":"repo","owner":"other","tail":"main/x.md"}"#,
         ),
         (
             "bitbucket.corp.example",
-            "bitbucket-data-center",
+            ForgeDialect::BitbucketDataCenter,
             "https://bitbucket.corp.example/bitbucket/projects/ACME/repos/widgets/browse/docs/a.md?at=refs%2Fheads%2Fmain",
             r#"{"dialect":"bitbucket-data-center","form":"browse","host":"bitbucket.corp.example","name":"widgets","owner":"ACME","tail":"docs/a.md"}"#,
         ),
         (
             "bitbucket.corp.example",
-            "bitbucket-data-center",
+            ForgeDialect::BitbucketDataCenter,
             "https://bitbucket.corp.example/bitbucket/users/alice/repos/widgets/browse/docs/a.md",
             r#"{"dialect":"bitbucket-data-center","form":"browse","host":"bitbucket.corp.example","name":"widgets","owner":"alice","tail":"docs/a.md"}"#,
         ),
         (
             "bitbucket.corp.example",
-            "bitbucket-data-center",
+            ForgeDialect::BitbucketDataCenter,
             "https://bitbucket.corp.example/projects/OTHER/repos/else/browse/projects/ACME/repos/widgets/browse/docs/a.md",
             r#"{"dialect":"bitbucket-data-center","form":"browse","host":"bitbucket.corp.example","name":"else","owner":"OTHER","tail":"projects/ACME/repos/widgets/browse/docs/a.md"}"#,
         ),
     ];
     for (host, dialect, destination, expected) in cases {
-        let mut document: serde_json::Value = serde_json::from_slice(
-            &serde_json_canonicalizer::to_vec(&report(introduced(destination))).unwrap(),
-        )
-        .expect("the complete report is JSON");
-        document["payload"]["evaluation"]["forge"] = serde_json::Value::String(dialect.to_owned());
-        document["payload"]["evaluation"]["repository"]["host"] =
-            serde_json::Value::String(host.to_owned());
-        let (envelope, _) =
-            validate_envelope(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
-                .expect("the declared-host report is accepted");
-        let derived = plan(&envelope, "0.0.0", sample_digest())
+        let mut envelope = report(vec![(
+            None,
+            Some(external_occurrence("docs/a.md", destination)),
+        )]);
+        let Evaluation::Resolved(evaluation) = &mut envelope.payload.evaluation else {
+            panic!("the fixture evaluation is resolved");
+        };
+        let repository = evaluation.repository.as_ref().unwrap();
+        evaluation.repository = RepositoryIdentity::new(
+            host.to_owned(),
+            repository.owner().to_owned(),
+            repository.name().to_owned(),
+        );
+        evaluation.forge = Some(dialect);
+        envelope.payload_digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+            serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
+        })
+        .unwrap();
+        let derived = plan(&envelope, "0.0.0", hb(PAYLOAD_SCHEMA, b"null"))
             .expect("the declared-host report yields a plan");
         let repository = repository_of(&derived, destination).expect("the declared host is shaped");
         assert_eq!(
@@ -667,7 +570,7 @@ fn forge_row(
 fn evidence_bytes_preserve_escaping_and_round_trip() {
     let document = ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
-        plan_payload_digest: sample_digest(),
+        plan_payload_digest: hb(PAYLOAD_SCHEMA, b"null"),
         producer: ExternalEvidenceProducer {
             name: "probe \"quoted\" \\ \n \t 😀".to_owned(),
             version: "0.0.0".to_owned(),
@@ -702,7 +605,7 @@ fn derived_validation_rejects_invalid_evidence_shapes() {
     };
     let document = ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
-        plan_payload_digest: sample_digest(),
+        plan_payload_digest: hb(PAYLOAD_SCHEMA, b"null"),
         producer: ExternalEvidenceProducer {
             name: String::new(),
             version: String::new(),
@@ -755,20 +658,20 @@ fn the_judgment_policy_is_conservative() {
     ];
     let observations = destinations
         .iter()
-        .map(|(destination, _)| row(Value::Null, external_occurrence("docs/a.md", destination)))
-        .chain(std::iter::once(row(
-            Value::Null,
-            external_occurrence("docs/a.md", "https://f.example/quiet"),
+        .map(|(destination, _)| (None, Some(external_occurrence("docs/a.md", destination))))
+        .chain(std::iter::once((
+            None,
+            Some(external_occurrence("docs/a.md", "https://f.example/quiet")),
         )))
         .collect();
-    let plan =
-        plan(&report(observations), "0.0.0", sample_digest()).expect("the report yields a plan");
+    let plan = plan(&report(observations), "0.0.0", hb(PAYLOAD_SCHEMA, b"null"))
+        .expect("the report yields a plan");
     let evidence = evidence(
         &plan,
         destinations.iter().map(|(_, row)| row.clone()).collect(),
     );
-    let assessment =
-        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
+    let assessment = assess(&plan, &evidence, "0.0.0", hb(PAYLOAD_SCHEMA, b"null"))
+        .expect("the pair yields an assessment");
     assert_eq!(
         verdicts_of(&assessment),
         vec![
@@ -814,11 +717,11 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
     let temporary_target = "https://b.example/current";
     let plan = plan(
         &report(vec![
-            row(Value::Null, external_occurrence("docs/a.md", permanent)),
-            row(Value::Null, external_occurrence("docs/a.md", temporary)),
+            (None, Some(external_occurrence("docs/a.md", permanent))),
+            (None, Some(external_occurrence("docs/a.md", temporary))),
         ]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     let observed = evidence(
@@ -841,8 +744,8 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
         )
         .collect(),
     );
-    let assessment =
-        assess(&plan, &observed, "0.0.0", sample_digest()).expect("the redirects are evidence");
+    let assessment = assess(&plan, &observed, "0.0.0", hb(PAYLOAD_SCHEMA, b"null"))
+        .expect("the redirects are evidence");
     let verdicts = &assessment.payload.verdicts;
     let verdict = |destination: &str| {
         verdicts
@@ -874,7 +777,7 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
                 &plan,
                 &evidence(&plan, vec![malformed]),
                 "0.0.0",
-                sample_digest()
+                hb(PAYLOAD_SCHEMA, b"null")
             ),
             Err(AssessDefect::Evidence(_))
         ));
@@ -886,10 +789,10 @@ fn forge_facts_refute_only_after_visibility_and_resolution() {
     let shaped = |name: &str| format!("https://github.com/acme/{name}/blob/main/a.md");
     let observations = ["one", "two", "three"]
         .iter()
-        .map(|name| row(Value::Null, external_occurrence("docs/a.md", &shaped(name))))
+        .map(|name| (None, Some(external_occurrence("docs/a.md", &shaped(name)))))
         .collect();
-    let plan =
-        plan(&report(observations), "0.0.0", sample_digest()).expect("the report yields a plan");
+    let plan = plan(&report(observations), "0.0.0", hb(PAYLOAD_SCHEMA, b"null"))
+        .expect("the report yields a plan");
     let evidence = evidence(
         &plan,
         vec![
@@ -902,8 +805,8 @@ fn forge_facts_refute_only_after_visibility_and_resolution() {
             forge_row(&shaped("three"), ForgeRepository::Readable, None),
         ],
     );
-    let assessment =
-        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
+    let assessment = assess(&plan, &evidence, "0.0.0", hb(PAYLOAD_SCHEMA, b"null"))
+        .expect("the pair yields an assessment");
     assert_eq!(
         verdicts_of(&assessment),
         vec![
@@ -917,9 +820,12 @@ fn forge_facts_refute_only_after_visibility_and_resolution() {
 #[test]
 fn stray_or_repeated_evidence_invalidates_the_assessment() {
     let plan = plan(
-        &report(introduced("https://a.example/x")),
+        &report(vec![(
+            None,
+            Some(external_occurrence("docs/a.md", "https://a.example/x")),
+        )]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     for rows in [
@@ -935,14 +841,19 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
         )],
     ] {
         assert!(matches!(
-            assess(&plan, &evidence(&plan, rows), "0.0.0", sample_digest(),),
+            assess(
+                &plan,
+                &evidence(&plan, rows),
+                "0.0.0",
+                hb(PAYLOAD_SCHEMA, b"null"),
+            ),
             Err(AssessDefect::UnboundEvidence)
         ));
     }
     let mut foreign = evidence(&plan, Vec::new());
-    foreign.plan_payload_digest = sample_digest();
+    foreign.plan_payload_digest = hb(PAYLOAD_SCHEMA, b"null");
     assert!(matches!(
-        assess(&plan, &foreign, "0.0.0", sample_digest()),
+        assess(&plan, &foreign, "0.0.0", hb(PAYLOAD_SCHEMA, b"null")),
         Err(AssessDefect::UnboundEvidence)
     ));
 }
@@ -950,9 +861,12 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
 #[test]
 fn malformed_evidence_rows_are_refused() {
     let plan = plan(
-        &report(introduced("https://a.example/x")),
+        &report(vec![(
+            None,
+            Some(external_occurrence("docs/a.md", "https://a.example/x")),
+        )]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     for (status, failure) in [
@@ -971,7 +885,12 @@ fn malformed_evidence_rows_are_refused() {
             checked_at: "t0".to_owned(),
         };
         assert!(matches!(
-            assess(&plan, &evidence(&plan, vec![bad]), "0.0.0", sample_digest()),
+            assess(
+                &plan,
+                &evidence(&plan, vec![bad]),
+                "0.0.0",
+                hb(PAYLOAD_SCHEMA, b"null")
+            ),
             Err(AssessDefect::Evidence(_))
         ));
     }
@@ -983,15 +902,18 @@ fn malformed_evidence_rows_are_refused() {
 #[test]
 fn the_judge_is_no_laxer_than_its_contracts() {
     let plan = plan(
-        &report(introduced("https://a.example/x")),
+        &report(vec![(
+            None,
+            Some(external_occurrence("docs/a.md", "https://a.example/x")),
+        )]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     let mut unnamed = evidence(&plan, Vec::new());
     unnamed.producer.version.clear();
     assert!(matches!(
-        assess(&plan, &unnamed, "0.0.0", sample_digest(),),
+        assess(&plan, &unnamed, "0.0.0", hb(PAYLOAD_SCHEMA, b"null"),),
         Err(AssessDefect::Evidence(_))
     ));
 
@@ -1002,7 +924,12 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         &serde_json_canonicalizer::to_vec(&invalid_plan.payload).unwrap(),
     );
     assert!(matches!(
-        assess(&invalid_plan, &unnamed, "0.0.0", sample_digest(),),
+        assess(
+            &invalid_plan,
+            &unnamed,
+            "0.0.0",
+            hb(PAYLOAD_SCHEMA, b"null"),
+        ),
         Err(AssessDefect::Plan(_))
     ));
 }
@@ -1012,8 +939,12 @@ fn the_judge_is_no_laxer_than_its_contracts() {
 #[test]
 fn a_tail_resolution_needs_a_tail_in_the_shape() {
     let bare = "https://github.com/acme/widgets";
-    let plan = plan(&report(introduced(bare)), "0.0.0", sample_digest())
-        .expect("the report yields a plan");
+    let plan = plan(
+        &report(vec![(None, Some(external_occurrence("docs/a.md", bare)))]),
+        "0.0.0",
+        hb(PAYLOAD_SCHEMA, b"null"),
+    )
+    .expect("the report yields a plan");
     assert!(matches!(
         assess(
             &plan,
@@ -1026,7 +957,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
                 )]
             ),
             "0.0.0",
-            sample_digest()
+            hb(PAYLOAD_SCHEMA, b"null")
         ),
         Err(AssessDefect::UnboundEvidence)
     ));
@@ -1037,7 +968,7 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
             vec![forge_row(bare, ForgeRepository::Readable, None)],
         ),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("visibility-only evidence judges a bare shape");
     assert_eq!(
@@ -1049,15 +980,18 @@ fn a_tail_resolution_needs_a_tail_in_the_shape() {
 #[test]
 fn the_assessment_binds_the_whole_chain() {
     let plan = plan(
-        &report(introduced("https://a.example/x")),
+        &report(vec![(
+            None,
+            Some(external_occurrence("docs/a.md", "https://a.example/x")),
+        )]),
         "0.0.0",
-        sample_digest(),
+        hb(PAYLOAD_SCHEMA, b"null"),
     )
     .expect("the report yields a plan");
     let rows = vec![probe("https://a.example/x", ProbeMethod::Get, 200)];
     let evidence = evidence(&plan, rows);
-    let assessment =
-        assess(&plan, &evidence, "0.0.0", sample_digest()).expect("the pair yields an assessment");
+    let assessment = assess(&plan, &evidence, "0.0.0", hb(PAYLOAD_SCHEMA, b"null"))
+        .expect("the pair yields an assessment");
     let subject = &assessment.payload.subject;
     assert_eq!(subject.plan_payload_digest, plan.payload_digest);
     assert_eq!(
@@ -1079,14 +1013,67 @@ fn the_assessment_binds_the_whole_chain() {
 
 #[test]
 fn an_external_occurrence_missing_its_promise_is_refused() {
-    let Value::Object(occurrence) = external_occurrence("docs/a.md", "https://x.example/a") else {
-        panic!("the occurrence is an object");
-    };
-    let mut occurrence = occurrence.into_vec();
-    occurrence.retain(|(name, _)| name != "external_destination");
-    let source = report(vec![row(Value::Null, Value::object(occurrence))]);
+    let mut occurrence = external_occurrence("docs/a.md", "https://x.example/a");
+    occurrence.external_destination = None;
+    let source = report(vec![(None, Some(occurrence))]);
     assert_eq!(
-        plan(&source, "0.0.0", sample_digest()),
+        plan(&source, "0.0.0", hb(PAYLOAD_SCHEMA, b"null")),
         Err(PlanDefect::MalformedExternal)
     );
+}
+
+#[test]
+fn external_report_vectors_preserve_complete_identities() {
+    for (observations, [envelope_digest, payload_digest, plan_digest]) in [
+        (
+            Vec::new(),
+            [
+                "sha256:8e881c394f9cd40a21aabbaa791f092735e5b1fd23f29ea59b956db24c6f7f2d",
+                "sha256:638aad88aa929d23d77b7dc3bc50c2cee5c077e0ee74967f1a71c942299370aa",
+                "sha256:f96adee47b87f3d705da08a037512187b3d698026941fee5b5c429cbbdf87950",
+            ],
+        ),
+        (
+            vec![(
+                None,
+                Some(external_occurrence(
+                    "docs/a.md",
+                    "https://example.com/manual?x=\"quoted\"&path=é",
+                )),
+            )],
+            [
+                "sha256:aa084c030572a7768ab4b0d645d33334c8a0d5615a162c4c2a87a6147c404e2b",
+                "sha256:bea266647d52ceb71fa04ae226cc5b36ae6cb7d733c33e341278e999a279d117",
+                "sha256:be55b7cc417080966972fdfc6e89d3f9fc672fc6e456a2bd417c001313eb5e1f",
+            ],
+        ),
+        (
+            vec![
+                (
+                    Some(external_occurrence("docs/a.md", "https://old.example/a")),
+                    None,
+                ),
+                (
+                    None,
+                    Some(external_occurrence("docs/b.md", "https://new.example/b")),
+                ),
+            ],
+            [
+                "sha256:e6f192ab82eb545923a2e9e9e2091af379c689cdd8519fbad7a2db2f212d6bda",
+                "sha256:660726b441c572f86ee650e83a55cda5ea75ac3b419e9fcb7b9abf8307b4605f",
+                "sha256:917cdb99a7118638a8d1dc15141b8ce8573559840e7164d794c80f1b40d8a031",
+            ],
+        ),
+    ] {
+        let source = report(observations);
+        let derived = plan(&source, "0.0.0", hb(PAYLOAD_SCHEMA, b"null")).unwrap();
+        let bytes = serde_json_canonicalizer::to_vec(&source).unwrap();
+        assert_eq!(
+            hb(amiss_wire::report::ENVELOPE_SCHEMA, &bytes).to_string(),
+            envelope_digest
+        );
+        assert_eq!(source.payload_digest.to_string(), payload_digest);
+        assert_eq!(derived.payload_digest.to_string(), plan_digest);
+        assert_eq!(validate_envelope(&bytes).unwrap().0, source);
+    }
 }
