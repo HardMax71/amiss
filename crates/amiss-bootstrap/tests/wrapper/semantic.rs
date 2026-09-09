@@ -1,11 +1,9 @@
-use amiss_bootstrap::result::BootstrapResult;
+use amiss_bootstrap::result::{BootstrapResult, parse_result};
+use amiss_fixtures::report_bytes;
 use amiss_wire::{
     assessment::Nullable,
     digest::hb,
-    report::{
-        PAYLOAD_SCHEMA,
-        model::{Controls, ReportEnvelope, SemanticEvidenceProducer, SemanticEvidenceProvenance},
-    },
+    report::model::{Controls, SemanticEvidenceProducer, SemanticEvidenceProvenance},
     requests::{ControlsRequest, SuppliedSemanticEvidence},
     semantic::{
         self, SemanticEvidenceEnvelope,
@@ -13,7 +11,7 @@ use amiss_wire::{
     },
 };
 
-use super::{Release, invoke, plant, sealed_run, settled, stderr_names};
+use super::{Release, invoke, plant, sealed_run, stderr_names};
 
 pub(super) fn capture(staged: &Release) {
     let mut run = sealed_run(staged);
@@ -22,8 +20,7 @@ pub(super) fn capture(staged: &Release) {
     ))
     .unwrap();
     let producer = &document.payload.producer;
-    let mut report: ReportEnvelope = serde_json::from_slice(&run.wire).unwrap();
-    let Controls::Resolved(controls) = &mut report.payload.controls else {
+    let Controls::Resolved(controls) = &mut run.report.payload.controls else {
         panic!("the report has resolved controls");
     };
     controls.semantic_evidence = Some(vec![SemanticEvidenceProvenance {
@@ -35,17 +32,12 @@ pub(super) fn capture(staged: &Release) {
             version: producer.version.clone(),
         },
     }]);
-    report.payload_digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
-    );
-    run.wire = serde_json_canonicalizer::to_vec(&report).unwrap();
-    run.wire.push(b'\n');
     run.requests.controls.semantic_evidence = vec![SuppliedSemanticEvidence {
         expected_context_digest: producer.context_digest,
         value: document.into(),
     }];
-    plant(&run, &run.wire, "0");
+    let wire = report_bytes(run.report.clone()).unwrap();
+    plant(&run, &wire, "0");
     let invocation = invoke(staged, &run, "result", false);
     assert_eq!(
         invocation.output.status.code(),
@@ -53,8 +45,11 @@ pub(super) fn capture(staged: &Release) {
         "{:?}",
         invocation.output.stderr
     );
-    assert_eq!(settled(&invocation), Some(BootstrapResult::Pass));
-    assert_eq!(std::fs::read(&invocation.report).unwrap(), run.wire);
+    assert_eq!(
+        parse_result(&std::fs::read(&invocation.result).unwrap()),
+        Some(BootstrapResult::Pass)
+    );
+    assert_eq!(std::fs::read(&invocation.report).unwrap(), wire);
 
     let mut cases = malformed_controls(&run.requests.controls)
         .into_iter()
@@ -73,7 +68,10 @@ pub(super) fn capture(staged: &Release) {
         run.controls_input = Some(bytes);
         let invocation = invoke(staged, &run, "result", false);
         assert_eq!(invocation.output.status.code(), Some(2));
-        assert_eq!(settled(&invocation), Some(BootstrapResult::TamperedRuntime));
+        assert_eq!(
+            parse_result(&std::fs::read(&invocation.result).unwrap()),
+            Some(BootstrapResult::TamperedRuntime)
+        );
         assert!(std::fs::read(&invocation.report).unwrap().is_empty());
         stderr_names(&invocation, diagnostic, "invalid semantic input");
     }

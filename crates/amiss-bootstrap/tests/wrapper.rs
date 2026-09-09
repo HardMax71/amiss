@@ -14,21 +14,22 @@ use std::fs;
 use std::io::{Read as _, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Output};
+use std::sync::LazyLock;
 
 use amiss_bootstrap::result::{BootstrapResult, parse_result};
-use amiss_fixtures::CommitChain;
 use amiss_fixtures::requests::SealedRequests;
+use amiss_fixtures::{CommitChain, report_bytes};
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_organization_floor,
-    canonical_trusted_time, parse_execution_constraint, parse_trusted_time,
+    ActionBootstrapContract, ExecutionConstraintDescriptor, ExecutionConstraintSchema,
+    TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement, canonical_execution_constraint,
+    canonical_organization_floor, canonical_trusted_time,
 };
-use amiss_wire::digest::hb;
-use amiss_wire::json::{Value, parse};
-use amiss_wire::model::{Oid, RepoPathText};
-use amiss_wire::report::PAYLOAD_SCHEMA;
-use amiss_wire::report::model::ReportStatus;
+use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
+use amiss_wire::report::model;
 use amiss_wire::requests::{
-    REQUEST_STREAM_BYTES, SEALED_ENGINE_ARGUMENT, commit_candidate_identity_digest,
+    CandidateSnapshot, GitSnapshotIdentity, GitSnapshotKind, REQUEST_STREAM_BYTES, RequestTrust,
+    SEALED_ENGINE_ARGUMENT, commit_candidate_identity_digest,
 };
 
 use support::release::{Release, release, release_with_engine};
@@ -56,17 +57,15 @@ fn main() -> ExitCode {
     let own = fs::read(std::env::current_exe().expect("own path")).expect("own bytes");
     let staged = release_with_engine(&own, |_root| {});
     let refused = release(|_root| {});
-    pass_run(&staged);
+    engine_output(&staged);
     block_run(&staged);
     absent_candidate(&refused);
-    silent_engine(&staged);
-    garbage_engine(&staged);
     identity_absent(&refused);
     invalid_supplied_controls(&staged);
     semantic::capture(&staged);
-    wrong_result_name(&refused);
+    invalid_invocation_writes_nothing(&refused, "result2", false, "wrong result name");
     #[cfg(unix)]
-    symlinked_scratch(&refused);
+    invalid_invocation_writes_nothing(&refused, "result", true, "symlinked scratch");
     request_ceiling(&staged);
     unread_requests(&staged);
     println!("wrapper: every scenario held");
@@ -98,73 +97,35 @@ fn engine() -> ExitCode {
 
 fn wrapper_constraint(staged: &Release) -> ExecutionConstraintDescriptor {
     let own = fs::read(env!("CARGO_BIN_EXE_amiss-bootstrap")).unwrap();
-    let raw = format!(
-        concat!(
-            r#"{{"schema":"amiss/scanner-execution-constraint","action_repository":"#,
-            r#"{{"host":"git.example.internal","owner":"platform/security","name":"amiss"}},"#,
-            r#""action_object_format":"sha1","action_commit_oid":"{commit}","#,
-            r#""action_tree_oid":"{tree}","manifest_path":"release-manifest.json","#,
-            r#""release_manifest_digest":"{manifest}","selected_platform":"{platform}","#,
-            r#""required_status_name":"amiss / assure","#,
-            r#""bootstrap_contract":"amiss-action-bootstrap","bootstrap_digest":"{bootstrap}"}}"#,
-        ),
-        commit = staged.commit,
-        tree = staged.tree,
-        manifest = staged.manifest_digest,
-        platform = staged.platform.as_ref(),
-        bootstrap = hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
-    );
-    parse_execution_constraint(raw.as_bytes()).unwrap()
-}
-
-fn entry<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
-    let Value::Object(members) = value else {
-        panic!("not an object");
-    };
-    members
-        .iter_mut()
-        .find(|(name, _)| name == key)
-        .map(|(_, member)| member)
-        .expect("a present member")
-}
-
-fn set(value: &mut Value, key: &str, member: Value) {
-    let Value::Object(members) = value else {
-        panic!("not an object");
-    };
-    if let Some(slot) = members.iter_mut().find(|(name, _)| name == key) {
-        slot.1 = member;
-        return;
+    ExecutionConstraintDescriptor {
+        action_commit_oid: Oid::new(ObjectFormat::Sha1, staged.commit.clone()).unwrap(),
+        action_object_format: ObjectFormat::Sha1,
+        action_repository: RepositoryIdentity::new(
+            "git.example.internal".to_owned(),
+            "platform/security".to_owned(),
+            "amiss".to_owned(),
+        )
+        .unwrap(),
+        action_tree_oid: Oid::new(ObjectFormat::Sha1, staged.tree.clone()).unwrap(),
+        bootstrap_contract: ActionBootstrapContract::Current,
+        bootstrap_digest: hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
+        manifest_path: "release-manifest.json".parse().unwrap(),
+        release_manifest_digest: staged.manifest_digest,
+        required_status_name: "amiss / assure".to_owned(),
+        schema: ExecutionConstraintSchema::Current,
+        selected_platform: staged.platform,
     }
-    let at = members
-        .iter()
-        .position(|(name, _)| name.as_str() > key)
-        .unwrap_or(members.len());
-    let mut expanded = std::mem::take(members).into_vec();
-    expanded.insert(at, (key.to_owned(), member));
-    *members = expanded.into_boxed_slice();
 }
 
-fn string(raw: &str) -> Value {
-    Value::string(raw)
-}
-
-/// One run the wrapper can settle end to end: a pre-acquired repository, a
-/// request triple bound to it, and the envelope the engine will replay.
 struct Run {
     repository: CommitChain,
     requests: SealedRequests,
     controls_input: Option<Vec<u8>>,
-    wire: Vec<u8>,
+    report: model::ReportEnvelope,
 }
 
-fn commit(chain: &CommitChain, position: usize) -> &amiss_fixtures::Commit {
-    chain.commits.get(position).expect("a fixture commit")
-}
-
-fn chain_trees(chain: &CommitChain) -> (String, String) {
-    (commit(chain, 0).tree.clone(), commit(chain, 1).tree.clone())
-}
+static REPORT: LazyLock<model::ReportEnvelope> =
+    LazyLock::new(|| serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap());
 
 fn sealed_run(staged: &Release) -> Run {
     let repository = amiss_fixtures::commit_chain(&[
@@ -172,254 +133,129 @@ fn sealed_run(staged: &Release) -> Run {
         ("candidate", &[("doc.md", "# candidate\n")]),
     ])
     .expect("a commit chain");
+    let [base, candidate] = repository.commits.as_slice() else {
+        panic!("a two-commit fixture");
+    };
     let mut requests = SealedRequests::new(wrapper_constraint(staged));
     let format = requests.evaluation.object_format;
-    requests.evaluation.base_commit = Oid::new(format, commit(&repository, 0).id.clone()).unwrap();
-    requests.evaluation.candidate_commit =
-        Some(Oid::new(format, commit(&repository, 1).id.clone()).unwrap());
-    let trees = chain_trees(&repository);
-    let wire = bind_envelope(staged, &mut requests, &trees, 0);
+    requests.evaluation.base_commit = Oid::new(format, base.id.clone()).unwrap();
+    requests.evaluation.candidate_commit = Some(Oid::new(format, candidate.id.clone()).unwrap());
+    let report = bind_envelope(staged, &mut requests, &repository);
     Run {
         repository,
         requests,
         controls_input: None,
-        wire,
+        report,
     }
 }
 
-/// Rebinds the supplied trusted-time statement to the run's identity and
-/// returns the bound statement with its digest.
-fn bind_statement(
-    requests: &mut SealedRequests,
-    repository_value: &Value,
-    identity: &str,
-) -> (Value, String) {
-    let target = requests
-        .evaluation
-        .target_ref
-        .as_ref()
-        .expect("a target")
-        .as_str()
-        .to_owned();
+fn bind_statement(requests: &mut SealedRequests, identity: Digest) {
+    let request = &requests.evaluation;
     let time = requests
         .controls
         .trusted_time
         .as_mut()
         .expect("supplied time");
-    let mut statement = Value::object(Vec::new());
-    set(
-        &mut statement,
-        "schema",
-        string("amiss/scanner-trusted-time-statement"),
-    );
-    set(
-        &mut statement,
-        "controller",
-        string("external-required-check-clock"),
-    );
-    set(&mut statement, "repository", repository_value.clone());
-    set(&mut statement, "ref", string(&target));
-    set(
-        &mut statement,
-        "candidate_identity_digest",
-        string(identity),
-    );
-    set(&mut statement, "provider", string(&time.provider));
-    set(
-        &mut statement,
-        "provider_run_id",
-        string(&time.provider_run_id),
-    );
-    set(
-        &mut statement,
-        "provider_run_attempt",
-        Value::Integer(i64::try_from(time.provider_run_attempt).unwrap()),
-    );
-    set(&mut statement, "evaluation_instant", string(INSTANT));
-    set(&mut statement, "valid_until", string(VALID_UNTIL));
-    let parsed = parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap())
-        .expect("a valid statement fixture");
-    let (_, digest) = canonical_trusted_time(&parsed).unwrap();
-    time.expected_digest = digest;
-    time.value = parsed;
-    (statement, digest.to_string())
+    time.value = TrustedTimeStatement {
+        candidate_identity_digest: identity,
+        controller: TrustedTimeController::ExternalRequiredCheckClock,
+        evaluation_instant: INSTANT.to_owned().try_into().unwrap(),
+        provider: time.provider.clone(),
+        provider_run_attempt: time.provider_run_attempt,
+        provider_run_id: time.provider_run_id.clone(),
+        ref_name: request.target_ref.clone().expect("a target"),
+        repository: request.repository.clone().expect("an identity"),
+        schema: TrustedTimeSchema::Current,
+        valid_until: VALID_UNTIL.to_owned().try_into().unwrap(),
+    };
+    time.expected_digest = canonical_trusted_time(&time.value).unwrap().1;
 }
 
-/// Builds the envelope the engine must print for the wrapper to accept it.
-/// The identity digest is computed by the wire crate from the request and
-/// the trees, and the envelope mirrors exactly the members that digest
-/// covers.
 fn bind_envelope(
     staged: &Release,
     requests: &mut SealedRequests,
-    trees: &(String, String),
-    exit_class: i64,
-) -> Vec<u8> {
+    repository: &CommitChain,
+) -> model::ReportEnvelope {
+    let [base, candidate] = repository.commits.as_slice() else {
+        panic!("a two-commit fixture");
+    };
     let format = requests.evaluation.object_format;
-    let base_tree = Oid::new(format, trees.0.clone()).unwrap();
-    let candidate_tree = Oid::new(format, trees.1.clone()).unwrap();
+    let base_tree = Oid::new(format, base.tree.clone()).unwrap();
+    let candidate_tree = Oid::new(format, candidate.tree.clone()).unwrap();
     let identity =
         commit_candidate_identity_digest(&requests.evaluation, &base_tree, &candidate_tree)
-            .expect("a commit-pair identity")
-            .to_string();
-
-    let identity_repository = requests
-        .evaluation
-        .repository
+            .expect("a commit-pair identity");
+    bind_statement(requests, identity);
+    let time = requests
+        .controls
+        .trusted_time
         .as_ref()
-        .expect("an identity");
-    let mut repository_value = Value::object(Vec::new());
-    set(
-        &mut repository_value,
-        "host",
-        string(identity_repository.host()),
-    );
-    set(
-        &mut repository_value,
-        "owner",
-        string(identity_repository.owner()),
-    );
-    set(
-        &mut repository_value,
-        "name",
-        string(identity_repository.name()),
-    );
-
-    let (statement, statement_digest) = bind_statement(requests, &repository_value, &identity);
-
-    let mut envelope = example_envelope();
-    let payload = entry(&mut envelope, "payload");
-    set(
-        entry(payload, "engine"),
-        "engine_digest",
-        string(&staged.engine_digest.to_string()),
-    );
-    patch_evaluation(payload, requests, &repository_value, trees);
-    patch_controls(payload, requests, statement, &statement_digest);
-    set(
-        entry(payload, "result"),
-        "exit_code",
-        Value::Integer(exit_class),
-    );
-    if exit_class == 1 {
-        set(
-            entry(payload, "result"),
-            "status",
-            string(ReportStatus::Fail.as_ref()),
-        );
-    }
-    let digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(entry(&mut envelope, "payload")).unwrap(),
-    )
-    .to_string();
-    set(&mut envelope, "payload_digest", string(&digest));
-    let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
-    wire.push(b'\n');
-    wire
-}
-
-fn patch_evaluation(
-    payload: &mut Value,
-    requests: &SealedRequests,
-    repository_value: &Value,
-    trees: &(String, String),
-) {
+        .expect("supplied time");
     let request = &requests.evaluation;
-    let evaluation = entry(payload, "evaluation");
-    set(evaluation, "repository", repository_value.clone());
-    set(evaluation, "forge", string("gitlab"));
-    for (member, reference) in [
-        ("candidate_ref", &request.candidate_ref),
-        ("target_ref", &request.target_ref),
-        ("default_branch_ref", &request.default_branch_ref),
-    ] {
-        set(
-            evaluation,
-            member,
-            string(reference.as_ref().expect("an identity ref").as_str()),
-        );
-    }
-    let candidate = request.candidate_commit.as_ref().expect("a candidate");
-    for (member, commit, tree) in [
-        ("base", &request.base_commit, &trees.0),
-        ("candidate", candidate, &trees.1),
-    ] {
-        let snapshot = entry(evaluation, member);
-        set(snapshot, "commit_oid", string(commit.as_str()));
-        set(snapshot, "tree_oid", string(tree));
-    }
-    set(evaluation, "evaluation_instant", string(INSTANT));
-    set(evaluation, "trusted_time", Value::Bool(true));
-}
-
-fn patch_controls(
-    payload: &mut Value,
-    requests: &SealedRequests,
-    statement: Value,
-    statement_digest: &str,
-) {
+    let mut report = REPORT.clone();
+    report.payload.engine.engine_digest = staged.engine_digest;
+    let model::Evaluation::Resolved(evaluation) = &mut report.payload.evaluation else {
+        panic!("a resolved evaluation");
+    };
+    evaluation.repository.clone_from(&request.repository);
+    evaluation.forge = request.forge;
+    evaluation.candidate_ref.clone_from(&request.candidate_ref);
+    evaluation.target_ref.clone_from(&request.target_ref);
+    evaluation
+        .default_branch_ref
+        .clone_from(&request.default_branch_ref);
+    evaluation.base = model::BaseSnapshot::Git(GitSnapshotIdentity {
+        commit_oid: request.base_commit.clone(),
+        kind: GitSnapshotKind::GitCommit,
+        object_format: format,
+        tree_oid: base_tree,
+    });
+    evaluation.candidate =
+        model::Snapshot::Available(CandidateSnapshot::Git(GitSnapshotIdentity {
+            commit_oid: request.candidate_commit.clone().expect("a candidate"),
+            kind: GitSnapshotKind::GitCommit,
+            object_format: format,
+            tree_oid: candidate_tree,
+        }));
+    evaluation.evaluation_instant = Some(time.value.evaluation_instant.clone());
+    evaluation.trusted_time = true;
     let floor = requests
         .controls
         .organization_floor
         .as_ref()
         .expect("a floor");
-    let floor_digest = floor.expected_digest.to_string();
-    let floor_source = floor.trust_source.as_ref().to_owned();
     let supplied = requests
         .controls
         .execution_constraint
         .as_ref()
         .expect("a constraint");
-    let constraint_source = supplied.trust_source.as_ref().to_owned();
-    let constraint_value = parse(&serde_json::to_vec(&supplied.value).expect("constraint JSON"))
-        .expect("a constraint value");
-    let constraint_digest = canonical_execution_constraint(&requests.constraint)
-        .unwrap()
-        .1
-        .to_string();
-
-    let controls = entry(payload, "controls");
-    set(controls, "profile", string("enforce"));
-    let mut floor_echo = Value::object(Vec::new());
-    set(&mut floor_echo, "status", string("verified"));
-    set(&mut floor_echo, "digest", string(&floor_digest));
-    set(&mut floor_echo, "trust_source", string(&floor_source));
-    set(controls, "organization_floor", floor_echo);
-    let mut constraint_echo = Value::object(Vec::new());
-    set(&mut constraint_echo, "status", string("verified"));
-    set(&mut constraint_echo, "descriptor", constraint_value);
-    set(
-        &mut constraint_echo,
-        "descriptor_digest",
-        string(&constraint_digest),
-    );
-    set(
-        &mut constraint_echo,
-        "trust_source",
-        string(&constraint_source),
-    );
-    set(controls, "execution_constraint", constraint_echo);
-    let mut time_echo = Value::object(Vec::new());
-    set(&mut time_echo, "status", string("verified"));
-    set(
-        &mut time_echo,
-        "trust_source",
-        string("external-required-check"),
-    );
-    set(&mut time_echo, "statement", statement);
-    set(&mut time_echo, "statement_digest", string(statement_digest));
-    set(controls, "trusted_time_source", time_echo);
-}
-
-fn example_envelope() -> Value {
-    let bytes = fs::read(
-        Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../spec/examples")
-            .join("scanner-report.json"),
-    )
-    .unwrap();
-    parse(&bytes).unwrap()
+    let model::Controls::Resolved(controls) = &mut report.payload.controls else {
+        panic!("resolved controls");
+    };
+    controls.profile = request.profile;
+    controls.organization_floor = model::ControlProvenance {
+        digest: Some(floor.expected_digest),
+        status: model::ControlStatus::Verified,
+        trust_source: model::ControlTrustSource::Verified(floor.trust_source),
+    };
+    controls.execution_constraint = model::ExecutionConstraintProvenance::Verified(Box::new(
+        model::VerifiedExecutionConstraint {
+            descriptor: supplied.value.clone(),
+            descriptor_digest: canonical_execution_constraint(&requests.constraint)
+                .unwrap()
+                .1,
+            status: model::VerifiedControlStatus::Verified,
+            trust_source: supplied.trust_source,
+        },
+    ));
+    controls.trusted_time_source =
+        model::TrustedTimeProvenance::Verified(Box::new(model::VerifiedTrustedTime {
+            statement: time.value.clone(),
+            statement_digest: time.expected_digest,
+            status: model::VerifiedControlStatus::Verified,
+            trust_source: model::TrustedTimeTrustSource::ExternalRequiredCheck,
+        }));
+    report
 }
 
 struct Invocation {
@@ -487,10 +323,6 @@ fn plant(run: &Run, stdout: &[u8], exit: &str) {
     fs::write(run.repository.root().join("engine-exit"), exit).unwrap();
 }
 
-fn settled(invocation: &Invocation) -> Option<BootstrapResult> {
-    parse_result(&fs::read(&invocation.result).unwrap())
-}
-
 fn stderr_names(invocation: &Invocation, diagnostic: &str, scenario: &str) {
     let stderr = String::from_utf8_lossy(&invocation.output.stderr);
     assert!(
@@ -499,39 +331,84 @@ fn stderr_names(invocation: &Invocation, diagnostic: &str, scenario: &str) {
     );
 }
 
-fn pass_run(staged: &Release) {
-    let run = sealed_run(staged);
-    plant(&run, &run.wire, "0");
-    let invocation = invoke(staged, &run, "result", false);
-    assert_eq!(
-        invocation.output.status.code(),
-        Some(0),
-        "a pass run exits zero"
-    );
-    assert_eq!(settled(&invocation), Some(BootstrapResult::Pass));
-    assert_eq!(
-        fs::read(&invocation.report).unwrap(),
-        run.wire,
-        "the published report is the accepted envelope"
-    );
-    assert!(
-        invocation.output.stderr.is_empty(),
-        "a pass run needs no diagnostic"
-    );
+fn engine_output(staged: &Release) {
+    for floor_source in [
+        RequestTrust::ExternalRequiredCheck,
+        RequestTrust::OrganizationPolicy,
+    ] {
+        for constraint_source in [
+            RequestTrust::ExternalRequiredCheck,
+            RequestTrust::OrganizationPolicy,
+        ] {
+            let mut run = sealed_run(staged);
+            run.requests
+                .controls
+                .organization_floor
+                .as_mut()
+                .unwrap()
+                .trust_source = floor_source;
+            run.requests
+                .controls
+                .execution_constraint
+                .as_mut()
+                .unwrap()
+                .trust_source = constraint_source;
+            run.report = bind_envelope(staged, &mut run.requests, &run.repository);
+            let wire = report_bytes(run.report.clone()).unwrap();
+            for (stdout, expected, exit, published, diagnostic) in [
+                (
+                    wire.as_slice(),
+                    BootstrapResult::Pass,
+                    0,
+                    wire.as_slice(),
+                    "",
+                ),
+                (
+                    b"".as_slice(),
+                    BootstrapResult::MissingOutput,
+                    2,
+                    b"".as_slice(),
+                    "report-missing",
+                ),
+                (
+                    b"not an envelope\n".as_slice(),
+                    BootstrapResult::TamperedRuntime,
+                    2,
+                    b"".as_slice(),
+                    "report-rejected",
+                ),
+            ] {
+                plant(&run, stdout, "0");
+                let invocation = invoke(staged, &run, "result", false);
+                assert_eq!(invocation.output.status.code(), Some(exit));
+                assert_eq!(
+                    parse_result(&fs::read(&invocation.result).unwrap()),
+                    Some(expected)
+                );
+                assert_eq!(fs::read(&invocation.report).unwrap(), published);
+                let stderr = String::from_utf8_lossy(&invocation.output.stderr);
+                assert_eq!(stderr.is_empty(), diagnostic.is_empty());
+                assert!(stderr.contains(diagnostic), "{stderr:?}");
+            }
+        }
+    }
 }
 
 fn block_run(staged: &Release) {
     let mut run = sealed_run(staged);
-    let trees = chain_trees(&run.repository);
-    run.wire = bind_envelope(staged, &mut run.requests, &trees, 1);
-    plant(&run, &run.wire, "1");
+    run.report.payload.result.exit_code = 1;
+    run.report.payload.result.status = model::ReportStatus::Fail;
+    plant(&run, &report_bytes(run.report.clone()).unwrap(), "1");
     let invocation = invoke(staged, &run, "result", false);
     assert_eq!(
         invocation.output.status.code(),
         Some(1),
         "a block run exits one"
     );
-    assert_eq!(settled(&invocation), Some(BootstrapResult::Block));
+    assert_eq!(
+        parse_result(&fs::read(&invocation.result).unwrap()),
+        Some(BootstrapResult::Block)
+    );
 }
 
 fn absent_candidate(staged: &Release) {
@@ -539,12 +416,14 @@ fn absent_candidate(staged: &Release) {
     let format = run.requests.evaluation.object_format;
     run.requests.evaluation.candidate_commit =
         Some(Oid::new(format, ABSENT_COMMIT.to_owned()).unwrap());
-    let trees = chain_trees(&run.repository);
-    run.wire = bind_envelope(staged, &mut run.requests, &trees, 0);
-    plant(&run, &run.wire, "0");
+    run.report = bind_envelope(staged, &mut run.requests, &run.repository);
+    plant(&run, &report_bytes(run.report.clone()).unwrap(), "0");
     let invocation = invoke(staged, &run, "result", false);
     assert_eq!(invocation.output.status.code(), Some(2));
-    assert_eq!(settled(&invocation), Some(BootstrapResult::Unavailable));
+    assert_eq!(
+        parse_result(&fs::read(&invocation.result).unwrap()),
+        Some(BootstrapResult::Unavailable)
+    );
     stderr_names(
         &invocation,
         "repository-not-pre-acquired",
@@ -552,30 +431,17 @@ fn absent_candidate(staged: &Release) {
     );
 }
 
-fn silent_engine(staged: &Release) {
-    let run = sealed_run(staged);
-    plant(&run, b"", "0");
-    let invocation = invoke(staged, &run, "result", false);
-    assert_eq!(settled(&invocation), Some(BootstrapResult::MissingOutput));
-    stderr_names(&invocation, "report-missing", "silent engine");
-}
-
-fn garbage_engine(staged: &Release) {
-    let run = sealed_run(staged);
-    plant(&run, b"not an envelope\n", "0");
-    let invocation = invoke(staged, &run, "result", false);
-    assert_eq!(settled(&invocation), Some(BootstrapResult::TamperedRuntime));
-    stderr_names(&invocation, "report-rejected", "garbage engine");
-}
-
 /// The request grammar makes the four identity fields all-or-nothing, so the
 /// only sealed-identity gap a parsed request can carry is an absent forge.
 fn identity_absent(staged: &Release) {
     let mut run = sealed_run(staged);
     run.requests.evaluation.forge = None;
-    plant(&run, &run.wire, "0");
+    plant(&run, &report_bytes(run.report.clone()).unwrap(), "0");
     let invocation = invoke(staged, &run, "result", false);
-    assert_eq!(settled(&invocation), Some(BootstrapResult::TamperedRuntime));
+    assert_eq!(
+        parse_result(&fs::read(&invocation.result).unwrap()),
+        Some(BootstrapResult::TamperedRuntime)
+    );
     stderr_names(&invocation, "evaluation-identity-absent", "absent forge");
 }
 
@@ -606,10 +472,13 @@ fn invalid_supplied_controls(staged: &Release) {
         (provider, "provider", "trusted-time-invalid"),
         (lifetime, "valid_until", "trusted-time-invalid"),
     ] {
-        plant(&run, &run.wire, "0");
+        plant(&run, &report_bytes(run.report.clone()).unwrap(), "0");
         let invocation = invoke(staged, &run, "result", false);
         assert_eq!(invocation.output.status.code(), Some(2), "{field}");
-        assert_eq!(settled(&invocation), Some(BootstrapResult::TamperedRuntime));
+        assert_eq!(
+            parse_result(&fs::read(&invocation.result).unwrap()),
+            Some(BootstrapResult::TamperedRuntime)
+        );
         assert!(fs::read(&invocation.report).unwrap().is_empty(), "{field}");
         stderr_names(&invocation, diagnostic, field);
     }
@@ -622,7 +491,7 @@ fn invalid_invocation_writes_nothing(
     scenario: &str,
 ) {
     let run = sealed_run(staged);
-    plant(&run, &run.wire, "0");
+    plant(&run, &report_bytes(run.report.clone()).unwrap(), "0");
     let invocation = invoke(staged, &run, result_name, scratch_link);
     assert_eq!(invocation.output.status.code(), Some(2), "{scenario}");
     stderr_names(&invocation, "invalid-invocation", scenario);
@@ -634,15 +503,6 @@ fn invalid_invocation_writes_nothing(
         fs::read(&invocation.report).unwrap().is_empty(),
         "{scenario}"
     );
-}
-
-fn wrong_result_name(staged: &Release) {
-    invalid_invocation_writes_nothing(staged, "result2", false, "wrong result name");
-}
-
-#[cfg(unix)]
-fn symlinked_scratch(staged: &Release) {
-    invalid_invocation_writes_nothing(staged, "result", true, "symlinked scratch");
 }
 
 /// Grows valid protected paths until the canonical request is exactly `target` bytes long.
@@ -691,7 +551,7 @@ fn inflate_controls(staged: &Release, run: &mut Run, target: u64) {
         })
         .collect();
     floor.expected_digest = canonical_organization_floor(&floor.value).unwrap().1;
-    run.wire = bind_envelope(staged, &mut run.requests, &chain_trees(&run.repository), 0);
+    run.report = bind_envelope(staged, &mut run.requests, &run.repository);
     let sized = run
         .requests
         .controls
@@ -703,19 +563,22 @@ fn inflate_controls(staged: &Release, run: &mut Run, target: u64) {
 fn request_ceiling(staged: &Release) {
     let mut run = sealed_run(staged);
     inflate_controls(staged, &mut run, REQUEST_STREAM_BYTES);
-    plant(&run, &run.wire, "0");
+    plant(&run, &report_bytes(run.report.clone()).unwrap(), "0");
     let invocation = invoke(staged, &run, "result", false);
     assert_eq!(
-        settled(&invocation),
+        parse_result(&fs::read(&invocation.result).unwrap()),
         Some(BootstrapResult::Pass),
         "a controls request exactly at the stream ceiling is read whole"
     );
 
     let mut over = sealed_run(staged);
     inflate_controls(staged, &mut over, REQUEST_STREAM_BYTES + 1);
-    plant(&over, &over.wire, "0");
+    plant(&over, &report_bytes(over.report.clone()).unwrap(), "0");
     let invocation = invoke(staged, &over, "result", false);
-    assert_eq!(settled(&invocation), Some(BootstrapResult::TamperedRuntime));
+    assert_eq!(
+        parse_result(&fs::read(&invocation.result).unwrap()),
+        Some(BootstrapResult::TamperedRuntime)
+    );
     stderr_names(&invocation, "controls-request-invalid", "over the ceiling");
 }
 
@@ -725,9 +588,12 @@ fn request_ceiling(staged: &Release) {
 fn unread_requests(staged: &Release) {
     let mut run = sealed_run(staged);
     inflate_controls(staged, &mut run, REQUEST_STREAM_BYTES);
-    plant(&run, &run.wire, "0");
+    plant(&run, &report_bytes(run.report.clone()).unwrap(), "0");
     fs::write(run.repository.root().join("engine-skip-stdin"), b"").unwrap();
     let invocation = invoke(staged, &run, "result", false);
-    assert_eq!(settled(&invocation), Some(BootstrapResult::Unavailable));
+    assert_eq!(
+        parse_result(&fs::read(&invocation.result).unwrap()),
+        Some(BootstrapResult::Unavailable)
+    );
     stderr_names(&invocation, "engine-collection-failed", "unread requests");
 }
