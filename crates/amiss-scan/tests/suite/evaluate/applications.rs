@@ -50,8 +50,10 @@ fn policy() -> (Vec<Comparison>, Effects) {
         include_bytes!("../../../../../spec/examples/scanner-trusted-time-statement.json"),
     )
     .unwrap();
-    statement.evaluation_instant = moment("2026-07-11T00:00:00Z");
-    statement.valid_until = moment("2026-07-11T00:10:00Z");
+    statement.evaluation_instant =
+        amiss_wire::model::UtcInstant::try_from("2026-07-11T00:00:00Z".to_owned()).unwrap();
+    statement.valid_until =
+        amiss_wire::model::UtcInstant::try_from("2026-07-11T00:10:00Z".to_owned()).unwrap();
     let (_, digest) = canonical_trusted_time(&statement).unwrap();
     (
         comparisons,

@@ -142,10 +142,6 @@ fn execution() -> ExecutionConstraintDescriptor {
     parse_execution_constraint(&example("scanner-execution-constraint.json")).unwrap()
 }
 
-fn instant(value: &str) -> UtcInstant {
-    UtcInstant::new(value.to_owned()).unwrap()
-}
-
 fn policy() -> PolicyControls {
     PolicyControls {
         external_policy: ExternalPolicy::Advisory,
@@ -188,8 +184,8 @@ fn bootstrap(
 ) -> Result<BootstrapJob, BootstrapJobError> {
     bootstrap_job(BootstrapJobInput {
         run,
-        evaluation_instant: instant("2026-07-12T10:00:00Z"),
-        valid_until: instant("2026-07-12T10:05:00Z"),
+        evaluation_instant: UtcInstant::try_from("2026-07-12T10:00:00Z".to_owned()).unwrap(),
+        valid_until: UtcInstant::try_from("2026-07-12T10:05:00Z".to_owned()).unwrap(),
         acquired_semantic_templates,
     })
 }
@@ -271,8 +267,8 @@ fn job_construction_binds_the_complete_authenticated_run() {
     let run = run_request(policy());
     let job = bootstrap_job(BootstrapJobInput {
         run: &run,
-        evaluation_instant: instant("2026-07-12T10:00:00Z"),
-        valid_until: instant("2026-07-12T10:05:00Z"),
+        evaluation_instant: UtcInstant::try_from("2026-07-12T10:00:00Z".to_owned()).unwrap(),
+        valid_until: UtcInstant::try_from("2026-07-12T10:05:00Z".to_owned()).unwrap(),
         acquired_semantic_templates: &[],
     })
     .unwrap();
@@ -559,8 +555,8 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
-            evaluation_instant: instant("2026-07-12T10:00:00Z"),
-            valid_until: instant("2026-07-12T10:05:00Z"),
+            evaluation_instant: UtcInstant::try_from("2026-07-12T10:00:00Z".to_owned()).unwrap(),
+            valid_until: UtcInstant::try_from("2026-07-12T10:05:00Z".to_owned()).unwrap(),
             acquired_semantic_templates: &[],
         })
         .unwrap_err(),
@@ -587,8 +583,8 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
-            evaluation_instant: instant("2026-07-12T10:00:00Z"),
-            valid_until: instant("2026-07-12T10:05:00Z"),
+            evaluation_instant: UtcInstant::try_from("2026-07-12T10:00:00Z".to_owned()).unwrap(),
+            valid_until: UtcInstant::try_from("2026-07-12T10:05:00Z".to_owned()).unwrap(),
             acquired_semantic_templates: &[],
         })
         .unwrap_err(),
@@ -599,8 +595,8 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
-            evaluation_instant: instant("2026-07-12T10:00:00Z"),
-            valid_until: instant("2026-07-12T10:20:00Z"),
+            evaluation_instant: UtcInstant::try_from("2026-07-12T10:00:00Z".to_owned()).unwrap(),
+            valid_until: UtcInstant::try_from("2026-07-12T10:20:00Z".to_owned()).unwrap(),
             acquired_semantic_templates: &[],
         })
         .unwrap_err(),
@@ -709,8 +705,8 @@ fn a_validated_plan_cannot_be_changed_in_place() {
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
-            evaluation_instant: instant("2026-07-12T10:00:00Z"),
-            valid_until: instant("2026-07-12T10:05:00Z"),
+            evaluation_instant: UtcInstant::try_from("2026-07-12T10:00:00Z".to_owned()).unwrap(),
+            valid_until: UtcInstant::try_from("2026-07-12T10:05:00Z".to_owned()).unwrap(),
             acquired_semantic_templates: &[],
         })
         .unwrap_err(),
@@ -726,8 +722,8 @@ fn a_job_cannot_escape_the_ledger_frozen_plan_binding() {
     assert_eq!(
         bootstrap_job(BootstrapJobInput {
             run: &run,
-            evaluation_instant: instant("2026-07-12T10:00:00Z"),
-            valid_until: instant("2026-07-12T10:05:00Z"),
+            evaluation_instant: UtcInstant::try_from("2026-07-12T10:00:00Z".to_owned()).unwrap(),
+            valid_until: UtcInstant::try_from("2026-07-12T10:05:00Z".to_owned()).unwrap(),
             acquired_semantic_templates: &[],
         })
         .unwrap_err(),

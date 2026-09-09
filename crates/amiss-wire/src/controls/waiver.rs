@@ -10,8 +10,7 @@ use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdent
 
 use super::fact::fact_digests;
 use super::{
-    Fact, WAIVER_BUNDLE_SCHEMA, root, sorted_set, valid_reason, validate_instant,
-    validate_repository, validate_tree,
+    Fact, WAIVER_BUNDLE_SCHEMA, root, sorted_set, valid_reason, validate_repository, validate_tree,
 };
 
 #[derive(
@@ -90,7 +89,6 @@ pub fn canonical_waiver_bundle(bundle: &WaiverBundle) -> Result<(Vec<u8>, Digest
 
 fn validate_waiver_bundle(bundle: &WaiverBundle) -> Result<(), Error> {
     validate_repository("$.repository", &bundle.repository)?;
-    validate_instant("$.created_at", &bundle.created_at)?;
     if bundle.items.len() > 100_000 {
         return fail("$.items", ErrorKind::LimitExceeded);
     }
@@ -147,9 +145,6 @@ fn validate_waiver_item(path: &str, item: &WaiverItem) -> Result<(), Error> {
     if !valid_reason(&item.reason) {
         return fail(&format!("{path}.reason"), ErrorKind::InvalidValue);
     }
-    validate_instant(&format!("{path}.created_at"), &item.created_at)?;
-    validate_instant(&format!("{path}.not_before"), &item.not_before)?;
-    validate_instant(&format!("{path}.expires_at"), &item.expires_at)?;
     (item.created_at <= item.not_before && item.not_before < item.expires_at)
         .then_some(())
         .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))

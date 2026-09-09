@@ -64,7 +64,12 @@ fn clock_shape_and_binding_defects_remain_distinct() {
     for (value, defect) in [
         (Value::Null, AcceptanceDefect::SealedControls),
         (Value::Bool(true), AcceptanceDefect::Shape),
-        (string("not-an-instant"), AcceptanceDefect::SealedControls),
+        (string("not-an-instant"), AcceptanceDefect::Shape),
+        (string("2026-02-30T10:00:00Z"), AcceptanceDefect::Shape),
+        (
+            string("2026-07-12T10:00:01Z"),
+            AcceptanceDefect::SealedControls,
+        ),
     ] {
         assert_eq!(
             refused(Deviation::post(move |payload| {

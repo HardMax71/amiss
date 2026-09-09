@@ -669,11 +669,6 @@ fn tree() -> amiss_wire::model::TreeIdentity {
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
-fn moment(raw: &str) -> amiss_wire::model::UtcInstant {
-    amiss_wire::model::UtcInstant::new(raw.to_owned()).expect("an instant")
-}
-
-#[expect(clippy::expect_used, reason = "test fixture helper")]
 fn waived_fact() -> amiss_wire::controls::Fact {
     amiss_wire::controls::Fact {
         schema: amiss_wire::controls::FactSchema::Current,
@@ -718,7 +713,8 @@ fn waived_fact() -> amiss_wire::controls::Fact {
 /// A waiver is live from its activation instant, not one tick after it.
 #[test]
 fn a_waiver_active_at_this_very_instant_is_not_early() {
-    let instant = moment("2026-07-02T00:00:00Z");
+    let instant = amiss_wire::model::UtcInstant::try_from("2026-07-02T00:00:00Z".to_owned())
+        .expect("an instant");
     let item = amiss_wire::controls::WaiverItem {
         waiver_id: amiss_wire::model::ArtifactId::new("waiver/one".to_owned()).expect("id"),
         finding_key: hb("amiss/scanner-finding-key", b"key"),
@@ -728,9 +724,11 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         owner: OwnerId::try_from("team:docs".to_owned()).expect("owner"),
         issuer: OwnerId::try_from("team:release".to_owned()).expect("issuer"),
         reason: "window".to_owned(),
-        created_at: moment("2026-07-01T00:00:00Z"),
+        created_at: amiss_wire::model::UtcInstant::try_from("2026-07-01T00:00:00Z".to_owned())
+            .expect("an instant"),
         not_before: instant.clone(),
-        expires_at: moment("2026-08-01T00:00:00Z"),
+        expires_at: amiss_wire::model::UtcInstant::try_from("2026-08-01T00:00:00Z".to_owned())
+            .expect("an instant"),
         residual_disposition: amiss_wire::controls::WaiverResidualDisposition::Warn,
     };
     let statement = amiss_wire::controls::TrustedTimeStatement {
@@ -747,7 +745,8 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         provider_run_id: "run/1".to_owned(),
         provider_run_attempt: 1,
         evaluation_instant: instant,
-        valid_until: moment("2026-07-02T00:10:00Z"),
+        valid_until: amiss_wire::model::UtcInstant::try_from("2026-07-02T00:10:00Z".to_owned())
+            .expect("an instant"),
     };
     let (_, time_digest) =
         amiss_wire::controls::canonical_trusted_time(&statement).expect("trusted time");

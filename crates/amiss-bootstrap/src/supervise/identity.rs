@@ -1,5 +1,5 @@
 use amiss_wire::digest::hj_serde;
-use amiss_wire::model::{BranchRef, UtcInstant};
+use amiss_wire::model::BranchRef;
 use amiss_wire::report::model::{Controls, IdentityPreimage, ResolvedEvaluation};
 use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, CandidateIdentitySchema};
 
@@ -34,7 +34,7 @@ pub(super) fn accept(
         evaluation
             .evaluation_instant
             .as_ref()
-            .map(UtcInstant::as_str),
+            .map(|instant| instant.as_str()),
         identity_digest,
         expected,
     )

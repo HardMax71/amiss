@@ -302,11 +302,6 @@ fn a_disposition_weakens_only_by_dropping_below_the_base() {
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
-fn instant() -> UtcInstant {
-    UtcInstant::new("2026-07-01T00:00:00Z".to_owned()).expect("instant")
-}
-
-#[expect(clippy::expect_used, reason = "test fixture helper")]
 fn cloned_first_item(document: &serde_json::Value) -> serde_json::Value {
     document
         .get("items")
@@ -409,19 +404,20 @@ fn waiver_input(item_count: usize) -> WaiverInput {
 
 #[test]
 fn debt_and_waiver_item_ceilings_are_exact() {
-    let at_cap = verify_debt(&debt_input(1), None, None, None, &instant(), 1).unwrap_err();
+    let instant = UtcInstant::try_from("2026-07-01T00:00:00Z".to_owned()).unwrap();
+    let at_cap = verify_debt(&debt_input(1), None, None, None, &instant, 1).unwrap_err();
     assert_eq!(
         at_cap.code,
         AnalysisErrorCode::ControlBindingMismatch,
         "one item under a ceiling of one is within it; only the binding fails"
     );
-    let over = verify_debt(&debt_input(2), None, None, None, &instant(), 1).unwrap_err();
+    let over = verify_debt(&debt_input(2), None, None, None, &instant, 1).unwrap_err();
     assert_eq!(over.code, AnalysisErrorCode::ResourceLimitExceeded);
     assert_eq!(over.resource, Some((ResourceName::DebtItems, 1, 2)));
 
-    let at_cap = verify_waiver(&waiver_input(1), None, None, None, &instant(), 1).unwrap_err();
+    let at_cap = verify_waiver(&waiver_input(1), None, None, None, &instant, 1).unwrap_err();
     assert_eq!(at_cap.code, AnalysisErrorCode::ControlBindingMismatch);
-    let over = verify_waiver(&waiver_input(2), None, None, None, &instant(), 1).unwrap_err();
+    let over = verify_waiver(&waiver_input(2), None, None, None, &instant, 1).unwrap_err();
     assert_eq!(over.code, AnalysisErrorCode::ResourceLimitExceeded);
     assert_eq!(over.resource, Some((ResourceName::WaiverItems, 1, 2)));
 }

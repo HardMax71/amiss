@@ -245,7 +245,7 @@ fn classify_adoption(gathered: &Gathered) -> Validation<Option<Adoption>> {
         .ok_or(Code::InvalidInvocation)?;
     let instant = |slot: &Slot| {
         slot.unique_value()
-            .filter(|value| amiss_wire::model::UtcInstant::new((*value).to_owned()).is_some())
+            .filter(|value| amiss_wire::model::UtcInstant::try_from((*value).to_owned()).is_ok())
             .map(str::to_owned)
     };
     let nonempty = |slot: &Slot| {

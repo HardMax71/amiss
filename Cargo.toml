@@ -50,9 +50,11 @@ axum = { version = "0.8.9", default-features = false, features = ["http1", "toki
 base64 = { version = "0.23", default-features = false, features = ["std"] }
 cap-fs-ext = "4.0.2"
 cap-std = "4.0.2"
+datealgo = { version = "0.2.1", default-features = false }
 derive_more = { version = "2.1.1", default-features = false, features = ["display"] }
 divan = "0.1.21"
 digest-io = "0.1.0"
+edtf-core = { version = "1.2.3", default-features = false }
 flate2 = "1"
 getrandom = "0.4.3"
 hex = "0.4"

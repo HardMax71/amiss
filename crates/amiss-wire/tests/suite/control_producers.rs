@@ -51,8 +51,8 @@ fn trusted_time_statement() -> TrustedTimeStatement {
         provider: "gitlab-ci".to_owned(),
         provider_run_id: "pipeline/01J2Z9-7".to_owned(),
         provider_run_attempt: 2,
-        evaluation_instant: UtcInstant::new("2026-07-12T10:00:00Z".to_owned()).unwrap(),
-        valid_until: UtcInstant::new("2026-07-12T10:10:00Z".to_owned()).unwrap(),
+        evaluation_instant: UtcInstant::try_from("2026-07-12T10:00:00Z".to_owned()).unwrap(),
+        valid_until: UtcInstant::try_from("2026-07-12T10:10:00Z".to_owned()).unwrap(),
     }
 }
 

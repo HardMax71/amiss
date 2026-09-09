@@ -139,6 +139,7 @@ dependencies = [
  "base64 0.23.1",
  "cap-std",
  "countio",
+ "datealgo",
  "derive_more",
  "flate2",
  "getrandom 0.4.3",
@@ -510,8 +511,10 @@ name = "amiss-wire"
 version = "0.27.0"
 dependencies = [
  "countio",
+ "datealgo",
  "digest-io",
  "divan",
+ "edtf-core",
  "hex",
  "hex_fmt",
  "js_int",
@@ -1260,6 +1263,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4583a4551df46e2792f82ceeac45e850d2e2d5debba0b91f102385cda5b11f06"
 
 [[package]]
+name = "datealgo"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8460319e3aaa3b5b1810df5096308334bf23b46db0b1b0003e6682ed14223846"
+
+[[package]]
 name = "defmt"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1435,6 +1444,12 @@ name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
+
+[[package]]
+name = "edtf-core"
+version = "1.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9ce7075601dfd0cf8c5117a8ef452d748cbb8866194349d39177353e93ee1c0"
 
 [[package]]
 name = "either"

@@ -64,10 +64,10 @@ fn maximal_trusted_time(
     .ok_or(BootstrapJobError::RequestEncoding)?;
     let ref_name = BranchRef::new(format!("refs/heads/{}", "\"".repeat(255)))
         .ok_or(BootstrapJobError::RequestEncoding)?;
-    let evaluation_instant = UtcInstant::new("9999-12-31T23:50:00Z".to_owned())
-        .ok_or(BootstrapJobError::RequestEncoding)?;
-    let valid_until = UtcInstant::new("9999-12-31T23:59:00Z".to_owned())
-        .ok_or(BootstrapJobError::RequestEncoding)?;
+    let evaluation_instant = UtcInstant::try_from("9999-12-31T23:50:00Z".to_owned())
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    let valid_until = UtcInstant::try_from("9999-12-31T23:59:00Z".to_owned())
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
     let statement = TrustedTimeStatement {
         schema: TrustedTimeSchema::Current,
         controller: TrustedTimeController::ExternalRequiredCheckClock,

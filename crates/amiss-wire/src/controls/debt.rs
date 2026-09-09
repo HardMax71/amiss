@@ -10,8 +10,7 @@ use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdent
 
 use super::fact::fact_digests;
 use super::{
-    DEBT_SNAPSHOT_SCHEMA, Fact, root, sorted_set, valid_reason, validate_instant,
-    validate_repository, validate_tree,
+    DEBT_SNAPSHOT_SCHEMA, Fact, root, sorted_set, valid_reason, validate_repository, validate_tree,
 };
 
 #[derive(
@@ -80,7 +79,6 @@ pub fn canonical_debt_snapshot(snapshot: &DebtSnapshot) -> Result<(Vec<u8>, Dige
 fn validate_debt_snapshot(snapshot: &DebtSnapshot) -> Result<(), Error> {
     validate_repository("$.repository", &snapshot.repository)?;
     validate_tree("$.adoption_tree", &snapshot.adoption_tree)?;
-    validate_instant("$.created_at", &snapshot.created_at)?;
     if snapshot.items.len() > 100_000 {
         return fail("$.items", ErrorKind::LimitExceeded);
     }
@@ -117,8 +115,6 @@ fn validate_debt_item(path: &str, item: &DebtItem) -> Result<(), Error> {
     if !valid_reason(&item.reason) {
         return fail(&format!("{path}.reason"), ErrorKind::InvalidValue);
     }
-    validate_instant(&format!("{path}.created_at"), &item.created_at)?;
-    validate_instant(&format!("{path}.expires_at"), &item.expires_at)?;
     (item.created_at < item.expires_at)
         .then_some(())
         .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))

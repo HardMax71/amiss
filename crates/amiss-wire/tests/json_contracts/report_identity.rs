@@ -41,8 +41,9 @@ fn report_identity_projections_keep_the_candidate_contract() -> serde_json::Resu
             (Some("2026-09-06T10:00:00Z"), false),
             (Some("2026-09-06T11:00:00Z"), true),
         ] {
-            evaluation.evaluation_instant = instant
-                .map(|instant| amiss_wire::model::UtcInstant::new(instant.to_owned()).unwrap());
+            evaluation.evaluation_instant = instant.map(|instant| {
+                amiss_wire::model::UtcInstant::try_from(instant.to_owned()).unwrap()
+            });
             evaluation.trusted_time = trusted;
             let preimage = IdentityPreimage {
                 evaluation: &evaluation,

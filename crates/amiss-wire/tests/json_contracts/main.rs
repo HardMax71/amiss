@@ -22,6 +22,7 @@ mod external_plan_ingress;
 mod external_reader;
 mod external_snapshots;
 mod input;
+mod instants;
 mod locale_assessment;
 mod locale_evidence;
 mod locale_plan;

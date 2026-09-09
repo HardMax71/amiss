@@ -8,7 +8,7 @@ use crate::digest::{Digest, hb};
 use crate::json::MAX_SAFE_INTEGER;
 use crate::model::{ArtifactId, BranchRef, RepositoryIdentity, UtcInstant};
 
-use super::{provider_run_id_valid, validate_instant, validate_repository};
+use super::{provider_run_id_valid, validate_repository};
 
 pub const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement";
 pub const TRUSTED_TIME_CONTROLLER: &str = "external-required-check-clock";
@@ -97,14 +97,24 @@ fn validate_trusted_time(statement: &TrustedTimeStatement) -> Result<(), Error> 
         .contains(&statement.provider_run_attempt)
         .then_some(())
         .ok_or_else(|| Error::new("$.provider_run_attempt", ErrorKind::InvalidValue))?;
-    validate_instant("$.evaluation_instant", &statement.evaluation_instant)?;
-    validate_instant("$.valid_until", &statement.valid_until)?;
-    let lifetime = statement
-        .valid_until
-        .epoch_seconds()
-        .saturating_sub(statement.evaluation_instant.epoch_seconds());
-    (1..=STATEMENT_TTL_MAX_SECONDS)
-        .contains(&lifetime)
-        .then_some(())
+    let [evaluation, valid_until] =
+        [&statement.evaluation_instant, &statement.valid_until].map(|instant| {
+            let edtf_core::Edtf::DateTime(instant) = edtf_core::Edtf::parse(instant).ok()? else {
+                return None;
+            };
+            Some(datealgo::datetime_to_secs((
+                instant.date.year.value()?.try_into().ok()?,
+                instant.date.month?.value()?,
+                instant.date.day?.value()?,
+                instant.time.hour,
+                instant.time.minute,
+                instant.time.second,
+            )))
+        });
+    evaluation
+        .zip(valid_until)
+        .map(|(evaluation, until)| until.saturating_sub(evaluation))
+        .filter(|lifetime| (1..=STATEMENT_TTL_MAX_SECONDS).contains(lifetime))
+        .map(|_lifetime| ())
         .ok_or_else(|| Error::new("$.valid_until", ErrorKind::InvalidValue))
 }

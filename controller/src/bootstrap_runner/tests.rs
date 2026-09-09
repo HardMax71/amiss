@@ -147,10 +147,6 @@ fn a_closed_channel_is_a_supervision_defect() {
     assert_eq!(heartbeat.calls, 0);
 }
 
-fn instant(raw: &str) -> UtcInstant {
-    UtcInstant::new(raw.to_owned()).unwrap()
-}
-
 fn run<'a>(
     executable: &'a Path,
     directory: &'a Path,
@@ -175,8 +171,8 @@ fn a_run_is_valid_only_within_the_watchdog_and_over_real_paths() {
     let root = tempfile::TempDir::new().unwrap();
     let executable = root.path().join("bootstrap");
     std::fs::write(&executable, b"#!/bin/sh\n").unwrap();
-    let evaluation = instant("2026-07-01T00:00:00Z");
-    let until = instant("2026-07-01T00:10:00Z");
+    let evaluation = UtcInstant::try_from("2026-07-01T00:00:00Z".to_owned()).unwrap();
+    let until = UtcInstant::try_from("2026-07-01T00:10:00Z".to_owned()).unwrap();
     let watchdog = Duration::from_millis(WATCHDOG_MILLISECONDS);
 
     assert!(valid_run(&run(

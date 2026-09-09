@@ -13,6 +13,8 @@ use crate::{
     RunnerOutcome, run_bootstrap,
 };
 
+mod tests;
+
 pub struct AcquisitionTarget<'a> {
     pub repository: &'a Path,
     pub action: &'a Path,
@@ -88,7 +90,7 @@ impl<A: Acquisition + 'static> Runner for AcquiringRunner<A> {
             return RunnerOutcome::Unavailable;
         };
         let Some((evaluation_instant, valid_until)) =
-            trusted_window(self.clock.as_ref(), self.validity_seconds)
+            trusted_window(self.clock.now_unix_millis(), self.validity_seconds)
         else {
             return RunnerOutcome::Unavailable;
         };
@@ -198,15 +200,20 @@ fn await_acquisition(
     }
 }
 
-fn trusted_window(
-    clock: &dyn ControllerClock,
-    validity_seconds: i64,
-) -> Option<(UtcInstant, UtcInstant)> {
-    let now = clock.now_unix_millis().filter(|instant| *instant >= 0)?;
+fn trusted_window(now: Option<i64>, validity_seconds: i64) -> Option<(UtcInstant, UtcInstant)> {
+    let now = now.filter(|instant| *instant >= 0)?;
     let evaluation_seconds = now.checked_div(1_000)?;
     let valid_until_seconds = evaluation_seconds.checked_add(validity_seconds)?;
-    Some((
-        UtcInstant::from_epoch_seconds(evaluation_seconds)?,
-        UtcInstant::from_epoch_seconds(valid_until_seconds)?,
-    ))
+    let [evaluation, valid_until] = [evaluation_seconds, valid_until_seconds].map(|seconds| {
+        (datealgo::RD_SECONDS_MIN..=datealgo::RD_SECONDS_MAX)
+            .contains(&seconds)
+            .then(|| datealgo::secs_to_datetime(seconds))
+            .and_then(|(year, month, day, hour, minute, second)| {
+                UtcInstant::try_from(format!(
+                    "{year:04}-{month:02}-{day:02}T{hour:02}:{minute:02}:{second:02}Z"
+                ))
+                .ok()
+            })
+    });
+    Some((evaluation?, valid_until?))
 }

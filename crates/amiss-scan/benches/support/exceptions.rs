@@ -69,8 +69,10 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
                 owner: OwnerId::try_from("team:benchmark".to_owned())
                     .unwrap_or_else(|_defect| panic!("benchmark owner")),
                 reason: "Exception target lookup benchmark.".to_owned(),
-                created_at: instant("2026-07-01T00:00:00Z"),
-                expires_at: instant("2026-08-01T00:00:00Z"),
+                created_at: UtcInstant::try_from("2026-07-01T00:00:00Z".to_owned())
+                    .unwrap_or_else(|_defect| panic!("benchmark instant")),
+                expires_at: UtcInstant::try_from("2026-08-01T00:00:00Z".to_owned())
+                    .unwrap_or_else(|_defect| panic!("benchmark instant")),
             }
         })
         .collect();
@@ -86,8 +88,10 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
         provider: "github-actions".to_owned(),
         provider_run_id: "1".to_owned(),
         provider_run_attempt: 1,
-        evaluation_instant: instant("2026-07-12T10:00:00Z"),
-        valid_until: instant("2026-07-12T10:05:00Z"),
+        evaluation_instant: UtcInstant::try_from("2026-07-12T10:00:00Z".to_owned())
+            .unwrap_or_else(|_defect| panic!("benchmark instant")),
+        valid_until: UtcInstant::try_from("2026-07-12T10:05:00Z".to_owned())
+            .unwrap_or_else(|_defect| panic!("benchmark instant")),
     };
     let (_, time_digest) = canonical_trusted_time(&statement)
         .unwrap_or_else(|error| panic!("benchmark trusted time: {error}"));
@@ -197,10 +201,6 @@ fn repo_path_text(raw: String) -> RepoPathText {
 
 fn artifact_id(raw: String) -> ArtifactId {
     ArtifactId::new(raw).unwrap_or_else(|| panic!("benchmark artifact id"))
-}
-
-fn instant(raw: &str) -> UtcInstant {
-    UtcInstant::new(raw.to_owned()).unwrap_or_else(|| panic!("benchmark instant"))
 }
 
 fn tree(fill: &str) -> TreeIdentity {

@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use amiss_wire::model::{Adapter, ForgeDialect, OwnerId, RepoPath, RepositoryIdentity, UtcInstant};
+use amiss_wire::model::{Adapter, ForgeDialect, OwnerId, RepoPath, RepositoryIdentity};
 use strum::IntoEnumIterator;
 
 #[test]
@@ -32,31 +32,6 @@ fn an_owner_id_keeps_its_grammar_and_its_text() {
         OwnerId::try_from("team:Docs".to_owned()).is_err(),
         "an uppercase tail byte is refused"
     );
-}
-
-#[test]
-fn epoch_seconds_render_the_documented_instants() {
-    let render = |seconds: i64| {
-        UtcInstant::from_epoch_seconds(seconds)
-            .unwrap()
-            .as_str()
-            .to_owned()
-    };
-    assert_eq!(render(0), "1970-01-01T00:00:00Z");
-    assert_eq!(render(951_782_400), "2000-02-29T00:00:00Z");
-    assert_eq!(render(4_102_444_799), "2099-12-31T23:59:59Z");
-    assert_eq!(render(951_868_800), "2000-03-01T00:00:00Z");
-    assert_eq!(render(4_107_456_000), "2100-02-28T00:00:00Z");
-    assert_eq!(render(4_107_542_400), "2100-03-01T00:00:00Z");
-    assert_eq!(render(946_598_400), "1999-12-31T00:00:00Z");
-    assert_eq!(render(2_147_472_000), "2038-01-19T00:00:00Z");
-
-    let mut previous = render(-2_000_000_000);
-    for step in 1_i64..=800 {
-        let sample = render(-2_000_000_000 + step * 86_400 * 90);
-        assert!(sample > previous, "instants advance at step {step}");
-        previous = sample;
-    }
 }
 
 #[test]

@@ -12,7 +12,9 @@ bench = false
 
 [dependencies]
 countio.workspace = true
+datealgo.workspace = true
 digest-io.workspace = true
+edtf-core.workspace = true
 hex = { workspace = true, features = ["serde"] }
 hex_fmt.workspace = true
 json-serde.workspace = true

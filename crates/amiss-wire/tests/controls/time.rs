@@ -29,7 +29,7 @@ fn instants_are_strictly_gregorian() {
         "2000-02-29T12:00:00Z",
         "0001-01-01T00:00:00Z",
     ] {
-        assert!(UtcInstant::new(valid.to_owned()).is_some(), "{valid}");
+        assert!(UtcInstant::try_from(valid.to_owned()).is_ok(), "{valid}");
     }
     for invalid in [
         "2026-02-29T00:00:00Z",
@@ -43,12 +43,15 @@ fn instants_are_strictly_gregorian() {
         "2026-07-12T00:00:00",
         "2026-7-12T00:00:00Z",
     ] {
-        assert!(UtcInstant::new(invalid.to_owned()).is_none(), "{invalid}");
+        assert!(
+            UtcInstant::try_from(invalid.to_owned()).is_err(),
+            "{invalid}"
+        );
     }
 }
 
 #[test]
-fn instants_round_trip_unix_seconds() {
+fn instants_round_trip_their_wire_strings() {
     for value in [
         "0000-01-01T00:00:00Z",
         "1969-12-31T23:59:59Z",
@@ -57,14 +60,12 @@ fn instants_round_trip_unix_seconds() {
         "2026-07-22T10:00:00Z",
         "9999-12-31T23:59:59Z",
     ] {
-        let instant = UtcInstant::new(value.to_owned()).unwrap();
+        let instant = UtcInstant::try_from(value.to_owned()).unwrap();
         assert_eq!(
-            UtcInstant::from_epoch_seconds(instant.epoch_seconds()),
-            Some(instant)
+            serde_json::from_slice::<UtcInstant>(&serde_json::to_vec(&instant).unwrap()).unwrap(),
+            instant
         );
     }
-    assert!(UtcInstant::from_epoch_seconds(-62_167_219_201).is_none());
-    assert!(UtcInstant::from_epoch_seconds(253_402_300_800).is_none());
 }
 
 #[test]
@@ -91,10 +92,7 @@ fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
         statement.evaluation_instant.as_str(),
         "2026-07-12T10:00:00Z"
     );
-    assert_eq!(
-        statement.valid_until.epoch_seconds() - statement.evaluation_instant.epoch_seconds(),
-        600
-    );
+    assert_eq!(statement.valid_until.as_str(), "2026-07-12T10:10:00Z");
 
     let too_long = TIME_STATEMENT.replace("10:10:00Z", "10:10:01Z");
     assert_eq!(

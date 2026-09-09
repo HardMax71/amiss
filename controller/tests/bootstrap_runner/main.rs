@@ -118,8 +118,8 @@ impl Harness {
             scratch,
             executable,
             request,
-            evaluation_instant: instant("2026-07-22T20:00:00Z"),
-            valid_until: instant("2026-07-22T20:05:00Z"),
+            evaluation_instant: UtcInstant::try_from("2026-07-22T20:00:00Z".to_owned()).unwrap(),
+            valid_until: UtcInstant::try_from("2026-07-22T20:05:00Z".to_owned()).unwrap(),
         }
     }
 
@@ -268,10 +268,6 @@ fn request(
         )
         .unwrap(),
     }
-}
-
-fn instant(value: &str) -> UtcInstant {
-    UtcInstant::new(value.to_owned()).unwrap()
 }
 
 fn run(mode: &str) -> (Harness, RunnerOutcome, Heartbeat) {

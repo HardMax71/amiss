@@ -77,8 +77,8 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
 /// counted and left to be fixed instead.
 fn items(built: &Built, adoption: &Adoption) -> Result<(Vec<DebtItem>, usize, usize), ()> {
     let owner = OwnerId::try_from(adoption.owner.clone()).map_err(|_defect| ())?;
-    let created_at = UtcInstant::new(adoption.created_at.clone()).ok_or(())?;
-    let expires_at = UtcInstant::new(adoption.expires_at.clone()).ok_or(())?;
+    let created_at = UtcInstant::try_from(adoption.created_at.clone()).map_err(|_defect| ())?;
+    let expires_at = UtcInstant::try_from(adoption.expires_at.clone()).map_err(|_defect| ())?;
     let mut rows = Vec::new();
     let mut ineligible = 0_usize;
     let mut factless = 0_usize;
@@ -189,7 +189,7 @@ fn snapshot<P, R, M, E>(
             tree_oid: candidate.tree_oid.clone(),
         },
         adoption_report_payload_digest: payload_digest,
-        created_at: UtcInstant::new(adoption.created_at.clone())?,
+        created_at: UtcInstant::try_from(adoption.created_at.clone()).ok()?,
         items,
     })
 }
