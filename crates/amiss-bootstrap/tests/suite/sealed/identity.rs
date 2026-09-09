@@ -1,28 +1,11 @@
-use amiss_bootstrap::supervise::{AcceptanceDefect, Expectations, accept};
+use amiss_bootstrap::supervise::{AcceptanceDefect, accept};
 use amiss_fixtures::{canonical_json, corrupt};
-use amiss_wire::controls::canonical_trusted_time;
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::digest::hb;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::{PAYLOAD_SCHEMA, model};
 use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, CandidateIdentitySchema};
 
-use super::GOLDEN;
-
-fn bind(candidate_identity_digest: Digest) -> (model::ReportEnvelope, Expectations) {
-    let (mut report, mut expectations) = GOLDEN.clone();
-    let model::Controls::Resolved(controls) = &mut report.payload.controls else {
-        panic!("the fixture has resolved controls");
-    };
-    let model::TrustedTimeProvenance::Verified(trusted) = &mut controls.trusted_time_source else {
-        panic!("the fixture has verified time");
-    };
-    trusted.statement.candidate_identity_digest = candidate_identity_digest;
-    trusted.statement_digest = canonical_trusted_time(&trusted.statement).unwrap().1;
-    let sealed = expectations.sealed.as_mut().unwrap();
-    sealed.candidate_identity_digest = candidate_identity_digest;
-    sealed.trusted_time_digest = trusted.statement_digest;
-    (report, expectations)
-}
+use super::{GOLDEN, bind};
 
 #[test]
 fn identity_extensions_are_refused_even_with_matching_bindings() {

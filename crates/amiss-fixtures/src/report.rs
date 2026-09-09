@@ -1,10 +1,23 @@
 use std::sync::Arc;
 
-use amiss_wire::digest::hb;
+use amiss_wire::digest::{hb, hj_serde};
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::report::model::{
     AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackItem, ReportEnvelope,
 };
+
+/// Rebinds a typed fixture's payload and emits canonical JSON with one trailing LF.
+///
+/// # Errors
+/// Returns the library error if the report cannot be serialized.
+pub fn report_bytes(mut report: ReportEnvelope) -> serde_json::Result<Vec<u8>> {
+    report.payload_digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&report.payload, &mut writer)
+    })?;
+    let mut wire = serde_json_canonicalizer::to_vec(&report)?;
+    wire.push(b'\n');
+    Ok(wire)
+}
 
 /// Replaces one fixture fragment and rebinds the report's payload digest.
 ///

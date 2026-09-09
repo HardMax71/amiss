@@ -1,9 +1,8 @@
 use amiss_bootstrap::supervise::{AcceptanceDefect, Expectations, accept};
+use amiss_fixtures::report_bytes;
 use amiss_wire::{
-    digest::hb,
-    report::{
-        PAYLOAD_SCHEMA, emit_report,
-        model::{Controls, ReportEnvelope, SemanticEvidenceProducer, SemanticEvidenceProvenance},
+    report::model::{
+        Controls, ReportEnvelope, SemanticEvidenceProducer, SemanticEvidenceProvenance,
     },
     semantic::SemanticProducerKind,
 };
@@ -45,12 +44,7 @@ fn semantic_evidence_binds_each_producer_fact() {
             panic!("resolved controls");
         };
         controls.semantic_evidence = Some(vec![row]);
-        report.payload_digest = hb(
-            PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
-        );
-        let mut wire = Vec::new();
-        emit_report(&report, &mut wire).unwrap();
+        let wire = report_bytes(report).unwrap();
         let expected = (index == 0)
             .then_some(0)
             .ok_or(AcceptanceDefect::SealedControls);
@@ -67,13 +61,8 @@ fn semantic_evidence_binds_each_producer_fact() {
 
 #[test]
 fn semantic_metadata_shape_is_checked_before_bindings() {
-    let (mut report, expectations) = semantic_report();
-    report.payload_digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
-    );
-    let mut wire = Vec::new();
-    emit_report(&report, &mut wire).unwrap();
+    let (report, expectations) = semantic_report();
+    let wire = report_bytes(report.clone()).unwrap();
     let wire = String::from_utf8(wire).unwrap();
     assert_eq!(accept(wire.as_bytes(), &expectations), Ok(0));
     let Controls::Resolved(controls) = &report.payload.controls else {
