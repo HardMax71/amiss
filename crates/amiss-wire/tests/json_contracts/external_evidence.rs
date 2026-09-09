@@ -5,7 +5,6 @@ use amiss_wire::{
         self, AssessDefect, EvidenceDefect, ExternalEvidence, ExternalEvidenceRow, ForgeRepository,
         ForgeTail, ProbeFailure, ProbeMethod,
     },
-    json,
 };
 
 const EVIDENCE: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-evidence.json");
@@ -209,29 +208,26 @@ fn evidence_capture_keeps_strict_bounds_and_requires_an_object() {
     assert!(matches!(
         external::parse_evidence(too_deep.as_bytes()),
         Err(EvidenceDefect::Wire(Error {
-            kind: ErrorKind::Json(json::Error {
-                kind: json::ErrorKind::DepthLimit,
-                ..
-            }),
+            kind: ErrorKind::UnknownField,
             ..
         }))
     ));
-    for invalid in [
-        br#"{"future":0,"\u0066uture":1}"#.as_slice(),
-        br#"{"future":-0}"#,
-        br#"{"future":0.5}"#,
-        br#"{"future":1e0}"#,
-        br#"{"future":9007199254740992}"#,
-        b"{} {}",
-        b"\xff",
+    for (invalid, expected) in [
+        (
+            br#"{"future":0,"\u0066uture":1}"#.as_slice(),
+            ErrorKind::UnknownField,
+        ),
+        (br#"{"future":-0}"#, ErrorKind::UnknownField),
+        (br#"{"future":0.5}"#, ErrorKind::UnknownField),
+        (br#"{"future":1e0}"#, ErrorKind::UnknownField),
+        (br#"{"future":9007199254740992}"#, ErrorKind::UnknownField),
+        (b"{} {}", ErrorKind::MissingField),
+        (b"\xff", ErrorKind::InvalidValue),
     ] {
-        assert!(matches!(
-            external::parse_evidence(invalid),
-            Err(EvidenceDefect::Wire(Error {
-                kind: ErrorKind::Json(_),
-                ..
-            }))
-        ));
+        let Err(EvidenceDefect::Wire(error)) = external::parse_evidence(invalid) else {
+            panic!("malformed evidence must fail during typed input decoding");
+        };
+        assert_eq!(error.kind, expected, "{invalid:?}");
     }
     let oversized = vec![b' '; usize::try_from(external::EXTERNAL_DOCUMENT_BYTES + 1).unwrap()];
     assert!(matches!(

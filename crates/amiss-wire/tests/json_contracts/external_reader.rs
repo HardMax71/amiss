@@ -2,22 +2,39 @@ use amiss_wire::{
     de::{Error, ErrorKind},
     digest::hb,
     external::{self, AssessmentDefect, ExternalAssessmentEnvelope, ExternalPlanEnvelope},
-    json,
 };
 
 const PLAN: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-plan.json");
 const ASSESSMENT: &[u8] =
     include_bytes!("../../../../spec/examples/scanner-external-assessment.json");
+const EVIDENCE: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-evidence.json");
 
 #[test]
 fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
-    let readers: [fn(&[u8]) -> bool; 2] = [
+    let readers: [fn(&[u8]) -> bool; 3] = [
         |bytes| external::parse_plan(bytes).is_ok(),
         |bytes| external::parse_assessment(bytes).is_ok(),
+        |bytes| external::parse_evidence(bytes).is_ok(),
     ];
-    for (bytes, read) in [PLAN, ASSESSMENT].into_iter().zip(readers) {
+    for ((bytes, schema), read) in [
+        (PLAN, external::PLAN_ENVELOPE_SCHEMA),
+        (ASSESSMENT, external::ASSESSMENT_ENVELOPE_SCHEMA),
+        (EVIDENCE, external::EVIDENCE_SCHEMA),
+    ]
+    .into_iter()
+    .zip(readers)
+    {
         assert!(read(bytes));
         let text = std::str::from_utf8(bytes).unwrap();
+        for key in ["schema", r"\u0073chema"] {
+            let duplicate = text.replacen('{', &format!(r#"{{"{key}":"{schema}","#), 1);
+            assert!(!read(duplicate.as_bytes()), "{duplicate}");
+        }
+        for invalid in [b"null".as_slice(), b"true", b"0", b"[]", b"\xff"] {
+            assert!(!read(invalid));
+        }
+        assert!(!read(format!("\u{feff}{text}").as_bytes()));
+        assert!(read(format!(" \n{text}\r\t").as_bytes()));
         for member in [
             r#""future":-0,"#,
             r#""future":0.5,"#,
@@ -150,26 +167,46 @@ fn assessments_share_the_closed_engine_and_producer_descriptors() {
 }
 
 #[test]
-fn closed_external_plans_still_enforce_strict_lexical_and_depth_limits() {
+fn closed_external_plans_reject_invalid_numbers_and_deep_unknown_fields() {
     let document: ExternalPlanEnvelope = serde_json::from_slice(PLAN).unwrap();
     let wire = serde_json::to_string(&document).unwrap();
-    for member in [
-        "\"retained_count\":-0",
-        "\"retained_count\":0.0",
-        "\"retained_count\":0e0",
-        "\"retained_count\":9007199254740992",
-        "\"retained_count\":0,\"retained_count\":0",
-        "\"retained_count\":0,\"retained_\\u0063ount\":0",
+    for (member, expected, path) in [
+        (
+            "\"retained_count\":-0",
+            ErrorKind::WrongType,
+            "$.payload.retained_count",
+        ),
+        (
+            "\"retained_count\":0.0",
+            ErrorKind::WrongType,
+            "$.payload.retained_count",
+        ),
+        (
+            "\"retained_count\":0e0",
+            ErrorKind::WrongType,
+            "$.payload.retained_count",
+        ),
+        (
+            "\"retained_count\":9007199254740992",
+            ErrorKind::InvalidValue,
+            "$.payload.retained_count",
+        ),
+        (
+            "\"retained_count\":0,\"retained_count\":0",
+            ErrorKind::InvalidValue,
+            "$.payload",
+        ),
+        (
+            "\"retained_count\":0,\"retained_\\u0063ount\":0",
+            ErrorKind::InvalidValue,
+            "$.payload",
+        ),
     ] {
         let changed = wire.replace("\"retained_count\":0", member);
         assert_ne!(changed, wire);
-        assert!(matches!(
-            external::parse_plan(changed.as_bytes()),
-            Err(Error {
-                kind: ErrorKind::Json(_),
-                ..
-            })
-        ));
+        let defect = external::parse_plan(changed.as_bytes()).unwrap_err();
+        assert_eq!(defect.kind, expected, "{member}: {defect:?}");
+        assert_eq!(defect.path, path, "{member}");
     }
     let nested = format!("{}null{}", "[".repeat(510), "]".repeat(510));
     let changed = wire.replace(
@@ -181,8 +218,7 @@ fn closed_external_plans_still_enforce_strict_lexical_and_depth_limits() {
         ErrorKind::UnknownField
     );
     let too_deep = changed.replace(&nested, &format!("[{nested}]"));
-    let ErrorKind::Json(error) = external::parse_plan(too_deep.as_bytes()).unwrap_err().kind else {
-        panic!("the strict depth limit must be enforced before typed decoding");
-    };
-    assert_eq!(error.kind, json::ErrorKind::DepthLimit);
+    let defect = external::parse_plan(too_deep.as_bytes()).unwrap_err();
+    assert_eq!(defect.kind, ErrorKind::UnknownField);
+    assert_eq!(defect.path, "$.payload.future");
 }
