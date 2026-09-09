@@ -94,23 +94,15 @@ pub(super) fn controls(setup: &Setup) -> Result<model::Controls, crate::Error> {
             reasons: vec![reason],
         }));
     }
-    let provenance = |control: Option<(Digest, RequestTrust)>| {
-        let (status, trust_source) = match control {
-            Some((_, RequestTrust::ExternalRequiredCheck)) => (
-                model::ControlStatus::Verified,
-                model::ControlTrustSource::ExternalRequiredCheck,
-            ),
-            Some((_, RequestTrust::OrganizationPolicy)) => (
-                model::ControlStatus::Verified,
-                model::ControlTrustSource::OrganizationPolicy,
-            ),
-            None => (model::ControlStatus::None, model::ControlTrustSource::None),
-        };
-        model::ControlProvenance {
-            digest: control.map(|(digest, _)| digest),
-            status,
-            trust_source,
-        }
+    let provenance = |control: Option<(Digest, RequestTrust)>| model::ControlProvenance {
+        digest: control.map(|(digest, _)| digest),
+        status: control.map_or(model::ControlStatus::None, |_| {
+            model::ControlStatus::Verified
+        }),
+        trust_source: control.map_or(
+            model::ControlTrustSource::None(model::NoControlStatus::None),
+            |(_, trust)| model::ControlTrustSource::Verified(trust),
+        ),
     };
     let (descriptor, descriptor_digest) =
         sandbox_descriptor().map_err(|_defect| crate::Error::Internal)?;

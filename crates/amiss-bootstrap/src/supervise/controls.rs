@@ -1,8 +1,8 @@
 use amiss_wire::controls::{canonical_execution_constraint, canonical_trusted_time};
 use amiss_wire::digest::Digest;
 use amiss_wire::report::model::{
-    ControlStatus, ControlTrustSource, Controls, ExecutionConstraintProvenance, SandboxAssurance,
-    SandboxEnforcementSource, TrustedTimeProvenance,
+    ControlProvenance, ControlStatus, ControlTrustSource, Controls, ExecutionConstraintProvenance,
+    NoControlStatus, SandboxAssurance, SandboxEnforcementSource, TrustedTimeProvenance,
 };
 
 use super::{AcceptanceDefect, SealedExpectations};
@@ -36,19 +36,16 @@ pub(super) fn accept(
         (&controls.debt_snapshot, &expected.debt_snapshot),
         (&controls.waiver_bundle, &expected.waiver_bundle),
     ] {
-        let accepted = match expected {
-            Some(expected) => {
-                actual.status == ControlStatus::Verified
-                    && actual.digest == Some(expected.digest)
-                    && actual.trust_source.as_ref() == expected.trust_source.as_ref()
-            }
-            None => {
-                actual.status == ControlStatus::None
-                    && actual.digest.is_none()
-                    && actual.trust_source == ControlTrustSource::None
-            }
+        let expected = expected.as_ref();
+        let expected = ControlProvenance {
+            digest: expected.map(|expected| expected.digest),
+            status: expected.map_or(ControlStatus::None, |_| ControlStatus::Verified),
+            trust_source: expected.map_or(
+                ControlTrustSource::None(NoControlStatus::None),
+                |expected| ControlTrustSource::Verified(expected.trust_source),
+            ),
         };
-        if !accepted {
+        if *actual != expected {
             return Err(AcceptanceDefect::SealedControls);
         }
     }

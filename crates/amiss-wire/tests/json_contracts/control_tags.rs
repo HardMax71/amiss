@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use amiss_wire::controls::Profile;
 use amiss_wire::report::model::{
     ControlStatus, ControlTrustSource, NoControlStatus, SandboxAssurance, SandboxEnforcementSource,
@@ -5,7 +7,6 @@ use amiss_wire::report::model::{
 };
 use amiss_wire::requests::RequestTrust;
 use serde::{Serialize, de::DeserializeOwned};
-use serde_json::{Value, json};
 
 #[test]
 fn control_tags_keep_their_wire_spelling_and_require_strings() -> serde_json::Result<()> {
@@ -26,13 +27,13 @@ fn control_tags_keep_their_wire_spelling_and_require_strings() -> serde_json::Re
         (ControlStatus::Verified, "verified"),
     ])?;
     strings(&[
-        (ControlTrustSource::None, "none"),
+        (ControlTrustSource::None(NoControlStatus::None), "none"),
         (
-            ControlTrustSource::ExternalRequiredCheck,
+            ControlTrustSource::Verified(RequestTrust::ExternalRequiredCheck),
             "external-required-check",
         ),
         (
-            ControlTrustSource::OrganizationPolicy,
+            ControlTrustSource::Verified(RequestTrust::OrganizationPolicy),
             "organization-policy",
         ),
     ])?;
@@ -59,18 +60,18 @@ fn strings<T: Serialize + DeserializeOwned + PartialEq + std::fmt::Debug>(
     cases: &[(T, &str)],
 ) -> serde_json::Result<()> {
     for (value, spelling) in cases {
-        let encoded = serde_json::to_value(value)?;
-        assert_eq!(encoded, json!(spelling));
-        assert_eq!(&serde_json::from_value::<T>(encoded)?, value);
+        let encoded = serde_json::to_vec(value)?;
+        assert_eq!(encoded, serde_json::to_vec(spelling)?);
+        assert_eq!(&serde_json::from_slice::<T>(&encoded)?, value);
         for invalid in [
-            json!({*spelling: null}),
-            json!([spelling]),
-            Value::Null,
-            json!(false),
-            json!(1),
-            json!("unknown"),
+            serde_json::to_vec(&BTreeMap::from([(*spelling, None::<bool>)]))?,
+            serde_json::to_vec(&[*spelling])?,
+            serde_json::to_vec(&())?,
+            serde_json::to_vec(&false)?,
+            serde_json::to_vec(&1)?,
+            serde_json::to_vec("unknown")?,
         ] {
-            assert!(serde_json::from_value::<T>(invalid).is_err(), "{spelling}");
+            assert!(serde_json::from_slice::<T>(&invalid).is_err(), "{spelling}");
         }
     }
     Ok(())

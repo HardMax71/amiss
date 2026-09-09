@@ -9,7 +9,7 @@ use amiss_scan::policy::{FloorInput, verify_floor};
 use amiss_wire::controls::{Profile, canonical_organization_floor, parse_organization_floor};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
-use amiss_wire::report::EngineProvenance;
+use amiss_wire::report::{Disposition, EngineProvenance, FindingKind, model};
 use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
 
@@ -250,38 +250,58 @@ fn a_verified_floor_raises_dispositions_and_discloses_provenance() {
         "\"minimum_dispositions\": []",
         "\"minimum_dispositions\": [ { \"finding_kind\": \"explicit-target-missing\", \"disposition\": \"fail\" } ]",
     );
-    let input = floor_input(&extra);
-    let floor_digest = input.digest.to_string();
-    let report = payload(&shell(Some(input)), &repo, &base, &candidate);
-
-    let provenance = &report["controls"]["organization_floor"];
-    assert_eq!(provenance["status"], "verified");
-    assert_eq!(
-        provenance["digest"],
-        serde_json::Value::String(floor_digest)
-    );
-    assert_eq!(provenance["trust_source"], "external-required-check");
-
-    let finding = report["findings"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|row| row["kind"] == "explicit-target-missing")
+    for source in [
+        RequestTrust::ExternalRequiredCheck,
+        RequestTrust::OrganizationPolicy,
+    ] {
+        let mut input = floor_input(&extra);
+        input.trust_source = source;
+        let digest = input.digest;
+        let built = commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(Some(input)),
+            &base,
+            &candidate,
+        )
         .unwrap();
-    assert_eq!(finding["configured_disposition"], "fail");
-    assert_eq!(finding["effective_disposition"], "fail");
-    let trace = finding["policy_trace"].as_array().unwrap();
-    assert_eq!(trace.len(), 2);
-    assert_eq!(trace[0]["source"], "built-in");
-    assert_eq!(trace[0]["before"], "record");
-    assert_eq!(trace[0]["after"], "warn");
-    assert_eq!(trace[1]["source"], "organization-floor");
-    assert_eq!(trace[1]["rule_id"], "floor/explicit-target-missing");
-    assert_eq!(trace[1]["before"], "warn");
-    assert_eq!(trace[1]["after"], "fail");
+        let bytes = amiss_scan::report::wire(&built).unwrap();
+        let (report, _) = amiss_wire::report::validate_envelope(&bytes).unwrap();
+        let report = report.payload;
+        let model::Controls::Resolved(controls) = report.controls else {
+            panic!("the floor is verified");
+        };
+        assert_eq!(
+            controls.organization_floor,
+            model::ControlProvenance {
+                digest: Some(digest),
+                status: model::ControlStatus::Verified,
+                trust_source: model::ControlTrustSource::Verified(source),
+            }
+        );
 
-    assert_eq!(report["result"]["status"], "fail");
-    assert_eq!(report["exit_code"], 1);
+        let finding = report
+            .findings
+            .iter()
+            .find(|row| row.kind == FindingKind::ExplicitTargetMissing)
+            .unwrap();
+        assert_eq!(finding.configured_disposition, Disposition::Fail);
+        assert_eq!(finding.effective_disposition, Disposition::Fail);
+        let [built_in, floor] = finding.policy_trace.as_slice() else {
+            panic!("the built-in disposition is raised by the floor");
+        };
+        assert_eq!(built_in.source, model::PolicySource::BuiltIn);
+        assert_eq!(built_in.before, Disposition::Record);
+        assert_eq!(built_in.after, Disposition::Warn);
+        assert_eq!(floor.source, model::PolicySource::OrganizationFloor);
+        assert_eq!(floor.rule_id, "floor/explicit-target-missing");
+        assert_eq!(floor.before, Disposition::Warn);
+        assert_eq!(floor.after, Disposition::Fail);
+        assert_eq!(report.result.status, model::ReportStatus::Fail);
+        assert_eq!(report.result.exit_code, 1);
+        assert_eq!(built.exit_code, 1);
+    }
 }
 
 #[test]

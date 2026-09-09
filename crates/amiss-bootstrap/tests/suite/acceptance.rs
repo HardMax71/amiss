@@ -473,7 +473,7 @@ fn sealed_report() -> (model::ReportEnvelope, Expectations) {
     controls.organization_floor = model::ControlProvenance {
         status: model::ControlStatus::Verified,
         digest: Some(FLOOR_DIGEST.parse().unwrap()),
-        trust_source: model::ControlTrustSource::OrganizationPolicy,
+        trust_source: model::ControlTrustSource::Verified(RequestTrust::OrganizationPolicy),
     };
     controls.execution_constraint = model::ExecutionConstraintProvenance::Verified(Box::new(
         model::VerifiedExecutionConstraint {

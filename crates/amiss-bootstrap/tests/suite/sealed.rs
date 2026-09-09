@@ -118,7 +118,7 @@ static GOLDEN: LazyLock<(model::ReportEnvelope, Expectations)> = LazyLock::new(|
     controls.organization_floor = model::ControlProvenance {
         digest: Some(FLOOR_DIGEST.parse().unwrap()),
         status: model::ControlStatus::Verified,
-        trust_source: model::ControlTrustSource::ExternalRequiredCheck,
+        trust_source: model::ControlTrustSource::Verified(RequestTrust::ExternalRequiredCheck),
     };
     controls.execution_constraint = model::ExecutionConstraintProvenance::Verified(Box::new(
         model::VerifiedExecutionConstraint {
@@ -477,10 +477,12 @@ fn an_optional_control_matches_its_expectation_on_every_fact() {
     let mut cases: [_; 6] = std::array::from_fn(|_| controls.clone());
     cases[0].organization_floor.status = model::ControlStatus::None;
     cases[1].organization_floor.digest = Some(FOREIGN_DIGEST.parse().unwrap());
-    cases[2].organization_floor.trust_source = model::ControlTrustSource::None;
+    cases[2].organization_floor.trust_source =
+        model::ControlTrustSource::None(model::NoControlStatus::None);
     cases[3].debt_snapshot.status = model::ControlStatus::Verified;
     cases[4].debt_snapshot.digest = Some(FLOOR_DIGEST.parse().unwrap());
-    cases[5].debt_snapshot.trust_source = model::ControlTrustSource::ExternalRequiredCheck;
+    cases[5].debt_snapshot.trust_source =
+        model::ControlTrustSource::Verified(RequestTrust::ExternalRequiredCheck);
     for (controls, identity) in cases.into_iter().zip([
         "sha256:50f8538e0c41f249e45506262abea67d9b3ea2d9c915d9f58d8545dafa7ba895",
         "sha256:a91a51c0144baa5604e841d3fd6e2856d68b0ee9ac374f03e454baf776b16ed1",
@@ -497,6 +499,63 @@ fn an_optional_control_matches_its_expectation_on_every_fact() {
             Err(AcceptanceDefect::SealedControls),
             identity,
         );
+    }
+}
+
+#[test]
+fn each_optional_control_binds_the_original_request_trust() {
+    for (source, other) in [
+        (
+            RequestTrust::ExternalRequiredCheck,
+            RequestTrust::OrganizationPolicy,
+        ),
+        (
+            RequestTrust::OrganizationPolicy,
+            RequestTrust::ExternalRequiredCheck,
+        ),
+    ] {
+        let (mut report, mut expectations) = GOLDEN.clone();
+        let model::Controls::Resolved(controls) = &mut report.payload.controls else {
+            panic!("the fixture has resolved controls");
+        };
+        let expected = expectations.sealed.as_mut().unwrap();
+        for (actual, expected) in [
+            (
+                &mut controls.organization_floor,
+                &mut expected.organization_floor,
+            ),
+            (&mut controls.debt_snapshot, &mut expected.debt_snapshot),
+            (&mut controls.waiver_bundle, &mut expected.waiver_bundle),
+        ] {
+            *actual = model::ControlProvenance {
+                digest: Some(FLOOR_DIGEST.parse().unwrap()),
+                status: model::ControlStatus::Verified,
+                trust_source: model::ControlTrustSource::Verified(source),
+            };
+            *expected = Some(SealedControlExpectation {
+                digest: FLOOR_DIGEST.parse().unwrap(),
+                trust_source: source,
+            });
+        }
+        let [mut floor, mut debt, mut waiver] = std::array::from_fn(|_| controls.clone());
+        assert_eq!(
+            accept(&report_bytes(report.clone()).unwrap(), &expectations),
+            Ok(0)
+        );
+        for control in [
+            &mut floor.organization_floor,
+            &mut debt.debt_snapshot,
+            &mut waiver.waiver_bundle,
+        ] {
+            control.trust_source = model::ControlTrustSource::Verified(other);
+        }
+        for controls in [floor, debt, waiver] {
+            report.payload.controls = model::Controls::Resolved(controls);
+            assert_eq!(
+                accept(&report_bytes(report.clone()).unwrap(), &expectations),
+                Err(AcceptanceDefect::SealedControls)
+            );
+        }
     }
 }
 

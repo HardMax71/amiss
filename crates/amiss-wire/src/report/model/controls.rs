@@ -27,23 +27,11 @@ pub enum ControlStatus {
     Verified,
 }
 
-#[derive(
-    Clone,
-    Copy,
-    Debug,
-    PartialEq,
-    Eq,
-    SerializeDisplay,
-    DeserializeFromStr,
-    Display,
-    EnumString,
-    strum::AsRefStr,
-)]
-#[strum(serialize_all = "kebab-case")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum ControlTrustSource {
-    ExternalRequiredCheck,
-    None,
-    OrganizationPolicy,
+    Verified(RequestTrust),
+    None(NoControlStatus),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
