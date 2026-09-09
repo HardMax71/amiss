@@ -51,70 +51,21 @@ fn invalid_attributions(comparisons: &[Comparison]) -> BTreeMap<Digest, Attribut
     rows
 }
 
-/// The exact ordinary-finding projection: document findings, occurrence
-/// boundaries, structural aggregation by key with attribution, and the
-/// comparison-derived removal, ambiguity, and impact findings. Analysis
-/// errors never enter, and the result is in canonical finding-key order.
+#[derive(Clone, Copy)]
+pub struct GovernedInputs<'a> {
+    pub site: &'a crate::semantic::SiteEvaluation,
+    pub governed: &'a [GovernedSeed],
+    pub claims: &'a [ClaimGroup],
+    pub projections: &'a [crate::projection::Outcome],
+}
+
+/// Evaluates all supplied inputs under the candidate policy and returns
+/// findings in canonical key order. The returned exception-overlap errors
+/// make the run incomplete.
 ///
 /// # Errors
 /// Returns [`crate::Error::Internal`] if a finding key cannot be serialized.
 pub fn evaluate(
-    documents: &[DocumentInput],
-    comparisons: &[Comparison],
-    profile: Profile,
-) -> Result<Vec<Finding>, crate::Error> {
-    let (findings, _no_exceptions) = evaluate_with_policy(
-        documents,
-        comparisons,
-        profile,
-        &crate::policy::Effects::default(),
-        &[],
-        &[],
-    )?;
-    Ok(findings)
-}
-
-/// The full projection with the candidate policy applied: the raise-only
-/// repository and floor steps on structural candidate facts, exact debt and
-/// waiver application with their defect findings, the weakening and coverage
-/// control findings, and one unsupported-capability finding per candidate
-/// document holding reserved governed definitions. The returned rows are the
-/// exception-overlap errors; any row makes the run incomplete.
-///
-/// # Errors
-/// Returns [`crate::Error::Internal`] if a finding key cannot be serialized.
-pub fn evaluate_with_policy(
-    documents: &[DocumentInput],
-    comparisons: &[Comparison],
-    profile: Profile,
-    policy: &crate::policy::Effects,
-    governed: &[GovernedSeed],
-    claims: &[ClaimGroup],
-) -> Result<(Vec<Finding>, Vec<ErrorDetail>), crate::Error> {
-    let site = crate::semantic::SiteEvaluation::default();
-    evaluate_with_site(
-        documents,
-        comparisons,
-        profile,
-        policy,
-        GovernedInputs {
-            site: &site,
-            governed,
-            claims,
-            projections: &[],
-        },
-    )
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct GovernedInputs<'a> {
-    pub(crate) site: &'a crate::semantic::SiteEvaluation,
-    pub(crate) governed: &'a [GovernedSeed],
-    pub(crate) claims: &'a [ClaimGroup],
-    pub(crate) projections: &'a [crate::projection::Outcome],
-}
-
-pub(crate) fn evaluate_with_site(
     documents: &[DocumentInput],
     comparisons: &[Comparison],
     profile: Profile,

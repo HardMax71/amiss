@@ -4,10 +4,11 @@ use amiss_md::extract::BlockKind;
 use amiss_scan::correlate::{
     Comparison, Impact, Observation, Outcome, Reason, SourceChange, TargetChange,
 };
-use amiss_scan::evaluate::evaluate;
+use amiss_scan::evaluate::{GovernedInputs, evaluate};
 use amiss_scan::policy::{DebtContext, Effects, TimeContext};
 use amiss_scan::resolve::Intent;
 use amiss_scan::scan::SpanDisplay;
+use amiss_scan::semantic::SiteEvaluation;
 use amiss_wire::controls::{
     DebtItem, EligibleFindingKind, Fact, FactEvidence, FactEvidenceKind, FactSchema,
     FindingKeyInput, FindingKeyInputSchema, FindingOccurrence, FindingScope, MissingResolution,
@@ -42,8 +43,20 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
             }
         })
         .collect();
-    let findings = evaluate(&[], &comparisons, amiss_wire::controls::Profile::Enforce)
-        .unwrap_or_else(|error| panic!("benchmark evaluation: {error:?}"));
+    let (findings, errors) = evaluate(
+        &[],
+        &comparisons,
+        amiss_wire::controls::Profile::Enforce,
+        &Effects::default(),
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
+    )
+    .unwrap_or_else(|error| panic!("benchmark evaluation: {error:?}"));
+    assert!(errors.is_empty());
     assert_eq!(findings.len(), count, "one structural finding per target");
     let items = findings
         .iter()

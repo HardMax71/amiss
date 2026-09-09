@@ -31,20 +31,29 @@ fn adoption_facts_match_evaluation_for_each_shape_and_multiplicity() -> Result<(
                     })
                     .collect();
                 let reproduced = structural_facts(&observations)?;
-                let findings: Vec<_> = evaluate(
+                let (findings, errors) = evaluate(
                     &[],
                     &comparisons(Vec::new(), observations),
                     Profile::Observe,
-                )?
-                .into_iter()
-                .filter(|finding| {
-                    matches!(
-                        finding.key_input.finding_kind,
-                        FindingKind::ExplicitTargetMissing
-                            | FindingKind::ExplicitTargetTypeMismatch,
-                    )
-                })
-                .collect();
+                    &Effects::default(),
+                    GovernedInputs {
+                        site: &SiteEvaluation::default(),
+                        governed: &[],
+                        claims: &[],
+                        projections: &[],
+                    },
+                )?;
+                assert!(errors.is_empty());
+                let findings: Vec<_> = findings
+                    .into_iter()
+                    .filter(|finding| {
+                        matches!(
+                            finding.key_input.finding_kind,
+                            FindingKind::ExplicitTargetMissing
+                                | FindingKind::ExplicitTargetTypeMismatch,
+                        )
+                    })
+                    .collect();
                 assert_eq!(findings.len(), 1);
                 assert_eq!(reproduced.len(), 1);
                 let finding = &findings[0];

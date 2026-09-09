@@ -3,13 +3,14 @@ use amiss_md::extract::Occurrence;
 use amiss_scan::Observation;
 use amiss_scan::correlate::{Comparison, Side, correlate};
 use amiss_scan::evaluate::{
-    Attribution, DocumentInput, DocumentSide, Finding, GovernedSeed, LocationSide, evaluate,
-    evaluate_with_policy,
+    Attribution, DocumentInput, DocumentSide, Finding, GovernedInputs, GovernedSeed, LocationSide,
+    evaluate,
 };
 use amiss_scan::observe::{ObservationIdentity, observation_input};
 use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
+use amiss_scan::semantic::SiteEvaluation;
 use amiss_wire::controls::{Profile, SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, OwnerId, RepoPath};
@@ -24,6 +25,7 @@ use amiss_wire::resolution::{
 
 mod applications;
 mod fact_contract;
+mod inputs;
 mod key_contract;
 
 fn engine() -> EngineProvenance {
@@ -231,7 +233,20 @@ fn document_findings_follow_step_one() {
             candidate: Some(DocumentSide::ExcludedBuiltIn),
         },
     ];
-    let findings = evaluate(&documents, &[], Profile::Observe).expect("finding evaluation");
+    let (findings, errors) = evaluate(
+        &documents,
+        &[],
+        Profile::Observe,
+        &Effects::default(),
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
+    )
+    .expect("finding evaluation");
+    assert!(errors.is_empty());
     let got = kinds(&findings);
     assert_eq!(got.len(), 3);
     assert!(got.contains(&FindingKind::DocumentRemoved));
@@ -251,6 +266,12 @@ fn document_findings_follow_step_one() {
 
 #[test]
 fn boundary_kinds_follow_the_mapping() {
+    let inputs = GovernedInputs {
+        site: &SiteEvaluation::default(),
+        governed: &[],
+        claims: &[],
+        projections: &[],
+    };
     let rows = [
         (
             Resolution::Invalid {
@@ -285,12 +306,15 @@ fn boundary_kinds_follow_the_mapping() {
     ];
     for (resolution, expected) in rows {
         let candidate = observation(&spec("d.md", "t.md", resolution));
-        let findings = evaluate(
+        let (findings, errors) = evaluate(
             &[],
             &comparisons(Vec::new(), vec![candidate]),
             Profile::Observe,
+            &Effects::default(),
+            inputs,
         )
         .expect("finding evaluation");
+        assert!(errors.is_empty());
         assert!(
             kinds(&findings).contains(&expected),
             "typed boundary emits {expected:?}"
@@ -298,12 +322,15 @@ fn boundary_kinds_follow_the_mapping() {
     }
 
     let pointer = spec("d.md", "t.md", lfs_pointer("t.md"));
-    let findings = evaluate(
+    let (findings, errors) = evaluate(
         &[],
         &comparisons(Vec::new(), vec![observation(&pointer)]),
         Profile::Observe,
+        &Effects::default(),
+        inputs,
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     assert_eq!(
         kinds(&findings),
         vec![FindingKind::UnsupportedTargetKind],
@@ -313,19 +340,28 @@ fn boundary_kinds_follow_the_mapping() {
 
 #[test]
 fn structural_findings_aggregate_and_attribute() {
+    let inputs = GovernedInputs {
+        site: &SiteEvaluation::default(),
+        governed: &[],
+        claims: &[],
+        projections: &[],
+    };
     let missing = missing_spec("d.md", "absent.md");
     let mut second = missing_spec("d.md", "absent.md");
     second.node_path = vec![3, 1];
 
-    let introduced = evaluate(
+    let (introduced, errors) = evaluate(
         &[],
         &comparisons(
             Vec::new(),
             vec![observation(&missing), observation(&second)],
         ),
         Profile::Observe,
+        &Effects::default(),
+        inputs,
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     let finding = only(introduced, FindingKind::ExplicitTargetMissing);
     assert_eq!(finding.attribution, Attribution::Introduced);
     assert_eq!(finding.member_count, 2, "duplicates share one key");
@@ -333,21 +369,27 @@ fn structural_findings_aggregate_and_attribute() {
     assert!(finding.base_fact.as_ref().is_none() && finding.candidate_fact.as_ref().is_some());
     assert_eq!(finding.configured_disposition, Disposition::Warn);
 
-    let pre_existing = evaluate(
+    let (pre_existing, errors) = evaluate(
         &[],
         &comparisons(vec![observation(&missing)], vec![observation(&missing)]),
         Profile::Observe,
+        &Effects::default(),
+        inputs,
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     let finding = only(pre_existing, FindingKind::ExplicitTargetMissing);
     assert_eq!(finding.attribution, Attribution::PreExisting);
 
-    let resolved = evaluate(
+    let (resolved, errors) = evaluate(
         &[],
         &comparisons(vec![observation(&missing)], Vec::new()),
         Profile::Observe,
+        &Effects::default(),
+        inputs,
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     let removal_and_projection = resolved;
     let finding = only(
         removal_and_projection
@@ -365,12 +407,15 @@ fn structural_findings_aggregate_and_attribute() {
     );
     assert_eq!(finding.location.side, LocationSide::Base);
 
-    let enforced = evaluate(
+    let (enforced, errors) = evaluate(
         &[],
         &comparisons(Vec::new(), vec![observation(&missing)]),
         Profile::Enforce,
+        &Effects::default(),
+        inputs,
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     assert_eq!(
         only(enforced, FindingKind::ExplicitTargetMissing).configured_disposition,
         Disposition::Fail
@@ -397,12 +442,20 @@ fn every_missing_reason_emits_the_structural_finding() {
     ];
     for (target, missing) in rows {
         let candidate = observation(&spec("d.md", target, Resolution::Missing(missing)));
-        let findings = evaluate(
+        let (findings, errors) = evaluate(
             &[],
             &comparisons(Vec::new(), vec![candidate]),
             Profile::Observe,
+            &Effects::default(),
+            GovernedInputs {
+                site: &SiteEvaluation::default(),
+                governed: &[],
+                claims: &[],
+                projections: &[],
+            },
         )
         .expect("finding evaluation");
+        assert!(errors.is_empty());
         assert!(
             kinds(&findings).contains(&FindingKind::ExplicitTargetMissing),
             "every typed missing reason is structural"
@@ -421,12 +474,20 @@ fn immutable_commits_keep_separate_structural_finding_keys() {
     second.intent.kind = IntentKind::SameRepositoryGithub;
     second.intent.commit_oid = Oid::new(ObjectFormat::Sha1, "b".repeat(40));
 
-    let findings = evaluate(
+    let (findings, errors) = evaluate(
         &[],
         &comparisons(Vec::new(), vec![observation(&first), observation(&second)]),
         Profile::Observe,
+        &Effects::default(),
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     assert_eq!(
         findings
             .iter()
@@ -441,15 +502,23 @@ fn unknown_attribution_needs_unequal_facts_on_one_key() {
     let base = missing_spec("d.md", "absent.md");
     let mut doubled = missing_spec("d.md", "absent.md");
     doubled.node_path = vec![7, 0];
-    let findings = evaluate(
+    let (findings, errors) = evaluate(
         &[],
         &comparisons(
             vec![observation(&base)],
             vec![observation(&base), observation(&doubled)],
         ),
         Profile::Observe,
+        &Effects::default(),
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     let finding = only(findings, FindingKind::ExplicitTargetMissing);
     assert_eq!(
         finding.attribution,
@@ -460,13 +529,22 @@ fn unknown_attribution_needs_unequal_facts_on_one_key() {
 
 #[test]
 fn comparison_findings_follow_step_four() {
+    let inputs = GovernedInputs {
+        site: &SiteEvaluation::default(),
+        governed: &[],
+        claims: &[],
+        projections: &[],
+    };
     let removed_spec = resolved_spec("d.md", "t.md");
-    let findings = evaluate(
+    let (findings, errors) = evaluate(
         &[],
         &comparisons(vec![observation(&removed_spec)], Vec::new()),
         Profile::Observe,
+        &Effects::default(),
+        inputs,
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     let removed = only(findings, FindingKind::ExplicitReferenceRemoved);
     assert_eq!(removed.location.side, LocationSide::Base);
     assert_eq!(removed.configured_disposition, Disposition::Record);
@@ -479,29 +557,35 @@ fn comparison_findings_follow_step_four() {
     let mut two = resolved_spec("d.md", "t.md");
     two.block = "second candidate [x](t.md)".to_owned();
     two.node_path = vec![9, 9];
-    let ambiguous = evaluate(
+    let (ambiguous, errors) = evaluate(
         &[],
         &comparisons(
             vec![observation(&lone_base)],
             vec![observation(&one), observation(&two)],
         ),
         Profile::Observe,
+        &Effects::default(),
+        inputs,
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     let finding = only(ambiguous, FindingKind::ObservationCorrelationAmbiguous);
     assert_eq!(finding.member_count, 1);
 
     let base_available = spec("d.md", "t.md", resolved_blob("t.md", b"before"));
     let candidate_available = spec("d.md", "t.md", resolved_blob("t.md", b"after"));
-    let impact = evaluate(
+    let (impact, errors) = evaluate(
         &[],
         &comparisons(
             vec![observation(&base_available)],
             vec![observation(&candidate_available)],
         ),
         Profile::Observe,
+        &Effects::default(),
+        inputs,
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     let finding = only(impact, FindingKind::DependencyChangedSubjectUnchanged);
     assert_eq!(finding.configured_disposition, Disposition::Warn);
     assert_eq!(finding.attribution, Attribution::NotApplicable);
@@ -511,12 +595,20 @@ fn comparison_findings_follow_step_four() {
 fn findings_sort_by_canonical_key() {
     let one = missing_spec("a.md", "missing-one.md");
     let two = missing_spec("b.md", "missing-two.md");
-    let findings = evaluate(
+    let (findings, errors) = evaluate(
         &[],
         &comparisons(Vec::new(), vec![observation(&one), observation(&two)]),
         Profile::Observe,
+        &Effects::default(),
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
     )
     .expect("finding evaluation");
+    assert!(errors.is_empty());
     let keys: Vec<_> = findings.iter().map(|finding| finding.finding_key).collect();
     let mut sorted = keys.clone();
     sorted.sort_unstable();
@@ -527,6 +619,12 @@ fn findings_sort_by_canonical_key() {
 /// merely another invalid one at the same place.
 #[test]
 fn an_invalid_attribution_needs_the_same_destination() {
+    let inputs = GovernedInputs {
+        site: &SiteEvaluation::default(),
+        governed: &[],
+        claims: &[],
+        projections: &[],
+    };
     let same = spec(
         "d.md",
         "../out.md",
@@ -535,19 +633,19 @@ fn an_invalid_attribution_needs_the_same_destination() {
         },
     );
     let paired = comparisons(vec![observation(&same)], vec![observation(&same)]);
-    let finding = only(
-        evaluate(&[], &paired, Profile::Observe).expect("finding evaluation"),
-        FindingKind::InvalidReference,
-    );
+    let (findings, errors) = evaluate(&[], &paired, Profile::Observe, &Effects::default(), inputs)
+        .expect("finding evaluation");
+    assert!(errors.is_empty());
+    let finding = only(findings, FindingKind::InvalidReference);
     assert_eq!(finding.attribution, Attribution::PreExisting);
 
     let mut base = observation(&same);
     base.raw_destination_digest = hb("amiss/scanner-raw-destination", b"elsewhere");
     let moved = comparisons(vec![base], vec![observation(&same)]);
-    let finding = only(
-        evaluate(&[], &moved, Profile::Observe).expect("finding evaluation"),
-        FindingKind::InvalidReference,
-    );
+    let (findings, errors) = evaluate(&[], &moved, Profile::Observe, &Effects::default(), inputs)
+        .expect("finding evaluation");
+    assert!(errors.is_empty());
+    let finding = only(findings, FindingKind::InvalidReference);
     assert_eq!(
         finding.attribution,
         Attribution::Introduced,
@@ -576,13 +674,17 @@ fn introduced_only_demotes_pre_existing_failures_alone() {
         representative_span: None,
         representative_display: None,
     };
-    let (findings, errors) = evaluate_with_policy(
+    let (findings, errors) = evaluate(
         &[],
         &comparisons,
         Profile::EnforceIntroduced,
         &Effects::default(),
-        std::slice::from_ref(&governed),
-        &[],
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: std::slice::from_ref(&governed),
+            claims: &[],
+            projections: &[],
+        },
     )
     .expect("finding evaluation");
     assert!(errors.is_empty());
@@ -626,9 +728,20 @@ fn a_raise_to_the_standing_disposition_adds_no_step() {
         raised: vec![(FindingKind::ExplicitTargetMissing, Disposition::Fail)],
         ..Effects::default()
     };
-    let (findings, _errors) =
-        evaluate_with_policy(&[], &comparisons, Profile::Enforce, &policy, &[], &[])
-            .expect("finding evaluation");
+    let (findings, errors) = evaluate(
+        &[],
+        &comparisons,
+        Profile::Enforce,
+        &policy,
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
+    )
+    .expect("finding evaluation");
+    assert!(errors.is_empty());
     let finding = only(findings, FindingKind::ExplicitTargetMissing);
     assert_eq!(finding.effective_disposition, Disposition::Fail);
     assert_eq!(
@@ -655,7 +768,21 @@ fn a_present_document_is_neither_removed_nor_opaque() {
             extracted_references: 1,
         }),
     }];
-    let got = kinds(&evaluate(&documents, &[], Profile::Observe).expect("finding evaluation"));
+    let (findings, errors) = evaluate(
+        &documents,
+        &[],
+        Profile::Observe,
+        &Effects::default(),
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
+    )
+    .expect("finding evaluation");
+    assert!(errors.is_empty());
+    let got = kinds(&findings);
     assert!(!got.contains(&FindingKind::DocumentRemoved));
     assert!(!got.contains(&FindingKind::OpaqueMdxRegion));
 }
@@ -765,8 +892,20 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         }),
         ..Effects::default()
     };
-    let (findings, _errors) = evaluate_with_policy(&[], &[], Profile::Enforce, &policy, &[], &[])
-        .expect("finding evaluation");
+    let (findings, errors) = evaluate(
+        &[],
+        &[],
+        Profile::Enforce,
+        &policy,
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
+    )
+    .expect("finding evaluation");
+    assert!(errors.is_empty());
     assert!(
         !kinds(&findings).contains(&FindingKind::WaiverInvalid),
         "a waiver live from this instant carries no defect"

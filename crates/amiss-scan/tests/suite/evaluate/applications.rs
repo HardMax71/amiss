@@ -17,10 +17,21 @@ use super::*;
 fn policy() -> (Vec<Comparison>, Effects) {
     let fixture = missing_spec("d.md", "absent.md");
     let comparisons = comparisons(Vec::new(), vec![observation(&fixture)]);
-    let finding = only(
-        evaluate(&[], &comparisons, Profile::Observe).unwrap(),
-        FindingKind::ExplicitTargetMissing,
-    );
+    let (findings, errors) = evaluate(
+        &[],
+        &comparisons,
+        Profile::Observe,
+        &Effects::default(),
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
+    )
+    .unwrap();
+    assert!(errors.is_empty());
+    let finding = only(findings, FindingKind::ExplicitTargetMissing);
     let mut fact = waived_fact();
     fact.key_input.scope.occurrence.source_projection_digest =
         hb("amiss/scanner-source-projection", fixture.block.as_bytes());
@@ -131,8 +142,19 @@ fn applied_exceptions_carry_exact_provenance_and_disposition_steps() {
                 PolicySource::WaiverBundle,
             ),
         ] {
-            let (findings, errors) =
-                evaluate_with_policy(&[], &comparisons, profile, &policy, &[], &[]).unwrap();
+            let (findings, errors) = evaluate(
+                &[],
+                &comparisons,
+                profile,
+                &policy,
+                GovernedInputs {
+                    site: &SiteEvaluation::default(),
+                    governed: &[],
+                    claims: &[],
+                    projections: &[],
+                },
+            )
+            .unwrap();
             assert!(errors.is_empty());
             let finding = only(findings, FindingKind::ExplicitTargetMissing);
             assert_eq!(finding.debt, expected_debt);
@@ -157,8 +179,19 @@ fn applied_exceptions_carry_exact_provenance_and_disposition_steps() {
 #[test]
 fn overlapping_exceptions_carry_neither_application() {
     let (comparisons, policy) = policy();
-    let (findings, errors) =
-        evaluate_with_policy(&[], &comparisons, Profile::Enforce, &policy, &[], &[]).unwrap();
+    let (findings, errors) = evaluate(
+        &[],
+        &comparisons,
+        Profile::Enforce,
+        &policy,
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
+    )
+    .unwrap();
     assert_eq!(errors.len(), 1);
     assert_eq!(
         errors[0].code,

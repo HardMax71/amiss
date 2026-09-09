@@ -24,8 +24,7 @@ pub use model::{
 };
 pub use references::structural_facts;
 use run::candidate_digest_of;
-pub(crate) use run::{GovernedInputs, evaluate_with_site};
-pub use run::{evaluate, evaluate_with_policy};
+pub use run::{GovernedInputs, evaluate};
 
 pub const FINDING_KEY_SCHEMA: &str = "amiss/scanner-finding-key-input";
 pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key";

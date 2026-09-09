@@ -208,7 +208,7 @@ fn evaluate_paired(
 ) -> Result<(Vec<Finding>, Vec<ErrorDetail>), crate::Error> {
     let inputs: Vec<DocumentInput> = paired.iter().map(document_input).collect();
     let groups = crate::evaluate::claim_groups(claims);
-    crate::evaluate::evaluate_with_site(
+    crate::evaluate::evaluate(
         &inputs,
         comparisons,
         setup.profile,

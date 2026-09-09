@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use amiss_scan::{
+    evaluate::{GovernedInputs, evaluate},
     projection::{Outcome, Verdict},
     report::construct,
     semantic::{SiteDefect, SiteEvaluation},
@@ -88,6 +89,27 @@ fn report_construction_uses_every_explicit_site_and_projection_input() {
             BTreeSet::from([FindingKind::SiteBuildDefect, FindingKind::ProjectionDrift]),
         ),
     ] {
+        let (findings, errors) = evaluate(
+            &[],
+            &[],
+            setup.profile,
+            &setup.policy,
+            GovernedInputs {
+                site,
+                governed: &[],
+                claims: &[],
+                projections,
+            },
+        )
+        .unwrap();
+        assert!(errors.is_empty());
+        assert_eq!(
+            findings
+                .iter()
+                .map(|finding| finding.key_input.finding_kind)
+                .collect::<BTreeSet<_>>(),
+            expected
+        );
         let built = construct(
             &setup,
             &discovery,
@@ -158,6 +180,21 @@ fn report_inputs_keep_limits_and_evaluation_failure_reports() {
         },
         ..projection
     };
+    assert!(matches!(
+        evaluate(
+            &[],
+            &[],
+            setup.profile,
+            &setup.policy,
+            GovernedInputs {
+                site: &SiteEvaluation::default(),
+                governed: &[],
+                claims: &[],
+                projections: std::slice::from_ref(&invalid),
+            },
+        ),
+        Err(amiss_scan::Error::Internal)
+    ));
     let incomplete = construct(
         &setup,
         &discovery,

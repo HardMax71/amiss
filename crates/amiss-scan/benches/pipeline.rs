@@ -5,10 +5,11 @@ use std::sync::Arc;
 
 use amiss_git::{GitLimits, GitResources};
 use amiss_scan::correlate::{Side, correlate};
-use amiss_scan::evaluate::evaluate_with_policy;
+use amiss_scan::evaluate::{GovernedInputs, evaluate};
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity, construct};
 use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
+use amiss_scan::semantic::SiteEvaluation;
 use amiss_scan::{
     Classification, DocumentRecord, DocumentStatus, Effects, ScanLimits, ScanResources, Scanned,
     SnapshotDiscovery,
@@ -166,7 +167,7 @@ fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
                 black_box(&discovery),
                 black_box(&discovery),
                 black_box(comparisons),
-                black_box(&amiss_scan::semantic::SiteEvaluation::default()),
+                black_box(&SiteEvaluation::default()),
                 black_box(&[]),
                 black_box(&[]),
             )
@@ -257,13 +258,17 @@ fn lookup_last_document(bencher: Bencher<'_, '_>, count: usize) {
 fn evaluate_matching_debt(bencher: Bencher<'_, '_>, count: usize) {
     let (comparisons, policy) = exception_fixture(count);
     bencher.bench_local(|| {
-        evaluate_with_policy(
+        evaluate(
             &[],
             black_box(&comparisons),
             amiss_wire::controls::Profile::Enforce,
             black_box(&policy),
-            &[],
-            &[],
+            GovernedInputs {
+                site: &SiteEvaluation::default(),
+                governed: &[],
+                claims: &[],
+                projections: &[],
+            },
         )
         .unwrap_or_else(|error| panic!("benchmark evaluation: {error:?}"))
     });

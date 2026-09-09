@@ -44,12 +44,20 @@ fn reference_keys_preserve_normalization_and_optional_identity_fields() {
                 );
                 let reproduced =
                     structural_facts(std::slice::from_ref(&candidate)).expect("adoption keys");
-                let findings = evaluate(
+                let (findings, errors) = evaluate(
                     &[],
                     &comparisons(Vec::new(), vec![candidate]),
                     Profile::Observe,
+                    &Effects::default(),
+                    GovernedInputs {
+                        site: &SiteEvaluation::default(),
+                        governed: &[],
+                        claims: &[],
+                        projections: &[],
+                    },
                 )
                 .expect("finding evaluation");
+                assert!(errors.is_empty());
                 let finding = only(findings, FindingKind::ExplicitTargetMissing);
                 assert_eq!(
                     reproduced.get(&finding.finding_key),
@@ -105,7 +113,7 @@ fn nonreference_keys_preserve_document_observation_and_control_scopes() {
         ],
         ..Effects::default()
     };
-    let (findings, errors) = evaluate_with_policy(
+    let (findings, errors) = evaluate(
         &[DocumentInput {
             path: repo_path("gone.md"),
             base: Some(DocumentSide::Unsupported),
@@ -114,8 +122,12 @@ fn nonreference_keys_preserve_document_observation_and_control_scopes() {
         &comparisons(Vec::new(), vec![candidate]),
         Profile::Observe,
         &policy,
-        &[],
-        &[],
+        GovernedInputs {
+            site: &SiteEvaluation::default(),
+            governed: &[],
+            claims: &[],
+            projections: &[],
+        },
     )
     .expect("finding evaluation");
     assert!(errors.is_empty());
