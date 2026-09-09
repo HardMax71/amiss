@@ -8,17 +8,17 @@ use amiss_wire::controls::{ProjectionKind, ProjectionSource};
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, RepositoryIdentity};
 use amiss_wire::requests::REQUEST_STREAM_BYTES;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::{ConfigError, read_regular};
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RegistryFile {
     relations: Vec<RelationFile>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RelationFile {
     identity: ArtifactId,
@@ -29,34 +29,27 @@ struct RelationFile {
     status_destinations: Vec<RelationStatusDestination>,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SubjectFile {
     role: ArtifactId,
     scope: ScopeFile,
     target: BranchRef,
     object_format: ObjectFormat,
-    credential: String,
+    credential: OpaqueId,
     source: ProjectionSource,
     limits: RelationLimits,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ScopeFile {
-    provider: ProviderFile,
-    integration: String,
+    provider: ProviderIdentity,
+    integration: IntegrationId,
     repository: RepositoryFile,
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ProviderFile {
-    namespace: String,
-    instance: String,
-}
-
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RepositoryFile {
     owner: String,
@@ -75,52 +68,46 @@ struct RepositoryFile {
 /// complete registry violates a relation identity, projection, limit, or destination law.
 pub fn load_relation_registry(path: &Path) -> Result<RelationRegistry, ConfigError> {
     let bytes = read_regular(path, REQUEST_STREAM_BYTES)?;
-    amiss_wire::json::parse(&bytes)
-        .map_err(|defect| ConfigError::caused_by("relation registry is not strict JSON", defect))?;
-    let raw: RegistryFile = serde_json::from_slice(&bytes)
-        .map_err(|defect| ConfigError::caused_by("relation registry is not strict JSON", defect))?;
+    let (raw, _digest): (RegistryFile, _) =
+        amiss_wire::de::deserialize_json(&bytes, "amiss/relation-registry").map_err(|defect| {
+            ConfigError::caused_by("relation registry is not strict JSON", defect)
+        })?;
     let plans = raw
         .relations
         .into_iter()
-        .map(load_relation)
+        .map(|raw| {
+            let [left, right] = raw.subjects;
+            Ok(RelationPlan {
+                identity: raw.identity,
+                context_digest: raw.context_digest,
+                projection: raw.projection,
+                subjects: [load_subject(left)?, load_subject(right)?],
+                aggregate_limits: raw.aggregate_limits,
+                status_destinations: raw.status_destinations,
+            })
+        })
         .collect::<Result<Vec<_>, _>>()?;
     relation_registry(plans)
         .map_err(|defect| ConfigError::caused_by("relation registry is invalid", defect))
 }
 
-fn load_relation(raw: RelationFile) -> Result<RelationPlan, ConfigError> {
-    let [left, right] = raw.subjects;
-    Ok(RelationPlan {
-        identity: raw.identity,
-        context_digest: raw.context_digest,
-        projection: raw.projection,
-        subjects: [load_subject(left)?, load_subject(right)?],
-        aggregate_limits: raw.aggregate_limits,
-        status_destinations: raw.status_destinations,
-    })
-}
-
 fn load_subject(raw: SubjectFile) -> Result<RelationSubject, ConfigError> {
-    let invalid = || ConfigError::invalid("relation subject identity is invalid");
-    let provider = ProviderIdentity::new(raw.scope.provider.namespace, raw.scope.provider.instance)
-        .ok_or_else(invalid)?;
     let repository = RepositoryIdentity::new(
-        provider.instance.as_str().to_owned(),
+        raw.scope.provider.instance.as_str().to_owned(),
         raw.scope.repository.owner,
         raw.scope.repository.name,
     )
-    .ok_or_else(invalid)?;
+    .ok_or_else(|| ConfigError::invalid("relation subject identity is invalid"))?;
     Ok(RelationSubject {
         role: raw.role,
         scope: PlanScope {
-            provider,
-            integration: IntegrationId::try_from(raw.scope.integration)
-                .map_err(|_error| invalid())?,
+            provider: raw.scope.provider,
+            integration: raw.scope.integration,
             repository,
         },
         target: raw.target,
         object_format: raw.object_format,
-        credential: OpaqueId::try_from(raw.credential).map_err(|_error| invalid())?,
+        credential: raw.credential,
         source: raw.source,
         limits: raw.limits,
     })

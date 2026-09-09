@@ -19,6 +19,7 @@ mod mdbook_config;
 mod opaque_id;
 mod provider_namespace;
 mod relation_binding;
+mod relation_limits;
 mod run_attempt;
 mod semantic_artifact;
 mod semantic_binding;

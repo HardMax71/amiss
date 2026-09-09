@@ -307,11 +307,116 @@ fn relation_input_types_reject_unknown_and_incompatible_data()
             r#""projection":"sorted-rows-v1""#,
             r#""projection":"code-text-v1""#,
         ),
+        (
+            "invalid provider namespace",
+            r#""namespace":"gitea""#,
+            r#""namespace":"Gitea""#,
+        ),
+        (
+            "invalid provider instance",
+            r#""instance":"forge.example""#,
+            r#""instance":"forge example""#,
+        ),
+        (
+            "invalid integration identity",
+            r#""integration":"77""#,
+            r#""integration":"bad integration""#,
+        ),
+        (
+            "null credential identity",
+            r#""credential":"credential/source""#,
+            r#""credential":null"#,
+        ),
     ] {
         let invalid = original.replace(field, replacement);
         assert_ne!(invalid, original, "{name} must change the captured input");
         fs::write(&path, invalid)?;
         assert!(load_relation_registry(&path).is_err(), "{name}");
+    }
+    Ok(())
+}
+
+#[test]
+fn relation_files_reject_positional_records() -> Result<(), Box<dyn std::error::Error>> {
+    let directory = TempDir::new()?;
+    load_relation_fixture(&directory)?;
+    let path = directory.path().join("relations.json");
+    let original = fs::read_to_string(&path)?;
+    let mut cases = vec![("registry", "[[]]".to_owned())];
+    for (name, field, positional) in [
+        (
+            "provider",
+            r#""provider":{"instance":"forge.example","namespace":"gitea"}"#,
+            r#""provider":["gitea","forge.example"]"#,
+        ),
+        (
+            "repository",
+            r#""repository":{"name":"service","owner":"acme"}"#,
+            r#""repository":["acme","service"]"#,
+        ),
+        (
+            "destination",
+            r#"{"required_status_name":"Amiss cross-repository","subject_role":"documentation"}"#,
+            r#"["documentation","Amiss cross-repository"]"#,
+        ),
+        (
+            "limits",
+            r#""limits":{"acquisition_bytes":1048576,"acquisition_objects":100,"projection_bytes":1048576,"projection_records":100}"#,
+            r#""limits":[100,1048576,100,1048576]"#,
+        ),
+    ] {
+        let changed = original.replace(field, positional);
+        assert_ne!(changed, original, "{name} must change the input");
+        cases.push((name, changed));
+    }
+    let mut accepted = Vec::new();
+    for (name, bytes) in cases {
+        fs::write(&path, bytes)?;
+        if load_relation_registry(&path).is_ok() {
+            accepted.push(name);
+        }
+    }
+    assert!(
+        accepted.is_empty(),
+        "accepted positional records: {accepted:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn relation_files_keep_strict_numbers_and_complete_input() -> Result<(), Box<dyn std::error::Error>>
+{
+    let directory = TempDir::new()?;
+    load_relation_fixture(&directory)?;
+    let path = directory.path().join("relations.json");
+    let original = fs::read_to_string(&path)?;
+    for replacement in [
+        "9007199254740992",
+        "18446744073709551615",
+        "-0",
+        "-1",
+        "100.0",
+        "1e2",
+        "null",
+        "true",
+        r#""100""#,
+    ] {
+        let changed = original.replace(
+            r#""acquisition_objects":100"#,
+            &format!(r#""acquisition_objects":{replacement}"#),
+        );
+        assert_ne!(changed, original);
+        fs::write(&path, changed)?;
+        assert!(load_relation_registry(&path).is_err(), "{replacement}");
+    }
+    for changed in [
+        format!("{original} null"),
+        original.replace(r#""relations":"#, r#""relations":[],"rel\u0061tions":"#),
+        original.replace(r#""owner":"acme""#, r#""owner":"acme","ow\u006eer":"acme""#),
+    ] {
+        assert_ne!(changed, original);
+        fs::write(&path, changed)?;
+        assert!(load_relation_registry(&path).is_err());
     }
     Ok(())
 }

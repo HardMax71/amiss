@@ -13,6 +13,8 @@ use amiss_wire::controls::{
 use amiss_wire::digest::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat};
 use amiss_wire::relation::RelationPlanEnvelope;
+use js_int::UInt;
+use serde_with::{As, TryFromInto};
 
 use crate::{AuthenticatedDelivery, IntegrationId, OpaqueId, PlanScope, ProviderIdentity};
 
@@ -37,7 +39,8 @@ pub use store::{
 
 pub const RELATION_REGISTRY_LIMIT: usize = 1_024;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationLimits {
     pub acquisition_objects: u64,
@@ -57,7 +60,7 @@ pub struct RelationSubject {
     pub limits: RelationLimits,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationStatusDestination {
     pub subject_role: ArtifactId,

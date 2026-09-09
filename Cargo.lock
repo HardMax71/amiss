@@ -146,6 +146,7 @@ dependencies = [
  "hex",
  "hmac",
  "html5gum",
+ "js_int",
  "percent-encoding",
  "processkit",
  "regex-lite",
