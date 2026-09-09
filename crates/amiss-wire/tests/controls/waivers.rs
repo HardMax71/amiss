@@ -4,7 +4,6 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::ErrorKind;
 
-use amiss_wire::json;
 use strum::IntoEnumIterator;
 
 use crate::support::{
@@ -20,13 +19,13 @@ fn roundtrip_scope(context: &str, edit: &dyn Fn(String) -> String) -> FindingSco
     let key_input = edit(key_input_json("explicit-target-missing"));
     let key = amiss_wire::digest::hb(
         FINDING_KEY_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
+        &amiss_fixtures::canonical_json(key_input.as_bytes()).unwrap(),
     )
     .to_string();
     let fact_doc = edit(fact_json());
     let fact = amiss_wire::digest::hb(
         FACT_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(fact_doc.as_bytes()).unwrap()).unwrap(),
+        &amiss_fixtures::canonical_json(fact_doc.as_bytes()).unwrap(),
     )
     .to_string();
     let item = edit(waiver_item(
@@ -122,13 +121,13 @@ fn a_waiver_answers_for_every_spelling_its_scope_may_carry() {
         let key_input = edit(key_input_json("explicit-target-missing"));
         let key = amiss_wire::digest::hb(
             FINDING_KEY_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
+            &amiss_fixtures::canonical_json(key_input.as_bytes()).unwrap(),
         )
         .to_string();
         let fact_doc = edit(fact_json());
         let fact = amiss_wire::digest::hb(
             FACT_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&json::parse(fact_doc.as_bytes()).unwrap()).unwrap(),
+            &amiss_fixtures::canonical_json(fact_doc.as_bytes()).unwrap(),
         )
         .to_string();
         let item = edit(waiver_item(

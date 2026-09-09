@@ -142,13 +142,13 @@ fn commit_identity_construction_matches_the_published_preimage() {
     evaluation.target_ref = BranchRef::new("refs/heads/main".to_owned());
     evaluation.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
 
-    let published = amiss_wire::json::parse(&request_example("candidate-identity.json"))
-        .expect("the candidate identity example is strict JSON");
+    let published = amiss_fixtures::canonical_json(&request_example("candidate-identity.json"))
+        .expect("fixture JSON");
     assert_eq!(
         commit_candidate_identity_digest(&evaluation, &oid('2'), &oid('4')),
         Some(amiss_wire::digest::hb(
             CANDIDATE_IDENTITY_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&published).expect("fixture JSON")
+            &published
         ))
     );
 

@@ -4,7 +4,6 @@ use amiss_wire::controls::{
     parse_projection_source, parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::json;
 use amiss_wire::model::RepoPathText;
 
 use crate::support::POLICY;
@@ -319,11 +318,11 @@ fn optional_projection_assertions_preserve_presence_and_reject_null() {
     assert_eq!(present_policy.projection_assertions, Some(Vec::new()));
     assert_eq!(
         canonical_scanner_policy(&absent_policy).unwrap().0,
-        serde_json_canonicalizer::to_vec(&json::parse(absent).unwrap()).unwrap()
+        amiss_fixtures::canonical_json(absent).unwrap()
     );
     assert_eq!(
         canonical_scanner_policy(&present_policy).unwrap().0,
-        serde_json_canonicalizer::to_vec(&json::parse(present).unwrap()).unwrap()
+        amiss_fixtures::canonical_json(present).unwrap()
     );
     assert_ne!(
         canonical_scanner_policy(&absent_policy).unwrap().1,

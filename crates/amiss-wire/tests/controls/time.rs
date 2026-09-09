@@ -4,7 +4,6 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::ErrorKind;
 
-use amiss_wire::json;
 use amiss_wire::model::UtcInstant;
 
 use crate::support::TIME_STATEMENT;
@@ -82,8 +81,7 @@ fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
         canonical_trusted_time(&statement).unwrap().1,
         amiss_wire::digest::hb(
             "amiss/scanner-trusted-time-statement",
-            &serde_json_canonicalizer::to_vec(&json::parse(TIME_STATEMENT.as_bytes()).unwrap())
-                .unwrap()
+            &amiss_fixtures::canonical_json(TIME_STATEMENT.as_bytes()).unwrap()
         )
     );
     assert_eq!(statement.provider_run_id, "pipeline/01J2Z9-7");

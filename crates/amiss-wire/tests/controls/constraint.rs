@@ -7,8 +7,6 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::ErrorKind;
 
-use amiss_wire::json;
-
 use crate::support::{
     FLOOR, TIME_STATEMENT, computed_digests, debt_item, debt_snapshot, waiver_bundle, waiver_item,
 };
@@ -31,32 +29,26 @@ fn controls_accept_open_forge_identities() {
     let debt = debt_snapshot("2026-07-02T00:00:00Z", &[item])
         .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
         .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
-    let debt_value = json::parse(debt.as_bytes()).unwrap();
+    let debt_bytes = amiss_fixtures::canonical_json(debt.as_bytes()).unwrap();
     let debt = parse_debt_snapshot(debt.as_bytes()).unwrap();
     assert_eq!(debt.schema, DebtSnapshotSchema::Current);
     assert_eq!(debt.repository.owner(), "platform/security");
     assert_eq!(
         canonical_debt_snapshot(&debt).unwrap().1,
-        amiss_wire::digest::hb(
-            "amiss/debt-snapshot",
-            &serde_json_canonicalizer::to_vec(&debt_value).unwrap()
-        )
+        amiss_wire::digest::hb("amiss/debt-snapshot", &debt_bytes)
     );
 
     let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
     let waiver = waiver_bundle(&[item])
         .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
         .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
-    let waiver_value = json::parse(waiver.as_bytes()).unwrap();
+    let waiver_bytes = amiss_fixtures::canonical_json(waiver.as_bytes()).unwrap();
     let waiver = parse_waiver_bundle(waiver.as_bytes()).unwrap();
     assert_eq!(waiver.schema, WaiverBundleSchema::Current);
     assert_eq!(waiver.repository.owner(), "platform/security");
     assert_eq!(
         canonical_waiver_bundle(&waiver).unwrap().1,
-        amiss_wire::digest::hb(
-            "amiss/waiver-bundle",
-            &serde_json_canonicalizer::to_vec(&waiver_value).unwrap()
-        )
+        amiss_wire::digest::hb("amiss/waiver-bundle", &waiver_bytes)
     );
 
     let time = parse_trusted_time(TIME_STATEMENT.as_bytes()).unwrap();
@@ -101,8 +93,7 @@ fn parses_an_execution_constraint_descriptor() {
         canonical_execution_constraint(&descriptor).unwrap().1,
         amiss_wire::digest::hb(
             "amiss/scanner-execution-constraint",
-            &serde_json_canonicalizer::to_vec(&json::parse(CONSTRAINT.as_bytes()).unwrap())
-                .unwrap()
+            &amiss_fixtures::canonical_json(CONSTRAINT.as_bytes()).unwrap()
         )
     );
 

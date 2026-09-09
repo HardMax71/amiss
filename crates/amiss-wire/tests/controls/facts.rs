@@ -5,7 +5,6 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::{Error, ErrorKind};
 
-use amiss_wire::json;
 use amiss_wire::resolution::{BlobContent, BlobMode, Target};
 
 use crate::support::{
@@ -33,12 +32,12 @@ fn parse_debt_fact(
     let fact = fact_json_for(fact_finding_kind, key_input, resolution);
     let finding_key = amiss_wire::digest::hb(
         FINDING_KEY_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
+        &amiss_fixtures::canonical_json(key_input.as_bytes()).unwrap(),
     )
     .to_string();
     let fact_digest = amiss_wire::digest::hb(
         FACT_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(fact.as_bytes()).unwrap()).unwrap(),
+        &amiss_fixtures::canonical_json(fact.as_bytes()).unwrap(),
     )
     .to_string();
     let item = debt_item_json(
@@ -70,7 +69,7 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         .unwrap();
         assert_eq!(
             serde_json::to_vec(&parsed.items[0].accepted_fact.key_input).unwrap(),
-            serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
+            amiss_fixtures::canonical_json(key_input.as_bytes()).unwrap(),
         );
         assert_eq!(
             parsed.items[0]
@@ -198,10 +197,8 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
         let item = &snapshot.items[0];
         assert_eq!(
             serde_json::to_vec(&item.accepted_fact.key_input).unwrap(),
-            serde_json_canonicalizer::to_vec(
-                &json::parse(key_input_json("explicit-target-missing").as_bytes()).unwrap()
-            )
-            .unwrap(),
+            amiss_fixtures::canonical_json(key_input_json("explicit-target-missing").as_bytes())
+                .unwrap(),
         );
         let (bytes, digest) = canonical_fact(&item.accepted_fact).unwrap();
         assert_eq!(digest, item.accepted_fact_digest);
