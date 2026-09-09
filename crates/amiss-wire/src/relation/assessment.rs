@@ -3,9 +3,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, Nullable};
-use crate::de::{Error, ErrorKind, fail};
+use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hj_serde};
-use crate::json;
 use crate::semantic::producer_version_valid;
 
 use super::evidence::{RelationEvidenceEnvelope, RelationProjectionSlot, evidence_payload_digest};
@@ -103,10 +102,7 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<RelationAssessmentEnvelope, Erro
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let mut input = serde_json::Deserializer::from_slice(bytes);
-    let document: RelationAssessmentEnvelope = crate::requests::object::deserialize(&mut input)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let document: RelationAssessmentEnvelope = de::deserialize_json(bytes)?;
     if assessment_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }

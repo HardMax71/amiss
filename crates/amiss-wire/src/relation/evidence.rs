@@ -1,8 +1,9 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
-use crate::de::{Error, ErrorKind, fail};
+use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hj_serde, verified_json_digest};
 use crate::json;
 use crate::model::ArtifactId;
@@ -63,6 +64,7 @@ pub enum RelationProjectionSlot {
 #[serde(deny_unknown_fields)]
 pub struct RelationProjectedValue {
     pub value_digest: Digest,
+    #[serde(with = "As::<TryFromInto<UInt>>")]
     pub value_bytes: u64,
 }
 
@@ -77,9 +79,7 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<RelationEvidenceEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let document: RelationEvidenceEnvelope = serde_json::from_slice(bytes)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let document: RelationEvidenceEnvelope = de::deserialize_json(bytes)?;
     verified_json_digest(EVIDENCE_ENVELOPE_SCHEMA, bytes, &document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if evidence_payload_digest(&document.payload)? != document.payload_digest {

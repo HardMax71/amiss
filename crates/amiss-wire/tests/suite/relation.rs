@@ -270,8 +270,8 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
         );
         assert_ne!(open, text);
         let error = parse(open.as_bytes()).unwrap_err();
-        assert_eq!(error.path, "$");
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert_eq!(error.path, "$.payload.unknown");
+        assert_eq!(error.kind, ErrorKind::UnknownField);
 
         let oversized = vec![b' '; usize::try_from(RELATION_DOCUMENT_BYTES).unwrap() + 1];
         let error = parse(&oversized).unwrap_err();

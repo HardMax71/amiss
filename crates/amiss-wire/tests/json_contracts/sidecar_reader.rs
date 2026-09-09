@@ -1,15 +1,17 @@
-use amiss_wire::{locale, publication};
+use amiss_wire::{locale, publication, relation};
 
 #[test]
-fn locale_and_publication_readers_reject_malformed_complete_inputs()
--> Result<(), Box<dyn std::error::Error>> {
-    let readers: [fn(&[u8]) -> bool; 6] = [
+fn sidecar_readers_reject_malformed_complete_inputs() -> Result<(), Box<dyn std::error::Error>> {
+    let readers: [fn(&[u8]) -> bool; 9] = [
         |bytes| locale::parse_plan(bytes).is_ok(),
         |bytes| locale::parse_evidence(bytes).is_ok(),
         |bytes| locale::parse_assessment(bytes).is_ok(),
         |bytes| publication::parse_plan(bytes).is_ok(),
         |bytes| publication::parse_evidence(bytes).is_ok(),
         |bytes| publication::parse_assessment(bytes).is_ok(),
+        |bytes| relation::parse_plan(bytes).is_ok(),
+        |bytes| relation::parse_evidence(bytes).is_ok(),
+        |bytes| relation::parse_assessment(bytes).is_ok(),
     ];
     for ((bytes, schema, limit), read) in [
         (
@@ -41,6 +43,21 @@ fn locale_and_publication_readers_reject_malformed_complete_inputs()
             include_bytes!("../../../../spec/examples/publication-assessment.json").as_slice(),
             publication::ASSESSMENT_ENVELOPE_SCHEMA,
             publication::PUBLICATION_DOCUMENT_BYTES,
+        ),
+        (
+            include_bytes!("../../../../spec/examples/relation-plan.json").as_slice(),
+            relation::PLAN_ENVELOPE_SCHEMA,
+            relation::RELATION_DOCUMENT_BYTES,
+        ),
+        (
+            include_bytes!("../../../../spec/examples/relation-evidence.json").as_slice(),
+            relation::EVIDENCE_ENVELOPE_SCHEMA,
+            relation::RELATION_DOCUMENT_BYTES,
+        ),
+        (
+            include_bytes!("../../../../spec/examples/relation-assessment.json").as_slice(),
+            relation::ASSESSMENT_ENVELOPE_SCHEMA,
+            relation::RELATION_DOCUMENT_BYTES,
         ),
     ]
     .into_iter()

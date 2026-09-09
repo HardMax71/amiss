@@ -55,7 +55,7 @@ pub(super) fn assert_closed_input(
 }
 
 pub(super) fn assert_object_required<T, U>(
-    (document, read, root_error): (&T, impl Fn(&[u8]) -> Result<T, Error>, ErrorKind),
+    (document, read): (&T, impl Fn(&[u8]) -> Result<T, Error>),
     object: &U,
     positional: impl Serialize,
 ) -> Result<(), Box<dyn std::error::Error>>
@@ -83,7 +83,7 @@ where
         Some(Error {
             path: "$".to_owned(),
             kind: if object == text {
-                root_error
+                ErrorKind::WrongType
             } else {
                 ErrorKind::InvalidValue
             },

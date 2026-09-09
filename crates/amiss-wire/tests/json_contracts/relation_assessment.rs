@@ -65,33 +65,35 @@ fn relation_assessment_schema_tags_and_object_shapes_are_closed() {
     let payload = &document.payload;
     let engine = &payload.engine;
     let subject = &payload.subject;
-    for schema in [
-        serde_json::to_string(&document.schema).unwrap(),
-        serde_json::to_string(&payload.schema).unwrap(),
+    for (schema, path) in [
+        (serde_json::to_string(&document.schema).unwrap(), "$.schema"),
+        (
+            serde_json::to_string(&payload.schema).unwrap(),
+            "$.payload.schema",
+        ),
     ] {
-        for invalid in ["null", "[]", r#""unknown""#] {
+        for (invalid, kind) in [
+            ("null", ErrorKind::WrongType),
+            ("[]", ErrorKind::WrongType),
+            (r#""unknown""#, ErrorKind::InvalidValue),
+        ] {
             let changed = text.replacen(&schema, invalid, 1);
             assert_ne!(changed, text);
-            assert_eq!(
-                relation::parse_assessment(changed.as_bytes())
-                    .unwrap_err()
-                    .kind,
-                ErrorKind::InvalidValue
-            );
+            let error = relation::parse_assessment(changed.as_bytes()).unwrap_err();
+            assert_eq!(error.path, path);
+            assert_eq!(error.kind, kind);
         }
         let missing = text.replacen(&format!("\"schema\":{schema},"), "", 1);
         assert_ne!(missing, text);
-        assert_eq!(
-            relation::parse_assessment(missing.as_bytes())
-                .unwrap_err()
-                .kind,
-            ErrorKind::InvalidValue
-        );
+        let error = relation::parse_assessment(missing.as_bytes()).unwrap_err();
+        assert_eq!(error.path, path);
+        assert_eq!(error.kind, ErrorKind::MissingField);
     }
-    for (object, positional) in [
+    for (object, positional, path) in [
         (
             text.clone(),
             serde_json::to_string(&(document.schema, payload, document.payload_digest)).unwrap(),
+            "$",
         ),
         (
             serde_json::to_string(payload).unwrap(),
@@ -103,10 +105,12 @@ fn relation_assessment_schema_tags_and_object_shapes_are_closed() {
                 payload.reason,
             ))
             .unwrap(),
+            "$.payload",
         ),
         (
             serde_json::to_string(engine).unwrap(),
             serde_json::to_string(&(&engine.engine_version, engine.engine_digest)).unwrap(),
+            "$.payload.engine",
         ),
         (
             serde_json::to_string(subject).unwrap(),
@@ -116,17 +120,22 @@ fn relation_assessment_schema_tags_and_object_shapes_are_closed() {
                 subject.evidence_payload_digest,
             ))
             .unwrap(),
+            "$.payload.subject",
         ),
     ] {
-        for replacement in [positional, object.replacen('{', r#"{"unknown":true,"#, 1)] {
+        for (replacement, path, kind) in [
+            (positional, path.to_owned(), ErrorKind::WrongType),
+            (
+                object.replacen('{', r#"{"unknown":true,"#, 1),
+                format!("{path}.unknown"),
+                ErrorKind::UnknownField,
+            ),
+        ] {
             let changed = text.replacen(&object, &replacement, 1);
             assert_ne!(changed, text);
-            assert_eq!(
-                relation::parse_assessment(changed.as_bytes())
-                    .unwrap_err()
-                    .kind,
-                ErrorKind::InvalidValue
-            );
+            let error = relation::parse_assessment(changed.as_bytes()).unwrap_err();
+            assert_eq!(error.path, path);
+            assert_eq!(error.kind, kind);
         }
     }
 }

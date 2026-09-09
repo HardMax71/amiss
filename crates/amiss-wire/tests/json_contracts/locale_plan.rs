@@ -61,7 +61,7 @@ fn owned_locale_plan_preserves_page_allocations_and_bounded_output() {
 fn locale_plan_requires_objects_at_every_struct_position() -> Result<(), Box<dyn std::error::Error>>
 {
     let document = locale::parse_plan(PLAN)?;
-    let input = (&document, locale::parse_plan, ErrorKind::WrongType);
+    let input = (&document, locale::parse_plan);
     let payload = &document.payload;
     let docs = &payload.docs;
     let repository = &docs.repository;

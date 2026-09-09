@@ -1,4 +1,4 @@
-use amiss_wire::{de::ErrorKind, publication};
+use amiss_wire::publication;
 
 use super::input::assert_object_required;
 
@@ -8,7 +8,7 @@ fn publication_plan_requires_objects_without_normalizing_positional_input()
     let document = publication::parse_plan(include_bytes!(
         "../../../../spec/examples/publication-plan.json"
     ))?;
-    let input = (&document, publication::parse_plan, ErrorKind::WrongType);
+    let input = (&document, publication::parse_plan);
     let payload = &document.payload;
     let docs = &payload.docs;
     let repository = &docs.repository;
@@ -93,7 +93,7 @@ fn publication_receipts_require_objects_without_normalizing_positional_input()
     let document = publication::parse_evidence(include_bytes!(
         "../../../../spec/examples/publication-evidence.json"
     ))?;
-    let input = (&document, publication::parse_evidence, ErrorKind::WrongType);
+    let input = (&document, publication::parse_evidence);
     let payload = &document.payload;
     let deployment = &payload.deployment;
     let record = &deployment.record;
@@ -133,11 +133,7 @@ fn publication_receipts_require_objects_without_normalizing_positional_input()
     let document = publication::parse_assessment(include_bytes!(
         "../../../../spec/examples/publication-assessment.json"
     ))?;
-    let input = (
-        &document,
-        publication::parse_assessment,
-        ErrorKind::WrongType,
-    );
+    let input = (&document, publication::parse_assessment);
     let payload = &document.payload;
     let engine = &payload.engine;
     let subject = &payload.subject;

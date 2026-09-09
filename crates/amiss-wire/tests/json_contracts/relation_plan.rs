@@ -73,7 +73,7 @@ fn owned_plan_moves_bounded_sources_and_writes_only_at_the_output_boundary() {
 fn complete_plan_requires_schema_tags_and_objects_at_every_nested_level()
 -> Result<(), Box<dyn std::error::Error>> {
     let document = relation::parse_plan(PLAN)?;
-    let input = (&document, relation::parse_plan, ErrorKind::InvalidValue);
+    let input = (&document, relation::parse_plan);
     let payload = &document.payload;
     let relation = &payload.relation;
     let subject = &payload.subjects[1];
@@ -124,24 +124,26 @@ fn complete_plan_requires_schema_tags_and_objects_at_every_nested_level()
     }
 
     let text = serde_json::to_string(&document)?;
-    for tag in [
-        serde_json::to_string(&document.schema)?,
-        serde_json::to_string(&payload.schema)?,
+    for (tag, path) in [
+        (serde_json::to_string(&document.schema)?, "$.schema"),
+        (serde_json::to_string(&payload.schema)?, "$.payload.schema"),
     ] {
-        for invalid in ["null", "false", r#""unknown""#] {
+        for (invalid, kind) in [
+            ("null", ErrorKind::WrongType),
+            ("false", ErrorKind::WrongType),
+            (r#""unknown""#, ErrorKind::InvalidValue),
+        ] {
             let changed = text.replacen(&tag, invalid, 1);
             assert_ne!(changed, text);
-            assert_eq!(
-                relation::parse_plan(changed.as_bytes()).unwrap_err().kind,
-                ErrorKind::InvalidValue
-            );
+            let error = relation::parse_plan(changed.as_bytes()).unwrap_err();
+            assert_eq!(error.path, path);
+            assert_eq!(error.kind, kind);
         }
         let missing = text.replacen(&format!("\"schema\":{tag},"), "", 1);
         assert_ne!(missing, text);
-        assert_eq!(
-            relation::parse_plan(missing.as_bytes()).unwrap_err().kind,
-            ErrorKind::InvalidValue
-        );
+        let error = relation::parse_plan(missing.as_bytes()).unwrap_err();
+        assert_eq!(error.path, path);
+        assert_eq!(error.kind, ErrorKind::MissingField);
     }
     Ok(())
 }

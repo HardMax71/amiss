@@ -61,7 +61,7 @@ fn typed_locale_assessment_retains_full_results_and_bounded_output() {
 #[test]
 fn locale_assessment_requires_objects_and_schema_tags() -> Result<(), Box<dyn std::error::Error>> {
     let document = locale::parse_assessment(ASSESSMENT)?;
-    let input = (&document, locale::parse_assessment, ErrorKind::WrongType);
+    let input = (&document, locale::parse_assessment);
     let payload = &document.payload;
     let coverage = &payload.coverage;
     let fallback = &coverage.fallbacks[0];

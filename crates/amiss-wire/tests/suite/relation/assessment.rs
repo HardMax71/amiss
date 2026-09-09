@@ -136,15 +136,17 @@ fn nullable_assessment_fields_are_required() {
     )
     .unwrap();
     let text = String::from_utf8(serde_json_canonicalizer::to_vec(&assessment).unwrap()).unwrap();
-    for member in [
-        r#""reason":"evidence-absent","#,
-        r#""evidence_payload_digest":null,"#,
+    for (member, path) in [
+        (r#""reason":"evidence-absent","#, "$.payload.reason"),
+        (
+            r#""evidence_payload_digest":null,"#,
+            "$.payload.subject.evidence_payload_digest",
+        ),
     ] {
         let missing = text.replacen(member, "", 1);
         assert_ne!(missing, text);
-        assert_eq!(
-            parse_assessment(missing.as_bytes()).unwrap_err().kind,
-            ErrorKind::InvalidValue
-        );
+        let error = parse_assessment(missing.as_bytes()).unwrap_err();
+        assert_eq!(error.path, path);
+        assert_eq!(error.kind, ErrorKind::MissingField);
     }
 }
