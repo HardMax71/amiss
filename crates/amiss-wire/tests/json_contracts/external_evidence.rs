@@ -222,7 +222,14 @@ fn evidence_capture_keeps_strict_bounds_and_requires_an_object() {
         (br#"{"future":1e0}"#, ErrorKind::UnknownField),
         (br#"{"future":9007199254740992}"#, ErrorKind::UnknownField),
         (b"{} {}", ErrorKind::MissingField),
-        (b"\xff", ErrorKind::InvalidValue),
+        (
+            b"\xff",
+            ErrorKind::Deserialize {
+                category: serde_json::error::Category::Syntax,
+                line: 1,
+                column: 1,
+            },
+        ),
     ] {
         let Err(EvidenceDefect::Wire(error)) = external::parse_evidence(invalid) else {
             panic!("malformed evidence must fail during typed input decoding");

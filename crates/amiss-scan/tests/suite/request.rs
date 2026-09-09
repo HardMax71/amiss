@@ -21,6 +21,24 @@ use amiss_wire::semantic::{
     record,
 };
 
+#[test]
+fn typed_configuration_errors_distinguish_syntax_from_invalid_data() {
+    for (input, code) in [
+        ("{".to_owned(), AnalysisErrorCode::InvalidJson),
+        ("{\"schema\": !}".to_owned(), AnalysisErrorCode::InvalidJson),
+        (format!("{TIME}[]"), AnalysisErrorCode::InvalidJson),
+        ("null".to_owned(), AnalysisErrorCode::ConfigurationInvalid),
+        ("{}".to_owned(), AnalysisErrorCode::ConfigurationInvalid),
+        (
+            "{\"future\": null}".to_owned(),
+            AnalysisErrorCode::UnknownField,
+        ),
+    ] {
+        let error = amiss_wire::controls::parse_trusted_time(input.as_bytes()).unwrap_err();
+        assert_eq!(amiss_scan::request::configuration_detail(&error).code, code);
+    }
+}
+
 const FLOOR: &str = r#"{
   "schema": "amiss/organization-floor",
   "floor_id": "acme/scanner-floor-2026-07",

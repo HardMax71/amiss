@@ -120,7 +120,13 @@ fn trusted_time_reader_keeps_complete_input_and_checked_attempts() {
         let invalid = format!("{example}{suffix}");
         let error = parse_trusted_time(invalid.as_bytes()).unwrap_err();
         assert_eq!(error.path, "$");
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert!(matches!(
+            error.kind,
+            ErrorKind::Deserialize {
+                category: serde_json::error::Category::Syntax,
+                ..
+            }
+        ));
     }
     assert!(parse_trusted_time(format!(" \n{example}\r\t").as_bytes()).is_ok());
     for invalid in [

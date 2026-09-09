@@ -11,6 +11,12 @@ pub struct Error {
 pub enum ErrorKind {
     #[error("{0}")]
     Json(json::Error),
+    #[error("{category:?} JSON error at line {line} column {column}")]
+    Deserialize {
+        category: serde_json::error::Category,
+        line: usize,
+        column: usize,
+    },
     #[error("required field is missing")]
     MissingField,
     #[error("field is unknown")]
@@ -58,23 +64,34 @@ pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned + serde::Serialize
         &mut deserializer,
         &mut track,
     ))
+    .and_then(|document| {
+        deserializer.end()?;
+        Ok(document)
+    })
     .map_err(|error| {
         deserialize_error("$", &serde_path_to_error::Error::new(track.path(), error))
     })?;
-    deserializer
-        .end()
-        .map_err(|_error| Error::new("$", ErrorKind::InvalidValue))?;
     let digest = crate::digest::verified_json_digest(domain, bytes, &document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     Ok((document, digest))
 }
 
-pub(crate) fn deserialize_error<E: std::fmt::Display>(
+pub(crate) fn deserialize_error(
     base: &str,
-    defect: &serde_path_to_error::Error<E>,
+    defect: &serde_path_to_error::Error<serde_json::Error>,
 ) -> Error {
-    let message = defect.inner().to_string();
-    let (kind, member) = if let Some(member) = message
+    let error = defect.inner();
+    let message = error.to_string();
+    let (kind, member) = if !error.is_data() {
+        (
+            ErrorKind::Deserialize {
+                category: error.classify(),
+                line: error.line(),
+                column: error.column(),
+            },
+            None,
+        )
+    } else if let Some(member) = message
         .strip_prefix("missing field `")
         .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
     {

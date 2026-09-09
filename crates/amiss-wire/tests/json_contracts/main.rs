@@ -15,6 +15,7 @@ mod control_inputs;
 mod control_reader;
 mod control_tags;
 mod controls_request;
+mod deserialize_errors;
 mod external_assessment;
 mod external_counts;
 mod external_evidence;

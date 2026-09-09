@@ -167,6 +167,7 @@ pub fn configuration_detail(error: &Error) -> ErrorDetail {
             | JsonErrorKind::FractionOrExponent
             | JsonErrorKind::IntegerOutOfRange => AnalysisErrorCode::InvalidJson,
         },
+        ErrorKind::Deserialize { .. } => AnalysisErrorCode::InvalidJson,
         ErrorKind::UnknownField => AnalysisErrorCode::UnknownField,
         ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
         ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,
