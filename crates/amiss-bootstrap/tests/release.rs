@@ -15,12 +15,14 @@ use amiss_fixtures::requests::{RequestPaths, SealedRequests, indent};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_wire::action::host_platform;
 use amiss_wire::controls::{
-    ConstraintPlatform, ExecutionConstraintDescriptor, parse_execution_constraint,
+    ActionBootstrapContract, ConstraintPlatform, ExecutionConstraintDescriptor,
+    ExecutionConstraintSchema,
 };
 use amiss_wire::digest::{Digest, hb, sha256};
-use amiss_wire::json::{Value, parse as parse_json};
-use amiss_wire::manifest::{RuntimeRole, canonical_release_manifest, parse_release_manifest};
-use amiss_wire::model::ObjectFormat;
+use amiss_wire::manifest::{
+    ReleaseManifest, RuntimeRole, canonical_release_manifest, parse_release_manifest,
+};
+use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
 use amiss_wire::requests::SnapshotMaterialization;
 use tempfile::TempDir;
 
@@ -33,53 +35,30 @@ use support::release::{ACTION, Release, release};
 const BOOTSTRAP: &[u8] = b"the exact protected bootstrap bytes";
 
 fn constraint(release: &Release) -> ExecutionConstraintDescriptor {
-    let value = object(vec![
-        ("schema", string("amiss/scanner-execution-constraint")),
-        (
-            "action_repository",
-            object(vec![
-                ("host", string("git.example.internal")),
-                ("owner", string("platform/security")),
-                ("name", string("amiss")),
-            ]),
-        ),
-        ("action_object_format", string("sha1")),
-        ("action_commit_oid", string(&release.commit)),
-        ("action_tree_oid", string(&release.tree)),
-        ("manifest_path", string("release-manifest.json")),
-        (
-            "release_manifest_digest",
-            string(&release.manifest_digest.to_string()),
-        ),
-        ("selected_platform", string(release.platform.as_ref())),
-        ("required_status_name", string("amiss / assure")),
-        ("bootstrap_contract", string("amiss-action-bootstrap")),
-        (
-            "bootstrap_digest",
-            string(&hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, BOOTSTRAP).to_string()),
-        ),
-    ]);
-    parse_execution_constraint(&serde_json_canonicalizer::to_vec(&value).unwrap())
-        .expect("the constraint parses")
+    ExecutionConstraintDescriptor {
+        action_commit_oid: release.commit.parse().unwrap(),
+        action_object_format: ObjectFormat::Sha1,
+        action_repository: RepositoryIdentity::new(
+            "git.example.internal".to_owned(),
+            "platform/security".to_owned(),
+            "amiss".to_owned(),
+        )
+        .unwrap(),
+        action_tree_oid: release.tree.parse().unwrap(),
+        bootstrap_contract: ActionBootstrapContract::Current,
+        bootstrap_digest: hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, BOOTSTRAP),
+        manifest_path: "release-manifest.json".parse().unwrap(),
+        release_manifest_digest: release.manifest_digest,
+        required_status_name: "amiss / assure".to_owned(),
+        schema: ExecutionConstraintSchema::Current,
+        selected_platform: release.platform,
+    }
 }
 
 fn attempt(release: &Release, bootstrap: &[u8]) -> Result<amiss_bootstrap::Validated, Refusal> {
     let repo = Repository::open(release.dir.path(), ObjectFormat::Sha1).expect("open action tree");
     let mut resources = GitResources::new(GitLimits::CONTRACT);
     validate(&repo, &mut resources, &constraint(release), bootstrap)
-}
-
-fn string(text: &str) -> Value {
-    Value::string(text)
-}
-
-fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::object(
-        members
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-    )
 }
 
 #[test]
@@ -113,15 +92,10 @@ fn the_generated_manifest_reparses_to_its_pinned_digest() {
     let bytes = fs::read(release.dir.path().join("release-manifest.json")).unwrap();
     assert_eq!(bytes.last(), Some(&b'\n'), "the manifest blob ends in LF");
     let parsed = parse_release_manifest(&bytes).expect("the generated manifest parses");
+    let (canonical, digest) = canonical_release_manifest(&parsed).unwrap();
+    assert_eq!(digest, release.manifest_digest);
     assert_eq!(
-        canonical_release_manifest(&parsed).unwrap().1,
-        release.manifest_digest
-    );
-    assert_eq!(
-        serde_json_canonicalizer::to_vec(
-            &amiss_wire::json::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap()
-        )
-        .unwrap(),
+        canonical,
         bytes.strip_suffix(b"\n").unwrap(),
         "the manifest blob is exactly its own canonicalization"
     );
@@ -157,38 +131,18 @@ fn a_symlinked_engine_path_refuses() {
     );
 }
 
-fn edit_action_rows(value: &mut Value, edit: &impl Fn(&mut Value) -> bool) {
-    match value {
-        Value::Array(items) => {
-            let mut retained = std::mem::take(items).into_vec();
-            retained.retain_mut(|item| !is_action_row(item) || edit(item));
-            for item in &mut retained {
-                edit_action_rows(item, edit);
-            }
-            *items = retained.into_boxed_slice();
-        }
-        Value::Object(members) => {
-            for (_key, member) in members.iter_mut() {
-                edit_action_rows(member, edit);
-            }
-        }
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) => {}
-    }
-}
-
-fn with_rewritten_manifest(transform: impl Fn(&mut Value), also: impl FnOnce(&Path)) -> Release {
+fn with_rewritten_manifest(
+    transform: impl FnOnce(&mut ReleaseManifest),
+    also: impl FnOnce(&Path),
+) -> Release {
     let mut digested: Option<Digest> = None;
     let mut release = release(|root| {
         let path = root.join("release-manifest.json");
         let bytes = fs::read(&path).unwrap();
-        let mut value = parse_json(bytes.strip_suffix(b"\n").expect("the manifest ends in LF"))
-            .expect("the manifest parses");
-        transform(&mut value);
-        digested = Some(hb(
-            amiss_wire::manifest::MANIFEST_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&value).unwrap(),
-        ));
-        let mut out = serde_json_canonicalizer::to_vec(&value).unwrap();
+        let mut manifest = parse_release_manifest(&bytes).unwrap();
+        transform(&mut manifest);
+        let (mut out, digest) = canonical_release_manifest(&manifest).unwrap();
+        digested = Some(digest);
         out.push(b'\n');
         fs::write(&path, out).unwrap();
         also(root);
@@ -197,23 +151,22 @@ fn with_rewritten_manifest(transform: impl Fn(&mut Value), also: impl FnOnce(&Pa
     release
 }
 
-fn is_action_row(value: &Value) -> bool {
-    let Value::Object(members) = value else {
-        return false;
-    };
-    members.iter().any(|(key, member)| {
-        key == "role" && matches!(member, Value::String(role) if role.as_ref() == "runtime-data")
-    })
-}
-
 /// The action definition is what a `uses:` workflow actually executes, so a
 /// manifest whose closure fails to pin it must refuse even when its digest
 /// is self-consistent: otherwise the one runnable file at the tree root is
 /// the one file nothing checks.
 #[test]
 fn a_manifest_that_omits_the_action_row_is_refused() {
-    let release =
-        with_rewritten_manifest(|value| edit_action_rows(value, &|_row| false), |_root| {});
+    let release = with_rewritten_manifest(
+        |manifest| {
+            for artifact in &mut manifest.artifacts {
+                artifact
+                    .runtime_files
+                    .retain(|row| row.role != RuntimeRole::RuntimeData);
+            }
+        },
+        |_root| {},
+    );
 
     let outcome = attempt(&release, BOOTSTRAP);
     assert_eq!(
@@ -227,19 +180,17 @@ fn a_manifest_that_omits_the_action_row_is_refused() {
 /// metadata path, not merely exist somewhere in the artifact.
 #[test]
 fn runtime_data_off_the_action_path_is_not_a_pin() {
-    let repathed = |row: &mut Value| {
-        let Value::Object(members) = row else {
-            return true;
-        };
-        for (key, member) in members.iter_mut() {
-            if key == "path" {
-                *member = Value::string("assets.yml");
-            }
-        }
-        true
-    };
     let release = with_rewritten_manifest(
-        |value| edit_action_rows(value, &repathed),
+        |manifest| {
+            for row in manifest
+                .artifacts
+                .iter_mut()
+                .flat_map(|artifact| &mut artifact.runtime_files)
+                .filter(|row| row.role == RuntimeRole::RuntimeData)
+            {
+                row.path = "assets.yml".parse().unwrap();
+            }
+        },
         |root| fs::rename(root.join("action.yml"), root.join("assets.yml")).unwrap(),
     );
 
@@ -418,25 +369,11 @@ fn a_release_missing_its_lockfile_refuses_on_the_path() {
 /// The constraint has to name this exact binary, since the wrapper hashes
 /// itself before it reads a request.
 fn binary_constraint(staged: &Release) -> ExecutionConstraintDescriptor {
-    named_constraint(staged, "amiss / assure")
-}
-
-fn named_constraint(staged: &Release, status: &str) -> ExecutionConstraintDescriptor {
     let own = fs::read(env!("CARGO_BIN_EXE_amiss-bootstrap")).unwrap();
-    let value = parse_json(
-        format!(
-            r#"{{"schema":"amiss/scanner-execution-constraint","action_repository":{{"host":"git.example.internal","owner":"platform/security","name":"amiss"}},"action_object_format":"sha1","action_commit_oid":"{}","action_tree_oid":"{}","manifest_path":"release-manifest.json","release_manifest_digest":"{}","selected_platform":"{}","required_status_name":"{}","bootstrap_contract":"amiss-action-bootstrap","bootstrap_digest":"{}"}}"#,
-            staged.commit,
-            staged.tree,
-            staged.manifest_digest,
-            staged.platform.as_ref(),
-            status,
-            hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
-        )
-        .as_bytes(),
-    )
-    .unwrap();
-    parse_execution_constraint(&serde_json_canonicalizer::to_vec(&value).unwrap()).unwrap()
+    ExecutionConstraintDescriptor {
+        bootstrap_digest: hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
+        ..constraint(staged)
+    }
 }
 
 /// Runs the wrapper over one request triple and reports what it settled to.
@@ -533,7 +470,7 @@ fn an_execution_constraint_that_disagrees_with_its_digest_or_the_host_is_refused
     assert!(refused(&staged, &wrong_digest));
 
     let mut wrong_host = SealedRequests::new(binary_constraint(&staged));
-    wrong_host.constraint = named_constraint(&staged, "amiss / other");
+    wrong_host.constraint.required_status_name = "amiss / other".to_owned();
     assert!(refused(&staged, &wrong_host));
 }
 

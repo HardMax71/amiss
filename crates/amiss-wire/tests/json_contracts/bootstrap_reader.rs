@@ -1,6 +1,7 @@
 use amiss_wire::{
     controls::{self, ExecutionConstraintDescriptor, parse_execution_constraint},
     de::ErrorKind,
+    manifest,
     requests::{self, EvaluationRequest, SnapshotRequest},
 };
 
@@ -12,15 +13,20 @@ const CONSTRAINT: &[u8] =
 
 #[test]
 fn bootstrap_readers_reject_malformed_complete_inputs() -> Result<(), Box<dyn std::error::Error>> {
-    let readers: [fn(&[u8]) -> bool; 3] = [
+    let readers: [fn(&[u8]) -> bool; 4] = [
         |bytes| EvaluationRequest::parse(bytes).is_ok(),
         |bytes| SnapshotRequest::parse(bytes).is_ok(),
         |bytes| parse_execution_constraint(bytes).is_ok(),
+        |bytes| manifest::parse_release_manifest(bytes).is_ok(),
     ];
     for ((bytes, schema), read) in [
         (EVALUATION, requests::EVALUATION_REQUEST_SCHEMA),
         (SNAPSHOT, requests::SNAPSHOT_REQUEST_SCHEMA),
         (CONSTRAINT, controls::EXECUTION_CONSTRAINT_SCHEMA),
+        (
+            include_bytes!("../../../../spec/examples/scanner-release-manifest.json").as_slice(),
+            manifest::MANIFEST_DOMAIN,
+        ),
     ]
     .into_iter()
     .zip(readers)

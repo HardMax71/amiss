@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::controls::{ConstraintPlatform, GitMode, root, sorted_set, validate_repository};
+use crate::controls::{ConstraintPlatform, GitMode, sorted_set, validate_repository};
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hb, verified_json_digest};
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
 pub const MANIFEST_DOMAIN: &str = "amiss/scanner-release-manifest";
@@ -134,9 +134,10 @@ pub struct ReleaseManifest {
 /// values, inconsistent digests or closure rows, and unsorted or duplicate
 /// set members.
 pub fn parse_release_manifest(bytes: &[u8]) -> Result<ReleaseManifest, Error> {
-    root(bytes)?;
     let manifest = de::deserialize_json(bytes)?;
     validate_release_manifest(&manifest)?;
+    verified_json_digest(MANIFEST_DOMAIN, bytes, &manifest)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     Ok(manifest)
 }
 
