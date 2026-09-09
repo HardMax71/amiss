@@ -6,7 +6,6 @@ mod harness;
 mod provider;
 
 use axum::http::StatusCode;
-use serde_json::json;
 
 use harness::{Harness, LaneCase};
 use provider::sign;
@@ -49,8 +48,7 @@ async fn definitive_engine_and_runtime_failures_never_return_success() {
 async fn policy_runner_expiry_and_request_identity_fail_closed() {
     let wrong_policy = Harness::new(LaneCase::Pass);
     let mut claims = wrong_policy.claims();
-    *claims.pointer_mut("/job_config/url").unwrap() =
-        json!("https://gitlab.example/project/.gitlab-ci.yml");
+    claims.job_config.url = "https://gitlab.example/project/.gitlab-ci.yml".to_owned();
     assert_eq!(
         wrong_policy
             .request_with(&sign(&claims), br#"{"merge_request_iid":42}"#)
@@ -61,8 +59,8 @@ async fn policy_runner_expiry_and_request_identity_fail_closed() {
 
     let wrong_runner = Harness::new(LaneCase::Pass);
     let mut claims = wrong_runner.claims();
-    *claims.get_mut("runner_id").unwrap() = json!("88");
-    *claims.get_mut("runner_environment").unwrap() = json!("self-hosted");
+    claims.runner_id = 88;
+    claims.runner_environment = "self-hosted".to_owned();
     assert_eq!(
         wrong_runner
             .request_with(&sign(&claims), br#"{"merge_request_iid":42}"#)
@@ -73,10 +71,10 @@ async fn policy_runner_expiry_and_request_identity_fail_closed() {
 
     let expired = Harness::new(LaneCase::Pass);
     let mut claims = expired.claims();
-    let now = claims.get("iat").unwrap().as_u64().unwrap();
-    *claims.get_mut("iat").unwrap() = json!(now - 600);
-    *claims.get_mut("nbf").unwrap() = json!(now - 601);
-    *claims.get_mut("exp").unwrap() = json!(now - 5);
+    let now = claims.iat;
+    claims.iat = now - 600;
+    claims.nbf = now - 601;
+    claims.exp = now - 5;
     assert_eq!(
         expired
             .request_with(&sign(&claims), br#"{"merge_request_iid":42}"#)
@@ -99,7 +97,7 @@ async fn policy_runner_expiry_and_request_identity_fail_closed() {
 
     let wrong_gate = Harness::new(LaneCase::Pass);
     let mut claims = wrong_gate.claims();
-    *claims.get_mut("sha").unwrap() = json!("dddddddddddddddddddddddddddddddddddddddd");
+    claims.sha = "dddddddddddddddddddddddddddddddddddddddd".to_owned();
     assert_eq!(
         wrong_gate
             .request_with(&sign(&claims), br#"{"merge_request_iid":42}"#)

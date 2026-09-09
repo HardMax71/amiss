@@ -6,12 +6,15 @@
 use amiss_controller::{
     OpaqueId, ProviderError, ProviderInstance, ReplayIdentity, SignedTimePolicy,
 };
-use serde_json::{Value, json};
+use amiss_controller_gitlab::claims::Claims;
+use jsonwebtoken::jwk::{
+    AlgorithmParameters, CommonParameters, EllipticCurveKeyParameters, Jwk, JwkSet,
+    RSAKeyParameters,
+};
 
 use crate::support::identity::now_seconds;
 use crate::support::oidc::{
-    SKEW_SECONDS, accept, claims, oidc, route, set_claim, sign, verify, verify_routed,
-    verify_signed,
+    SKEW_SECONDS, accept, claims, oidc, route, sign, verify, verify_routed, verify_signed,
 };
 
 const BODY: &[u8] = br#"{"merge_request_iid":42}"#;
@@ -53,40 +56,61 @@ fn pinned_policy_job_claims_define_the_delivery() {
 }
 
 #[test]
+fn signed_claims_are_closed_and_support_multiple_audiences() {
+    #[derive(serde::Serialize)]
+    struct Extended<'a> {
+        #[serde(flatten)]
+        claims: &'a Claims,
+        future: bool,
+    }
+    let now = now_seconds();
+    let source = oidc();
+    let mut claims = claims(now);
+    let baseline = accept(&source, &claims, BODY, now).unwrap();
+    assert_eq!(
+        verify(
+            &source,
+            &Extended {
+                claims: &claims,
+                future: true
+            },
+            BODY,
+            now
+        ),
+        Err(ProviderError::Authentication)
+    );
+    claims.aud.push("another-service".to_owned());
+    assert_eq!(
+        accept(&source, &claims, BODY, now).unwrap().delivery(),
+        baseline.delivery()
+    );
+    claims.aud = vec!["another-service".to_owned()];
+    assert_eq!(
+        verify(&source, &claims, BODY, now),
+        Err(ProviderError::Authentication)
+    );
+}
+
+#[test]
 fn issuer_audience_policy_project_and_run_claims_are_exact() {
     let now = now_seconds();
     let source = oidc();
-    let cases = [
-        changed(now, "iss", json!("https://attacker.invalid")),
-        changed(now, "aud", json!("other-controller")),
-        changed(now, "job_project_id", json!("102")),
-        changed(now, "job_project_path", json!("acme/other")),
-        changed(now, "pipeline_id", json!("0")),
-        changed(now, "pipeline_source", json!("push")),
-        changed(now, "job_id", json!("0")),
-        changed(now, "job_source", json!("project")),
-        changed(now, "sha", json!("not-an-oid")),
+    let changes: &[fn(&mut Claims)] = &[
+        |c| c.iss = "https://attacker.invalid".to_owned(),
+        |c| c.aud = vec!["other-controller".to_owned()],
+        |c| c.job_project_id = 102,
+        |c| c.job_project_path = "acme/other".to_owned(),
+        |c| c.pipeline_id = 0,
+        |c| c.pipeline_source = "push".to_owned(),
+        |c| c.job_id = 0,
+        |c| c.job_source = "project".to_owned(),
+        |c| c.sha = "not-an-oid".to_owned(),
+        |c| c.job_config.url = "https://gitlab.example/project/.gitlab-ci.yml".to_owned(),
+        |c| c.job_config.sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned(),
     ];
-    for case in cases {
-        assert_eq!(
-            verify(&source, &case, BODY, now),
-            Err(ProviderError::Authentication)
-        );
-    }
-
-    let mut wrong_url = claims(now);
-    *wrong_url
-        .get_mut("job_config")
-        .unwrap()
-        .get_mut("url")
-        .unwrap() = json!("https://gitlab.example/project/.gitlab-ci.yml");
-    let mut wrong_sha = claims(now);
-    *wrong_sha
-        .get_mut("job_config")
-        .unwrap()
-        .get_mut("sha")
-        .unwrap() = json!("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-    for case in [wrong_url, wrong_sha] {
+    for change in changes {
+        let mut case = claims(now);
+        change(&mut case);
         assert_eq!(
             verify(&source, &case, BODY, now),
             Err(ProviderError::Authentication)
@@ -98,18 +122,20 @@ fn issuer_audience_policy_project_and_run_claims_are_exact() {
 fn runner_jti_time_and_request_hint_fail_closed() {
     let now = now_seconds();
     let source = oidc();
-    let cases = [
-        changed(now, "runner_id", json!("0")),
-        changed(now, "runner_environment", json!("project")),
-        changed(now, "jti", json!("")),
-        changed(now, "jti", json!("x".repeat(1_025))),
-        changed(now, "jti", json!("line\nbreak")),
-        changed(now, "aud", json!("")),
-        changed(now, "sub", json!("")),
-        changed(now, "iat", json!(now.saturating_add(301))),
-        changed(now, "nbf", json!(now.saturating_add(301))),
+    let changes: &[fn(&mut Claims)] = &[
+        |c| c.runner_id = 0,
+        |c| c.runner_environment = "project".to_owned(),
+        |c| c.jti.clear(),
+        |c| c.jti = "x".repeat(1_025),
+        |c| c.jti = "line\nbreak".to_owned(),
+        |c| c.aud = vec![String::new()],
+        |c| c.sub.clear(),
+        |c| c.iat = c.iat.saturating_add(301),
+        |c| c.nbf = c.iat.saturating_add(301),
     ];
-    for case in cases {
+    for change in changes {
+        let mut case = claims(now);
+        change(&mut case);
         assert_eq!(
             verify(&source, &case, BODY, now),
             Err(ProviderError::Authentication)
@@ -117,18 +143,14 @@ fn runner_jti_time_and_request_hint_fail_closed() {
     }
 
     let mut wrong_self_hosted = claims(now);
-    set_claim(
-        &mut wrong_self_hosted,
-        "runner_environment",
-        json!("self-hosted"),
-    );
-    set_claim(&mut wrong_self_hosted, "runner_id", json!("88"));
+    wrong_self_hosted.runner_environment = "self-hosted".to_owned();
+    wrong_self_hosted.runner_id = 88;
     assert_eq!(
         verify(&source, &wrong_self_hosted, BODY, now),
         Err(ProviderError::Authentication)
     );
     let mut self_hosted = claims(now);
-    set_claim(&mut self_hosted, "runner_environment", json!("self-hosted"));
+    self_hosted.runner_environment = "self-hosted".to_owned();
     assert!(accept(&source, &self_hosted, BODY, now).is_ok());
     for body in [
         br#"{"merge_request_iid":0}"#.as_slice(),
@@ -166,24 +188,18 @@ fn signature_headers_and_freshness_are_not_advisory() {
     );
 
     let mut stale = claims(now);
-    set_claim(&mut stale, "iat", json!(now - 600));
-    set_claim(&mut stale, "nbf", json!(now - 601));
+    stale.iat = now - 600;
+    stale.nbf = now - 601;
     assert!(accept(&source, &stale, BODY, now).is_err());
 
     let mut expired = claims(now);
-    set_claim(&mut expired, "iat", json!(now - 20));
-    set_claim(&mut expired, "nbf", json!(now - 21));
-    set_claim(&mut expired, "exp", json!(now - 5));
+    expired.iat = now - 20;
+    expired.nbf = now - 21;
+    expired.exp = now - 5;
     assert_eq!(
         verify(&source, &expired, BODY, now),
         Err(ProviderError::Authentication)
     );
-}
-
-fn changed(now: u64, name: &str, value: Value) -> Value {
-    let mut changed = claims(now);
-    set_claim(&mut changed, name, value);
-    changed
 }
 
 #[test]
@@ -225,12 +241,23 @@ fn the_key_identifier_grammar_is_exact() {
 
 const RSA_N: &str = "ofgWCuLjybRlzo0tZWJjNiuSfb4p4fAkd_wWJcyQoTbji9k0l8W26mPddxHmfHQp-Vaw-4qPCJrcS2mJPMEzP1Pt0Bm4d4QlL-yRT-SFd2lZS-pCgNMsD1W_YpRPEwOWvG6b32690r2jZ47soMZo9wGzjb_7OMg0LOL-bSf63kpaSHSXndS5z5rexMdbBYUsLA9e-KXBdQOS-UTo7WTBEMa2R2CapHg665xsmtdVMTBQY4uDZlxvb3qCo5ZwKh9kG4LT6_I5IhlJH7aGhyxXFvUK-DWNmoudF8NAco9_h9iaGNj8q2ethFkMLs91kzk2PAcDTW9gb54h4FRWyuXpoQ";
 
-fn jwks(kids: &[String]) -> jsonwebtoken::jwk::JwkSet {
-    let keys = kids
-        .iter()
-        .map(|kid| json!({"kty": "RSA", "kid": kid, "n": RSA_N, "e": "AQAB"}))
-        .collect::<Vec<_>>();
-    serde_json::from_value(json!({ "keys": keys })).unwrap()
+fn jwks(kids: &[String]) -> JwkSet {
+    JwkSet {
+        keys: kids
+            .iter()
+            .map(|kid| Jwk {
+                common: CommonParameters {
+                    key_id: Some(kid.clone()),
+                    ..Default::default()
+                },
+                algorithm: AlgorithmParameters::RSA(RSAKeyParameters {
+                    n: RSA_N.to_owned(),
+                    e: "AQAB".to_owned(),
+                    ..Default::default()
+                }),
+            })
+            .collect(),
+    }
 }
 
 fn anchors(kids: &[String]) -> std::collections::BTreeMap<String, amiss_controller::TrustAnchorId> {
@@ -300,21 +327,26 @@ fn a_jwks_that_disagrees_with_its_anchors_is_refused() {
         "a duplicated kid is refused even when the counts agree"
     );
 
-    let elliptic: jsonwebtoken::jwk::JwkSet = serde_json::from_value(json!({"keys": [{
-        "kty": "EC",
-        "kid": "kid-0",
-        "crv": "P-256",
-        "x": "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU",
-        "y": "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0"
-    }]}))
-    .unwrap();
+    let elliptic = JwkSet {
+        keys: vec![Jwk {
+            common: CommonParameters {
+                key_id: Some("kid-0".to_owned()),
+                ..Default::default()
+            },
+            algorithm: AlgorithmParameters::EllipticCurve(EllipticCurveKeyParameters {
+                x: "f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU".to_owned(),
+                y: "x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0".to_owned(),
+                ..Default::default()
+            }),
+        }],
+    };
     assert!(
         public_keys_from_jwks(&elliptic, &anchors(&one)).is_err(),
         "a key outside the RSA family is refused"
     );
 
-    let anonymous: jsonwebtoken::jwk::JwkSet =
-        serde_json::from_value(json!({"keys": [{"kty": "RSA", "n": RSA_N, "e": "AQAB"}]})).unwrap();
+    let mut anonymous = jwks(&one);
+    anonymous.keys[0].common.key_id = None;
     assert!(
         public_keys_from_jwks(&anonymous, &anchors(&one)).is_err(),
         "a key without an identifier is refused"
@@ -418,7 +450,7 @@ fn a_token_at_its_own_bounds_is_still_authentic() {
     let source = oidc();
 
     let mut at_jti_ceiling = claims(now);
-    set_claim(&mut at_jti_ceiling, "jti", json!("x".repeat(1_024)));
+    at_jti_ceiling.jti = "x".repeat(1_024);
     assert!(
         accept(&source, &at_jti_ceiling, BODY, now).is_ok(),
         "an identifier exactly at its ceiling"
@@ -427,47 +459,47 @@ fn a_token_at_its_own_bounds_is_still_authentic() {
     // The expiry comes down to meet the issue time, since an issue time in the
     // future is refused for freshness before these claims are compared.
     let mut at_expiry = claims(now);
-    set_claim(&mut at_expiry, "exp", json!(now));
+    at_expiry.exp = now;
     assert!(
         accept(&source, &at_expiry, BODY, now).is_ok(),
         "issued at its own expiry"
     );
 
     let mut valid_from_expiry = claims(now);
-    set_claim(&mut valid_from_expiry, "exp", json!(now));
-    set_claim(&mut valid_from_expiry, "nbf", json!(now));
+    valid_from_expiry.exp = now;
+    valid_from_expiry.nbf = now;
     assert!(
         accept(&source, &valid_from_expiry, BODY, now).is_ok(),
         "valid from its own expiry"
     );
 
     let mut at_skew = claims(now);
-    set_claim(&mut at_skew, "iat", json!(now - SKEW_SECONDS));
-    set_claim(&mut at_skew, "nbf", json!(now - SKEW_SECONDS));
-    set_claim(&mut at_skew, "exp", json!(now - SKEW_SECONDS));
+    at_skew.iat = now - SKEW_SECONDS;
+    at_skew.nbf = now - SKEW_SECONDS;
+    at_skew.exp = now - SKEW_SECONDS;
     assert!(
         accept(&source, &at_skew, BODY, now).is_ok(),
         "expired exactly the skew ago is still inside the window"
     );
 
     let mut past_skew = claims(now);
-    set_claim(&mut past_skew, "iat", json!(now - SKEW_SECONDS - 1));
-    set_claim(&mut past_skew, "nbf", json!(now - SKEW_SECONDS - 1));
-    set_claim(&mut past_skew, "exp", json!(now - SKEW_SECONDS - 1));
+    past_skew.iat = now - SKEW_SECONDS - 1;
+    past_skew.nbf = now - SKEW_SECONDS - 1;
+    past_skew.exp = now - SKEW_SECONDS - 1;
     assert!(
         accept(&source, &past_skew, BODY, now).is_err(),
         "one second past the skew is expired"
     );
 
     let mut ahead_at_skew = claims(now);
-    set_claim(&mut ahead_at_skew, "nbf", json!(now + SKEW_SECONDS));
+    ahead_at_skew.nbf = now + SKEW_SECONDS;
     assert!(
         accept(&source, &ahead_at_skew, BODY, now).is_ok(),
         "valid from exactly the skew ahead is inside the window"
     );
 
     let mut ahead_past_skew = claims(now);
-    set_claim(&mut ahead_past_skew, "nbf", json!(now + SKEW_SECONDS + 1));
+    ahead_past_skew.nbf = now + SKEW_SECONDS + 1;
     assert!(
         accept(&source, &ahead_past_skew, BODY, now).is_err(),
         "one second further ahead is not yet valid"
@@ -480,10 +512,15 @@ fn a_token_at_its_own_bounds_is_still_authentic() {
 fn a_numeric_identifier_is_the_same_identifier() {
     let now = now_seconds();
     let source = oidc();
-    let mut numeric = claims(now);
-    set_claim(&mut numeric, "runner_id", json!(77));
-    set_claim(&mut numeric, "pipeline_id", json!(202));
-    set_claim(&mut numeric, "job_id", json!(303));
+    let numeric = claims(now);
+    let encoded = serde_json::to_string(&numeric).unwrap();
+    for field in [
+        r#""runner_id":77"#,
+        r#""pipeline_id":202"#,
+        r#""job_id":303"#,
+    ] {
+        assert!(encoded.contains(field), "{field}");
+    }
     let delivery = accept(&source, &numeric, BODY, now).expect("a numeric identifier verifies");
     assert!(
         delivery
@@ -529,10 +566,7 @@ fn a_token_past_the_ceiling_is_refused_before_it_is_verified() {
     let now = now_seconds();
     let source = oidc();
     let mut padded = claims(now);
-    padded.as_object_mut().unwrap().insert(
-        "padding".to_owned(),
-        serde_json::json!("p".repeat(16 * 1024)),
-    );
+    padded.sub = "p".repeat(16 * 1024);
     let oversized = sign(&padded);
     assert!(
         oversized.len() > 16 * 1024,

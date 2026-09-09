@@ -7,9 +7,10 @@ use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{
     AcquiringRunner, AdapterRegistry, Controller, ControllerClock, DeliveryHeader, DeliveryRoute,
     FileLedgerConfig, FileLedgerRoot, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
-    PlanScope, PolicyControls, ProviderAdapter, ReplayWindow, SignedTimePolicy, SystemClock,
-    UntrustedDelivery, check_plan, register_plan,
+    PlanScope, PolicyControls, ProviderAdapter, ReplayWindow, SignedTimePolicy, UntrustedDelivery,
+    check_plan, register_plan,
 };
+use amiss_controller_gitlab::claims::Claims;
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
     AdmissionRejection, EndpointConfig, Operations, check_lane, evaluation_router_with_clock,
@@ -20,7 +21,6 @@ use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
-use serde_json::Value;
 use tempfile::TempDir;
 use tower::ServiceExt as _;
 
@@ -122,9 +122,7 @@ impl Harness {
             plan,
         )
         .unwrap();
-        // jsonwebtoken checks exp and nbf against wall time, so this lane stops
-        // the clock at the wall rather than at an instant of its own choosing.
-        let test_clock = TestClock::at(SystemClock.now_unix_millis().unwrap());
+        let test_clock = TestClock::new();
         let clock: Arc<dyn ControllerClock> = test_clock.clone();
         let ledger = FileLedgerRoot::open_with_clock(
             &ledger_root,
@@ -191,7 +189,7 @@ impl Harness {
             .status()
     }
 
-    pub(super) fn claims(&self) -> Value {
+    pub(super) fn claims(&self) -> Claims {
         claims(&self.repositories.commits.candidate, self.clock.now())
     }
 

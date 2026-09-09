@@ -3,16 +3,17 @@ mod gitea;
 use amiss_controller_fixtures::clock::TestClock;
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
-use std::time::{Duration, SystemTime};
+use std::time::Duration;
 
 use amiss_controller::{
-    AcceptedDelivery, DeliveryHeader, DeliveryRoute, GitHubWebhook, GiteaWebhook, IngressLimits,
-    IngressPolicy, OpaqueId, ProviderIdentity, ReplayWindow, SignedTimePolicy, UntrustedDelivery,
-    WebhookKey, WebhookKeyring,
+    DeliveryHeader, DeliveryRoute, GitHubWebhook, GiteaWebhook, IngressLimits, IngressPolicy,
+    OpaqueId, ProviderIdentity, ReplayWindow, SignedTimePolicy, UntrustedDelivery, WebhookKey,
+    WebhookKeyring,
 };
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitea::{DedicatedReviewer, GiteaPullRequestSource};
 use amiss_controller_github::GitHubPullRequestSource;
+use amiss_controller_gitlab::claims::{Claims, RequestHint};
 use amiss_controller_gitlab::{GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
@@ -186,82 +187,70 @@ pub fn provider_webhooks(data: &[u8]) {
 ///
 /// Panics when an unchanged fixture is refused or an authenticated proof no
 /// longer satisfies the fixed ingress policy.
+#[expect(
+    clippy::expect_used,
+    reason = "the typed signing fixture and test clock must be valid"
+)]
 pub fn gitlab_oidc(data: &[u8]) {
-    let Some(now) = SystemTime::UNIX_EPOCH
-        .elapsed()
-        .ok()
-        .map(|elapsed| elapsed.as_secs())
-    else {
-        return;
-    };
-    let Some(expiry) = now.checked_add(300) else {
-        return;
-    };
+    #[derive(serde::Serialize)]
+    struct Body<'a> {
+        #[serde(flatten)]
+        hint: &'a RequestHint,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        extra: Option<String>,
+    }
+    let clock = TestClock::new();
+    let now = u64::try_from(clock.now().div_euclid(1_000)).expect("the test instant is positive");
     let selector = selection(data, 13);
     let mutation = data.get(1..).unwrap_or_default();
-    let mut claims = json!({
-        "iss": format!("https://{GITLAB_HOST}"),
-        "sub": "project_path:acme/widget:ref_type:branch:ref:topic",
-        "aud": GITLAB_AUDIENCE,
-        "exp": expiry,
-        "nbf": now.saturating_sub(1),
-        "iat": now,
-        "jti": "2d7d0a3f-4aaf-47f5-aeec-291a7c40eef0",
-        "job_project_id": "101",
-        "job_project_path": "acme/widget",
-        "pipeline_id": "202",
-        "pipeline_source": "merge_request_event",
-        "job_id": "303",
-        "runner_id": "77",
-        "runner_environment": "gitlab-hosted",
-        "sha": SHA1,
-        "job_source": "pipeline_execution_policy",
-        "job_config": {
-            "url": format!("https://{GITLAB_HOST}/security/policy.yml"),
-            "sha": oid('f').as_str()
-        }
-    });
-    let mut body = json!({"merge_request_iid": 42});
-    mutate_gitlab(&mut claims, &mut body, selector, mutation);
-
+    let mut claims: Claims = serde_json::from_slice(amiss_fixtures::GITLAB_POLICY_CLAIMS)
+        .expect("the shared policy-job fixture is complete");
+    claims.iss = format!("https://{GITLAB_HOST}");
+    claims.job_config.url = format!("https://{GITLAB_HOST}/security/policy.yml");
+    claims.iat = now;
+    claims.nbf = now.saturating_sub(1);
+    claims.exp = now.checked_add(300).expect("the test expiry fits");
+    let mut hint = RequestHint {
+        merge_request_iid: 42,
+    };
+    if let Some(change) = selector
+        .checked_sub(1)
+        .and_then(|index| GITLAB_MUTATIONS.get(index))
+    {
+        change(&mut claims, &mut hint, mutation);
+    }
+    let body = serde_json::to_vec(&Body {
+        hint: &hint,
+        extra: (selector == 12).then(|| text(mutation)),
+    })
+    .expect("the typed request serializes");
     let mut header = Header::new(Algorithm::RS256);
     header.kid = Some(GITLAB_KID.to_owned());
-    let Ok(token) = encode(&header, &claims, &GITLAB_SIGNING_KEY) else {
-        return;
-    };
+    let token = encode(&header, &claims, &GITLAB_SIGNING_KEY)
+        .expect("the typed claims sign with the fixed key");
     let authorization = format!("Bearer {token}");
-    let Ok(body) = serde_json::to_vec(&body) else {
-        return;
-    };
     let provider = provider("gitlab", GITLAB_HOST);
-    let trust_set = opaque("gitlab-oidc");
     let route = DeliveryRoute {
         provider: provider.clone(),
-        trust_set,
+        trust_set: opaque("gitlab-oidc"),
         signed_time: SignedTimePolicy::Required(Duration::from_mins(5)),
     };
     let headers = [DeliveryHeader {
         name: "authorization",
         value: authorization.as_bytes(),
     }];
-    let Some(now_millis) = i64::try_from(now)
-        .ok()
-        .and_then(|now| now.checked_mul(1_000))
-    else {
-        return;
-    };
     let policy = ingress();
-    let Ok(check) = policy.pre_auth(
-        UntrustedDelivery {
-            route: &route,
-            received_at_unix_millis: now_millis,
-            headers: &headers,
-            body: &body,
-        },
-        &*TestClock::at(now_millis),
-    ) else {
-        return;
-    };
+    let check = policy
+        .pre_auth(
+            UntrustedDelivery {
+                route: &route,
+                received_at_unix_millis: clock.now(),
+                headers: &headers,
+                body: &body,
+            },
+            &*clock,
+        )
+        .expect("the generated request is inside ingress bounds");
     let verified = GITLAB_OIDC.authenticate(check);
     assert!(
         selector != 0 || verified.is_ok(),
@@ -275,96 +264,48 @@ pub fn gitlab_oidc(data: &[u8]) {
         );
         if let Ok(accepted) = accepted {
             assert_eq!(accepted.delivery().identity.provider, provider);
-            assert_gitlab_replay(&claims, &accepted);
+            assert_eq!(
+                accepted.delivery().identity.delivery.as_str(),
+                format!(
+                    "oidc/runner/{}/jti/{}",
+                    claims.runner_id,
+                    hb("amiss/gitlab-oidc-jti-v1", claims.jti.as_bytes())
+                ),
+                "the authenticated JTI determines the replay identity"
+            );
+            let keep_through = i64::try_from(claims.iat)
+                .ok()
+                .and_then(|value| value.checked_mul(1_000))
+                .and_then(|value| value.checked_add(REPLAY_RETENTION_MILLIS));
+            assert_eq!(
+                accepted.replay_keep_through_unix_millis(),
+                keep_through,
+                "the replay identity remains through both ingress windows"
+            );
         }
     }
 }
 
-fn assert_gitlab_replay(claims: &Value, accepted: &AcceptedDelivery) {
-    let replay = claims
-        .get("jti")
-        .and_then(Value::as_str)
-        .zip(
-            claims
-                .get("runner_id")
-                .and_then(Value::as_str)
-                .and_then(|runner| runner.parse::<u64>().ok()),
-        )
-        .map(|(jti, runner)| {
-            format!(
-                "oidc/runner/{runner}/jti/{}",
-                hb("amiss/gitlab-oidc-jti-v1", jti.as_bytes())
-            )
-        });
-    assert_eq!(
-        Some(accepted.delivery().identity.delivery.as_str()),
-        replay.as_deref(),
-        "the authenticated JTI determines the replay identity"
-    );
-    let keep_through = claims
-        .get("iat")
-        .and_then(Value::as_u64)
-        .and_then(|value| i64::try_from(value).ok())
-        .and_then(|value| value.checked_mul(1_000))
-        .and_then(|value| value.checked_add(REPLAY_RETENTION_MILLIS));
-    assert_eq!(
-        accepted.replay_keep_through_unix_millis(),
-        keep_through,
-        "the replay identity remains through both ingress windows"
-    );
-}
-
-fn mutate_gitlab(claims: &mut Value, body: &mut Value, selector: usize, mutation: &[u8]) {
-    let (target, replacement) = match selector {
-        1 => (claims.pointer_mut("/jti"), json!(text(mutation))),
-        2 => (
-            claims.pointer_mut("/runner_environment"),
-            json!(if mutation.first().is_some_and(|byte| byte & 1 == 0) {
-                "self-hosted"
-            } else {
-                "untrusted"
-            }),
-        ),
-        3 => (
-            claims.pointer_mut("/runner_id"),
-            json!(number(mutation).to_string()),
-        ),
-        4 => (
-            claims.pointer_mut("/job_project_id"),
-            json!(number(mutation).to_string()),
-        ),
-        5 => (
-            claims.pointer_mut("/job_project_path"),
-            json!(format!("acme/{}", text(mutation))),
-        ),
-        6 => (
-            claims.pointer_mut("/pipeline_id"),
-            json!(number(mutation).to_string()),
-        ),
-        7 => (
-            claims.pointer_mut("/job_id"),
-            json!(number(mutation).to_string()),
-        ),
-        8 => (claims.pointer_mut("/sha"), json!(text(mutation))),
-        9 => (
-            claims.pointer_mut("/job_config/url"),
-            json!(format!("https://{GITLAB_HOST}/{}", text(mutation))),
-        ),
-        10 => (
-            body.pointer_mut("/merge_request_iid"),
-            json!(number(mutation)),
-        ),
-        11 => (claims.pointer_mut("/iat"), json!(number(mutation))),
-        12 => (
-            Some(body),
-            json!({"merge_request_iid": 42, "extra": text(mutation)}),
-        ),
-        _ => (None, Value::Null),
-    };
-    if let Some(target) = target {
-        *target = replacement;
-    }
-}
+const GITLAB_MUTATIONS: [fn(&mut Claims, &mut RequestHint, &[u8]); 11] = [
+    |c, _, bytes| c.jti = text(bytes),
+    |c, _, bytes| {
+        if bytes.first().is_some_and(|byte| byte & 1 == 0) {
+            "self-hosted"
+        } else {
+            "untrusted"
+        }
+        .clone_into(&mut c.runner_environment);
+    },
+    |c, _, bytes| c.runner_id = number(bytes),
+    |c, _, bytes| c.job_project_id = number(bytes),
+    |c, _, bytes| c.job_project_path = format!("acme/{}", text(bytes)),
+    |c, _, bytes| c.pipeline_id = number(bytes),
+    |c, _, bytes| c.job_id = number(bytes),
+    |c, _, bytes| c.sha = text(bytes),
+    |c, _, bytes| c.job_config.url = format!("https://{GITLAB_HOST}/{}", text(bytes)),
+    |_, hint, bytes| hint.merge_request_iid = number(bytes),
+    |c, _, bytes| c.iat = number(bytes),
+];
 
 struct WebhookExercise<'a> {
     body: Vec<u8>,

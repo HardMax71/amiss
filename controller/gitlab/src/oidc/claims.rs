@@ -1,13 +1,10 @@
-use std::fmt;
-
+use crate::claims::{Claims, RequestHint};
+use crate::identity::{canonical_project_path, exact_sha1, repository_identity};
 use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, ProviderError,
     ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
 };
 use amiss_wire::model::ObjectFormat;
-use serde::Deserialize;
-
-use crate::identity::{canonical_project_path, exact_sha1, repository_identity};
 
 use super::PolicyBinding;
 
@@ -107,70 +104,4 @@ fn change_id(project_id: u64, merge_request_iid: u64) -> Option<ChangeId> {
         "project/{project_id}/merge-request/{merge_request_iid}"
     ))
     .ok()
-}
-
-#[derive(Deserialize)]
-pub(crate) struct Claims {
-    #[serde(rename = "iss")]
-    _iss: String,
-    sub: String,
-    aud: String,
-    exp: u64,
-    nbf: u64,
-    iat: u64,
-    jti: String,
-    #[serde(deserialize_with = "deserialize_u64")]
-    job_project_id: u64,
-    job_project_path: String,
-    #[serde(deserialize_with = "deserialize_u64")]
-    pipeline_id: u64,
-    pipeline_source: String,
-    #[serde(deserialize_with = "deserialize_u64")]
-    job_id: u64,
-    #[serde(deserialize_with = "deserialize_u64")]
-    runner_id: u64,
-    runner_environment: String,
-    sha: String,
-    job_source: String,
-    job_config: JobConfig,
-}
-
-#[derive(Deserialize)]
-struct JobConfig {
-    url: String,
-    sha: String,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct RequestHint {
-    merge_request_iid: u64,
-}
-
-fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    struct IdVisitor;
-
-    impl serde::de::Visitor<'_> for IdVisitor {
-        type Value = u64;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str("a positive decimal identifier")
-        }
-
-        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
-            Ok(value)
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            value.parse().map_err(E::custom)
-        }
-    }
-
-    deserializer.deserialize_any(IdVisitor)
 }

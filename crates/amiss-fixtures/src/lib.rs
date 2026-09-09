@@ -26,6 +26,9 @@ pub const SCANNER_REPORT: &[u8] =
 /// Constructed Gitea-family delivery using complete provider response records.
 pub const GITEA_PULL_WEBHOOK: &[u8] = include_bytes!("../data/gitea-pull-webhook.json");
 
+/// Constructed GitLab policy-job claims matching the provider's complete token fields.
+pub const GITLAB_POLICY_CLAIMS: &[u8] = include_bytes!("../data/gitlab-policy-claims.json");
+
 /// Repository-local variables Git exports to hooks. They must not select the
 /// repository, index, object store, or configuration for a fixture command.
 /// Keep this list in sync with `git rev-parse --local-env-vars`; the integration

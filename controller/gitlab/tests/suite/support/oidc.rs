@@ -7,11 +7,12 @@ use amiss_controller::{
     ProviderError, ReplayWindow, SignedTimePolicy, UntrustedDelivery, VerifiedDelivery,
 };
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
+use amiss_controller_gitlab::claims::Claims;
 use amiss_controller_gitlab::{
     GitLabConfigError, GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust,
 };
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-use serde_json::{Value, json};
+use serde::Serialize;
 
 use super::identity::{HOST, PROJECT_PATH, TestClock, oid, provider};
 
@@ -117,36 +118,15 @@ fn public_key() -> OidcPublicKey {
     .unwrap()
 }
 
-pub fn claims(now: u64) -> Value {
-    json!({
-        "iss": format!("https://{HOST}"),
-        "sub": "project_path:acme/widget:ref_type:branch:ref:topic",
-        "aud": AUDIENCE,
-        "exp": now.checked_add(300).unwrap(),
-        "nbf": now.checked_sub(1).unwrap(),
-        "iat": now,
-        "jti": "2d7d0a3f-4aaf-47f5-aeec-291a7c40eef0",
-        "job_project_id": "101",
-        "job_project_path": PROJECT_PATH,
-        "pipeline_id": "202",
-        "pipeline_source": "merge_request_event",
-        "job_id": "303",
-        "runner_id": "77",
-        "runner_environment": "gitlab-hosted",
-        "sha": oid('b').as_str(),
-        "job_source": "pipeline_execution_policy",
-        "job_config": {
-            "url": format!("https://{HOST}/security/policy.yml"),
-            "sha": oid('f').as_str()
-        }
-    })
+pub fn claims(now: u64) -> Claims {
+    let mut claims: Claims = serde_json::from_slice(amiss_fixtures::GITLAB_POLICY_CLAIMS).unwrap();
+    claims.iat = now;
+    claims.nbf = now.checked_sub(1).unwrap();
+    claims.exp = now.checked_add(300).unwrap();
+    claims
 }
 
-pub fn set_claim(claims: &mut Value, name: &str, value: Value) {
-    *claims.get_mut(name).unwrap() = value;
-}
-
-pub fn sign(claims: &Value) -> String {
+pub fn sign(claims: &impl Serialize) -> String {
     let mut header = Header::new(Algorithm::RS256);
     header.kid = Some(KID.to_owned());
     encode(
@@ -159,7 +139,7 @@ pub fn sign(claims: &Value) -> String {
 
 pub fn verify(
     source: &GitLabOidc,
-    claims: &Value,
+    claims: &impl Serialize,
     body: &[u8],
     now: u64,
 ) -> Result<VerifiedDelivery, ProviderError> {
@@ -206,7 +186,7 @@ pub fn verify_routed(
 
 pub fn accept(
     source: &GitLabOidc,
-    claims: &Value,
+    claims: &impl Serialize,
     body: &[u8],
     now: u64,
 ) -> Result<AcceptedDelivery, &'static str> {

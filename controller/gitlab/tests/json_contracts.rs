@@ -4,6 +4,9 @@ use amiss_controller::{ProviderError, decode_bounded_json};
 use amiss_controller_gitlab::tree::{TreeEntry, TreeObject};
 use amiss_wire::controls::GitMode;
 
+#[path = "json_contracts/claims.rs"]
+mod claims;
+
 #[test]
 fn tree_responses_retain_every_field_from_the_live_contract() {
     let input = include_bytes!("fixtures/tree.json");

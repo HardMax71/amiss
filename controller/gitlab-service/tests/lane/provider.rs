@@ -6,6 +6,7 @@ use amiss_controller::{
     OpaqueId, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, ResolvedCommit,
 };
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
+use amiss_controller_gitlab::claims::Claims;
 use amiss_controller_gitlab::{
     GitLabAccess, GitLabApi, GitLabBranch, GitLabJob, GitLabMergeChecks, GitLabMergeRequest,
     GitLabOidc, GitLabPipeline, GitLabProject, GitLabProtection, GitLabRefresh, GitLabRefreshQuery,
@@ -13,7 +14,6 @@ use amiss_controller_gitlab::{
 };
 use amiss_wire::model::{ObjectFormat, Oid};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-use serde_json::{Value, json};
 
 use amiss_controller_fixtures::lane::Repositories;
 
@@ -113,33 +113,18 @@ pub(super) fn provider() -> ProviderIdentity {
     }
 }
 
-pub(super) fn claims(gate: &Oid, now_millis: i64) -> Value {
-    let now = u64::try_from(now_millis / 1_000).unwrap();
-    json!({
-        "iss": format!("https://{HOST}"),
-        "sub": "project_path:acme/widget:ref_type:branch:ref:topic",
-        "aud": AUDIENCE,
-        "exp": now.checked_add(300).unwrap(),
-        "nbf": now.checked_sub(1).unwrap(),
-        "iat": now,
-        "jti": "gitlab-service-lane-jti",
-        "job_project_id": PROJECT_ID.to_string(),
-        "job_project_path": PROJECT_PATH,
-        "pipeline_id": "202",
-        "pipeline_source": "merge_request_event",
-        "job_id": "303",
-        "runner_id": "77",
-        "runner_environment": "gitlab-hosted",
-        "sha": gate.as_str(),
-        "job_source": "pipeline_execution_policy",
-        "job_config": {
-            "url": format!("https://{HOST}/security/policy.yml"),
-            "sha": oid('f').as_str()
-        }
-    })
+pub(super) fn claims(gate: &Oid, now_millis: i64) -> Claims {
+    let now = u64::try_from(now_millis.div_euclid(1_000)).unwrap();
+    let mut claims: Claims = serde_json::from_slice(amiss_fixtures::GITLAB_POLICY_CLAIMS).unwrap();
+    claims.iat = now;
+    claims.nbf = now.checked_sub(1).unwrap();
+    claims.exp = now.checked_add(300).unwrap();
+    "gitlab-service-lane-jti".clone_into(&mut claims.jti);
+    gate.as_str().clone_into(&mut claims.sha);
+    claims
 }
 
-pub(super) fn sign(claims: &Value) -> String {
+pub(super) fn sign(claims: &Claims) -> String {
     let mut header = Header::new(Algorithm::RS256);
     header.kid = Some(KID.to_owned());
     encode(

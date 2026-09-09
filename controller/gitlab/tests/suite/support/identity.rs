@@ -1,5 +1,4 @@
 pub use amiss_controller_fixtures::clock::TestClock;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use amiss_controller::{ProviderIdentity, ProviderInstance, ProviderNamespace};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
@@ -8,10 +7,8 @@ pub const HOST: &str = "gitlab.example";
 pub const PROJECT_PATH: &str = "acme/widget";
 
 pub fn now_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
+    let clock = TestClock::new();
+    u64::try_from(clock.now().div_euclid(1_000)).unwrap()
 }
 
 pub fn provider() -> ProviderIdentity {

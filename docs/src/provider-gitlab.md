@@ -36,6 +36,14 @@ key ID, issuer, and audience. It then binds the `job_project_id`, canonical
 `job_project_path`, `pipeline_id`, `job_id`, `runner_id`, `runner_environment`, `sha`,
 `pipeline_source`, `job_source`, and policy `job_config` claims. The pipeline source must be
 `merge_request_event`, and the job source must be `pipeline_execution_policy`.
+
+The claims model retains GitLab's project, namespace, user, ref, configuration, and optional
+deployment metadata too. Missing required claims, unknown claims (including nested fields), and
+null optional claims are refused. Required nullable user and configuration fields must remain
+present. Both a single audience and an audience list are supported; project and run identifiers
+accept decimal strings or JSON integers. GitLab's protection flags remain the strings `true` and
+`false`, not JSON booleans. Adding a claim upstream requires updating this closed contract.
+
 ```dot process
 digraph gitlab_provider {
   rankdir = TB;
