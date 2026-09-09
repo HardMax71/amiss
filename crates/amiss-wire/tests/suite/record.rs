@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::json::Value;
 use amiss_wire::semantic::SemanticEvidenceTemplate;
 use amiss_wire::semantic::observation::Observation;
 use amiss_wire::semantic::record::{parse_input, template, validate_records};
@@ -65,17 +64,12 @@ fn row_order_duplicates_and_closed_metadata_are_refused() {
         assert_eq!(parse_input(&input(records)).unwrap_err().kind, kind);
     }
 
-    let value = amiss_wire::json::parse(&input("[]")).unwrap();
-    let Value::Object(members) = value else {
-        panic!("the source is an object")
-    };
-    let mut members = members.into_vec();
-    members.push(("producer_version".to_owned(), Value::string("2")));
-    let value = Value::object(members);
+    let source = String::from_utf8(input("[]")).unwrap();
+    assert!(parse_input(source.as_bytes()).is_ok());
+    let unknown = source.replacen('{', r#"{"producer_version":"2","#, 1);
+    assert_ne!(unknown, source);
     assert_eq!(
-        parse_input(&serde_json_canonicalizer::to_vec(&value).unwrap())
-            .unwrap_err()
-            .kind,
+        parse_input(unknown.as_bytes()).unwrap_err().kind,
         ErrorKind::UnknownField
     );
 }

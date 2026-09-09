@@ -1,38 +1,11 @@
 use std::collections::BTreeSet;
 
 use amiss_wire::digest::hb;
-use amiss_wire::json::{Value, parse};
+use amiss_wire::report::model::{Controls, Evaluation, ReportEnvelope};
 use amiss_wire::report::{
     AnalysisErrorCode, Disposition, ENGINE_DOMAIN, ENVELOPE_SCHEMA, EngineProvenance, FindingKind,
     FixKind, PAYLOAD_SCHEMA, invocation_failure_wire,
 };
-
-#[expect(clippy::panic, reason = "test navigation helper")]
-fn member<'a>(value: &'a Value, key: &str) -> &'a Value {
-    let Value::Object(members) = value else {
-        panic!("not an object");
-    };
-    members
-        .iter()
-        .find(|(name, _)| name == key)
-        .map_or_else(|| panic!("missing member {key}"), |(_, value)| value)
-}
-
-#[expect(clippy::panic, reason = "test navigation helper")]
-fn strings(value: &Value) -> Vec<String> {
-    let Value::Array(items) = value else {
-        panic!("not an array");
-    };
-    items
-        .iter()
-        .map(|item| {
-            let Value::String(s) = item else {
-                panic!("not a string");
-            };
-            s.to_string()
-        })
-        .collect()
-}
 
 fn engine() -> EngineProvenance {
     EngineProvenance {
@@ -61,92 +34,85 @@ fn builds_the_fatal_incomplete_envelope() {
         wire
     );
 
-    let envelope = parse(&wire).unwrap();
-    let Value::String(schema) = member(&envelope, "schema") else {
-        panic!("schema is not a string");
-    };
-    assert_eq!(schema.as_ref(), ENVELOPE_SCHEMA);
-
-    let payload = member(&envelope, "payload");
-    let Value::String(payload_digest) = member(&envelope, "payload_digest") else {
-        panic!("payload_digest is not a string");
-    };
-    let payload_bytes = serde_json_canonicalizer::to_vec(payload).unwrap();
+    let envelope: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
     assert_eq!(
-        payload_digest.as_ref(),
-        hb(PAYLOAD_SCHEMA, &payload_bytes).to_string()
+        serde_json_canonicalizer::to_vec(&envelope).unwrap(),
+        amiss_fixtures::canonical_json(&wire).unwrap()
     );
+    assert_eq!(envelope.schema.to_string(), ENVELOPE_SCHEMA);
 
-    let evaluation = member(payload, "evaluation");
-    assert_eq!(member(evaluation, "request_digest"), &Value::Null);
+    let payload = &envelope.payload;
+    let payload_bytes = serde_json_canonicalizer::to_vec(payload).unwrap();
+    assert_eq!(envelope.payload_digest, hb(PAYLOAD_SCHEMA, &payload_bytes));
+
+    let Evaluation::Unavailable(evaluation) = &payload.evaluation else {
+        panic!("an invocation refusal has no resolved evaluation");
+    };
+    assert!(evaluation.request_digest.is_none());
     assert_eq!(
-        strings(member(evaluation, "reasons")),
-        vec!["invalid-event", "invalid-profile"],
+        evaluation
+            .reasons
+            .iter()
+            .map(AsRef::as_ref)
+            .collect::<Vec<_>>(),
+        ["invalid-event", "invalid-profile"],
         "reasons use enum declaration order"
     );
+    let Controls::Unavailable(controls) = &payload.controls else {
+        panic!("an invocation refusal has no resolved controls");
+    };
+    assert!(controls.request_digest.is_none());
     assert_eq!(
-        strings(member(member(payload, "controls"), "reasons")),
-        vec!["not-parsed"]
+        controls
+            .reasons
+            .iter()
+            .map(AsRef::as_ref)
+            .collect::<Vec<_>>(),
+        ["not-parsed"]
     );
-    let feedback = member(payload, "feedback");
-    assert_eq!(member(feedback, "status"), &Value::string("unavailable"));
-    let Value::Object(feedback_members) = feedback else {
-        panic!("feedback is not an object");
-    };
-    assert_eq!(feedback_members.len(), 1);
+    assert_eq!(
+        serde_json::to_string(&payload.feedback).unwrap(),
+        r#"{"status":"unavailable"}"#
+    );
 
-    let Value::Array(errors) = member(payload, "errors") else {
-        panic!("errors is not an array");
-    };
-    let codes: Vec<String> = errors
-        .iter()
-        .map(|row| strings(&Value::array(vec![member(row, "code").clone()])).remove(0))
-        .collect();
+    let codes: Vec<_> = payload.errors.iter().map(|row| row.code.as_ref()).collect();
     assert_eq!(
         codes,
-        vec!["INVALID_EVENT", "INVALID_PROFILE"],
+        ["INVALID_EVENT", "INVALID_PROFILE"],
         "error rows sort by code bytes"
     );
-    for row in errors {
-        assert_eq!(member(row, "phase"), &Value::string("invocation"));
-        assert_eq!(member(row, "path"), &Value::Null);
-        assert_eq!(member(row, "resource"), &Value::Null);
-        assert_eq!(member(row, "configured_limit"), &Value::Null);
-        assert_eq!(member(row, "observed_lower_bound"), &Value::Null);
+    for row in &payload.errors {
+        assert_eq!(row.phase.as_ref(), "invocation");
+        assert!(row.path.is_none());
+        assert!(row.path_bytes_hex.is_none());
+        assert!(row.resource.is_none());
+        assert!(row.configured_limit.is_none());
+        assert!(row.observed_lower_bound.is_none());
     }
 
-    let result = member(payload, "result");
-    assert_eq!(member(result, "complete"), &Value::Bool(false));
-    assert_eq!(member(result, "status"), &Value::string("incomplete"));
-    assert_eq!(member(result, "exit_code"), &Value::Integer(2));
-    assert_eq!(member(result, "finding_count"), &Value::Integer(0));
-    assert_eq!(member(result, "error_count"), &Value::Integer(2));
+    let result = &payload.result;
+    assert!(!result.complete);
+    assert_eq!(result.status.as_ref(), "incomplete");
+    assert_eq!(result.exit_code, 2);
+    assert_eq!(result.finding_count, 0);
+    assert_eq!(result.error_count, 2);
 
-    let summary = member(payload, "summary");
-    assert_eq!(member(summary, "counts_complete"), &Value::Bool(false));
-    assert_eq!(
-        member(member(summary, "documents"), "discovered"),
-        &Value::Integer(0)
-    );
-    for detail in ["documents", "observations", "findings"] {
-        assert_eq!(member(payload, detail), &Value::array(Vec::new()));
-    }
+    assert!(!payload.summary.counts_complete);
+    assert_eq!(payload.summary.documents.discovered, 0);
+    assert!(payload.documents.is_empty());
+    assert!(payload.observations.is_empty());
+    assert!(payload.findings.is_empty());
 
-    let engine_block = member(payload, "engine");
-    assert_eq!(
-        member(engine_block, "engine_contract"),
-        &Value::string("amiss/scanner")
-    );
-    let Value::Array(adapters) = member(engine_block, "adapters") else {
-        panic!("adapters is not an array");
-    };
-    let ids: Vec<String> = adapters
+    assert_eq!(payload.engine.engine_contract.to_string(), "amiss/scanner");
+    let ids: Vec<_> = payload
+        .engine
+        .adapters
         .iter()
-        .map(|row| strings(&Value::array(vec![member(row, "adapter_id").clone()])).remove(0))
+        .map(|row| row.adapter_id.as_ref())
         .collect();
     assert_eq!(
         ids,
-        vec!["asciidoc", "markdown", "mdx", "plain-advisory", "rst"]
+        ["asciidoc", "markdown", "mdx", "plain-advisory", "rst"]
     );
 }
 
@@ -159,27 +125,32 @@ fn orders_reasons_and_errors_independently() {
         AnalysisErrorCode::RequestUnreadable,
     ]);
     let wire = invocation_failure_wire(&engine(), &codes).unwrap().unwrap();
-    let envelope = parse(&wire).unwrap();
-    let payload = member(&envelope, "payload");
+    let envelope: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    let Evaluation::Unavailable(evaluation) = &envelope.payload.evaluation else {
+        panic!("an invocation refusal has no resolved evaluation");
+    };
     assert_eq!(
-        strings(member(member(payload, "evaluation"), "reasons")),
-        vec![
+        evaluation
+            .reasons
+            .iter()
+            .map(AsRef::as_ref)
+            .collect::<Vec<_>>(),
+        [
             "invalid-invocation",
             "invalid-event",
             "invalid-profile",
             "request-unreadable"
         ]
     );
-    let Value::Array(errors) = member(payload, "errors") else {
-        panic!("errors is not an array");
-    };
-    let codes: Vec<String> = errors
+    let codes: Vec<_> = envelope
+        .payload
+        .errors
         .iter()
-        .map(|row| strings(&Value::array(vec![member(row, "code").clone()])).remove(0))
+        .map(|row| row.code.as_ref())
         .collect();
     assert_eq!(
         codes,
-        vec![
+        [
             "INVALID_EVENT",
             "INVALID_INVOCATION",
             "INVALID_PROFILE",
@@ -344,7 +315,6 @@ fn every_fix_kind_states_its_own_sentence() {
 
 #[test]
 fn report_emission_preserves_bytes_and_propagates_short_writes() {
-    use amiss_wire::report::model::ReportEnvelope;
     use amiss_wire::report::{FATAL_SCRATCH_BYTES, emit_report};
     use std::io::{BufWriter, Cursor, ErrorKind};
 
