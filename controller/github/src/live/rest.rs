@@ -9,7 +9,6 @@ use wary::Validate as _;
 pub(super) use amiss_controller::OperationDeadline;
 use amiss_controller::{
     AcquiredSemanticTemplate, ForgeNegative, ProviderError, WorkflowArtifactExpectation,
-    decode_bounded_json,
 };
 pub(super) use amiss_controller::{
     ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
@@ -34,7 +33,7 @@ use super::{GitHubClientError, GitHubTimeouts};
 
 mod transport;
 
-use self::transport::{MAX_RESPONSE_BYTES, Transport, decode_body};
+use self::transport::{Transport, decode_body};
 
 const PAGE_SIZE: usize = 100;
 const PAGE_SIZE_U8: u8 = 100;
@@ -165,10 +164,14 @@ impl HttpRest {
             per_page: EXACT_PAGE_SIZE,
             page: 1,
         };
-        let run_page: WorkflowRunPage = decode_body(
-            self.transport
-                .get(&query_route(&run_route, &run_query)?, deadline)?,
-        )?;
+        let request = self
+            .transport
+            .client
+            .get(self.transport.url(&query_route(&run_route, &run_query)?)?);
+        let run_page: WorkflowRunPage =
+            decode_body(self.transport.execute(request, deadline)?, |bytes| {
+                serde_json::from_slice(bytes)
+            })?;
         let run = select_workflow_run(config, expectation, candidate, run_page)?;
 
         let artifact_route = format!("/repos/{owner}/{name}/actions/runs/{}/artifacts", run.id);
@@ -177,10 +180,14 @@ impl HttpRest {
             per_page: EXACT_PAGE_SIZE,
             page: 1,
         };
-        let artifact_page: WorkflowArtifactPage = decode_body(
+        let request = self.transport.client.get(
             self.transport
-                .get(&query_route(&artifact_route, &artifact_query)?, deadline)?,
-        )?;
+                .url(&query_route(&artifact_route, &artifact_query)?)?,
+        );
+        let artifact_page: WorkflowArtifactPage =
+            decode_body(self.transport.execute(request, deadline)?, |bytes| {
+                serde_json::from_slice(bytes)
+            })?;
         let artifact = select_workflow_artifact(expectation, &run, artifact_page)?;
 
         let archive_route = format!(
@@ -211,7 +218,11 @@ impl HttpRest {
                 page,
             };
             let route = query_route(&route, &query)?;
-            let batch: Vec<BranchRule> = decode_body(self.transport.get(&route, deadline)?)?;
+            let request = self.transport.client.get(self.transport.url(&route)?);
+            let batch: Vec<BranchRule> =
+                decode_body(self.transport.execute(request, deadline)?, |bytes| {
+                    serde_json::from_slice(bytes)
+                })?;
             for rule in &batch {
                 rule.validate(&())
                     .map_err(|_defect| ProviderError::InvalidResponse)?;
@@ -232,15 +243,14 @@ impl HttpRest {
         oid: &Oid,
         deadline: OperationDeadline,
     ) -> Result<GitCommitRecord, ProviderError> {
-        let response = self.transport.get(
-            &format!("/repos/{owner}/{name}/git/commits/{oid}"),
-            deadline,
-        )?;
-        let declared = response.content_length();
-        decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, |bytes| {
-            amiss_wire::read_json(bytes, u64::MAX)
-        })
-        .map(|(commit, _length)| commit)
+        let url = self
+            .transport
+            .url(&format!("/repos/{owner}/{name}/git/commits/{oid}"))?;
+        decode_body(
+            self.transport
+                .execute(self.transport.client.get(url), deadline)?,
+            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+        )
     }
 
     fn presence(
@@ -268,13 +278,15 @@ impl GitHubRest for HttpRest {
         pull_request: GitHubPullRequest<'_>,
         deadline: OperationDeadline,
     ) -> Result<PullRequestRecord, ProviderError> {
-        decode_body(self.transport.get(
-            &format!(
-                "/repos/{}/{}/pulls/{}",
-                pull_request.repository_owner, pull_request.repository_name, pull_request.number
-            ),
-            deadline,
-        )?)
+        let url = self.transport.url(&format!(
+            "/repos/{}/{}/pulls/{}",
+            pull_request.repository_owner, pull_request.repository_name, pull_request.number
+        ))?;
+        decode_body(
+            self.transport
+                .execute(self.transport.client.get(url), deadline)?,
+            |bytes| serde_json::from_slice(bytes),
+        )
     }
 
     fn refresh_data(
@@ -284,10 +296,14 @@ impl GitHubRest for HttpRest {
     ) -> Result<RefreshData, ProviderError> {
         let owner = pull_request.repository_owner;
         let name = pull_request.repository_name;
-        let repository: RepositoryRecord = decode_body(
-            self.transport
-                .get(&format!("/repos/{owner}/{name}"), deadline)?,
-        )?;
+        let request = self
+            .transport
+            .client
+            .get(self.transport.url(&format!("/repos/{owner}/{name}"))?);
+        let repository: RepositoryRecord =
+            decode_body(self.transport.execute(request, deadline)?, |bytes| {
+                serde_json::from_slice(bytes)
+            })?;
         let authoritative = self.pull_request(pull_request, deadline)?;
         let target = self.git_commit(owner, name, &authoritative.base.sha, deadline)?;
         let candidate = self.git_commit(owner, name, pull_request.candidate_commit, deadline)?;
@@ -354,7 +370,11 @@ impl GitHubRest for HttpRest {
                 app_id,
             };
             let route = query_route(&route, &query)?;
-            let response: CheckRunPage = decode_body(self.transport.get(&route, deadline)?)?;
+            let request = self.transport.client.get(self.transport.url(&route)?);
+            let response: CheckRunPage =
+                decode_body(self.transport.execute(request, deadline)?, |bytes| {
+                    serde_json::from_slice(bytes)
+                })?;
             let count =
                 u64::try_from(runs.len()).map_err(|_defect| ProviderError::InvalidResponse)?;
             check_page(count, response.check_runs.len(), response.total_count)?;
@@ -379,7 +399,14 @@ impl GitHubRest for HttpRest {
             path_segment(repository.owner()),
             path_segment(repository.name())
         );
-        decode_body(self.transport.post(&route, check, deadline)?)
+        let request = self
+            .transport
+            .client
+            .post(self.transport.url(&route)?)
+            .json(check);
+        decode_body(self.transport.execute(request, deadline)?, |bytes| {
+            serde_json::from_slice(bytes)
+        })
     }
 }
 
@@ -397,10 +424,15 @@ impl GitHubRelationRest for HttpRest {
         let owner = path_segment(repository.owner());
         let name = path_segment(repository.name());
         let branch = path_segment(branch);
-        let record: RepositoryCommitRecord = decode_body(self.transport.get(
-            &format!("/repos/{owner}/{name}/commits/{branch}"),
-            self.transport.deadline()?,
-        )?)?;
+        let request = self.transport.client.get(
+            self.transport
+                .url(&format!("/repos/{owner}/{name}/commits/{branch}"))?,
+        );
+        let record: RepositoryCommitRecord = decode_body(
+            self.transport
+                .execute(request, self.transport.deadline()?)?,
+            |bytes| serde_json::from_slice(bytes),
+        )?;
         Ok(CommitRecord {
             sha: record.sha,
             tree: record.commit.tree.sha,
@@ -461,7 +493,9 @@ impl GitHubVerification for HttpRest {
             )?;
             let records: Vec<RefRecord> =
                 match self.transport.request_fact(Method::GET, &paged, deadline)? {
-                    Ok(response) => decode_body(response)?,
+                    Ok(response) => {
+                        decode_body(response, |bytes| amiss_wire::read_json(bytes, u64::MAX))?
+                    }
                     Err(ForgeNegative::Missing | ForgeNegative::Denied) => return Ok(None),
                 };
             if records.len() > PAGE_SIZE {

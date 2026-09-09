@@ -179,7 +179,14 @@ fn an_expired_deadline_fails_before_any_transport_io() {
     let deadline = OperationDeadline::after(Duration::ZERO).unwrap();
     assert_eq!(
         transport
-            .get("/repos/example/demo/rules/branches/main", deadline)
+            .execute(
+                transport.client.get(
+                    transport
+                        .url("/repos/example/demo/rules/branches/main")
+                        .unwrap()
+                ),
+                deadline,
+            )
             .err(),
         Some(ProviderError::Unavailable)
     );

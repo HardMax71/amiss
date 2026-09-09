@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use amiss_wire::model::Oid;
+use amiss_wire::model::{ObjectKind, Oid};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     ChangeLocator, ChangeSnapshot, DeliveryIdentity, IngressCheck, ProviderNamespace,
@@ -21,6 +22,15 @@ pub struct ResolvedCommit {
     pub id: Oid,
     pub tree: Oid,
     pub parents: Vec<Oid>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct GitObject {
+    #[serde(rename = "type")]
+    pub kind: ObjectKind,
+    pub sha: Oid,
+    pub url: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]

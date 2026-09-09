@@ -7,3 +7,9 @@ has one parent and null signature metadata. The
 [signed merge](https://api.github.com/repos/github/rest-api-description/git/commits/3cef12e8a02d612ad032473d4fb87266f2befeae)
 has two parents and populated verification metadata. The model follows the
 [GitHub Git commit contract](https://docs.github.com/en/rest/git/commits#get-a-commit-object).
+
+The reference captures use the same API version and capture date. The
+[exact reference](https://api.github.com/repos/HardMax71/amiss/git/ref/heads/github/typed-commit-flow)
+and [prefix listing](https://api.github.com/repos/HardMax71/amiss/git/matching-refs/heads/github)
+are stored separately to preserve their object-versus-array contracts. The branch name
+contains a slash, and the nested object points to the fixed commit captured in the response.

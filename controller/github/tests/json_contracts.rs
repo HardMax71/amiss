@@ -1,6 +1,94 @@
 use amiss_controller::{ProviderError, decode_bounded_json};
 use amiss_controller_github::commit::{GitCommitRecord, VerificationReason};
+use amiss_controller_github::reference::RefRecord;
 use amiss_wire::model::ObjectFormat;
+
+#[test]
+fn reference_captures_share_the_complete_object_without_losing_fields() {
+    let input = include_str!("fixtures/git-reference.json");
+    let listing = include_str!("fixtures/git-references.json");
+    let record: RefRecord = amiss_wire::read_json(input.as_bytes(), u64::MAX).unwrap();
+    let records: Vec<RefRecord> = amiss_wire::read_json(listing.as_bytes(), u64::MAX).unwrap();
+    assert_eq!(records.as_slice(), std::slice::from_ref(&record));
+    assert_eq!(record.reference, "refs/heads/github/typed-commit-flow");
+    assert_eq!(record.object.kind, amiss_wire::model::ObjectKind::Commit);
+    assert_eq!(record.object.sha.object_format(), ObjectFormat::Sha1);
+    assert_eq!(
+        record.object.sha.as_str(),
+        "9f0c1d21a356128a9b0337a446850e6f281ac62f"
+    );
+    assert_eq!(
+        amiss_fixtures::canonical_json(&serde_json::to_vec(&record).unwrap()).unwrap(),
+        amiss_fixtures::canonical_json(input.as_bytes()).unwrap()
+    );
+    assert_eq!(
+        amiss_fixtures::canonical_json(&serde_json::to_vec(&records).unwrap()).unwrap(),
+        amiss_fixtures::canonical_json(listing.as_bytes()).unwrap()
+    );
+    for (old, new) in [
+        (r#""ref":"#, r#""unexpected":true,"ref":"#),
+        (r#""object":{"#, r#""object":{"unexpected":true,"#),
+        (r#""type":"commit""#, r#""type":"future_kind""#),
+        (r#""type":"commit""#, r#""type":{"commit":null}"#),
+        (r#""type":"commit""#, r#""type":0"#),
+        (r#""node_id":"#, r#""\u006eode_id":null,"node_id":"#),
+        (
+            r#""sha":"9f0c1d21a356128a9b0337a446850e6f281ac62f""#,
+            r#""sha":"not-an-oid""#,
+        ),
+    ] {
+        assert_eq!(input.matches(old).count(), 1, "{old}");
+        let changed = input.replacen(old, new, 1);
+        assert!(
+            serde_json::from_str::<RefRecord>(&changed).is_err(),
+            "{new}"
+        );
+        assert!(
+            amiss_wire::read_json::<RefRecord>(changed.as_bytes(), u64::MAX).is_err(),
+            "{new}"
+        );
+    }
+    for field in [
+        format!(
+            "\"node_id\":{},",
+            serde_json::to_string(&record.node_id).unwrap()
+        ),
+        format!("\"url\":{},", serde_json::to_string(&record.url).unwrap()),
+        format!(
+            ",\"url\":{}",
+            serde_json::to_string(&record.object.url).unwrap()
+        ),
+    ] {
+        assert_eq!(input.matches(&field).count(), 1, "{field}");
+        let changed = input.replacen(&field, "", 1);
+        assert!(
+            serde_json::from_str::<RefRecord>(&changed).is_err(),
+            "{field}"
+        );
+    }
+    let positional = (
+        &record.reference,
+        &record.node_id,
+        &record.url,
+        &record.object,
+    );
+    for encoded in [
+        serde_json::to_vec(&positional).unwrap(),
+        serde_json::to_vec(&(
+            &record.reference,
+            &record.node_id,
+            &record.url,
+            (&record.object.kind, &record.object.sha, &record.object.url),
+        ))
+        .unwrap(),
+    ] {
+        assert!(amiss_wire::read_json::<RefRecord>(&encoded, u64::MAX).is_err());
+    }
+    let encoded = serde_json::to_vec(&[positional]).unwrap();
+    assert!(amiss_wire::read_json::<Vec<RefRecord>>(&encoded, u64::MAX).is_err());
+    assert!(amiss_wire::read_json::<RefRecord>(listing.as_bytes(), u64::MAX).is_err());
+    assert!(amiss_wire::read_json::<Vec<RefRecord>>(input.as_bytes(), u64::MAX).is_err());
+}
 
 #[test]
 fn captured_git_commits_keep_unsigned_and_verified_metadata() {

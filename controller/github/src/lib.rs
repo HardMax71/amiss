@@ -3,6 +3,7 @@
 mod acquisition;
 pub mod commit;
 mod live;
+pub mod reference;
 mod workflow_artifact;
 
 use std::sync::Arc;

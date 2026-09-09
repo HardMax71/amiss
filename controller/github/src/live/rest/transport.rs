@@ -11,7 +11,6 @@ use reqwest::header::{
 };
 use reqwest::{Method, StatusCode};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -21,7 +20,7 @@ use super::super::{GitHubClientError, GitHubTimeouts};
 use super::OperationDeadline;
 
 const MAX_API_BASE_BYTES: usize = 2_048;
-pub(super) const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;
+const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;
 const MAX_ARTIFACT_LOCATION_BYTES: usize = 8 * 1_024;
 const GITHUB_API_VERSION: &str = "2022-11-28";
 const GITHUB_JSON: &str = "application/vnd.github+json";
@@ -46,7 +45,7 @@ fn classified(status: u16, headers: &HeaderMap) -> Result<ForgeFact<()>, Provide
 }
 
 pub(super) struct Transport {
-    client: Client,
+    pub(super) client: Client,
     api_base: String,
     app: AppCredential,
     minted: Mutex<Option<MintedToken>>,
@@ -107,14 +106,6 @@ impl Transport {
         OperationDeadline::after(self.operation_timeout)
     }
 
-    pub(super) fn get(
-        &self,
-        route: &str,
-        deadline: OperationDeadline,
-    ) -> Result<Response, ProviderError> {
-        self.execute(self.client.get(self.url(route)?), deadline)
-    }
-
     pub(super) fn download_artifact(
         &self,
         route: &str,
@@ -154,15 +145,6 @@ impl Transport {
         read_artifact_body(response, declared, maximum_bytes)
     }
 
-    pub(super) fn post(
-        &self,
-        route: &str,
-        body: &impl Serialize,
-        deadline: OperationDeadline,
-    ) -> Result<Response, ProviderError> {
-        self.execute(self.client.post(self.url(route)?).json(body), deadline)
-    }
-
     /// A verification request whose negative answers are facts: the absence or
     /// refusal of what the route names, distinct from a failed call. A
     /// rate-limited refusal stays an error, since no fact was learned.
@@ -172,32 +154,22 @@ impl Transport {
         route: &str,
         deadline: OperationDeadline,
     ) -> Result<ForgeFact<Response>, ProviderError> {
-        let token = self.token(deadline)?;
         let request = self.client.request(method, self.url(route)?);
-        let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
-            .timeout(deadline.remaining()?)
-            .send()
-            .map_err(|error| map_error(&error))?;
+        let response = self.execute(request, deadline)?;
         classified(response.status().as_u16(), response.headers())
             .map(|fact| fact.map(|()| response))
     }
 
-    fn execute(
+    pub(super) fn execute(
         &self,
         request: RequestBuilder,
         deadline: OperationDeadline,
     ) -> Result<Response, ProviderError> {
         let token = self.token(deadline)?;
-        let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
+        github_headers(request, &token, ProviderError::AuthorizationRevoked)?
             .timeout(deadline.remaining()?)
             .send()
-            .map_err(|error| map_error(&error))?;
-        settled(
-            response.status().as_u16(),
-            response.headers(),
-            ProviderError::AuthorizationRevoked,
-        )?;
-        Ok(response)
+            .map_err(|error| map_error(&error))
     }
 
     fn token(&self, deadline: OperationDeadline) -> Result<SecretString, ProviderError> {
@@ -231,11 +203,12 @@ impl Transport {
             response.headers(),
             ProviderError::Authentication,
         )?;
-        let minted: InstallationToken = decode_body(response)?;
+        let minted: InstallationToken =
+            decode_body(response, |bytes| serde_json::from_slice(bytes))?;
         Ok(SecretString::from(minted.token))
     }
 
-    fn url(&self, route: &str) -> Result<Url, ProviderError> {
+    pub(super) fn url(&self, route: &str) -> Result<Url, ProviderError> {
         if !route.starts_with('/') || route.starts_with("//") {
             return Err(ProviderError::InvalidResponse);
         }
@@ -290,12 +263,18 @@ fn github_headers(
         .header(AUTHORIZATION, authorization))
 }
 
-pub(super) fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
+pub(super) fn decode_body<T, E>(
+    response: Response,
+    decode: impl FnOnce(&[u8]) -> Result<T, E>,
+) -> Result<T, ProviderError> {
+    settled(
+        response.status().as_u16(),
+        response.headers(),
+        ProviderError::AuthorizationRevoked,
+    )?;
     let declared = response.content_length();
-    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, |bytes| {
-        serde_json::from_slice(bytes)
-    })
-    .map(|(value, _length)| value)
+    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, decode)
+        .map(|(value, _length)| value)
 }
 
 fn artifact_location(headers: &HeaderMap) -> Result<Url, ProviderError> {

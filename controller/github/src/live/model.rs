@@ -2,6 +2,7 @@ use amiss_wire::model::Oid;
 use serde::{Deserialize, Serialize};
 
 pub(super) use crate::commit::{GitCommitRecord, GitObjectRecord};
+pub(super) use crate::reference::RefRecord;
 
 use super::rules::BranchRule;
 
@@ -124,10 +125,4 @@ pub(super) struct CreateCheckRun {
 pub(super) struct CreateCheckRunOutput {
     pub title: String,
     pub summary: String,
-}
-
-#[derive(Deserialize)]
-pub(super) struct RefRecord {
-    #[serde(rename = "ref")]
-    pub reference: String,
 }
