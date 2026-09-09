@@ -35,7 +35,10 @@ fn external_outcome(run: &amiss_controller::RunIdentity) -> RunnerOutcome {
         identity: Box::new(run.clone()),
         evaluation: Evaluation::Pass,
         report: amiss_fixtures::captured_report(
-            amiss_fixtures::external_report(&[DESTINATION]).unwrap(),
+            serde_json_canonicalizer::to_vec(
+                &amiss_fixtures::external_report(&[DESTINATION]).unwrap(),
+            )
+            .unwrap(),
         )
         .unwrap(),
         semantic_artifact: None,
@@ -43,14 +46,7 @@ fn external_outcome(run: &amiss_controller::RunIdentity) -> RunnerOutcome {
 }
 
 fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> ExternalEvidence {
-    let report = amiss_fixtures::external_report(&[DESTINATION]).unwrap();
-    let (report, _verdict) = amiss_wire::report::validate_envelope(&report).unwrap();
-    let plan = amiss_wire::external::plan(
-        &report,
-        &report.payload.engine.engine_version,
-        report.payload.engine.engine_digest,
-    )
-    .unwrap();
+    let plan = amiss_fixtures::external_plan(&[DESTINATION]).unwrap();
     ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
         plan_payload_digest: plan.payload_digest,

@@ -4,13 +4,11 @@ use amiss_wire::report::{
     model::{ObservationComparison, ReportEnvelope},
 };
 
-const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.canonical.json");
-
 /// A minimal complete scanner report whose candidate side introduces the
 /// given external destinations, digest-true, for producer and lane tests.
 #[must_use]
-pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
-    let mut report: ReportEnvelope = serde_json::from_slice(REPORT).ok()?;
+pub fn external_report(destinations: &[&str]) -> Option<ReportEnvelope> {
+    let mut report: ReportEnvelope = serde_json::from_slice(crate::SCANNER_REPORT).ok()?;
     let local = report
         .payload
         .observations
@@ -61,16 +59,17 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
     report.payload.summary.references.external_out_of_scope = count;
     report.payload.summary.references.extracted = count.saturating_add(1);
     report.payload.summary.references.resolved = 1;
-    let payload = serde_json_canonicalizer::to_vec(&report.payload).ok()?;
-    report.payload_digest = amiss_wire::digest::hb(PAYLOAD_SCHEMA, &payload);
-    serde_json_canonicalizer::to_vec(&report).ok()
+    report.payload_digest = amiss_wire::digest::hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&report.payload, &mut writer)
+    })
+    .ok()?;
+    Some(report)
 }
 
 /// Derives the external plan from the shared digest-true report fixture.
 #[must_use]
 pub fn external_plan(destinations: &[&str]) -> Option<amiss_wire::external::ExternalPlanEnvelope> {
     let report = external_report(destinations)?;
-    let (report, _verdict) = amiss_wire::report::validate_envelope(&report).ok()?;
     amiss_wire::external::plan(
         &report,
         &report.payload.engine.engine_version,

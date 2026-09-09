@@ -4,7 +4,7 @@ use super::targets;
 
 #[test]
 fn only_unshaped_https_destinations_are_selected_up_to_the_cap() {
-    let report = amiss_fixtures::external_report(&[
+    let plan = amiss_fixtures::external_plan(&[
         "https://a.example/one",
         "https://b.example/two",
         "https://c.example/three",
@@ -12,14 +12,6 @@ fn only_unshaped_https_destinations_are_selected_up_to_the_cap() {
         "http://plain.example/insecure",
     ])
     .unwrap();
-    let (report, _verdict) = amiss_wire::report::validate_envelope(&report).unwrap();
-    let plan = amiss_wire::external::plan(
-        &report,
-        &report.payload.engine.engine_version,
-        report.payload.engine.engine_digest,
-    )
-    .unwrap();
-
     let (selected, skipped) = targets(&plan, 64);
     assert_eq!(
         selected,
