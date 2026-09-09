@@ -9,6 +9,7 @@ use wary::Validate as _;
 pub(super) use amiss_controller::OperationDeadline;
 use amiss_controller::{
     AcquiredSemanticTemplate, ForgeNegative, ProviderError, WorkflowArtifactExpectation,
+    decode_bounded_json,
 };
 pub(super) use amiss_controller::{
     ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
@@ -33,7 +34,7 @@ use super::{GitHubClientError, GitHubTimeouts};
 
 mod transport;
 
-use self::transport::{Transport, decode_body};
+use self::transport::{MAX_RESPONSE_BYTES, Transport, decode_body};
 
 const PAGE_SIZE: usize = 100;
 const PAGE_SIZE_U8: u8 = 100;
@@ -164,9 +165,10 @@ impl HttpRest {
             per_page: EXACT_PAGE_SIZE,
             page: 1,
         };
-        let run_page: WorkflowRunPage = self
-            .transport
-            .get(&query_route(&run_route, &run_query)?, deadline)?;
+        let run_page: WorkflowRunPage = decode_body(
+            self.transport
+                .get(&query_route(&run_route, &run_query)?, deadline)?,
+        )?;
         let run = select_workflow_run(config, expectation, candidate, run_page)?;
 
         let artifact_route = format!("/repos/{owner}/{name}/actions/runs/{}/artifacts", run.id);
@@ -175,9 +177,10 @@ impl HttpRest {
             per_page: EXACT_PAGE_SIZE,
             page: 1,
         };
-        let artifact_page: WorkflowArtifactPage = self
-            .transport
-            .get(&query_route(&artifact_route, &artifact_query)?, deadline)?;
+        let artifact_page: WorkflowArtifactPage = decode_body(
+            self.transport
+                .get(&query_route(&artifact_route, &artifact_query)?, deadline)?,
+        )?;
         let artifact = select_workflow_artifact(expectation, &run, artifact_page)?;
 
         let archive_route = format!(
@@ -208,7 +211,7 @@ impl HttpRest {
                 page,
             };
             let route = query_route(&route, &query)?;
-            let batch: Vec<BranchRule> = self.transport.get(&route, deadline)?;
+            let batch: Vec<BranchRule> = decode_body(self.transport.get(&route, deadline)?)?;
             for rule in &batch {
                 rule.validate(&())
                     .map_err(|_defect| ProviderError::InvalidResponse)?;
@@ -226,13 +229,18 @@ impl HttpRest {
         &self,
         owner: &str,
         name: &str,
-        oid: &str,
+        oid: &Oid,
         deadline: OperationDeadline,
     ) -> Result<GitCommitRecord, ProviderError> {
-        self.transport.get(
-            &format!("/repos/{owner}/{name}/git/commits/{}", path_segment(oid)),
+        let response = self.transport.get(
+            &format!("/repos/{owner}/{name}/git/commits/{oid}"),
             deadline,
-        )
+        )?;
+        let declared = response.content_length();
+        decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, |bytes| {
+            amiss_wire::read_json(bytes, u64::MAX)
+        })
+        .map(|(commit, _length)| commit)
     }
 
     fn presence(
@@ -260,13 +268,13 @@ impl GitHubRest for HttpRest {
         pull_request: GitHubPullRequest<'_>,
         deadline: OperationDeadline,
     ) -> Result<PullRequestRecord, ProviderError> {
-        self.transport.get(
+        decode_body(self.transport.get(
             &format!(
                 "/repos/{}/{}/pulls/{}",
                 pull_request.repository_owner, pull_request.repository_name, pull_request.number
             ),
             deadline,
-        )
+        )?)
     }
 
     fn refresh_data(
@@ -276,23 +284,13 @@ impl GitHubRest for HttpRest {
     ) -> Result<RefreshData, ProviderError> {
         let owner = pull_request.repository_owner;
         let name = pull_request.repository_name;
-        let repository: RepositoryRecord = self
-            .transport
-            .get(&format!("/repos/{owner}/{name}"), deadline)?;
+        let repository: RepositoryRecord = decode_body(
+            self.transport
+                .get(&format!("/repos/{owner}/{name}"), deadline)?,
+        )?;
         let authoritative = self.pull_request(pull_request, deadline)?;
-        let target: RepositoryCommitRecord = self.transport.get(
-            &format!(
-                "/repos/{owner}/{name}/commits/{}",
-                path_segment(&authoritative.base.sha)
-            ),
-            deadline,
-        )?;
-        let candidate = self.git_commit(
-            owner,
-            name,
-            pull_request.candidate_commit.as_str(),
-            deadline,
-        )?;
+        let target = self.git_commit(owner, name, &authoritative.base.sha, deadline)?;
+        let candidate = self.git_commit(owner, name, pull_request.candidate_commit, deadline)?;
         let current_head = if authoritative.head.sha == candidate.sha {
             CommitRecord {
                 sha: candidate.sha.clone(),
@@ -307,7 +305,7 @@ impl GitHubRest for HttpRest {
         };
         let gate_sha = authoritative
             .merge_commit_sha
-            .as_deref()
+            .as_ref()
             .ok_or(ProviderError::Unavailable)?;
         let gate = self.git_commit(owner, name, gate_sha, deadline)?;
         let rules = self.branch_rules(owner, name, &authoritative.base.branch, deadline)?;
@@ -316,7 +314,7 @@ impl GitHubRest for HttpRest {
             pull_request: authoritative,
             target: CommitRecord {
                 sha: target.sha,
-                tree: target.commit.tree.sha,
+                tree: target.tree.sha,
             },
             candidate: CommitRecord {
                 sha: candidate.sha,
@@ -356,7 +354,7 @@ impl GitHubRest for HttpRest {
                 app_id,
             };
             let route = query_route(&route, &query)?;
-            let response: CheckRunPage = self.transport.get(&route, deadline)?;
+            let response: CheckRunPage = decode_body(self.transport.get(&route, deadline)?)?;
             let count =
                 u64::try_from(runs.len()).map_err(|_defect| ProviderError::InvalidResponse)?;
             check_page(count, response.check_runs.len(), response.total_count)?;
@@ -381,7 +379,7 @@ impl GitHubRest for HttpRest {
             path_segment(repository.owner()),
             path_segment(repository.name())
         );
-        self.transport.post(&route, check, deadline)
+        decode_body(self.transport.post(&route, check, deadline)?)
     }
 }
 
@@ -399,10 +397,10 @@ impl GitHubRelationRest for HttpRest {
         let owner = path_segment(repository.owner());
         let name = path_segment(repository.name());
         let branch = path_segment(branch);
-        let record: RepositoryCommitRecord = self.transport.get(
+        let record: RepositoryCommitRecord = decode_body(self.transport.get(
             &format!("/repos/{owner}/{name}/commits/{branch}"),
             self.transport.deadline()?,
-        )?;
+        )?)?;
         Ok(CommitRecord {
             sha: record.sha,
             tree: record.commit.tree.sha,

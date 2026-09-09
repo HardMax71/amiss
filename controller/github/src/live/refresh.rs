@@ -47,16 +47,23 @@ pub(super) fn snapshot(
     validate_pull_request(config, pull_request, &data.pull_request)?;
     let authorized = rules_authorize(config, &data.rules);
 
-    let candidate = exact_oid(&data.candidate.sha)?;
-    let current_head = exact_oid(&data.pull_request.head.sha)?;
-    let fetched_head = exact_oid(&data.current_head.sha)?;
-    let base = exact_oid(&data.target.sha)?;
-    let candidate_tree = exact_oid(&data.candidate.tree)?;
-    let current_head_tree = exact_oid(&data.current_head.tree)?;
-    let base_tree = exact_oid(&data.target.tree)?;
-    let gate_commit = exact_oid(&data.gate.sha)?;
-    if candidate != *pull_request.candidate_commit
-        || current_head != fetched_head
+    let candidate = &data.candidate.sha;
+    let current_head = &data.pull_request.head.sha;
+    let base = &data.target.sha;
+    if [
+        candidate,
+        current_head,
+        &data.current_head.sha,
+        base,
+        &data.candidate.tree,
+        &data.current_head.tree,
+        &data.target.tree,
+        &data.gate.sha,
+    ]
+    .into_iter()
+    .any(|oid| oid.object_format() != ObjectFormat::Sha1)
+        || candidate != pull_request.candidate_commit
+        || current_head != &data.current_head.sha
         || data.pull_request.base.sha != data.target.sha
     {
         return Err(ProviderError::InvalidResponse);
@@ -66,7 +73,7 @@ pub(super) fn snapshot(
         "closed" => false,
         _ => return Err(ProviderError::InvalidResponse),
     };
-    let gate_ready = gate_ready(data, open, &base, &current_head, &current_head_tree)?;
+    let gate_ready = gate_ready(data, open, base, current_head, &data.current_head.tree)?;
 
     let refs = RunRefs {
         forge: ForgeDialect::Github,
@@ -78,14 +85,17 @@ pub(super) fn snapshot(
         pull_request.change.clone(),
         refs,
         ObjectFormat::Sha1,
-        OidPair { base, candidate },
         OidPair {
-            base: base_tree,
-            candidate: candidate_tree,
+            base: base.clone(),
+            candidate: candidate.clone(),
+        },
+        OidPair {
+            base: data.target.tree.clone(),
+            candidate: data.candidate.tree.clone(),
         },
     )
     .ok_or(ProviderError::InvalidResponse)?;
-    let state = if current_head != *pull_request.candidate_commit {
+    let state = if current_head != pull_request.candidate_commit {
         ChangeState::Superseded
     } else if !authorized {
         ChangeState::AuthorizationRevoked
@@ -99,7 +109,7 @@ pub(super) fn snapshot(
     Ok(ChangeSnapshot {
         state,
         run,
-        gate_commit,
+        gate_commit: data.gate.sha.clone(),
     })
 }
 
@@ -115,18 +125,18 @@ pub(super) fn publication_target_is_current(
         "open" | "closed" => {}
         _ => return Err(ProviderError::InvalidResponse),
     }
-    let gate = authoritative
-        .merge_commit_sha
-        .as_deref()
-        .map(exact_oid)
-        .transpose()?;
-    Ok(
-        exact_oid(&authoritative.head.sha)? == *pull_request.candidate_commit
-            && exact_oid(&authoritative.base.sha)? == publication.run.commits.base
-            && branch_ref(&authoritative.head.branch)? == publication.run.refs.candidate
-            && branch_ref(&authoritative.base.branch)? == publication.run.refs.target
-            && gate.as_ref() == Some(&publication.gate_commit),
-    )
+    if [&authoritative.head.sha, &authoritative.base.sha]
+        .into_iter()
+        .chain(authoritative.merge_commit_sha.as_ref())
+        .any(|oid| oid.object_format() != ObjectFormat::Sha1)
+    {
+        return Err(ProviderError::InvalidResponse);
+    }
+    Ok(authoritative.head.sha == *pull_request.candidate_commit
+        && authoritative.base.sha == publication.run.commits.base
+        && branch_ref(&authoritative.head.branch)? == publication.run.refs.candidate
+        && branch_ref(&authoritative.base.branch)? == publication.run.refs.target
+        && authoritative.merge_commit_sha.as_ref() == Some(&publication.gate_commit))
 }
 
 fn gate_ready(
@@ -136,7 +146,7 @@ fn gate_ready(
     candidate: &Oid,
     candidate_tree: &Oid,
 ) -> Result<bool, ProviderError> {
-    if data.pull_request.merge_commit_sha.as_deref() != Some(data.gate.sha.as_str()) {
+    if data.pull_request.merge_commit_sha.as_ref() != Some(&data.gate.sha) {
         return Err(ProviderError::InvalidResponse);
     }
     if !open {
@@ -149,12 +159,14 @@ fn gate_ready(
             let [gate_base, gate_candidate] = data.gate.parents.as_slice() else {
                 return Err(ProviderError::InvalidResponse);
             };
-            let parents_match =
-                exact_oid(gate_base)? == *base && exact_oid(gate_candidate)? == *candidate;
+            let parents_match = gate_base == base && gate_candidate == candidate;
             if !parents_match {
                 return Err(ProviderError::InvalidResponse);
             }
-            Ok(exact_oid(&data.gate.tree)? == *candidate_tree)
+            if data.gate.tree.object_format() != ObjectFormat::Sha1 {
+                return Err(ProviderError::InvalidResponse);
+            }
+            Ok(&data.gate.tree == candidate_tree)
         }
     }
 }
@@ -255,10 +267,6 @@ fn pull_repository_identity(
         &repository.name,
         &repository.full_name,
     )
-}
-
-fn exact_oid(raw: &str) -> Result<Oid, ProviderError> {
-    Oid::new(ObjectFormat::Sha1, raw.to_owned()).ok_or(ProviderError::InvalidResponse)
 }
 
 fn branch_ref(branch: &str) -> Result<BranchRef, ProviderError> {

@@ -17,7 +17,6 @@ use super::{
     github_headers, map_error, map_status, rate_limited, read_artifact_body, settled,
     validate_api_base,
 };
-use crate::live::rules::BranchRule;
 use crate::{GitHubClientError, GitHubTimeouts};
 
 static RSA_KEYS: LazyLock<RsaKeys> =
@@ -180,7 +179,7 @@ fn an_expired_deadline_fails_before_any_transport_io() {
     let deadline = OperationDeadline::after(Duration::ZERO).unwrap();
     assert_eq!(
         transport
-            .get::<Vec<BranchRule>>("/repos/example/demo/rules/branches/main", deadline)
+            .get("/repos/example/demo/rules/branches/main", deadline)
             .err(),
         Some(ProviderError::Unavailable)
     );

@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod acquisition;
+pub mod commit;
 mod live;
 mod workflow_artifact;
 

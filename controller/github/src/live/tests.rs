@@ -69,20 +69,20 @@ fn refresh_requires_one_exact_ready_merge_gate() {
     assert_eq!(snapshot.state, ChangeState::Superseded);
 
     let mut wrong_parent = fixture.data.clone();
-    *wrong_parent.gate.parents.first_mut().unwrap() = oid('f').as_str().to_owned();
+    *wrong_parent.gate.parents.first_mut().unwrap() = oid('f');
     assert_eq!(
         super::refresh::snapshot(&fixture.config, fixture.request(), &wrong_parent),
         Err(ProviderError::InvalidResponse)
     );
 
     let mut merged_tree = fixture.data.clone();
-    merged_tree.gate.tree = oid('f').as_str().to_owned();
+    merged_tree.gate.tree = oid('f');
     let snapshot =
         super::refresh::snapshot(&fixture.config, fixture.request(), &merged_tree).unwrap();
     assert_eq!(snapshot.state, ChangeState::Superseded);
 
     let mut wrong_gate = fixture.data.clone();
-    wrong_gate.pull_request.merge_commit_sha = Some(oid('f').as_str().to_owned());
+    wrong_gate.pull_request.merge_commit_sha = Some(oid('f'));
     assert_eq!(
         super::refresh::snapshot(&fixture.config, fixture.request(), &wrong_gate),
         Err(ProviderError::InvalidResponse)
@@ -824,19 +824,16 @@ impl Fixture {
         let current_head = oid('f');
         let current_tree = oid('1');
         let current_gate = oid('2');
-        data.pull_request.head.sha = current_head.as_str().to_owned();
-        data.pull_request.merge_commit_sha = Some(current_gate.as_str().to_owned());
+        data.pull_request.head.sha = current_head.clone();
+        data.pull_request.merge_commit_sha = Some(current_gate.clone());
         data.current_head = CommitRecord {
-            sha: current_head.as_str().to_owned(),
-            tree: current_tree.as_str().to_owned(),
+            sha: current_head.clone(),
+            tree: current_tree.clone(),
         };
         data.gate = super::model::GateCommitRecord {
-            sha: current_gate.as_str().to_owned(),
-            tree: current_tree.as_str().to_owned(),
-            parents: vec![
-                oid('a').as_str().to_owned(),
-                current_head.as_str().to_owned(),
-            ],
+            sha: current_gate.clone(),
+            tree: current_tree.clone(),
+            parents: vec![oid('a'), current_head.clone()],
         };
         data
     }
@@ -949,9 +946,9 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             number: 42,
             state: "open".to_owned(),
             mergeable: Some(true),
-            merge_commit_sha: Some(oid('e').as_str().to_owned()),
+            merge_commit_sha: Some(oid('e')),
             head: PullRefRecord {
-                sha: candidate.as_str().to_owned(),
+                sha: candidate.clone(),
                 branch: "topic".to_owned(),
                 repo: Some(PullRepositoryRecord {
                     id: 202,
@@ -963,27 +960,27 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
                 }),
             },
             base: PullRefRecord {
-                sha: oid('a').as_str().to_owned(),
+                sha: oid('a'),
                 branch: "main".to_owned(),
                 repo: Some(base_repository),
             },
         },
         target: CommitRecord {
-            sha: oid('a').as_str().to_owned(),
-            tree: oid('c').as_str().to_owned(),
+            sha: oid('a'),
+            tree: oid('c'),
         },
         candidate: CommitRecord {
-            sha: candidate.as_str().to_owned(),
-            tree: oid('d').as_str().to_owned(),
+            sha: candidate.clone(),
+            tree: oid('d'),
         },
         current_head: CommitRecord {
-            sha: candidate.as_str().to_owned(),
-            tree: oid('d').as_str().to_owned(),
+            sha: candidate.clone(),
+            tree: oid('d'),
         },
         gate: super::model::GateCommitRecord {
-            sha: oid('e').as_str().to_owned(),
-            tree: oid('d').as_str().to_owned(),
-            parents: vec![oid('a').as_str().to_owned(), candidate.as_str().to_owned()],
+            sha: oid('e'),
+            tree: oid('d'),
+            parents: vec![oid('a'), candidate.clone()],
         },
         rules: vec![required_rule(Some(APP_ID), true)],
     }
@@ -1137,7 +1134,7 @@ fn refresh_rejects_a_request_wrong_in_one_field() {
 fn refresh_pins_the_fetched_head_and_the_base_echo() {
     let fixture = Fixture::new();
     let mut diverged = fixture.data.clone();
-    diverged.current_head.sha = oid('e').as_str().to_owned();
+    diverged.current_head.sha = oid('e');
     assert_eq!(
         super::refresh::snapshot(&fixture.config, fixture.request(), &diverged),
         Err(ProviderError::InvalidResponse),
@@ -1145,7 +1142,7 @@ fn refresh_pins_the_fetched_head_and_the_base_echo() {
     );
 
     let mut wandering_base = fixture.data.clone();
-    wandering_base.pull_request.base.sha = oid('f').as_str().to_owned();
+    wandering_base.pull_request.base.sha = oid('f');
     assert_eq!(
         super::refresh::snapshot(&fixture.config, fixture.request(), &wandering_base),
         Err(ProviderError::InvalidResponse),
@@ -1170,11 +1167,11 @@ fn a_publication_target_is_current_only_in_every_field() {
     assert_eq!(current(&authoritative), Ok(true));
 
     let mut moved_head = authoritative.clone();
-    moved_head.head.sha = oid('e').as_str().to_owned();
+    moved_head.head.sha = oid('e');
     assert_eq!(current(&moved_head), Ok(false));
 
     let mut moved_base = authoritative.clone();
-    moved_base.base.sha = oid('f').as_str().to_owned();
+    moved_base.base.sha = oid('f');
     assert_eq!(current(&moved_base), Ok(false));
 
     let mut lost_gate = authoritative.clone();

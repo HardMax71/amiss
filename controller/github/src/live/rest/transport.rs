@@ -21,7 +21,7 @@ use super::super::{GitHubClientError, GitHubTimeouts};
 use super::OperationDeadline;
 
 const MAX_API_BASE_BYTES: usize = 2_048;
-const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;
+pub(super) const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;
 const MAX_ARTIFACT_LOCATION_BYTES: usize = 8 * 1_024;
 const GITHUB_API_VERSION: &str = "2022-11-28";
 const GITHUB_JSON: &str = "application/vnd.github+json";
@@ -107,11 +107,11 @@ impl Transport {
         OperationDeadline::after(self.operation_timeout)
     }
 
-    pub(super) fn get<T: DeserializeOwned>(
+    pub(super) fn get(
         &self,
         route: &str,
         deadline: OperationDeadline,
-    ) -> Result<T, ProviderError> {
+    ) -> Result<Response, ProviderError> {
         self.execute(self.client.get(self.url(route)?), deadline)
     }
 
@@ -154,12 +154,12 @@ impl Transport {
         read_artifact_body(response, declared, maximum_bytes)
     }
 
-    pub(super) fn post<T: DeserializeOwned>(
+    pub(super) fn post(
         &self,
         route: &str,
         body: &impl Serialize,
         deadline: OperationDeadline,
-    ) -> Result<T, ProviderError> {
+    ) -> Result<Response, ProviderError> {
         self.execute(self.client.post(self.url(route)?).json(body), deadline)
     }
 
@@ -182,11 +182,11 @@ impl Transport {
             .map(|fact| fact.map(|()| response))
     }
 
-    fn execute<T: DeserializeOwned>(
+    fn execute(
         &self,
         request: RequestBuilder,
         deadline: OperationDeadline,
-    ) -> Result<T, ProviderError> {
+    ) -> Result<Response, ProviderError> {
         let token = self.token(deadline)?;
         let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
             .timeout(deadline.remaining()?)
@@ -197,7 +197,7 @@ impl Transport {
             response.headers(),
             ProviderError::AuthorizationRevoked,
         )?;
-        decode_body(response)
+        Ok(response)
     }
 
     fn token(&self, deadline: OperationDeadline) -> Result<SecretString, ProviderError> {

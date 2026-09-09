@@ -1,4 +1,7 @@
+use amiss_wire::model::Oid;
 use serde::{Deserialize, Serialize};
+
+pub(super) use crate::commit::{GitCommitRecord, GitObjectRecord};
 
 use super::rules::BranchRule;
 
@@ -22,14 +25,14 @@ pub(super) struct PullRequestRecord {
     pub number: u64,
     pub state: String,
     pub mergeable: Option<bool>,
-    pub merge_commit_sha: Option<String>,
+    pub merge_commit_sha: Option<Oid>,
     pub head: PullRefRecord,
     pub base: PullRefRecord,
 }
 
 #[derive(Clone, Deserialize)]
 pub(super) struct PullRefRecord {
-    pub sha: String,
+    pub sha: Oid,
     #[serde(rename = "ref")]
     pub branch: String,
     pub repo: Option<PullRepositoryRecord>,
@@ -45,31 +48,19 @@ pub(super) struct PullRepositoryRecord {
 
 #[derive(Clone)]
 pub(super) struct CommitRecord {
-    pub sha: String,
-    pub tree: String,
+    pub sha: Oid,
+    pub tree: Oid,
 }
 
 #[derive(Deserialize)]
 pub(super) struct RepositoryCommitRecord {
-    pub sha: String,
+    pub sha: Oid,
     pub commit: RepositoryCommit,
 }
 
 #[derive(Deserialize)]
 pub(super) struct RepositoryCommit {
     pub tree: GitObjectRecord,
-}
-
-#[derive(Deserialize)]
-pub(super) struct GitCommitRecord {
-    pub sha: String,
-    pub tree: GitObjectRecord,
-    pub parents: Vec<GitObjectRecord>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct GitObjectRecord {
-    pub sha: String,
 }
 
 #[derive(Clone)]
@@ -85,9 +76,9 @@ pub(super) struct RefreshData {
 
 #[derive(Clone)]
 pub(super) struct GateCommitRecord {
-    pub sha: String,
-    pub tree: String,
-    pub parents: Vec<String>,
+    pub sha: Oid,
+    pub tree: Oid,
+    pub parents: Vec<Oid>,
 }
 
 #[derive(Clone, Deserialize)]

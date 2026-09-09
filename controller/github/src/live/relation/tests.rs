@@ -32,8 +32,8 @@ fn exact_subject_resolves_one_current_head() {
     let client = Client {
         config,
         rest: FakeRelationRest::new(Ok(CommitRecord {
-            sha: "3".repeat(40),
-            tree: "4".repeat(40),
+            sha: oid(ObjectFormat::Sha1, '3'),
+            tree: oid(ObjectFormat::Sha1, '4'),
         })),
     };
 
@@ -90,8 +90,8 @@ fn request_scope_is_checked_before_provider_io() {
         let client = Client {
             config: config.clone(),
             rest: FakeRelationRest::new(Ok(CommitRecord {
-                sha: "3".repeat(40),
-                tree: "4".repeat(40),
+                sha: oid(ObjectFormat::Sha1, '3'),
+                tree: oid(ObjectFormat::Sha1, '4'),
             })),
         };
         assert_eq!(
@@ -107,12 +107,12 @@ fn malformed_head_or_provider_failure_is_not_a_finality_fact() {
     let (config, subject) = fixture();
     for head in [
         Ok(CommitRecord {
-            sha: "not-an-oid".to_owned(),
-            tree: "4".repeat(40),
+            sha: oid(ObjectFormat::Sha256, '3'),
+            tree: oid(ObjectFormat::Sha1, '4'),
         }),
         Ok(CommitRecord {
-            sha: "3".repeat(40),
-            tree: "not-an-oid".to_owned(),
+            sha: oid(ObjectFormat::Sha1, '3'),
+            tree: oid(ObjectFormat::Sha256, '4'),
         }),
         Err(ProviderError::Unavailable),
     ] {
