@@ -1,7 +1,7 @@
 use amiss_wire::model::Oid;
 use serde::{Deserialize, Serialize};
 
-pub(super) use crate::commit::{GitCommitRecord, GitObjectRecord};
+pub(super) use crate::commit::GitCommitRecord;
 pub(super) use crate::reference::RefRecord;
 
 use super::rules::BranchRule;
@@ -51,17 +51,6 @@ pub(super) struct PullRepositoryRecord {
 pub(super) struct CommitRecord {
     pub sha: Oid,
     pub tree: Oid,
-}
-
-#[derive(Deserialize)]
-pub(super) struct RepositoryCommitRecord {
-    pub sha: Oid,
-    pub commit: RepositoryCommit,
-}
-
-#[derive(Deserialize)]
-pub(super) struct RepositoryCommit {
-    pub tree: GitObjectRecord,
 }
 
 #[derive(Clone)]

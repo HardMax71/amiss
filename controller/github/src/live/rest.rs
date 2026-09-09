@@ -25,7 +25,7 @@ use super::artifact::{
 };
 use super::model::{
     CheckRunPage, CheckRunRecord, CommitRecord, CreateCheckRun, GateCommitRecord, GitCommitRecord,
-    PullRequestRecord, RefRecord, RefreshData, RepositoryCommitRecord, RepositoryRecord,
+    PullRequestRecord, RefRecord, RefreshData, RepositoryRecord,
 };
 use super::relation::GitHubRelationRest;
 use super::rules::BranchRule;
@@ -415,7 +415,7 @@ impl GitHubRelationRest for HttpRest {
         &self,
         repository: &RepositoryIdentity,
         target: &BranchRef,
-    ) -> Result<CommitRecord, ProviderError> {
+    ) -> Result<(RefRecord, GitCommitRecord), ProviderError> {
         let branch = target
             .as_str()
             .strip_prefix("refs/heads/")
@@ -424,19 +424,17 @@ impl GitHubRelationRest for HttpRest {
         let owner = path_segment(repository.owner());
         let name = path_segment(repository.name());
         let branch = path_segment(branch);
+        let deadline = self.transport.deadline()?;
         let request = self.transport.client.get(
             self.transport
-                .url(&format!("/repos/{owner}/{name}/commits/{branch}"))?,
+                .url(&format!("/repos/{owner}/{name}/git/ref/heads/{branch}"))?,
         );
-        let record: RepositoryCommitRecord = decode_body(
-            self.transport
-                .execute(request, self.transport.deadline()?)?,
-            |bytes| serde_json::from_slice(bytes),
-        )?;
-        Ok(CommitRecord {
-            sha: record.sha,
-            tree: record.commit.tree.sha,
-        })
+        let reference: RefRecord =
+            decode_body(self.transport.execute(request, deadline)?, |bytes| {
+                amiss_wire::read_json(bytes, u64::MAX)
+            })?;
+        let commit = self.git_commit(&owner, &name, &reference.object.sha, deadline)?;
+        Ok((reference, commit))
     }
 }
 

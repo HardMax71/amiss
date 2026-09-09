@@ -5,11 +5,11 @@ use amiss_controller::{
     RelationSubject, RelationSubjectHead, relation_status_publication,
 };
 use amiss_wire::digest::hb;
-use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ObjectFormat, ObjectKind, RepositoryIdentity};
 use amiss_wire::relation::RelationSnapshot;
 
 use super::Client;
-use super::model::{CommitRecord, CreateCheckRun, CreateCheckRunOutput};
+use super::model::{CreateCheckRun, CreateCheckRunOutput, GitCommitRecord, RefRecord};
 use super::publication::{CheckRunDecision, check_run_decision, validate_created};
 use super::rest::GitHubRest;
 
@@ -22,7 +22,7 @@ pub(super) trait GitHubRelationRest {
         &self,
         repository: &RepositoryIdentity,
         target: &BranchRef,
-    ) -> Result<CommitRecord, ProviderError>;
+    ) -> Result<(RefRecord, GitCommitRecord), ProviderError>;
 }
 
 impl<R: GitHubRelationRest> Client<R> {
@@ -33,10 +33,13 @@ impl<R: GitHubRelationRest> Client<R> {
         let repository = &subject.scope.repository;
         validate_relation_scope(&self.config, &subject.scope, subject.object_format)?;
 
-        let head = self.rest.relation_head(repository, &subject.target)?;
-        if [&head.sha, &head.tree]
-            .into_iter()
-            .any(|oid| oid.object_format() != subject.object_format)
+        let (reference, head) = self.rest.relation_head(repository, &subject.target)?;
+        if reference.reference != subject.target.as_str()
+            || reference.object.kind != ObjectKind::Commit
+            || reference.object.sha != head.sha
+            || [&head.sha, &head.tree.sha]
+                .into_iter()
+                .any(|oid| oid.object_format() != subject.object_format)
         {
             return Err(ProviderError::InvalidResponse);
         }
@@ -44,7 +47,7 @@ impl<R: GitHubRelationRest> Client<R> {
             subject: subject.clone(),
             candidate: RelationSnapshot {
                 commit: head.sha,
-                tree: head.tree,
+                tree: head.tree.sha,
             },
         })
     }

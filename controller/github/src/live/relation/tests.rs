@@ -13,12 +13,12 @@ use amiss_controller::{
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ObjectFormat, ObjectKind, Oid, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
 use super::{GitHubRelationRest, RelationSubjectHead, relation_check_run};
 use crate::live::model::{
-    CheckRunApp, CheckRunOutputRecord, CheckRunRecord, CommitRecord, CreateCheckRun,
+    CheckRunApp, CheckRunOutputRecord, CheckRunRecord, CreateCheckRun, GitCommitRecord, RefRecord,
 };
 use crate::live::publication::{CheckRunDecision, check_run_decision};
 use crate::live::{Client, Config};
@@ -28,31 +28,26 @@ const INSTALLATION_ID: u64 = 7;
 
 #[test]
 fn exact_subject_resolves_one_current_head() {
-    let (config, subject) = fixture();
-    let client = Client {
-        config,
-        rest: FakeRelationRest::new(Ok(CommitRecord {
-            sha: oid(ObjectFormat::Sha1, '3'),
-            tree: oid(ObjectFormat::Sha1, '4'),
-        })),
-    };
-
-    assert_eq!(
-        client.resolve_relation_head(&subject),
-        Ok(RelationSubjectHead {
-            subject,
-            candidate: RelationSnapshot {
-                commit: oid(ObjectFormat::Sha1, '3'),
-                tree: oid(ObjectFormat::Sha1, '4'),
-            },
-        })
-    );
-    assert_eq!(client.rest.calls.load(Ordering::Relaxed), 1);
+    for branch in ["refs/heads/main", "refs/heads/release/next"] {
+        let (mut client, mut subject) = fixture();
+        subject.target = BranchRef::new(branch.to_owned()).unwrap();
+        client.rest.head.as_mut().unwrap().0.reference = branch.to_owned();
+        assert_eq!(
+            client.resolve_relation_head(&subject),
+            Ok(RelationSubjectHead {
+                subject,
+                candidate: RelationSnapshot {
+                    commit: oid(ObjectFormat::Sha1, '3'),
+                    tree: oid(ObjectFormat::Sha1, '4'),
+                },
+            })
+        );
+        assert_eq!(client.rest.calls.load(Ordering::Relaxed), 1);
+    }
 }
 
 #[test]
 fn request_scope_is_checked_before_provider_io() {
-    let (config, subject) = fixture();
     let defects: [fn(&mut RelationSubject); 6] = [
         |subject| {
             subject.scope.provider.instance =
@@ -85,15 +80,8 @@ fn request_scope_is_checked_before_provider_io() {
     ];
 
     for defect in defects {
-        let mut changed = subject.clone();
+        let (client, mut changed) = fixture();
         defect(&mut changed);
-        let client = Client {
-            config: config.clone(),
-            rest: FakeRelationRest::new(Ok(CommitRecord {
-                sha: oid(ObjectFormat::Sha1, '3'),
-                tree: oid(ObjectFormat::Sha1, '4'),
-            })),
-        };
         assert_eq!(
             client.resolve_relation_head(&changed),
             Err(ProviderError::InvalidResponse)
@@ -104,28 +92,41 @@ fn request_scope_is_checked_before_provider_io() {
 
 #[test]
 fn malformed_head_or_provider_failure_is_not_a_finality_fact() {
-    let (config, subject) = fixture();
-    for head in [
-        Ok(CommitRecord {
-            sha: oid(ObjectFormat::Sha256, '3'),
-            tree: oid(ObjectFormat::Sha1, '4'),
-        }),
-        Ok(CommitRecord {
-            sha: oid(ObjectFormat::Sha1, '3'),
-            tree: oid(ObjectFormat::Sha256, '4'),
-        }),
-        Err(ProviderError::Unavailable),
+    let defects: [fn(&mut RefRecord, &mut GitCommitRecord); 9] = [
+        |reference, _head| reference.reference.push_str("-other"),
+        |reference, _head| {
+            reference.reference = reference.reference.replace("refs/heads/", "refs/tags/");
+        },
+        |reference, _head| reference.object.kind = ObjectKind::Tag,
+        |reference, _head| reference.object.kind = ObjectKind::Tree,
+        |reference, _head| reference.object.kind = ObjectKind::Blob,
+        |reference, _head| reference.object.sha = oid(ObjectFormat::Sha1, '5'),
+        |_reference, head| head.sha = oid(ObjectFormat::Sha1, '5'),
+        |reference, head| {
+            head.sha = oid(ObjectFormat::Sha256, '3');
+            reference.object.sha = head.sha.clone();
+        },
+        |_reference, head| head.tree.sha = oid(ObjectFormat::Sha256, '4'),
+    ];
+    for (index, defect) in defects.into_iter().enumerate() {
+        let (mut client, subject) = fixture();
+        let (reference, head) = client.rest.head.as_mut().unwrap();
+        defect(reference, head);
+        assert_eq!(
+            client.resolve_relation_head(&subject),
+            Err(ProviderError::InvalidResponse),
+            "defect {index}"
+        );
+        assert_eq!(client.rest.calls.load(Ordering::Relaxed), 1);
+    }
+    for failure in [
+        ProviderError::Unavailable,
+        ProviderError::AuthorizationRevoked,
     ] {
-        let expected = head
-            .as_ref()
-            .err()
-            .copied()
-            .unwrap_or(ProviderError::InvalidResponse);
-        let client = Client {
-            config: config.clone(),
-            rest: FakeRelationRest::new(head),
-        };
-        assert_eq!(client.resolve_relation_head(&subject), Err(expected));
+        let (mut client, subject) = fixture();
+        client.rest.head = Err(failure);
+        assert_eq!(client.resolve_relation_head(&subject), Err(failure));
+        assert_eq!(client.rest.calls.load(Ordering::Relaxed), 1);
     }
 }
 
@@ -245,7 +246,7 @@ fn relation_check_run_reconciliation_reuses_only_one_exact_result() {
     ));
 }
 
-fn fixture() -> (Config, RelationSubject) {
+fn fixture() -> (Client<FakeRelationRest>, RelationSubject) {
     let relation = relation_audit(true).unwrap();
     let mut subject = relation
         .transition
@@ -257,12 +258,32 @@ fn fixture() -> (Config, RelationSubject) {
         .unwrap()
         .clone();
     subject.scope.integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
+    let mut reference: RefRecord = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/git-reference.json"),
+        u64::MAX,
+    )
+    .unwrap();
+    let mut head: GitCommitRecord = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/git-commit-unsigned.json"),
+        u64::MAX,
+    )
+    .unwrap();
+    reference.reference = subject.target.as_str().to_owned();
+    head.sha = oid(ObjectFormat::Sha1, '3');
+    head.tree.sha = oid(ObjectFormat::Sha1, '4');
+    reference.object.sha = head.sha.clone();
     (
-        Config {
-            provider: subject.scope.provider.clone(),
-            app_id: APP_ID,
-            installation_id: INSTALLATION_ID,
-            required_status_name: "amiss/provider".to_owned(),
+        Client {
+            config: Config {
+                provider: subject.scope.provider.clone(),
+                app_id: APP_ID,
+                installation_id: INSTALLATION_ID,
+                required_status_name: "amiss/provider".to_owned(),
+            },
+            rest: FakeRelationRest {
+                head: Ok((reference, head)),
+                calls: AtomicUsize::new(0),
+            },
         },
         subject,
     )
@@ -356,17 +377,8 @@ fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
 }
 
 struct FakeRelationRest {
-    head: Result<CommitRecord, ProviderError>,
+    head: Result<(RefRecord, GitCommitRecord), ProviderError>,
     calls: AtomicUsize,
-}
-
-impl FakeRelationRest {
-    fn new(head: Result<CommitRecord, ProviderError>) -> Self {
-        Self {
-            head,
-            calls: AtomicUsize::new(0),
-        }
-    }
 }
 
 impl GitHubRelationRest for FakeRelationRest {
@@ -374,7 +386,7 @@ impl GitHubRelationRest for FakeRelationRest {
         &self,
         _repository: &RepositoryIdentity,
         _target: &BranchRef,
-    ) -> Result<CommitRecord, ProviderError> {
+    ) -> Result<(RefRecord, GitCommitRecord), ProviderError> {
         self.calls.fetch_add(1, Ordering::Relaxed);
         self.head.clone()
     }
