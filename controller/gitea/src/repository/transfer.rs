@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{As, TryFromInto};
+use serde_with::{As, MapPreventDuplicates, Same, TryFromInto};
 
 use crate::user::{UserRecord, UserVisibility};
 
@@ -30,7 +30,7 @@ pub struct Team {
     pub permission: PermissionLevel,
     #[serde(deserialize_with = "Option::deserialize")]
     pub units: Option<Vec<RepositoryUnit>>,
-    #[serde(deserialize_with = "Option::deserialize")]
+    #[serde(with = "As::<Option<MapPreventDuplicates<Same, Same>>>")]
     pub units_map: Option<BTreeMap<RepositoryUnit, PermissionLevel>>,
     pub can_create_org_repo: bool,
     #[serde(

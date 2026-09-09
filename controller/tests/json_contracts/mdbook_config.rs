@@ -8,6 +8,64 @@ use amiss_wire::{JsonInputError, read_json};
 use super::mdbook::Renderers;
 
 #[test]
+fn html_map_constraints_belong_to_the_typed_fields() {
+    for input in [
+        "{}",
+        r#"{"code":{},"search":{}}"#,
+        r#"{"redirect":{},"code":{"hidelines":{}},"search":{"chapter":{}}}"#,
+        include_str!("../fixtures/mdbook-html-config.json"),
+    ] {
+        let html: HtmlConfig = serde_json::from_str(input).unwrap();
+        assert_eq!(
+            read_json::<HtmlConfig>(input.as_bytes(), MDBOOK_RENDER_CONTEXT_BYTES).unwrap(),
+            html
+        );
+    }
+    let nulls = r#"{"redirect":null,"code":{"hidelines":null},"search":{"chapter":null}}"#;
+    let html: HtmlConfig = serde_json::from_str(nulls).unwrap();
+    assert_eq!(html.redirect, None);
+    assert_eq!(html.code.unwrap().hidelines, None);
+    assert_eq!(html.search.unwrap().chapter, None);
+    assert!(read_json::<HtmlConfig>(nulls.as_bytes(), MDBOOK_RENDER_CONTEXT_BYTES).is_err());
+
+    let input = include_str!("../fixtures/mdbook-html-config.json");
+    let accepted: Vec<_> = [
+        (
+            r#""old.html":"new.html""#,
+            r#""old.html":"new.html","old.html":"new.html""#,
+        ),
+        (
+            r#""old.html":"new.html""#,
+            r#""old.html":"other.html","\u006fld.html":"new.html""#,
+        ),
+        (r##""rust":"#""##, r##""rust":"#","rust":"#""##),
+        (r##""rust":"#""##, r##""rust":"//","\u0072ust":"#""##),
+        (
+            r#""intro.md":{"enable":false}"#,
+            r#""intro.md":{"enable":false},"intro.md":{"enable":false}"#,
+        ),
+        (
+            r#""intro.md":{"enable":false}"#,
+            r#""intro.md":{"enable":true},"\u0069ntro.md":{"enable":false}"#,
+        ),
+    ]
+    .into_iter()
+    .filter_map(|(original, replacement)| {
+        assert_eq!(input.matches(original).count(), 1);
+        let invalid = input.replacen(original, replacement, 1);
+        assert!(read_json::<HtmlConfig>(invalid.as_bytes(), MDBOOK_RENDER_CONTEXT_BYTES).is_err());
+        serde_json::from_str::<HtmlConfig>(&invalid)
+            .is_ok()
+            .then_some(replacement)
+    })
+    .collect();
+    assert!(
+        accepted.is_empty(),
+        "typed maps accepted duplicates: {accepted:?}"
+    );
+}
+
+#[test]
 fn normalized_build_and_book_settings_remain_complete_and_typed() {
     let input = br#"{"book":{"title":null,"authors":[],"description":null,"language":"ar","text-direction":"rtl"},"build":{"build-dir":"C:\\operator\\book","create-missing":false,"use-default-preprocessors":true,"extra-watch-dirs":["assets"]},"rust":{"edition":"2024"},"output":{"html":{}}}"#;
     let config: Config<NoExtensions, NoExtensions> =

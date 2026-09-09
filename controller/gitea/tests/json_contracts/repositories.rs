@@ -10,6 +10,55 @@ use amiss_wire::assessment::Nullable;
 use amiss_wire::model::ObjectFormat;
 
 #[test]
+fn team_unit_maps_are_required_nullable_and_reject_decoded_duplicate_keys() {
+    let mut team = Team {
+        id: 1,
+        name: "reviewers".to_owned(),
+        description: String::new(),
+        organization: None,
+        includes_all_repositories: false,
+        permission: PermissionLevel::Read,
+        units: None,
+        units_map: None,
+        can_create_org_repo: false,
+        visibility: None,
+    };
+    let null_map = serde_json::to_string(&team).unwrap();
+    let missing = null_map.replace(r#""units_map":null,"#, "");
+    assert_ne!(missing, null_map);
+    assert!(serde_json::from_str::<Team>(&missing).is_err());
+    assert!(amiss_wire::read_json::<Team>(missing.as_bytes(), u64::MAX).is_err());
+    for units_map in [
+        None,
+        Some(BTreeMap::new()),
+        Some(BTreeMap::from([(
+            RepositoryUnit::Code,
+            PermissionLevel::Read,
+        )])),
+    ] {
+        team.units_map = units_map;
+        let input = serde_json::to_vec(&team).unwrap();
+        assert_eq!(serde_json::from_slice::<Team>(&input).unwrap(), team);
+        assert_eq!(
+            amiss_wire::read_json::<Team>(&input, u64::MAX).unwrap(),
+            team
+        );
+    }
+    let input = serde_json::to_string(&team).unwrap();
+    let accepted = ["repo.code", r"repo.\u0063ode"].map(|key| {
+        let invalid = input.replacen(
+            r#""units_map":{"#,
+            &format!(r#""units_map":{{"{key}":"read","#),
+            1,
+        );
+        assert_ne!(invalid, input);
+        assert!(amiss_wire::read_json::<Team>(invalid.as_bytes(), u64::MAX).is_err());
+        serde_json::from_str::<Team>(&invalid).is_ok()
+    });
+    assert_eq!(accepted, [false; 2]);
+}
+
+#[test]
 fn repository_captures_keep_omission_null_and_nested_parents_distinct() {
     for (input, fork, omitted) in [
         (

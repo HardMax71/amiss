@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
+use serde_with::{As, MapPreventDuplicates, Same};
 
 #[serde_with::skip_serializing_none]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -103,6 +104,7 @@ pub struct HtmlConfig {
     pub cname: Option<String>,
     pub edit_url_template: Option<String>,
     pub live_reload_endpoint: Option<String>,
+    #[serde(default, with = "As::<Option<MapPreventDuplicates<Same, Same>>>")]
     pub redirect: Option<BTreeMap<String, String>>,
     pub hash_files: Option<bool>,
     pub sidebar_header_nav: Option<bool>,
@@ -138,6 +140,7 @@ pub struct Fold {
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "kebab-case", deny_unknown_fields)]
 pub struct Code {
+    #[serde(default, with = "As::<Option<MapPreventDuplicates<Same, Same>>>")]
     pub hidelines: Option<BTreeMap<String, String>>,
 }
 
@@ -163,6 +166,7 @@ pub struct Search {
     pub expand: Option<bool>,
     pub heading_split_level: Option<u8>,
     pub copy_js: Option<bool>,
+    #[serde(default, with = "As::<Option<MapPreventDuplicates<Same, Same>>>")]
     pub chapter: Option<BTreeMap<String, SearchChapterSettings>>,
 }
 
