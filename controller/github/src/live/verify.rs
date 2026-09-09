@@ -4,7 +4,7 @@ use amiss_controller::{
     ForgeProducer, ForgeTail, ProviderError, forge_evidence, forge_repository_evidence, ref_span,
     spelled_segments,
 };
-use amiss_wire::model::ForgeDialect;
+use amiss_wire::model::{ForgeDialect, ObjectFormat, ObjectKind};
 
 use super::rest::{GitHubVerification, Presence, RefFamily};
 
@@ -51,7 +51,7 @@ pub(super) fn verify_external<R: GitHubVerification>(
 fn resolve_tail<R: GitHubVerification>(
     rest: &R,
     repository: &amiss_wire::external::ExternalRepository,
-    deadline: super::rest::OperationDeadline,
+    deadline: R::Deadline,
 ) -> Result<Option<ForgeTail>, ProviderError> {
     if !matches!(repository.form.as_deref(), Some("blob" | "tree" | "raw")) {
         return Ok(None);
@@ -72,18 +72,29 @@ fn resolve_tail<R: GitHubVerification>(
     let rewritten = segments.iter().any(|segment| segment.contains('/'));
     let mut matches = Vec::new();
     for family in [RefFamily::Heads, RefFamily::Tags] {
-        let Some(names) =
+        let Some(records) =
             rest.matching_refs(&repository.owner, &repository.name, family, first, deadline)?
         else {
             return Ok(None);
         };
-        // Within one family a second whole-segment match cannot exist, since
-        // git refuses a ref nesting under another; across families it can.
-        matches.extend(
-            names.into_iter().find_map(|candidate| {
-                ref_span(&segments, &candidate).map(|span| (candidate, span))
-            }),
-        );
+        let qualifier = format!("refs/{}/", family.as_ref());
+        let selected = records
+            .into_iter()
+            .try_fold(None, |selected: Option<_>, record| {
+                let name = record
+                    .reference
+                    .strip_prefix(&qualifier)
+                    .filter(|name| !name.is_empty() && name.starts_with(first))
+                    .ok_or(ProviderError::InvalidResponse)?;
+                if record.object.sha.object_format() != ObjectFormat::Sha1
+                    || (family == RefFamily::Heads && record.object.kind != ObjectKind::Commit)
+                {
+                    return Err(ProviderError::InvalidResponse);
+                }
+                Ok(selected
+                    .or_else(|| ref_span(&segments, name).map(|span| (name.to_owned(), span))))
+            })?;
+        matches.extend(selected);
     }
     // A branch and a differing tag both matching leave the revision split
     // ambiguous, and the forge's tie-break is its own; that is no fact.

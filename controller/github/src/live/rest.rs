@@ -74,26 +74,26 @@ pub(super) trait GitHubRest: Send + Sync {
 /// The read-only verification surface, apart from refresh and publication
 /// on purpose: a verifier holding this can state facts and nothing else.
 pub(super) trait GitHubVerification: Send + Sync {
-    fn deadline(&self) -> Result<OperationDeadline, ProviderError>;
+    type Deadline: Copy;
+
+    fn deadline(&self) -> Result<Self::Deadline, ProviderError>;
 
     fn repository_visibility(
         &self,
         owner: &str,
         name: &str,
-        deadline: OperationDeadline,
+        deadline: Self::Deadline,
     ) -> Result<Visibility, ProviderError>;
 
-    /// Ref names in the family sharing the prefix, family qualifier
-    /// stripped; `None` when the repository stopped answering for them or
-    /// the listing could not be proven complete, so no ref fact exists.
+    /// Complete matching records; `None` means no ref fact was acquired.
     fn matching_refs(
         &self,
         owner: &str,
         name: &str,
         family: RefFamily,
         prefix: &str,
-        deadline: OperationDeadline,
-    ) -> Result<Option<Vec<String>>, ProviderError>;
+        deadline: Self::Deadline,
+    ) -> Result<Option<Vec<RefRecord>>, ProviderError>;
 
     /// The path as the tail's decoded segments, each sent to the API as
     /// exactly one segment, so an escaped slash keeps the URL's grouping.
@@ -103,7 +103,7 @@ pub(super) trait GitHubVerification: Send + Sync {
         name: &str,
         reference: &str,
         path: &[String],
-        deadline: OperationDeadline,
+        deadline: Self::Deadline,
     ) -> Result<Presence, ProviderError>;
 
     fn commit_presence(
@@ -111,7 +111,7 @@ pub(super) trait GitHubVerification: Send + Sync {
         owner: &str,
         name: &str,
         oid: &str,
-        deadline: OperationDeadline,
+        deadline: Self::Deadline,
     ) -> Result<Presence, ProviderError>;
 }
 
@@ -443,6 +443,8 @@ impl GitHubRelationRest for HttpRest {
 // The verification routes carry another repository's spellings, so every
 // borrowed segment is percent-encoded rather than trusted.
 impl GitHubVerification for HttpRest {
+    type Deadline = OperationDeadline;
+
     fn deadline(&self) -> Result<OperationDeadline, ProviderError> {
         self.transport.deadline()
     }
@@ -473,7 +475,7 @@ impl GitHubVerification for HttpRest {
         family: RefFamily,
         prefix: &str,
         deadline: OperationDeadline,
-    ) -> Result<Option<Vec<String>>, ProviderError> {
+    ) -> Result<Option<Vec<RefRecord>>, ProviderError> {
         let route = format!(
             "/repos/{}/{}/git/matching-refs/{}/{}",
             path_segment(owner),
@@ -481,39 +483,10 @@ impl GitHubVerification for HttpRest {
             family.as_ref(),
             path_segment(prefix),
         );
-        let qualifier = format!("refs/{}/", family.as_ref());
-        let mut names = Vec::new();
-        for page in 1..=MAX_PAGES {
-            let paged = query_route(
-                &route,
-                &PageQuery {
-                    per_page: PAGE_SIZE_U8,
-                    page,
-                },
-            )?;
-            let records: Vec<RefRecord> =
-                match self.transport.request_fact(Method::GET, &paged, deadline)? {
-                    Ok(response) => {
-                        decode_body(response, |bytes| amiss_wire::read_json(bytes, u64::MAX))?
-                    }
-                    Err(ForgeNegative::Missing | ForgeNegative::Denied) => return Ok(None),
-                };
-            if records.len() > PAGE_SIZE {
-                return Err(ProviderError::InvalidResponse);
-            }
-            let complete = records.len() < PAGE_SIZE;
-            names.extend(
-                records.into_iter().filter_map(|record| {
-                    record.reference.strip_prefix(&qualifier).map(str::to_owned)
-                }),
-            );
-            if complete {
-                return Ok(Some(names));
-            }
-        }
-        // Ten full pages leave the listing unproven complete, and a truncated
-        // candidate set could become a false refutation downstream: no fact.
-        Ok(None)
+        let Ok(response) = self.transport.request_fact(Method::GET, &route, deadline)? else {
+            return Ok(None);
+        };
+        decode_body(response, |bytes| amiss_wire::read_json(bytes, u64::MAX)).map(Some)
     }
 
     fn content_presence(

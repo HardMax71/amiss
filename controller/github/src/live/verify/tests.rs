@@ -2,14 +2,15 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Duration;
 
 use amiss_controller::ProviderError;
 use amiss_fixtures::{external_facts, external_plan};
 
+use crate::reference::RefRecord;
 use amiss_wire::external::{ExternalReason, ExternalVerdict, assess};
+use amiss_wire::model::{ObjectFormat, ObjectKind, Oid};
 
-use super::super::rest::{GitHubVerification, OperationDeadline, Presence, RefFamily, Visibility};
+use super::super::rest::{GitHubVerification, Presence, RefFamily, Visibility};
 use super::{PRODUCER_NAME, verify_external};
 
 #[derive(Default)]
@@ -17,6 +18,7 @@ struct ScriptedRest {
     visibility: BTreeMap<&'static str, Visibility>,
     heads: BTreeMap<&'static str, Vec<&'static str>>,
     tags: BTreeMap<&'static str, Vec<&'static str>>,
+    records: Option<(RefFamily, Vec<RefRecord>)>,
     contents: BTreeMap<(&'static str, &'static str, Vec<&'static str>), Presence>,
     commits: BTreeMap<(&'static str, &'static str), Presence>,
     refs_unanswered: BTreeSet<&'static str>,
@@ -35,15 +37,17 @@ impl ScriptedRest {
 }
 
 impl GitHubVerification for ScriptedRest {
-    fn deadline(&self) -> Result<OperationDeadline, ProviderError> {
-        OperationDeadline::after(Duration::from_secs(30))
+    type Deadline = ();
+
+    fn deadline(&self) -> Result<(), ProviderError> {
+        Ok(())
     }
 
     fn repository_visibility(
         &self,
         _owner: &str,
         name: &str,
-        _deadline: OperationDeadline,
+        _deadline: (),
     ) -> Result<Visibility, ProviderError> {
         self.spend()?;
         Ok(*self.visibility.get(name).unwrap_or(&Visibility::Missing))
@@ -51,15 +55,20 @@ impl GitHubVerification for ScriptedRest {
 
     fn matching_refs(
         &self,
-        _owner: &str,
+        owner: &str,
         name: &str,
         family: RefFamily,
         prefix: &str,
-        _deadline: OperationDeadline,
-    ) -> Result<Option<Vec<String>>, ProviderError> {
+        _deadline: (),
+    ) -> Result<Option<Vec<RefRecord>>, ProviderError> {
         self.spend()?;
         if self.refs_unanswered.contains(name) {
             return Ok(None);
+        }
+        if let Some((record_family, records)) = &self.records
+            && *record_family == family
+        {
+            return Ok(Some(records.clone()));
         }
         let table = match family {
             RefFamily::Heads => &self.heads,
@@ -71,7 +80,22 @@ impl GitHubVerification for ScriptedRest {
                 .into_iter()
                 .flatten()
                 .filter(|candidate| candidate.starts_with(prefix))
-                .map(|candidate| (*candidate).to_owned())
+                .map(|candidate| RefRecord {
+                    reference: format!("refs/{}/{candidate}", family.as_ref()),
+                    node_id: format!("fixture-{candidate}"),
+                    url: format!(
+                        "https://api.github.com/repos/{owner}/{name}/git/refs/{}/{candidate}",
+                        family.as_ref()
+                    ),
+                    object: amiss_controller::GitObject {
+                        kind: ObjectKind::Commit,
+                        sha: Oid::new(ObjectFormat::Sha1, "1".repeat(40)).unwrap(),
+                        url: format!(
+                            "https://api.github.com/repos/{owner}/{name}/git/commits/{}",
+                            "1".repeat(40)
+                        ),
+                    },
+                })
                 .collect(),
         ))
     }
@@ -82,7 +106,7 @@ impl GitHubVerification for ScriptedRest {
         name: &str,
         reference: &str,
         path: &[String],
-        _deadline: OperationDeadline,
+        _deadline: (),
     ) -> Result<Presence, ProviderError> {
         self.spend()?;
         let segments: Vec<&str> = path.iter().map(String::as_str).collect();
@@ -97,7 +121,7 @@ impl GitHubVerification for ScriptedRest {
         _owner: &str,
         name: &str,
         oid: &str,
-        _deadline: OperationDeadline,
+        _deadline: (),
     ) -> Result<Presence, ProviderError> {
         self.spend()?;
         Ok(*self.commits.get(&(name, oid)).unwrap_or(&Presence::Absent))
@@ -105,6 +129,113 @@ impl GitHubVerification for ScriptedRest {
 }
 
 const OID: &str = "0123456789abcdef0123456789abcdef01234567";
+
+#[test]
+fn complete_reference_lists_are_not_paginated_by_row_count() {
+    let captured: RefRecord = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/git-reference.json"),
+        u64::MAX,
+    )
+    .unwrap();
+    let destination = "https://github.com/HardMax71/amiss/blob/github/typed-commit-flow/README.md";
+    let plan = external_plan(&[destination]).unwrap();
+    for (family, kind, count) in [
+        (RefFamily::Heads, ObjectKind::Commit, 100),
+        (RefFamily::Heads, ObjectKind::Commit, 108),
+        (RefFamily::Heads, ObjectKind::Commit, 1_000),
+        (RefFamily::Heads, ObjectKind::Commit, 1_036),
+        (RefFamily::Tags, ObjectKind::Commit, 1),
+        (RefFamily::Tags, ObjectKind::Tag, 1),
+        (RefFamily::Tags, ObjectKind::Tree, 1),
+        (RefFamily::Tags, ObjectKind::Blob, 1),
+    ] {
+        let mut records: Vec<RefRecord> = (0..count - 1)
+            .map(|index| RefRecord {
+                reference: format!("refs/{}/github/branch-{index}", family.as_ref()),
+                node_id: format!("fixture-{index}"),
+                url: format!(
+                    "https://api.github.com/repos/HardMax71/amiss/git/refs/{}/github/branch-{index}",
+                    family.as_ref()
+                ),
+                object: captured.object.clone(),
+            })
+            .collect();
+        records.push(RefRecord {
+            reference: format!("refs/{}/github/typed-commit-flow", family.as_ref()),
+            url: format!(
+                "https://api.github.com/repos/HardMax71/amiss/git/refs/{}/github/typed-commit-flow",
+                family.as_ref()
+            ),
+            object: amiss_controller::GitObject {
+                kind,
+                ..captured.object.clone()
+            },
+            ..captured.clone()
+        });
+        let bytes = serde_json::to_vec(&records).unwrap();
+        let (decoded, length) =
+            amiss_controller::decode_bounded_json(bytes.as_slice(), None, bytes.len(), |bytes| {
+                amiss_wire::read_json::<Vec<RefRecord>>(bytes, u64::MAX)
+            })
+            .unwrap();
+        assert_eq!(length, bytes.len());
+        assert_eq!(decoded, records);
+        let rest = ScriptedRest {
+            visibility: BTreeMap::from([("amiss", Visibility::Readable)]),
+            records: Some((family, decoded)),
+            contents: BTreeMap::from([(
+                ("amiss", "github/typed-commit-flow", vec!["README.md"]),
+                Presence::Present,
+            )]),
+            ..ScriptedRest::default()
+        };
+        let evidence = verify_external(&rest, &plan, "github.com", "0.0.0", "t0").unwrap();
+        assert_eq!(
+            external_facts(&evidence).unwrap(),
+            vec![format!("{destination} readable resolved")],
+            "{family:?} {kind:?} {count}"
+        );
+        assert_eq!(rest.calls.load(Ordering::Relaxed), 4);
+    }
+}
+
+#[test]
+fn every_reference_record_must_match_the_requested_scope() {
+    let captured: RefRecord = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/git-reference.json"),
+        u64::MAX,
+    )
+    .unwrap();
+    let plan = external_plan(&[
+        "https://github.com/HardMax71/amiss/blob/github/typed-commit-flow/README.md",
+    ])
+    .unwrap();
+    let defects: [fn(&mut RefRecord); 7] = [
+        |record| record.reference = "refs/tags/github/typed-commit-flow".to_owned(),
+        |record| record.reference = "refs/heads/unrelated".to_owned(),
+        |record| record.reference = "refs/heads/".to_owned(),
+        |record| record.object.kind = ObjectKind::Tag,
+        |record| record.object.kind = ObjectKind::Tree,
+        |record| record.object.kind = ObjectKind::Blob,
+        |record| record.object.sha = Oid::new(ObjectFormat::Sha256, "1".repeat(64)).unwrap(),
+    ];
+    for defect in defects {
+        let mut changed = captured.clone();
+        defect(&mut changed);
+        for records in [vec![changed.clone()], vec![captured.clone(), changed]] {
+            let rest = ScriptedRest {
+                visibility: BTreeMap::from([("amiss", Visibility::Readable)]),
+                records: Some((RefFamily::Heads, records)),
+                ..ScriptedRest::default()
+            };
+            assert_eq!(
+                verify_external(&rest, &plan, "github.com", "0.0.0", "t0").unwrap_err(),
+                ProviderError::InvalidResponse
+            );
+            assert_eq!(rest.calls.load(Ordering::Relaxed), 2);
+        }
+    }
+}
 
 fn matrix_rest() -> ScriptedRest {
     ScriptedRest {
