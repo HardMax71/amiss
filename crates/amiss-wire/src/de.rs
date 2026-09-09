@@ -50,8 +50,18 @@ pub fn fail<T>(path: &str, kind: ErrorKind) -> Result<T, Error> {
 
 pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| deserialize_error("$", &defect))
+    let mut track = serde_path_to_error::Track::new();
+    let document = crate::requests::object::deserialize(serde_path_to_error::Deserializer::new(
+        &mut deserializer,
+        &mut track,
+    ))
+    .map_err(|error| {
+        deserialize_error("$", &serde_path_to_error::Error::new(track.path(), error))
+    })?;
+    deserializer
+        .end()
+        .map_err(|_error| Error::new("$", ErrorKind::InvalidValue))?;
+    Ok(document)
 }
 
 pub(crate) fn deserialize_error<E: std::fmt::Display>(

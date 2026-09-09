@@ -73,7 +73,7 @@ fn owned_plan_moves_bounded_sources_and_writes_only_at_the_output_boundary() {
 fn complete_plan_requires_schema_tags_and_objects_at_every_nested_level()
 -> Result<(), Box<dyn std::error::Error>> {
     let document = relation::parse_plan(PLAN)?;
-    let input = (&document, relation::parse_plan);
+    let input = (&document, relation::parse_plan, ErrorKind::InvalidValue);
     let payload = &document.payload;
     let relation = &payload.relation;
     let subject = &payload.subjects[1];

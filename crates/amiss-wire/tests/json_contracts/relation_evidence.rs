@@ -80,7 +80,7 @@ fn owned_evidence_preserves_roles_safe_counts_and_bounded_output() {
 fn evidence_requires_object_shapes_and_both_schema_tags() -> Result<(), Box<dyn std::error::Error>>
 {
     let document = relation::parse_evidence(EVIDENCE)?;
-    let input = (&document, relation::parse_evidence);
+    let input = (&document, relation::parse_evidence, ErrorKind::InvalidValue);
     let payload = &document.payload;
     let subject = &payload.subjects[1];
     let RelationProjectionSlot::Projected(value) = &subject.candidate else {

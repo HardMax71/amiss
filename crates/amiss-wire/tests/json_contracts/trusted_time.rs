@@ -1,4 +1,8 @@
-use amiss_wire::{controls::canonical_trusted_time, requests::ControlsRequest};
+use amiss_wire::{
+    controls::{canonical_trusted_time, parse_trusted_time},
+    de::ErrorKind,
+    requests::ControlsRequest,
+};
 
 #[test]
 fn supplied_time_is_a_closed_object_and_keeps_its_canonical_identity() {
@@ -49,6 +53,11 @@ fn supplied_time_is_a_closed_object_and_keeps_its_canonical_identity() {
         &statement.valid_until,
     ))
     .unwrap();
+    assert_eq!(parse_trusted_time(object.as_bytes()).unwrap(), *statement);
+    assert_eq!(
+        parse_trusted_time(positional.as_bytes()).unwrap_err().kind,
+        ErrorKind::WrongType
+    );
     let compact = serde_json::to_string(&request).unwrap();
     for invalid in [
         positional.as_str(),
@@ -69,5 +78,75 @@ fn supplied_time_is_a_closed_object_and_keeps_its_canonical_identity() {
             serde_json::from_str::<ControlsRequest>(&altered).is_err(),
             "{invalid}"
         );
+    }
+}
+
+#[test]
+fn trusted_time_requires_an_object_repository() {
+    let request = ControlsRequest::parse(include_bytes!(
+        "../../../../spec/examples/scanner-controls-request.json"
+    ))
+    .unwrap();
+    let statement = request.trusted_time.unwrap().value;
+    let encoded = serde_json::to_string(&statement).unwrap();
+    let repository = serde_json::to_string(&statement.repository).unwrap();
+    let positional = serde_json::to_string(&(
+        statement.repository.host(),
+        statement.repository.name(),
+        statement.repository.owner(),
+    ))
+    .unwrap();
+    let invalid = encoded.replace(&repository, &positional);
+    assert_ne!(invalid, encoded);
+    let error = parse_trusted_time(invalid.as_bytes()).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::WrongType);
+    assert_eq!(error.path, "$.repository");
+    assert!(serde_json::from_str::<amiss_wire::controls::TrustedTimeStatement>(&invalid).is_err());
+}
+
+#[test]
+fn trusted_time_reader_keeps_complete_input_and_checked_attempts() {
+    let example = include_str!("../../../../spec/examples/scanner-trusted-time-statement.json");
+    let mut statement = parse_trusted_time(example.as_bytes()).unwrap();
+    for attempt in [1, amiss_wire::json::MAX_SAFE_INTEGER.unsigned_abs()] {
+        statement.provider_run_attempt = attempt;
+        let (bytes, digest) = canonical_trusted_time(&statement).unwrap();
+        let parsed = parse_trusted_time(&bytes).unwrap();
+        assert_eq!(parsed, statement);
+        assert_eq!(canonical_trusted_time(&parsed).unwrap().1, digest);
+    }
+
+    for suffix in ["{}", "[]", "true", "0", "]"] {
+        let invalid = format!("{example}{suffix}");
+        let error = parse_trusted_time(invalid.as_bytes()).unwrap_err();
+        assert_eq!(error.path, "$");
+        assert_eq!(error.kind, ErrorKind::InvalidValue);
+    }
+    assert!(parse_trusted_time(format!(" \n{example}\r\t").as_bytes()).is_ok());
+    for invalid in [
+        b"\xff".as_slice(),
+        b"\xef\xbb\xbf{}",
+        b"null",
+        b"true",
+        b"0",
+    ] {
+        assert!(parse_trusted_time(invalid).is_err(), "{invalid:?}");
+    }
+    for attempt in ["0", "-0", "2.0", "2e0", "9007199254740992"] {
+        let invalid = example.replace(
+            "\"provider_run_attempt\": 2",
+            &format!("\"provider_run_attempt\": {attempt}"),
+        );
+        assert_ne!(invalid, example);
+        let error = parse_trusted_time(invalid.as_bytes()).unwrap_err();
+        assert_eq!(error.path, "$.provider_run_attempt", "{attempt}");
+    }
+    for field in [
+        r#""provider_run_attempt":2,"#,
+        r#""provider_run_\u0061ttempt":2,"#,
+        r#""future":null,"#,
+    ] {
+        let invalid = example.replacen('{', &format!("{{{field}"), 1);
+        assert!(parse_trusted_time(invalid.as_bytes()).is_err(), "{field}");
     }
 }

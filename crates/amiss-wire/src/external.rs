@@ -27,22 +27,10 @@ pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/external-assessment-payload";
 pub const EXTERNAL_DOCUMENT_BYTES: u64 = crate::report::MACHINE_JSON_BYTES;
 
 fn read<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, crate::de::Error> {
-    use crate::de::{Error, ErrorKind, fail};
+    use crate::de::{ErrorKind, fail};
 
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let mut track = serde_path_to_error::Track::new();
-    let document = crate::requests::object::deserialize(serde_path_to_error::Deserializer::new(
-        &mut deserializer,
-        &mut track,
-    ))
-    .map_err(|error| {
-        crate::de::deserialize_error("$", &serde_path_to_error::Error::new(track.path(), error))
-    })?;
-    deserializer
-        .end()
-        .map_err(|_error| Error::new("$", ErrorKind::InvalidValue))?;
-    Ok(document)
+    crate::de::deserialize_json(bytes)
 }

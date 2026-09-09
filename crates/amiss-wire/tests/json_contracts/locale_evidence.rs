@@ -117,7 +117,7 @@ fn locale_evidence_keeps_individual_and_combined_inventory_limits() {
 fn locale_evidence_requires_objects_for_envelope_and_shared_bindings()
 -> Result<(), Box<dyn std::error::Error>> {
     let document = locale::parse_evidence(EVIDENCE)?;
-    let input = (&document, locale::parse_evidence);
+    let input = (&document, locale::parse_evidence, ErrorKind::WrongType);
     let payload = &document.payload;
     let docs = &payload.docs;
     let repository = &docs.repository;
@@ -189,7 +189,7 @@ fn locale_evidence_requires_objects_for_both_inventories_pages_and_products()
     };
     product.digest = sha256(b"distinct target product");
     let document = locale::evidence(payload)?;
-    let input = (&document, locale::parse_evidence);
+    let input = (&document, locale::parse_evidence, ErrorKind::WrongType);
     let source = &document.payload.source;
     let target = &document.payload.target;
     assert_object_required(

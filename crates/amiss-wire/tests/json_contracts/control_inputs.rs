@@ -1,7 +1,7 @@
 use amiss_wire::{
     controls::{
         canonical_debt_snapshot, canonical_execution_constraint, canonical_organization_floor,
-        canonical_waiver_bundle,
+        canonical_waiver_bundle, parse_organization_floor,
     },
     digest::Digest,
     requests::{ControlsRequest, RequestTrust, SuppliedControl},
@@ -93,6 +93,7 @@ fn control_inputs_keep_their_concrete_shapes_and_identities() {
         &floor.resource_limits,
     ))
     .unwrap();
+    assert!(parse_organization_floor(positional.as_bytes()).is_err());
     let altered = encoded.replace(&serde_json::to_string(floor).unwrap(), &positional);
     assert_ne!(altered, encoded);
     assert!(ControlsRequest::parse(altered.as_bytes()).is_err());

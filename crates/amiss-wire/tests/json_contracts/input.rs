@@ -8,7 +8,7 @@ use amiss_wire::{
 use serde::{Deserialize, Serialize};
 
 pub(super) fn assert_object_required<T, U>(
-    (document, read): (&T, impl Fn(&[u8]) -> Result<T, Error>),
+    (document, read, root_error): (&T, impl Fn(&[u8]) -> Result<T, Error>, ErrorKind),
     object: &U,
     positional: impl Serialize,
 ) -> Result<(), Box<dyn std::error::Error>>
@@ -35,7 +35,11 @@ where
         read(changed.as_bytes()).err(),
         Some(Error {
             path: "$".to_owned(),
-            kind: ErrorKind::InvalidValue,
+            kind: if object == text {
+                root_error
+            } else {
+                ErrorKind::InvalidValue
+            },
         })
     );
     Ok(())

@@ -8,7 +8,7 @@ use crate::digest::{Digest, hb};
 use crate::json::MAX_SAFE_INTEGER;
 use crate::model::{ArtifactId, BranchRef, RepositoryIdentity, UtcInstant};
 
-use super::{provider_run_id_valid, root, validate_instant, validate_repository};
+use super::{provider_run_id_valid, validate_instant, validate_repository};
 
 pub const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement";
 pub const TRUSTED_TIME_CONTROLLER: &str = "external-required-check-clock";
@@ -48,6 +48,7 @@ pub struct TrustedTimeStatement {
     pub provider_run_id: String,
     #[serde(rename = "ref")]
     pub ref_name: BranchRef,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub repository: RepositoryIdentity,
     pub schema: TrustedTimeSchema,
     pub valid_until: UtcInstant,
@@ -61,7 +62,6 @@ pub struct TrustedTimeStatement {
 /// values, or a lifetime outside `0 < valid_until - evaluation_instant <= 600`
 /// seconds.
 pub fn parse_trusted_time(bytes: &[u8]) -> Result<TrustedTimeStatement, Error> {
-    root(bytes)?;
     let statement = de::deserialize_json(bytes)?;
     validate_trusted_time(&statement)?;
     Ok(statement)
