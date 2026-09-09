@@ -26,3 +26,11 @@ The owner fixtures were extracted with `gh api --jq .owner` from the public
 on 2026-09-10 with the same API version. They cover user and organization owners,
 including URI templates and optional visibility metadata. They are nested-object
 captures, not complete repository-response fixtures.
+
+The workflow-repository fixture is the complete repository member of public
+[run 34409057444](https://api.github.com/repos/HardMax71/amiss/actions/runs/34409057444),
+captured read-only on 2026-09-10 with API version 2022-11-28. The custom-properties
+fixture is the member of [github/docs](https://api.github.com/repos/github/docs)
+captured the same way; its 11 entries were cross-checked against the read-only
+repository properties endpoint. Optional metadata in contract tests is synthetic,
+not claimed as captured from the workflow run.

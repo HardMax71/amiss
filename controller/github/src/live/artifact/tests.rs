@@ -96,7 +96,7 @@ fn exact_provider_records_select_and_retain_the_planned_template() {
 #[test]
 fn every_workflow_run_binding_clause_fails_closed() {
     let (config, expectation, candidate) = fixture();
-    let defects: [fn(&mut WorkflowRunPage); 14] = [
+    let defects: [fn(&mut WorkflowRunPage); 15] = [
         |page| page.total_count = 2,
         |page| page.workflow_runs.push(page.workflow_runs[0].clone()),
         |page| page.workflow_runs[0].id = 0,
@@ -110,6 +110,10 @@ fn every_workflow_run_binding_clause_fails_closed() {
         |page| page.workflow_runs[0].run_attempt = 0,
         |page| page.workflow_runs[0].repository.id = 0,
         |page| page.workflow_runs[0].repository.full_name = "other/widget".to_owned(),
+        |page| {
+            page.workflow_runs[0].repository.owner.login = "Other".to_owned();
+            page.workflow_runs[0].repository.full_name = "Other/Widget".to_owned();
+        },
         |page| page.workflow_runs[0].head_repository.id = 0,
         |page| page.workflow_runs[0].head_repository.owner.login = "bad owner".to_owned(),
         |page| page.workflow_runs.clear(),
@@ -212,8 +216,8 @@ fn fixture() -> (Config, WorkflowArtifactExpectation, Oid) {
 }
 
 fn repository(id: u64, owner: &str, name: &str) -> WorkflowRepositoryRecord {
-    let record: OwnerRecord = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/owner-user.json"),
+    let record: WorkflowRepositoryRecord = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/workflow-repository.json"),
         u64::MAX,
     )
     .unwrap();
@@ -223,8 +227,9 @@ fn repository(id: u64, owner: &str, name: &str) -> WorkflowRepositoryRecord {
         full_name: format!("{owner}/{name}"),
         owner: OwnerRecord {
             login: owner.to_owned(),
-            ..record
+            ..record.owner
         },
+        ..record
     }
 }
 

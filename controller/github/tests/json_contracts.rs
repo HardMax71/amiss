@@ -9,6 +9,9 @@ mod artifact;
 #[path = "json_contracts/owner.rs"]
 mod owner;
 
+#[path = "json_contracts/repository.rs"]
+mod repository;
+
 #[test]
 fn reference_captures_share_the_complete_object_without_losing_fields() {
     let input = include_str!("fixtures/git-reference.json");

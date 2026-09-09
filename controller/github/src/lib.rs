@@ -6,6 +6,7 @@ pub mod commit;
 mod live;
 pub mod owner;
 pub mod reference;
+pub mod repository;
 mod workflow_artifact;
 
 use std::sync::Arc;

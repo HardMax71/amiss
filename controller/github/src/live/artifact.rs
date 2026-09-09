@@ -8,18 +8,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::artifact::WorkflowArtifactPage;
 
-use super::model::OwnerRecord;
 use super::{Config, refresh};
+pub(super) use crate::repository::WorkflowRepositoryRecord;
 
 pub(super) const EXACT_PAGE_SIZE: u8 = 2;
-
-#[derive(Clone, Deserialize)]
-pub(super) struct WorkflowRepositoryRecord {
-    pub(super) id: u64,
-    pub(super) name: String,
-    pub(super) full_name: String,
-    pub(super) owner: OwnerRecord,
-}
 
 #[derive(Clone, Deserialize)]
 pub(super) struct WorkflowRunRecord {
