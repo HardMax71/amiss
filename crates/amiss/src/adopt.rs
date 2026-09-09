@@ -76,7 +76,7 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
 /// the adoption accepts; blocking rows outside the eligible kinds are
 /// counted and left to be fixed instead.
 fn items(built: &Built, adoption: &Adoption) -> Result<(Vec<DebtItem>, usize, usize), ()> {
-    let owner = OwnerId::new(adoption.owner.clone()).ok_or(())?;
+    let owner = OwnerId::try_from(adoption.owner.clone()).map_err(|_defect| ())?;
     let created_at = UtcInstant::new(adoption.created_at.clone()).ok_or(())?;
     let expires_at = UtcInstant::new(adoption.expires_at.clone()).ok_or(())?;
     let mut rows = Vec::new();

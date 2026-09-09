@@ -26,6 +26,7 @@ mod locale_assessment;
 mod locale_evidence;
 mod locale_plan;
 mod manifest_reader;
+mod owners;
 mod policy_presence;
 mod publication_assessment;
 mod publication_evidence;

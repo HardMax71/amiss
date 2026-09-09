@@ -66,7 +66,8 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
                 finding_key: finding.finding_key,
                 accepted_fact,
                 accepted_fact_digest,
-                owner: owner_id("team:benchmark"),
+                owner: OwnerId::try_from("team:benchmark".to_owned())
+                    .unwrap_or_else(|_defect| panic!("benchmark owner")),
                 reason: "Exception target lookup benchmark.".to_owned(),
                 created_at: instant("2026-07-01T00:00:00Z"),
                 expires_at: instant("2026-08-01T00:00:00Z"),
@@ -196,10 +197,6 @@ fn repo_path_text(raw: String) -> RepoPathText {
 
 fn artifact_id(raw: String) -> ArtifactId {
     ArtifactId::new(raw).unwrap_or_else(|| panic!("benchmark artifact id"))
-}
-
-fn owner_id(raw: &str) -> OwnerId {
-    OwnerId::new(raw.to_owned()).unwrap_or_else(|| panic!("benchmark owner"))
 }
 
 fn instant(raw: &str) -> UtcInstant {

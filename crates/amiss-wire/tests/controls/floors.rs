@@ -42,13 +42,13 @@ fn parses_the_floor_fixture() {
     let owners: Vec<&str> = floor
         .authorized_debt_owners
         .iter()
-        .map(amiss_wire::model::OwnerId::as_str)
+        .map(|owner| owner.as_str())
         .collect();
     assert_eq!(owners, ["team:docs-platform"]);
     let issuers: Vec<&str> = floor
         .authorized_waiver_issuers
         .iter()
-        .map(amiss_wire::model::OwnerId::as_str)
+        .map(|issuer| issuer.as_str())
         .collect();
     assert_eq!(issuers, ["team:release-engineering"]);
     let waivable: Vec<&str> = floor

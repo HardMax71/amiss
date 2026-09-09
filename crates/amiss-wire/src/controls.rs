@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use crate::de::{Error, ErrorKind, fail};
 use crate::json::{self, Value};
-use crate::model::{OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
+use crate::model::{RepositoryIdentity, TreeIdentity, UtcInstant};
 
 pub use crate::semantic::RECORD_KEY_BYTES;
 
@@ -120,14 +120,6 @@ pub(crate) fn validate_repository(
     .as_ref()
         == Some(repository)
     {
-        Ok(())
-    } else {
-        fail(path, ErrorKind::InvalidValue)
-    }
-}
-
-pub(crate) fn validate_owner(path: &str, owner: &OwnerId) -> Result<(), Error> {
-    if OwnerId::new(owner.as_str().to_owned()).as_ref() == Some(owner) {
         Ok(())
     } else {
         fail(path, ErrorKind::InvalidValue)

@@ -12,7 +12,7 @@ use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{Profile, SourceConstruct, TargetKind};
 use amiss_wire::digest::hb;
-use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{Adapter, ObjectFormat, Oid, OwnerId, RepoPath};
 use amiss_wire::report::model::ControlStateSource;
 use amiss_wire::report::{
     Disposition, EngineProvenance, FindingKind, IntentKind, adapter_contract,
@@ -661,11 +661,6 @@ fn a_present_document_is_neither_removed_nor_opaque() {
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
-fn owner(raw: &str) -> amiss_wire::model::OwnerId {
-    amiss_wire::model::OwnerId::new(raw.to_owned()).expect("an owner id")
-}
-
-#[expect(clippy::expect_used, reason = "test fixture helper")]
 fn tree() -> amiss_wire::model::TreeIdentity {
     amiss_wire::model::TreeIdentity {
         object_format: ObjectFormat::Sha1,
@@ -730,8 +725,8 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         authorized_fact: waived_fact(),
         authorized_fact_digest: hb("amiss/scanner-fact", b"fact"),
         candidate_tree: tree(),
-        owner: owner("team:docs"),
-        issuer: owner("team:release"),
+        owner: OwnerId::try_from("team:docs".to_owned()).expect("owner"),
+        issuer: OwnerId::try_from("team:release".to_owned()).expect("issuer"),
         reason: "window".to_owned(),
         created_at: moment("2026-07-01T00:00:00Z"),
         not_before: instant.clone(),
@@ -762,7 +757,7 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
             trust_source: amiss_wire::requests::RequestTrust::OrganizationPolicy,
             candidate_tree: tree(),
             items: vec![item],
-            authorized_issuers: vec![owner("team:release")],
+            authorized_issuers: vec![OwnerId::try_from("team:release".to_owned()).expect("issuer")],
             waivable_kinds: vec![amiss_wire::controls::EligibleFindingKind::ExplicitTargetMissing],
         }),
         time: Some(TimeContext {

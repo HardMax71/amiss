@@ -18,6 +18,7 @@ hex_fmt.workspace = true
 json-serde.workspace = true
 js_int.workspace = true
 o2o-macros.workspace = true
+regex-lite.workspace = true
 serde.workspace = true
 serde-transcode.workspace = true
 serde_json = { workspace = true, features = ["unbounded_depth"] }
@@ -27,6 +28,7 @@ serde_with = { workspace = true, features = ["std"] }
 sha2.workspace = true
 strum.workspace = true
 thiserror.workspace = true
+validated_newtype.workspace = true
 wary.workspace = true
 
 [dev-dependencies]

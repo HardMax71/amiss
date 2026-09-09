@@ -10,7 +10,7 @@ use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdent
 
 use super::fact::fact_digests;
 use super::{
-    DEBT_SNAPSHOT_SCHEMA, Fact, root, sorted_set, valid_reason, validate_instant, validate_owner,
+    DEBT_SNAPSHOT_SCHEMA, Fact, root, sorted_set, valid_reason, validate_instant,
     validate_repository, validate_tree,
 };
 
@@ -114,7 +114,6 @@ fn validate_debt_item(path: &str, item: &DebtItem) -> Result<(), Error> {
             ErrorKind::DigestMismatch,
         );
     }
-    validate_owner(&format!("{path}.owner"), &item.owner)?;
     if !valid_reason(&item.reason) {
         return fail(&format!("{path}.reason"), ErrorKind::InvalidValue);
     }

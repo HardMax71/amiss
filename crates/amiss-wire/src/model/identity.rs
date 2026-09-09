@@ -1,4 +1,5 @@
 use core::{fmt, str::FromStr};
+use std::sync::LazyLock;
 
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -32,26 +33,15 @@ impl FromStr for ArtifactId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct OwnerId(String);
+static OWNER_ID: LazyLock<Result<regex_lite::Regex, regex_lite::Error>> =
+    LazyLock::new(|| regex_lite::Regex::new(r"\A(team|service|user):[a-z0-9][a-z0-9._/-]*\z"));
 
-impl OwnerId {
-    #[must_use]
-    pub fn new(raw: String) -> Option<Self> {
-        if raw.len() > 160 {
-            return None;
-        }
-        let suffix = ["team:", "service:", "user:"]
-            .iter()
-            .find_map(|prefix| raw.strip_prefix(prefix))?;
-        id_body_valid(suffix.as_bytes()).then_some(Self(raw))
-    }
-
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+validated_newtype::validated_newtype! {
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+    #[serde(transparent)]
+    String => pub OwnerId
+    if |raw: &str| raw.len() <= 160 && OWNER_ID.as_ref().is_ok_and(|pattern| pattern.is_match(raw));
+    error "invalid owner identity"
 }
 
 fn id_body_valid(raw: &[u8]) -> bool {

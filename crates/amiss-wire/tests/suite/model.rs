@@ -22,14 +22,14 @@ fn repo_paths_order_and_borrow_as_their_bytes() {
 
 #[test]
 fn an_owner_id_keeps_its_grammar_and_its_text() {
-    let owner = OwnerId::new("team:docs-guild".to_owned()).unwrap();
+    let owner = OwnerId::try_from("team:docs-guild".to_owned()).unwrap();
     assert_eq!(owner.as_str(), "team:docs-guild");
     assert!(
-        OwnerId::new("team:docs!".to_owned()).is_none(),
+        OwnerId::try_from("team:docs!".to_owned()).is_err(),
         "an illegal tail byte is refused"
     );
     assert!(
-        OwnerId::new("team:Docs".to_owned()).is_none(),
+        OwnerId::try_from("team:Docs".to_owned()).is_err(),
         "an uppercase tail byte is refused"
     );
 }

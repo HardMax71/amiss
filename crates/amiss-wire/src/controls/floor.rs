@@ -9,7 +9,7 @@ use crate::model::{ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdent
 
 use super::{
     EligibleFindingKind, FindingDisposition, ORGANIZATION_FLOOR_SCHEMA, Profile, ResourceName,
-    root, sorted_set, validate_owner, validate_repository,
+    root, sorted_set, validate_repository,
 };
 
 #[derive(
@@ -166,9 +166,6 @@ fn validate_floor_shape(floor: &OrganizationFloor) -> Result<(), Error> {
     ] {
         if owners.len() > 10_000 {
             return fail(path, ErrorKind::LimitExceeded);
-        }
-        for (index, owner) in owners.iter().enumerate() {
-            validate_owner(&format!("{path}[{index}]"), owner)?;
         }
         sorted_set(path, owners, |left, right| {
             left.as_str().cmp(right.as_str())

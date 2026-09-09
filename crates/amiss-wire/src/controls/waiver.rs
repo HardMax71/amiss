@@ -10,7 +10,7 @@ use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdent
 
 use super::fact::fact_digests;
 use super::{
-    Fact, WAIVER_BUNDLE_SCHEMA, root, sorted_set, valid_reason, validate_instant, validate_owner,
+    Fact, WAIVER_BUNDLE_SCHEMA, root, sorted_set, valid_reason, validate_instant,
     validate_repository, validate_tree,
 };
 
@@ -144,8 +144,6 @@ fn validate_waiver_item(path: &str, item: &WaiverItem) -> Result<(), Error> {
         );
     }
     validate_tree(&format!("{path}.candidate_tree"), &item.candidate_tree)?;
-    validate_owner(&format!("{path}.owner"), &item.owner)?;
-    validate_owner(&format!("{path}.issuer"), &item.issuer)?;
     if !valid_reason(&item.reason) {
         return fail(&format!("{path}.reason"), ErrorKind::InvalidValue);
     }
