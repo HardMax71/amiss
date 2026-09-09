@@ -62,7 +62,7 @@ pub struct TrustedTimeStatement {
 /// values, or a lifetime outside `0 < valid_until - evaluation_instant <= 600`
 /// seconds.
 pub fn parse_trusted_time(bytes: &[u8]) -> Result<TrustedTimeStatement, Error> {
-    let statement = de::deserialize_json(bytes)?;
+    let (statement, _digest) = de::deserialize_json(bytes, TRUSTED_TIME_STATEMENT_SCHEMA)?;
     validate_trusted_time(&statement)?;
     Ok(statement)
 }

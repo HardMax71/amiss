@@ -67,7 +67,7 @@ pub enum ObservationKind {
 /// Fails on oversized or malformed strict JSON, unknown fields, invalid identities or digests,
 /// and records that are not bounded, control-free, sorted, and unique by key.
 pub fn parse_input(bytes: &[u8]) -> Result<Input, Error> {
-    let input: Input = super::parse_document(bytes)?;
+    let (input, _digest): (Input, _) = super::parse_document(bytes, INPUT_SCHEMA)?;
     validate_records("$.records", &input.records)?;
     Ok(input)
 }

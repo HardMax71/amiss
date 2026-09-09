@@ -68,7 +68,7 @@ pub struct WaiverBundle {
 /// `(candidate_tree, finding_key)` pairs.
 pub fn parse_waiver_bundle(bytes: &[u8]) -> Result<WaiverBundle, Error> {
     root(bytes)?;
-    let bundle = de::deserialize_json(bytes)?;
+    let (bundle, _digest) = de::deserialize_json(bytes, WAIVER_BUNDLE_SCHEMA)?;
     validate_waiver_bundle(&bundle)?;
     Ok(bundle)
 }

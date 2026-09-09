@@ -101,7 +101,7 @@ pub fn valid_required_status_name(raw: &str) -> bool {
 /// Fails on strict-JSON defects, schema-shape violations, invalid grammar
 /// values, or object IDs inconsistent with the declared object format.
 pub fn parse_execution_constraint(bytes: &[u8]) -> Result<ExecutionConstraintDescriptor, Error> {
-    let descriptor = de::deserialize_json(bytes)?;
+    let (descriptor, _digest) = de::deserialize_json(bytes, EXECUTION_CONSTRAINT_SCHEMA)?;
     validate_execution_constraint(&descriptor)?;
     Ok(descriptor)
 }

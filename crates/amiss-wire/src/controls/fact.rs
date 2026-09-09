@@ -193,7 +193,7 @@ pub struct Fact {
 /// finding, key, resolution, and multiplicity values.
 pub fn parse_fact(bytes: &[u8]) -> Result<Fact, Error> {
     root(bytes)?;
-    let fact = de::deserialize_json(bytes)?;
+    let (fact, _digest) = de::deserialize_json(bytes, FACT_DOMAIN)?;
     validate_fact("$", &fact)?;
     Ok(fact)
 }

@@ -1,4 +1,4 @@
-use crate::json;
+use crate::{digest::Digest, json};
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{kind} at {path}")]
@@ -48,7 +48,10 @@ pub fn fail<T>(path: &str, kind: ErrorKind) -> Result<T, Error> {
     Err(Error::new(path, kind))
 }
 
-pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
+pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned + serde::Serialize>(
+    bytes: &[u8],
+    domain: &str,
+) -> Result<(T, Digest), Error> {
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let mut track = serde_path_to_error::Track::new();
     let document = crate::requests::object::deserialize(serde_path_to_error::Deserializer::new(
@@ -61,7 +64,9 @@ pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> 
     deserializer
         .end()
         .map_err(|_error| Error::new("$", ErrorKind::InvalidValue))?;
-    Ok(document)
+    let digest = crate::digest::verified_json_digest(domain, bytes, &document)
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    Ok((document, digest))
 }
 
 pub(crate) fn deserialize_error<E: std::fmt::Display>(

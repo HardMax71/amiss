@@ -26,11 +26,14 @@ pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/external-assessment-envelope
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/external-assessment-payload";
 pub const EXTERNAL_DOCUMENT_BYTES: u64 = crate::report::MACHINE_JSON_BYTES;
 
-fn read<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, crate::de::Error> {
+fn read<T: serde::de::DeserializeOwned + serde::Serialize>(
+    bytes: &[u8],
+    domain: &str,
+) -> Result<(T, crate::digest::Digest), crate::de::Error> {
     use crate::de::{ErrorKind, fail};
 
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    crate::de::deserialize_json(bytes)
+    crate::de::deserialize_json(bytes, domain)
 }

@@ -57,7 +57,7 @@ pub struct DebtSnapshot {
 /// causal time-order violations, and unsorted or duplicate items or keys.
 pub fn parse_debt_snapshot(bytes: &[u8]) -> Result<DebtSnapshot, Error> {
     root(bytes)?;
-    let snapshot = de::deserialize_json(bytes)?;
+    let (snapshot, _digest) = de::deserialize_json(bytes, DEBT_SNAPSHOT_SCHEMA)?;
     validate_debt_snapshot(&snapshot)?;
     Ok(snapshot)
 }

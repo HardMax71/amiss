@@ -6,7 +6,7 @@ use strum::{Display, EnumString};
 use wary::Validate;
 
 use crate::de::{Error, ErrorKind};
-use crate::digest::{Digest, hj_serde, verified_json_digest};
+use crate::digest::{Digest, hj_serde};
 
 use super::evidence::{
     EvidenceDefect, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
@@ -188,10 +188,8 @@ pub enum AssessmentDefect {
 /// Fails on oversized or malformed strict JSON, unknown or reshaped data,
 /// malformed fields, a derived validation error, or a digest mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, AssessmentDefect> {
-    let document: ExternalAssessmentEnvelope =
-        super::read(bytes).map_err(AssessmentDefect::Wire)?;
-    verified_json_digest(ASSESSMENT_ENVELOPE_SCHEMA, bytes, &document)
-        .map_err(|_defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
+    let (document, _digest): (ExternalAssessmentEnvelope, _) =
+        super::read(bytes, ASSESSMENT_ENVELOPE_SCHEMA).map_err(AssessmentDefect::Wire)?;
     let payload_digest = assessment_payload_digest(&document.payload)?;
     if payload_digest != document.payload_digest {
         return Err(AssessmentDefect::Wire(Error::new(

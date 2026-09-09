@@ -12,6 +12,7 @@ mod adoption;
 mod bootstrap_reader;
 mod canonical;
 mod control_inputs;
+mod control_reader;
 mod control_tags;
 mod controls_request;
 mod external_assessment;

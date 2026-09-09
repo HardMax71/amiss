@@ -11,7 +11,7 @@ use crate::controls::{
     WaiverBundle, provider_run_id_valid,
 };
 use crate::de::{self, Error, ErrorKind};
-use crate::digest::{Digest, verified_json_digest};
+use crate::digest::Digest;
 use crate::model::ArtifactId;
 use crate::semantic::SemanticEvidenceEnvelope;
 
@@ -122,7 +122,7 @@ impl SnapshotRequest {
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
     /// grammar values.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let request: Self = de::deserialize_json(bytes)?;
+        let (request, _digest): (Self, _) = de::deserialize_json(bytes, SNAPSHOT_REQUEST_SCHEMA)?;
         validate_snapshot(&request)?;
         Ok(request)
     }
@@ -254,10 +254,8 @@ impl ControlsRequest {
     /// grammar values. Controls and semantic evidence decode under their closed schemas.
     /// Consumers verify semantic constraints and independent digests.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let request: Self = de::deserialize_json(bytes)?;
+        let (request, _digest): (Self, _) = de::deserialize_json(bytes, CONTROLS_REQUEST_SCHEMA)?;
         validate_controls(&request)?;
-        verified_json_digest(CONTROLS_REQUEST_SCHEMA, bytes, &request)
-            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
         Ok(request)
     }
 

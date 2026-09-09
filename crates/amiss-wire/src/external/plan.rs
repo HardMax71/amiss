@@ -7,7 +7,7 @@ use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::de::{Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde, verified_json_digest};
+use crate::digest::{Digest, hj_serde};
 use crate::model::ForgeDialect;
 use crate::report::model::{
     BaseSnapshot, Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence,
@@ -191,9 +191,7 @@ pub fn plan(
 /// Fails on oversized or malformed strict JSON, an unknown or malformed field, a
 /// violated plan law, or a payload digest mismatch.
 pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
-    let document: ExternalPlanEnvelope = super::read(bytes)?;
-    verified_json_digest(PLAN_ENVELOPE_SCHEMA, bytes, &document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let (document, _digest) = super::read(bytes, PLAN_ENVELOPE_SCHEMA)?;
     validate_plan_envelope(&document)?;
     Ok(document)
 }

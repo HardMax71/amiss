@@ -4,7 +4,7 @@ use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde, verified_json_digest};
+use crate::digest::{Digest, hj_serde};
 use crate::json;
 use crate::model::ArtifactId;
 
@@ -79,9 +79,8 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<RelationEvidenceEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    let document: RelationEvidenceEnvelope = de::deserialize_json(bytes)?;
-    verified_json_digest(EVIDENCE_ENVELOPE_SCHEMA, bytes, &document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let (document, _digest): (RelationEvidenceEnvelope, _) =
+        de::deserialize_json(bytes, EVIDENCE_ENVELOPE_SCHEMA)?;
     if evidence_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }

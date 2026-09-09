@@ -5,8 +5,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 use wary::Validate;
 
-use crate::de::{Error, ErrorKind};
-use crate::digest::{Digest, verified_json_digest};
+use crate::de::Error;
+use crate::digest::Digest;
 
 use super::{EVIDENCE_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
 
@@ -211,9 +211,8 @@ pub enum EvidenceDefect {
 /// Fails on oversized or malformed strict JSON, unknown or reshaped data,
 /// malformed fields, or a schema law reported by the derived validator.
 pub fn parse_evidence(bytes: &[u8]) -> Result<(ExternalEvidence, Digest), EvidenceDefect> {
-    let document: ExternalEvidence = super::read(bytes).map_err(EvidenceDefect::Wire)?;
-    let digest = verified_json_digest(EVIDENCE_SCHEMA, bytes, &document)
-        .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
+    let (document, digest): (ExternalEvidence, _) =
+        super::read(bytes, EVIDENCE_SCHEMA).map_err(EvidenceDefect::Wire)?;
     document
         .validate(&())
         .map_err(EvidenceDefect::Contract)

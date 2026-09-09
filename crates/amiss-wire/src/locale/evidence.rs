@@ -4,7 +4,7 @@ use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde, verified_json_digest};
+use crate::digest::{Digest, hj_serde};
 use crate::model::ArtifactId;
 use crate::publication::{
     DocsCandidate, PublicationProducer, PublicationResource, PublicationUriKind, validate_docs,
@@ -109,9 +109,8 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<LocaleCoverageEvidenceEnvelope, Er
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EVIDENCE_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    let document: LocaleCoverageEvidenceEnvelope = de::deserialize_json(bytes)?;
-    verified_json_digest(EVIDENCE_ENVELOPE_SCHEMA, bytes, &document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let (document, _digest): (LocaleCoverageEvidenceEnvelope, _) =
+        de::deserialize_json(bytes, EVIDENCE_ENVELOPE_SCHEMA)?;
     if evidence_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }

@@ -102,7 +102,8 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<RelationAssessmentEnvelope, Erro
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    let document: RelationAssessmentEnvelope = de::deserialize_json(bytes)?;
+    let (document, _digest): (RelationAssessmentEnvelope, _) =
+        de::deserialize_json(bytes, ASSESSMENT_ENVELOPE_SCHEMA)?;
     if assessment_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }

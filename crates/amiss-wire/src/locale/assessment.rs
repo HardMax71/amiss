@@ -6,7 +6,7 @@ use strum::{Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde, verified_json_digest};
+use crate::digest::{Digest, hj_serde};
 use crate::model::ArtifactId;
 use crate::semantic::producer_version_valid;
 
@@ -167,9 +167,8 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<LocaleCoverageAssessmentEnvelope
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    let document: LocaleCoverageAssessmentEnvelope = de::deserialize_json(bytes)?;
-    verified_json_digest(ASSESSMENT_ENVELOPE_SCHEMA, bytes, &document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let (document, _digest): (LocaleCoverageAssessmentEnvelope, _) =
+        de::deserialize_json(bytes, ASSESSMENT_ENVELOPE_SCHEMA)?;
     if assessment_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }

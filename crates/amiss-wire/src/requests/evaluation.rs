@@ -4,7 +4,6 @@ use strum::{Display, EnumString};
 
 use crate::controls::Profile;
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::verified_json_digest;
 use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::{EVALUATION_REQUEST_SCHEMA, RequestMode};
@@ -52,9 +51,7 @@ impl EvaluationRequest {
     /// Fails on strict-JSON defects, schema-shape violations, invalid
     /// grammar values, and a candidate commit inconsistent with the mode.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let request: Self = de::deserialize_json(bytes)?;
-        verified_json_digest(EVALUATION_REQUEST_SCHEMA, bytes, &request)
-            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+        let (request, _digest): (Self, _) = de::deserialize_json(bytes, EVALUATION_REQUEST_SCHEMA)?;
         validate_evaluation(&request)?;
         Ok(request)
     }

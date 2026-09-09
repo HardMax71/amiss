@@ -3,7 +3,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde, verified_json_digest};
+use crate::digest::{Digest, hj_serde};
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 
 mod assessment;
@@ -124,9 +124,8 @@ pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    let document: PublicationPlanEnvelope = de::deserialize_json(bytes)?;
-    verified_json_digest(PLAN_ENVELOPE_SCHEMA, bytes, &document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let (document, _digest): (PublicationPlanEnvelope, _) =
+        de::deserialize_json(bytes, PLAN_ENVELOPE_SCHEMA)?;
     if plan_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }

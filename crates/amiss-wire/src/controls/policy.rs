@@ -166,7 +166,7 @@ pub struct ScannerPolicy {
 /// invalid grammar values, and unsorted or duplicate set members.
 pub fn parse_scanner_policy(bytes: &[u8]) -> Result<ScannerPolicy, Error> {
     root(bytes)?;
-    let policy = de::deserialize_json(bytes)?;
+    let (policy, _digest) = de::deserialize_json(bytes, SCANNER_POLICY_SCHEMA)?;
     validate_scanner_policy(&policy)?;
     Ok(policy)
 }
@@ -210,7 +210,7 @@ pub fn parse_projection_source(
     projection: ProjectionKind,
 ) -> Result<ProjectionSource, Error> {
     root(bytes)?;
-    let source = de::deserialize_json(bytes)?;
+    let (source, _digest) = de::deserialize_json(bytes, SCANNER_POLICY_SCHEMA)?;
     validate_projection_source("$", projection, &source)?;
     Ok(source)
 }

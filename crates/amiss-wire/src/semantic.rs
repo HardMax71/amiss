@@ -120,7 +120,7 @@ pub enum TemplateSchema {
 /// Fails on an oversized stream, strict-JSON or shape defects, a payload digest mismatch,
 /// invalid producer identity, or observations outside the closed, bounded, sorted contract.
 pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope<'static>, Error> {
-    let document: SemanticEvidenceEnvelope<'static> = parse_document(bytes)?;
+    let (document, _digest) = parse_document(bytes, ENVELOPE_SCHEMA)?;
     validate(&document)?;
     Ok(document)
 }
@@ -146,18 +146,22 @@ pub fn validate(document: &SemanticEvidenceEnvelope<'_>) -> Result<(), Error> {
 /// Fails on an oversized stream, strict-JSON or shape defect, invalid producer identity, or
 /// observations outside the closed, bounded, sorted contract.
 pub fn parse_template(bytes: &[u8]) -> Result<SemanticEvidenceTemplate<'static>, Error> {
-    let document: SemanticEvidenceTemplate<'static> = parse_document(bytes)?;
+    let (document, _digest): (SemanticEvidenceTemplate<'static>, _) =
+        parse_document(bytes, TEMPLATE_SCHEMA)?;
     validate_producer("$.producer", &document.producer)?;
     validate_observations("$.observations", &document.observations)?;
     Ok(document)
 }
 
-fn parse_document<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
+fn parse_document<T: serde::de::DeserializeOwned + Serialize>(
+    bytes: &[u8],
+    domain: &str,
+) -> Result<(T, Digest), Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    de::deserialize_json(bytes)
+    de::deserialize_json(bytes, domain)
 }
 
 /// Binds a template to one candidate without encoding the resulting envelope.
