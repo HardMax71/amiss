@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod acquisition;
+pub mod artifact;
 pub mod commit;
 mod live;
 pub mod reference;

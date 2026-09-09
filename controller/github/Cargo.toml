@@ -12,6 +12,7 @@ publish = false
 amiss-controller = { path = ".." }
 amiss-controller-git = { path = "../git" }
 amiss-wire = { path = "../../crates/amiss-wire" }
+json-serde.workspace = true
 jsonwebtoken.workspace = true
 percent-encoding.workspace = true
 reqwest.workspace = true
@@ -19,6 +20,7 @@ secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_urlencoded = "0.7"
+serde_with.workspace = true
 thiserror.workspace = true
 url.workspace = true
 wary.workspace = true

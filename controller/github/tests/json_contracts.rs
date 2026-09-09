@@ -3,6 +3,9 @@ use amiss_controller_github::commit::{GitCommitRecord, VerificationReason};
 use amiss_controller_github::reference::RefRecord;
 use amiss_wire::model::ObjectFormat;
 
+#[path = "json_contracts/artifact.rs"]
+mod artifact;
+
 #[test]
 fn reference_captures_share_the_complete_object_without_losing_fields() {
     let input = include_str!("fixtures/git-reference.json");

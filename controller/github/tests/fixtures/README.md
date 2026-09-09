@@ -13,3 +13,9 @@ The reference captures use the same API version and capture date. The
 and [prefix listing](https://api.github.com/repos/HardMax71/amiss/git/matching-refs/heads/github)
 are stored separately to preserve their object-versus-array contracts. The branch name
 contains a slash, and the nested object points to the fixed commit captured in the response.
+
+The [artifact page](https://api.github.com/repos/HardMax71/amiss/actions/runs/34409057444/artifacts?per_page=2)
+was captured read-only on 2026-09-10 with the same API version. It retains the complete
+metadata and linked run for a coverage artifact; no archive was downloaded. Tests also
+cover the missing and nullable fields declared by the
+[artifact API](https://docs.github.com/en/rest/actions/artifacts#list-workflow-run-artifacts).

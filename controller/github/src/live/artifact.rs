@@ -1,9 +1,12 @@
 mod tests;
 
 use amiss_controller::{AcquiredSemanticTemplate, ProviderError, WorkflowArtifactExpectation};
+use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::{ObjectFormat, Oid};
 use serde::{Deserialize, Serialize};
+
+use crate::artifact::WorkflowArtifactPage;
 
 use super::model::OwnerRecord;
 use super::{Config, refresh};
@@ -21,7 +24,7 @@ pub(super) struct WorkflowRepositoryRecord {
 #[derive(Clone, Deserialize)]
 pub(super) struct WorkflowRunRecord {
     pub(super) id: u64,
-    pub(super) head_sha: String,
+    pub(super) head_sha: Oid,
     pub(super) event: String,
     pub(super) status: String,
     pub(super) conclusion: Option<String>,
@@ -35,30 +38,6 @@ pub(super) struct WorkflowRunRecord {
 pub(super) struct WorkflowRunPage {
     pub(super) total_count: u64,
     pub(super) workflow_runs: Vec<WorkflowRunRecord>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct ArtifactRunRecord {
-    pub(super) id: u64,
-    pub(super) repository_id: u64,
-    pub(super) head_repository_id: u64,
-    pub(super) head_sha: String,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct WorkflowArtifactRecord {
-    pub(super) id: u64,
-    pub(super) name: String,
-    pub(super) size_in_bytes: u64,
-    pub(super) expired: bool,
-    pub(super) digest: String,
-    pub(super) workflow_run: Option<ArtifactRunRecord>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct WorkflowArtifactPage {
-    pub(super) total_count: u64,
-    pub(super) artifacts: Vec<WorkflowArtifactRecord>,
 }
 
 #[derive(Serialize)]
@@ -127,7 +106,7 @@ pub(super) fn select_workflow_run(
         && run.head_repository.id > 0
         && run.workflow_id > 0
         && run.run_attempt > 0
-        && run.head_sha == candidate.as_str()
+        && run.head_sha == *candidate
         && run.event == expectation.event.as_str()
         && run.status == "completed"
         && run.conclusion.as_deref() == Some("success")
@@ -142,18 +121,19 @@ pub(super) fn select_workflow_artifact(
     page: WorkflowArtifactPage,
 ) -> Result<SelectedArtifact, ProviderError> {
     let artifact = exactly_one(page.total_count, page.artifacts)?;
-    let linked = artifact
-        .workflow_run
-        .ok_or(ProviderError::InvalidResponse)?;
-    let digest = Digest::from_wire(&artifact.digest).ok_or(ProviderError::InvalidResponse)?;
+    let (Some(Nullable::Value(digest)), Some(Nullable::Value(linked))) =
+        (artifact.digest, artifact.workflow_run)
+    else {
+        return Err(ProviderError::InvalidResponse);
+    };
     if artifact.id == 0
         || artifact.name != expectation.artifact_name
         || !(1..=expectation.archive_byte_limit).contains(&artifact.size_in_bytes)
         || artifact.expired
-        || linked.id != run.id
-        || linked.repository_id != run.repository.id
-        || linked.head_repository_id != run.head_repository.id
-        || linked.head_sha != run.head_sha
+        || linked.id != Some(run.id)
+        || linked.repository_id != Some(run.repository.id)
+        || linked.head_repository_id != Some(run.head_repository.id)
+        || linked.head_sha.as_ref() != Some(&run.head_sha)
     {
         return Err(ProviderError::InvalidResponse);
     }

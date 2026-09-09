@@ -16,11 +16,12 @@ pub(super) use amiss_controller::{
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 
 use crate::GitHubPullRequest;
+use crate::artifact::WorkflowArtifactPage;
 
 use super::Config;
 use super::artifact::{
-    EXACT_PAGE_SIZE, WorkflowArtifactPage, WorkflowArtifactQuery, WorkflowRunPage,
-    WorkflowRunQuery, finish_workflow_artifact, select_workflow_artifact, select_workflow_run,
+    EXACT_PAGE_SIZE, WorkflowArtifactQuery, WorkflowRunPage, WorkflowRunQuery,
+    finish_workflow_artifact, select_workflow_artifact, select_workflow_run,
     validate_workflow_request,
 };
 use super::model::{
@@ -186,7 +187,7 @@ impl HttpRest {
         );
         let artifact_page: WorkflowArtifactPage =
             decode_body(self.transport.execute(request, deadline)?, |bytes| {
-                serde_json::from_slice(bytes)
+                amiss_wire::read_json(bytes, u64::MAX)
             })?;
         let artifact = select_workflow_artifact(expectation, &run, artifact_page)?;
 
