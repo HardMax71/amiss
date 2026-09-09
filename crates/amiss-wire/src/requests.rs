@@ -1,17 +1,17 @@
 use std::io::{Read, Write};
 use std::sync::Arc;
 
-use js_int::Int;
+use js_int::{Int, UInt};
 use serde::{Deserialize, Serialize};
 use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeStatement,
-    WaiverBundle, provider_run_id_valid, root,
+    WaiverBundle, provider_run_id_valid,
 };
 use crate::de::{self, Error, ErrorKind};
-use crate::digest::Digest;
+use crate::digest::{Digest, verified_json_digest};
 use crate::model::ArtifactId;
 use crate::semantic::SemanticEvidenceEnvelope;
 
@@ -185,6 +185,7 @@ pub enum RequestTrust {
 
 /// The supplied trusted-time statement with the provider-authenticated run
 /// context the statement must identify. Its trust source is fixed.
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SuppliedTime {
@@ -253,9 +254,10 @@ impl ControlsRequest {
     /// grammar values. Controls and semantic evidence decode under their closed schemas.
     /// Consumers verify semantic constraints and independent digests.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        root(bytes)?;
         let request: Self = de::deserialize_json(bytes)?;
         validate_controls(&request)?;
+        verified_json_digest(CONTROLS_REQUEST_SCHEMA, bytes, &request)
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
         Ok(request)
     }
 
@@ -266,10 +268,8 @@ impl ControlsRequest {
     /// The constructed fields violate the same laws [`Self::parse`] enforces.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
         validate_controls(self)?;
-        let bytes = serde_json_canonicalizer::to_vec(self)
-            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-        root(&bytes)?;
-        Ok(bytes)
+        serde_json_canonicalizer::to_vec(self)
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))
     }
 }
 
@@ -282,7 +282,7 @@ fn validate_controls(request: &ControlsRequest) -> Result<(), Error> {
         provider_run_id_valid(&time.provider_run_id)
             .then_some(())
             .ok_or_else(|| Error::new("$.trusted_time.provider_run_id", ErrorKind::InvalidValue))?;
-        (1..=9_007_199_254_740_991)
+        (1..=js_int::MAX_SAFE_UINT)
             .contains(&time.provider_run_attempt)
             .then_some(())
             .ok_or_else(|| {

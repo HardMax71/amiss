@@ -1,5 +1,6 @@
+use js_int::Int;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
@@ -19,6 +20,7 @@ pub enum OrganizationFloorSchema {
     Current,
 }
 
+#[serde_with::apply(i64 => #[serde(with = "As::<TryFromInto<Int>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResourceLimit {

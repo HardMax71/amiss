@@ -28,6 +28,59 @@ fn supplied<T: DeserializeOwned, E: std::fmt::Debug>(
 }
 
 #[test]
+fn controls_output_rejects_out_of_range_nested_numbers() {
+    let request = ControlsRequest {
+        organization_floor: Some(supplied(
+            include_bytes!("../../../../spec/examples/organization-floor.json"),
+            canonical_organization_floor,
+        )),
+        debt_snapshot: Some(supplied(
+            include_bytes!("../../../../spec/examples/debt-snapshot.json"),
+            canonical_debt_snapshot,
+        )),
+        waiver_bundle: Some(supplied(
+            include_bytes!("../../../../spec/examples/waiver-bundle.json"),
+            canonical_waiver_bundle,
+        )),
+        ..ControlsRequest::default()
+    };
+    let canonical = request.canonical_bytes().unwrap();
+    assert_eq!(ControlsRequest::parse(&canonical).unwrap(), request);
+    let edits: [fn(&mut ControlsRequest); 3] = [
+        |request| {
+            request
+                .organization_floor
+                .as_mut()
+                .unwrap()
+                .value
+                .resource_limits[0]
+                .maximum = i64::MAX;
+        },
+        |request| {
+            request.debt_snapshot.as_mut().unwrap().value.items[0]
+                .accepted_fact
+                .evidence
+                .occurrence_multiplicity = u64::MAX;
+        },
+        |request| {
+            request.waiver_bundle.as_mut().unwrap().value.items[0]
+                .authorized_fact
+                .evidence
+                .occurrence_multiplicity = u64::MAX;
+        },
+    ];
+    let rejections = edits.map(|edit| {
+        let mut invalid = request.clone();
+        edit(&mut invalid);
+        [
+            serde_json::to_vec(&invalid).is_err(),
+            invalid.canonical_bytes().is_err(),
+        ]
+    });
+    assert_eq!(rejections, [[true; 2]; 3]);
+}
+
+#[test]
 fn control_inputs_keep_their_concrete_shapes_and_identities() {
     let request = ControlsRequest {
         organization_floor: Some(supplied(

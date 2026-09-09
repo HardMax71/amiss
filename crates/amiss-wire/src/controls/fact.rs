@@ -1,5 +1,6 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
@@ -135,6 +136,7 @@ pub enum StructuralResolution {
     TypeMismatch { target: Target<RepoPathText> },
 }
 
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FactEvidence {

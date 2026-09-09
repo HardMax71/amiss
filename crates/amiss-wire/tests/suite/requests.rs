@@ -120,7 +120,6 @@ fn control_readers_reject_unknown_payloads_within_the_json_depth_limit() {
             1,
         );
         assert_ne!(invalid, example);
-        assert!(amiss_wire::json::parse(invalid.as_bytes()).is_ok());
         assert!(serde_json::from_str::<ControlsRequest>(&invalid).is_err());
         assert_eq!(
             ControlsRequest::parse(invalid.as_bytes()).unwrap_err().kind,
@@ -318,11 +317,21 @@ fn request_writers_are_canonical_and_the_sealed_frame_is_exact() {
         snapshot: snapshot.canonical_bytes().unwrap(),
         controls: controls.canonical_bytes().unwrap(),
     };
-    for bytes in [&streams.evaluation, &streams.snapshot, &streams.controls] {
-        assert_eq!(
-            serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(bytes).unwrap()).unwrap(),
-            *bytes
-        );
+    for (bytes, canonical) in [
+        (
+            &streams.evaluation,
+            serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
+        ),
+        (
+            &streams.snapshot,
+            serde_json_canonicalizer::to_vec(&snapshot).unwrap(),
+        ),
+        (
+            &streams.controls,
+            serde_json_canonicalizer::to_vec(&controls).unwrap(),
+        ),
+    ] {
+        assert_eq!(*bytes, canonical);
     }
 
     let mut frame = Vec::new();
@@ -489,9 +498,10 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
         "trusted_time",
         "execution_constraint",
     ] {
-        let mut value: serde_json::Value = serde_json::from_slice(empty).unwrap();
-        value.as_object_mut().unwrap().remove(field);
-        let error = ControlsRequest::parse(&serde_json::to_vec(&value).unwrap()).unwrap_err();
+        let text = std::str::from_utf8(empty).unwrap();
+        let changed = text.replace(&format!("  \"{field}\": null,\n"), "");
+        assert_ne!(changed, text);
+        let error = ControlsRequest::parse(changed.as_bytes()).unwrap_err();
         assert_eq!(error.path, format!("$.{field}"));
         assert_eq!(error.kind, ErrorKind::MissingField);
     }
