@@ -1,10 +1,11 @@
+use js_int::UInt;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hj_serde, verified_json_digest};
-use crate::json;
+use crate::json::MAX_SAFE_INTEGER;
 
 use super::{
     CompletedSite, DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationProducer,
@@ -58,6 +59,7 @@ pub struct PublicationDeployment {
     pub outcome: PublicationOutcome,
     pub record: PublicationResource,
     pub workflow: PublicationResource,
+    #[serde(with = "As::<TryFromInto<UInt>>")]
     pub provider_run_attempt: u64,
 }
 
@@ -80,7 +82,6 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let document: PublicationEvidenceEnvelope = de::deserialize_json(bytes)?;
     verified_json_digest(EVIDENCE_ENVELOPE_SCHEMA, bytes, &document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
@@ -133,9 +134,7 @@ fn validate_evidence(evidence: &PublicationEvidence) -> Result<(), Error> {
             PublicationUriKind::Resource,
         )?;
     }
-    if !(1..=json::MAX_SAFE_INTEGER.unsigned_abs())
-        .contains(&evidence.deployment.provider_run_attempt)
-    {
+    if !(1..=MAX_SAFE_INTEGER.unsigned_abs()).contains(&evidence.deployment.provider_run_attempt) {
         return fail(
             "$.payload.deployment.provider_run_attempt",
             ErrorKind::InvalidValue,

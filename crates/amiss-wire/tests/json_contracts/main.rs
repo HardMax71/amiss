@@ -49,6 +49,7 @@ mod semantic_observations;
 mod semantic_producers;
 mod semantic_reader;
 mod semantic_requests;
+mod sidecar_reader;
 mod string_tags;
 mod trusted_time;
 

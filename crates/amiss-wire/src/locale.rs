@@ -7,7 +7,6 @@ use strum::{Display, EnumString};
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hj_serde, verified_json_digest};
-use crate::json;
 use crate::model::ArtifactId;
 use crate::publication::{
     DocsCandidate, PublicationProducer, PublicationResource, PublicationUriKind, validate_docs,
@@ -118,7 +117,6 @@ pub fn parse_plan(bytes: &[u8]) -> Result<LocaleCoveragePlanEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > LOCALE_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let document: LocaleCoveragePlanEnvelope = de::deserialize_json(bytes)?;
     verified_json_digest(PLAN_ENVELOPE_SCHEMA, bytes, &document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;

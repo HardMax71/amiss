@@ -7,6 +7,53 @@ use amiss_wire::{
 };
 use serde::{Deserialize, Serialize};
 
+pub(super) fn assert_closed_input(
+    bytes: &[u8],
+    schema: &str,
+    limit: u64,
+    read: impl Fn(&[u8]) -> bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    assert!(read(bytes));
+    let text = std::str::from_utf8(bytes)?;
+    for key in ["schema", r"\u0073chema"] {
+        let duplicate = text.replacen('{', &format!(r#"{{"{key}":"{schema}","#), 1);
+        assert!(!read(duplicate.as_bytes()), "{duplicate}");
+    }
+    for invalid in [b"null".as_slice(), b"true", b"0", b"[]", b"\xff"] {
+        assert!(!read(invalid));
+    }
+    assert!(!read(format!("\u{feff}{text}").as_bytes()));
+    assert!(read(format!(" \n{text}\r\t").as_bytes()));
+    for member in [
+        r#""future":-0,"#,
+        r#""future":0.5,"#,
+        r#""future":1e0,"#,
+        r#""future":9007199254740992,"#,
+        r#""future":0,"future":1,"#,
+        r#""future":0,"\u0066uture":1,"#,
+    ] {
+        let invalid = text.replacen('{', &format!("{{{member}"), 1);
+        assert!(!read(invalid.as_bytes()), "{member}");
+    }
+    for depth in [128, 511, 512] {
+        let nested = format!("{}null{}", "[".repeat(depth), "]".repeat(depth));
+        let invalid = text.replacen('{', &format!(r#"{{"future":{nested},"#), 1);
+        assert!(!read(invalid.as_bytes()), "depth {depth}");
+    }
+    for suffix in ["null", "{}", "garbage"] {
+        assert!(!read(format!("{text}{suffix}").as_bytes()));
+    }
+    assert!(!read(format!("[{text}]").as_bytes()));
+    let oversized = vec![
+        b' ';
+        usize::try_from(limit)?
+            .checked_add(1)
+            .ok_or("no representable oversized sample")?
+    ];
+    assert!(!read(&oversized));
+    Ok(())
+}
+
 pub(super) fn assert_object_required<T, U>(
     (document, read, root_error): (&T, impl Fn(&[u8]) -> Result<T, Error>, ErrorKind),
     object: &U,

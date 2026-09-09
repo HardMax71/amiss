@@ -7,7 +7,6 @@ use strum::{AsRefStr, Display, EnumString};
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hj_serde, verified_json_digest};
-use crate::json;
 use crate::semantic::producer_version_valid;
 
 use super::evidence::{PublicationEvidenceEnvelope, evidence_payload_digest};
@@ -86,7 +85,6 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<PublicationAssessmentEnvelope, E
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let document: PublicationAssessmentEnvelope = de::deserialize_json(bytes)?;
     verified_json_digest(ASSESSMENT_ENVELOPE_SCHEMA, bytes, &document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;

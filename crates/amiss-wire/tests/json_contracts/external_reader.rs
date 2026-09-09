@@ -10,7 +10,8 @@ const ASSESSMENT: &[u8] =
 const EVIDENCE: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-evidence.json");
 
 #[test]
-fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
+fn external_envelopes_keep_strict_inputs_and_complete_payload_digests()
+-> Result<(), Box<dyn std::error::Error>> {
     let readers: [fn(&[u8]) -> bool; 3] = [
         |bytes| external::parse_plan(bytes).is_ok(),
         |bytes| external::parse_assessment(bytes).is_ok(),
@@ -24,34 +25,7 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
     .into_iter()
     .zip(readers)
     {
-        assert!(read(bytes));
-        let text = std::str::from_utf8(bytes).unwrap();
-        for key in ["schema", r"\u0073chema"] {
-            let duplicate = text.replacen('{', &format!(r#"{{"{key}":"{schema}","#), 1);
-            assert!(!read(duplicate.as_bytes()), "{duplicate}");
-        }
-        for invalid in [b"null".as_slice(), b"true", b"0", b"[]", b"\xff"] {
-            assert!(!read(invalid));
-        }
-        assert!(!read(format!("\u{feff}{text}").as_bytes()));
-        assert!(read(format!(" \n{text}\r\t").as_bytes()));
-        for member in [
-            r#""future":-0,"#,
-            r#""future":0.5,"#,
-            r#""future":1e0,"#,
-            r#""future":9007199254740992,"#,
-            r#""future":0,"future":1,"#,
-            r#""future":0,"\u0066uture":1,"#,
-        ] {
-            let invalid = text.replacen('{', &format!("{{{member}"), 1);
-            assert!(!read(invalid.as_bytes()), "{member}");
-        }
-        for suffix in ["null", "{}", "garbage"] {
-            assert!(!read(format!("{text}{suffix}").as_bytes()));
-        }
-        assert!(!read(format!("[{text}]").as_bytes()));
-        let oversized = vec![b' '; usize::try_from(external::EXTERNAL_DOCUMENT_BYTES + 1).unwrap()];
-        assert!(!read(&oversized));
+        super::input::assert_closed_input(bytes, schema, external::EXTERNAL_DOCUMENT_BYTES, read)?;
     }
 
     let mut assessment: ExternalAssessmentEnvelope = serde_json::from_slice(ASSESSMENT).unwrap();
@@ -75,6 +49,7 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
         external::parse_assessment(&serde_json::to_vec(&assessment).unwrap()).unwrap(),
         assessment
     );
+    Ok(())
 }
 
 #[test]
