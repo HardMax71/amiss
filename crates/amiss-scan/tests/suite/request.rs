@@ -23,19 +23,40 @@ use amiss_wire::semantic::{
 
 #[test]
 fn typed_configuration_errors_distinguish_syntax_from_invalid_data() {
-    for (input, code) in [
-        ("{".to_owned(), AnalysisErrorCode::InvalidJson),
-        ("{\"schema\": !}".to_owned(), AnalysisErrorCode::InvalidJson),
-        (format!("{TIME}[]"), AnalysisErrorCode::InvalidJson),
-        ("null".to_owned(), AnalysisErrorCode::ConfigurationInvalid),
-        ("{}".to_owned(), AnalysisErrorCode::ConfigurationInvalid),
+    let trailing = format!("{TIME}[]");
+    let inputs: &[(&[u8], AnalysisErrorCode)] = &[
+        (b"{", AnalysisErrorCode::InvalidJson),
+        (b"{\"schema\": !}", AnalysisErrorCode::InvalidJson),
+        (trailing.as_bytes(), AnalysisErrorCode::InvalidJson),
+        (b"null", AnalysisErrorCode::ConfigurationInvalid),
+        (b"{}", AnalysisErrorCode::ConfigurationInvalid),
+        (b"{\"future\": null}", AnalysisErrorCode::UnknownField),
+        (b"{\"controller\":\"\xff\"}", AnalysisErrorCode::InvalidUtf8),
         (
-            "{\"future\": null}".to_owned(),
-            AnalysisErrorCode::UnknownField,
+            b"{\"controller\":\"\xc3(\"}",
+            AnalysisErrorCode::InvalidUtf8,
         ),
-    ] {
-        let error = amiss_wire::controls::parse_trusted_time(input.as_bytes()).unwrap_err();
-        assert_eq!(amiss_scan::request::configuration_detail(&error).code, code);
+        (
+            b"{\"controller\":\"ok\xc0\xaf\"}",
+            AnalysisErrorCode::InvalidUtf8,
+        ),
+        (
+            b"{\"controller\":\"\xed\xa0\x80\"}",
+            AnalysisErrorCode::InvalidUtf8,
+        ),
+        (
+            b"{\"controller\":\"\xf0\x9f",
+            AnalysisErrorCode::InvalidUtf8,
+        ),
+        (b"{\"future\":null}\xff", AnalysisErrorCode::InvalidUtf8),
+    ];
+    for &(input, code) in inputs {
+        let error = amiss_wire::controls::parse_trusted_time(input).unwrap_err();
+        assert_eq!(
+            amiss_scan::request::configuration_detail(&error).code,
+            code,
+            "{input:?}"
+        );
     }
 }
 

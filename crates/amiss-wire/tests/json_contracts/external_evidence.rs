@@ -193,6 +193,7 @@ fn evidence_keeps_derived_validation_and_nonnull_optional_fields() {
 
 #[test]
 fn evidence_capture_keeps_strict_bounds_and_requires_an_object() {
+    let invalid_utf8 = [u8::MAX];
     let document: ExternalEvidence = serde_json::from_slice(EVIDENCE).unwrap();
     let wire = serde_json::to_string(&document).unwrap();
     let nested = format!("{}null{}", "[".repeat(511), "]".repeat(511));
@@ -223,12 +224,8 @@ fn evidence_capture_keeps_strict_bounds_and_requires_an_object() {
         (br#"{"future":9007199254740992}"#, ErrorKind::UnknownField),
         (b"{} {}", ErrorKind::MissingField),
         (
-            b"\xff",
-            ErrorKind::Deserialize {
-                category: serde_json::error::Category::Syntax,
-                line: 1,
-                column: 1,
-            },
+            invalid_utf8.as_slice(),
+            ErrorKind::Utf8(std::str::from_utf8(&invalid_utf8).unwrap_err()),
         ),
     ] {
         let Err(EvidenceDefect::Wire(error)) = external::parse_evidence(invalid) else {

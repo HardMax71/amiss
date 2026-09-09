@@ -152,7 +152,9 @@ fn covered(roots: &BTreeSet<RepoPath>, path: &[u8]) -> bool {
 
 fn specific_code(kind: &ErrorKind) -> AnalysisErrorCode {
     match kind {
-        ErrorKind::Json(_) | ErrorKind::Deserialize { .. } => AnalysisErrorCode::InvalidJson,
+        ErrorKind::Utf8(_) | ErrorKind::Json(_) | ErrorKind::Deserialize { .. } => {
+            AnalysisErrorCode::InvalidJson
+        }
         ErrorKind::UnknownField => AnalysisErrorCode::UnknownField,
         ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
         ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,

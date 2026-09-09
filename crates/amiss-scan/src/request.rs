@@ -152,6 +152,7 @@ fn typed<T>(
 #[must_use]
 pub fn configuration_detail(error: &Error) -> ErrorDetail {
     let analysis = match error.kind {
+        ErrorKind::Utf8(_) => AnalysisErrorCode::InvalidUtf8,
         ErrorKind::Json(json) => match json.kind {
             JsonErrorKind::InvalidUtf8 => AnalysisErrorCode::InvalidUtf8,
             JsonErrorKind::DuplicateKey => AnalysisErrorCode::DuplicateJsonKey,

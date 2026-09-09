@@ -4,11 +4,14 @@ use crate::{digest::Digest, json};
 #[error("{kind} at {path}")]
 pub struct Error {
     pub path: String,
+    #[source]
     pub kind: ErrorKind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ErrorKind {
+    #[error("{0}")]
+    Utf8(#[source] std::str::Utf8Error),
     #[error("{0}")]
     Json(json::Error),
     #[error("{category:?} JSON error at line {line} column {column}")]
@@ -67,7 +70,9 @@ pub fn deserialize_json<T: serde::de::DeserializeOwned + serde::Serialize>(
     bytes: &[u8],
     domain: &str,
 ) -> Result<(T, Digest), Error> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    let text =
+        std::str::from_utf8(bytes).map_err(|error| Error::new("$", ErrorKind::Utf8(error)))?;
+    let mut deserializer = serde_json::Deserializer::from_str(text);
     let mut track = serde_path_to_error::Track::new();
     let document = crate::requests::object::deserialize(serde_path_to_error::Deserializer::new(
         &mut deserializer,
