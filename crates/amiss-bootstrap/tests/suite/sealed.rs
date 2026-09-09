@@ -8,6 +8,7 @@
 use std::fs;
 use std::path::Path;
 use std::process::ExitStatus;
+use std::sync::LazyLock;
 
 use amiss_bootstrap::supervise::{
     AcceptanceDefect, Defect, Expectations, SealedControlExpectation, SealedExpectations,
@@ -20,13 +21,18 @@ use amiss_wire::controls::{
 
 use amiss_wire::json::{Value, parse};
 use amiss_wire::model::RepositoryIdentity;
-use amiss_wire::report::model::ReportStatus;
+use amiss_wire::report::model::{ReportEnvelope, ReportStatus};
 use amiss_wire::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA};
 use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, RequestTrust};
 
 mod controls;
 mod identity;
 mod semantic;
+
+static GOLDEN: LazyLock<(ReportEnvelope, Expectations)> = LazyLock::new(|| {
+    let (wire, expectations) = golden(Deviation::default());
+    (serde_json::from_slice(&wire).unwrap(), expectations)
+});
 
 const CANDIDATE_REF: &str = "refs/heads/topic";
 const TARGET_REF: &str = "refs/heads/main";

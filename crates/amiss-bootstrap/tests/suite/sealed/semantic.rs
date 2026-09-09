@@ -8,11 +8,10 @@ use amiss_wire::{
     semantic::SemanticProducerKind,
 };
 
-use super::{Deviation, FLOOR_DIGEST, FOREIGN_DIGEST, golden};
+use super::{FLOOR_DIGEST, FOREIGN_DIGEST, GOLDEN};
 
 fn semantic_report() -> (ReportEnvelope, Expectations) {
-    let (wire, mut expectations) = golden(Deviation::default());
-    let mut report: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    let (mut report, mut expectations) = GOLDEN.clone();
     let Controls::Resolved(controls) = &mut report.payload.controls else {
         panic!("resolved controls");
     };

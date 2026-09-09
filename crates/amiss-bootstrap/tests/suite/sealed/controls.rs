@@ -1,17 +1,12 @@
 use std::sync::LazyLock;
 
-use amiss_bootstrap::supervise::{AcceptanceDefect, Expectations, accept};
+use amiss_bootstrap::supervise::{AcceptanceDefect, accept};
 use amiss_wire::digest::hb;
 use amiss_wire::report::{PAYLOAD_SCHEMA, model};
 
 use amiss_fixtures::corrupt;
 
-use super::{Deviation, golden};
-
-static GOLDEN: LazyLock<(model::ReportEnvelope, Expectations)> = LazyLock::new(|| {
-    let (wire, expectations) = golden(Deviation::default());
-    (serde_json::from_slice(&wire).unwrap(), expectations)
-});
+use super::GOLDEN;
 
 static POSITIONAL: LazyLock<Vec<Vec<u8>>> = LazyLock::new(|| {
     let (report, _) = &*GOLDEN;
