@@ -13,7 +13,7 @@ use super::delivery::StoredChange;
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger::format) struct StoredProviderRun {
     pub(in crate::file_ledger::format) run_id: String,
-    pub(in crate::file_ledger::format) attempt: u64,
+    pub(in crate::file_ledger::format) attempt: ProviderRunAttempt,
     pub(in crate::file_ledger::format) object_format: ObjectFormat,
     pub(in crate::file_ledger::format) candidate_commit: Oid,
 }
@@ -23,11 +23,10 @@ impl StoredProviderRun {
         &self,
     ) -> MaterializeResult<ProviderRunIdentity> {
         ProviderRunId::new(self.run_id.clone())
-            .zip(ProviderRunAttempt::new(self.attempt))
-            .and_then(|(run_id, attempt)| {
+            .and_then(|run_id| {
                 ProviderRunIdentity::new(
                     run_id,
-                    attempt,
+                    self.attempt,
                     self.object_format,
                     self.candidate_commit.clone(),
                 )

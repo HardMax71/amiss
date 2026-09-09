@@ -17,6 +17,7 @@ mod ledger_run;
 mod mdbook;
 mod mdbook_config;
 mod relation_binding;
+mod run_attempt;
 mod semantic_artifact;
 mod semantic_binding;
 mod semantic_retention;

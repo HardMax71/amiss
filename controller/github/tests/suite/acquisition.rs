@@ -364,7 +364,7 @@ fn provider_run(
     .unwrap();
     ProviderRunIdentity::new(
         ProviderRunId::new(format!("pr:{}", hb(RUN_DOMAIN, &fields))).unwrap(),
-        ProviderRunAttempt::new(1).unwrap(),
+        ProviderRunAttempt::try_from(1).unwrap(),
         ObjectFormat::Sha1,
         candidate.clone(),
     )

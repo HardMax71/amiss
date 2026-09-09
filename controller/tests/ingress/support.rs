@@ -94,7 +94,7 @@ pub(crate) fn split_delivery(
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("run-11".to_owned()).unwrap(),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap(),
         )

@@ -304,7 +304,7 @@ fn a_lease_and_a_publication_are_matched_field_by_field() {
         ("another provider run", |publication| {
             publication.provider_run = ProviderRunIdentity::new(
                 ProviderRunId::new("other-run".to_owned()).unwrap(),
-                ProviderRunAttempt::new(1).unwrap(),
+                ProviderRunAttempt::try_from(1).unwrap(),
                 ObjectFormat::Sha1,
                 publication.provider_run.candidate_commit.clone(),
             )

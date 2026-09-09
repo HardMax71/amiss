@@ -82,7 +82,7 @@ fn request() -> super::super::model::RunRequest {
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("pr:run".to_owned()).expect("a run id"),
-            ProviderRunAttempt::new(1).expect("an attempt"),
+            ProviderRunAttempt::try_from(1).expect("an attempt"),
             ObjectFormat::Sha1,
             oid('b'),
         )

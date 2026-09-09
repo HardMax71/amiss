@@ -215,7 +215,7 @@ fn refresh_query(
         && delivery.identity.integration == policy.integration
         && delivery.change.repository == expected_repository
         && project_id == policy.project_id
-        && delivery.provider_run.attempt.get() == 1
+        && *delivery.provider_run.attempt == 1
         && delivery.provider_run.object_format == ObjectFormat::Sha1
         && exact_gate == delivery.provider_run.candidate_commit;
     valid

@@ -44,7 +44,7 @@ impl Record {
                 change: StoredChange::new(&authenticated.change),
                 provider_run: StoredProviderRun {
                     run_id: authenticated.provider_run.run_id.as_str().to_owned(),
-                    attempt: authenticated.provider_run.attempt.get(),
+                    attempt: authenticated.provider_run.attempt,
                     object_format: authenticated.provider_run.object_format,
                     candidate_commit: authenticated.provider_run.candidate_commit.clone(),
                 },

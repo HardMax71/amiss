@@ -67,7 +67,7 @@ fn delivery(transition: &RelationTransition) -> AuthenticatedDelivery {
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("run/relation".to_owned()).unwrap(),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::try_from(1).unwrap(),
             subject.object_format,
             frozen.commits.candidate.clone(),
         )

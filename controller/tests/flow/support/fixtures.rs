@@ -56,7 +56,7 @@ pub(crate) fn delivery(
         change,
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("provider-run-11".to_owned()).unwrap(),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             oid(candidate_commit),
         )

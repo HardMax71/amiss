@@ -159,6 +159,7 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "url",
+ "validated_newtype",
  "wary",
 ]
 
@@ -4897,6 +4898,15 @@ checksum = "23b082222b4f6619906941c17eb2297fff4c2fb96cb60164170522942a200bd8"
 dependencies = [
  "outref",
  "vsimd",
+]
+
+[[package]]
+name = "validated_newtype"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "160f1ca3dc12c9e48f60b5b7a56092e372bda4ee2805f6c84ae337dd582fe12f"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

@@ -40,7 +40,7 @@ impl StoredPublication {
         Ok(Self {
             provider_run: StoredProviderRun {
                 run_id: publication.provider_run.run_id.as_str().to_owned(),
-                attempt: publication.provider_run.attempt.get(),
+                attempt: publication.provider_run.attempt,
                 object_format: publication.provider_run.object_format,
                 candidate_commit: publication.provider_run.candidate_commit.clone(),
             },

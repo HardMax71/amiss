@@ -108,7 +108,7 @@ fn run_request(policy: PolicyControls) -> RunRequest {
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("pipeline/987654321:job-42".to_owned()).unwrap(),
-            ProviderRunAttempt::new(2).unwrap(),
+            ProviderRunAttempt::try_from(2).unwrap(),
             ObjectFormat::Sha1,
             oid('3'),
         )

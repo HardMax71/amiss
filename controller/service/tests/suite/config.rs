@@ -107,7 +107,7 @@ fn relation_delivery(
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("run/1".to_owned()).unwrap(),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
         )

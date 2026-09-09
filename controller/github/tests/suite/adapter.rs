@@ -670,7 +670,7 @@ fn every_clause_binding_the_delivery_stands_alone() {
         "a non-canonical owner cannot enter an authenticated delivery"
     );
     let mut retried = delivery.clone();
-    retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    retried.provider_run.attempt = ProviderRunAttempt::try_from(2).unwrap();
     let mut wider_format = delivery.clone();
     wider_format.provider_run.object_format = ObjectFormat::Sha256;
     let mut wider_candidate = delivery;

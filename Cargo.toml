@@ -88,6 +88,7 @@ trustfall-rustdoc-adapter = { version = "=61.0.1", default-features = false }
 unicode-general-category = "1.1"
 unicode-normalization = "0.1"
 url = "2"
+validated_newtype = { version = "0.1.1", default-features = false, features = ["serde"] }
 wary = { version = "=0.3.1", default-features = false, features = ["std", "derive", "serde"] }
 zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2"] }
 

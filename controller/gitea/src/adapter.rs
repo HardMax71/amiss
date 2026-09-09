@@ -119,7 +119,7 @@ fn validate_delivery<'a>(
         || repository.host() != provider.instance.as_str()
         || repository.owner().contains('/')
         || !canonical_repository
-        || delivery.provider_run.attempt.get() != 1
+        || *delivery.provider_run.attempt != 1
         || delivery.provider_run.object_format != ObjectFormat::Sha1
         || delivery.provider_run.candidate_commit.object_format() != ObjectFormat::Sha1
         || run_digest.is_none()

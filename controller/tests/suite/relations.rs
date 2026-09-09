@@ -114,7 +114,7 @@ fn delivery(repository: &str, object_format: ObjectFormat) -> AuthenticatedDeliv
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("run/9".to_owned()).unwrap(),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::try_from(1).unwrap(),
             object_format,
             Oid::new(object_format, hex).unwrap(),
         )

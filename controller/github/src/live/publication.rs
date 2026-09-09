@@ -121,7 +121,7 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
         repository.name(),
         run.change.change,
         publication.provider_run.run_id,
-        publication.provider_run.attempt.get(),
+        *publication.provider_run.attempt,
         publication.gate_commit.as_str(),
         run.refs.candidate.as_str(),
         run.refs.target.as_str(),

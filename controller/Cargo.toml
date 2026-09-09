@@ -44,6 +44,7 @@ tempfile.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "time"] }
 url.workspace = true
+validated_newtype.workspace = true
 wary.workspace = true
 
 [dev-dependencies]

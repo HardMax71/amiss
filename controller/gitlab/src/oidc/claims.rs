@@ -78,7 +78,7 @@ pub(crate) fn authenticated_facts(
             claims.pipeline_id, claims.job_id
         ))
         .ok_or(ProviderError::Authentication)?,
-        ProviderRunAttempt::new(1).ok_or(ProviderError::Authentication)?,
+        ProviderRunAttempt::try_from(1).map_err(|_error| ProviderError::Authentication)?,
         ObjectFormat::Sha1,
         gate,
     )

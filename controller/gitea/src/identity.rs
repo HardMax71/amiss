@@ -27,7 +27,7 @@ pub(crate) fn provider_run(
     .ok()?;
     ProviderRunIdentity::new(
         ProviderRunId::new(format!("pr:{}", hb(RUN_DOMAIN, &fields)))?,
-        ProviderRunAttempt::new(1)?,
+        ProviderRunAttempt::try_from(1).ok()?,
         ObjectFormat::Sha1,
         candidate.clone(),
     )

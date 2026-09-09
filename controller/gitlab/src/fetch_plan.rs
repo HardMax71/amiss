@@ -51,7 +51,7 @@ pub fn gitlab_fetch_plan(request: &RunRequest) -> Result<GitLabFetchPlan, GitLab
         && run.object_format == ObjectFormat::Sha1
         && request.provider_run.object_format == ObjectFormat::Sha1
         && request.plan.execution.action_object_format == ObjectFormat::Sha1;
-    let binding_valid = request.provider_run.attempt.get() == 1
+    let binding_valid = *request.provider_run.attempt == 1
         && request.provider_run.candidate_commit == run.commits.candidate
         && exact_oids(run, request);
     let refs_valid = [

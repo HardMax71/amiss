@@ -59,6 +59,31 @@ fn stored_run_fields_preserve_the_existing_byte_layout() {
 }
 
 #[test]
+fn stored_provider_attempts_are_checked_before_materialization() {
+    for raw in [
+        "0",
+        "9007199254740992",
+        "18446744073709551615",
+        "-1",
+        "1.0",
+        "\"1\"",
+        "null",
+    ] {
+        let mutation = PROVIDER_RUN.replace("\"attempt\":1", &format!("\"attempt\":{raw}"));
+        assert_ne!(mutation, PROVIDER_RUN);
+        assert!(
+            serde_json::from_str::<StoredProviderRun>(&mutation).is_err(),
+            "{raw}"
+        );
+    }
+    let maximum = PROVIDER_RUN.replace("\"attempt\":1", "\"attempt\":9007199254740991");
+    let stored: StoredProviderRun = serde_json::from_str(&maximum).unwrap();
+    let restored = stored.materialize().unwrap();
+    assert_eq!(*restored.attempt, 9_007_199_254_740_991);
+    assert_eq!(serde_json::to_string(&stored).unwrap(), maximum);
+}
+
+#[test]
 fn stored_runs_preserve_sha256_ids_for_every_forge() {
     let mut provider_run: StoredProviderRun = serde_json::from_str(PROVIDER_RUN).unwrap();
     let mut run: StoredRun = serde_json::from_str(RUN).unwrap();

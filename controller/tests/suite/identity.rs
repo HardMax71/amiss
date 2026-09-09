@@ -12,7 +12,7 @@ fn provider_run_preserves_typed_ids_and_checks_the_declared_format()
         for declared in [ObjectFormat::Sha1, ObjectFormat::Sha256] {
             let run = ProviderRunIdentity::new(
                 ProviderRunId::new("run/1".to_owned()).ok_or("run id")?,
-                ProviderRunAttempt::new(1).ok_or("attempt")?,
+                ProviderRunAttempt::try_from(1)?,
                 declared,
                 candidate.clone(),
             );
@@ -48,15 +48,4 @@ fn opaque_delivery_ids_reject_ambiguous_bytes() {
     assert!(DeliveryId::new("line\nbreak".to_owned()).is_none());
     assert!(DeliveryId::new("a".repeat(256)).is_some());
     assert!(DeliveryId::new("a".repeat(257)).is_none());
-}
-
-#[test]
-fn provider_attempt_is_positive() {
-    assert!(ProviderRunAttempt::new(0).is_none());
-    assert_eq!(
-        ProviderRunAttempt::new(2).map(ProviderRunAttempt::get),
-        Some(2)
-    );
-    assert!(ProviderRunAttempt::new(9_007_199_254_740_991).is_some());
-    assert!(ProviderRunAttempt::new(9_007_199_254_740_992).is_none());
 }

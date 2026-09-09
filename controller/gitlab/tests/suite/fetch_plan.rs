@@ -123,7 +123,7 @@ fn every_binding_clause_of_the_plan_stands_alone() {
     assert!(gitlab_fetch_plan(&request).is_ok());
 
     let mut retried = request.clone();
-    retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    retried.provider_run.attempt = ProviderRunAttempt::try_from(2).unwrap();
     let mut other_candidate = request.clone();
     other_candidate.run.commits.candidate = Oid::new(ObjectFormat::Sha1, "d".repeat(40)).unwrap();
     let mut wider_tree = request;

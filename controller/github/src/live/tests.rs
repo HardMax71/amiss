@@ -601,8 +601,7 @@ fn publication_conclusions_and_create_response_are_exact() {
             format!("change: {}", run.change.change),
             format!(
                 "provider-run: {}#{}",
-                publication.provider_run.run_id,
-                publication.provider_run.attempt.get()
+                publication.provider_run.run_id, *publication.provider_run.attempt
             ),
             format!("gate-commit: {}", publication.gate_commit.as_str()),
             format!("candidate-ref: {}", run.refs.candidate.as_str()),

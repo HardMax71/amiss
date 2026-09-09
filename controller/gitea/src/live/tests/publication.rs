@@ -247,7 +247,7 @@ fn a_publication_is_validated_in_every_field() {
     let mut wrong_gate = fresh();
     wrong_gate.gate_commit = oid('9');
     let mut wrong_attempt = fresh();
-    wrong_attempt.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    wrong_attempt.provider_run.attempt = ProviderRunAttempt::try_from(2).unwrap();
     let mut wrong_change = fresh();
     wrong_change.run.change.change =
         ChangeId::new("repository/101/pull/4201/number/43".to_owned()).unwrap();

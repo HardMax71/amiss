@@ -59,7 +59,7 @@ fn request(repository_pair: &CommitPair, action: &CommitPair) -> RunRequest {
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("pipeline/987654321:job-42".to_owned()).unwrap(),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::try_from(1).unwrap(),
             ObjectFormat::Sha1,
             oid(&repository_pair.candidate),
         )

@@ -179,7 +179,7 @@ fn every_binding_clause_of_the_refresh_query_stands_alone() {
     let mut other_project = delivery.clone();
     other_project.change.change = ChangeId::new("project/102/merge-request/42".to_owned()).unwrap();
     let mut retried = delivery.clone();
-    retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    retried.provider_run.attempt = ProviderRunAttempt::try_from(2).unwrap();
     let mut wider_format = delivery.clone();
     wider_format.provider_run.object_format = ObjectFormat::Sha256;
 

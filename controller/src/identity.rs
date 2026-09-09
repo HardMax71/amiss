@@ -69,23 +69,14 @@ impl fmt::Display for OpaqueId {
     }
 }
 
-/// A provider run attempt: one-based and inside the exact-integer range
-/// every JSON consumer can carry.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ProviderRunAttempt(u64);
-
-impl ProviderRunAttempt {
-    pub const fn new(raw: u64) -> Option<Self> {
-        if raw == 0 || raw > 9_007_199_254_740_991 {
-            None
-        } else {
-            Some(Self(raw))
-        }
-    }
-
-    pub const fn get(self) -> u64 {
-        self.0
-    }
+validated_newtype::validated_newtype! {
+    /// A provider run attempt: one-based and inside the exact-integer range
+    /// every JSON consumer can carry.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize)]
+    #[serde(transparent)]
+    u64 => pub ProviderRunAttempt
+    if |attempt: &u64| (1..=9_007_199_254_740_991).contains(attempt);
+    error "provider run attempt must be a positive exact JSON integer"
 }
 
 /// A provider run pinned to the delivery-authenticated candidate commit

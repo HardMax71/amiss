@@ -185,7 +185,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         candidate_identity_digest: candidate_identity,
         provider: input.run.delivery.provider.namespace.as_str().to_owned(),
         provider_run_id: input.run.provider_run.run_id.as_str().to_owned(),
-        provider_run_attempt: input.run.provider_run.attempt.get(),
+        provider_run_attempt: *input.run.provider_run.attempt,
         evaluation_instant: input.evaluation_instant,
         valid_until: input.valid_until,
     };
@@ -210,7 +210,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
             expected_digest: statement_digest,
             provider: input.run.delivery.provider.namespace.as_str().to_owned(),
             provider_run_id: input.run.provider_run.run_id.as_str().to_owned(),
-            provider_run_attempt: input.run.provider_run.attempt.get(),
+            provider_run_attempt: *input.run.provider_run.attempt,
         },
         SuppliedControl {
             value: checked_plan.execution.clone(),

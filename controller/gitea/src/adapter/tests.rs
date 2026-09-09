@@ -119,7 +119,7 @@ fn a_delivery_answers_for_every_field_alone() {
         }),
         ("a second attempt", |delivery| {
             delivery.provider_run.attempt =
-                amiss_controller::ProviderRunAttempt::new(2).expect("an attempt");
+                amiss_controller::ProviderRunAttempt::try_from(2).expect("an attempt");
         }),
         ("another object format", |delivery| {
             delivery.provider_run.object_format = ObjectFormat::Sha256;
