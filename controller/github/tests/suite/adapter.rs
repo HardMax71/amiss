@@ -527,7 +527,7 @@ fn rejects_body_tampering_and_wrong_routes() {
     );
 
     let wrong_provider = ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
         instance: ProviderInstance::new("github.enterprise.test".to_owned()).unwrap(),
     };
     assert_eq!(
@@ -650,7 +650,7 @@ fn every_clause_binding_the_delivery_stands_alone() {
         authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
     let delivery = verified.delivery().clone();
     let elsewhere = ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
         instance: ProviderInstance::new("github.example".to_owned()).unwrap(),
     };
 
@@ -814,7 +814,7 @@ fn observed(pull_request: GitHubPullRequest<'_>) -> ApiRequest {
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
         instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
     }
 }

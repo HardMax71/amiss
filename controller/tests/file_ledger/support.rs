@@ -65,7 +65,7 @@ fn gitlab_provider() -> ProviderIdentity {
 
 fn provider_in(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new(namespace.to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
         instance: ProviderInstance::new("forge.example.test".to_owned()).unwrap(),
     }
 }

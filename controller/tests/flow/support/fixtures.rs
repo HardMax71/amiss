@@ -17,7 +17,7 @@ use super::{FakeAdapter, FakeRunner, MemoryLedger};
 
 pub(crate) fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("forgejo".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("forgejo".to_owned()).unwrap(),
         instance: ProviderInstance::new("forge.example.test".to_owned()).unwrap(),
     }
 }

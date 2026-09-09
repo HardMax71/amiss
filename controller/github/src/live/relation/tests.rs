@@ -80,7 +80,7 @@ fn request_scope_is_checked_before_provider_io() {
         |subject| subject.object_format = ObjectFormat::Sha256,
         |subject| {
             subject.scope.provider.namespace =
-                amiss_controller::ProviderNamespace::new("gitlab".to_owned()).unwrap();
+                amiss_controller::ProviderNamespace::try_from("gitlab".to_owned()).unwrap();
         },
     ];
 

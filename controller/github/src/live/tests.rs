@@ -393,7 +393,7 @@ fn a_token_answers_only_for_its_own_installation() {
 
     let app = GitHubApp::new(
         ProviderIdentity {
-            namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+            namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
             instance: ProviderInstance::new("ghes.invalid".to_owned()).unwrap(),
         },
         APP_ID,
@@ -1054,7 +1054,7 @@ fn decision_error(
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
         instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
     }
 }
@@ -1083,7 +1083,7 @@ fn refresh_rejects_a_request_wrong_in_one_field() {
 
     let elsewhere = ChangeLocator {
         provider: ProviderIdentity {
-            namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+            namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
             instance: ProviderInstance::new("github.example".to_owned()).unwrap(),
         },
         repository: fixture.change.repository.clone(),

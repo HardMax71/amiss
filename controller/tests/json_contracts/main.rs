@@ -16,6 +16,7 @@ mod ledger_digests;
 mod ledger_run;
 mod mdbook;
 mod mdbook_config;
+mod provider_namespace;
 mod relation_binding;
 mod run_attempt;
 mod semantic_artifact;

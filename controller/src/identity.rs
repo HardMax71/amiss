@@ -1,4 +1,4 @@
-use std::fmt;
+use std::sync::LazyLock;
 
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -8,38 +8,22 @@ fn bounded(raw: String, maximum: usize, valid: impl Fn(u8) -> bool) -> Option<St
         .then_some(raw)
 }
 
-/// The registry key for one provider family, in a lowercase DNS-label
-/// grammar so it can never collide by case or whitespace.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ProviderNamespace(String);
+static PROVIDER_NAMESPACE: LazyLock<Result<regex_lite::Regex, regex_lite::Error>> =
+    LazyLock::new(|| regex_lite::Regex::new(r"\A[a-z0-9][a-z0-9.-]{0,63}\z"));
 
-impl ProviderNamespace {
-    pub fn new(raw: String) -> Option<Self> {
-        let first = *raw.as_bytes().first()?;
-        if !first.is_ascii_lowercase() && !first.is_ascii_digit() {
-            return None;
-        }
-        bounded(raw, 64, |byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
-        })
-        .map(Self)
-    }
-
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-impl fmt::Display for ProviderNamespace {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
+validated_newtype::validated_newtype! {
+    /// The registry key for one provider family, in a bounded lowercase ASCII grammar.
+    #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, derive_more::Display)]
+    #[serde(transparent)]
+    String => pub ProviderNamespace
+    if |raw: &str| PROVIDER_NAMESPACE.as_ref().is_ok_and(|pattern| pattern.is_match(raw));
+    error "invalid provider namespace"
 }
 
 /// One provider-issued opaque identifier: bounded printable bytes the
 /// controller stores and compares but never interprets. Which role a value
 /// plays is said by the field that holds it, not by a wrapper type.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, derive_more::Display)]
 pub struct OpaqueId(String);
 
 pub type ProviderInstance = OpaqueId;
@@ -60,12 +44,6 @@ impl OpaqueId {
 
     pub fn as_str(&self) -> &str {
         &self.0
-    }
-}
-
-impl fmt::Display for OpaqueId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
     }
 }
 
@@ -115,7 +93,7 @@ pub struct ProviderIdentity {
 impl ProviderIdentity {
     pub fn new(namespace: String, instance: String) -> Option<Self> {
         Some(Self {
-            namespace: ProviderNamespace::new(namespace)?,
+            namespace: ProviderNamespace::try_from(namespace).ok()?,
             instance: ProviderInstance::new(instance)?,
         })
     }

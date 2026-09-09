@@ -433,7 +433,7 @@ fn provider(namespace: &str) -> ProviderIdentity {
 }
 
 fn namespace(raw: &str) -> ProviderNamespace {
-    ProviderNamespace::new(raw.to_owned()).unwrap()
+    ProviderNamespace::try_from(raw.to_owned()).unwrap()
 }
 
 fn snapshot(

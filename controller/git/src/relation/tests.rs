@@ -33,7 +33,7 @@ fn subject(role: &str, repository: &str) -> RelationSubject {
         role: artifact(role),
         scope: PlanScope {
             provider: ProviderIdentity {
-                namespace: ProviderNamespace::new("github".to_owned()).expect("namespace"),
+                namespace: ProviderNamespace::try_from("github".to_owned()).expect("namespace"),
                 instance: ProviderInstance::new("github.com".to_owned()).expect("instance"),
             },
             integration: IntegrationId::new(format!("installation/{repository}"))

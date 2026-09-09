@@ -25,7 +25,7 @@ fn branch(name: &str) -> BranchRef {
 
 fn run_identity(candidate: char) -> RunIdentity {
     let provider = ProviderIdentity {
-        namespace: crate::ProviderNamespace::new("gitea".to_owned()).expect("a namespace"),
+        namespace: crate::ProviderNamespace::try_from("gitea".to_owned()).expect("a namespace"),
         instance: crate::ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
     };
     let change = ChangeLocator {
@@ -73,7 +73,8 @@ fn request() -> super::super::model::RunRequest {
     super::super::model::RunRequest {
         delivery: DeliveryIdentity {
             provider: ProviderIdentity {
-                namespace: crate::ProviderNamespace::new("gitea".to_owned()).expect("a namespace"),
+                namespace: crate::ProviderNamespace::try_from("gitea".to_owned())
+                    .expect("a namespace"),
                 instance: crate::ProviderInstance::new("forge.example".to_owned())
                     .expect("an instance"),
             },

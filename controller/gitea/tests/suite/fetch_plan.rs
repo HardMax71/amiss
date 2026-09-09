@@ -115,7 +115,7 @@ fn tree_claims_do_not_change_the_provider_fetch_plan() {
 
 fn request(namespace: &str) -> RunRequest {
     let provider = ProviderIdentity {
-        namespace: ProviderNamespace::new(namespace.to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
         instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
     };
     let repository = repository("acme", "widget");

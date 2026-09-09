@@ -274,7 +274,7 @@ fn set_workflow_artifacts(
 
 fn request() -> RunRequest {
     let provider = ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
         instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
     };
     let repository = RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap();

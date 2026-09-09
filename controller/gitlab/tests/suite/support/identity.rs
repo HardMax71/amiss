@@ -16,7 +16,7 @@ pub fn now_seconds() -> u64 {
 
 pub fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
         instance: ProviderInstance::new(HOST.to_owned()).unwrap(),
     }
 }

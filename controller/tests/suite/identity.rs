@@ -1,6 +1,5 @@
 use amiss_controller::{
-    DeliveryId, ProviderIdentity, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
-    ProviderRunIdentity,
+    DeliveryId, ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
 };
 use amiss_wire::model::{ObjectFormat, Oid};
 
@@ -24,14 +23,6 @@ fn provider_run_preserves_typed_ids_and_checks_the_declared_format()
         }
     }
     Ok(())
-}
-
-#[test]
-fn provider_namespace_is_open_but_canonical() {
-    assert!(ProviderNamespace::new("github".to_owned()).is_some());
-    assert!(ProviderNamespace::new("forgejo-v2".to_owned()).is_some());
-    assert!(ProviderNamespace::new("GitHub".to_owned()).is_none());
-    assert!(ProviderNamespace::new("gitea/family".to_owned()).is_none());
 }
 
 #[test]

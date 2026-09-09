@@ -101,7 +101,7 @@ fn a_repository_route_names_its_owner_and_repository() {
 
     let change = ChangeLocator {
         provider: ProviderIdentity {
-            namespace: ProviderNamespace::new("gitea".to_owned()).unwrap(),
+            namespace: ProviderNamespace::try_from("gitea".to_owned()).unwrap(),
             instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
         },
         repository: RepositoryIdentity::new(

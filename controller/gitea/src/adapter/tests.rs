@@ -21,7 +21,7 @@ fn branch(name: &str) -> BranchRef {
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("gitea".to_owned()).expect("a namespace"),
+        namespace: ProviderNamespace::try_from("gitea".to_owned()).expect("a namespace"),
         instance: ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
     }
 }
@@ -93,19 +93,19 @@ fn a_delivery_answers_for_every_field_alone() {
     assert!(validate_delivery(&sound, &provider(), &reviewer()).is_ok());
 
     let elsewhere = ProviderIdentity {
-        namespace: ProviderNamespace::new("gitea".to_owned()).expect("a namespace"),
+        namespace: ProviderNamespace::try_from("gitea".to_owned()).expect("a namespace"),
         instance: ProviderInstance::new("other.example".to_owned()).expect("an instance"),
     };
     let rows: [(&str, Deviation); 7] = [
         ("another delivery provider", |delivery| {
             delivery.identity.provider = ProviderIdentity {
-                namespace: ProviderNamespace::new("forgejo".to_owned()).expect("a namespace"),
+                namespace: ProviderNamespace::try_from("forgejo".to_owned()).expect("a namespace"),
                 instance: ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
             };
         }),
         ("another change provider", |delivery| {
             delivery.change.provider = ProviderIdentity {
-                namespace: ProviderNamespace::new("forgejo".to_owned()).expect("a namespace"),
+                namespace: ProviderNamespace::try_from("forgejo".to_owned()).expect("a namespace"),
                 instance: ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
             };
         }),

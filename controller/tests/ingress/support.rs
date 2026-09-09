@@ -40,7 +40,7 @@ pub(crate) fn opaque(value: &str) -> OpaqueId {
 
 pub(crate) fn provider(instance: &str) -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("forge".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("forge".to_owned()).unwrap(),
         instance: ProviderInstance::new(instance.to_owned()).unwrap(),
     }
 }

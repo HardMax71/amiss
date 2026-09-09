@@ -45,7 +45,7 @@ fn action_execution(action: &CommitPair, action_tree: Oid) -> ExecutionConstrain
 
 fn request(repository_pair: &CommitPair, action: &CommitPair) -> RunRequest {
     let provider = ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
         instance: ProviderInstance::new("gitlab.example.internal".to_owned()).unwrap(),
     };
     let execution = action_execution(action, tree(action, &action.candidate));

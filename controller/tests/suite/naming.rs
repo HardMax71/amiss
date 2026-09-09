@@ -68,7 +68,7 @@ fn every_error_message_is_its_own_sentence() {
 #[test]
 fn identities_display_their_spellings() {
     assert_eq!(
-        ProviderNamespace::new("github".to_owned())
+        ProviderNamespace::try_from("github".to_owned())
             .unwrap()
             .to_string(),
         "github"

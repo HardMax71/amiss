@@ -50,6 +50,7 @@ axum = { version = "0.8.9", default-features = false, features = ["http1", "toki
 base64 = { version = "0.23", default-features = false, features = ["std"] }
 cap-fs-ext = "4.0.2"
 cap-std = "4.0.2"
+derive_more = { version = "2.1.1", default-features = false, features = ["display"] }
 divan = "0.1.21"
 digest-io = "0.1.0"
 flate2 = "1"
@@ -66,6 +67,7 @@ memchr = "2.8.3"
 pem = "4.0.0"
 percent-encoding = "2"
 quick-xml = "0.42"
+regex-lite = "0.1.9"
 reqwest = { version = "0.13", default-features = false, features = ["blocking", "json", "rustls"] }
 secrecy = "0.10"
 serde = { version = "1", features = ["derive", "rc"] }

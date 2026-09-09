@@ -163,7 +163,7 @@ fn wrong_job_pipeline_and_commit_topology_are_invalid_provider_data() {
 fn every_binding_clause_of_the_refresh_query_stands_alone() {
     let (source, delivery, valid) = fixture();
     let elsewhere = ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
         instance: ProviderInstance::new("other.example".to_owned()).unwrap(),
     };
 

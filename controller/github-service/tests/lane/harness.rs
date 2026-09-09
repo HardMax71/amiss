@@ -337,7 +337,7 @@ impl LaneCase {
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
         instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
     }
 }

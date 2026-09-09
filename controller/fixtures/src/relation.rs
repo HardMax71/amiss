@@ -165,7 +165,7 @@ fn subject(
         role: ArtifactId::new(role.to_owned())?,
         scope: PlanScope {
             provider: ProviderIdentity {
-                namespace: ProviderNamespace::new(provider.to_owned())?,
+                namespace: ProviderNamespace::try_from(provider.to_owned()).ok()?,
                 instance: ProviderInstance::new(instance.to_owned())?,
             },
             integration: IntegrationId::new(format!("integration/{role}"))?,

@@ -87,7 +87,7 @@ fn check<'a>(
 fn route(signed_time: SignedTimePolicy) -> DeliveryRoute {
     DeliveryRoute {
         provider: ProviderIdentity {
-            namespace: ProviderNamespace::new("test".to_owned()).unwrap(),
+            namespace: ProviderNamespace::try_from("test".to_owned()).unwrap(),
             instance: ProviderInstance::new("forge.example.test".to_owned()).unwrap(),
         },
         trust_set: trust_set(),

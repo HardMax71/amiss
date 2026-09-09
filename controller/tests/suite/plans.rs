@@ -33,7 +33,7 @@ fn plan() -> CheckPlan {
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from("gitlab".to_owned()).unwrap(),
         instance: ProviderInstance::new("gitlab.example.internal".to_owned()).unwrap(),
     }
 }

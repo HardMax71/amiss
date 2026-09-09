@@ -84,6 +84,37 @@ fn stored_provider_attempts_are_checked_before_materialization() {
 }
 
 #[test]
+fn stored_namespaces_are_checked_before_materialization() {
+    for raw in ["", ".gitea", "gitea/forge", "Gitea", "gitea\n", "gitea💡"] {
+        let encoded = serde_json::to_string(raw).unwrap();
+        let mutation = RUN.replace(
+            "\"namespace\":\"gitea\"",
+            &format!("\"namespace\":{encoded}"),
+        );
+        assert_ne!(mutation, RUN);
+        assert!(
+            serde_json::from_str::<StoredRun>(&mutation).is_err(),
+            "{raw:?}"
+        );
+    }
+    for (length, accepted) in [(64, true), (65, false)] {
+        let spelling = "a".repeat(length);
+        let mutation = RUN.replace(
+            "\"namespace\":\"gitea\"",
+            &format!("\"namespace\":\"{spelling}\""),
+        );
+        let stored = serde_json::from_str::<StoredRun>(&mutation);
+        assert_eq!(stored.is_ok(), accepted);
+        if accepted {
+            let stored = stored.unwrap();
+            let change = stored.change.materialize().unwrap();
+            assert_eq!(change.provider.namespace.as_str(), spelling);
+            assert_eq!(serde_json::to_string(&stored).unwrap(), mutation);
+        }
+    }
+}
+
+#[test]
 fn stored_runs_preserve_sha256_ids_for_every_forge() {
     let mut provider_run: StoredProviderRun = serde_json::from_str(PROVIDER_RUN).unwrap();
     let mut run: StoredRun = serde_json::from_str(RUN).unwrap();

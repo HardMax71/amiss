@@ -77,21 +77,21 @@ impl StoredDeliveryIdentity {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StoredProvider {
-    namespace: String,
+    namespace: ProviderNamespace,
     instance: String,
 }
 
 impl StoredProvider {
     fn new(provider: &ProviderIdentity) -> Self {
         Self {
-            namespace: provider.namespace.as_str().to_owned(),
+            namespace: provider.namespace.clone(),
             instance: provider.instance.as_str().to_owned(),
         }
     }
 
     fn materialize(&self) -> MaterializeResult<ProviderIdentity> {
         Ok(ProviderIdentity {
-            namespace: checked(ProviderNamespace::new(self.namespace.clone()))?,
+            namespace: self.namespace.clone(),
             instance: checked(ProviderInstance::new(self.instance.clone()))?,
         })
     }

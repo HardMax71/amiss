@@ -121,7 +121,7 @@ fn changing_a_typed_control_and_its_digest_cannot_preserve_a_frozen_plan() {
 fn every_workflow_identity_member_changes_the_frozen_binding() {
     let changes: [fn(&mut WorkflowArtifactExpectation); 15] = [
         |artifact| {
-            artifact.provider.namespace = ProviderNamespace::new("other".to_owned()).unwrap();
+            artifact.provider.namespace = ProviderNamespace::try_from("other".to_owned()).unwrap();
         },
         |artifact| {
             artifact.provider.instance =
