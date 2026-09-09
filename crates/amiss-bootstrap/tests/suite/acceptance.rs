@@ -1,5 +1,4 @@
 #![expect(
-    clippy::expect_used,
     clippy::panic,
     clippy::unwrap_used,
     reason = "integration harness over asserted fixture shapes"
@@ -15,14 +14,16 @@ use amiss_bootstrap::supervise::{
     Supervised, accept, settle, supervise,
 };
 use amiss_wire::controls::{
-    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
-    parse_trusted_time,
+    Profile, TRUSTED_TIME_STATEMENT_SCHEMA, TrustedTimeController, TrustedTimeSchema,
+    TrustedTimeStatement, canonical_execution_constraint, canonical_trusted_time,
+    parse_execution_constraint,
 };
-
-use amiss_wire::json::{Value, parse};
+use amiss_wire::digest::{hb, hj_serde};
 use amiss_wire::model::RepositoryIdentity;
-use amiss_wire::report::PAYLOAD_SCHEMA;
-use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
+use amiss_wire::report::{PAYLOAD_SCHEMA, model};
+use amiss_wire::requests::{
+    CANDIDATE_IDENTITY_DOMAIN, CandidateIdentitySchema, CandidateSnapshot, RequestTrust,
+};
 
 mod ingress;
 mod reader;
@@ -194,42 +195,26 @@ fn exited(code: i32) -> ExitStatus {
 /// identities that payload carries.
 fn accepted_report() -> (Vec<u8>, Expectations) {
     let wire = dossier_example("scanner-report.canonical.json");
-    let envelope = parse(&wire).unwrap();
-    let payload = member(&envelope, "payload").unwrap();
-
-    let engine_digest = text(member(payload, "engine").unwrap(), "engine_digest").unwrap();
-    let evaluation = member(payload, "evaluation").unwrap();
-    let base_commit = text(member(evaluation, "base").unwrap(), "commit_oid").unwrap();
-    let candidate_commit = text(member(evaluation, "candidate").unwrap(), "commit_oid");
-
+    let report: model::ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    let model::Evaluation::Resolved(evaluation) = &report.payload.evaluation else {
+        panic!("the committed report has a resolved evaluation");
+    };
+    let (
+        model::BaseSnapshot::Git(base),
+        model::Snapshot::Available(CandidateSnapshot::Git(candidate)),
+    ) = (&evaluation.base, &evaluation.candidate)
+    else {
+        panic!("the committed report describes a commit pair");
+    };
     (
         wire,
         Expectations {
-            engine_digest: engine_digest.parse().unwrap(),
-            base_commit: base_commit.parse().unwrap(),
-            candidate_commit: candidate_commit.map(|commit| commit.parse().unwrap()),
+            engine_digest: report.payload.engine.engine_digest,
+            base_commit: base.commit_oid.clone(),
+            candidate_commit: Some(candidate.commit_oid.clone()),
             sealed: None,
         },
     )
-}
-
-fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
-    match value {
-        Value::Object(members) => members
-            .iter()
-            .find(|(name, _)| name == key)
-            .map(|(_, member)| member),
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Array(_) => {
-            None
-        }
-    }
-}
-
-fn text(value: &Value, key: &str) -> Option<String> {
-    match member(value, key) {
-        Some(Value::String(text)) => Some(text.to_string()),
-        _ => None,
-    }
 }
 
 #[test]
@@ -246,8 +231,7 @@ fn the_indented_contract_example_is_rejected_as_noncanonical() {
 fn the_contract_golden_is_the_canonicalization_of_its_indented_value() {
     let indented = dossier_example("scanner-report.json");
     let golden = dossier_example("scanner-report.canonical.json");
-    let parsed = parse(&indented).unwrap();
-    let mut recanonicalized = serde_json_canonicalizer::to_vec(&parsed).unwrap();
+    let mut recanonicalized = amiss_fixtures::canonical_json(&indented).unwrap();
     recanonicalized.push(b'\n');
     assert_eq!(
         recanonicalized, golden,
@@ -297,76 +281,85 @@ fn schema_labels_are_part_of_the_acceptance_law() {
 
 #[test]
 fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
-    let (wire, expectations) = sealed_report();
+    let (report, expectations) = sealed_report();
+    let mut wire = serde_json_canonicalizer::to_vec(&report).unwrap();
+    wire.push(b'\n');
     assert_eq!(accept(&wire, &expectations), Ok(0));
 
-    let wrong_ref = rewrite(&wire, |payload| {
-        let evaluation = member_mut(payload, "evaluation");
-        set_member(
-            evaluation,
-            "target_ref",
-            Value::string("refs/heads/other".to_owned()),
-        );
+    let wrong_ref = rewrite(report.clone(), |payload| {
+        let model::Evaluation::Resolved(evaluation) = &mut payload.evaluation else {
+            panic!("the sealed report has a resolved evaluation");
+        };
+        evaluation.target_ref = Some("refs/heads/other".parse().unwrap());
     });
     assert_eq!(
         accept(&wrong_ref, &expectations),
         Err(AcceptanceDefect::SealedIdentity)
     );
 
-    let wrong_provider = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        let trusted = member_mut(controls, "trusted_time_source");
-        let statement = member_mut(trusted, "statement");
-        set_member(statement, "provider", Value::string("github".to_owned()));
-    });
-    assert_eq!(
-        accept(&wrong_provider, &expectations),
-        Err(AcceptanceDefect::SealedControls)
-    );
+    let model::Controls::Resolved(controls) = &report.payload.controls else {
+        panic!("the sealed report has resolved controls");
+    };
+    let [
+        mut wrong_provider,
+        mut wrong_profile,
+        mut dropped_floor,
+        mut changed_descriptor,
+    ] = std::array::from_fn(|_| controls.clone());
 
-    let wrong_profile = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        set_member(controls, "profile", Value::string("enforce".to_owned()));
-    });
-    assert_eq!(
-        accept(&wrong_profile, &expectations),
-        Err(AcceptanceDefect::SealedControls)
-    );
+    let model::TrustedTimeProvenance::Verified(trusted) = &mut wrong_provider.trusted_time_source
+    else {
+        panic!("the sealed report has verified trusted time");
+    };
+    trusted.statement.provider = "github".to_owned();
+    wrong_profile.profile = Profile::Enforce;
+    dropped_floor.organization_floor.status = model::ControlStatus::None;
+    let model::ExecutionConstraintProvenance::Verified(constraint) =
+        &mut changed_descriptor.execution_constraint
+    else {
+        panic!("the sealed report has a verified execution constraint");
+    };
+    constraint.descriptor.required_status_name = "amiss / changed".to_owned();
 
-    let dropped_floor = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        let floor = member_mut(controls, "organization_floor");
-        set_member(floor, "status", Value::string("none".to_owned()));
-    });
-    assert_eq!(
-        accept(&dropped_floor, &expectations),
-        Err(AcceptanceDefect::SealedControls)
-    );
-
-    let changed_descriptor = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        let constraint = member_mut(controls, "execution_constraint");
-        let descriptor = member_mut(constraint, "descriptor");
-        set_member(
-            descriptor,
-            "required_status_name",
-            Value::string("amiss / changed".to_owned()),
+    for controls in [
+        wrong_provider,
+        wrong_profile,
+        dropped_floor,
+        changed_descriptor,
+    ] {
+        let changed = rewrite(report.clone(), |payload| {
+            payload.controls = model::Controls::Resolved(controls);
+        });
+        assert_eq!(
+            accept(&changed, &expectations),
+            Err(AcceptanceDefect::SealedControls)
         );
-    });
-    assert_eq!(
-        accept(&changed_descriptor, &expectations),
-        Err(AcceptanceDefect::SealedControls)
-    );
+    }
+}
 
-    let unavailable_hybrid = rewrite(&wire, |payload| {
-        insert_member(
-            member_mut(payload, "evaluation"),
-            "status",
-            Value::string("unavailable".to_owned()),
-        );
-    });
+#[test]
+fn sealed_acceptance_rejects_an_unavailable_hybrid() {
+    let (report, expectations) = sealed_report();
+    let payload = serde_json_canonicalizer::to_string(&report.payload).unwrap();
+    let evaluation = serde_json_canonicalizer::to_string(&report.payload.evaluation).unwrap();
+    assert_eq!(payload.matches(&evaluation).count(), 1);
+    let hybrid = evaluation.replacen('{', r#"{"status":"unavailable","#, 1);
+    assert_ne!(hybrid, evaluation);
+    let changed = payload.replacen(&evaluation, &hybrid, 1);
+    let changed =
+        String::from_utf8(amiss_fixtures::canonical_json(changed.as_bytes()).unwrap()).unwrap();
+    let mut wire = serde_json_canonicalizer::to_string(&report).unwrap();
+    wire.push('\n');
+    let digest = report.payload_digest.to_string();
+    assert_eq!(wire.matches(&payload).count(), 1);
+    assert_eq!(wire.matches(&digest).count(), 1);
+    let malformed = wire.replacen(&payload, &changed, 1).replacen(
+        &digest,
+        &hb(PAYLOAD_SCHEMA, changed.as_bytes()).to_string(),
+        1,
+    );
     assert_eq!(
-        accept(&unavailable_hybrid, &expectations),
+        accept(malformed.as_bytes(), &expectations),
         Err(AcceptanceDefect::Shape)
     );
 }
@@ -375,32 +368,27 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
 /// repository, so only the direct repository binding can refuse it.
 #[test]
 fn a_statement_issued_for_another_repository_is_refused() {
-    let (wire, mut expectations) = sealed_report();
-    let foreign = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        let trusted = member_mut(controls, "trusted_time_source");
-        {
-            let statement = member_mut(trusted, "statement");
-            let repository = member_mut(statement, "repository");
-            set_member(repository, "name", Value::string("other".to_owned()));
-        }
-        let digest = amiss_wire::digest::hb(
-            "amiss/scanner-trusted-time-statement",
-            &serde_json_canonicalizer::to_vec(member(trusted, "statement").unwrap()).unwrap(),
+    let (report, mut expectations) = sealed_report();
+    let foreign = rewrite(report, |payload| {
+        let model::Controls::Resolved(controls) = &mut payload.controls else {
+            panic!("the sealed report has resolved controls");
+        };
+        let model::TrustedTimeProvenance::Verified(trusted) = &mut controls.trusted_time_source
+        else {
+            panic!("the sealed report has verified trusted time");
+        };
+        trusted.statement.repository = RepositoryIdentity::new(
+            trusted.statement.repository.host().to_owned(),
+            trusted.statement.repository.owner().to_owned(),
+            "other".to_owned(),
         )
-        .to_string();
-        set_member(trusted, "statement_digest", Value::string(digest));
-    });
-    let rewritten = parse(&foreign).unwrap();
-    let trusted = member(member(&rewritten, "payload").unwrap(), "controls")
-        .and_then(|controls| member(controls, "trusted_time_source"))
         .unwrap();
-    let Value::String(digest) = member(trusted, "statement_digest").unwrap().clone() else {
-        panic!("statement digest is text")
-    };
-    if let Some(sealed) = expectations.sealed.as_mut() {
-        sealed.trusted_time_digest = digest.parse().unwrap();
-    }
+        trusted.statement_digest = hj_serde(TRUSTED_TIME_STATEMENT_SCHEMA, |mut writer| {
+            serde_json_canonicalizer::to_writer(&trusted.statement, &mut writer)
+        })
+        .unwrap();
+        expectations.sealed.as_mut().unwrap().trusted_time_digest = trusted.statement_digest;
+    });
     assert_eq!(
         accept(&foreign, &expectations),
         Err(AcceptanceDefect::SealedControls)
@@ -410,33 +398,104 @@ fn a_statement_issued_for_another_repository_is_refused() {
 const FLOOR_DIGEST: &str =
     "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
 
-fn sealed_report() -> (Vec<u8>, Expectations) {
-    let (wire, mut expectations) = accepted_report();
-    let descriptor = parse(&dossier_example("scanner-execution-constraint.json")).unwrap();
-    let constraint =
-        parse_execution_constraint(&serde_json_canonicalizer::to_vec(&descriptor).unwrap())
-            .unwrap();
-    let constraint_digest = canonical_execution_constraint(&constraint)
-        .unwrap()
-        .1
-        .to_string();
-    let mut envelope = parse(&wire).unwrap();
-    let payload = member_mut(&mut envelope, "payload");
-    let evaluation = member_mut(payload, "evaluation");
-    let candidate_identity_digest = seal_evaluation(evaluation);
-    let (statement, time_digest) = sealed_statement(evaluation, &candidate_identity_digest);
-    seal_controls(
-        member_mut(payload, "controls"),
-        descriptor,
-        &constraint_digest,
-        statement,
-        &time_digest,
-    );
-    refresh_digest(&mut envelope);
-    let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
+#[test]
+fn sealed_fixture_keeps_its_original_identities() {
+    let (report, expectations) = sealed_report();
+    let mut wire = serde_json_canonicalizer::to_vec(&report).unwrap();
     wire.push(b'\n');
+    assert_eq!(accept(&wire, &expectations), Ok(0));
+    assert_eq!(
+        serde_json::from_slice::<model::ReportEnvelope>(&wire).unwrap(),
+        report
+    );
+    assert_eq!(
+        amiss_fixtures::canonical_json(&wire).unwrap(),
+        serde_json_canonicalizer::to_vec(&report).unwrap()
+    );
+    let sealed = expectations.sealed.unwrap();
+    assert_eq!(
+        [
+            hb("amiss/test-bootstrap-sealed-report", &wire),
+            report.payload_digest,
+            sealed.candidate_identity_digest,
+            sealed.execution_constraint.digest,
+            sealed.trusted_time_digest,
+        ]
+        .map(|digest| digest.to_string()),
+        [
+            "sha256:9993a32b5aaadfaaf3c23638be6ad18c637cb74cf6e98656bb98c6d97455884d",
+            "sha256:4401872e85015bedb26063129b7eacc05a49cce96cd216ef5a27dd1a7e47ec8c",
+            "sha256:4c1c92f6b5ea7354763f2b45837dcca1905901bb54130a8893aabc30b5f3ac6e",
+            "sha256:4b889138e21a65bad37ba80f833dae0764e5f0be8dc10a8b9f77b3bcc7a8c417",
+            "sha256:85d982f94712e35f98bcd64adb9b4269007fd77381812bb94c7abbed814904de",
+        ]
+    );
+}
+
+fn sealed_report() -> (model::ReportEnvelope, Expectations) {
+    let (wire, mut expectations) = accepted_report();
+    let constraint =
+        parse_execution_constraint(&dossier_example("scanner-execution-constraint.json")).unwrap();
+    let constraint_digest = canonical_execution_constraint(&constraint).unwrap().1;
+    let mut report: model::ReportEnvelope = serde_json::from_slice(&wire).unwrap();
+    let model::Evaluation::Resolved(evaluation) = &mut report.payload.evaluation else {
+        panic!("the committed report has a resolved evaluation");
+    };
+    evaluation.candidate_ref = Some("refs/heads/feature/docs".parse().unwrap());
+    evaluation.target_ref = Some("refs/heads/main".parse().unwrap());
+    evaluation.trusted_time = true;
+    evaluation.evaluation_instant = Some("2026-07-12T10:00:00Z".to_owned().try_into().unwrap());
+    let preimage = model::IdentityPreimage {
+        evaluation,
+        schema: CandidateIdentitySchema::Current,
+    };
+    let candidate_identity_digest = hj_serde(CANDIDATE_IDENTITY_DOMAIN, |mut writer| {
+        serde_json_canonicalizer::to_writer(&preimage, &mut writer)
+    })
+    .unwrap();
+    let statement = TrustedTimeStatement {
+        schema: TrustedTimeSchema::Current,
+        controller: TrustedTimeController::ExternalRequiredCheckClock,
+        provider: "gitlab".to_owned(),
+        repository: evaluation.repository.clone().unwrap(),
+        ref_name: "refs/heads/main".parse().unwrap(),
+        candidate_identity_digest,
+        provider_run_id: "pipeline/42".to_owned(),
+        provider_run_attempt: 2,
+        evaluation_instant: evaluation.evaluation_instant.clone().unwrap(),
+        valid_until: "2026-07-12T10:09:00Z".to_owned().try_into().unwrap(),
+    };
+    let time_digest = canonical_trusted_time(&statement).unwrap().1;
+    let model::Controls::Resolved(controls) = &mut report.payload.controls else {
+        panic!("the committed report has resolved controls");
+    };
+    controls.semantic_evidence = Some(Vec::new());
+    controls.organization_floor = model::ControlProvenance {
+        status: model::ControlStatus::Verified,
+        digest: Some(FLOOR_DIGEST.parse().unwrap()),
+        trust_source: model::ControlTrustSource::OrganizationPolicy,
+    };
+    controls.execution_constraint = model::ExecutionConstraintProvenance::Verified(Box::new(
+        model::VerifiedExecutionConstraint {
+            status: model::VerifiedControlStatus::Verified,
+            descriptor_digest: constraint_digest,
+            descriptor: constraint,
+            trust_source: RequestTrust::ExternalRequiredCheck,
+        },
+    ));
+    controls.trusted_time_source =
+        model::TrustedTimeProvenance::Verified(Box::new(model::VerifiedTrustedTime {
+            status: model::VerifiedControlStatus::Verified,
+            trust_source: model::TrustedTimeTrustSource::ExternalRequiredCheck,
+            statement_digest: time_digest,
+            statement,
+        }));
+    report.payload_digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&report.payload, &mut writer)
+    })
+    .unwrap();
     expectations.sealed = Some(SealedExpectations {
-        profile: amiss_wire::controls::Profile::Observe,
+        profile: Profile::Observe,
         candidate_ref: "refs/heads/feature/docs".to_owned(),
         target_ref: "refs/heads/main".to_owned(),
         repository: RepositoryIdentity::new(
@@ -448,193 +507,33 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
         provider: "gitlab".to_owned(),
         provider_run_id: "pipeline/42".to_owned(),
         provider_run_attempt: 2,
-        candidate_identity_digest: candidate_identity_digest.parse().unwrap(),
+        candidate_identity_digest,
         organization_floor: Some(SealedControlExpectation {
             digest: FLOOR_DIGEST.parse().unwrap(),
-            trust_source: amiss_wire::requests::RequestTrust::OrganizationPolicy,
+            trust_source: RequestTrust::OrganizationPolicy,
         }),
         debt_snapshot: None,
         waiver_bundle: None,
         execution_constraint: SealedControlExpectation {
-            digest: constraint_digest.parse().unwrap(),
-            trust_source: amiss_wire::requests::RequestTrust::ExternalRequiredCheck,
+            digest: constraint_digest,
+            trust_source: RequestTrust::ExternalRequiredCheck,
         },
-        trusted_time_digest: time_digest.parse().unwrap(),
+        trusted_time_digest: time_digest,
         semantic_evidence: Vec::new(),
     });
-    (wire, expectations)
+    (report, expectations)
 }
 
-fn seal_evaluation(evaluation: &mut Value) -> String {
-    set_member(
-        evaluation,
-        "candidate_ref",
-        Value::string("refs/heads/feature/docs".to_owned()),
-    );
-    set_member(
-        evaluation,
-        "target_ref",
-        Value::string("refs/heads/main".to_owned()),
-    );
-    set_member(evaluation, "trusted_time", Value::Bool(true));
-    set_member(
-        evaluation,
-        "evaluation_instant",
-        Value::string("2026-07-12T10:00:00Z".to_owned()),
-    );
-    let Value::Object(members) = evaluation.clone() else {
-        panic!("evaluation is an object");
-    };
-    let mut identity: Vec<(String, Value)> = members
-        .into_iter()
-        .filter(|(name, _value)| name != "evaluation_instant" && name != "trusted_time")
-        .collect();
-    identity.push((
-        "schema".to_owned(),
-        Value::string(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
-    ));
-    amiss_wire::digest::hb(
-        CANDIDATE_IDENTITY_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&Value::object(identity)).unwrap(),
-    )
-    .to_string()
-}
-
-fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String) {
-    let statement = object(vec![
-        (
-            "schema",
-            Value::string("amiss/scanner-trusted-time-statement".to_owned()),
-        ),
-        (
-            "controller",
-            Value::string("external-required-check-clock".to_owned()),
-        ),
-        ("provider", Value::string("gitlab".to_owned())),
-        (
-            "repository",
-            member(evaluation, "repository").unwrap().clone(),
-        ),
-        ("ref", Value::string("refs/heads/main".to_owned())),
-        (
-            "candidate_identity_digest",
-            Value::string(identity_digest.to_owned()),
-        ),
-        ("provider_run_id", Value::string("pipeline/42".to_owned())),
-        ("provider_run_attempt", Value::Integer(2)),
-        (
-            "evaluation_instant",
-            Value::string("2026-07-12T10:00:00Z".to_owned()),
-        ),
-        (
-            "valid_until",
-            Value::string("2026-07-12T10:09:00Z".to_owned()),
-        ),
-    ]);
-    let parsed =
-        parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap()).unwrap();
-    let digest = canonical_trusted_time(&parsed).unwrap().1.to_string();
-    (statement, digest)
-}
-
-fn seal_controls(
-    controls: &mut Value,
-    descriptor: Value,
-    constraint_digest: &str,
-    statement: Value,
-    time_digest: &str,
-) {
-    set_member(controls, "semantic_evidence", Value::array(Vec::new()));
-    set_member(
-        controls,
-        "organization_floor",
-        object(vec![
-            ("status", Value::string("verified".to_owned())),
-            ("digest", Value::string(FLOOR_DIGEST.to_owned())),
-            (
-                "trust_source",
-                Value::string("organization-policy".to_owned()),
-            ),
-        ]),
-    );
-    set_member(
-        controls,
-        "execution_constraint",
-        object(vec![
-            ("status", Value::string("verified".to_owned())),
-            (
-                "descriptor_digest",
-                Value::string(constraint_digest.to_owned()),
-            ),
-            ("descriptor", descriptor),
-            (
-                "trust_source",
-                Value::string("external-required-check".to_owned()),
-            ),
-        ]),
-    );
-    set_member(
-        controls,
-        "trusted_time_source",
-        object(vec![
-            ("status", Value::string("verified".to_owned())),
-            (
-                "trust_source",
-                Value::string("external-required-check".to_owned()),
-            ),
-            ("statement_digest", Value::string(time_digest.to_owned())),
-            ("statement", statement),
-        ]),
-    );
-}
-
-fn rewrite(wire: &[u8], edit: impl FnOnce(&mut Value)) -> Vec<u8> {
-    let mut envelope = parse(wire).unwrap();
-    edit(member_mut(&mut envelope, "payload"));
-    refresh_digest(&mut envelope);
-    let mut rewritten = serde_json_canonicalizer::to_vec(&envelope).unwrap();
-    rewritten.push(b'\n');
-    rewritten
-}
-
-fn refresh_digest(envelope: &mut Value) {
-    let digest = amiss_wire::digest::hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(member(envelope, "payload").unwrap()).unwrap(),
-    )
-    .to_string();
-    set_member(envelope, "payload_digest", Value::string(digest));
-}
-
-fn member_mut<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
-    let Value::Object(members) = value else {
-        panic!("value is an object");
-    };
-    &mut members
-        .iter_mut()
-        .find(|(name, _value)| name == key)
-        .expect("member exists")
-        .1
-}
-
-fn set_member(value: &mut Value, key: &str, replacement: Value) {
-    *member_mut(value, key) = replacement;
-}
-
-fn insert_member(value: &mut Value, key: &str, member: Value) {
-    let Value::Object(members) = value else {
-        panic!("value is an object");
-    };
-    assert!(members.iter().all(|(name, _value)| name != key));
-    let mut expanded = std::mem::take(members).into_vec();
-    expanded.push((key.to_owned(), member));
-    *members = expanded.into_boxed_slice();
-}
-
-fn object(rows: Vec<(&str, Value)>) -> Value {
-    Value::object(
-        rows.into_iter()
-            .map(|(name, value)| (name.to_owned(), value))
-            .collect(),
-    )
+fn rewrite(
+    mut report: model::ReportEnvelope,
+    edit: impl FnOnce(&mut model::ReportPayload),
+) -> Vec<u8> {
+    edit(&mut report.payload);
+    report.payload_digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+        serde_json_canonicalizer::to_writer(&report.payload, &mut writer)
+    })
+    .unwrap();
+    let mut wire = serde_json_canonicalizer::to_vec(&report).unwrap();
+    wire.push(b'\n');
+    wire
 }
