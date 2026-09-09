@@ -2,6 +2,7 @@ use amiss_wire::model::Oid;
 use serde::{Deserialize, Serialize};
 
 pub(super) use crate::commit::GitCommitRecord;
+pub(super) use crate::owner::OwnerRecord;
 pub(super) use crate::reference::RefRecord;
 
 use super::rules::BranchRule;
@@ -13,11 +14,6 @@ pub(super) struct RepositoryRecord {
     pub full_name: String,
     pub owner: OwnerRecord,
     pub default_branch: String,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct OwnerRecord {
-    pub login: String,
 }
 
 #[derive(Clone, Deserialize)]

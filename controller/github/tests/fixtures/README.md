@@ -19,3 +19,10 @@ was captured read-only on 2026-09-10 with the same API version. It retains the c
 metadata and linked run for a coverage artifact; no archive was downloaded. Tests also
 cover the missing and nullable fields declared by the
 [artifact API](https://docs.github.com/en/rest/actions/artifacts#list-workflow-run-artifacts).
+
+The owner fixtures were extracted with `gh api --jq .owner` from the public
+[Amiss repository](https://api.github.com/repos/HardMax71/amiss) and
+[GitHub API-description repository](https://api.github.com/repos/github/rest-api-description)
+on 2026-09-10 with the same API version. They cover user and organization owners,
+including URI templates and optional visibility metadata. They are nested-object
+captures, not complete repository-response fixtures.

@@ -311,6 +311,7 @@ dependencies = [
  "amiss-wire",
  "hex",
  "hmac",
+ "js_int",
  "json-serde",
  "jsonwebtoken",
  "percent-encoding",

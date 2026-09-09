@@ -923,12 +923,18 @@ impl GitHubRest for FakeRest {
 }
 
 fn refresh_data(candidate: &Oid) -> RefreshData {
+    let owner: OwnerRecord = amiss_wire::read_json(
+        include_bytes!("../../tests/fixtures/owner-user.json"),
+        u64::MAX,
+    )
+    .unwrap();
     let base_repository = PullRepositoryRecord {
         id: 101,
         name: "widget".to_owned(),
         full_name: "Acme/Widget".to_owned(),
         owner: OwnerRecord {
             login: "Acme".to_owned(),
+            ..owner.clone()
         },
     };
     RefreshData {
@@ -936,9 +942,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             id: 101,
             name: "Widget".to_owned(),
             full_name: "Acme/Widget".to_owned(),
-            owner: OwnerRecord {
-                login: "Acme".to_owned(),
-            },
+            owner: base_repository.owner.clone(),
             default_branch: "main".to_owned(),
         },
         pull_request: PullRequestRecord {
@@ -956,6 +960,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
                     full_name: "Contributor/widget-fork".to_owned(),
                     owner: OwnerRecord {
                         login: "Contributor".to_owned(),
+                        ..owner
                     },
                 }),
             },

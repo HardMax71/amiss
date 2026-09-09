@@ -4,6 +4,7 @@ mod acquisition;
 pub mod artifact;
 pub mod commit;
 mod live;
+pub mod owner;
 pub mod reference;
 mod workflow_artifact;
 
