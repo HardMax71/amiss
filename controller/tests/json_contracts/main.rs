@@ -12,6 +12,7 @@ use amiss_wire::digest::{hb, sha256};
 mod bounded_input;
 mod external_evidence;
 mod failure_tags;
+mod ledger_digests;
 mod ledger_run;
 mod mdbook;
 mod mdbook_config;

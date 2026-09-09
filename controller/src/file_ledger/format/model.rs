@@ -1,4 +1,3 @@
-mod check;
 mod conclusion;
 mod delivery;
 mod replay;
@@ -6,7 +5,6 @@ mod run;
 
 use crate::file_ledger::FileLedgerError;
 
-pub(super) use check::{StoredCheck, materialize as materialize_check, store as store_check};
 pub(super) use conclusion::StoredConclusion;
 pub(super) use delivery::{
     StoredChange, StoredDelivery, StoredDeliveryIdentity, StoredDeliveryKey,

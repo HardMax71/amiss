@@ -4,8 +4,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use amiss_controller::{
-    ArtifactReference, ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError,
-    LeaseCompletion, StageOutcome,
+    ArtifactReference, ControllerClock, DeliveryClaim, DeliveryLedger, ExternalTally, FileLedger,
+    FileLedgerError, LeaseCompletion, StageOutcome,
 };
 use amiss_wire::digest::{hb, sha256};
 use tempfile::TempDir;
@@ -155,6 +155,59 @@ fn staged_v3_without_a_gate_commit_is_reexecuted_before_publication() {
         reopened.stage(&delivery, &recovered, &replacement).unwrap(),
         StageOutcome::Staged(staged) if staged.publication.as_ref() == &replacement
     ));
+}
+
+#[test]
+fn typed_artifact_storage_preserves_metadata_constraints() {
+    type Defect = fn(&mut ArtifactReference);
+    let cases: [(&str, Defect); 5] = [
+        ("invalid identifier", |reference| reference.id.push('g')),
+        ("wrong report route", |reference| {
+            reference.locator.push_str("/other");
+        }),
+        ("negative expiry", |reference| {
+            reference.expires_at_unix_millis = -1;
+        }),
+        ("assessment without tally", |reference| {
+            reference.assessment_digest = Some(sha256(b"assessment"));
+        }),
+        ("incomplete with tally", |reference| {
+            reference.assessment_digest = Some(sha256(b"assessment"));
+            reference.external_tally = Some(ExternalTally {
+                refuted: 0,
+                unproven: 0,
+                reachable: 0,
+            });
+            reference.external_incomplete = true;
+        }),
+    ];
+    let clock = TestClock::at(1_000);
+    let delivery = delivery("42");
+    for (reason, deviate) in cases {
+        let directory = TempDir::new().unwrap();
+        let mut ledger = open(directory.path(), &clock);
+        let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
+        let mut publication = publication(&delivery, &lease);
+        let mut artifact = ArtifactReference {
+            id: "a".repeat(64),
+            locator: format!("https://amiss.example/artifacts/{}/report", "a".repeat(64)),
+            expires_at_unix_millis: 2_000,
+            report_digest: sha256(&publication.report.as_ref().unwrap().bytes),
+            assessment_digest: None,
+            external_tally: None,
+            external_incomplete: false,
+            semantic_digest: None,
+        };
+        deviate(&mut artifact);
+        publication.artifact = Some(artifact);
+        assert!(
+            matches!(
+                ledger.stage(&delivery, &lease, &publication),
+                Err(FileLedgerError::Corrupt)
+            ),
+            "{reason}"
+        );
+    }
 }
 
 #[test]
@@ -595,7 +648,11 @@ fn one_impossible_field_fails_the_record_closed() {
             replace_field(text, "fence", &generation.saturating_add(1).to_string())
         }),
         ("a done digest off the wire", Reached::Done, |text| {
-            replace_string(text, "sha256:", "sha256!")
+            replace_string(
+                text,
+                r#""staged_digest":"sha256:"#,
+                r#""staged_digest":"sha256!"#,
+            )
         }),
         (
             "a gate commit off the object format",

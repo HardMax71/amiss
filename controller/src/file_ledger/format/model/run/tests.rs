@@ -21,6 +21,35 @@ const RUN: &str = concat!(
 );
 
 #[test]
+fn stored_ledger_identity_preimages_are_stable() {
+    use crate::file_ledger::format::{StoredPublication, delivery_key, staged_digest};
+    use crate::{ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId};
+
+    let evaluation = ControllerEvaluationId::new("eval/ledger".to_owned()).unwrap();
+    let raw = format!(
+        r#"{{"provider_run":{PROVIDER_RUN},"evaluation_id":"eval/ledger","check":{{"plan_digest":"sha256:{plan}","required_status_name":"amiss/enforce","execution_constraint_digest":"sha256:{constraint}"}},"run":{RUN},"gate_commit":"{gate}","conclusion":{{"conclusion":"pass"}},"report":{{"report":"absent"}}}}"#,
+        plan = "a".repeat(64),
+        constraint = "b".repeat(64),
+        gate = "b".repeat(40),
+    );
+    let stored: StoredPublication = serde_json::from_str(&raw).unwrap();
+    let publication = stored.materialize(None).unwrap();
+    let identity = DeliveryIdentity {
+        provider: publication.run.change.provider,
+        integration: IntegrationId::new("integration/7".to_owned()).unwrap(),
+        delivery: DeliveryId::new("delivery/42".to_owned()).unwrap(),
+    };
+    assert_eq!(
+        delivery_key(&identity).unwrap(),
+        "a1e0fabbd2934452219e1a66ba8ae933791fe55bbfd29c6379aa5ae2a5e89ae9"
+    );
+    assert_eq!(
+        staged_digest(&evaluation, 1, &stored).unwrap().to_string(),
+        "sha256:1321a7f0f747db2639f365b3aa9a97a14a564748a289d8b602be427da96a339e"
+    );
+}
+
+#[test]
 fn stored_run_fields_preserve_the_existing_byte_layout() {
     let provider_run: StoredProviderRun = serde_json::from_str(PROVIDER_RUN).unwrap();
     let run: StoredRun = serde_json::from_str(RUN).unwrap();

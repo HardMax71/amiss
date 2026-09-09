@@ -2,20 +2,18 @@ mod tests;
 
 use std::sync::Arc;
 
+use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::Oid;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ArtifactReference, AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, ExternalTally,
-    Publication, RunIdentity,
+    ArtifactReference, AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, Publication,
+    RunIdentity,
 };
 
-use super::model::{
-    StoredChange, StoredCheck, StoredConclusion, StoredProviderRun, StoredRun, materialize_check,
-    store_check,
-};
+use super::model::{StoredChange, StoredConclusion, StoredProviderRun, StoredRun};
 use crate::file_ledger::FileLedgerError;
 
 const REPORT_DOMAIN: &str = "amiss/controller-report-blob-v1";
@@ -25,14 +23,14 @@ const REPORT_DOMAIN: &str = "amiss/controller-report-blob-v1";
 pub(in crate::file_ledger) struct StoredPublication {
     provider_run: StoredProviderRun,
     evaluation_id: String,
-    check: StoredCheck,
+    check: CheckBinding,
     run: StoredRun,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(in crate::file_ledger) gate_commit: Option<Oid>,
     conclusion: StoredConclusion,
     report: StoredReport,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    artifact: Option<StoredArtifact>,
+    artifact: Option<ArtifactReference>,
 }
 
 impl StoredPublication {
@@ -47,7 +45,7 @@ impl StoredPublication {
                 candidate_commit: publication.provider_run.candidate_commit.clone(),
             },
             evaluation_id: publication.evaluation_id.as_str().to_owned(),
-            check: store_check(&publication.check),
+            check: publication.check.clone(),
             run: StoredRun {
                 change: StoredChange::new(&publication.run.change),
                 refs: publication.run.refs.clone(),
@@ -58,7 +56,7 @@ impl StoredPublication {
             gate_commit: Some(publication.gate_commit.clone()),
             conclusion: StoredConclusion::new(publication.conclusion),
             report,
-            artifact: publication.artifact.as_ref().map(StoredArtifact::new),
+            artifact: publication.artifact.clone(),
         })
     }
 
@@ -98,38 +96,20 @@ impl StoredPublication {
     }
 
     pub(super) fn materialize_metadata(&self) -> Result<Publication<Option<Oid>>, FileLedgerError> {
-        if let Some(reference) = self.report() {
-            reference.validate()?;
+        if self
+            .report()
+            .is_some_and(|reference| reference.length > MACHINE_JSON_BYTES)
+            || !valid_required_status_name(&self.check.required_status_name)
+        {
+            return Err(FileLedgerError::Corrupt);
         }
-        let artifact = match &self.artifact {
-            Some(stored) => {
-                let assessment_digest = stored
-                    .assessment_digest
-                    .as_deref()
-                    .map(|raw| Digest::from_wire(raw).ok_or(FileLedgerError::Corrupt))
-                    .transpose()?;
-                let semantic_digest = stored
-                    .semantic_digest
-                    .as_deref()
-                    .map(|raw| Digest::from_wire(raw).ok_or(FileLedgerError::Corrupt))
-                    .transpose()?;
-                Some(
-                    crate::artifacts::checked_reference(ArtifactReference {
-                        id: stored.id.clone(),
-                        locator: stored.locator.clone(),
-                        expires_at_unix_millis: stored.expires_at_unix_millis,
-                        report_digest: Digest::from_wire(&stored.report_digest)
-                            .ok_or(FileLedgerError::Corrupt)?,
-                        semantic_digest,
-                        assessment_digest,
-                        external_tally: stored.external_tally,
-                        external_incomplete: stored.external_incomplete,
-                    })
-                    .ok_or(FileLedgerError::Corrupt)?,
-                )
-            }
-            None => None,
-        };
+        let artifact = self
+            .artifact
+            .clone()
+            .map(|reference| {
+                crate::artifacts::checked_reference(reference).ok_or(FileLedgerError::Corrupt)
+            })
+            .transpose()?;
         let run = RunIdentity::new(
             self.run.change.materialize()?,
             self.run.refs.clone(),
@@ -149,7 +129,7 @@ impl StoredPublication {
             provider_run: self.provider_run.materialize()?,
             evaluation_id: ControllerEvaluationId::new(self.evaluation_id.clone())
                 .ok_or(FileLedgerError::Corrupt)?,
-            check: materialize_check(&self.check)?,
+            check: self.check.clone(),
             run,
             gate_commit: self.gate_commit.clone(),
             conclusion: self.conclusion.materialize(),
@@ -199,38 +179,6 @@ fn validate_artifact_report(publication: &Publication) -> Result<(), FileLedgerE
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct StoredArtifact {
-    id: String,
-    locator: String,
-    expires_at_unix_millis: i64,
-    report_digest: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    assessment_digest: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    external_tally: Option<ExternalTally>,
-    #[serde(default)]
-    external_incomplete: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    semantic_digest: Option<String>,
-}
-
-impl StoredArtifact {
-    fn new(reference: &ArtifactReference) -> Self {
-        Self {
-            id: reference.id.clone(),
-            locator: reference.locator.clone(),
-            expires_at_unix_millis: reference.expires_at_unix_millis,
-            report_digest: reference.report_digest.to_string(),
-            assessment_digest: reference.assessment_digest.map(|digest| digest.to_string()),
-            external_tally: reference.external_tally,
-            external_incomplete: reference.external_incomplete,
-            semantic_digest: reference.semantic_digest.map(|digest| digest.to_string()),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "report", rename_all = "kebab-case", deny_unknown_fields)]
 enum StoredReport {
     Absent,
@@ -259,7 +207,7 @@ impl StoredReport {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger) struct ReportRef {
-    digest: String,
+    digest: Digest,
     length: u64,
 }
 
@@ -267,25 +215,14 @@ impl ReportRef {
     pub(in crate::file_ledger) fn new(report: &[u8]) -> Result<Self, FileLedgerError> {
         let length = report_length(report.len())?;
         Ok(Self {
-            digest: hb(REPORT_DOMAIN, report).to_string(),
+            digest: hb(REPORT_DOMAIN, report),
             length,
         })
     }
 
-    pub(in crate::file_ledger) fn digest(&self) -> &str {
-        &self.digest
-    }
-
     pub(in crate::file_ledger) fn matches(&self, report: &[u8]) -> bool {
         u64::try_from(report.len()).ok() == Some(self.length)
-            && hb(REPORT_DOMAIN, report).to_string() == self.digest
-    }
-
-    fn validate(&self) -> Result<(), FileLedgerError> {
-        if self.length > MACHINE_JSON_BYTES || Digest::from_wire(&self.digest).is_none() {
-            return Err(FileLedgerError::Corrupt);
-        }
-        Ok(())
+            && hb(REPORT_DOMAIN, report) == self.digest
     }
 }
 

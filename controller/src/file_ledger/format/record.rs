@@ -1,11 +1,11 @@
+use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::digest::Digest;
 use serde::{Deserialize, Serialize};
 
 use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId};
 
 use super::model::{
-    StoredChange, StoredCheck, StoredDelivery, StoredDeliveryIdentity, StoredProviderRun,
-    StoredReplayKeep, materialize_check, store_check,
+    StoredChange, StoredDelivery, StoredDeliveryIdentity, StoredProviderRun, StoredReplayKeep,
 };
 use super::publication::StoredPublication;
 use crate::file_ledger::FileLedgerError;
@@ -20,7 +20,7 @@ pub(in crate::file_ledger) struct Record {
     pub(in crate::file_ledger) last_seen_unix_millis: i64,
     binding: StoredDelivery,
     replay_keep: StoredReplayKeep,
-    check: StoredCheck,
+    check: CheckBinding,
     evaluation_id: String,
     pub(in crate::file_ledger) state: State,
 }
@@ -50,7 +50,7 @@ impl Record {
                 },
             },
             replay_keep: StoredReplayKeep::new(delivery.replay_keep()),
-            check: store_check(check),
+            check: check.clone(),
             evaluation_id: evaluation_id.as_str().to_owned(),
             state: State::Running {
                 owner,
@@ -67,7 +67,7 @@ impl Record {
     ) -> Result<bool, FileLedgerError> {
         Ok(self.binding.materialize()? == *delivery.delivery()
             && self.replay_keep == StoredReplayKeep::new(delivery.replay_keep())
-            && self.check == store_check(check))
+            && self.check == *check)
     }
 
     pub(in crate::file_ledger) fn matches_key(&self, key: &str) -> Result<bool, FileLedgerError> {
@@ -90,12 +90,15 @@ impl Record {
     }
 
     pub(super) fn validate(&self) -> Result<(), FileLedgerError> {
-        if self.schema != RECORD_SCHEMA || self.generation == 0 || self.last_seen_unix_millis < 0 {
+        if self.schema != RECORD_SCHEMA
+            || self.generation == 0
+            || self.last_seen_unix_millis < 0
+            || !valid_required_status_name(&self.check.required_status_name)
+        {
             return Err(FileLedgerError::Corrupt);
         }
         let delivery = self.binding.materialize()?;
         self.replay_keep.validate()?;
-        let check = materialize_check(&self.check)?;
         if delivery.identity.provider != delivery.change.provider {
             return Err(FileLedgerError::Corrupt);
         }
@@ -116,16 +119,10 @@ impl Record {
                 if *fence == 0 || *fence > self.generation {
                     return Err(FileLedgerError::Corrupt);
                 }
-                publication.validate_binding(&self.evaluation_id, &delivery, &check)?;
+                publication.validate_binding(&self.evaluation_id, &delivery, &self.check)?;
             }
-            State::Done {
-                fence,
-                staged_digest,
-            } => {
-                if *fence == 0
-                    || *fence > self.generation
-                    || Digest::from_wire(staged_digest).is_none()
-                {
+            State::Done { fence, .. } => {
+                if *fence == 0 || *fence > self.generation {
                     return Err(FileLedgerError::Corrupt);
                 }
             }
@@ -152,6 +149,6 @@ pub(in crate::file_ledger) enum State {
     },
     Done {
         fence: u64,
-        staged_digest: String,
+        staged_digest: Digest,
     },
 }

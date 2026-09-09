@@ -40,16 +40,21 @@ pub struct ArtifactBundle<'a> {
     pub external_incomplete: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ArtifactReference {
     pub id: String,
     pub locator: String,
     pub expires_at_unix_millis: i64,
     pub report_digest: Digest,
-    pub semantic_digest: Option<Digest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assessment_digest: Option<Digest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_tally: Option<ExternalTally>,
+    #[serde(default)]
     pub external_incomplete: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_digest: Option<Digest>,
 }
 
 #[derive(Clone, Copy)]

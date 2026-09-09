@@ -5,7 +5,7 @@ use crate::{
 };
 
 use super::format::{self, State, StoredPublication};
-use super::store::Row;
+use super::store::{Row, read_bounded};
 use super::{FileLedger, FileLedgerError};
 
 impl DeliveryLedger for FileLedger {
@@ -117,11 +117,26 @@ impl DeliveryLedger for FileLedger {
         {
             return Ok(StageOutcome::Lost);
         }
-        match record.state.clone() {
+        match &record.state {
             State::Staged {
                 fence,
                 publication: stored,
-            } => restage(&row, lease, publication, evaluation_id, fence, &stored),
+            } => {
+                let existing = staged(&row, evaluation_id, *fence, stored)?;
+                let StagedPublication {
+                    evaluation_id,
+                    fence,
+                    publication: stored,
+                } = &existing;
+                if *evaluation_id == lease.evaluation_id
+                    && *fence == lease.fence
+                    && stored.as_ref() == publication
+                {
+                    Ok(StageOutcome::Staged(existing))
+                } else {
+                    Ok(StageOutcome::Lost)
+                }
+            }
             State::Done { .. } => Ok(StageOutcome::Lost),
             State::Running { .. } => {
                 self.stage_running(&row, lease, publication, record, evaluation_id)
@@ -190,27 +205,6 @@ fn complete_record(
     }
 }
 
-fn restage(
-    row: &Row,
-    lease: &DeliveryLease,
-    publication: &Publication,
-    evaluation_id: ControllerEvaluationId,
-    fence: u64,
-    stored: &StoredPublication,
-) -> Result<StageOutcome, FileLedgerError> {
-    let existing = staged(row, evaluation_id, fence, stored)?;
-    let requested = StagedPublication {
-        evaluation_id: lease.evaluation_id.clone(),
-        fence: lease.fence,
-        publication: Box::new(publication.clone()),
-    };
-    if existing == requested {
-        Ok(StageOutcome::Staged(existing))
-    } else {
-        Ok(StageOutcome::Lost)
-    }
-}
-
 fn make_lease(
     evaluation_id: ControllerEvaluationId,
     check: CheckBinding,
@@ -231,7 +225,18 @@ fn staged(
     fence: u64,
     stored: &StoredPublication,
 ) -> Result<StagedPublication, FileLedgerError> {
-    let report = row.load_report(stored.report())?;
+    let report = stored
+        .report()
+        .map(|_reference| {
+            let path = row.root.join(format!("{}.report", row.key));
+            match read_bounded(&path, MACHINE_JSON_BYTES) {
+                Err(FileLedgerError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
+                    Err(FileLedgerError::Corrupt)
+                }
+                result => result,
+            }
+        })
+        .transpose()?;
     Ok(StagedPublication {
         evaluation_id,
         fence: LeaseFence::new(fence).ok_or(FileLedgerError::Corrupt)?,
@@ -252,3 +257,4 @@ fn publication_matches(
 }
 mod claim;
 mod stage;
+use amiss_wire::report::MACHINE_JSON_BYTES;

@@ -2,7 +2,7 @@ mod model;
 mod publication;
 mod record;
 
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::digest::{Digest, hj_serde};
 use serde::Serialize;
 
 use crate::{ControllerEvaluationId, DeliveryIdentity};
@@ -32,9 +32,11 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Record, FileLedgerError> {
 }
 
 pub(super) fn delivery_key(identity: &DeliveryIdentity) -> Result<String, FileLedgerError> {
-    let bytes = serde_json::to_vec(&StoredDeliveryKey::new(identity))
-        .map_err(|_defect| FileLedgerError::Corrupt)?;
-    digest_hex(&hb(KEY_DOMAIN, &bytes).to_string())
+    let digest = hj_serde(KEY_DOMAIN, |writer| {
+        serde_json::to_writer(writer, &StoredDeliveryKey::new(identity))
+    })
+    .map_err(|_defect| FileLedgerError::Corrupt)?;
+    Ok(hex::encode(digest.as_bytes()))
 }
 
 pub(super) fn evaluation_id(
@@ -53,21 +55,16 @@ pub(super) fn staged_digest(
     evaluation_id: &ControllerEvaluationId,
     fence: u64,
     publication: &StoredPublication,
-) -> Result<String, FileLedgerError> {
+) -> Result<Digest, FileLedgerError> {
     let value = StagedDigest {
         evaluation_id: evaluation_id.as_str(),
         fence,
         publication,
     };
-    let bytes = serde_json::to_vec(&value).map_err(|_defect| FileLedgerError::Corrupt)?;
-    Ok(hb(STAGED_DOMAIN, &bytes).to_string())
-}
-
-pub(super) fn digest_hex(wire: &str) -> Result<String, FileLedgerError> {
-    Digest::from_wire(wire).ok_or(FileLedgerError::Corrupt)?;
-    wire.strip_prefix("sha256:")
-        .map(str::to_owned)
-        .ok_or(FileLedgerError::Corrupt)
+    hj_serde(STAGED_DOMAIN, |writer| {
+        serde_json::to_writer(writer, &value)
+    })
+    .map_err(|_defect| FileLedgerError::Corrupt)
 }
 
 #[derive(Serialize)]
