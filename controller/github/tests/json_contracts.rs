@@ -72,17 +72,20 @@ fn reference_captures_share_the_complete_object_without_losing_fields() {
         &record.url,
         &record.object,
     );
+    let object = serde_json::to_string(&record.object).unwrap();
+    let positional_object =
+        serde_json::to_string(&(&record.object.kind, &record.object.sha, &record.object.url))
+            .unwrap();
+    let named = serde_json::to_string(&record).unwrap();
+    assert_eq!(named.matches(&object).count(), 1);
     for encoded in [
+        named.replacen(&object, &positional_object, 1).into_bytes(),
         serde_json::to_vec(&positional).unwrap(),
-        serde_json::to_vec(&(
-            &record.reference,
-            &record.node_id,
-            &record.url,
-            (&record.object.kind, &record.object.sha, &record.object.url),
-        ))
-        .unwrap(),
     ] {
-        assert!(amiss_wire::read_json::<RefRecord>(&encoded, u64::MAX).is_err());
+        assert!(
+            amiss_wire::read_json::<RefRecord>(&encoded, u64::MAX).is_err(),
+            "{encoded:?}"
+        );
     }
     let encoded = serde_json::to_vec(&[positional]).unwrap();
     assert!(amiss_wire::read_json::<Vec<RefRecord>>(&encoded, u64::MAX).is_err());
