@@ -166,6 +166,8 @@ fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
                 black_box(&discovery),
                 black_box(&discovery),
                 black_box(comparisons),
+                black_box(&amiss_scan::semantic::SiteEvaluation::default()),
+                black_box(&[]),
                 black_box(&[]),
             )
         });

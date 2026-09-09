@@ -395,7 +395,7 @@ fn conclude(
         }
     }
     match correlate(base.1, candidate_side) {
-        Ok(comparisons) => crate::report::construct_with_site(
+        Ok(comparisons) => crate::report::construct(
             setup,
             base.0,
             candidate.0,

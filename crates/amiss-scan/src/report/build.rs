@@ -17,31 +17,12 @@ use super::identity::{controls, evaluation};
 use super::summary::summary_counts;
 use super::{Built, Setup};
 
-/// Constructs the complete report for a local commit-pair run with no
-/// external controls: canonical payload, envelope, wire bytes, digest, and
-/// the process result.
+/// Constructs a complete report from the supplied snapshot, policy, site,
+/// claim and projection results. The caller emits its typed envelope.
 ///
 /// # Errors
 /// Returns an internal error if the report cannot be serialized or hashed.
 pub fn construct(
-    setup: &Setup,
-    base: &SnapshotDiscovery,
-    candidate: &SnapshotDiscovery,
-    comparisons: Vec<Comparison>,
-    claims: &[crate::claim::ClaimOutcome],
-) -> Result<Built, crate::Error> {
-    construct_with_site(
-        setup,
-        base,
-        candidate,
-        comparisons,
-        &crate::semantic::SiteEvaluation::default(),
-        claims,
-        &[],
-    )
-}
-
-pub(crate) fn construct_with_site(
     setup: &Setup,
     base: &SnapshotDiscovery,
     candidate: &SnapshotDiscovery,

@@ -22,6 +22,8 @@ use amiss_wire::report::{
 };
 use tempfile::TempDir;
 
+mod inputs;
+
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn git(dir: &Path, args: &[&str]) -> String {
     amiss_fixtures::git(dir, args).unwrap()
@@ -183,6 +185,8 @@ fn report_retaining(
         &base_discovery,
         &candidate_discovery,
         comparisons,
+        &amiss_scan::semantic::SiteEvaluation::default(),
+        &[],
         &[],
     )
     .unwrap()
@@ -570,7 +574,16 @@ fn an_observation_row_hashes_the_identity_input_it_renders() {
     let mut setup = bare_setup(64);
     setup.base = identity.clone();
     setup.candidate = CandidateBlock::Commit(identity);
-    let built = construct(&setup, &discovery, &discovery, comparisons, &[]).unwrap();
+    let built = construct(
+        &setup,
+        &discovery,
+        &discovery,
+        comparisons,
+        &amiss_scan::semantic::SiteEvaluation::default(),
+        &[],
+        &[],
+    )
+    .unwrap();
     let envelope: serde_json::Value =
         crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let row = &envelope["payload"]["observations"][0]["candidate"];
@@ -615,7 +628,16 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
 fn document_rows_merge_both_sides_in_strict_raw_path_order() {
     let base = excluded_discovery(&["a-.md", "a/base.md", "a0.md"]);
     let candidate = excluded_discovery(&["a/candidate.md", "a0.md", "a1.md"]);
-    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]).unwrap();
+    let built = construct(
+        &bare_setup(64),
+        &base,
+        &candidate,
+        Vec::new(),
+        &amiss_scan::semantic::SiteEvaluation::default(),
+        &[],
+        &[],
+    )
+    .unwrap();
     let wire: serde_json::Value =
         crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let rows = wire["payload"]["documents"].as_array().unwrap();
@@ -649,7 +671,16 @@ fn a_document_that_moved_is_not_unchanged() {
     let moved = candidate.documents.first_mut().unwrap();
     moved.oid = Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap();
 
-    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]).unwrap();
+    let built = construct(
+        &bare_setup(64),
+        &base,
+        &candidate,
+        Vec::new(),
+        &amiss_scan::semantic::SiteEvaluation::default(),
+        &[],
+        &[],
+    )
+    .unwrap();
     let wire: serde_json::Value =
         crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let rows = wire["payload"]["documents"].as_array().unwrap();
@@ -967,7 +998,16 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let built = construct(&setup, &base_discovery, &candidate_discovery, inflated, &[]).unwrap();
+    let built = construct(
+        &setup,
+        &base_discovery,
+        &candidate_discovery,
+        inflated,
+        &amiss_scan::semantic::SiteEvaluation::default(),
+        &[],
+        &[],
+    )
+    .unwrap();
 
     assert_eq!(
         built.status,
@@ -1043,6 +1083,8 @@ fn a_finding_location_carries_the_real_display_positions() {
         &base_discovery,
         &candidate_discovery,
         comparisons,
+        &amiss_scan::semantic::SiteEvaluation::default(),
+        &[],
         &[],
     )
     .unwrap();

@@ -5,7 +5,6 @@ mod identity;
 mod index;
 mod summary;
 
-pub(crate) use build::construct_with_site;
 pub use build::{construct, construct_incomplete};
 pub use identity::candidate_identity_digest;
 pub use index::{INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, synthetic_candidate};

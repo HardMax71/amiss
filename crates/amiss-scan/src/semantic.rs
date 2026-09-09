@@ -84,31 +84,31 @@ pub(crate) enum SitePageBacking {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct SiteNavigation {
-    pub(crate) root: Option<RepoPath>,
-    pub(crate) manifest: RepoPath,
-    pub(crate) entrypoints: Vec<String>,
-    pub(crate) reachable: Vec<RepoPath>,
+pub struct SiteNavigation {
+    pub root: Option<RepoPath>,
+    pub manifest: RepoPath,
+    pub entrypoints: Vec<String>,
+    pub reachable: Vec<RepoPath>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct SiteEvaluation {
-    pub(crate) navigation: Option<Arc<SiteNavigation>>,
-    pub(crate) defects: Arc<[SiteDefect]>,
+pub struct SiteEvaluation {
+    pub navigation: Option<Arc<SiteNavigation>>,
+    pub defects: Arc<[SiteDefect]>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct SiteDefect {
-    pub(crate) id: Digest,
-    pub(crate) evidence: FindingFactEvidence<
+pub struct SiteDefect {
+    pub id: Digest,
+    pub evidence: FindingFactEvidence<
         RepoPath,
         Resolution<RepoPath>,
         ProjectionSource,
         ProjectionDifference<Box<RowsProjectionDifference>>,
         GitMode,
     >,
-    pub(crate) source: Option<RepoPath>,
-    pub(crate) member_count: u64,
+    pub source: Option<RepoPath>,
+    pub member_count: u64,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

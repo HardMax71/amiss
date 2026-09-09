@@ -355,7 +355,16 @@ fn assert_report(
     );
     let base = discovery(base_scanned, base_source, '1');
     let candidate = discovery(candidate_scanned, candidate_source, '2');
-    let built = construct(&setup(), &base, &candidate, Vec::new(), &[]).unwrap();
+    let built = construct(
+        &setup(),
+        &base,
+        &candidate,
+        Vec::new(),
+        &amiss_scan::semantic::SiteEvaluation::default(),
+        &[],
+        &[],
+    )
+    .unwrap();
     let wire = amiss_scan::report::wire(&built).unwrap();
     let envelope = support::generated_report(&wire)
         .unwrap_or_else(|error| panic!("{id}: generated report violates its contract: {error}"));
@@ -527,7 +536,16 @@ fn a_recognized_claim_without_an_answer_keeps_the_boundary() {
     let base_source = "plain words\n";
     let base = discovery(scanned(base_source), base_source, '1');
     let candidate = discovery(scanned(source), source, '2');
-    let built = construct(&setup(), &base, &candidate, Vec::new(), &[]).unwrap();
+    let built = construct(
+        &setup(),
+        &base,
+        &candidate,
+        Vec::new(),
+        &amiss_scan::semantic::SiteEvaluation::default(),
+        &[],
+        &[],
+    )
+    .unwrap();
     let envelope = support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     assert_eq!(built.exit_code, 2, "an unanswered claim is a boundary");
     let findings = envelope

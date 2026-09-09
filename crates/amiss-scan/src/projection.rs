@@ -45,7 +45,7 @@ pub(crate) fn normalized_line_endings(selected: &[u8]) -> Cow<'_, [u8]> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Verdict {
+pub enum Verdict {
     Attested,
     Drift {
         reason: ProjectionObserved,
@@ -69,7 +69,7 @@ pub(crate) fn unavailable(reason: ProjectionObserved, sink: &SemanticCodeSink) -
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct Outcome {
+pub struct Outcome {
     pub assertion: ProjectionAssertion,
     pub carrier_digests: Vec<Digest>,
     pub answered_spans: Vec<(usize, usize)>,
