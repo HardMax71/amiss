@@ -1,4 +1,4 @@
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::digest::Digest;
 use amiss_wire::model::ArtifactId;
 use serde::{Deserialize, Serialize};
 use wary::Validate as _;
@@ -55,10 +55,8 @@ pub(crate) enum ContextSchema {
 pub(crate) enum Error {
     #[error("the producer context exceeds its byte ceiling")]
     Bytes,
-    #[error("the producer context is not strict JSON")]
-    Json(#[source] amiss_wire::json::Error),
     #[error("the producer context is invalid")]
-    Shape(#[source] serde_json::Error),
+    Shape(#[source] amiss_wire::de::Error),
     #[error("the producer context is invalid")]
     Contract(#[source] wary::Report),
 }
@@ -67,12 +65,9 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<(Context, Digest), Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > BYTES {
         return Err(Error::Bytes);
     }
-    amiss_wire::json::parse(bytes).map_err(Error::Json)?;
-    let context: Context = serde_json::from_slice(bytes).map_err(Error::Shape)?;
+    let (context, digest): (Context, _) =
+        amiss_wire::de::deserialize_json(bytes, DIGEST_DOMAIN).map_err(Error::Shape)?;
     context.validate(&()).map_err(Error::Contract)?;
-    let digest = serde_json::to_vec(&context)
-        .map(|canonical| hb(DIGEST_DOMAIN, &canonical))
-        .map_err(Error::Shape)?;
     Ok((context, digest))
 }
 

@@ -233,11 +233,72 @@ fn context_keeps_strict_json_and_complete_stream_limits() {
         [b"\xef\xbb\xbf".as_slice(), &valid].concat(),
         [valid.as_slice(), b" false"].concat(),
     ] {
-        assert!(matches!(parse(&bytes), Err(Error::Json(_))));
+        assert!(matches!(parse(&bytes), Err(Error::Shape(_))));
     }
     let mut padded = valid;
     padded.resize(usize::try_from(super::BYTES).unwrap(), b' ');
     assert!(parse(&padded).is_ok());
     padded.push(b' ');
     assert!(matches!(parse(&padded), Err(Error::Bytes)));
+}
+
+#[test]
+fn context_rejects_positional_objects_and_object_form_schema_tags() {
+    let bytes = context("[]", "x86_64-unknown-linux-gnu");
+    let (parsed, _) = parse(&bytes).unwrap();
+    let positional = serde_json::to_vec(&(
+        &parsed.cfg,
+        &parsed.compiler,
+        parsed.dependencies_digest,
+        &parsed.features,
+        &parsed.name,
+        &parsed.package,
+        parsed.rustdoc_format,
+        &parsed.schema,
+        &parsed.target,
+        &parsed.target_triple,
+    ))
+    .unwrap();
+    let scalar = serde_json::to_string(&parsed.schema).unwrap();
+    let object_tag = String::from_utf8(bytes)
+        .unwrap()
+        .replace(&scalar, &format!("{{{scalar}:null}}"));
+    assert_eq!(
+        [
+            parse(&positional).is_ok(),
+            parse(object_tag.as_bytes()).is_ok()
+        ],
+        [false; 2]
+    );
+}
+
+#[test]
+fn context_identity_survives_typed_ingress() {
+    let base = context(r#"["default","serde"]"#, "x86_64-unknown-linux-gnu");
+    let (mut special, _) = parse(&base).unwrap();
+    special.compiler = "rustc \"é\" \\ build".to_owned();
+    let escaped = serde_json::to_vec(&special).unwrap();
+    special.rustdoc_format = u32::MAX;
+    let maximum = serde_json::to_vec(&special).unwrap();
+    for (bytes, expected) in [
+        (
+            base,
+            "sha256:2de9a1c5b1fc291185395bbd0a56b0f51cc69815c7c8f289731feeef542972e8",
+        ),
+        (
+            escaped,
+            "sha256:46fc4e62530531b0c3cee79bdc97be20815e6ae25d27b617e4cd82ddb1bf6301",
+        ),
+        (
+            maximum,
+            "sha256:0e9d05334c1163da3ad9756ed13dfe72566b87e35acb881dee5eb16e4bd8fb94",
+        ),
+    ] {
+        let (parsed, digest) = parse(&bytes).unwrap();
+        assert_eq!(digest, expected.parse().unwrap());
+        assert_eq!(
+            parse(&serde_json::to_vec_pretty(&parsed).unwrap()).unwrap(),
+            (parsed, digest)
+        );
+    }
 }

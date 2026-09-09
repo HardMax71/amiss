@@ -11,6 +11,7 @@ publish = false
 [[bin]]
 name = "amiss-rust-public-api"
 path = "src/main.rs"
+test = false
 
 [dependencies]
 amiss-controller-files = { path = "../controller/files" }

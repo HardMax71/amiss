@@ -54,7 +54,16 @@ pub fn fail<T>(path: &str, kind: ErrorKind) -> Result<T, Error> {
     Err(Error::new(path, kind))
 }
 
-pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned + serde::Serialize>(
+/// Reads one complete JSON object and its domain-separated canonical digest.
+///
+/// Callers enforce byte ceilings and domain validation. Use closed Serde records;
+/// canonical equality alone does not reject duplicate entries in maps.
+///
+/// # Errors
+///
+/// Fails on typed decoding or trailing content, or when serialization changes
+/// the canonical input.
+pub fn deserialize_json<T: serde::de::DeserializeOwned + serde::Serialize>(
     bytes: &[u8],
     domain: &str,
 ) -> Result<(T, Digest), Error> {

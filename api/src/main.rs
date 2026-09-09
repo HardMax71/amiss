@@ -3,7 +3,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::digest::{Digest, hb, hj_serde};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::record::{Input, InputSchema, Record};
 
@@ -114,11 +114,13 @@ fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Vec<u8>, Failur
         &context.target,
         &context.target_triple,
     )?;
-    let input_digest = serde_json::to_vec(&InputIdentity {
+    let identity = InputIdentity {
         context_digest,
         rustdoc_digest: hb(RUSTDOC_DOMAIN, rustdoc_bytes),
+    };
+    let input_digest = hj_serde(INPUT_DOMAIN, |writer| {
+        serde_json::to_writer(writer, &identity)
     })
-    .map(|canonical| hb(INPUT_DOMAIN, &canonical))
     .map_err(Failure::InputIdentity)?;
     let producer_identity =
         ArtifactId::new(PRODUCER_IDENTITY.to_owned()).ok_or(Failure::ProducerIdentity)?;
