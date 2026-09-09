@@ -6,6 +6,39 @@ use amiss_wire::report::model::{
     AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackItem, ReportEnvelope,
 };
 
+/// Replaces one fixture fragment and rebinds the report's payload digest.
+///
+/// # Errors
+/// Returns the library error for malformed JSON or serialization failure.
+///
+/// # Panics
+/// The fragment, payload or digest is absent or ambiguous, or the replacement changes nothing.
+pub fn corrupt(
+    report: &ReportEnvelope,
+    original: &str,
+    replacement: &str,
+) -> serde_json::Result<Vec<u8>> {
+    let payload = serde_json_canonicalizer::to_string(&report.payload)?;
+    assert_eq!(payload.matches(original).count(), 1, "{original}");
+    let changed = payload.replacen(original, replacement, 1);
+    assert_ne!(changed, payload);
+    let mut source = serde_json::Deserializer::from_str(&changed);
+    let changed =
+        serde_json_canonicalizer::to_string(&serde_transcode::Transcoder::new(&mut source))?;
+    source.end()?;
+    let mut wire = serde_json_canonicalizer::to_string(report)?;
+    let digest = report.payload_digest.to_string();
+    assert_eq!(wire.matches(&payload).count(), 1);
+    assert_eq!(wire.matches(&digest).count(), 1);
+    wire = wire.replacen(&payload, &changed, 1).replacen(
+        &digest,
+        &hb(PAYLOAD_SCHEMA, changed.as_bytes()).to_string(),
+        1,
+    );
+    wire.push('\n');
+    Ok(wire.into_bytes())
+}
+
 /// Captures a complete fixture report without changing its source bytes.
 ///
 /// # Errors

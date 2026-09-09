@@ -3,6 +3,8 @@ use amiss_wire::digest::{hb, hj_serde};
 use amiss_wire::report::{PAYLOAD_SCHEMA, model};
 use amiss_wire::requests::CandidateSnapshot;
 
+use amiss_fixtures::corrupt;
+
 use super::accepted_report;
 
 mod positional;
@@ -36,7 +38,10 @@ fn report_rows_are_decoded_not_just_counted() {
         let original = format!(r#""{name}":{rows}"#);
         let invalid = format!(r#""{name}":[{}]"#, vec!["null"; count.max(1)].join(","));
         assert_eq!(
-            accept(&corrupt(&report, &original, &invalid), &expectations),
+            accept(
+                &corrupt(&report, &original, &invalid).unwrap(),
+                &expectations
+            ),
             Err(AcceptanceDefect::Shape),
             "{name}"
         );
@@ -73,7 +78,7 @@ fn typed_counts_still_obey_the_strict_json_integer_limit() {
     report.payload.summary.findings.warn = 9_007_199_254_740_991;
     let original = serde_json_canonicalizer::to_string(&report.payload.summary.findings).unwrap();
     let invalid = original.replacen("9007199254740991", "9007199254740992", 1);
-    let wire = corrupt(&report, &original, &invalid);
+    let wire = corrupt(&report, &original, &invalid).unwrap();
     assert!(serde_json::from_slice::<model::ReportEnvelope>(&wire).is_err());
     assert_eq!(accept(&wire, &expectations), Err(AcceptanceDefect::Shape));
 }
@@ -157,7 +162,7 @@ fn report_result_members_are_required_and_typed_in_both_readers() {
     ] {
         let invalid = result.replace(original, replacement);
         assert_ne!(invalid, result, "{original}");
-        let altered = corrupt(&report, &result, &invalid);
+        let altered = corrupt(&report, &result, &invalid).unwrap();
         assert_eq!(
             validate_envelope(&altered).map(drop),
             Err(ReportDefect::NotAReport),
@@ -245,7 +250,10 @@ fn core_status_tags_are_strings_and_completion_is_boolean() {
         ),
     ] {
         assert_eq!(
-            accept(&corrupt(&report, &original, &invalid), &expectations),
+            accept(
+                &corrupt(&report, &original, &invalid).unwrap(),
+                &expectations
+            ),
             Err(AcceptanceDefect::Shape)
         );
     }
@@ -261,7 +269,7 @@ fn core_status_tags_are_strings_and_completion_is_boolean() {
             1,
         );
         assert_eq!(
-            accept(&corrupt(&report, &result, &changed), &expectations),
+            accept(&corrupt(&report, &result, &changed).unwrap(), &expectations),
             Err(AcceptanceDefect::Shape),
             "{invalid}"
         );
@@ -352,7 +360,10 @@ fn candidates_without_an_expected_commit_still_require_a_snapshot_shape() {
         r#"{"kind":"unavailable"}"#,
     ] {
         assert_eq!(
-            accept(&corrupt(&report, &candidate, invalid), &expectations),
+            accept(
+                &corrupt(&report, &candidate, invalid).unwrap(),
+                &expectations
+            ),
             Err(AcceptanceDefect::Shape),
             "{invalid}"
         );
@@ -360,7 +371,10 @@ fn candidates_without_an_expected_commit_still_require_a_snapshot_shape() {
     let evaluation = serde_json_canonicalizer::to_string(evaluation).unwrap();
     let changed = evaluation.replacen(&format!(r#""candidate":{candidate},"#), "", 1);
     assert_eq!(
-        accept(&corrupt(&report, &evaluation, &changed), &expectations),
+        accept(
+            &corrupt(&report, &evaluation, &changed).unwrap(),
+            &expectations
+        ),
         Err(AcceptanceDefect::Shape)
     );
 }
@@ -400,7 +414,10 @@ fn metadata_extensions_are_rejected_before_the_payload_digest_check() {
             "{object}"
         );
         assert_eq!(
-            accept(&corrupt(&report, &object, &extended), &expectations),
+            accept(
+                &corrupt(&report, &object, &extended).unwrap(),
+                &expectations
+            ),
             Err(AcceptanceDefect::Shape),
             "{object}"
         );
@@ -448,26 +465,6 @@ fn bind(report: &mut model::ReportEnvelope) -> Vec<u8> {
     bytes
 }
 
-fn corrupt(report: &model::ReportEnvelope, original: &str, replacement: &str) -> Vec<u8> {
-    let payload = serde_json_canonicalizer::to_string(&report.payload).unwrap();
-    assert_eq!(payload.matches(original).count(), 1, "{original}");
-    let changed = payload.replacen(original, replacement, 1);
-    assert_ne!(changed, payload);
-    let changed =
-        String::from_utf8(amiss_fixtures::canonical_json(changed.as_bytes()).unwrap()).unwrap();
-    let mut wire = serde_json_canonicalizer::to_string(report).unwrap();
-    let digest = report.payload_digest.to_string();
-    assert_eq!(wire.matches(&payload).count(), 1);
-    assert_eq!(wire.matches(&digest).count(), 1);
-    wire = wire.replacen(&payload, &changed, 1).replacen(
-        &digest,
-        &hb(PAYLOAD_SCHEMA, changed.as_bytes()).to_string(),
-        1,
-    );
-    wire.push('\n');
-    wire.into_bytes()
-}
-
 #[test]
 fn wire_corruption_preserves_canonicality_and_rebinds_the_payload() {
     let (wire, expectations) = accepted_report();
@@ -480,7 +477,7 @@ fn wire_corruption_preserves_canonicality_and_rebinds_the_payload() {
         serde_json_canonicalizer::to_string(&result).unwrap(),
         serde_json::to_string_pretty(&result).unwrap(),
     ] {
-        let wire = corrupt(&report, &original, &replacement);
+        let wire = corrupt(&report, &original, &replacement).unwrap();
         assert_eq!(
             accept(&wire, &expectations),
             Err(AcceptanceDefect::FindingCount)
@@ -500,4 +497,6 @@ fn wire_corruption_preserves_canonicality_and_rebinds_the_payload() {
         wires.push(wire);
     }
     assert_eq!(wires.first(), wires.last());
+    let payload = serde_json_canonicalizer::to_string(&report.payload).unwrap();
+    assert!(corrupt(&report, &payload, "{}{}").is_err());
 }

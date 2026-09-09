@@ -202,7 +202,7 @@ static CASES: LazyLock<(Expectations, Vec<Vec<u8>>)> = LazyLock::new(|| {
             .unwrap(),
         ),
     ]
-    .map(|(object, positional)| corrupt(&report, &object, &positional));
+    .map(|(object, positional)| corrupt(&report, &object, &positional).unwrap());
     (
         expectations,
         std::iter::once(envelope).chain(shapes).collect(),
