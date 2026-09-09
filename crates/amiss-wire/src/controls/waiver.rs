@@ -10,7 +10,7 @@ use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdent
 
 use super::fact::fact_digests;
 use super::{
-    Fact, WAIVER_BUNDLE_SCHEMA, root, sorted_set, valid_reason, validate_repository, validate_tree,
+    Fact, WAIVER_BUNDLE_SCHEMA, sorted_set, valid_reason, validate_repository, validate_tree,
 };
 
 #[derive(
@@ -67,7 +67,6 @@ pub struct WaiverBundle {
 /// causal time-order violations, duplicate waiver IDs, and duplicate
 /// `(candidate_tree, finding_key)` pairs.
 pub fn parse_waiver_bundle(bytes: &[u8]) -> Result<WaiverBundle, Error> {
-    root(bytes)?;
     let (bundle, _digest) = de::deserialize_json(bytes, WAIVER_BUNDLE_SCHEMA)?;
     validate_waiver_bundle(&bundle)?;
     Ok(bundle)

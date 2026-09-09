@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 
 use crate::de::{Error, ErrorKind, fail};
-use crate::json::{self, Value};
 use crate::model::{RepositoryIdentity, TreeIdentity};
 
 pub use crate::semantic::RECORD_KEY_BYTES;
@@ -69,15 +68,6 @@ const WAIVER_BUNDLE_SCHEMA: &str = "amiss/waiver-bundle";
 
 pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key";
 pub const FACT_DOMAIN: &str = "amiss/scanner-fact";
-
-/// The one restricted-JSON root every control document parses through.
-///
-/// # Errors
-///
-/// Any strict-JSON defect, carried as `ErrorKind::Json`.
-pub fn root(bytes: &[u8]) -> Result<Value, Error> {
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
-}
 
 pub(crate) fn sorted_set<T>(
     path: &str,

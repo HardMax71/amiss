@@ -9,7 +9,7 @@ use crate::model::{ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdent
 
 use super::{
     EligibleFindingKind, FindingDisposition, ORGANIZATION_FLOOR_SCHEMA, Profile, ResourceName,
-    root, sorted_set, validate_repository,
+    sorted_set, validate_repository,
 };
 
 #[derive(
@@ -68,7 +68,6 @@ pub const ORGANIZATION_POLICY_ENTRIES_LIMIT: u64 = 100_000;
 /// duplicate set members, and a combined entry count over the built-in
 /// `organization-policy-entries` limit or a tighter self-declared one.
 pub fn parse_organization_floor(bytes: &[u8]) -> Result<OrganizationFloor, FloorDefect> {
-    root(bytes).map_err(FloorDefect::Schema)?;
     let (floor, _digest) =
         de::deserialize_json(bytes, ORGANIZATION_FLOOR_SCHEMA).map_err(FloorDefect::Schema)?;
     validate_organization_floor(&floor)?;

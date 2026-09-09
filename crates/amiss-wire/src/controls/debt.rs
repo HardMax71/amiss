@@ -10,7 +10,7 @@ use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdent
 
 use super::fact::fact_digests;
 use super::{
-    DEBT_SNAPSHOT_SCHEMA, Fact, root, sorted_set, valid_reason, validate_repository, validate_tree,
+    DEBT_SNAPSHOT_SCHEMA, Fact, sorted_set, valid_reason, validate_repository, validate_tree,
 };
 
 #[derive(
@@ -56,7 +56,6 @@ pub struct DebtSnapshot {
 /// fact digests that do not recompute, fact-kind/resolution inconsistencies,
 /// causal time-order violations, and unsorted or duplicate items or keys.
 pub fn parse_debt_snapshot(bytes: &[u8]) -> Result<DebtSnapshot, Error> {
-    root(bytes)?;
     let (snapshot, _digest) = de::deserialize_json(bytes, DEBT_SNAPSHOT_SCHEMA)?;
     validate_debt_snapshot(&snapshot)?;
     Ok(snapshot)

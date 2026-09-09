@@ -9,9 +9,7 @@ use crate::extraction::governed_name_valid;
 use crate::json;
 use crate::model::{Adapter, ArtifactId, RepoPathText};
 
-use super::{
-    Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA, root, sorted_set,
-};
+use super::{Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA, sorted_set};
 
 /// Maximum UTF-8 byte length of one exact document suffix selector.
 pub const DOCUMENT_SUFFIX_BYTES: usize = 64;
@@ -165,7 +163,7 @@ pub struct ScannerPolicy {
 /// Fails on strict-JSON defects, schema-shape violations, unknown fields,
 /// invalid grammar values, and unsorted or duplicate set members.
 pub fn parse_scanner_policy(bytes: &[u8]) -> Result<ScannerPolicy, Error> {
-    root(bytes)?;
+    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let (policy, _digest) = de::deserialize_json(bytes, SCANNER_POLICY_SCHEMA)?;
     validate_scanner_policy(&policy)?;
     Ok(policy)
@@ -209,7 +207,6 @@ pub fn parse_projection_source(
     bytes: &[u8],
     projection: ProjectionKind,
 ) -> Result<ProjectionSource, Error> {
-    root(bytes)?;
     let (source, _digest) = de::deserialize_json(bytes, SCANNER_POLICY_SCHEMA)?;
     validate_projection_source("$", projection, &source)?;
     Ok(source)

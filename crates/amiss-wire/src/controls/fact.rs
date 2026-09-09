@@ -9,9 +9,7 @@ use crate::digest::{Digest, hb, hj_serde};
 use crate::model::{Oid, RepoPath, RepoPathText};
 use crate::resolution::Target;
 
-use super::{
-    EligibleFindingKind, FACT_DOMAIN, FINDING_KEY_DOMAIN, SourceConstruct, TargetKind, root,
-};
+use super::{EligibleFindingKind, FACT_DOMAIN, FINDING_KEY_DOMAIN, SourceConstruct, TargetKind};
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -192,7 +190,6 @@ pub struct Fact {
 /// Fails on strict-JSON defects, schema-shape violations, or inconsistent
 /// finding, key, resolution, and multiplicity values.
 pub fn parse_fact(bytes: &[u8]) -> Result<Fact, Error> {
-    root(bytes)?;
     let (fact, _digest) = de::deserialize_json(bytes, FACT_DOMAIN)?;
     validate_fact("$", &fact)?;
     Ok(fact)
