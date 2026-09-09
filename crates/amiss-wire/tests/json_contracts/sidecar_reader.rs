@@ -63,7 +63,7 @@ fn sidecar_readers_reject_malformed_complete_inputs() -> Result<(), Box<dyn std:
     .into_iter()
     .zip(readers)
     {
-        super::input::assert_closed_input(bytes, schema, limit, read)?;
+        super::input::assert_closed_input(bytes, schema, Some(limit), read)?;
     }
     Ok(())
 }

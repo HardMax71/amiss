@@ -6,7 +6,7 @@ use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
-use super::{root, validate_repository};
+use super::validate_repository;
 
 pub const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint";
 pub const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap";
@@ -62,6 +62,7 @@ pub enum ConstraintPlatform {
 pub struct ExecutionConstraintDescriptor {
     pub action_commit_oid: Oid,
     pub action_object_format: ObjectFormat,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub action_repository: RepositoryIdentity,
     pub action_tree_oid: Oid,
     pub bootstrap_contract: ActionBootstrapContract,
@@ -100,7 +101,6 @@ pub fn valid_required_status_name(raw: &str) -> bool {
 /// Fails on strict-JSON defects, schema-shape violations, invalid grammar
 /// values, or object IDs inconsistent with the declared object format.
 pub fn parse_execution_constraint(bytes: &[u8]) -> Result<ExecutionConstraintDescriptor, Error> {
-    root(bytes)?;
     let descriptor = de::deserialize_json(bytes)?;
     validate_execution_constraint(&descriptor)?;
     Ok(descriptor)

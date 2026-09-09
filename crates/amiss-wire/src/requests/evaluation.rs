@@ -2,11 +2,12 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::controls::{Profile, root};
+use crate::controls::Profile;
 use crate::de::{self, Error, ErrorKind, fail};
+use crate::digest::verified_json_digest;
 use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-use super::RequestMode;
+use super::{EVALUATION_REQUEST_SCHEMA, RequestMode};
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -51,8 +52,9 @@ impl EvaluationRequest {
     /// Fails on strict-JSON defects, schema-shape violations, invalid
     /// grammar values, and a candidate commit inconsistent with the mode.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        root(bytes)?;
         let request: Self = de::deserialize_json(bytes)?;
+        verified_json_digest(EVALUATION_REQUEST_SCHEMA, bytes, &request)
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
         validate_evaluation(&request)?;
         Ok(request)
     }

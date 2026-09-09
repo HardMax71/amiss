@@ -8,6 +8,7 @@ use strum::IntoEnumIterator;
 #[path = "../support/relation.rs"]
 mod relation_fixture;
 
+mod bootstrap_reader;
 mod canonical;
 mod control_inputs;
 mod control_tags;

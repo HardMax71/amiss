@@ -25,7 +25,12 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests()
     .into_iter()
     .zip(readers)
     {
-        super::input::assert_closed_input(bytes, schema, external::EXTERNAL_DOCUMENT_BYTES, read)?;
+        super::input::assert_closed_input(
+            bytes,
+            schema,
+            Some(external::EXTERNAL_DOCUMENT_BYTES),
+            read,
+        )?;
     }
 
     let mut assessment: ExternalAssessmentEnvelope = serde_json::from_slice(ASSESSMENT).unwrap();

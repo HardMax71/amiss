@@ -1,8 +1,9 @@
 use std::io::{Read, Write};
 use std::sync::Arc;
 
+use js_int::Int;
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::controls::{
@@ -90,6 +91,7 @@ pub enum SnapshotMaterialization {
 pub struct SnapshotRequest {
     pub schema: SnapshotSchema,
     pub materialization: SnapshotMaterialization,
+    #[serde(with = "As::<TryFromInto<Int>>")]
     pub repository_handle: i64,
     pub pre_acquired: bool,
 }
@@ -120,7 +122,6 @@ impl SnapshotRequest {
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
     /// grammar values.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        root(bytes)?;
         let request: Self = de::deserialize_json(bytes)?;
         validate_snapshot(&request)?;
         Ok(request)

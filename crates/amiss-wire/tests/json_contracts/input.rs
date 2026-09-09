@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 pub(super) fn assert_closed_input(
     bytes: &[u8],
     schema: &str,
-    limit: u64,
+    limit: Option<u64>,
     read: impl Fn(&[u8]) -> bool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     assert!(read(bytes));
@@ -44,13 +44,20 @@ pub(super) fn assert_closed_input(
         assert!(!read(format!("{text}{suffix}").as_bytes()));
     }
     assert!(!read(format!("[{text}]").as_bytes()));
-    let oversized = vec![
-        b' ';
-        usize::try_from(limit)?
-            .checked_add(1)
-            .ok_or("no representable oversized sample")?
-    ];
-    assert!(!read(&oversized));
+    if let Some(limit) = limit {
+        let limit = usize::try_from(limit)?;
+        assert!(bytes.len() <= limit);
+        let mut bounded = Vec::with_capacity(
+            limit
+                .checked_add(1)
+                .ok_or("no representable oversized sample")?,
+        );
+        bounded.extend_from_slice(bytes);
+        bounded.resize(limit, b' ');
+        assert!(read(&bounded));
+        bounded.push(b' ');
+        assert!(!read(&bounded));
+    }
     Ok(())
 }
 
