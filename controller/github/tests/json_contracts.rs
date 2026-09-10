@@ -21,6 +21,9 @@ mod owner;
 #[path = "json_contracts/pull_repository.rs"]
 mod pull_repository;
 
+#[path = "json_contracts/pull_ref.rs"]
+mod pull_ref;
+
 #[path = "json_contracts/repository.rs"]
 mod repository;
 

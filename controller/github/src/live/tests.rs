@@ -1017,8 +1017,13 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             mergeable: Some(true),
             merge_commit_sha: Some(oid('e')),
             head: PullRefRecord {
+                label: "Contributor:topic".to_owned(),
                 sha: candidate.clone(),
                 branch: "topic".to_owned(),
+                user: OwnerRecord {
+                    login: "Contributor".to_owned(),
+                    ..owner.clone()
+                },
                 repo: Some(PullRepositoryRecord {
                     id: 202,
                     name: "widget-fork".to_owned(),
@@ -1031,8 +1036,10 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
                 }),
             },
             base: PullRefRecord {
+                label: "Acme:main".to_owned(),
                 sha: oid('a'),
                 branch: "main".to_owned(),
+                user: base_repository.owner.clone(),
                 repo: Some(base_repository),
             },
         },
@@ -1254,6 +1261,13 @@ fn a_publication_target_is_current_only_in_every_field() {
     let mut moved_base = authoritative.clone();
     moved_base.base.sha = oid('f');
     assert_eq!(current(&moved_base), Ok(false));
+
+    for (head, base) in [("renamed", "main"), ("topic", "renamed")] {
+        let mut renamed = authoritative.clone();
+        renamed.head.branch = head.to_owned();
+        renamed.base.branch = base.to_owned();
+        assert_eq!(current(&renamed), Ok(false));
+    }
 
     let mut lost_gate = authoritative.clone();
     lost_gate.merge_commit_sha = None;

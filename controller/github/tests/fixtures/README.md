@@ -71,3 +71,11 @@ and source records. The Amiss response contains the documented validity-check
 security setting missing from the upstream shared response schema. Captured clone
 tokens are absent or empty; populated template, organization and token cases in
 tests are synthetic. No repository or security setting was changed.
+
+The pull-refs fixture collects the complete head and base members, in that order,
+from read-only GETs of [Amiss pull request 936](https://api.github.com/repos/HardMax71/amiss/pulls/936)
+and [Rust pull request 147350](https://api.github.com/repos/rust-lang/rust/pulls/147350),
+captured on 2026-09-10 with API version 2022-11-28. It is a collection of response
+members, not a server listing response. The closed Rust PR has a null head
+repository despite the schema's nonnullable reference. No nonempty clone token
+is present, and no pull request or repository was changed.

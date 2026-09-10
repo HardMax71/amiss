@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::check::{CheckRunConclusion, CheckRunStatus};
 pub(super) use crate::check::{CheckRunPage, CheckRunRecord};
 pub(super) use crate::commit::GitCommitRecord;
+pub(super) use crate::pull::PullRefRecord;
 pub(super) use crate::reference::RefRecord;
 pub(super) use crate::repository::RepositoryRecord;
 pub(super) use crate::repository::pull::PullRepositoryRecord;
@@ -19,14 +20,6 @@ pub(super) struct PullRequestRecord {
     pub merge_commit_sha: Option<Oid>,
     pub head: PullRefRecord,
     pub base: PullRefRecord,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct PullRefRecord {
-    pub sha: Oid,
-    #[serde(rename = "ref")]
-    pub branch: String,
-    pub repo: Option<PullRepositoryRecord>,
 }
 
 #[derive(Clone)]
