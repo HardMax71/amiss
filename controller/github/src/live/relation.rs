@@ -12,9 +12,9 @@ use super::Client;
 use super::model::{CreateCheckRun, CreateCheckRunOutput, GitCommitRecord, RefRecord};
 use super::publication::{CheckRunDecision, check_run_decision, validate_created};
 use super::rest::GitHubRest;
+use crate::check::{CheckRunConclusion, CheckRunStatus};
 
 const CHECK_RUN_DOMAIN: &str = "amiss/controller-github-relation-check-run-v1";
-const COMPLETED: &str = "completed";
 const TITLE: &str = "Amiss cross-repository relation";
 
 pub(super) trait GitHubRelationRest {
@@ -94,13 +94,13 @@ fn relation_check_run(
         .map_err(|_defect| ProviderError::InvalidResponse)?;
     Ok(CreateCheckRun {
         name: target.required_status_name.clone(),
-        head_sha: target.candidate_commit.as_str().to_owned(),
+        head_sha: target.candidate_commit.clone(),
         external_id: hb(CHECK_RUN_DOMAIN, publication.summary.as_bytes()).to_string(),
-        status: COMPLETED,
+        status: CheckRunStatus::Completed,
         conclusion: if publication.passing {
-            "success".to_owned()
+            CheckRunConclusion::Success
         } else {
-            "failure".to_owned()
+            CheckRunConclusion::Failure
         },
         output: CreateCheckRunOutput {
             title: TITLE.to_owned(),

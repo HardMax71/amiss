@@ -48,3 +48,10 @@ captured read-only on 2026-09-10 with API version 2022-11-28. Its 23 permission
 entries have string values; permission names are open in the upstream contract.
 Enterprise owners and optional/null metadata in tests are schema-backed synthetic
 cases, not captured enterprise data. No check run or app was created or changed.
+
+The check-run fixture is the complete response for the same check. Its check-runs
+page uses the exact adapter query: check_name=json-contract-drift, filter=all,
+per_page=100, page=1 and app_id=15368 on the captured head. The page's sole record
+equals the individual response. Deployment metadata and stale conclusions in
+tests are synthetic; GitHub documents stale as a server-assigned conclusion even
+though its response-schema enumeration omits it. No check was created or updated.

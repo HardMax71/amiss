@@ -18,10 +18,11 @@ use amiss_wire::report::model::{FeedbackAction, FeedbackItem, RepoPath};
 use amiss_wire::report::{Disposition, FindingKind};
 
 use crate::GitHubPullRequest;
+use crate::check::{CheckRunApp, CheckRunConclusion, CheckRunOutputRecord, CheckRunStatus};
 
 use super::model::{
-    CheckRunApp, CheckRunOutputRecord, CheckRunRecord, CommitRecord, CreateCheckRun, OwnerRecord,
-    PullRefRecord, PullRepositoryRecord, PullRequestRecord, RefreshData, RepositoryRecord,
+    CheckRunRecord, CommitRecord, CreateCheckRun, OwnerRecord, PullRefRecord, PullRepositoryRecord,
+    PullRequestRecord, RefreshData, RepositoryRecord,
 };
 use super::publication::{CheckRunDecision, publication_decision, validate_created};
 use super::rest::{GitHubRest, OperationDeadline};
@@ -275,12 +276,40 @@ fn publication_reuses_only_one_exact_owned_check() {
         CheckRunDecision::Reuse
     ));
 
-    let mut changed = exact.clone();
-    changed.conclusion = Some("failure".to_owned());
-    assert_eq!(
-        decision_error(&fixture, &publication, &[changed]),
-        ProviderError::InvalidResponse
-    );
+    for conclusion in [
+        None,
+        Some(CheckRunConclusion::Failure),
+        Some(CheckRunConclusion::Stale),
+    ] {
+        let mut changed = exact.clone();
+        changed.conclusion = conclusion;
+        assert_eq!(
+            validate_created(&fixture.config, &expected, &changed),
+            Err(ProviderError::InvalidResponse)
+        );
+        assert_eq!(
+            decision_error(&fixture, &publication, &[changed]),
+            ProviderError::InvalidResponse
+        );
+    }
+    for status in [
+        CheckRunStatus::Queued,
+        CheckRunStatus::InProgress,
+        CheckRunStatus::Waiting,
+        CheckRunStatus::Requested,
+        CheckRunStatus::Pending,
+    ] {
+        let mut changed = exact.clone();
+        changed.status = status;
+        assert_eq!(
+            validate_created(&fixture.config, &expected, &changed),
+            Err(ProviderError::InvalidResponse)
+        );
+        assert_eq!(
+            decision_error(&fixture, &publication, &[changed]),
+            ProviderError::InvalidResponse
+        );
+    }
     let mut missing_output = exact.clone();
     missing_output.output.summary = None;
     assert_eq!(
@@ -453,7 +482,7 @@ fn an_owned_check_run_is_exact_in_every_field_that_names_it() {
     let mut other_name = exact.clone();
     other_name.name = format!("{} (retry)", expected.name);
     let mut other_head = exact.clone();
-    other_head.head_sha = "f".repeat(40);
+    other_head.head_sha = oid('f');
     let mut other_name_and_evaluation = exact;
     other_name_and_evaluation.name = format!("{} (retry)", expected.name);
     other_name_and_evaluation.external_id = Some("evaluation-older".to_owned());
@@ -464,6 +493,10 @@ fn an_owned_check_run_is_exact_in_every_field_that_names_it() {
         other_head,
         other_name_and_evaluation,
     ] {
+        assert_eq!(
+            validate_created(&fixture.config, &expected, &broken),
+            Err(ProviderError::InvalidResponse)
+        );
         assert_eq!(
             decision_error(&fixture, &publication, std::slice::from_ref(&broken)),
             ProviderError::InvalidResponse,
@@ -493,8 +526,22 @@ fn a_created_check_run_answers_on_every_clause() {
     appless.app = None;
     let mut other_summary = check_run(APP_ID, &expected);
     other_summary.output.summary = Some("something else entirely".to_owned());
+    let mut other_evaluation = check_run(APP_ID, &expected);
+    other_evaluation.external_id = Some("evaluation-older".to_owned());
+    let mut missing_evaluation = check_run(APP_ID, &expected);
+    missing_evaluation.external_id = None;
+    let mut other_title = check_run(APP_ID, &expected);
+    other_title.output.title = Some("another check".to_owned());
 
-    for broken in [unnumbered, another_app, appless, other_summary] {
+    for broken in [
+        unnumbered,
+        another_app,
+        appless,
+        other_summary,
+        other_evaluation,
+        missing_evaluation,
+        other_title,
+    ] {
         assert_eq!(
             validate_created(&fixture.config, &expected, &broken),
             Err(ProviderError::InvalidResponse),
@@ -568,12 +615,16 @@ fn publication_summary_carries_the_report_feedback_lines() {
 fn publication_conclusions_and_create_response_are_exact() {
     let fixture = Fixture::new();
     let cases = [
-        (CheckConclusion::Pass, "success", "pass"),
-        (CheckConclusion::Block, "failure", "block"),
-        (CheckConclusion::Superseded, "cancelled", "superseded"),
+        (CheckConclusion::Pass, CheckRunConclusion::Success, "pass"),
+        (CheckConclusion::Block, CheckRunConclusion::Failure, "block"),
+        (
+            CheckConclusion::Superseded,
+            CheckRunConclusion::Cancelled,
+            "superseded",
+        ),
         (
             CheckConclusion::Unavailable(RunFailure::Timeout),
-            "failure",
+            CheckRunConclusion::Failure,
             "unavailable",
         ),
     ];
@@ -583,7 +634,8 @@ fn publication_conclusions_and_create_response_are_exact() {
             publication_decision(&fixture.config, &publication, &[]).unwrap(),
         );
         assert_eq!(expected.conclusion, expected_conclusion);
-        assert_eq!(expected.head_sha, publication.gate_commit.as_str());
+        assert_eq!(expected.head_sha, publication.gate_commit);
+        assert_eq!(expected.status, CheckRunStatus::Completed);
         let run = &publication.run;
         let repository = &run.change.repository;
         let bindings = [
@@ -1008,25 +1060,28 @@ fn required_rule(integration_id: Option<u64>, strict: bool) -> BranchRule {
 }
 
 fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
+    let captured: CheckRunRecord = amiss_wire::read_json(
+        include_bytes!("../../tests/fixtures/check-run.json"),
+        u64::MAX,
+    )
+    .unwrap();
     CheckRunRecord {
         id: 81,
         name: expected.name.clone(),
         head_sha: expected.head_sha.clone(),
         external_id: Some(expected.external_id.clone()),
-        status: expected.status.to_owned(),
-        conclusion: Some(expected.conclusion.clone()),
+        status: expected.status,
+        conclusion: Some(expected.conclusion),
         output: CheckRunOutputRecord {
             title: Some(expected.output.title.clone()),
             summary: Some(expected.output.summary.clone()),
+            ..captured.output
         },
         app: Some(CheckRunApp {
             id: app_id,
-            ..amiss_wire::read_json(
-                include_bytes!("../../tests/fixtures/github-app.json"),
-                u64::MAX,
-            )
-            .unwrap()
+            ..captured.app.unwrap()
         }),
+        ..captured
     }
 }
 

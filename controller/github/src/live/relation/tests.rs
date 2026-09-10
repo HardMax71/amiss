@@ -17,9 +17,8 @@ use amiss_wire::model::{BranchRef, ObjectFormat, ObjectKind, Oid, RepositoryIden
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
 use super::{GitHubRelationRest, RelationSubjectHead, relation_check_run};
-use crate::live::model::{
-    CheckRunApp, CheckRunOutputRecord, CheckRunRecord, CreateCheckRun, GitCommitRecord, RefRecord,
-};
+use crate::check::{CheckRunApp, CheckRunConclusion, CheckRunOutputRecord, CheckRunStatus};
+use crate::live::model::{CheckRunRecord, CreateCheckRun, GitCommitRecord, RefRecord};
 use crate::live::publication::{CheckRunDecision, check_run_decision};
 use crate::live::{Client, Config};
 
@@ -134,11 +133,17 @@ fn malformed_head_or_provider_failure_is_not_a_finality_fact() {
 fn relation_check_run_binds_the_exact_audit_without_exposing_the_credential() {
     let (config, mut status, target) = status_fixture();
     let cases = [
-        (RelationVerdict::Aligned, "success"),
-        (RelationVerdict::IntroducedDrift, "failure"),
-        (RelationVerdict::PreExistingDrift, "failure"),
-        (RelationVerdict::ResolvedDrift, "success"),
-        (RelationVerdict::Unproven, "failure"),
+        (RelationVerdict::Aligned, CheckRunConclusion::Success),
+        (
+            RelationVerdict::IntroducedDrift,
+            CheckRunConclusion::Failure,
+        ),
+        (
+            RelationVerdict::PreExistingDrift,
+            CheckRunConclusion::Failure,
+        ),
+        (RelationVerdict::ResolvedDrift, CheckRunConclusion::Success),
+        (RelationVerdict::Unproven, CheckRunConclusion::Failure),
     ];
     let mut identities = std::collections::BTreeSet::new();
     for (verdict, conclusion) in cases {
@@ -149,9 +154,9 @@ fn relation_check_run_binds_the_exact_audit_without_exposing_the_credential() {
         status.audit.audit = ArtifactAuditDigests::Relation(audit);
         let expected = relation_check_run(&config, &status, &target).unwrap();
         assert_eq!(expected.name, target.required_status_name);
-        assert_eq!(expected.head_sha, target.candidate_commit.as_str());
+        assert_eq!(expected.head_sha, target.candidate_commit);
         assert_eq!(expected.conclusion, conclusion);
-        assert_eq!(expected.status, "completed");
+        assert_eq!(expected.status, CheckRunStatus::Completed);
         assert!(Digest::from_wire(&expected.external_id).is_some());
         assert!(identities.insert(expected.external_id));
         for binding in [
@@ -361,25 +366,28 @@ fn audit_bundle(fixture: &RelationAuditFixture) -> RelationAuditBundle<'_> {
 }
 
 fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
+    let captured: CheckRunRecord = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/check-run.json"),
+        u64::MAX,
+    )
+    .unwrap();
     CheckRunRecord {
         id: 42,
         name: expected.name.clone(),
         head_sha: expected.head_sha.clone(),
         external_id: Some(expected.external_id.clone()),
-        status: expected.status.to_owned(),
-        conclusion: Some(expected.conclusion.clone()),
+        status: expected.status,
+        conclusion: Some(expected.conclusion),
         output: CheckRunOutputRecord {
             title: Some(expected.output.title.clone()),
             summary: Some(expected.output.summary.clone()),
+            ..captured.output
         },
         app: Some(CheckRunApp {
             id: app_id,
-            ..amiss_wire::read_json(
-                include_bytes!("../../../tests/fixtures/github-app.json"),
-                u64::MAX,
-            )
-            .unwrap()
+            ..captured.app.unwrap()
         }),
+        ..captured
     }
 }
 

@@ -4,8 +4,8 @@ use amiss_wire::model::{ForgeDialect, ObjectFormat};
 use super::Config;
 use super::model::{CheckRunRecord, CreateCheckRun, CreateCheckRunOutput};
 use crate::GitHubPullRequest;
+use crate::check::{CheckRunConclusion, CheckRunStatus};
 
-const COMPLETED: &str = "completed";
 const TITLE: &str = "Amiss provider verification";
 
 pub(super) enum CheckRunDecision {
@@ -93,7 +93,11 @@ pub(super) fn validate_created(
     created: &CheckRunRecord,
 ) -> Result<(), ProviderError> {
     let own_app = created.app.as_ref().map(|app| app.id) == Some(config.app_id);
-    if created.id == 0 || !own_app || !matches_expected(created, expected) {
+    if created.id == 0
+        || !own_app
+        || created.output.summary.as_deref() != Some(expected.output.summary.as_str())
+        || !matches_stable_fields(created, expected)
+    {
         return Err(ProviderError::InvalidResponse);
     }
     Ok(())
@@ -103,7 +107,12 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
     if publication.check.required_status_name != config.required_status_name {
         return Err(ProviderError::InvalidResponse);
     }
-    let (label, conclusion) = conclusion(publication.conclusion);
+    let (label, conclusion) = match publication.conclusion {
+        CheckConclusion::Pass => ("pass", CheckRunConclusion::Success),
+        CheckConclusion::Block => ("block", CheckRunConclusion::Failure),
+        CheckConclusion::Superseded => ("superseded", CheckRunConclusion::Cancelled),
+        CheckConclusion::Unavailable(_) => ("unavailable", CheckRunConclusion::Failure),
+    };
     let failure = if let CheckConclusion::Unavailable(failure) = publication.conclusion {
         format!("\nfailure: {failure}")
     } else {
@@ -141,10 +150,10 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
     .ok_or(ProviderError::InvalidResponse)?;
     Ok(CreateCheckRun {
         name: config.required_status_name.clone(),
-        head_sha: publication.gate_commit.as_str().to_owned(),
+        head_sha: publication.gate_commit.clone(),
         external_id: publication.evaluation_id.as_str().to_owned(),
-        status: COMPLETED,
-        conclusion: conclusion.to_owned(),
+        status: CheckRunStatus::Completed,
+        conclusion,
         output: CreateCheckRunOutput {
             title: TITLE.to_owned(),
             summary,
@@ -152,25 +161,11 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
     })
 }
 
-fn conclusion(conclusion: CheckConclusion) -> (&'static str, &'static str) {
-    match conclusion {
-        CheckConclusion::Pass => ("pass", "success"),
-        CheckConclusion::Block => ("block", "failure"),
-        CheckConclusion::Superseded => ("superseded", "cancelled"),
-        CheckConclusion::Unavailable(_) => ("unavailable", "failure"),
-    }
-}
-
-fn matches_expected(run: &CheckRunRecord, expected: &CreateCheckRun) -> bool {
-    run.output.summary.as_deref() == Some(expected.output.summary.as_str())
-        && matches_stable_fields(run, expected)
-}
-
 fn matches_stable_fields(run: &CheckRunRecord, expected: &CreateCheckRun) -> bool {
     run.name == expected.name
         && run.head_sha == expected.head_sha
         && run.external_id.as_deref() == Some(expected.external_id.as_str())
         && run.status == expected.status
-        && run.conclusion.as_deref() == Some(expected.conclusion.as_str())
+        && run.conclusion == Some(expected.conclusion)
         && run.output.title.as_deref() == Some(expected.output.title.as_str())
 }

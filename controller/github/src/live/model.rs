@@ -1,7 +1,8 @@
 use amiss_wire::model::Oid;
 use serde::{Deserialize, Serialize};
 
-pub(super) use crate::check::CheckRunApp;
+use crate::check::{CheckRunConclusion, CheckRunStatus};
+pub(super) use crate::check::{CheckRunPage, CheckRunRecord};
 pub(super) use crate::commit::GitCommitRecord;
 pub(super) use crate::owner::OwnerRecord;
 pub(super) use crate::reference::RefRecord;
@@ -68,37 +69,13 @@ pub(super) struct GateCommitRecord {
     pub parents: Vec<Oid>,
 }
 
-#[derive(Clone, Deserialize)]
-pub(super) struct CheckRunRecord {
-    pub id: u64,
-    pub name: String,
-    pub head_sha: String,
-    pub external_id: Option<String>,
-    pub status: String,
-    pub conclusion: Option<String>,
-    pub output: CheckRunOutputRecord,
-    pub app: Option<CheckRunApp>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct CheckRunOutputRecord {
-    pub title: Option<String>,
-    pub summary: Option<String>,
-}
-
-#[derive(Deserialize)]
-pub(super) struct CheckRunPage {
-    pub total_count: u64,
-    pub check_runs: Vec<CheckRunRecord>,
-}
-
 #[derive(Clone, Serialize)]
 pub(super) struct CreateCheckRun {
     pub name: String,
-    pub head_sha: String,
+    pub head_sha: Oid,
     pub external_id: String,
-    pub status: &'static str,
-    pub conclusion: String,
+    pub status: CheckRunStatus,
+    pub conclusion: CheckRunConclusion,
     pub output: CreateCheckRunOutput,
 }
 

@@ -9,6 +9,9 @@ mod artifact;
 #[path = "json_contracts/check_app.rs"]
 mod check_app;
 
+#[path = "json_contracts/check_run.rs"]
+mod check_run;
+
 #[path = "json_contracts/owner.rs"]
 mod owner;
 
