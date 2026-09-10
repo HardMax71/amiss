@@ -7,6 +7,7 @@ mod live;
 pub mod owner;
 pub mod reference;
 pub mod repository;
+pub mod workflow;
 mod workflow_artifact;
 
 use std::sync::Arc;

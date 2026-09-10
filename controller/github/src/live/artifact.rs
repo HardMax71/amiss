@@ -4,33 +4,15 @@ use amiss_controller::{AcquiredSemanticTemplate, ProviderError, WorkflowArtifact
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::{ObjectFormat, Oid};
-use serde::{Deserialize, Serialize};
+use js_int::UInt;
+use serde::Serialize;
 
 use crate::artifact::WorkflowArtifactPage;
 
 use super::{Config, refresh};
-pub(super) use crate::repository::WorkflowRepositoryRecord;
+pub(super) use crate::workflow::{WorkflowRunPage, WorkflowRunRecord};
 
 pub(super) const EXACT_PAGE_SIZE: u8 = 2;
-
-#[derive(Clone, Deserialize)]
-pub(super) struct WorkflowRunRecord {
-    pub(super) id: u64,
-    pub(super) head_sha: Oid,
-    pub(super) event: String,
-    pub(super) status: String,
-    pub(super) conclusion: Option<String>,
-    pub(super) workflow_id: u64,
-    pub(super) run_attempt: u64,
-    pub(super) repository: WorkflowRepositoryRecord,
-    pub(super) head_repository: WorkflowRepositoryRecord,
-}
-
-#[derive(Deserialize)]
-pub(super) struct WorkflowRunPage {
-    pub(super) total_count: u64,
-    pub(super) workflow_runs: Vec<WorkflowRunRecord>,
-}
 
 #[derive(Serialize)]
 pub(super) struct WorkflowRunQuery<'a> {
@@ -97,10 +79,10 @@ pub(super) fn select_workflow_run(
         && run.repository.id > 0
         && run.head_repository.id > 0
         && run.workflow_id > 0
-        && run.run_attempt > 0
+        && run.run_attempt.is_some_and(|attempt| attempt > UInt::MIN)
         && run.head_sha == *candidate
         && run.event == expectation.event.as_str()
-        && run.status == "completed"
+        && run.status.as_deref() == Some("completed")
         && run.conclusion.as_deref() == Some("success")
         && repository == expectation.repository
         && numeric_workflow_matches;

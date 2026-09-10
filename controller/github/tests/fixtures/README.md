@@ -34,3 +34,10 @@ fixture is the member of [github/docs](https://api.github.com/repos/github/docs)
 captured the same way; its 11 entries were cross-checked against the read-only
 repository properties endpoint. Optional metadata in contract tests is synthetic,
 not claimed as captured from the workflow run.
+
+The workflow-run fixture is the complete response for that same run. The
+workflow-runs page uses the adapter's query for its workflow ID and head SHA,
+event=pull_request, status=success, exclude_pull_requests=true, per_page=2 and
+page=1. The GET retains the linked pull request; the filtered page has an empty
+pull_requests array. Both were captured read-only on 2026-09-10 with API version
+2022-11-28. Nullable states and referenced workflows added in tests are synthetic.

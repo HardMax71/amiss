@@ -11,24 +11,43 @@ use amiss_controller::{
 use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{hb, sha256};
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
+use js_int::UInt;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 use super::{
-    SelectedArtifact, WorkflowRepositoryRecord, WorkflowRunPage, WorkflowRunRecord,
-    finish_workflow_artifact, select_workflow_artifact, select_workflow_run,
-    validate_workflow_request,
+    SelectedArtifact, WorkflowRunPage, WorkflowRunRecord, finish_workflow_artifact,
+    select_workflow_artifact, select_workflow_run, validate_workflow_request,
 };
 use crate::artifact::{ArtifactRunRecord, WorkflowArtifactPage, WorkflowArtifactRecord};
 use crate::live::Config;
 use crate::live::model::OwnerRecord;
+use crate::repository::WorkflowRepositoryRecord;
 
 const PAYLOAD_FILE: &str = "amiss/semantic-template.json";
 
 #[test]
 fn exact_provider_records_select_and_retain_the_planned_template() {
-    let (config, expectation, candidate) = fixture();
-    let run = select_workflow_run(&config, &expectation, &candidate, run_page(&candidate)).unwrap();
+    let (config, mut expectation, _) = fixture();
+    expectation.repository =
+        RepositoryIdentity::github("hardmax71".to_owned(), "amiss".to_owned()).unwrap();
+    expectation.workflow_identity = OpaqueId::try_from("313127792".to_owned()).unwrap();
+    let candidate = Oid::new(
+        ObjectFormat::Sha1,
+        "316badb35996a3ff460b1e2d4b8460f92571c438".to_owned(),
+    )
+    .unwrap();
+    let run = select_workflow_run(
+        &config,
+        &expectation,
+        &candidate,
+        amiss_wire::read_json(
+            include_bytes!("../../../tests/fixtures/workflow-runs.json"),
+            u64::MAX,
+        )
+        .unwrap(),
+    )
+    .unwrap();
     let payload = template(expectation.semantic.context_digest);
     let archive = archive(&payload);
     let selected = select_workflow_artifact(
@@ -96,7 +115,7 @@ fn exact_provider_records_select_and_retain_the_planned_template() {
 #[test]
 fn every_workflow_run_binding_clause_fails_closed() {
     let (config, expectation, candidate) = fixture();
-    let defects: [fn(&mut WorkflowRunPage); 15] = [
+    let defects: [fn(&mut WorkflowRunPage); 18] = [
         |page| page.total_count = 2,
         |page| page.workflow_runs.push(page.workflow_runs[0].clone()),
         |page| page.workflow_runs[0].id = 0,
@@ -104,10 +123,13 @@ fn every_workflow_run_binding_clause_fails_closed() {
             page.workflow_runs[0].head_sha = Oid::new(ObjectFormat::Sha1, "f".repeat(40)).unwrap();
         },
         |page| page.workflow_runs[0].event = "push".to_owned(),
-        |page| page.workflow_runs[0].status = "queued".to_owned(),
+        |page| page.workflow_runs[0].status = Some("queued".to_owned()),
+        |page| page.workflow_runs[0].status = None,
         |page| page.workflow_runs[0].conclusion = Some("failure".to_owned()),
+        |page| page.workflow_runs[0].conclusion = None,
         |page| page.workflow_runs[0].workflow_id = 0,
-        |page| page.workflow_runs[0].run_attempt = 0,
+        |page| page.workflow_runs[0].run_attempt = Some(UInt::MIN),
+        |page| page.workflow_runs[0].run_attempt = None,
         |page| page.workflow_runs[0].repository.id = 0,
         |page| page.workflow_runs[0].repository.full_name = "other/widget".to_owned(),
         |page| {
@@ -234,18 +256,26 @@ fn repository(id: u64, owner: &str, name: &str) -> WorkflowRepositoryRecord {
 }
 
 fn run_page(candidate: &Oid) -> WorkflowRunPage {
+    let captured: WorkflowRunRecord = amiss_wire::read_json(
+        include_bytes!("../../../tests/fixtures/workflow-run.json"),
+        u64::MAX,
+    )
+    .unwrap();
     WorkflowRunPage {
         total_count: 1,
         workflow_runs: vec![WorkflowRunRecord {
             id: 41,
             head_sha: candidate.clone(),
             event: "pull_request".to_owned(),
-            status: "completed".to_owned(),
+            status: Some("completed".to_owned()),
             conclusion: Some("success".to_owned()),
             workflow_id: 321,
-            run_attempt: 2,
+            run_attempt: Some(UInt::from(2_u8)),
             repository: repository(101, "Acme", "Widget"),
             head_repository: repository(202, "Contributor", "Widget-Fork"),
+            head_commit: None,
+            pull_requests: Some(Vec::new()),
+            ..captured
         }],
     }
 }
