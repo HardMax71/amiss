@@ -383,6 +383,7 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
         number: Some(42),
         pull_request: Some(pull),
         review: None,
+        comment: None,
         workflow: None,
         workflow_run: None,
     };

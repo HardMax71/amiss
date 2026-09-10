@@ -10,6 +10,7 @@ use crate::check::CheckRunStatus;
 use crate::repository::pull::PullRepositoryRecord;
 use crate::workflow::{ReferencedWorkflow, WorkflowCommit, WorkflowPullRequest};
 
+pub mod comment;
 pub mod event;
 pub mod pull;
 pub mod repository;
@@ -31,6 +32,8 @@ pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
     pub pull_request: Option<Pull>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub review: Option<review::ReviewRecord>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub comment: Option<comment::Comment>,
     pub workflow: Option<Workflow>,
     pub workflow_run: Option<WorkflowRun>,
 }

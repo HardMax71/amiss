@@ -2,6 +2,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
+use super::comment::ReviewCommentEvent;
+
 use super::pull::request::{PullRequestWebhook, SynchronizePullRequest};
 use super::review::ReviewEvent;
 use super::{GitHubPayload, PullRequest};
@@ -9,6 +11,7 @@ use super::{GitHubPayload, PullRequest};
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum GitHubEvent {
+    ReviewComment(Box<ReviewCommentEvent>),
     Review(Box<ReviewEvent>),
     PullRequest(Box<GitHubPayload<PullRequestWebhook, PullAction>>),
     Synchronize(Box<GitHubPayload<SynchronizePullRequest, SynchronizeAction>>),

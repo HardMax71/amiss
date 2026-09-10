@@ -36,6 +36,14 @@ pub const GITHUB_WEBHOOK_PULL: &[u8] = include_bytes!("../data/github-webhook-pu
 /// Unchanged submitted-review event from Octokit's published webhook examples.
 pub const GITHUB_WEBHOOK_REVIEW: &[u8] = include_bytes!("../data/github-webhook-review.json");
 
+/// Unchanged comment member from Octokit's published review-comment events.
+pub const GITHUB_WEBHOOK_REVIEW_COMMENT: &[u8] =
+    include_bytes!("../data/github-webhook-review-comment.json");
+
+/// Complete comment member from Octokit's published issue-comment-created example.
+pub const GITHUB_WEBHOOK_ISSUE_COMMENT: &[u8] =
+    include_bytes!("../data/github-webhook-issue-comment.json");
+
 /// Constructed GitLab policy-job claims matching the provider's complete token fields.
 pub const GITLAB_POLICY_CLAIMS: &[u8] = include_bytes!("../data/gitlab-policy-claims.json");
 

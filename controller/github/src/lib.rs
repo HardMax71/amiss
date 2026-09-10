@@ -27,6 +27,7 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::check::CheckRunStatus;
+use crate::webhook::comment::Comment;
 use crate::webhook::event::{ActivityAction, GitHubEvent, PullAction};
 use crate::webhook::pull::request::PullRequestWebhook;
 use crate::webhook::{GitHubPayload, WorkflowRun, WorkflowRunConclusion};
@@ -269,14 +270,17 @@ impl PullRequestFacts {
 
         let event: GitHubEvent = serde_json::from_slice(body).map_err(|_defect| Authentication)?;
         let payload = match event {
-            GitHubEvent::Review(_) => return Ok(None),
+            GitHubEvent::Review(_) | GitHubEvent::ReviewComment(_) => return Ok(None),
             GitHubEvent::PullRequest(payload) => {
-                if payload.review.is_some() {
+                if payload.review.is_some() || matches!(payload.comment, Some(Comment::Review(_))) {
                     return Err(Authentication);
                 }
                 let Some(pull_request) = payload.pull_request.as_ref() else {
                     return Ok(None);
                 };
+                if payload.comment.is_some() {
+                    return Err(Authentication);
+                }
                 if workflow_completion.is_some() || !supported_action(&payload) {
                     return Ok(None);
                 }
@@ -302,12 +306,15 @@ impl PullRequestFacts {
                 .map(Some);
             }
             GitHubEvent::Synchronize(payload) => {
-                if payload.review.is_some() {
+                if payload.review.is_some() || matches!(payload.comment, Some(Comment::Review(_))) {
                     return Err(Authentication);
                 }
                 let Some(pull) = payload.pull_request.as_ref() else {
                     return Ok(None);
                 };
+                if payload.comment.is_some() {
+                    return Err(Authentication);
+                }
                 if workflow_completion.is_some() || payload.action.is_none() {
                     return Ok(None);
                 }
@@ -333,35 +340,49 @@ impl PullRequestFacts {
             }
             GitHubEvent::Activity(payload) => payload,
         };
-        if payload.review.is_some() {
+        if payload.review.is_some()
+            || matches!(payload.comment, Some(Comment::Review(_)))
+            || (payload.pull_request.is_some()
+                && (payload.comment.is_some()
+                    || matches!(
+                        payload.action,
+                        Some(ActivityAction::Created | ActivityAction::Deleted)
+                    )))
+        {
             return Err(Authentication);
         }
         if payload.pull_request.is_some() {
             return Ok(None);
         }
 
-        let Some((completion, run)) = configured_workflow(&payload, workflow_completion) else {
-            return Ok(None);
-        };
-        if run.conclusion != Some(WorkflowRunConclusion::Success) {
-            return Ok(None);
-        }
-        let (installation_id, repository_id, repository) =
-            authenticated_repository(&payload, provider)?;
-        let Some(binding) =
-            workflow_pull_request(&payload, run, completion, provider, &repository)?
-        else {
-            return Ok(None);
-        };
-        bind_pull_request(
-            provider,
-            installation_id,
-            repository_id,
-            repository,
-            binding,
-        )
-        .map(Some)
+        authenticate_workflow_completion(&payload, provider, workflow_completion)
     }
+}
+
+fn authenticate_workflow_completion(
+    payload: &GitHubPayload<webhook::PullRequest, ActivityAction>,
+    provider: &ProviderIdentity,
+    workflow_completion: Option<&WorkflowCompletion>,
+) -> Result<Option<PullRequestFacts>, ProviderError> {
+    let Some((completion, run)) = configured_workflow(payload, workflow_completion) else {
+        return Ok(None);
+    };
+    if run.conclusion != Some(WorkflowRunConclusion::Success) {
+        return Ok(None);
+    }
+    let (installation_id, repository_id, repository) = authenticated_repository(payload, provider)?;
+    let Some(binding) = workflow_pull_request(payload, run, completion, provider, &repository)?
+    else {
+        return Ok(None);
+    };
+    bind_pull_request(
+        provider,
+        installation_id,
+        repository_id,
+        repository,
+        binding,
+    )
+    .map(Some)
 }
 
 #[derive(Clone, Copy)]

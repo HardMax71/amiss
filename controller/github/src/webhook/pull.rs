@@ -34,9 +34,9 @@ pub enum PullRequestAccountKind {
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
-pub enum Reviewer {
-    Account(Box<WorkflowOwner<PullRequestAccountKind>>),
-    Team(Box<ReviewTeam>),
+pub enum Reviewer<Account = WorkflowOwner<PullRequestAccountKind>, Team = ReviewTeam> {
+    Account(Box<Account>),
+    Team(Box<Team>),
 }
 
 #[serde_with::apply(Option<_> => #[serde(
