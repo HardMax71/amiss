@@ -16,15 +16,14 @@ fn signed_review_comments_retain_the_published_events_and_remain_no_work() {
     else {
         panic!("the fixture is a submitted review")
     };
+    let mut pull: CommentPullRequest =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW_PULL).unwrap();
+    pull.draft = None;
+    pull.auto_merge = None;
     let created = serde_json::to_vec(&ReviewCommentEvent::Created {
         event: CommentPayload {
             comment: serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW_COMMENT).unwrap(),
-            pull_request: CommentPullRequest {
-                context: event.pull_request.request,
-                draft: None,
-                auto_merge: None,
-                stack: None,
-            },
+            pull_request: pull,
             repository: event.repository,
             sender: event.sender,
             installation: event.installation,

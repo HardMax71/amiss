@@ -4,6 +4,7 @@
 )]
 
 mod review_comments;
+mod review_threads;
 mod reviews;
 
 use amiss_controller_fixtures::clock::TestClock;
@@ -70,6 +71,7 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
         pull_request: Some(pull),
         review: None,
         comment: None,
+        thread: None,
         workflow: None,
         workflow_run: None,
     })
@@ -1433,6 +1435,7 @@ fn workflow_payload() -> GitHubPayload {
         pull_request: None,
         review: None,
         comment: None,
+        thread: None,
         workflow: Some(Workflow {
             id: 321,
             node_id: "workflow-321".to_owned(),

@@ -6,11 +6,13 @@ use super::comment::ReviewCommentEvent;
 
 use super::pull::request::{PullRequestWebhook, SynchronizePullRequest};
 use super::review::ReviewEvent;
+use super::thread::ReviewThreadEvent;
 use super::{GitHubPayload, PullRequest};
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum GitHubEvent {
+    ReviewThread(Box<ReviewThreadEvent>),
     ReviewComment(Box<ReviewCommentEvent>),
     Review(Box<ReviewEvent>),
     PullRequest(Box<GitHubPayload<PullRequestWebhook, PullAction>>),
@@ -61,8 +63,6 @@ pub enum ActivityAction {
     Unlocked,
     Created,
     Deleted,
-    Resolved,
-    Unresolved,
     Completed,
     InProgress,
     Requested,

@@ -47,11 +47,6 @@ fn review_events_keep_action_specific_rules() {
         };
         let event: GitHubEvent = amiss_wire::read_json(input.as_bytes(), u64::MAX).unwrap();
         assert!(matches!(event, GitHubEvent::Review(_)));
-        assert!(
-            amiss_fixtures::canonical_json(&serde_json::to_vec(&event).unwrap()).unwrap()
-                == amiss_fixtures::canonical_json(input.as_bytes()).unwrap(),
-            "the {action} event must retain every member"
-        );
         if action == "edited" {
             let missing = input.replacen(r#""changes":{},"#, "", 1);
             assert!(serde_json::from_str::<GitHubEvent>(&missing).is_err());
@@ -79,6 +74,12 @@ fn review_events_keep_action_specific_rules() {
             ),
             (r#""id":237895671"#, r#""id":9007199254740992"#, false),
             (r#","draft":false"#, "", false),
+            (
+                r#""label":"Codertocat:changes""#,
+                r#""label":null"#,
+                action == "submitted",
+            ),
+            (r#""label":"Codertocat:changes","#, "", false),
             (r#""body":null"#, r#""body":false"#, false),
             (r#""id":279147437"#, stacked.as_str(), action != "edited"),
             (

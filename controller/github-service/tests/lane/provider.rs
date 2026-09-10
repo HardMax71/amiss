@@ -33,6 +33,7 @@ pub(super) static CHECK_RUN_BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
         pull_request: None,
         review: None,
         comment: None,
+        thread: None,
         workflow: None,
         workflow_run: None,
     })
@@ -88,6 +89,7 @@ impl SignedEvent {
             pull_request: Some(pull),
             review: None,
             comment: None,
+            thread: None,
             workflow: None,
             workflow_run: None,
         })

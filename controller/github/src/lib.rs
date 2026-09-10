@@ -270,9 +270,14 @@ impl PullRequestFacts {
 
         let event: GitHubEvent = serde_json::from_slice(body).map_err(|_defect| Authentication)?;
         let payload = match event {
-            GitHubEvent::Review(_) | GitHubEvent::ReviewComment(_) => return Ok(None),
+            GitHubEvent::ReviewThread(_)
+            | GitHubEvent::Review(_)
+            | GitHubEvent::ReviewComment(_) => return Ok(None),
             GitHubEvent::PullRequest(payload) => {
-                if payload.review.is_some() || matches!(payload.comment, Some(Comment::Review(_))) {
+                if payload.review.is_some()
+                    || payload.thread.is_some()
+                    || matches!(payload.comment, Some(Comment::Review(_)))
+                {
                     return Err(Authentication);
                 }
                 let Some(pull_request) = payload.pull_request.as_ref() else {
@@ -306,7 +311,10 @@ impl PullRequestFacts {
                 .map(Some);
             }
             GitHubEvent::Synchronize(payload) => {
-                if payload.review.is_some() || matches!(payload.comment, Some(Comment::Review(_))) {
+                if payload.review.is_some()
+                    || payload.thread.is_some()
+                    || matches!(payload.comment, Some(Comment::Review(_)))
+                {
                     return Err(Authentication);
                 }
                 let Some(pull) = payload.pull_request.as_ref() else {
@@ -341,6 +349,7 @@ impl PullRequestFacts {
             GitHubEvent::Activity(payload) => payload,
         };
         if payload.review.is_some()
+            || payload.thread.is_some()
             || matches!(payload.comment, Some(Comment::Review(_)))
             || (payload.pull_request.is_some()
                 && (payload.comment.is_some()

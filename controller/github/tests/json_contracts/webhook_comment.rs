@@ -1,6 +1,5 @@
 use amiss_controller_github::webhook::comment::{Comment, ReviewCommentRecord};
 use amiss_controller_github::webhook::pull::review::CommentPullRequest;
-use amiss_controller_github::webhook::review::ReviewEvent;
 use amiss_wire::assessment::Nullable;
 use js_int::UInt;
 
@@ -107,17 +106,10 @@ fn review_comment_members_keep_presence_nullability_and_closed_shapes() {
 
 #[test]
 fn review_comment_pr_options_remain_absent_without_defaults() {
-    let ReviewEvent::Submitted { event } =
-        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW).unwrap()
-    else {
-        panic!("submitted review")
-    };
-    let pull = CommentPullRequest {
-        context: event.pull_request.request,
-        draft: None,
-        auto_merge: None,
-        stack: None,
-    };
+    let mut pull: CommentPullRequest =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW_PULL).unwrap();
+    pull.draft = None;
+    pull.auto_merge = None;
     let input = serde_json::to_string(&pull).unwrap();
     assert!(
         amiss_wire::read_json::<CommentPullRequest>(input.as_bytes(), u64::MAX).unwrap() == pull

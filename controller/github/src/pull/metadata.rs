@@ -46,14 +46,16 @@ pub struct MilestoneRecord<User = OwnerRecord> {
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     deny_unknown_fields,
-    bound(deserialize = "User: Deserialize<'de>, Message: Deserialize<'de>")
+    bound(
+        deserialize = "User: Deserialize<'de>, Message: Deserialize<'de>, Title: Deserialize<'de>"
+    )
 )]
-pub struct AutoMergeRecord<User = OwnerRecord, Message = String> {
+pub struct AutoMergeRecord<User = OwnerRecord, Message = String, Title = Message> {
     #[serde(deserialize_with = "User::deserialize")]
     pub enabled_by: User,
     pub merge_method: MergeMethod,
-    #[serde(deserialize_with = "Message::deserialize")]
-    pub commit_title: Message,
+    #[serde(deserialize_with = "Title::deserialize")]
+    pub commit_title: Title,
     #[serde(deserialize_with = "Message::deserialize")]
     pub commit_message: Message,
 }

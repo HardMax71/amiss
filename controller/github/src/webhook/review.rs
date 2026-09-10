@@ -9,9 +9,11 @@ use strum::{Display, EnumString};
 use super::pull::PullRequestAccountKind;
 use super::pull::review::{ReviewActivityPullRequest, ReviewPullRequest};
 use super::repository::WorkflowOwner;
+use super::repository::pull::PullRepository;
 use super::{Installation, Organization, PreviousReference};
 use crate::check::EnterpriseRecord;
 use crate::owner::OwnerRecord;
+use crate::pull::PullRefRecord;
 use crate::pull::metadata::{AuthorAssociation, Link};
 use crate::repository::pull::PullRepositoryRecord;
 
@@ -46,7 +48,12 @@ pub enum ReviewEvent {
     deny_unknown_fields,
     bound(deserialize = "Pull: Deserialize<'de>, Review: Deserialize<'de>")
 )]
-pub struct ReviewPayload<Pull = ReviewActivityPullRequest, Review = ReviewRecord> {
+pub struct ReviewPayload<
+    Pull = ReviewActivityPullRequest<
+        PullRefRecord<Option<WorkflowOwner>, Option<PullRepository>, Nullable<String>>,
+    >,
+    Review = ReviewRecord,
+> {
     pub review: Review,
     pub pull_request: Pull,
     pub repository: PullRepositoryRecord,

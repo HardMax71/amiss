@@ -90,10 +90,17 @@ pub enum State {
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
     deny_unknown_fields,
-    bound(deserialize = "User: Deserialize<'de>, Repository: Deserialize<'de>")
+    bound(
+        deserialize = "User: Deserialize<'de>, Repository: Deserialize<'de>, Label: Deserialize<'de>"
+    )
 )]
-pub struct PullRefRecord<User = OwnerRecord, Repository = Option<PullRepositoryRecord>> {
-    pub label: String,
+pub struct PullRefRecord<
+    User = OwnerRecord,
+    Repository = Option<PullRepositoryRecord>,
+    Label = String,
+> {
+    #[serde(deserialize_with = "Label::deserialize")]
+    pub label: Label,
     #[serde(rename = "ref")]
     pub branch: String,
     pub sha: Oid,

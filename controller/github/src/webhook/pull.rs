@@ -9,6 +9,7 @@ use super::repository::WorkflowOwner;
 
 pub mod request;
 pub mod review;
+pub mod thread;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,

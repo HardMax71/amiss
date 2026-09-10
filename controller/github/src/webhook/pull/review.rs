@@ -29,10 +29,16 @@ pub struct PullRequestContext<
     Assignee = WorkflowOwner<PullRequestAccountKind>,
     Requested = Reviewer,
     Creator = WorkflowOwner<PullRequestAccountKind>,
+    User = WorkflowOwner<PullRequestAccountKind>,
+    Head = PullRefRecord<Option<WorkflowOwner>, Option<PullRepository>>,
 > {
     pub id: u64,
     pub number: u64,
-    pub head: PullRefRecord<Option<WorkflowOwner>, Option<PullRepository>>,
+    #[serde(
+        bound(deserialize = "Head: Deserialize<'de>"),
+        deserialize_with = "Head::deserialize"
+    )]
+    pub head: Head,
     pub base: PullRefRecord<Option<WorkflowOwner>, PullRepository>,
     pub url: String,
     pub node_id: String,
@@ -43,7 +49,7 @@ pub struct PullRequestContext<
     pub state: State,
     pub locked: bool,
     pub title: String,
-    pub user: Nullable<Box<WorkflowOwner<PullRequestAccountKind>>>,
+    pub user: Nullable<Box<User>>,
     pub body: Nullable<String>,
     pub created_at: String,
     pub updated_at: String,
@@ -69,9 +75,17 @@ pub struct PullRequestContext<
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ReviewActivityPullRequest {
+pub struct ReviewActivityPullRequest<
+    Head = PullRefRecord<Option<WorkflowOwner>, Option<PullRepository>>,
+> {
     #[serde(flatten)]
-    pub request: PullRequestContext,
+    pub request: PullRequestContext<
+        WorkflowOwner<PullRequestAccountKind>,
+        Reviewer,
+        WorkflowOwner<PullRequestAccountKind>,
+        WorkflowOwner<PullRequestAccountKind>,
+        Head,
+    >,
     pub auto_merge: Nullable<Box<AutoMergeRecord<Option<WorkflowOwner>, Option<String>>>>,
     pub draft: bool,
     #[serde(

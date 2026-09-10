@@ -82,7 +82,7 @@ pub struct CommentPayload<
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ReviewCommentRecord<OriginalLine = UInt> {
+pub struct ReviewCommentRecord<OriginalLine = UInt, User = WorkflowOwner> {
     pub url: String,
     pub pull_request_review_id: Nullable<UInt>,
     pub id: UInt,
@@ -93,7 +93,7 @@ pub struct ReviewCommentRecord<OriginalLine = UInt> {
     pub original_position: UInt,
     pub commit_id: Oid,
     pub original_commit_id: Oid,
-    pub user: Nullable<WorkflowOwner>,
+    pub user: Nullable<User>,
     pub body: String,
     pub created_at: String,
     pub updated_at: String,

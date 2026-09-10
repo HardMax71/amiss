@@ -384,6 +384,7 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
         pull_request: Some(pull),
         review: None,
         comment: None,
+        thread: None,
         workflow: None,
         workflow_run: None,
     };

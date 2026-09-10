@@ -15,6 +15,7 @@ pub mod event;
 pub mod pull;
 pub mod repository;
 pub mod review;
+pub mod thread;
 
 use pull::request::PullRequestWebhook;
 use repository::{WorkflowOwner, WorkflowRepository};
@@ -34,6 +35,8 @@ pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
     pub review: Option<review::ReviewRecord>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub comment: Option<comment::Comment>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub thread: Option<thread::ReviewThread>,
     pub workflow: Option<Workflow>,
     pub workflow_run: Option<WorkflowRun>,
 }
