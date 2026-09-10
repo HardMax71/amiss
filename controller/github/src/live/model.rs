@@ -4,20 +4,11 @@ use serde::{Deserialize, Serialize};
 use crate::check::{CheckRunConclusion, CheckRunStatus};
 pub(super) use crate::check::{CheckRunPage, CheckRunRecord};
 pub(super) use crate::commit::GitCommitRecord;
-pub(super) use crate::owner::OwnerRecord;
 pub(super) use crate::reference::RefRecord;
+pub(super) use crate::repository::RepositoryRecord;
 pub(super) use crate::repository::pull::PullRepositoryRecord;
 
 use super::rules::BranchRule;
-
-#[derive(Clone, Deserialize)]
-pub(super) struct RepositoryRecord {
-    pub id: u64,
-    pub name: String,
-    pub full_name: String,
-    pub owner: OwnerRecord,
-    pub default_branch: String,
-}
 
 #[derive(Clone, Deserialize)]
 pub(super) struct PullRequestRecord {

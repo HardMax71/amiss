@@ -145,6 +145,9 @@ fn workflow_repository_preserves_security_and_bypass_metadata() {
             secret_scanning_push_protection: Some(SecurityFeature {
                 status: Some(SecurityStatus::Disabled),
             }),
+            secret_scanning_validity_checks: Some(SecurityFeature {
+                status: Some(SecurityStatus::Enabled),
+            }),
         })),
         ..amiss_wire::read_json(CAPTURE.as_bytes(), u64::MAX).unwrap()
     };
@@ -209,6 +212,8 @@ fn repository_metadata_refuses_unknown_null_and_invalid_fields() {
         r#""security_and_analysis":{"secret_scanning":{"extra":true}}"#,
         r#""security_and_analysis":{"secret_scanning":{"status":{"enabled":null}}}"#,
         r#""security_and_analysis":{"secret_scanning":{"status":"future"}}"#,
+        r#""security_and_analysis":{"secret_scanning_validity_checks":null}"#,
+        r#""security_and_analysis":{"secret_scanning_validity_checks":{"status":"not_set"}}"#,
         r#""security_and_analysis":{"secret_scanning_delegated_bypass_options":{"extra":true}}"#,
         r#""security_and_analysis":{"secret_scanning_delegated_bypass_options":{"reviewers":[{"reviewer_id":1}]}}"#,
         r#""security_and_analysis":{"secret_scanning_delegated_bypass_options":{"reviewers":[{"reviewer_id":1,"reviewer_type":"TEAM","extra":true}]}}"#,

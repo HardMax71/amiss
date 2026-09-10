@@ -303,7 +303,7 @@ impl GitHubRest for HttpRest {
             .get(self.transport.url(&format!("/repos/{owner}/{name}"))?);
         let repository: RepositoryRecord =
             decode_body(self.transport.execute(request, deadline)?, |bytes| {
-                serde_json::from_slice(bytes)
+                amiss_wire::read_json(bytes, u64::MAX)
             })?;
         let authoritative = self.pull_request(pull_request, deadline)?;
         let target = self.git_commit(owner, name, &authoritative.base.sha, deadline)?;

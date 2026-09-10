@@ -62,3 +62,12 @@ read-only on 2026-09-10 with API version 2022-11-28; the base repository member 
 identical. The repository-access fixture is the complete permissions member of
 the ordinary Amiss repository GET on the same date. Optional policies, code-search
 metadata and token text in tests are synthetic, not captured credentials.
+
+The full repository fixtures are read-only GETs of
+[Amiss](https://api.github.com/repos/HardMax71/amiss) and an existing
+[API-description fork](https://api.github.com/repos/rizalgowandy/rest-api-description),
+captured on 2026-09-10 with API version 2022-11-28. The fork preserves both parent
+and source records. The Amiss response contains the documented validity-check
+security setting missing from the upstream shared response schema. Captured clone
+tokens are absent or empty; populated template, organization and token cases in
+tests are synthetic. No repository or security setting was changed.

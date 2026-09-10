@@ -12,6 +12,9 @@ mod check_app;
 #[path = "json_contracts/check_run.rs"]
 mod check_run;
 
+#[path = "json_contracts/full_repository.rs"]
+mod full_repository;
+
 #[path = "json_contracts/owner.rs"]
 mod owner;
 

@@ -21,7 +21,7 @@ use super::{
 };
 use crate::artifact::{ArtifactRunRecord, WorkflowArtifactPage, WorkflowArtifactRecord};
 use crate::live::Config;
-use crate::live::model::OwnerRecord;
+use crate::owner::OwnerRecord;
 use crate::repository::WorkflowRepositoryRecord;
 
 const PAYLOAD_FILE: &str = "amiss/semantic-template.json";

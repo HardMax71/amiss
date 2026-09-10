@@ -66,6 +66,15 @@ pub struct CodeOfConduct {
     pub body: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CodeOfConductSummary {
+    pub url: String,
+    pub html_url: Nullable<String>,
+    pub key: String,
+    pub name: String,
+}
+
 #[serde_with::apply(Option<_> => #[serde(
     default,
     deserialize_with = "deserialize_some",
@@ -84,6 +93,7 @@ pub struct SecurityAnalysis {
     pub secret_scanning_delegated_bypass_options: Option<BypassOptions>,
     pub secret_scanning_non_provider_patterns: Option<SecurityFeature>,
     pub secret_scanning_push_protection: Option<SecurityFeature>,
+    pub secret_scanning_validity_checks: Option<SecurityFeature>,
 }
 
 #[serde_with::apply(Option<_> => #[serde(

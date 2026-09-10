@@ -19,9 +19,10 @@ use amiss_wire::report::{Disposition, FindingKind};
 
 use crate::GitHubPullRequest;
 use crate::check::{CheckRunApp, CheckRunConclusion, CheckRunOutputRecord, CheckRunStatus};
+use crate::owner::OwnerRecord;
 
 use super::model::{
-    CheckRunRecord, CommitRecord, CreateCheckRun, OwnerRecord, PullRefRecord, PullRepositoryRecord,
+    CheckRunRecord, CommitRecord, CreateCheckRun, PullRefRecord, PullRepositoryRecord,
     PullRequestRecord, RefreshData, RepositoryRecord,
 };
 use super::publication::{CheckRunDecision, publication_decision, validate_created};
@@ -34,7 +35,8 @@ const INSTALLATION_ID: u64 = 7;
 
 #[test]
 fn refresh_maps_exact_trees_and_moved_head() {
-    let fixture = Fixture::new();
+    let mut fixture = Fixture::new();
+    fixture.data.repository.default_branch = "trunk".to_owned();
     let active =
         super::refresh::snapshot(&fixture.config, fixture.request(), &fixture.data).unwrap();
     assert_eq!(active.state, ChangeState::Active);
@@ -43,6 +45,9 @@ fn refresh_maps_exact_trees_and_moved_head() {
     assert_eq!(active.run.trees.base, oid('c'));
     assert_eq!(active.run.trees.candidate, oid('d'));
     assert_eq!(active.gate_commit, oid('e'));
+    assert_eq!(active.run.refs.candidate.as_str(), "refs/heads/topic");
+    assert_eq!(active.run.refs.target.as_str(), "refs/heads/main");
+    assert_eq!(active.run.refs.default_branch.as_str(), "refs/heads/trunk");
 
     let moved = fixture.moved_data();
     let superseded = super::refresh::snapshot(&fixture.config, fixture.request(), &moved).unwrap();
@@ -50,6 +55,7 @@ fn refresh_maps_exact_trees_and_moved_head() {
     assert_eq!(superseded.run.commits.candidate, oid('b'));
     assert_eq!(superseded.run.trees.candidate, oid('d'));
     assert_eq!(superseded.gate_commit, oid('2'));
+    assert_eq!(superseded.run.refs, active.run.refs);
 }
 
 #[test]
@@ -998,6 +1004,11 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             full_name: "Acme/Widget".to_owned(),
             owner: base_repository.owner.clone(),
             default_branch: "main".to_owned(),
+            ..amiss_wire::read_json(
+                include_bytes!("../../tests/fixtures/repository.json"),
+                u64::MAX,
+            )
+            .unwrap()
         },
         pull_request: PullRequestRecord {
             id: 4_201,
