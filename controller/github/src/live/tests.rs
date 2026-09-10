@@ -975,11 +975,12 @@ impl GitHubRest for FakeRest {
 }
 
 fn refresh_data(candidate: &Oid) -> RefreshData {
-    let owner: OwnerRecord = amiss_wire::read_json(
-        include_bytes!("../../tests/fixtures/owner-user.json"),
+    let captured: PullRepositoryRecord = amiss_wire::read_json(
+        include_bytes!("../../tests/fixtures/pull-repository.json"),
         u64::MAX,
     )
     .unwrap();
+    let owner = captured.owner.clone();
     let base_repository = PullRepositoryRecord {
         id: 101,
         name: "widget".to_owned(),
@@ -988,6 +989,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             login: "Acme".to_owned(),
             ..owner.clone()
         },
+        ..captured.clone()
     };
     RefreshData {
         repository: RepositoryRecord {
@@ -1014,6 +1016,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
                         login: "Contributor".to_owned(),
                         ..owner
                     },
+                    ..captured
                 }),
             },
             base: PullRefRecord {

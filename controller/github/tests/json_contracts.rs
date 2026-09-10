@@ -15,6 +15,9 @@ mod check_run;
 #[path = "json_contracts/owner.rs"]
 mod owner;
 
+#[path = "json_contracts/pull_repository.rs"]
+mod pull_repository;
+
 #[path = "json_contracts/repository.rs"]
 mod repository;
 

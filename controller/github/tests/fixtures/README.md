@@ -55,3 +55,10 @@ per_page=100, page=1 and app_id=15368 on the captured head. The page's sole reco
 equals the individual response. Deployment metadata and stale conclusions in
 tests are synthetic; GitHub documents stale as a server-assigned conclusion even
 though its response-schema enumeration omits it. No check was created or updated.
+
+The pull-repository fixture is the complete head repository member of
+[pull request 935](https://api.github.com/repos/HardMax71/amiss/pulls/935), captured
+read-only on 2026-09-10 with API version 2022-11-28; the base repository member was
+identical. The repository-access fixture is the complete permissions member of
+the ordinary Amiss repository GET on the same date. Optional policies, code-search
+metadata and token text in tests are synthetic, not captured credentials.

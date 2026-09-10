@@ -6,6 +6,7 @@ pub(super) use crate::check::{CheckRunPage, CheckRunRecord};
 pub(super) use crate::commit::GitCommitRecord;
 pub(super) use crate::owner::OwnerRecord;
 pub(super) use crate::reference::RefRecord;
+pub(super) use crate::repository::pull::PullRepositoryRecord;
 
 use super::rules::BranchRule;
 
@@ -35,14 +36,6 @@ pub(super) struct PullRefRecord {
     #[serde(rename = "ref")]
     pub branch: String,
     pub repo: Option<PullRepositoryRecord>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct PullRepositoryRecord {
-    pub id: u64,
-    pub name: String,
-    pub full_name: String,
-    pub owner: OwnerRecord,
 }
 
 #[derive(Clone)]

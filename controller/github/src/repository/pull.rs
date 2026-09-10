@@ -4,15 +4,11 @@ use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto};
 
-use crate::owner::OwnerRecord;
-
-pub mod metadata;
-pub mod pull;
-
-use metadata::{
-    CodeOfConduct, CustomProperties, PullRequestCreationPolicy, RepositoryLicense,
-    RepositoryPermissions, SecurityAnalysis,
+use super::metadata::{
+    CodeSearchIndexStatus, LicenseRecord, MergeCommitMessage, MergeCommitTitle,
+    PullRequestCreationPolicy, RepositoryAccess, SquashMergeCommitMessage, SquashMergeCommitTitle,
 };
+use crate::owner::OwnerRecord;
 
 #[serde_with::apply(Option<_> => #[serde(
     default,
@@ -21,13 +17,17 @@ use metadata::{
 )])]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct WorkflowRepositoryRecord {
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "the repository API exposes independent feature flags"
+)]
+pub struct PullRepositoryRecord {
     #[serde(with = "As::<TryFromInto<UInt>>")]
     pub id: u64,
-    pub node_id: String,
     pub name: String,
     pub full_name: String,
     pub owner: OwnerRecord,
+    pub node_id: String,
     pub private: bool,
     pub html_url: String,
     pub description: Nullable<String>,
@@ -69,48 +69,56 @@ pub struct WorkflowRepositoryRecord {
     pub tags_url: String,
     pub teams_url: String,
     pub trees_url: String,
+    pub clone_url: String,
+    pub default_branch: String,
+    pub forks: UInt,
+    pub forks_count: UInt,
+    pub git_url: String,
+    pub has_downloads: bool,
+    pub has_issues: bool,
+    pub has_projects: bool,
+    pub has_wiki: bool,
+    pub has_pages: bool,
+    pub homepage: Nullable<String>,
+    pub language: Nullable<String>,
+    pub archived: bool,
+    pub disabled: bool,
+    pub mirror_url: Nullable<String>,
+    pub open_issues: UInt,
+    pub open_issues_count: UInt,
+    pub license: Nullable<LicenseRecord>,
+    pub pushed_at: Nullable<String>,
+    pub size: UInt,
+    pub ssh_url: String,
+    pub stargazers_count: UInt,
+    pub svn_url: String,
+    pub watchers: UInt,
+    pub watchers_count: UInt,
+    pub created_at: Nullable<String>,
+    pub updated_at: Nullable<String>,
+    pub allow_auto_merge: Option<bool>,
     pub allow_forking: Option<bool>,
-    pub archived: Option<bool>,
-    pub clone_url: Option<String>,
-    pub code_of_conduct: Option<CodeOfConduct>,
-    pub created_at: Option<Nullable<String>>,
-    pub custom_properties: Option<CustomProperties>,
-    pub default_branch: Option<String>,
+    pub allow_merge_commit: Option<bool>,
+    pub allow_rebase_merge: Option<bool>,
+    pub allow_squash_merge: Option<bool>,
+    pub allow_update_branch: Option<bool>,
+    pub anonymous_access_enabled: Option<bool>,
+    pub code_search_index_status: Option<CodeSearchIndexStatus>,
     pub delete_branch_on_merge: Option<bool>,
-    pub disabled: Option<bool>,
-    pub forks: Option<UInt>,
-    pub forks_count: Option<UInt>,
-    pub git_url: Option<String>,
     pub has_discussions: Option<bool>,
-    pub has_downloads: Option<bool>,
-    pub has_issues: Option<bool>,
-    pub has_pages: Option<bool>,
-    pub has_projects: Option<bool>,
     pub has_pull_requests: Option<bool>,
-    pub has_wiki: Option<bool>,
-    pub homepage: Option<Nullable<String>>,
     pub is_template: Option<bool>,
-    pub language: Option<Nullable<String>>,
-    pub license: Option<Nullable<RepositoryLicense>>,
-    pub mirror_url: Option<Nullable<String>>,
-    pub network_count: Option<UInt>,
-    pub open_issues: Option<UInt>,
-    pub open_issues_count: Option<UInt>,
-    pub permissions: Option<RepositoryPermissions>,
+    pub master_branch: Option<String>,
+    pub merge_commit_message: Option<MergeCommitMessage>,
+    pub merge_commit_title: Option<MergeCommitTitle>,
+    pub permissions: Option<RepositoryAccess>,
     pub pull_request_creation_policy: Option<PullRequestCreationPolicy>,
-    pub pushed_at: Option<Nullable<String>>,
-    pub role_name: Option<String>,
-    pub security_and_analysis: Option<Nullable<SecurityAnalysis>>,
-    pub size: Option<UInt>,
-    pub ssh_url: Option<String>,
-    pub stargazers_count: Option<UInt>,
-    pub subscribers_count: Option<UInt>,
-    pub svn_url: Option<String>,
+    pub squash_merge_commit_message: Option<SquashMergeCommitMessage>,
+    pub squash_merge_commit_title: Option<SquashMergeCommitTitle>,
+    pub starred_at: Option<String>,
     pub temp_clone_token: Option<String>,
     pub topics: Option<Vec<String>>,
-    pub updated_at: Option<Nullable<String>>,
+    pub use_squash_pr_title_as_default: Option<bool>,
     pub visibility: Option<String>,
-    pub watchers: Option<UInt>,
-    pub watchers_count: Option<UInt>,
     pub web_commit_signoff_required: Option<bool>,
 }
