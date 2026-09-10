@@ -1,4 +1,6 @@
 ---
+imports: [shared/review-status.md]
+
 on:
   slash_command:
     name: [oc, opencode]
@@ -72,7 +74,6 @@ pre-agent-steps:
 timeout-minutes: 25
 
 safe-outputs:
-  report-failure-as-issue: false
   # The side-scan runs the same BYOK engine as the lane; its old default
   # of model auto was the parse failure the detection ledger tracks.
   threat-detection:
