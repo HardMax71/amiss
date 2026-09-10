@@ -15,7 +15,15 @@ use crate::workflow::WorkflowPullRequest;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CheckRunRecord {
+#[serde(bound(
+    deserialize = "Resource: Deserialize<'de>, Suite: Deserialize<'de>, App: Deserialize<'de>, Conclusion: Deserialize<'de>"
+))]
+pub struct CheckRunRecord<
+    Resource = CheckRunResource,
+    Suite = CheckRunSuite,
+    App = CheckRunApp,
+    Conclusion = CheckRunConclusion,
+> {
     #[serde(with = "As::<TryFromInto<UInt>>")]
     pub id: u64,
     pub name: String,
@@ -24,24 +32,31 @@ pub struct CheckRunRecord {
     pub external_id: Option<String>,
     pub status: CheckRunStatus,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub conclusion: Option<CheckRunConclusion>,
+    pub conclusion: Option<Conclusion>,
     pub output: CheckRunOutputRecord,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub app: Option<CheckRunApp>,
-    pub node_id: String,
+    pub app: Option<App>,
+    #[serde(flatten)]
+    pub resource: Resource,
     pub url: String,
     pub html_url: Nullable<String>,
-    pub details_url: Nullable<String>,
     pub started_at: Nullable<String>,
     pub completed_at: Nullable<String>,
-    pub check_suite: Nullable<CheckRunSuite>,
+    pub check_suite: Nullable<Suite>,
     pub pull_requests: Vec<WorkflowPullRequest>,
     #[serde(
         default,
         deserialize_with = "deserialize_some",
         skip_serializing_if = "Option::is_none"
     )]
-    pub deployment: Option<CheckRunDeployment>,
+    pub deployment: Option<CheckRunDeployment<App>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckRunResource {
+    pub node_id: String,
+    pub details_url: Nullable<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -77,7 +92,8 @@ pub struct CheckRunSuite {
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct CheckRunDeployment {
+#[serde(bound(deserialize = "App: Deserialize<'de>"))]
+pub struct CheckRunDeployment<App = CheckRunApp> {
     pub id: UInt,
     pub node_id: String,
     pub task: String,
@@ -91,7 +107,7 @@ pub struct CheckRunDeployment {
     pub original_environment: Option<String>,
     pub transient_environment: Option<bool>,
     pub production_environment: Option<bool>,
-    pub performed_via_github_app: Option<Nullable<CheckRunApp>>,
+    pub performed_via_github_app: Option<Nullable<App>>,
 }
 
 #[derive(

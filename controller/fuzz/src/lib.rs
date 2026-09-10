@@ -386,6 +386,7 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
         comment: None,
         thread: None,
         check_suite: None,
+        check_run: None,
         workflow: None,
         workflow_run: None,
     };

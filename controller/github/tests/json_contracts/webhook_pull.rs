@@ -24,6 +24,7 @@ fn signed_event_contracts_select_and_retain_the_complete_pull() {
         comment: None,
         thread: None,
         check_suite: None,
+        check_run: None,
         workflow: None,
         workflow_run: None,
     };

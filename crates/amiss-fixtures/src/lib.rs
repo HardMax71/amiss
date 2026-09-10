@@ -40,6 +40,9 @@ pub const GITHUB_WEBHOOK_REVIEW: &[u8] = include_bytes!("../data/github-webhook-
 pub const GITHUB_WEBHOOK_CHECK_SUITE: &[u8] =
     include_bytes!("../data/github-webhook-check-suite.json");
 
+/// Complete published check-run event, including its nested suite and app metadata.
+pub const GITHUB_WEBHOOK_CHECK_RUN: &[u8] = include_bytes!("../data/github-webhook-check-run.json");
+
 /// Complete PR member shared by the published review and review-thread examples.
 pub const GITHUB_WEBHOOK_REVIEW_PULL: &[u8] =
     include_bytes!("../data/github-webhook-review-pull.json");

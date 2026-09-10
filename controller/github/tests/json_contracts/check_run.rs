@@ -54,7 +54,7 @@ fn nullable_check_run_metadata_is_required_not_silently_defaulted() {
     run.conclusion = None;
     run.app = None;
     run.html_url = Nullable::Null;
-    run.details_url = Nullable::Null;
+    run.resource.details_url = Nullable::Null;
     run.started_at = Nullable::Null;
     run.completed_at = Nullable::Null;
     run.check_suite = Nullable::Null;

@@ -3,6 +3,7 @@
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
 
+mod check_runs;
 mod check_suites;
 mod review_comments;
 mod review_threads;
@@ -74,6 +75,7 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
         comment: None,
         thread: None,
         check_suite: None,
+        check_run: None,
         workflow: None,
         workflow_run: None,
     })
@@ -338,8 +340,7 @@ fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
             "change {index}"
         );
     }
-    let check_run =
-        br#"{"action":"completed","check_run":{"id":89721586894},"installation":{"id":7,"node_id":"installation-seven"}}"#;
+    let check_run = amiss_fixtures::GITHUB_WEBHOOK_CHECK_RUN;
     assert_eq!(authenticate_target(&source, check_run, &target), Ok(None));
 
     let other_target = BranchRef::new("refs/heads/release".to_owned()).unwrap();
@@ -787,15 +788,8 @@ fn contradictory_configured_completion_fields_fail_authentication() {
 fn signed_irrelevant_deliveries_are_authenticated_without_work() {
     let source = source();
     let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    for action in ["created", "completed"] {
-        let body = format!(
-            r#"{{"action":"{action}","check_run":{{"id":89721586894}},"installation":{{"id":7,"node_id":"installation-seven"}}}}"#
-        );
-        assert_eq!(
-            authenticate_target(&source, body.as_bytes(), &main),
-            Ok(None)
-        );
-    }
+    let check_run = amiss_fixtures::GITHUB_WEBHOOK_CHECK_RUN;
+    assert_eq!(authenticate_target(&source, check_run, &main), Ok(None));
 
     let check_suite = amiss_fixtures::GITHUB_WEBHOOK_CHECK_SUITE;
     assert_eq!(authenticate_target(&source, check_suite, &main), Ok(None));
@@ -1441,6 +1435,7 @@ fn workflow_payload() -> GitHubPayload {
         comment: None,
         thread: None,
         check_suite: None,
+        check_run: None,
         workflow: Some(Workflow {
             id: 321,
             node_id: "workflow-321".to_owned(),

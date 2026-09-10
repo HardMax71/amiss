@@ -16,6 +16,7 @@ pub mod event;
 pub mod pull;
 pub mod repository;
 pub mod review;
+pub mod run;
 pub mod suite;
 pub mod thread;
 
@@ -23,7 +24,7 @@ use pull::request::PullRequestWebhook;
 use repository::{WorkflowOwner, WorkflowRepository};
 
 #[serde_with::apply(Option<_> => #[serde(skip_serializing_if = "Option::is_none")])]
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(bound(deserialize = "Pull: Deserialize<'de>, Action: Deserialize<'de>"))]
 pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
     pub action: Option<Action>,
@@ -41,6 +42,15 @@ pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
     pub thread: Option<thread::ReviewThread>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub check_suite: Option<suite::CheckSuiteRecord>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub check_run: Option<
+        crate::check::CheckRunRecord<
+            run::WebhookCheckRunResource,
+            run::WebhookCheckSuite,
+            app::WebhookApp<Nullable<crate::check::AppOwner>>,
+            run::WebhookCheckRunConclusion,
+        >,
+    >,
     pub workflow: Option<Workflow>,
     pub workflow_run: Option<WorkflowRun>,
 }

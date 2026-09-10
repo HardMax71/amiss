@@ -15,10 +15,12 @@ use crate::installation::permissions::{AppPermissions, ReadWrite, WriteOnly};
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct WebhookApp {
+#[serde(bound(deserialize = "Owner: Deserialize<'de>"))]
+pub struct WebhookApp<Owner = Nullable<WorkflowOwner>> {
     pub id: Nullable<UInt>,
     pub node_id: String,
-    pub owner: Nullable<WorkflowOwner>,
+    #[serde(deserialize_with = "Owner::deserialize")]
+    pub owner: Owner,
     pub name: String,
     pub description: Nullable<String>,
     pub external_url: Nullable<String>,
@@ -29,6 +31,7 @@ pub struct WebhookApp {
     pub events: Option<Vec<AppEvent>>,
     pub slug: Option<String>,
     pub client_id: Option<Nullable<String>>,
+    pub installations_count: Option<UInt>,
 }
 
 #[serde_with::apply(Option<_> => #[serde(

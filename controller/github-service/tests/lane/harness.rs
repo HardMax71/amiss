@@ -23,7 +23,7 @@ use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use tempfile::TempDir;
 
-use super::provider::{CHECK_RUN_BODY, FakeGitHub, REPOSITORY_ID, SignedEvent, snapshot};
+use super::provider::{FakeGitHub, REPOSITORY_ID, SignedEvent, snapshot};
 use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories, execution_constraint};
 
 const SECRET: &[u8] = b"provider-lane-webhook-secret-2026";
@@ -206,7 +206,7 @@ impl Harness {
     }
 
     pub(super) fn no_work(&self) -> Result<Option<AdmittedDelivery>, AdmissionRejection> {
-        let event = SignedEvent::signed(CHECK_RUN_BODY.to_vec(), SECRET);
+        let event = SignedEvent::signed(amiss_fixtures::GITHUB_WEBHOOK_CHECK_RUN.to_vec(), SECRET);
         let headers = [DeliveryHeader {
             name: "x-hub-signature-256".to_owned(),
             value: event.signature,

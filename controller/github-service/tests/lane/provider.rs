@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::{Arc, Mutex};
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, DeliveryHeader, DeliveryRoute,
@@ -7,7 +7,7 @@ use amiss_controller::{
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_github::repository::pull::PullRepositoryRecord;
-use amiss_controller_github::webhook::pull::request::{PullRequestWebhook, SynchronizePullRequest};
+use amiss_controller_github::webhook::pull::request::SynchronizePullRequest;
 use amiss_controller_github::webhook::{GitHubPayload, Installation};
 use amiss_controller_github::{GitHubApi, GitHubPullRequest, GitHubPullRequestSource};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
@@ -18,34 +18,6 @@ const INSTALLATION_ID: u64 = 7;
 pub(super) const REPOSITORY_ID: u64 = 101;
 const PULL_REQUEST_ID: u64 = 4_201;
 const PULL_REQUEST_NUMBER: u64 = 42;
-pub(super) static CHECK_RUN_BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    let body = serde_json::to_string(&GitHubPayload::<PullRequestWebhook> {
-        action: Some("completed".to_owned()),
-        changes: None,
-        installation: Some(Installation {
-            id: INSTALLATION_ID,
-            node_id: "installation-seven".to_owned(),
-        }),
-        repository: Some(
-            serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap(),
-        ),
-        number: None,
-        pull_request: None,
-        review: None,
-        comment: None,
-        thread: None,
-        check_suite: None,
-        workflow: None,
-        workflow_run: None,
-    })
-    .unwrap();
-    body.replacen(
-        '{',
-        r#"{"check_run":{"id":89721586894,"name":"amiss / documentation assurance","head_sha":"3f1c8ab5ff36fbab9c0aa044271225cb3df69a60","status":"completed","conclusion":"success","app":{"id":4392947},"pull_requests":[]},"sender":{"id":1,"login":"github"},"#,
-        1,
-    )
-    .into_bytes()
-});
 
 pub(super) struct SignedEvent {
     pub body: Vec<u8>,
@@ -92,6 +64,7 @@ impl SignedEvent {
             comment: None,
             thread: None,
             check_suite: None,
+            check_run: None,
             workflow: None,
             workflow_run: None,
         })

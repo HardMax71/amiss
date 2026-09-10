@@ -270,7 +270,9 @@ impl PullRequestFacts {
 
         let event: GitHubEvent = serde_json::from_slice(body).map_err(|_defect| Authentication)?;
         let payload = match event {
-            GitHubEvent::CheckSuite(_)
+            GitHubEvent::CheckRun(_)
+            | GitHubEvent::RequestedCheckRun(_)
+            | GitHubEvent::CheckSuite(_)
             | GitHubEvent::ReviewThread(_)
             | GitHubEvent::Review(_)
             | GitHubEvent::ReviewComment(_) => return Ok(None),
@@ -278,17 +280,16 @@ impl PullRequestFacts {
                 if payload.review.is_some()
                     || payload.thread.is_some()
                     || payload.check_suite.is_some()
+                    || payload.check_run.is_some()
                     || matches!(payload.comment, Some(Comment::Review(_)))
                     || (payload.pull_request.is_some() && payload.comment.is_some())
                 {
                     return Err(Authentication);
                 }
-                let Some(pull_request) = payload.pull_request.as_ref() else {
+                let eligible = workflow_completion.is_none() && supported_action(&payload);
+                let Some(pull_request) = payload.pull_request.as_ref().filter(|_| eligible) else {
                     return Ok(None);
                 };
-                if workflow_completion.is_some() || !supported_action(&payload) {
-                    return Ok(None);
-                }
                 let pull = &pull_request.request;
                 let base = pull.base.repo.as_ref().ok_or(Authentication)?;
                 return authenticate_pull_request(
@@ -314,17 +315,16 @@ impl PullRequestFacts {
                 if payload.review.is_some()
                     || payload.thread.is_some()
                     || payload.check_suite.is_some()
+                    || payload.check_run.is_some()
                     || matches!(payload.comment, Some(Comment::Review(_)))
                     || (payload.pull_request.is_some() && payload.comment.is_some())
                 {
                     return Err(Authentication);
                 }
-                let Some(pull) = payload.pull_request.as_ref() else {
+                let eligible = workflow_completion.is_none() && payload.action.is_some();
+                let Some(pull) = payload.pull_request.as_ref().filter(|_| eligible) else {
                     return Ok(None);
                 };
-                if workflow_completion.is_some() || payload.action.is_none() {
-                    return Ok(None);
-                }
                 let base = &pull.base.repo;
                 return authenticate_pull_request(
                     &payload,
@@ -350,6 +350,7 @@ impl PullRequestFacts {
         if payload.review.is_some()
             || payload.thread.is_some()
             || payload.check_suite.is_some()
+            || payload.check_run.is_some()
             || matches!(payload.comment, Some(Comment::Review(_)))
             || (payload.pull_request.is_some()
                 && (payload.comment.is_some()

@@ -23,7 +23,7 @@ use crate::owner::OwnerRecord;
     clippy::struct_excessive_bools,
     reason = "the repository API exposes independent feature flags"
 )]
-pub struct PullRepositoryRecord {
+pub struct PullRepositoryRecord<Availability = RepositoryAvailability> {
     #[serde(with = "As::<TryFromInto<UInt>>")]
     pub id: u64,
     pub name: String,
@@ -84,7 +84,8 @@ pub struct PullRepositoryRecord {
     pub homepage: Nullable<String>,
     pub language: Nullable<String>,
     pub archived: bool,
-    pub disabled: bool,
+    #[serde(flatten)]
+    pub availability: Availability,
     pub mirror_url: Nullable<String>,
     pub open_issues: UInt,
     pub open_issues_count: UInt,
@@ -128,4 +129,10 @@ pub struct PullRepositoryRecord {
     pub use_squash_pr_title_as_default: Option<bool>,
     pub visibility: Option<String>,
     pub web_commit_signoff_required: Option<bool>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct RepositoryAvailability {
+    pub disabled: bool,
 }
