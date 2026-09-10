@@ -26,6 +26,8 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use serde::Deserialize;
 
+use crate::workflow::WorkflowPullRequest;
+
 pub use acquisition::{
     GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubAcquisitionSource,
     GitHubFetchPlan, github_fetch_plan,
@@ -324,7 +326,7 @@ impl PullRequestFacts {
 struct PullRequestBinding<'a> {
     pull_request_id: u64,
     number: u64,
-    candidate: &'a str,
+    candidate: &'a Oid,
     candidate_branch: &'a str,
     target_branch: &'a str,
 }
@@ -379,14 +381,12 @@ fn bind_pull_request(
     };
     let integration =
         IntegrationId::try_from(installation_id.to_string()).map_err(|_error| Authentication)?;
-    let candidate =
-        Oid::new(ObjectFormat::Sha1, binding.candidate.to_owned()).ok_or(Authentication)?;
     let candidate_ref = github_ref(binding.candidate_branch).ok_or(Authentication)?;
     let target_ref = github_ref(binding.target_branch).ok_or(Authentication)?;
     let provider_run = provider_run(
         &integration,
         &change,
-        &candidate,
+        binding.candidate,
         &candidate_ref,
         &target_ref,
     )
@@ -467,9 +467,9 @@ fn workflow_pull_request<'a>(
         && pull_request.head.repo.name == run.head_repository.name
         && pull_request.base.repo.id == raw_repository.id
         && pull_request.base.repo.name == raw_repository.name
-        && Oid::new(ObjectFormat::Sha1, pull_request.base.sha.clone()).is_some())
-    .then_some(())
-    .ok_or(Authentication)?;
+        && pull_request.base.sha.object_format() == ObjectFormat::Sha1)
+        .then_some(())
+        .ok_or(Authentication)?;
     Ok(Some(PullRequestBinding {
         pull_request_id: pull_request.id,
         number: pull_request.number,
@@ -672,7 +672,7 @@ struct PullRequest {
 
 #[derive(Deserialize)]
 struct Head {
-    sha: String,
+    sha: Oid,
     #[serde(rename = "ref")]
     branch: String,
 }
@@ -698,30 +698,8 @@ struct WorkflowRun {
     conclusion: Option<String>,
     workflow_id: u64,
     run_attempt: u64,
-    head_sha: String,
+    head_sha: Oid,
     repository: Repository,
     head_repository: Repository,
     pull_requests: Vec<WorkflowPullRequest>,
-}
-
-#[derive(Deserialize)]
-struct WorkflowPullRequest {
-    id: u64,
-    number: u64,
-    head: WorkflowPullRef,
-    base: WorkflowPullRef,
-}
-
-#[derive(Deserialize)]
-struct WorkflowPullRef {
-    sha: String,
-    #[serde(rename = "ref")]
-    branch: String,
-    repo: WorkflowRepository,
-}
-
-#[derive(Deserialize)]
-struct WorkflowRepository {
-    id: u64,
-    name: String,
 }

@@ -105,3 +105,10 @@ Only a final newline is added to the captured JSON for repository hygiene.
 branch-rules-synthetic.json is the existing 23-variant contract example, not a
 provider capture. Optional parameters and integration IDs use omission, as
 declared by the endpoint schema; supplied nulls are negative test cases.
+
+workflow-webhook-pr.json projects the first workflow_run.pull_requests entry
+from [Octokit's published completion example](https://github.com/octokit/webhooks/blob/7dd7fa56498a827a08b71919fae89428f5e8e283/payload-examples/api.github.com/workflow_run/completed.with-pull-requests.payload.json).
+Its values and members are unchanged; the projection is pretty-printed with a
+final newline. This is a public example, not a new live webhook capture or a
+positive full-envelope authentication fixture. The existing workflow-run.json
+separately supplies the real REST counterpart.
