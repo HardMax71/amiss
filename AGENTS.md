@@ -50,6 +50,12 @@ runs the same stages, so local green and remote green are the same thing.
 
 ## Checking your own change
 
+Automated reviewers (including gh-aw, CodeRabbit, and Cubic) report only evidenced
+repository defects as findings or new issues. Insufficient balance, quota limits,
+authentication failures, timeouts, unavailable tools, and provider outages are
+operational failures, not code defects. Report the review as incomplete or skipped
+with a reason and run link; never claim a clean review when it did not finish.
+
 The scanner runs on this repository in CI under `--profile enforce`. To run what CI
 runs, on the staged state:
 
