@@ -1,3 +1,4 @@
+use amiss_wire::assessment::Nullable;
 use amiss_wire::model::Oid;
 use js_int::UInt;
 use json_serde::deserialize_some;
@@ -5,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto};
 
 use crate::repository::pull::PullRepositoryRecord;
-use crate::workflow::WorkflowPullRequest;
+use crate::workflow::{WorkflowCommit, WorkflowPullRequest};
 
 pub mod repository;
 
@@ -120,7 +121,22 @@ pub struct WorkflowRun {
     pub workflow_id: u64,
     pub run_attempt: u64,
     pub head_sha: Oid,
+    pub head_commit: WorkflowCommit<Committer>,
     pub repository: WorkflowRepository,
     pub head_repository: WorkflowRepository,
     pub pull_requests: Vec<WorkflowPullRequest>,
+}
+
+#[serde_with::apply(Option<_> => #[serde(
+    default,
+    deserialize_with = "deserialize_some",
+    skip_serializing_if = "Option::is_none"
+)])]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Committer {
+    pub name: String,
+    pub email: Nullable<String>,
+    pub date: Option<String>,
+    pub username: Option<String>,
 }

@@ -20,11 +20,11 @@ use amiss_controller_github::repository::metadata::RepositoryOrganization;
 use amiss_controller_github::repository::pull::PullRepositoryRecord;
 use amiss_controller_github::webhook::repository::WorkflowRepository;
 use amiss_controller_github::webhook::{
-    Base, BaseChange, GitHubPayload, Head, Installation, Owner, PreviousReference, PullRequest,
-    PullRequestChanges, Repository, Workflow, WorkflowRun,
+    Base, BaseChange, Committer, GitHubPayload, Head, Installation, Owner, PreviousReference,
+    PullRequest, PullRequestChanges, Repository, Workflow, WorkflowRun,
 };
 use amiss_controller_github::workflow::{
-    WorkflowPullRef, WorkflowPullRepository, WorkflowPullRequest,
+    WorkflowCommit, WorkflowPullRef, WorkflowPullRepository, WorkflowPullRequest,
 };
 use amiss_controller_github::{
     GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
@@ -378,6 +378,61 @@ fn signed_workflow_repositories_reject_unknown_metadata() {
             );
         }
     }
+}
+
+#[test]
+fn signed_workflow_head_commit_is_a_typed_record() {
+    let source = GitHubPullRequestSource::new(
+        provider(),
+        webhook(),
+        &[workflow_artifact("docs-evidence.yml")],
+    );
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let payload = workflow_payload();
+    let commit =
+        serde_json::to_string(&payload.workflow_run.as_ref().unwrap().head_commit).unwrap();
+    let body = serde_json::to_string(&payload).unwrap();
+    assert_eq!(body.matches(&commit).count(), 1);
+    let original = authenticate_target(&source, body.as_bytes(), &target)
+        .unwrap()
+        .unwrap();
+    for replacement in [
+        "false".to_owned(),
+        "null".to_owned(),
+        "{}".to_owned(),
+        commit.replacen('{', r#"{"unknown":true,"#, 1),
+        commit.replacen(r#""author":{"#, r#""author":{"unknown":true,"#, 1),
+        commit.replacen(r#""committer":{"#, r#""committer":{"unknown":true,"#, 1),
+    ] {
+        assert_ne!(replacement, commit);
+        let invalid = body.replacen(&commit, &replacement, 1);
+        assert_eq!(
+            authenticate_target(&source, invalid.as_bytes(), &target),
+            Err(ProviderError::Authentication)
+        );
+    }
+    let member = format!("\"head_commit\":{commit},");
+    assert_eq!(body.matches(&member).count(), 1);
+    let missing = body.replacen(&member, "", 1);
+    assert_eq!(
+        authenticate_target(&source, missing.as_bytes(), &target),
+        Err(ProviderError::Authentication)
+    );
+
+    let mut metadata = payload.clone();
+    let commit = &mut metadata.workflow_run.as_mut().unwrap().head_commit;
+    for author in [&mut commit.author, &mut commit.committer] {
+        author.email = amiss_wire::assessment::Nullable::Null;
+        author.date = Some("2020-10-05T16:32:07Z".to_owned());
+        author.username = Some("fixture-author".to_owned());
+    }
+    commit.message = "Changed metadata".to_owned();
+    commit.tree_id = oid('f');
+    let input = serde_json::to_vec(&metadata).unwrap();
+    let accepted = authenticate_target(&source, &input, &target)
+        .unwrap()
+        .unwrap();
+    assert_eq!(accepted.delivery(), original.delivery());
 }
 
 #[test]
@@ -1085,6 +1140,9 @@ fn workflow_artifact(workflow_identity: &str) -> WorkflowArtifactExpectation {
 }
 
 fn workflow_payload() -> GitHubPayload {
+    let mut head_commit: WorkflowCommit<Committer> =
+        serde_json::from_slice(include_bytes!("../fixtures/webhook-workflow-commit.json")).unwrap();
+    head_commit.id = oid('b');
     let mut run_repository: WorkflowRepository = serde_json::from_slice(include_bytes!(
         "../fixtures/webhook-workflow-repository.json"
     ))
@@ -1137,6 +1195,7 @@ fn workflow_payload() -> GitHubPayload {
             workflow_id: 321,
             run_attempt: 2,
             head_sha: oid('b'),
+            head_commit,
             repository: run_repository,
             head_repository,
             pull_requests: vec![WorkflowPullRequest {

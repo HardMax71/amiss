@@ -140,3 +140,8 @@ Root organization fixtures cover the name declared by Octokit's completion
 schema and the nullable simple-user object declared by GitHub OpenAPI. Both
 forms are explicit typed alternatives; the account form keeps the existing
 closed owner contract. These additional forms are constructed, not live captures.
+
+webhook-workflow-commit.json projects the unchanged workflow_run.head_commit
+from the published completion example linked above. Null emails and optional
+date/username fields in tests are synthetic cases from the pinned webhook
+contract. The REST workflow fixtures keep their distinct nullable-author contract.

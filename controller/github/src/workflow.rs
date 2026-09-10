@@ -72,16 +72,16 @@ pub struct WorkflowRunPage {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkflowCommit {
+#[serde(deny_unknown_fields, bound(deserialize = "User: Deserialize<'de>"))]
+pub struct WorkflowCommit<User = Option<WorkflowCommitUser>> {
     pub id: Oid,
     pub tree_id: Oid,
     pub message: String,
     pub timestamp: String,
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub author: Option<WorkflowCommitUser>,
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub committer: Option<WorkflowCommitUser>,
+    #[serde(deserialize_with = "User::deserialize")]
+    pub author: User,
+    #[serde(deserialize_with = "User::deserialize")]
+    pub committer: User,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
