@@ -15,9 +15,8 @@ use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitea::{DedicatedReviewer, GiteaPullRequestSource};
 use amiss_controller_github::GitHubPullRequestSource;
 use amiss_controller_github::repository::pull::PullRepositoryRecord;
-use amiss_controller_github::webhook::{
-    Base, GitHubPayload, Head, Installation, Owner, PullRequest, Repository,
-};
+use amiss_controller_github::webhook::pull::request::PullRequestWebhook;
+use amiss_controller_github::webhook::{GitHubPayload, Installation};
 use amiss_controller_gitlab::claims::{Claims, RequestHint};
 use amiss_controller_gitlab::{GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust};
 use amiss_wire::digest::hb;
@@ -358,21 +357,21 @@ fn authenticate_webhook<S>(
 )]
 fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
     type Change = fn(&mut GitHubPayload, &[u8]);
-    let repository = Repository {
-        id: 11,
-        name: "widget".to_owned(),
-        full_name: "acme/widget".to_owned(),
-        owner: Owner {
-            login: "acme".to_owned(),
-        },
-    };
     let mut root: PullRepositoryRecord =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY)
             .expect("the published webhook repository is complete");
-    root.id = repository.id;
-    repository.name.clone_into(&mut root.name);
-    repository.full_name.clone_into(&mut root.full_name);
-    repository.owner.login.clone_into(&mut root.owner.login);
+    root.id = 11;
+    "widget".clone_into(&mut root.name);
+    "acme/widget".clone_into(&mut root.full_name);
+    "acme".clone_into(&mut root.owner.login);
+    let mut pull: PullRequestWebhook = serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_PULL)
+        .expect("the published webhook PR is complete");
+    pull.request.id = 33;
+    pull.request.number = 42;
+    pull.request.head.sha = oid('b');
+    "topic".clone_into(&mut pull.request.head.branch);
+    "main".clone_into(&mut pull.request.base.branch);
+    pull.request.base.repo = Some(root.clone());
     let mut payload = GitHubPayload {
         action: Some("opened".to_owned()),
         changes: None,
@@ -382,38 +381,19 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
         }),
         repository: Some(root),
         number: Some(42),
-        pull_request: Some(PullRequest {
-            id: 33,
-            number: 42,
-            head: Head {
-                sha: oid('b'),
-                branch: "topic".to_owned(),
-            },
-            base: Base {
-                branch: "main".to_owned(),
-                repo: repository,
-            },
-        }),
+        pull_request: Some(pull),
         workflow: None,
         workflow_run: None,
     };
-    let changes: [(usize, Change); 8] = [
+    let changes: [(usize, Change); 6] = [
         (1, |p, _| p.action = Some("synchronize".to_owned())),
         (2, |p, bytes| p.action = Some(text(bytes))),
         (3, |p, bytes| p.number = Some(number(bytes))),
-        (4, |p, bytes| {
-            p.pull_request
-                .as_mut()
-                .expect("the fixture has a PR")
-                .number = number(bytes);
-        }),
-        (5, |p, bytes| {
-            p.pull_request.as_mut().expect("the fixture has a PR").id = number(bytes);
-        }),
         (7, |p, bytes| {
             p.pull_request
                 .as_mut()
                 .expect("the fixture has a PR")
+                .request
                 .head
                 .branch = text(bytes);
         }),
@@ -421,6 +401,7 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
             p.pull_request
                 .as_mut()
                 .expect("the fixture has a PR")
+                .request
                 .base
                 .branch = text(bytes);
         }),
@@ -437,11 +418,27 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
         change(&mut payload, mutation);
     }
     let pull = payload.pull_request.as_ref().expect("the fixture has a PR");
-    let target_matches = pull.base.branch == "main";
+    let target_matches = pull.request.base.branch == "main";
     let mut body = serde_json::to_string(&payload).expect("the typed payload serializes");
+    if matches!(selector, 4 | 5) {
+        // Out-of-range IDs bypass the safe-integer model only at the negative wire boundary.
+        let (key, value) = if selector == 4 {
+            ("number", pull.request.number)
+        } else {
+            ("id", pull.request.id)
+        };
+        let original = serde_json::to_string(pull).expect("the complete PR serializes");
+        let member = format!("\"{key}\":{value},");
+        assert_eq!(original.matches(&member).count(), 1);
+        let replacement =
+            original.replacen(&member, &format!("\"{key}\":{},", number(mutation)), 1);
+        assert_eq!(body.matches(&original).count(), 1);
+        body = body.replacen(&original, &replacement, 1);
+    }
     if selector == 6 {
         // Malformed commit IDs enter only after the typed payload reaches the wire boundary.
-        let original = serde_json::to_string(&pull.head.sha).expect("the head ID serializes");
+        let original =
+            serde_json::to_string(&pull.request.head.sha).expect("the head ID serializes");
         let replacement = serde_json::to_string(&text(mutation)).expect("the mutation serializes");
         assert_eq!(body.matches(&original).count(), 1);
         body = body.replacen(&original, &replacement, 1);

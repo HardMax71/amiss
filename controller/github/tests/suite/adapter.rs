@@ -19,9 +19,11 @@ use amiss_controller::{
 use amiss_controller_github::check::CheckRunStatus;
 use amiss_controller_github::repository::metadata::RepositoryOrganization;
 use amiss_controller_github::repository::pull::PullRepositoryRecord;
+use amiss_controller_github::webhook::event::GitHubEvent;
+use amiss_controller_github::webhook::pull::request::{PullRequestWebhook, SynchronizePullRequest};
 use amiss_controller_github::webhook::{
-    Base, BaseChange, GitHubPayload, Head, Installation, Owner, PreviousReference, PullRequest,
-    PullRequestChanges, Repository, Workflow, WorkflowRun, WorkflowRunConclusion,
+    BaseChange, GitHubPayload, Installation, PreviousReference, PullRequestChanges, Workflow,
+    WorkflowRun, WorkflowRunConclusion,
 };
 use amiss_controller_github::workflow::{
     WorkflowPullRef, WorkflowPullRepository, WorkflowPullRequest,
@@ -45,6 +47,14 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
     "widget".clone_into(&mut repository.name);
     "HardMax71/widget".clone_into(&mut repository.full_name);
     "HardMax71".clone_into(&mut repository.owner.login);
+    let mut pull: PullRequestWebhook =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_PULL).unwrap();
+    pull.request.id = 4_201;
+    pull.request.number = 42;
+    pull.request.head.sha = oid('b');
+    "topic".clone_into(&mut pull.request.head.branch);
+    "main".clone_into(&mut pull.request.base.branch);
+    pull.request.base.repo = Some(repository.clone());
     serde_json::to_vec(&GitHubPayload {
         action: Some("opened".to_owned()),
         changes: None,
@@ -54,25 +64,7 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
         }),
         repository: Some(repository),
         number: Some(42),
-        pull_request: Some(PullRequest {
-            id: 4_201,
-            number: 42,
-            head: Head {
-                sha: oid('b'),
-                branch: "topic".to_owned(),
-            },
-            base: Base {
-                branch: "main".to_owned(),
-                repo: Repository {
-                    id: 101,
-                    name: "widget".to_owned(),
-                    full_name: "HardMax71/widget".to_owned(),
-                    owner: Owner {
-                        login: "HardMax71".to_owned(),
-                    },
-                },
-            },
-        }),
+        pull_request: Some(pull),
         workflow: None,
         workflow_run: None,
     })
@@ -601,7 +593,7 @@ fn pull_request_identity_excludes_root_metadata() {
         .unwrap()
         .unwrap();
     assert_eq!(accepted.delivery(), original.delivery());
-    let mutations: [fn(&mut Repository); 4] = [
+    let mutations: [fn(&mut PullRepositoryRecord); 4] = [
         |base| base.id += 1,
         |base| base.name = "other".to_owned(),
         |base| base.full_name = "other/widget".to_owned(),
@@ -609,7 +601,17 @@ fn pull_request_identity_excludes_root_metadata() {
     ];
     for (index, mutate) in mutations.into_iter().enumerate() {
         let mut changed = payload.clone();
-        mutate(&mut changed.pull_request.as_mut().unwrap().base.repo);
+        mutate(
+            changed
+                .pull_request
+                .as_mut()
+                .unwrap()
+                .request
+                .base
+                .repo
+                .as_mut()
+                .unwrap(),
+        );
         let input = serde_json::to_vec(&changed).unwrap();
         assert_eq!(
             authenticate_target(&source, &input, &target),
@@ -821,6 +823,136 @@ fn malformed_supported_delivery_is_not_no_work() {
 
     assert_eq!(
         authenticate_target(&source, malformed, &main),
+        Err(ProviderError::Authentication)
+    );
+}
+
+#[test]
+fn signed_active_pull_requests_reject_unknown_metadata() {
+    let source = source();
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let body = std::str::from_utf8(&BODY).unwrap();
+    for action in ["opened", "reopened", "edited", "synchronize"] {
+        let body = body.replacen(
+            r#""action":"opened""#,
+            &format!(r#""action":"{action}""#),
+            1,
+        );
+        for member in [r#""pull_request":{"#, r#""head":{"#, r#""base":{"#] {
+            assert_eq!(body.matches(member).count(), 1);
+            let invalid = body.replacen(member, &format!(r#"{member}"unknown":true,"#), 1);
+            assert_eq!(
+                authenticate_target(&source, invalid.as_bytes(), &target),
+                Err(ProviderError::Authentication),
+                "{action}: unknown metadata in {member}",
+            );
+        }
+    }
+}
+
+#[test]
+fn signed_actions_select_complete_pull_contracts_without_fallback() {
+    let source = source();
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let original = authenticate_target(&source, &BODY, &target)
+        .unwrap()
+        .unwrap();
+    let body = std::str::from_utf8(&BODY).unwrap();
+    for action in ["opened", "reopened", "synchronize"] {
+        let body = body.replacen(
+            r#""action":"opened""#,
+            &format!(r#""action":"{action}""#),
+            1,
+        );
+        let decoded: GitHubEvent = serde_json::from_str(&body).unwrap();
+        assert_eq!(
+            amiss_fixtures::canonical_json(body.as_bytes()).unwrap(),
+            amiss_fixtures::canonical_json(&serde_json::to_vec(&decoded).unwrap()).unwrap(),
+        );
+        let accepted = authenticate_target(&source, body.as_bytes(), &target)
+            .unwrap()
+            .unwrap();
+        assert_eq!(accepted.delivery(), original.delivery());
+        for (member, accepted) in [
+            (r#""mergeable":null,"#, action == "synchronize"),
+            (r#""draft":false,"#, action != "synchronize"),
+        ] {
+            assert_eq!(body.matches(member).count(), 1);
+            let changed = body.replacen(member, "", 1);
+            let result = authenticate_target(&source, changed.as_bytes(), &target);
+            if accepted {
+                assert_eq!(result.unwrap().unwrap().delivery(), original.delivery());
+            } else {
+                assert_eq!(result, Err(ProviderError::Authentication));
+            }
+        }
+    }
+    for action in [
+        r#""unknown""#,
+        r#"{"opened":null}"#,
+        r#""opened","action":"closed""#,
+        r#""opened","\u0061ction":"synchronize""#,
+    ] {
+        let changed = body.replacen(r#""action":"opened""#, &format!(r#""action":{action}"#), 1);
+        assert_eq!(
+            authenticate_target(&source, changed.as_bytes(), &target),
+            Err(ProviderError::Authentication)
+        );
+    }
+}
+
+#[test]
+fn signed_nullable_refs_preserve_binding_and_missing_actions_stay_no_work() {
+    let source = source();
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let original = authenticate_target(&source, &BODY, &target)
+        .unwrap()
+        .unwrap();
+    let mut ordinary: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
+    ordinary.pull_request.as_mut().unwrap().request.head.repo = None;
+    let wire = serde_json::to_vec(&ordinary).unwrap();
+    assert_eq!(
+        authenticate_target(&source, &wire, &target)
+            .unwrap()
+            .unwrap()
+            .delivery(),
+        original.delivery()
+    );
+    ordinary.action = None;
+    let wire = serde_json::to_vec(&ordinary).unwrap();
+    assert_eq!(authenticate_target(&source, &wire, &target), Ok(None));
+    ordinary.action = Some("opened".to_owned());
+    ordinary.pull_request.as_mut().unwrap().request.base.repo = None;
+    let wire = serde_json::to_vec(&ordinary).unwrap();
+    assert_eq!(
+        authenticate_target(&source, &wire, &target),
+        Err(ProviderError::Authentication)
+    );
+
+    let mut synchronize: GitHubPayload<SynchronizePullRequest> =
+        serde_json::from_slice(&BODY).unwrap();
+    synchronize.action = Some("synchronize".to_owned());
+    let pull = synchronize.pull_request.as_mut().unwrap();
+    pull.head.repo = None;
+    pull.head.user = None;
+    pull.user = amiss_wire::assessment::Nullable::Null;
+    pull.mergeable = None;
+    let wire = serde_json::to_vec(&synchronize).unwrap();
+    assert_eq!(
+        authenticate_target(&source, &wire, &target)
+            .unwrap()
+            .unwrap()
+            .delivery(),
+        original.delivery()
+    );
+    synchronize.action = None;
+    let wire = serde_json::to_vec(&synchronize).unwrap();
+    assert_eq!(authenticate_target(&source, &wire, &target), Ok(None));
+    synchronize.action = Some("synchronize".to_owned());
+    synchronize.pull_request.as_mut().unwrap().base.repo.owner = None;
+    let wire = serde_json::to_vec(&synchronize).unwrap();
+    assert_eq!(
+        authenticate_target(&source, &wire, &target),
         Err(ProviderError::Authentication)
     );
 }

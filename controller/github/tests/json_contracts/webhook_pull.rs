@@ -2,9 +2,51 @@ use amiss_controller_github::pull::PullRequestRecord;
 use amiss_controller_github::repository::metadata::{
     MergeCommitMessage, MergeCommitTitle, SquashMergeCommitMessage, SquashMergeCommitTitle,
 };
+use amiss_controller_github::webhook::GitHubPayload;
+use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::pull::LockReason;
 use amiss_controller_github::webhook::pull::request::{PullRequestWebhook, SynchronizePullRequest};
 use amiss_wire::assessment::Nullable;
+
+#[test]
+fn signed_event_contracts_select_and_retain_the_complete_pull() {
+    let mut payload = GitHubPayload {
+        action: None,
+        changes: None,
+        installation: None,
+        repository: None,
+        number: None,
+        pull_request: Some(
+            serde_json::from_slice::<PullRequestWebhook>(amiss_fixtures::GITHUB_WEBHOOK_PULL)
+                .unwrap(),
+        ),
+        workflow: None,
+        workflow_run: None,
+    };
+    for action in ["opened", "reopened", "edited", "synchronize"] {
+        payload.action = Some(action.to_owned());
+        let input = serde_json::to_string(&payload).unwrap();
+        let event: GitHubEvent = amiss_wire::read_json(input.as_bytes(), u64::MAX).unwrap();
+        assert_eq!(
+            matches!(event, GitHubEvent::Synchronize(_)),
+            action == "synchronize"
+        );
+        assert_eq!(
+            amiss_fixtures::canonical_json(input.as_bytes()).unwrap(),
+            amiss_fixtures::canonical_json(&serde_json::to_vec(&event).unwrap()).unwrap(),
+        );
+        for (old, new) in [
+            (r#""pull_request":{"#, r#""pull_request":{"unknown":true,"#),
+            (r#""id":279147437"#, r#""id":279147437,"\u0069d":279147437"#),
+            (r#""auto_merge":null,"#, ""),
+        ] {
+            assert_eq!(input.matches(old).count(), 1);
+            let invalid = input.replacen(old, new, 1);
+            assert!(serde_json::from_str::<GitHubEvent>(&invalid).is_err());
+            assert!(amiss_wire::read_json::<GitHubEvent>(invalid.as_bytes(), u64::MAX).is_err());
+        }
+    }
+}
 
 #[test]
 fn published_pull_request_retains_all_metadata() {

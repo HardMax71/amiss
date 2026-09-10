@@ -7,9 +7,8 @@ use amiss_controller::{
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_github::repository::pull::PullRepositoryRecord;
-use amiss_controller_github::webhook::{
-    Base, GitHubPayload, Head, Installation, Owner, PullRequest, Repository,
-};
+use amiss_controller_github::webhook::pull::request::{PullRequestWebhook, SynchronizePullRequest};
+use amiss_controller_github::webhook::{GitHubPayload, Installation};
 use amiss_controller_github::{GitHubApi, GitHubPullRequest, GitHubPullRequestSource};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
@@ -20,7 +19,7 @@ pub(super) const REPOSITORY_ID: u64 = 101;
 const PULL_REQUEST_ID: u64 = 4_201;
 const PULL_REQUEST_NUMBER: u64 = 42;
 pub(super) static CHECK_RUN_BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    let body = serde_json::to_string(&GitHubPayload {
+    let body = serde_json::to_string(&GitHubPayload::<PullRequestWebhook> {
         action: Some("completed".to_owned()),
         changes: None,
         installation: Some(Installation {
@@ -56,20 +55,25 @@ impl SignedEvent {
     }
 
     pub(super) fn for_target(candidate: &Oid, target: &str, secret: &[u8]) -> Self {
-        let repository = Repository {
-            id: REPOSITORY_ID,
-            name: "widget".to_owned(),
-            full_name: "acme/widget".to_owned(),
-            owner: Owner {
-                login: "acme".to_owned(),
-            },
-        };
         let mut root: PullRepositoryRecord =
             serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap();
-        root.id = repository.id;
-        repository.name.clone_into(&mut root.name);
-        repository.full_name.clone_into(&mut root.full_name);
-        repository.owner.login.clone_into(&mut root.owner.login);
+        root.id = REPOSITORY_ID;
+        "widget".clone_into(&mut root.name);
+        "acme/widget".clone_into(&mut root.full_name);
+        "acme".clone_into(&mut root.owner.login);
+        let mut pull: SynchronizePullRequest =
+            serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_PULL).unwrap();
+        pull.id = PULL_REQUEST_ID;
+        pull.number = PULL_REQUEST_NUMBER;
+        candidate.clone_into(&mut pull.head.sha);
+        "topic".clone_into(&mut pull.head.branch);
+        target.clone_into(&mut pull.base.branch);
+        pull.base.repo.id = root.id;
+        root.name.clone_into(&mut pull.base.repo.name);
+        root.full_name.clone_into(&mut pull.base.repo.full_name);
+        root.owner
+            .login
+            .clone_into(&mut pull.base.repo.owner.as_mut().unwrap().login);
         let body = serde_json::to_vec(&GitHubPayload {
             action: Some("synchronize".to_owned()),
             changes: None,
@@ -79,18 +83,7 @@ impl SignedEvent {
             }),
             repository: Some(root),
             number: Some(PULL_REQUEST_NUMBER),
-            pull_request: Some(PullRequest {
-                id: PULL_REQUEST_ID,
-                number: PULL_REQUEST_NUMBER,
-                head: Head {
-                    sha: candidate.clone(),
-                    branch: "topic".to_owned(),
-                },
-                base: Base {
-                    branch: target.to_owned(),
-                    repo: repository,
-                },
-            }),
+            pull_request: Some(pull),
             workflow: None,
             workflow_run: None,
         })

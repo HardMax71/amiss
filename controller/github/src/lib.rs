@@ -27,6 +27,8 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::check::CheckRunStatus;
+use crate::webhook::event::{ActivityAction, GitHubEvent, PullAction};
+use crate::webhook::pull::request::PullRequestWebhook;
 use crate::webhook::{GitHubPayload, WorkflowRun, WorkflowRunConclusion};
 
 pub use acquisition::{
@@ -38,7 +40,6 @@ pub use live::{GitHubApp, GitHubClientError, GitHubTimeouts};
 pub use workflow_artifact::{GitHubArtifactError, decode_workflow_artifact};
 
 const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v1";
-const SUPPORTED_ACTIONS: [&str; 3] = ["opened", "reopened", "synchronize"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GitHubPullRequest<'a> {
@@ -266,42 +267,67 @@ impl PullRequestFacts {
     ) -> Result<Option<Self>, ProviderError> {
         use ProviderError::Authentication;
 
-        let payload: GitHubPayload =
-            serde_json::from_slice(body).map_err(|_defect| Authentication)?;
-        if let Some(pull_request) = payload.pull_request.as_ref() {
-            if workflow_completion.is_some() {
-                return Ok(None);
+        let event: GitHubEvent = serde_json::from_slice(body).map_err(|_defect| Authentication)?;
+        let payload = match event {
+            GitHubEvent::PullRequest(payload) => {
+                let Some(pull_request) = payload.pull_request.as_ref() else {
+                    return Ok(None);
+                };
+                if workflow_completion.is_some() || !supported_action(&payload) {
+                    return Ok(None);
+                }
+                let pull = &pull_request.request;
+                let base = pull.base.repo.as_ref().ok_or(Authentication)?;
+                return authenticate_pull_request(
+                    &payload,
+                    provider,
+                    RepositoryFacts {
+                        id: base.id,
+                        name: &base.name,
+                        full_name: &base.full_name,
+                        owner: &base.owner.login,
+                    },
+                    PullRequestBinding {
+                        pull_request_id: pull.id,
+                        number: pull.number,
+                        candidate: &pull.head.sha,
+                        candidate_branch: &pull.head.branch,
+                        target_branch: &pull.base.branch,
+                    },
+                )
+                .map(Some);
             }
-            if !supported_action(&payload) {
-                return Ok(None);
+            GitHubEvent::Synchronize(payload) => {
+                let Some(pull) = payload.pull_request.as_ref() else {
+                    return Ok(None);
+                };
+                if workflow_completion.is_some() || payload.action.is_none() {
+                    return Ok(None);
+                }
+                let base = &pull.base.repo;
+                return authenticate_pull_request(
+                    &payload,
+                    provider,
+                    RepositoryFacts {
+                        id: base.id,
+                        name: &base.name,
+                        full_name: &base.full_name,
+                        owner: &base.owner.as_ref().ok_or(Authentication)?.login,
+                    },
+                    PullRequestBinding {
+                        pull_request_id: pull.id,
+                        number: pull.number,
+                        candidate: &pull.head.sha,
+                        candidate_branch: &pull.head.branch,
+                        target_branch: &pull.base.branch,
+                    },
+                )
+                .map(Some);
             }
-            let (installation_id, repository_id, repository) =
-                authenticated_repository(&payload, provider)?;
-            let root = payload.repository.as_ref().ok_or(Authentication)?;
-            let base = &pull_request.base.repo;
-            let number = payload.number.and_then(positive).ok_or(Authentication)?;
-            if pull_request.number != number
-                || root.id != base.id
-                || root.name != base.name
-                || root.full_name != base.full_name
-                || root.owner.login != base.owner.login
-            {
-                return Err(Authentication);
-            }
-            return bind_pull_request(
-                provider,
-                installation_id,
-                repository_id,
-                repository,
-                PullRequestBinding {
-                    pull_request_id: pull_request.id,
-                    number,
-                    candidate: &pull_request.head.sha,
-                    candidate_branch: &pull_request.head.branch,
-                    target_branch: &pull_request.base.branch,
-                },
-            )
-            .map(Some);
+            GitHubEvent::Activity(payload) => payload,
+        };
+        if payload.pull_request.is_some() {
+            return Ok(None);
         }
 
         let Some((completion, run)) = configured_workflow(&payload, workflow_completion) else {
@@ -337,8 +363,44 @@ struct PullRequestBinding<'a> {
     target_branch: &'a str,
 }
 
-fn authenticated_repository(
-    payload: &GitHubPayload,
+#[derive(Clone, Copy)]
+struct RepositoryFacts<'a> {
+    id: u64,
+    name: &'a str,
+    full_name: &'a str,
+    owner: &'a str,
+}
+
+fn authenticate_pull_request<Pull, Action>(
+    payload: &GitHubPayload<Pull, Action>,
+    provider: &ProviderIdentity,
+    base: RepositoryFacts<'_>,
+    binding: PullRequestBinding<'_>,
+) -> Result<PullRequestFacts, ProviderError> {
+    let (installation_id, repository_id, repository) = authenticated_repository(payload, provider)?;
+    let root = payload
+        .repository
+        .as_ref()
+        .ok_or(ProviderError::Authentication)?;
+    if payload.number != Some(binding.number)
+        || root.id != base.id
+        || root.name != base.name
+        || root.full_name != base.full_name
+        || root.owner.login != base.owner
+    {
+        return Err(ProviderError::Authentication);
+    }
+    bind_pull_request(
+        provider,
+        installation_id,
+        repository_id,
+        repository,
+        binding,
+    )
+}
+
+fn authenticated_repository<Pull, Action>(
+    payload: &GitHubPayload<Pull, Action>,
     provider: &ProviderIdentity,
 ) -> Result<(u64, u64, RepositoryIdentity), ProviderError> {
     let installation_id = payload
@@ -418,12 +480,12 @@ fn bind_pull_request(
     })
 }
 
-fn configured_workflow<'a>(
-    payload: &'a GitHubPayload,
+fn configured_workflow<'a, Pull>(
+    payload: &'a GitHubPayload<Pull, ActivityAction>,
     completion: Option<&'a WorkflowCompletion>,
 ) -> Option<(&'a WorkflowCompletion, &'a WorkflowRun)> {
     let run = payload.workflow_run.as_ref()?;
-    (payload.action.as_deref() == Some("completed")).then_some(())?;
+    (payload.action == Some(ActivityAction::Completed)).then_some(())?;
     let completion = completion?;
     (run.event == completion.event.as_str()).then_some(())?;
     let identity = completion.workflow_identity.as_str();
@@ -439,8 +501,8 @@ fn configured_workflow<'a>(
     matches.then_some((completion, run))
 }
 
-fn workflow_pull_request<'a>(
-    payload: &'a GitHubPayload,
+fn workflow_pull_request<'a, Pull, Action>(
+    payload: &'a GitHubPayload<Pull, Action>,
     run: &'a WorkflowRun,
     completion: &WorkflowCompletion,
     provider: &ProviderIdentity,
@@ -499,10 +561,10 @@ fn workflow_pull_request<'a>(
     }))
 }
 
-fn supported_action(payload: &GitHubPayload) -> bool {
-    payload.action.as_deref().is_some_and(|action| {
-        SUPPORTED_ACTIONS.contains(&action)
-            || action == "edited"
+fn supported_action(payload: &GitHubPayload<PullRequestWebhook, PullAction>) -> bool {
+    payload.action.is_some_and(|action| {
+        matches!(action, PullAction::Opened | PullAction::Reopened)
+            || action == PullAction::Edited
                 && payload
                     .changes
                     .as_ref()

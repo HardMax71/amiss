@@ -1,0 +1,68 @@
+use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use strum::{Display, EnumString};
+
+use super::pull::request::{PullRequestWebhook, SynchronizePullRequest};
+use super::{GitHubPayload, PullRequest};
+
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum GitHubEvent {
+    PullRequest(Box<GitHubPayload<PullRequestWebhook, PullAction>>),
+    Synchronize(Box<GitHubPayload<SynchronizePullRequest, SynchronizeAction>>),
+    Activity(Box<GitHubPayload<PullRequest, ActivityAction>>),
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum PullAction {
+    Opened,
+    Reopened,
+    Edited,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum SynchronizeAction {
+    Synchronize,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum ActivityAction {
+    Assigned,
+    AutoMergeDisabled,
+    AutoMergeEnabled,
+    Closed,
+    ConvertedToDraft,
+    Demilestoned,
+    Dequeued,
+    Enqueued,
+    Labeled,
+    Locked,
+    Milestoned,
+    ReadyForReview,
+    ReviewRequestRemoved,
+    ReviewRequested,
+    Stacked,
+    Unassigned,
+    Unlabeled,
+    Unlocked,
+    Created,
+    Deleted,
+    Dismissed,
+    Submitted,
+    Resolved,
+    Unresolved,
+    Completed,
+    InProgress,
+    Requested,
+    Rerequested,
+    RequestedAction,
+}

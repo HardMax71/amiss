@@ -10,21 +10,24 @@ use crate::check::CheckRunStatus;
 use crate::repository::pull::PullRepositoryRecord;
 use crate::workflow::{ReferencedWorkflow, WorkflowCommit, WorkflowPullRequest};
 
+pub mod event;
 pub mod pull;
 pub mod repository;
 
+use pull::request::PullRequestWebhook;
 use repository::{WorkflowOwner, WorkflowRepository};
 
 #[serde_with::apply(Option<_> => #[serde(skip_serializing_if = "Option::is_none")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-pub struct GitHubPayload {
-    pub action: Option<String>,
+#[serde(bound(deserialize = "Pull: Deserialize<'de>, Action: Deserialize<'de>"))]
+pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
+    pub action: Option<Action>,
     pub changes: Option<PullRequestChanges>,
     pub installation: Option<Installation>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub repository: Option<PullRepositoryRecord>,
     pub number: Option<u64>,
-    pub pull_request: Option<PullRequest>,
+    pub pull_request: Option<Pull>,
     pub workflow: Option<Workflow>,
     pub workflow_run: Option<WorkflowRun>,
 }
