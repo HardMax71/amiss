@@ -150,3 +150,16 @@ webhook-workflow-run.json projects the complete unchanged workflow_run from that
 published completion example. It retains all 34 supplied fields; optional referenced
 workflows, nullable actors and PR entries, and additional terminal states in tests
 are synthetic cases from GitHub's pinned OpenAPI contract, not new live captures.
+
+webhook-pull-repository.json retains the complete head.repo member from
+[Octokit's synchronize example](https://github.com/octokit/webhooks/blob/7dd7fa56498a827a08b71919fae89428f5e8e283/payload-examples/api.github.com/pull_request/synchronize.payload.json).
+Its base.repo and both references in the published opened example are identical.
+All 78 supplied fields remain unchanged, with pretty-printing and a final newline.
+This is a published example, not a newly captured live delivery.
+
+The pinned OpenAPI synchronize and Octokit common-repository schemas disagree on
+required discussion/template/signoff/custom-property fields. The model preserves
+their 74 shared required fields and all 25 named optional additions: absent disputed
+fields receive no invented defaults, and supplied nulls remain invalid. Timestamp,
+license, owner and policy variations in tests are synthetic schema-backed cases.
+The existing REST repository contract is deliberately not widened to match them.
