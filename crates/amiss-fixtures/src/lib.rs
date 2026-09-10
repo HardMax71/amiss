@@ -26,6 +26,10 @@ pub const SCANNER_REPORT: &[u8] =
 /// Constructed Gitea-family delivery using complete provider response records.
 pub const GITEA_PULL_WEBHOOK: &[u8] = include_bytes!("../data/gitea-pull-webhook.json");
 
+/// Unchanged repository member from Octokit's published workflow completion example.
+pub const GITHUB_WEBHOOK_REPOSITORY: &[u8] =
+    include_bytes!("../data/github-webhook-repository.json");
+
 /// Constructed GitLab policy-job claims matching the provider's complete token fields.
 pub const GITLAB_POLICY_CLAIMS: &[u8] = include_bytes!("../data/gitlab-policy-claims.json");
 

@@ -14,6 +14,7 @@ use amiss_controller::{
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitea::{DedicatedReviewer, GiteaPullRequestSource};
 use amiss_controller_github::GitHubPullRequestSource;
+use amiss_controller_github::repository::pull::PullRepositoryRecord;
 use amiss_controller_github::webhook::{
     Base, GitHubPayload, Head, Installation, Owner, PullRequest, Repository,
 };
@@ -365,6 +366,13 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
             login: "acme".to_owned(),
         },
     };
+    let mut root: PullRepositoryRecord =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY)
+            .expect("the published webhook repository is complete");
+    root.id = repository.id;
+    repository.name.clone_into(&mut root.name);
+    repository.full_name.clone_into(&mut root.full_name);
+    repository.owner.login.clone_into(&mut root.owner.login);
     let mut payload = GitHubPayload {
         action: Some("opened".to_owned()),
         changes: None,
@@ -372,7 +380,7 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
             id: 22,
             node_id: "installation-twenty-two".to_owned(),
         }),
-        repository: Some(repository.clone()),
+        repository: Some(root),
         number: Some(42),
         pull_request: Some(PullRequest {
             id: 33,

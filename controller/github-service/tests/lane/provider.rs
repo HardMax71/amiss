@@ -1,11 +1,12 @@
 use std::collections::VecDeque;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, DeliveryHeader, DeliveryRoute,
     IngressPolicy, OidPair, ProviderError, Publication, RunIdentity, RunRefs, UntrustedDelivery,
 };
 use amiss_controller_fixtures::clock::TestClock;
+use amiss_controller_github::repository::pull::PullRepositoryRecord;
 use amiss_controller_github::webhook::{
     Base, GitHubPayload, Head, Installation, Owner, PullRequest, Repository,
 };
@@ -18,26 +19,30 @@ const INSTALLATION_ID: u64 = 7;
 pub(super) const REPOSITORY_ID: u64 = 101;
 const PULL_REQUEST_ID: u64 = 4_201;
 const PULL_REQUEST_NUMBER: u64 = 42;
-pub(super) const CHECK_RUN_BODY: &[u8] = br#"{
-  "action":"completed",
-  "check_run":{
-    "id":89721586894,
-    "name":"amiss / documentation assurance",
-    "head_sha":"3f1c8ab5ff36fbab9c0aa044271225cb3df69a60",
-    "status":"completed",
-    "conclusion":"success",
-    "app":{"id":4392947},
-    "pull_requests":[]
-  },
-  "installation":{"id":7,"node_id":"installation-seven"},
-  "repository":{
-    "id":101,
-    "name":"widget",
-    "full_name":"acme/widget",
-    "owner":{"login":"acme"}
-  },
-  "sender":{"id":1,"login":"github"}
-}"#;
+pub(super) static CHECK_RUN_BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
+    let body = serde_json::to_string(&GitHubPayload {
+        action: Some("completed".to_owned()),
+        changes: None,
+        installation: Some(Installation {
+            id: INSTALLATION_ID,
+            node_id: "installation-seven".to_owned(),
+        }),
+        repository: Some(
+            serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap(),
+        ),
+        number: None,
+        pull_request: None,
+        workflow: None,
+        workflow_run: None,
+    })
+    .unwrap();
+    body.replacen(
+        '{',
+        r#"{"check_run":{"id":89721586894,"name":"amiss / documentation assurance","head_sha":"3f1c8ab5ff36fbab9c0aa044271225cb3df69a60","status":"completed","conclusion":"success","app":{"id":4392947},"pull_requests":[]},"sender":{"id":1,"login":"github"},"#,
+        1,
+    )
+    .into_bytes()
+});
 
 pub(super) struct SignedEvent {
     pub body: Vec<u8>,
@@ -59,6 +64,12 @@ impl SignedEvent {
                 login: "acme".to_owned(),
             },
         };
+        let mut root: PullRepositoryRecord =
+            serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap();
+        root.id = repository.id;
+        repository.name.clone_into(&mut root.name);
+        repository.full_name.clone_into(&mut root.full_name);
+        repository.owner.login.clone_into(&mut root.owner.login);
         let body = serde_json::to_vec(&GitHubPayload {
             action: Some("synchronize".to_owned()),
             changes: None,
@@ -66,7 +77,7 @@ impl SignedEvent {
                 id: INSTALLATION_ID,
                 node_id: "installation-seven".to_owned(),
             }),
-            repository: Some(repository.clone()),
+            repository: Some(root),
             number: Some(PULL_REQUEST_NUMBER),
             pull_request: Some(PullRequest {
                 id: PULL_REQUEST_ID,

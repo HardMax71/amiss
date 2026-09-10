@@ -23,7 +23,10 @@ fn pull_repository_capture_preserves_the_complete_record() {
     assert_eq!(captured.owner.login, "HardMax71");
     assert_eq!(captured.default_branch, "main");
     assert!(captured.contents_url.ends_with("{+path}"));
-    assert!(serde_json::from_str::<PullRepositoryRecord>(CAPTURE).unwrap() == captured);
+    assert_eq!(
+        serde_json::from_str::<PullRepositoryRecord>(CAPTURE).unwrap(),
+        captured
+    );
     assert_eq!(
         amiss_fixtures::canonical_json(&serde_json::to_vec(&captured).unwrap()).unwrap(),
         amiss_fixtures::canonical_json(CAPTURE.as_bytes()).unwrap()
@@ -73,8 +76,14 @@ fn pull_repository_retains_every_optional_policy_and_metadata_field() {
         ..amiss_wire::read_json(CAPTURE.as_bytes(), u64::MAX).unwrap()
     };
     let encoded = serde_json::to_vec(&complete).unwrap();
-    assert!(serde_json::from_slice::<PullRepositoryRecord>(&encoded).unwrap() == complete);
-    assert!(amiss_wire::read_json::<PullRepositoryRecord>(&encoded, u64::MAX).unwrap() == complete);
+    assert_eq!(
+        serde_json::from_slice::<PullRepositoryRecord>(&encoded).unwrap(),
+        complete
+    );
+    assert_eq!(
+        amiss_wire::read_json::<PullRepositoryRecord>(&encoded, u64::MAX).unwrap(),
+        complete
+    );
 }
 
 #[test]
@@ -91,10 +100,13 @@ fn pull_repository_nulls_do_not_make_required_members_optional() {
         ..amiss_wire::read_json(CAPTURE.as_bytes(), u64::MAX).unwrap()
     };
     let encoded = serde_json::to_string(&nullable).unwrap();
-    assert!(serde_json::from_str::<PullRepositoryRecord>(&encoded).unwrap() == nullable);
-    assert!(
-        amiss_wire::read_json::<PullRepositoryRecord>(encoded.as_bytes(), u64::MAX).unwrap()
-            == nullable
+    assert_eq!(
+        serde_json::from_str::<PullRepositoryRecord>(&encoded).unwrap(),
+        nullable
+    );
+    assert_eq!(
+        amiss_wire::read_json::<PullRepositoryRecord>(encoded.as_bytes(), u64::MAX).unwrap(),
+        nullable
     );
     for field in [
         "description",

@@ -340,6 +340,7 @@ dependencies = [
  "amiss-controller-fixtures",
  "amiss-controller-github",
  "amiss-controller-service",
+ "amiss-fixtures",
  "amiss-wire",
  "hex",
  "hmac",

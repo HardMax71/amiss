@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto};
 
 use super::metadata::{
-    CodeSearchIndexStatus, LicenseRecord, MergeCommitMessage, MergeCommitTitle,
-    PullRequestCreationPolicy, RepositoryAccess, SquashMergeCommitMessage, SquashMergeCommitTitle,
+    CodeSearchIndexStatus, CustomProperties, LicenseRecord, MergeCommitMessage, MergeCommitTitle,
+    PullRequestCreationPolicy, RepositoryAccess, RepositoryOrganization, SquashMergeCommitMessage,
+    SquashMergeCommitTitle,
 };
+use super::template::TemplateRepository;
 use crate::owner::OwnerRecord;
 
 #[serde_with::apply(Option<_> => #[serde(
@@ -15,7 +17,7 @@ use crate::owner::OwnerRecord;
     deserialize_with = "deserialize_some",
     skip_serializing_if = "Option::is_none"
 )])]
-#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -104,6 +106,7 @@ pub struct PullRepositoryRecord {
     pub allow_update_branch: Option<bool>,
     pub anonymous_access_enabled: Option<bool>,
     pub code_search_index_status: Option<CodeSearchIndexStatus>,
+    pub custom_properties: Option<CustomProperties>,
     pub delete_branch_on_merge: Option<bool>,
     pub has_discussions: Option<bool>,
     pub has_pull_requests: Option<bool>,
@@ -111,12 +114,16 @@ pub struct PullRepositoryRecord {
     pub master_branch: Option<String>,
     pub merge_commit_message: Option<MergeCommitMessage>,
     pub merge_commit_title: Option<MergeCommitTitle>,
+    pub network_count: Option<UInt>,
+    pub organization: Option<Nullable<RepositoryOrganization>>,
     pub permissions: Option<RepositoryAccess>,
     pub pull_request_creation_policy: Option<PullRequestCreationPolicy>,
     pub squash_merge_commit_message: Option<SquashMergeCommitMessage>,
     pub squash_merge_commit_title: Option<SquashMergeCommitTitle>,
     pub starred_at: Option<String>,
+    pub subscribers_count: Option<UInt>,
     pub temp_clone_token: Option<String>,
+    pub template_repository: Option<Nullable<TemplateRepository>>,
     pub topics: Option<Vec<String>>,
     pub use_squash_pr_title_as_default: Option<bool>,
     pub visibility: Option<String>,

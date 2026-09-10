@@ -277,9 +277,14 @@ impl PullRequestFacts {
             }
             let (installation_id, repository_id, repository) =
                 authenticated_repository(&payload, provider)?;
+            let root = payload.repository.as_ref().ok_or(Authentication)?;
+            let base = &pull_request.base.repo;
             let number = payload.number.and_then(positive).ok_or(Authentication)?;
             if pull_request.number != number
-                || payload.repository.as_ref() != Some(&pull_request.base.repo)
+                || root.id != base.id
+                || root.name != base.name
+                || root.full_name != base.full_name
+                || root.owner.login != base.owner.login
             {
                 return Err(Authentication);
             }

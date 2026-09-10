@@ -4,6 +4,7 @@ use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto};
 
+use crate::repository::pull::PullRepositoryRecord;
 use crate::workflow::WorkflowPullRequest;
 
 pub mod repository;
@@ -16,7 +17,8 @@ pub struct GitHubPayload {
     pub action: Option<String>,
     pub changes: Option<PullRequestChanges>,
     pub installation: Option<Installation>,
-    pub repository: Option<Repository>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub repository: Option<PullRepositoryRecord>,
     pub number: Option<u64>,
     pub pull_request: Option<PullRequest>,
     pub workflow: Option<Workflow>,

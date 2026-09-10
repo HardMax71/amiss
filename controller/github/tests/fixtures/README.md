@@ -129,3 +129,14 @@ from the published completion example linked above; its head_repository member
 is identical. Every member and value is retained with pretty-printing and a
 trailing newline. Nullable and minimally populated owners in tests follow the
 official OpenAPI contract, which is broader than Octokit's owner reference.
+
+webhook-template-repository.json is synthetic: it populates all 87 template fields
+and all 18 optional owner fields in repository-webhooks from the pinned official
+OpenAPI contract. Compatible values come from the published completion example;
+other fields use explicit sample values. It is not an observed template response.
+The complete event-root repository example is shared through amiss-fixtures.
+
+Root organization fixtures cover the name declared by Octokit's completion
+schema and the nullable simple-user object declared by GitHub OpenAPI. Both
+forms are explicit typed alternatives; the account form keeps the existing
+closed owner contract. These additional forms are constructed, not live captures.

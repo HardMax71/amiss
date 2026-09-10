@@ -34,7 +34,7 @@ fn full_repository_captures_retain_roots_parents_and_sources() {
         fork.parent.as_ref().unwrap().full_name,
         "github/rest-api-description"
     );
-    assert!(fork.parent == fork.source);
+    assert_eq!(fork.parent, fork.source);
 }
 
 #[test]

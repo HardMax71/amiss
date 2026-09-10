@@ -8,6 +8,7 @@ use crate::owner::OwnerRecord;
 
 pub mod metadata;
 pub mod pull;
+pub mod template;
 
 use metadata::{
     CodeOfConduct, CodeOfConductSummary, CustomProperties, LicenseRecord, MergeCommitMessage,

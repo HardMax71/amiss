@@ -30,6 +30,7 @@ thiserror.workspace = true
 [dev-dependencies]
 amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller-fixtures.workspace = true
+amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 hex.workspace = true
 hmac.workspace = true
 serde_json.workspace = true

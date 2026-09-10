@@ -5,7 +5,7 @@
 
 use amiss_controller_fixtures::clock::TestClock;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
 use amiss_controller::{
@@ -16,10 +16,12 @@ use amiss_controller::{
     ReplayWindow, RunIdentity, RunRefs, SemanticEvidenceExpectation, SignedTimePolicy,
     UntrustedDelivery, WebhookKey, WebhookKeyring, WorkflowArtifactExpectation,
 };
+use amiss_controller_github::repository::metadata::RepositoryOrganization;
+use amiss_controller_github::repository::pull::PullRepositoryRecord;
 use amiss_controller_github::webhook::repository::WorkflowRepository;
 use amiss_controller_github::webhook::{
-    BaseChange, GitHubPayload, Installation, Owner, PreviousReference, PullRequestChanges,
-    Repository, Workflow, WorkflowRun,
+    Base, BaseChange, GitHubPayload, Head, Installation, Owner, PreviousReference, PullRequest,
+    PullRequestChanges, Repository, Workflow, WorkflowRun,
 };
 use amiss_controller_github::workflow::{
     WorkflowPullRef, WorkflowPullRepository, WorkflowPullRequest,
@@ -36,32 +38,46 @@ use sha2::Sha256;
 
 const NOW: i64 = 1_800_000_000_000;
 const SECRET: &[u8] = b"github-webhook-secret";
-const BODY: &[u8] = br#"{
-  "action":"opened",
-  "installation":{"id":7,"node_id":"installation-seven"},
-  "repository":{
-    "id":101,
-    "name":"widget",
-    "full_name":"HardMax71/widget",
-    "owner":{"login":"HardMax71"}
-  },
-  "number":42,
-  "pull_request":{
-    "id":4201,
-    "number":42,
-    "head":{"sha":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","ref":"topic"},
-    "base":{
-      "ref":"main",
-      "repo":{
-        "id":101,
-        "name":"widget",
-        "full_name":"HardMax71/widget",
-        "owner":{"login":"HardMax71"}
-      }
-    }
-  }
-}"#;
-
+static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
+    let mut repository: PullRepositoryRecord =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap();
+    repository.id = 101;
+    "widget".clone_into(&mut repository.name);
+    "HardMax71/widget".clone_into(&mut repository.full_name);
+    "HardMax71".clone_into(&mut repository.owner.login);
+    serde_json::to_vec(&GitHubPayload {
+        action: Some("opened".to_owned()),
+        changes: None,
+        installation: Some(Installation {
+            id: 7,
+            node_id: "installation-seven".to_owned(),
+        }),
+        repository: Some(repository),
+        number: Some(42),
+        pull_request: Some(PullRequest {
+            id: 4_201,
+            number: 42,
+            head: Head {
+                sha: oid('b'),
+                branch: "topic".to_owned(),
+            },
+            base: Base {
+                branch: "main".to_owned(),
+                repo: Repository {
+                    id: 101,
+                    name: "widget".to_owned(),
+                    full_name: "HardMax71/widget".to_owned(),
+                    owner: Owner {
+                        login: "HardMax71".to_owned(),
+                    },
+                },
+            },
+        }),
+        workflow: None,
+        workflow_run: None,
+    })
+    .unwrap()
+});
 type HmacSha256 = Hmac<Sha256>;
 
 #[derive(Clone)]
@@ -190,7 +206,7 @@ fn signed_body_alone_defines_the_pull_request() {
     let adapter = adapter(FakeApi::new(dummy_snapshot()));
     let first = authenticated(
         &adapter,
-        BODY,
+        &BODY,
         &[
             ("x-github-event", b"issues"),
             ("x-github-delivery", b"forged-one"),
@@ -201,7 +217,7 @@ fn signed_body_alone_defines_the_pull_request() {
     .unwrap();
     let pretty = authenticated(
         &adapter,
-        BODY,
+        &BODY,
         &[
             ("x-github-event", b"push"),
             ("x-github-delivery", b"forged-two"),
@@ -229,7 +245,7 @@ fn signed_body_alone_defines_the_pull_request() {
 
     for action in ["reopened", "synchronize"] {
         let body = replaced_once(
-            BODY,
+            &BODY,
             r#""action":"opened""#,
             &format!(r#""action":"{action}""#),
         );
@@ -255,11 +271,11 @@ fn signed_target_must_belong_to_the_configured_lane() {
     let release = BranchRef::new("refs/heads/release".to_owned()).unwrap();
 
     assert!(matches!(
-        authenticate_target(&source, BODY, &main),
+        authenticate_target(&source, &BODY, &main),
         Ok(Some(_))
     ));
     assert_eq!(
-        authenticate_target(&source, BODY, &release),
+        authenticate_target(&source, &BODY, &release),
         Err(ProviderError::AuthorizationRevoked)
     );
 }
@@ -272,7 +288,7 @@ fn configured_workflow_completion_reproduces_the_pull_request_run() {
         &[workflow_artifact("docs-evidence.yml")],
     );
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let pull_request = authenticate_target(&source(), BODY, &target)
+    let pull_request = authenticate_target(&source(), &BODY, &target)
         .unwrap()
         .unwrap();
     let body = serde_json::to_vec(&workflow_payload()).unwrap();
@@ -286,7 +302,7 @@ fn configured_workflow_completion_reproduces_the_pull_request_run() {
         pull_request.delivery().provider_run
     );
     assert_eq!(
-        authenticate_target(&completion_source, BODY, &target),
+        authenticate_target(&completion_source, &BODY, &target),
         Ok(None)
     );
 
@@ -344,8 +360,11 @@ fn signed_workflow_repositories_reject_unknown_metadata() {
     let payload = workflow_payload();
     let run = payload.workflow_run.as_ref().unwrap();
     let body = serde_json::to_string(&payload).unwrap();
-    for record in [&run.repository, &run.head_repository] {
-        let repository = serde_json::to_string(record).unwrap();
+    for repository in [
+        serde_json::to_string(payload.repository.as_ref().unwrap()).unwrap(),
+        serde_json::to_string(&run.repository).unwrap(),
+        serde_json::to_string(&run.head_repository).unwrap(),
+    ] {
         assert_eq!(body.matches(&repository).count(), 1);
         for invalid in [
             repository.replacen('{', r#"{"unknown":true,"#, 1),
@@ -413,6 +432,44 @@ fn workflow_repository_identity_is_independent_of_retained_metadata() {
 }
 
 #[test]
+fn pull_request_identity_excludes_root_metadata() {
+    let source = source();
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let original = authenticate_target(&source, &BODY, &target)
+        .unwrap()
+        .unwrap();
+    let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
+    let root = payload.repository.as_mut().unwrap();
+    root.node_id = "root-metadata-only".to_owned();
+    root.owner.name = Some(amiss_wire::assessment::Nullable::Null);
+    root.network_count = Some(1_u32.into());
+    root.organization = Some(amiss_wire::assessment::Nullable::Value(
+        RepositoryOrganization::Name("unrelated-metadata".to_owned()),
+    ));
+    let input = serde_json::to_vec(&payload).unwrap();
+    let accepted = authenticate_target(&source, &input, &target)
+        .unwrap()
+        .unwrap();
+    assert_eq!(accepted.delivery(), original.delivery());
+    let mutations: [fn(&mut Repository); 4] = [
+        |base| base.id += 1,
+        |base| base.name = "other".to_owned(),
+        |base| base.full_name = "other/widget".to_owned(),
+        |base| base.owner.login = "other".to_owned(),
+    ];
+    for (index, mutate) in mutations.into_iter().enumerate() {
+        let mut changed = payload.clone();
+        mutate(&mut changed.pull_request.as_mut().unwrap().base.repo);
+        let input = serde_json::to_vec(&changed).unwrap();
+        assert_eq!(
+            authenticate_target(&source, &input, &target),
+            Err(ProviderError::Authentication),
+            "mutation {index}"
+        );
+    }
+}
+
+#[test]
 fn signed_webhook_metadata_is_complete_closed_and_checked() {
     let completion_source = GitHubPullRequestSource::new(
         provider(),
@@ -451,7 +508,7 @@ fn signed_webhook_metadata_is_complete_closed_and_checked() {
             "accepted {new}"
         );
     }
-    let body = std::str::from_utf8(BODY).unwrap();
+    let body = std::str::from_utf8(&BODY).unwrap();
     for (old, new) in [
         (
             r#""node_id":"installation-seven""#,
@@ -524,7 +581,7 @@ fn workflow_pr_references_reject_unknown_missing_and_malformed_metadata() {
             Err(ProviderError::Authentication)
         ));
     }
-    let other_format = replaced_once(BODY, &"b".repeat(40), &"b".repeat(64));
+    let other_format = replaced_once(&BODY, &"b".repeat(40), &"b".repeat(64));
     assert!(matches!(
         authenticate_target(&source(), &other_format, &target),
         Err(ProviderError::Authentication)
@@ -583,24 +640,23 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
         br#"{"action":"completed","check_suite":{"id":9321},"installation":{"id":7,"node_id":"installation-seven"}}"#;
     assert_eq!(authenticate_target(&source, check_suite, &main), Ok(None));
 
-    let issue = br#"{
-      "action":"opened",
-      "issue":{"id":1,"number":5},
-      "repository":{
-        "id":101,
-        "name":"widget",
-        "full_name":"HardMax71/widget",
-        "owner":{"login":"HardMax71"}
-      },
-      "installation":{"id":7,"node_id":"installation-seven"}
-    }"#;
-    assert_eq!(authenticate_target(&source, issue, &main), Ok(None));
+    let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
+    payload.pull_request = None;
+    let issue = serde_json::to_string(&payload).unwrap().replacen(
+        '{',
+        r#"{"issue":{"id":1,"number":5},"#,
+        1,
+    );
+    assert_eq!(
+        authenticate_target(&source, issue.as_bytes(), &main),
+        Ok(None)
+    );
 
-    let closed = replaced_once(BODY, r#""action":"opened""#, r#""action":"closed""#);
+    let closed = replaced_once(&BODY, r#""action":"opened""#, r#""action":"closed""#);
     assert_eq!(authenticate_target(&source, &closed, &main), Ok(None));
 
     let title_change = replaced_once(
-        BODY,
+        &BODY,
         r#""action":"opened","#,
         r#""action":"edited","changes":{"title":{"from":"old title"}},"#,
     );
@@ -622,7 +678,7 @@ fn malformed_supported_delivery_is_not_no_work() {
 #[test]
 fn edited_requires_a_signed_base_change() {
     let adapter = adapter(FakeApi::new(dummy_snapshot()));
-    let mut payload: GitHubPayload = serde_json::from_slice(BODY).unwrap();
+    let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
     payload.action = Some("edited".to_owned());
     payload.changes = Some(PullRequestChanges {
         base: Some(BaseChange {
@@ -678,7 +734,7 @@ fn signed_edited_changes_refuse_partial_or_unknown_records() {
         serde_json::from_str(include_str!("../fixtures/webhook-pull-changes.json")).unwrap();
     let wire = serde_json::to_string(&changes).unwrap();
     let body = replaced_once(
-        BODY,
+        &BODY,
         r#""action":"opened","#,
         &format!(r#""action":"edited","changes":{wire},"#),
     );
@@ -715,7 +771,7 @@ fn signed_edited_changes_refuse_partial_or_unknown_records() {
         assert_eq!(wire.matches(old).count(), 1, "{old}");
         let invalid = wire.replacen(old, new, 1);
         let body = replaced_once(
-            BODY,
+            &BODY,
             r#""action":"opened","#,
             &format!(r#""action":"edited","changes":{invalid},"#),
         );
@@ -732,7 +788,7 @@ fn signed_edited_changes_refuse_partial_or_unknown_records() {
         r#"{"body":{"from":"Old body"},"title":{"from":"Old title"}}"#,
     ] {
         let body = replaced_once(
-            BODY,
+            &BODY,
             r#""action":"opened","#,
             &format!(r#""action":"edited","changes":{input},"#),
         );
@@ -752,7 +808,7 @@ fn signed_source_outlives_the_live_api_adapter() {
     );
     let through_adapter = authenticated(
         &adapter,
-        BODY,
+        &BODY,
         &[],
         SignedTimePolicy::ReplayOnly,
         provider(),
@@ -762,7 +818,7 @@ fn signed_source_outlives_the_live_api_adapter() {
     assert!(dropped.load(Ordering::Acquire));
     let through_source = authenticated(
         source.as_ref(),
-        BODY,
+        &BODY,
         &[],
         SignedTimePolicy::ReplayOnly,
         provider(),
@@ -774,22 +830,22 @@ fn signed_source_outlives_the_live_api_adapter() {
 #[test]
 fn rejects_malformed_or_internally_inconsistent_signed_payloads() {
     let cases = [
-        replaced(BODY, r#""id":7"#, r#""id":0"#),
-        replaced(BODY, r#""id":101"#, r#""id":0"#),
-        replaced(BODY, r#""id":4201"#, r#""id":0"#),
-        replaced(BODY, r#""number":42"#, r#""number":0"#),
-        replaced_once(BODY, r#""id":101"#, r#""id":102"#),
-        replaced_once(BODY, r#""number":42"#, r#""number":41"#),
-        replaced_once(BODY, r#""action":"opened""#, r#""action":"edited""#),
-        replaced_once(BODY, "HardMax71/widget", "HardMax71/other"),
-        replaced_once(BODY, r#""name":"widget""#, r#""name":"other""#),
+        replaced(&BODY, r#""id":7"#, r#""id":0"#),
+        replaced(&BODY, r#""id":101"#, r#""id":0"#),
+        replaced(&BODY, r#""id":4201"#, r#""id":0"#),
+        replaced(&BODY, r#""number":42"#, r#""number":0"#),
+        replaced_once(&BODY, r#""id":101"#, r#""id":102"#),
+        replaced_once(&BODY, r#""number":42"#, r#""number":41"#),
+        replaced_once(&BODY, r#""action":"opened""#, r#""action":"edited""#),
+        replaced_once(&BODY, "HardMax71/widget", "HardMax71/other"),
+        replaced_once(&BODY, r#""name":"widget""#, r#""name":"other""#),
         replaced(
-            BODY,
+            &BODY,
             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
         ),
-        replaced_once(BODY, r#""ref":"topic""#, r#""ref":"bad ref""#),
-        replaced_once(BODY, r#""ref":"main""#, r#""ref":"bad..ref""#),
+        replaced_once(&BODY, r#""ref":"topic""#, r#""ref":"bad ref""#),
+        replaced_once(&BODY, r#""ref":"main""#, r#""ref":"bad..ref""#),
         br#"{"installation":{"id":7,"node_id":"installation-seven"}}"#.to_vec(),
     ];
     for body in cases {
@@ -808,8 +864,8 @@ fn rejects_malformed_or_internally_inconsistent_signed_payloads() {
 #[test]
 fn rejects_body_tampering_and_wrong_routes() {
     let adapter = adapter(FakeApi::new(dummy_snapshot()));
-    let signed = signature(BODY);
-    let tampered = replaced_once(BODY, r#""number":42"#, r#""number":43"#);
+    let signed = signature(&BODY);
+    let tampered = replaced_once(&BODY, r#""number":42"#, r#""number":43"#);
     assert_eq!(
         try_authenticate_with_signature(
             &adapter,
@@ -829,7 +885,7 @@ fn rejects_body_tampering_and_wrong_routes() {
     assert_eq!(
         authenticated(
             &adapter,
-            BODY,
+            &BODY,
             &[],
             SignedTimePolicy::ReplayOnly,
             wrong_provider,
@@ -839,7 +895,7 @@ fn rejects_body_tampering_and_wrong_routes() {
     assert_eq!(
         authenticated(
             &adapter,
-            BODY,
+            &BODY,
             &[],
             SignedTimePolicy::Required(Duration::from_mins(5)),
             provider(),
@@ -852,7 +908,7 @@ fn rejects_body_tampering_and_wrong_routes() {
 fn refresh_marks_ref_drift_superseded() {
     let seed = adapter(FakeApi::new(dummy_snapshot()));
     let verified =
-        authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
+        authenticated(&seed, &BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
     let delivery = verified.delivery().clone();
     let exact = snapshot(&delivery, "topic", "main");
     let exact_api = FakeApi::new(exact.clone());
@@ -910,7 +966,7 @@ fn refresh_marks_ref_drift_superseded() {
 fn publication_is_delegated_only_under_the_authenticated_identity() {
     let seed = adapter(FakeApi::new(dummy_snapshot()));
     let verified =
-        authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
+        authenticated(&seed, &BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
     let delivery = verified.delivery().clone();
     let run = snapshot(&delivery, "topic", "main").run;
     let valid = publication(&delivery, run.clone());
@@ -943,7 +999,7 @@ fn publication_is_delegated_only_under_the_authenticated_identity() {
 fn every_clause_binding_the_delivery_stands_alone() {
     let seed = adapter(FakeApi::new(dummy_snapshot()));
     let verified =
-        authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
+        authenticated(&seed, &BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
     let delivery = verified.delivery().clone();
     let elsewhere = ProviderIdentity {
         namespace: ProviderNamespace::try_from("github".to_owned()).unwrap(),
@@ -1041,14 +1097,12 @@ fn workflow_payload() -> GitHubPayload {
     head_repository.id = 202;
     "Contributor/widget".clone_into(&mut head_repository.full_name);
     "Contributor".clone_into(&mut head_repository.owner.as_mut().unwrap().login);
-    let repository = Repository {
-        id: 101,
-        name: "widget".to_owned(),
-        full_name: "HardMax71/widget".to_owned(),
-        owner: Owner {
-            login: "HardMax71".to_owned(),
-        },
-    };
+    let mut repository: PullRepositoryRecord =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap();
+    repository.id = 101;
+    "widget".clone_into(&mut repository.name);
+    "HardMax71/widget".clone_into(&mut repository.full_name);
+    "HardMax71".clone_into(&mut repository.owner.login);
     GitHubPayload {
         action: Some("completed".to_owned()),
         changes: None,
@@ -1056,7 +1110,7 @@ fn workflow_payload() -> GitHubPayload {
             id: 7,
             node_id: "installation-seven".to_owned(),
         }),
-        repository: Some(repository.clone()),
+        repository: Some(repository),
         number: None,
         pull_request: None,
         workflow: Some(Workflow {

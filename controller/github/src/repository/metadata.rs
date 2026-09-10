@@ -7,6 +7,15 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, DeserializeFromStr, MapPreventDuplicates, Same, SerializeDisplay};
 use strum::{Display, EnumString};
 
+use crate::owner::OwnerRecord;
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum RepositoryOrganization {
+    Name(String),
+    Account(Box<OwnerRecord>),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(transparent)]
 pub struct CustomProperties {
