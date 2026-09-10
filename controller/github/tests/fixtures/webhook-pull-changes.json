@@ -1,0 +1,8 @@
+{
+  "base": {
+    "ref": {"from": "previous-main"},
+    "sha": {"from": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+  },
+  "body": {"from": "Previous documentation details."},
+  "title": {"from": "Previous pull request title"}
+}

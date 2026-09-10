@@ -1,5 +1,6 @@
 use amiss_wire::model::Oid;
 use js_int::UInt;
+use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto};
 
@@ -18,20 +19,31 @@ pub struct GitHubPayload {
     pub workflow_run: Option<WorkflowRun>,
 }
 
+#[serde_with::apply(Option<_> => #[serde(
+    default,
+    deserialize_with = "deserialize_some",
+    skip_serializing_if = "Option::is_none"
+)])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct PullRequestChanges {
     pub base: Option<BaseChange>,
+    pub body: Option<PreviousReference>,
+    pub title: Option<PreviousReference>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct BaseChange {
     #[serde(rename = "ref")]
     pub reference: PreviousReference,
+    pub sha: PreviousReference<Oid>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-pub struct PreviousReference {
-    pub from: String,
+#[serde(deny_unknown_fields)]
+pub struct PreviousReference<T = String> {
+    pub from: T,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

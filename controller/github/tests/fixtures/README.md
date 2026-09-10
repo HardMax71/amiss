@@ -118,3 +118,8 @@ published completion example. webhook-installation.json projects installation
 from [Octokit's ready-for-review example](https://github.com/octokit/webhooks/blob/7dd7fa56498a827a08b71919fae89428f5e8e283/payload-examples/api.github.com/pull_request/ready_for_review.with-installation.payload.json).
 Both retain every member and value, pretty-printed with one trailing newline.
 They are published examples, not newly captured live deliveries.
+
+webhook-pull-changes.json is synthetic, following the closed changes object in
+[Octokit's pinned edited-PR schema](https://github.com/octokit/webhooks/blob/7dd7fa56498a827a08b71919fae89428f5e8e283/payload-schemas/api.github.com/pull_request/edited.schema.json).
+It includes previous base ref and SHA, body and title. That revision has no
+published edited-PR payload example; this is not presented as a captured delivery.
