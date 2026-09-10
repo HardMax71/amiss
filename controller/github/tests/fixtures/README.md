@@ -163,3 +163,10 @@ their 74 shared required fields and all 25 named optional additions: absent disp
 fields receive no invented defaults, and supplied nulls remain invalid. Timestamp,
 license, owner and policy variations in tests are synthetic schema-backed cases.
 The existing REST repository contract is deliberately not widened to match them.
+
+webhook-pull-refs.json retains the complete head and base references, in that
+order, from the same published synchronize example. Both references are identical
+to the corresponding opened-example members. All five fields and their complete
+nested records are unchanged, with pretty-printing and a trailing newline.
+Nullable accounts, deleted head repositories and numeric timestamps in tests
+are explicit synthetic cases from the two pinned contracts, not live captures.
