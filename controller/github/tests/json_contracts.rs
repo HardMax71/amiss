@@ -90,6 +90,9 @@ mod webhook_check_run;
 #[path = "json_contracts/workflow_event.rs"]
 mod workflow_event;
 
+#[path = "json_contracts/issue_comment_event.rs"]
+mod issue_comment_event;
+
 #[path = "json_contracts/issue_activity.rs"]
 mod issue_activity;
 

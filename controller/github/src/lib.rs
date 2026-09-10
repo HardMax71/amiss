@@ -28,8 +28,7 @@ use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryId
 
 use crate::check::CheckRunStatus;
 use crate::repository::pull::PullRepositoryRecord;
-use crate::webhook::comment::Comment;
-use crate::webhook::event::{ActivityAction, GitHubEvent, PullAction};
+use crate::webhook::event::{GitHubEvent, PullAction};
 use crate::webhook::pull::request::PullRequestWebhook;
 use crate::webhook::workflow::{WorkflowRunAction, WorkflowRunEvent};
 use crate::webhook::{GitHubPayload, Installation, WorkflowRunConclusion};
@@ -280,6 +279,7 @@ impl PullRequestFacts {
             | GitHubEvent::RequestedCheckRun(_)
             | GitHubEvent::CheckSuite(_)
             | GitHubEvent::ReviewThread(_)
+            | GitHubEvent::IssueComment(_)
             | GitHubEvent::Review(_)
             | GitHubEvent::ReviewComment(_) => return Ok(None),
             GitHubEvent::PullRequest(payload) => {
@@ -338,14 +338,6 @@ impl PullRequestFacts {
             GitHubEvent::Activity(payload) => payload,
         };
         reject_mixed_events(&payload)?;
-        if payload.pull_request.is_some()
-            && matches!(
-                payload.action,
-                Some(ActivityAction::Created | ActivityAction::Deleted)
-            )
-        {
-            return Err(Authentication);
-        }
         Ok(None)
     }
 }
@@ -359,9 +351,8 @@ fn reject_mixed_events<Pull, Action>(
         || payload.check_run.is_some()
         || payload.workflow.is_some()
         || payload.workflow_run.is_some()
-        || matches!(payload.comment, Some(Comment::Review(_)))
-        || (payload.pull_request.is_some()
-            && (payload.comment.is_some() || payload.issue.is_some()))
+        || payload.comment.is_some()
+        || (payload.pull_request.is_some() && payload.issue.is_some())
     {
         return Err(ProviderError::Authentication);
     }

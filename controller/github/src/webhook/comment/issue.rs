@@ -4,11 +4,50 @@ use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
 
 use super::Reactions;
-use crate::check::CheckRunApp;
+use crate::check::{CheckRunApp, EnterpriseRecord};
 use crate::owner::OwnerRecord;
 use crate::pull::metadata::AuthorAssociation;
+use crate::repository::pull::PullRepositoryRecord;
+use crate::webhook::issue::IssueRecord;
 use crate::webhook::pull::PullRequestAccountKind;
 use crate::webhook::repository::WorkflowOwner;
+use crate::webhook::review::ReviewChanges;
+use crate::webhook::{Installation, Organization};
+
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+pub enum IssueCommentEvent {
+    Created {
+        #[serde(flatten)]
+        event: IssueCommentPayload<IssueCommentRecord<WorkflowOwner>>,
+    },
+    Edited {
+        changes: ReviewChanges,
+        #[serde(flatten)]
+        event: IssueCommentPayload,
+    },
+    Deleted {
+        #[serde(flatten)]
+        event: IssueCommentPayload,
+    },
+}
+
+#[serde_with::apply(Option<_> => #[serde(
+    default,
+    deserialize_with = "deserialize_some",
+    skip_serializing_if = "Option::is_none"
+)])]
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IssueCommentPayload<Comment = IssueCommentRecord> {
+    pub issue: IssueRecord,
+    pub comment: Comment,
+    pub repository: PullRepositoryRecord,
+    pub sender: OwnerRecord,
+    pub installation: Option<Installation>,
+    pub organization: Option<Organization>,
+    pub enterprise: Option<EnterpriseRecord>,
+}
 
 #[serde_with::apply(Option<_> => #[serde(
     default,

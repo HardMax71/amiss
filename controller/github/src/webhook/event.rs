@@ -3,6 +3,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use super::comment::ReviewCommentEvent;
+use super::comment::issue::IssueCommentEvent;
 
 use super::pull::request::{PullRequestWebhook, SynchronizePullRequest};
 use super::review::ReviewEvent;
@@ -15,6 +16,7 @@ use super::{GitHubPayload, PullRequest, WorkflowRun};
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum GitHubEvent {
+    IssueComment(Box<IssueCommentEvent>),
     WorkflowRun(Box<WorkflowRunEvent>),
     RequestedWorkflowRun(
         Box<WorkflowRunEvent<WorkflowRun<RequestedWorkflowRunTitle>, RequestedWorkflowRunAction>>,
@@ -71,6 +73,4 @@ pub enum ActivityAction {
     Unassigned,
     Unlabeled,
     Unlocked,
-    Created,
-    Deleted,
 }
