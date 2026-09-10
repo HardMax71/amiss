@@ -15,6 +15,9 @@ mod check_run;
 #[path = "json_contracts/full_repository.rs"]
 mod full_repository;
 
+#[path = "json_contracts/installation.rs"]
+mod installation;
+
 #[path = "json_contracts/owner.rs"]
 mod owner;
 

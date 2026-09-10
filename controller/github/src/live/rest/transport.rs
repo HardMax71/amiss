@@ -11,10 +11,12 @@ use reqwest::header::{
 };
 use reqwest::{Method, StatusCode};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use url::Url;
 
 use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, decode_bounded_json};
+
+use crate::installation::InstallationToken;
 
 use super::super::{GitHubClientError, GitHubTimeouts};
 use super::OperationDeadline;
@@ -204,7 +206,7 @@ impl Transport {
             ProviderError::Authentication,
         )?;
         let minted: InstallationToken =
-            decode_body(response, |bytes| serde_json::from_slice(bytes))?;
+            decode_body(response, |bytes| amiss_wire::read_json(bytes, u64::MAX))?;
         Ok(SecretString::from(minted.token))
     }
 
@@ -222,11 +224,6 @@ struct AppClaims {
     iat: u64,
     exp: u64,
     iss: String,
-}
-
-#[derive(Deserialize)]
-struct InstallationToken {
-    token: String,
 }
 
 fn app_jwt(app: &AppCredential) -> Result<SecretString, ProviderError> {

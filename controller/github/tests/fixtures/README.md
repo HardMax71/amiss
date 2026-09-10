@@ -85,3 +85,10 @@ including the closed PR's real label. Milestone, auto-merge, requested-team and
 stack instances in contract tests are synthetic schema-backed cases, not captured
 provider behavior. Their absence from these responses does not make them optional
 where the API declares otherwise. No token was created or nonempty clone token retained.
+
+The installation-token fixture is synthetic, following the versioned API schema:
+all eight root fields and all 55 named app permissions are populated. Its token
+text is not a credential. Tests separately embed the captured pull repository;
+neither case is claimed as a captured installation-token response. The historical
+official token example has repository/schema inconsistencies, so it was not
+silently edited into a purported live capture. No installation token was minted.

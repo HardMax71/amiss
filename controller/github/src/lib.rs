@@ -4,6 +4,7 @@ mod acquisition;
 pub mod artifact;
 pub mod check;
 pub mod commit;
+pub mod installation;
 mod live;
 pub mod owner;
 pub mod pull;
