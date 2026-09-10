@@ -92,3 +92,12 @@ text is not a credential. Tests separately embed the captured pull repository;
 neither case is claimed as a captured installation-token response. The historical
 official token example has repository/schema inconsistencies, so it was not
 silently edited into a purported live capture. No installation token was minted.
+
+The branch-rule fixtures are unchanged first pages for
+[Amiss main](https://api.github.com/repos/HardMax71/amiss/rules/branches/main?per_page=100&page=1)
+and [github/docs main](https://api.github.com/repos/github/docs/rules/branches/main?per_page=100&page=1),
+captured read-only on 2026-09-10 with API version 2022-11-28. The latter includes
+the boolean review and merge-queue settings missing from the pinned OpenAPI
+description. Both are false in the capture; true, omitted and malformed values
+in tests are synthetic variations. No rules or repository settings were changed.
+Only a final newline is added to the captured JSON for repository hygiene.

@@ -7,6 +7,96 @@ use wary::Validate as _;
 use super::{BranchRule, RulesetSourceType};
 
 #[test]
+fn current_effective_rule_pages_decode_all_observed_settings() {
+    for (input, expected) in [
+        (
+            include_bytes!("../../../tests/fixtures/branch-rules-amiss.json").as_slice(),
+            4,
+        ),
+        (
+            include_bytes!("../../../tests/fixtures/branch-rules-docs.json").as_slice(),
+            6,
+        ),
+    ] {
+        let rules: Vec<BranchRule> = serde_json::from_slice(input).unwrap();
+        assert_eq!(rules.len(), expected);
+        for rule in &rules {
+            rule.validate(&()).unwrap();
+        }
+        let encoded = serde_json::to_vec(&rules).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<Vec<BranchRule>>(&encoded).unwrap(),
+            rules
+        );
+        let (bounded, length): (Vec<BranchRule>, _) =
+            decode_bounded_json(input, None, input.len(), |bytes| {
+                serde_json::from_slice(bytes)
+            })
+            .unwrap();
+        assert_eq!(bounded, rules);
+        assert_eq!(length, input.len());
+    }
+}
+
+#[test]
+fn observed_rule_settings_preserve_presence_and_only_accept_booleans() {
+    let input = include_str!("../../../tests/fixtures/branch-rules-docs.json");
+    for name in [
+        "ignore_approvals_from_contributors",
+        "actor_controlled_merging",
+    ] {
+        let member = format!(",\"{name}\":false");
+        assert_eq!(input.matches(&member).count(), 1, "{name}");
+        for value in [false, true] {
+            let supplied = format!(",\"{name}\":{value}");
+            let changed = input.replacen(&member, &supplied, 1);
+            let rules: Vec<BranchRule> = serde_json::from_str(&changed).unwrap();
+            for rule in &rules {
+                rule.validate(&()).unwrap();
+            }
+            let encoded = serde_json::to_string(&rules).unwrap();
+            assert_eq!(encoded.matches(&format!("\"{name}\":{value}")).count(), 1);
+            assert_eq!(
+                serde_json::from_str::<Vec<BranchRule>>(&encoded).unwrap(),
+                rules
+            );
+        }
+        let absent = input.replacen(&member, "", 1);
+        let rules: Vec<BranchRule> = serde_json::from_str(&absent).unwrap();
+        let encoded = serde_json::to_string(&rules).unwrap();
+        assert!(!encoded.contains(&format!("\"{name}\":")));
+        assert_eq!(
+            serde_json::from_str::<Vec<BranchRule>>(&encoded).unwrap(),
+            rules
+        );
+
+        for value in ["null", "0", r#""false""#, "[]", "{}"] {
+            let changed = input.replacen(&member, &format!(",\"{name}\":{value}"), 1);
+            assert!(
+                serde_json::from_str::<Vec<BranchRule>>(&changed).is_err(),
+                "{name}: {value}"
+            );
+            assert_eq!(
+                decode_bounded_json::<Vec<BranchRule>, _>(
+                    changed.as_bytes(),
+                    None,
+                    changed.len(),
+                    |bytes| serde_json::from_slice(bytes)
+                ),
+                Err(ProviderError::InvalidResponse)
+            );
+        }
+        for replacement in [
+            format!("{member},\"{name}\":true"),
+            format!("{member},\"{name}_unknown\":true"),
+        ] {
+            let changed = input.replacen(&member, &replacement, 1);
+            assert!(serde_json::from_str::<Vec<BranchRule>>(&changed).is_err());
+        }
+    }
+}
+
+#[test]
 fn real_effective_rules_keep_source_and_unattributed_review_policy() -> Result<(), &'static str> {
     let input = br#"[
         {"type":"deletion","ruleset_source_type":"Repository","ruleset_source":"HardMax71/amiss","ruleset_id":18948623},

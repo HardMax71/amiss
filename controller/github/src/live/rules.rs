@@ -1,5 +1,6 @@
 mod tests;
 
+use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
 use wary::Validate;
 
@@ -83,6 +84,12 @@ pub(super) struct UpdateParameters {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, wary::Wary)]
 #[serde(deny_unknown_fields)]
 pub(super) struct MergeQueueParameters {
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub actor_controlled_merging: Option<bool>,
     #[validate(range(min = 1, max = 360))]
     pub check_response_timeout_minutes: u64,
     pub grouping_strategy: GroupingStrategy,
@@ -128,6 +135,12 @@ pub(super) struct PullRequestParameters {
     pub allowed_merge_methods: Option<Vec<PullRequestMergeMethod>>,
     pub dismiss_stale_reviews_on_push: bool,
     pub dismissal_restriction: Option<DismissalRestriction>,
+    #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ignore_approvals_from_contributors: Option<bool>,
     pub require_code_owner_review: bool,
     pub require_extra_approval_for_unattributed_changes: Option<bool>,
     pub require_last_push_approval: bool,
