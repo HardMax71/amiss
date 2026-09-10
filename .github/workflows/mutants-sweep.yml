@@ -23,6 +23,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
+        with:
+          tools: cargo-nextest
+      - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: mutants-v2
@@ -40,6 +43,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
+        with:
+          tools: cargo-mutants
       - id: split
         env:
           PER_SHARD: "400"
@@ -72,6 +77,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
+        with:
+          tools: cargo-mutants cargo-nextest
+      - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: mutants-v2

@@ -8,13 +8,18 @@ runs:
       with:
         tool: mdbook@0.5.4
     - id: graphviz
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ~/.cargo-tools
-        key: docs-mdbook-graphviz0.3.1-last-changed0.4.0
+        key: docs-${{ runner.os }}-${{ runner.arch }}-mdbook-graphviz0.3.1-last-changed0.4.0
     - if: steps.graphviz.outputs.cache-hit != 'true'
       shell: bash
       run: cargo install --locked --root ~/.cargo-tools mdbook-graphviz@0.3.1 mdbook-last-changed@0.4.0
+    - if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.graphviz.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.cargo-tools
+        key: ${{ steps.graphviz.outputs.cache-primary-key }}
     # A fixed path under the runner's own HOME, holding only the pinned installs above.
     - shell: bash
       run: echo "$HOME/.cargo-tools/bin" >> "$GITHUB_PATH" # zizmor: ignore[github-env]

@@ -20,7 +20,8 @@ cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnin
 The toolchain is pinned by `rust-toolchain.toml`. Hooks run through prek: formatting and
 cheap checks on commit; clippy, the full suite, `cargo deny`, `cargo shear`, a
 pinned similarity-rs twin-edge gate, and a cargo-sweep pass over `target/` on push. CI
-runs the same stages, so local green and remote green are the same thing.
+runs the same stages for code changes; documentation and reviewer-only changes retain the
+relevant checks without unrelated Rust builds. Unknown paths take the full code lane.
 
 ## Laws the linters cannot see
 

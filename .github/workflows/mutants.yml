@@ -14,30 +14,39 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  changes:
+    uses: ./.github/workflows/changes.yml
+
   # Listing needs no build, so the shard count comes from the real mutant
   # count rather than from a guess about how large a change is.
   diff-plan:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
       shards: ${{ steps.split.outputs.shards }}
+      count: ${{ steps.split.outputs.count }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
       - uses: ./.github/actions/tools
+        with:
+          tools: cargo-mutants
       # A diff of anything but the checked-out tree refuses with exit 5.
       - run: git diff "origin/$BASE_REF".. > git.diff
         env:
           BASE_REF: ${{ github.base_ref }}
       - id: split
         env:
-          PER_SHARD: "5"
+          PER_SHARD: "10"
           MAX_SHARDS: "8"
         run: |
           set -euo pipefail
           total=$(cargo mutants --list --in-diff git.diff | { grep -c . || :; })
+          echo "count=$total" >> "$GITHUB_OUTPUT"
           shards=$(( (total + PER_SHARD - 1) / PER_SHARD ))
           if [ "$shards" -gt "$MAX_SHARDS" ]; then shards="$MAX_SHARDS"; fi
           if [ "$shards" -lt 1 ]; then shards=1; fi
@@ -46,6 +55,7 @@ jobs:
 
   incremental:
     needs: diff-plan
+    if: needs.diff-plan.outputs.count != '0'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -58,6 +68,9 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       - uses: ./.github/actions/tools
+        with:
+          tools: cargo-mutants cargo-nextest
+      - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: mutants-v2

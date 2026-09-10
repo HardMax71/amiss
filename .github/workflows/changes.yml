@@ -1,0 +1,36 @@
+name: changes
+
+on:
+  workflow_call:
+    outputs:
+      code:
+        value: ${{ jobs.classify.outputs.code }}
+      docs:
+        value: ${{ jobs.classify.outputs.docs }}
+      actions:
+        value: ${{ jobs.classify.outputs.actions }}
+
+permissions:
+  contents: read
+
+jobs:
+  classify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code || 'true' }}
+      docs: ${{ steps.filter.outputs.docs || 'true' }}
+      actions: ${{ steps.filter.outputs.actions || 'true' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: filter
+        if: github.event_name != 'schedule' && github.event_name != 'workflow_dispatch'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          token: ''
+          base: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before || github.sha }}
+          filters: .github/filters.yml
+          predicate-quantifier: some-with-excludes

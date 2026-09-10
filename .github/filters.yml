@@ -1,0 +1,20 @@
+code:
+  - '**'
+  - '!docs/**'
+  - '!{README,AGENTS,CLAUDE,CHANGELOG,CONTRIBUTING,CODE_OF_CONDUCT,SECURITY,LICENSE}.md'
+  - '!llms.txt'
+  - '!.github/ISSUE_TEMPLATE/**'
+  - '!.github/workflows/agent-*'
+  - '!.github/workflows/agentic_commands.yml'
+  - '!.github/workflows/shared/**'
+  - '!.github/aw/**'
+  - '!.coderabbit.yaml'
+  - '!cubic.yaml'
+docs:
+  - '**/*.md'
+  - 'docs/**'
+  - 'llms.txt'
+  - '!.github/**'
+actions:
+  - '.github/**'
+  - 'action.yml'
