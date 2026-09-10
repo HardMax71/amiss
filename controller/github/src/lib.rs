@@ -27,10 +27,12 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::check::CheckRunStatus;
+use crate::repository::pull::PullRepositoryRecord;
 use crate::webhook::comment::Comment;
 use crate::webhook::event::{ActivityAction, GitHubEvent, PullAction};
 use crate::webhook::pull::request::PullRequestWebhook;
-use crate::webhook::{GitHubPayload, WorkflowRun, WorkflowRunConclusion};
+use crate::webhook::workflow::{WorkflowRunAction, WorkflowRunEvent};
+use crate::webhook::{GitHubPayload, Installation, WorkflowRunConclusion};
 
 pub use acquisition::{
     GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubAcquisitionSource,
@@ -270,22 +272,18 @@ impl PullRequestFacts {
 
         let event: GitHubEvent = serde_json::from_slice(body).map_err(|_defect| Authentication)?;
         let payload = match event {
-            GitHubEvent::CheckRun(_)
+            GitHubEvent::WorkflowRun(payload) => {
+                return authenticate_workflow_completion(&payload, provider, workflow_completion);
+            }
+            GitHubEvent::RequestedWorkflowRun(_)
+            | GitHubEvent::CheckRun(_)
             | GitHubEvent::RequestedCheckRun(_)
             | GitHubEvent::CheckSuite(_)
             | GitHubEvent::ReviewThread(_)
             | GitHubEvent::Review(_)
             | GitHubEvent::ReviewComment(_) => return Ok(None),
             GitHubEvent::PullRequest(payload) => {
-                if payload.review.is_some()
-                    || payload.thread.is_some()
-                    || payload.check_suite.is_some()
-                    || payload.check_run.is_some()
-                    || matches!(payload.comment, Some(Comment::Review(_)))
-                    || (payload.pull_request.is_some() && payload.comment.is_some())
-                {
-                    return Err(Authentication);
-                }
+                reject_mixed_events(&payload)?;
                 let eligible = workflow_completion.is_none() && supported_action(&payload);
                 let Some(pull_request) = payload.pull_request.as_ref().filter(|_| eligible) else {
                     return Ok(None);
@@ -312,15 +310,7 @@ impl PullRequestFacts {
                 .map(Some);
             }
             GitHubEvent::Synchronize(payload) => {
-                if payload.review.is_some()
-                    || payload.thread.is_some()
-                    || payload.check_suite.is_some()
-                    || payload.check_run.is_some()
-                    || matches!(payload.comment, Some(Comment::Review(_)))
-                    || (payload.pull_request.is_some() && payload.comment.is_some())
-                {
-                    return Err(Authentication);
-                }
+                reject_mixed_events(&payload)?;
                 let eligible = workflow_completion.is_none() && payload.action.is_some();
                 let Some(pull) = payload.pull_request.as_ref().filter(|_| eligible) else {
                     return Ok(None);
@@ -347,42 +337,51 @@ impl PullRequestFacts {
             }
             GitHubEvent::Activity(payload) => payload,
         };
-        if payload.review.is_some()
-            || payload.thread.is_some()
-            || payload.check_suite.is_some()
-            || payload.check_run.is_some()
-            || matches!(payload.comment, Some(Comment::Review(_)))
-            || (payload.pull_request.is_some()
-                && (payload.comment.is_some()
-                    || matches!(
-                        payload.action,
-                        Some(ActivityAction::Created | ActivityAction::Deleted)
-                    )))
+        reject_mixed_events(&payload)?;
+        if payload.pull_request.is_some()
+            && matches!(
+                payload.action,
+                Some(ActivityAction::Created | ActivityAction::Deleted)
+            )
         {
             return Err(Authentication);
         }
-        if payload.pull_request.is_some() {
-            return Ok(None);
-        }
-
-        authenticate_workflow_completion(&payload, provider, workflow_completion)
+        Ok(None)
     }
 }
 
+fn reject_mixed_events<Pull, Action>(
+    payload: &GitHubPayload<Pull, Action>,
+) -> Result<(), ProviderError> {
+    if payload.review.is_some()
+        || payload.thread.is_some()
+        || payload.check_suite.is_some()
+        || payload.check_run.is_some()
+        || payload.workflow.is_some()
+        || payload.workflow_run.is_some()
+        || matches!(payload.comment, Some(Comment::Review(_)))
+        || (payload.pull_request.is_some() && payload.comment.is_some())
+    {
+        return Err(ProviderError::Authentication);
+    }
+    Ok(())
+}
+
 fn authenticate_workflow_completion(
-    payload: &GitHubPayload<webhook::PullRequest, ActivityAction>,
+    payload: &WorkflowRunEvent,
     provider: &ProviderIdentity,
     workflow_completion: Option<&WorkflowCompletion>,
 ) -> Result<Option<PullRequestFacts>, ProviderError> {
-    let Some((completion, run)) = configured_workflow(payload, workflow_completion) else {
+    let Some(completion) = configured_workflow(payload, workflow_completion) else {
         return Ok(None);
     };
+    let run = &payload.workflow_run;
     if run.conclusion != Some(WorkflowRunConclusion::Success) {
         return Ok(None);
     }
-    let (installation_id, repository_id, repository) = authenticated_repository(payload, provider)?;
-    let Some(binding) = workflow_pull_request(payload, run, completion, provider, &repository)?
-    else {
+    let (installation_id, repository_id, repository) =
+        authenticated_repository(payload.installation.as_ref(), &payload.repository, provider)?;
+    let Some(binding) = workflow_pull_request(payload, completion, provider, &repository)? else {
         return Ok(None);
     };
     bind_pull_request(
@@ -418,11 +417,12 @@ fn authenticate_pull_request<Pull, Action>(
     base: RepositoryFacts<'_>,
     binding: PullRequestBinding<'_>,
 ) -> Result<PullRequestFacts, ProviderError> {
-    let (installation_id, repository_id, repository) = authenticated_repository(payload, provider)?;
     let root = payload
         .repository
         .as_ref()
         .ok_or(ProviderError::Authentication)?;
+    let (installation_id, repository_id, repository) =
+        authenticated_repository(payload.installation.as_ref(), root, provider)?;
     if payload.number != Some(binding.number)
         || root.id != base.id
         || root.name != base.name
@@ -440,18 +440,13 @@ fn authenticate_pull_request<Pull, Action>(
     )
 }
 
-fn authenticated_repository<Pull, Action>(
-    payload: &GitHubPayload<Pull, Action>,
+fn authenticated_repository(
+    installation: Option<&Installation>,
+    repository: &PullRepositoryRecord,
     provider: &ProviderIdentity,
 ) -> Result<(u64, u64, RepositoryIdentity), ProviderError> {
-    let installation_id = payload
-        .installation
-        .as_ref()
+    let installation_id = installation
         .and_then(|installation| positive(installation.id))
-        .ok_or(ProviderError::Authentication)?;
-    let repository = payload
-        .repository
-        .as_ref()
         .ok_or(ProviderError::Authentication)?;
     let repository_id = positive(repository.id).ok_or(ProviderError::Authentication)?;
     let identity = github_repository_identity(
@@ -521,12 +516,12 @@ fn bind_pull_request(
     })
 }
 
-fn configured_workflow<'a, Pull>(
-    payload: &'a GitHubPayload<Pull, ActivityAction>,
+fn configured_workflow<'a>(
+    payload: &WorkflowRunEvent,
     completion: Option<&'a WorkflowCompletion>,
-) -> Option<(&'a WorkflowCompletion, &'a WorkflowRun)> {
-    let run = payload.workflow_run.as_ref()?;
-    (payload.action == Some(ActivityAction::Completed)).then_some(())?;
+) -> Option<&'a WorkflowCompletion> {
+    let run = &payload.workflow_run;
+    (payload.action == WorkflowRunAction::Completed).then_some(())?;
     let completion = completion?;
     (run.event == completion.event.as_str()).then_some(())?;
     let identity = completion.workflow_identity.as_str();
@@ -539,19 +534,19 @@ fn configured_workflow<'a, Pull>(
         },
         |workflow_id| run.workflow_id == workflow_id,
     );
-    matches.then_some((completion, run))
+    matches.then_some(completion)
 }
 
-fn workflow_pull_request<'a, Pull, Action>(
-    payload: &'a GitHubPayload<Pull, Action>,
-    run: &'a WorkflowRun,
+fn workflow_pull_request<'a>(
+    payload: &'a WorkflowRunEvent,
     completion: &WorkflowCompletion,
     provider: &ProviderIdentity,
     repository: &RepositoryIdentity,
 ) -> Result<Option<PullRequestBinding<'a>>, ProviderError> {
     use ProviderError::Authentication;
 
-    let raw_repository = payload.repository.as_ref().ok_or(Authentication)?;
+    let raw_repository = &payload.repository;
+    let run = &payload.workflow_run;
     let owner = run.repository.owner.as_ref().ok_or(Authentication)?;
     let head_owner = run.head_repository.owner.as_ref().ok_or(Authentication)?;
     let workflow_matches = payload

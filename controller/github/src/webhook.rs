@@ -19,6 +19,7 @@ pub mod review;
 pub mod run;
 pub mod suite;
 pub mod thread;
+pub mod workflow;
 
 use pull::request::PullRequestWebhook;
 use repository::{WorkflowOwner, WorkflowRepository};
@@ -51,7 +52,9 @@ pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
             run::WebhookCheckRunConclusion,
         >,
     >,
-    pub workflow: Option<Workflow>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub workflow: Option<Nullable<Workflow>>,
+    #[serde(default, deserialize_with = "deserialize_some")]
     pub workflow_run: Option<WorkflowRun>,
 }
 
@@ -164,7 +167,7 @@ pub struct Workflow {
 )]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct WorkflowRun {
+pub struct WorkflowRun<Title = workflow::WorkflowRunTitle> {
     pub id: u64,
     pub event: String,
     pub status: CheckRunStatus,
@@ -200,7 +203,8 @@ pub struct WorkflowRun {
     pub updated_at: String,
     pub url: String,
     pub workflow_url: String,
-    pub display_title: Option<String>,
+    #[serde(flatten)]
+    pub title: Title,
     pub referenced_workflows: Option<Nullable<Vec<ReferencedWorkflow>>>,
 }
 

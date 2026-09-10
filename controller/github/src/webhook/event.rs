@@ -9,11 +9,16 @@ use super::review::ReviewEvent;
 use super::run::{CheckRunEvent, RequestedAction};
 use super::suite::CheckSuiteEvent;
 use super::thread::ReviewThreadEvent;
-use super::{GitHubPayload, PullRequest};
+use super::workflow::{RequestedWorkflowRunAction, RequestedWorkflowRunTitle, WorkflowRunEvent};
+use super::{GitHubPayload, PullRequest, WorkflowRun};
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum GitHubEvent {
+    WorkflowRun(Box<WorkflowRunEvent>),
+    RequestedWorkflowRun(
+        Box<WorkflowRunEvent<WorkflowRun<RequestedWorkflowRunTitle>, RequestedWorkflowRunAction>>,
+    ),
     CheckRun(Box<CheckRunEvent>),
     RequestedCheckRun(Box<CheckRunEvent<RequestedAction>>),
     CheckSuite(Box<CheckSuiteEvent>),
@@ -68,7 +73,4 @@ pub enum ActivityAction {
     Unlocked,
     Created,
     Deleted,
-    Completed,
-    InProgress,
-    Requested,
 }

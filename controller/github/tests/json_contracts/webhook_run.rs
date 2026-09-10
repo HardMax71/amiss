@@ -28,7 +28,7 @@ fn workflow_run_nulls_keep_required_and_optional_presence_distinct() {
     run.name = Nullable::Null;
     run.previous_attempt_url = Nullable::Null;
     run.conclusion = None;
-    run.display_title = None;
+    run.title.display_title = None;
     run.pull_requests = vec![None];
     for workflows in [
         None,

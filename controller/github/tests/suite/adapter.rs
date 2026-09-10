@@ -8,6 +8,7 @@ mod check_suites;
 mod review_comments;
 mod review_threads;
 mod reviews;
+mod workflows;
 
 use amiss_controller_fixtures::clock::TestClock;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -27,6 +28,7 @@ use amiss_controller_github::repository::metadata::RepositoryOrganization;
 use amiss_controller_github::repository::pull::PullRepositoryRecord;
 use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::pull::request::{PullRequestWebhook, SynchronizePullRequest};
+use amiss_controller_github::webhook::workflow::{WorkflowRunAction, WorkflowRunEvent};
 use amiss_controller_github::webhook::{
     BaseChange, GitHubPayload, Installation, PreviousReference, PullRequestChanges, Workflow,
     WorkflowRun, WorkflowRunConclusion,
@@ -324,11 +326,11 @@ fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
         &[workflow_artifact("docs-evidence.yml")],
     );
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let changes: [fn(&mut GitHubPayload); 4] = [
-        |p| p.action = Some("in_progress".to_owned()),
+    let changes: [fn(&mut WorkflowRunEvent); 4] = [
+        |p| p.action = WorkflowRunAction::InProgress,
         |p| p.workflow.as_mut().unwrap().path = ".github/workflows/other.yml".to_owned(),
-        |p| p.workflow_run.as_mut().unwrap().conclusion = Some(WorkflowRunConclusion::Failure),
-        |p| p.workflow_run.as_mut().unwrap().pull_requests.clear(),
+        |p| p.workflow_run.conclusion = Some(WorkflowRunConclusion::Failure),
+        |p| p.workflow_run.pull_requests.clear(),
     ];
     for (index, change) in changes.into_iter().enumerate() {
         let mut payload = workflow_payload();
@@ -360,10 +362,10 @@ fn signed_workflow_repositories_reject_unknown_metadata() {
     );
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let payload = workflow_payload();
-    let run = payload.workflow_run.as_ref().unwrap();
+    let run = &payload.workflow_run;
     let body = serde_json::to_string(&payload).unwrap();
     for repository in [
-        serde_json::to_string(payload.repository.as_ref().unwrap()).unwrap(),
+        serde_json::to_string(&payload.repository).unwrap(),
         serde_json::to_string(&run.repository).unwrap(),
         serde_json::to_string(&run.head_repository).unwrap(),
     ] {
@@ -391,8 +393,7 @@ fn signed_workflow_head_commit_is_a_typed_record() {
     );
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let payload = workflow_payload();
-    let commit =
-        serde_json::to_string(&payload.workflow_run.as_ref().unwrap().head_commit).unwrap();
+    let commit = serde_json::to_string(&payload.workflow_run.head_commit).unwrap();
     let body = serde_json::to_string(&payload).unwrap();
     assert_eq!(body.matches(&commit).count(), 1);
     let original = authenticate_target(&source, body.as_bytes(), &target)
@@ -422,7 +423,7 @@ fn signed_workflow_head_commit_is_a_typed_record() {
     );
 
     let mut metadata = payload.clone();
-    let commit = &mut metadata.workflow_run.as_mut().unwrap().head_commit;
+    let commit = &mut metadata.workflow_run.head_commit;
     for author in [&mut commit.author, &mut commit.committer] {
         author.email = amiss_wire::assessment::Nullable::Null;
         author.date = Some("2020-10-05T16:32:07Z".to_owned());
@@ -474,11 +475,11 @@ fn signed_workflow_run_keeps_its_closed_contract() {
         );
     }
     let mut metadata = payload.clone();
-    let run = metadata.workflow_run.as_mut().unwrap();
+    let run = &mut metadata.workflow_run;
     run.actor = amiss_wire::assessment::Nullable::Null;
     run.triggering_actor = amiss_wire::assessment::Nullable::Null;
     run.name = amiss_wire::assessment::Nullable::Null;
-    run.display_title = None;
+    run.title.display_title = None;
     run.referenced_workflows = Some(amiss_wire::assessment::Nullable::Null);
     let accepted = authenticate_target(&source, &serde_json::to_vec(&metadata).unwrap(), &target)
         .unwrap()
@@ -492,7 +493,7 @@ fn signed_workflow_run_keeps_its_closed_contract() {
         CheckRunStatus::Requested,
         CheckRunStatus::Pending,
     ] {
-        metadata.workflow_run.as_mut().unwrap().status = status;
+        metadata.workflow_run.status = status;
         assert_eq!(
             authenticate_target(&source, &serde_json::to_vec(&metadata).unwrap(), &target),
             Err(ProviderError::Authentication)
@@ -510,13 +511,13 @@ fn signed_workflow_run_keeps_its_closed_contract() {
         Some(WorkflowRunConclusion::StartupFailure),
     ] {
         let mut candidate = payload.clone();
-        candidate.workflow_run.as_mut().unwrap().conclusion = conclusion;
+        candidate.workflow_run.conclusion = conclusion;
         assert_eq!(
             authenticate_target(&source, &serde_json::to_vec(&candidate).unwrap(), &target),
             Ok(None)
         );
     }
-    let pr = payload.workflow_run.as_ref().unwrap().pull_requests[0].clone();
+    let pr = payload.workflow_run.pull_requests[0].clone();
     for requests in [
         vec![],
         vec![None],
@@ -524,7 +525,7 @@ fn signed_workflow_run_keeps_its_closed_contract() {
         vec![None, pr],
     ] {
         let mut candidate = payload.clone();
-        candidate.workflow_run.as_mut().unwrap().pull_requests = requests;
+        candidate.workflow_run.pull_requests = requests;
         assert_eq!(
             authenticate_target(&source, &serde_json::to_vec(&candidate).unwrap(), &target),
             Ok(None)
@@ -545,7 +546,7 @@ fn workflow_repository_identity_is_independent_of_retained_metadata() {
         .unwrap()
         .unwrap();
     let mut metadata = payload.clone();
-    let run = metadata.workflow_run.as_mut().unwrap();
+    let run = &mut metadata.workflow_run;
     run.repository.node_id = "distinct-root-metadata".to_owned();
     run.repository.owner.as_mut().unwrap().name = Some("Display name".to_owned());
     run.head_repository.owner.as_mut().unwrap().email =
@@ -570,14 +571,14 @@ fn workflow_repository_identity_is_independent_of_retained_metadata() {
     ];
     for (index, mutate) in mutations.into_iter().enumerate() {
         let mut candidate = payload.clone();
-        mutate(candidate.workflow_run.as_mut().unwrap());
+        mutate(&mut candidate.workflow_run);
         let input = serde_json::to_vec(&candidate).unwrap();
         assert_eq!(
             authenticate_target(&source, &input, &target),
             Err(ProviderError::Authentication),
             "mutation {index}"
         );
-        candidate.workflow_run.as_mut().unwrap().conclusion = Some(WorkflowRunConclusion::Failure);
+        candidate.workflow_run.conclusion = Some(WorkflowRunConclusion::Failure);
         let input = serde_json::to_vec(&candidate).unwrap();
         assert_eq!(authenticate_target(&source, &input, &target), Ok(None));
     }
@@ -773,7 +774,7 @@ fn contradictory_configured_completion_fields_fail_authentication() {
         let mut payload = workflow_payload();
         change(
             payload.workflow.as_mut().unwrap(),
-            payload.workflow_run.as_mut().unwrap(),
+            &mut payload.workflow_run,
         );
         let body = serde_json::to_vec(&payload).unwrap();
         assert_eq!(
@@ -1371,7 +1372,7 @@ fn workflow_artifact(workflow_identity: &str) -> WorkflowArtifactExpectation {
     }
 }
 
-fn workflow_payload() -> GitHubPayload {
+fn workflow_payload() -> WorkflowRunEvent {
     let mut run: WorkflowRun =
         serde_json::from_slice(include_bytes!("../fixtures/webhook-workflow-run.json")).unwrap();
     run.id = 9_001;
@@ -1421,21 +1422,16 @@ fn workflow_payload() -> GitHubPayload {
     "widget".clone_into(&mut repository.name);
     "HardMax71/widget".clone_into(&mut repository.full_name);
     "HardMax71".clone_into(&mut repository.owner.login);
-    GitHubPayload {
-        action: Some("completed".to_owned()),
-        changes: None,
+    WorkflowRunEvent {
+        action: WorkflowRunAction::Completed,
+        sender: repository.owner.clone(),
+        organization: None,
+        enterprise: None,
         installation: Some(Installation {
             id: 7,
             node_id: "installation-seven".to_owned(),
         }),
-        repository: Some(repository),
-        number: None,
-        pull_request: None,
-        review: None,
-        comment: None,
-        thread: None,
-        check_suite: None,
-        check_run: None,
+        repository,
         workflow: Some(Workflow {
             id: 321,
             node_id: "workflow-321".to_owned(),
@@ -1452,7 +1448,7 @@ fn workflow_payload() -> GitHubPayload {
                 "https://github.com/HardMax71/widget/workflows/Documentation%20evidence/badge.svg"
                     .to_owned(),
         }),
-        workflow_run: Some(run),
+        workflow_run: run,
     }
 }
 
