@@ -13,6 +13,7 @@ use crate::workflow::{ReferencedWorkflow, WorkflowCommit, WorkflowPullRequest};
 pub mod app;
 pub mod comment;
 pub mod event;
+pub mod issue;
 pub mod pull;
 pub mod repository;
 pub mod review;
@@ -34,6 +35,8 @@ pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub repository: Option<PullRepositoryRecord>,
     pub number: Option<u64>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub issue: Option<issue::IssueRecord<issue::context::IssueActivityContext>>,
     pub pull_request: Option<Pull>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub review: Option<review::ReviewRecord>,

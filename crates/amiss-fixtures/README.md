@@ -19,3 +19,8 @@ data/github-webhook-workflow-run.json is the complete, unchanged
 [workflow completion with pull requests](https://github.com/octokit/webhooks/blob/7dd7fa56498a827a08b71919fae89428f5e8e283/payload-examples/api.github.com/workflow_run/completed.with-pull-requests.payload.json).
 It retains the root organization and sender alongside the workflow and run, and
 shares the same published source as the existing workflow-member fixtures.
+
+data/github-webhook-issue-comment-event.json is the complete, unchanged
+[issue-comment example with installation data](https://github.com/octokit/webhooks/blob/7dd7fa56498a827a08b71919fae89428f5e8e283/payload-examples/api.github.com/issue_comment/created.with-installation.payload.json).
+It retains the issue, its label and milestone, the comment, repository,
+organization, sender and installation together.

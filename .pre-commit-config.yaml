@@ -67,7 +67,7 @@ repos:
         files: ^\.github/(workflows/[^/]+|actions/[^/]+/action)\.ya?ml$
       - id: typos
         name: typos
-        entry: typos
+        entry: typos --force-exclude
         language: system
         # commit-range hex in the scan ledger tokenizes into short words
         exclude: (^|/)ledger\.md$

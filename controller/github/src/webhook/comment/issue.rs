@@ -17,21 +17,47 @@ use crate::webhook::repository::WorkflowOwner;
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct IssueCommentRecord {
+pub struct IssueCommentRecord<
+    User = WorkflowOwner<PullRequestAccountKind>,
+    Metadata = IssueCommentMetadata,
+> {
     pub url: String,
     pub html_url: String,
     pub issue_url: String,
     pub id: UInt,
     pub node_id: String,
-    pub user: Nullable<WorkflowOwner<PullRequestAccountKind>>,
+    pub user: Nullable<User>,
     pub created_at: String,
     pub updated_at: String,
+    #[serde(flatten)]
+    pub metadata: Metadata,
+    pub minimized: Option<Nullable<MinimizedComment>>,
+    pub pin: Option<Nullable<PinnedComment>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct IssueCommentMetadata {
     pub author_association: AuthorAssociation,
     pub performed_via_github_app: Nullable<Box<CheckRunApp>>,
     pub body: String,
     pub reactions: Reactions,
-    pub minimized: Option<Nullable<MinimizedComment>>,
-    pub pin: Option<Nullable<PinnedComment>>,
+}
+
+#[serde_with::apply(Option<_> => #[serde(
+    default,
+    deserialize_with = "deserialize_some",
+    skip_serializing_if = "Option::is_none"
+)])]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct PinnedIssueCommentMetadata {
+    pub author_association: Option<AuthorAssociation>,
+    pub performed_via_github_app: Option<Nullable<Box<CheckRunApp>>>,
+    pub body: Option<String>,
+    pub body_text: Option<String>,
+    pub body_html: Option<String>,
+    pub reactions: Option<Reactions>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

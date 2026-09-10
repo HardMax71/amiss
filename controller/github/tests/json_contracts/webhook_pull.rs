@@ -16,6 +16,7 @@ fn signed_event_contracts_select_and_retain_the_complete_pull() {
         installation: None,
         repository: None,
         number: None,
+        issue: None,
         pull_request: Some(
             serde_json::from_slice::<PullRequestWebhook>(amiss_fixtures::GITHUB_WEBHOOK_PULL)
                 .unwrap(),

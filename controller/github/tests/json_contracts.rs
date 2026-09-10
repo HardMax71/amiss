@@ -90,6 +90,9 @@ mod webhook_check_run;
 #[path = "json_contracts/workflow_event.rs"]
 mod workflow_event;
 
+#[path = "json_contracts/issue_activity.rs"]
+mod issue_activity;
+
 #[test]
 fn reference_captures_share_the_complete_object_without_losing_fields() {
     let input = include_str!("fixtures/git-reference.json");

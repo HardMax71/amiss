@@ -5,6 +5,7 @@
 
 mod check_runs;
 mod check_suites;
+mod issue_comments;
 mod review_comments;
 mod review_threads;
 mod reviews;
@@ -72,6 +73,7 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
         }),
         repository: Some(repository),
         number: Some(42),
+        issue: None,
         pull_request: Some(pull),
         review: None,
         comment: None,
@@ -795,13 +797,11 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
     let check_suite = amiss_fixtures::GITHUB_WEBHOOK_CHECK_SUITE;
     assert_eq!(authenticate_target(&source, check_suite, &main), Ok(None));
 
-    let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
-    payload.pull_request = None;
-    let issue = serde_json::to_string(&payload).unwrap().replacen(
-        '{',
-        r#"{"issue":{"id":1,"number":5},"#,
-        1,
-    );
+    let mut payload: GitHubPayload =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap();
+    payload.action = Some("opened".to_owned());
+    payload.comment = None;
+    let issue = serde_json::to_string(&payload).unwrap();
     assert_eq!(
         authenticate_target(&source, issue.as_bytes(), &main),
         Ok(None)

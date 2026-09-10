@@ -113,13 +113,18 @@ fn signed_review_comments_retain_the_published_events_and_remain_no_work() {
 fn issue_comments_remain_no_work_without_becoming_pr_deliveries() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let mut payload: GitHubPayload = serde_json::from_str("{}").unwrap();
-    payload.comment =
-        Some(serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT).unwrap());
+    let input = amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT;
+    let payload: GitHubPayload = serde_json::from_slice(input).unwrap();
     assert!(matches!(payload.comment, Some(Comment::Issue(_))));
     for action in ["created", "edited", "deleted"] {
-        payload.action = Some(action.to_owned());
-        let wire = serde_json::to_vec(&payload).unwrap();
+        let mut wire = replaced_once(
+            input,
+            r#""action": "created""#,
+            &format!(r#""action":"{action}""#),
+        );
+        if action == "edited" {
+            wire = replaced_once(&wire, "{", r#"{"changes":{},"#);
+        }
         assert_eq!(authenticate_target(&source, &wire, &target), Ok(None));
     }
     let mut pull: GitHubPayload = serde_json::from_slice(&BODY).unwrap();

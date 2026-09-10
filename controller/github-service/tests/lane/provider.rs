@@ -59,6 +59,7 @@ impl SignedEvent {
             }),
             repository: Some(root),
             number: Some(PULL_REQUEST_NUMBER),
+            issue: None,
             pull_request: Some(pull),
             review: None,
             comment: None,

@@ -59,6 +59,10 @@ pub const GITHUB_WEBHOOK_REVIEW_COMMENT: &[u8] =
 pub const GITHUB_WEBHOOK_ISSUE_COMMENT: &[u8] =
     include_bytes!("../data/github-webhook-issue-comment.json");
 
+/// Complete published issue-comment event with organization and installation data.
+pub const GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT: &[u8] =
+    include_bytes!("../data/github-webhook-issue-comment-event.json");
+
 /// Constructed GitLab policy-job claims matching the provider's complete token fields.
 pub const GITLAB_POLICY_CLAIMS: &[u8] = include_bytes!("../data/gitlab-policy-claims.json");
 

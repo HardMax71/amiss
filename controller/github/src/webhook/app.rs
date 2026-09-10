@@ -104,6 +104,7 @@ pub enum AppEvent {
     Watch,
     WorkflowDispatch,
     WorkflowRun,
+    Reminder,
     MergeGroup,
     PullRequestReviewThread,
     WorkflowJob,

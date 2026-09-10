@@ -1,3 +1,7 @@
+[files]
+# Captured JSON keeps upstream spelling byte-for-byte.
+extend-exclude = ["crates/amiss-fixtures/data/*.json"]
+
 [default]
 # base64url key material in test fixtures tokenizes into short words
 extend-ignore-re = ["[A-Za-z0-9_-]{40,}"]

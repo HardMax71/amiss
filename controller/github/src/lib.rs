@@ -360,7 +360,8 @@ fn reject_mixed_events<Pull, Action>(
         || payload.workflow.is_some()
         || payload.workflow_run.is_some()
         || matches!(payload.comment, Some(Comment::Review(_)))
-        || (payload.pull_request.is_some() && payload.comment.is_some())
+        || (payload.pull_request.is_some()
+            && (payload.comment.is_some() || payload.issue.is_some()))
     {
         return Err(ProviderError::Authentication);
     }
