@@ -23,19 +23,6 @@ network:
     - defaults
     - rust
 
-# The two engine version literals below must equal this; the tools contract checks.
-env:
-  COPILOT_CLI_VERSION: "1.0.79"
-
-jobs:
-  detection:
-    setup-steps:
-      - name: Restore Copilot CLI
-        continue-on-error: true
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: agent-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
-          path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
 
 steps:
   - uses: ./.github/actions/tools
@@ -43,31 +30,6 @@ steps:
     with:
       shared-key: gates
       save-if: "false"
-  - name: Restore Copilot CLI
-    id: copilot-cache
-    continue-on-error: true
-    uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-    with:
-      key: agent-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
-      path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
-
-pre-agent-steps:
-  - name: Seed Copilot CLI toolcache
-    run: |
-      arch=$(printf '%s' "$RUNNER_ARCH" | tr '[:upper:]' '[:lower:]')
-      copilot=$(command -v copilot)
-      target="${RUNNER_TOOL_CACHE}/copilot-cli/${COPILOT_CLI_VERSION}/${arch}/bin/copilot"
-      if [ "$copilot" != "$target" ]; then
-        install -D -m 0755 "$copilot" "$target"
-      fi
-  # Saving here, before the agent runs, keeps a failing run from losing the seed.
-  - name: Save Copilot CLI
-    if: steps.copilot-cache.outputs.cache-hit != 'true'
-    continue-on-error: true
-    uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-    with:
-      key: agent-${{ runner.os }}-${{ runner.arch }}-copilot-${{ env.COPILOT_CLI_VERSION }}
-      path: ${{ runner.tool_cache }}/copilot-cli/${{ env.COPILOT_CLI_VERSION }}
 
 timeout-minutes: 15
 

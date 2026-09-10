@@ -15,8 +15,13 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  changes:
+    uses: ./.github/workflows/changes.yml
+
   # Refreshes the build cache the PR shards restore.
   baseline:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -24,6 +29,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
+        with:
+          tools: cargo-nextest
+      - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           shared-key: mutants-v2

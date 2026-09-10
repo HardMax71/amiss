@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
   merge_group:
+  schedule:
+    - cron: "23 4 * * 2"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,37 +21,70 @@ env:
   CARGO_INCREMENTAL: "0"
 
 jobs:
-  json-contract-drift:
+  changes:
+    uses: ./.github/workflows/changes.yml
+
+  warm-tools:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: >-
+      - uses: ./.github/actions/tools
+
+  json-contract-drift:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain uninstall stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: contracts
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - if: needs.changes.outputs.code == 'true'
+        run: >-
           cargo test --workspace --test json_contracts --locked
       - name: Check generated scanner reports
+        if: needs.changes.outputs.code == 'true'
         run: cargo test -p amiss-scan --test suite --test fatal_envelope --locked
       - run: >-
           cargo test -p amiss --test documentation_contracts --locked
 
   gates:
+    needs: changes
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
+      - uses: re-actors/alls-green@b5b5b37504aa4183270bd3d855c52a67f212be35 # v1.3.0
+        with:
+          jobs: ${{ toJSON(needs) }}
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/tools
+        with:
+          tools: ${{ needs.changes.outputs.code == 'true' && 'prek typos zizmor cargo-deny cargo-shear similarity-rs' || 'prek typos zizmor' }}
       # Branch runs only restore; main saves the pruned caches, so lock bumps
       # on branches cannot crowd the shared budget and evict small entries.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - if: needs.changes.outputs.code == 'true'
+        run: rustup toolchain uninstall stable
+      - if: needs.changes.outputs.code == 'true'
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: .
           shared-key: gates
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - id: similarity
+        if: needs.changes.outputs.code == 'true'
         name: Derive the similarity comparison
         shell: bash
         env:
@@ -61,6 +97,7 @@ jobs:
             pull_request) base="$(git rev-parse HEAD^1)" ;;
             merge_group) base="$MERGE_BASE" ;;
             push) base="$BEFORE" ;;
+            schedule|workflow_dispatch) base="$(git rev-parse HEAD^)" ;;
             *) echo "unsupported similarity event: $EVENT" >&2; exit 1 ;;
           esac
           if [[ ! "$base" =~ ^0+$ ]]; then
@@ -95,7 +132,8 @@ jobs:
           key: similarity-v1-${{ steps.similarity.outputs.policy }}-${{ steps.similarity.outputs.base_tree }}
       - run: prek run --all-files
       # The suites belong to platform-tests, on every platform rather than this one.
-      - run: prek run --all-files --hook-stage pre-push
+      - if: needs.changes.outputs.code == 'true'
+        run: prek run --all-files --hook-stage pre-push
         env:
           AMISS_SIMILARITY_BASE: ${{ steps.similarity.outputs.base }}
           AMISS_SIMILARITY_BASE_MANIFEST: ${{ runner.temp }}/amiss-similarity/manifest
@@ -103,9 +141,12 @@ jobs:
           AMISS_SIMILARITY_CURRENT_TREE: ${{ steps.similarity.outputs.current_tree }}
           AMISS_SIMILARITY_POLICY: ${{ steps.similarity.outputs.policy }}
           SKIP: nextest
-      - run: rustup toolchain install nightly-2026-08-28 --profile minimal
-      - run: rustup target add --toolchain nightly-2026-08-28 wasm32-unknown-unknown
-      - run: >-
+      - if: needs.changes.outputs.code == 'true'
+        run: rustup toolchain install nightly-2026-08-28 --profile minimal
+      - if: needs.changes.outputs.code == 'true'
+        run: rustup target add --toolchain nightly-2026-08-28 wasm32-unknown-unknown
+      - if: needs.changes.outputs.code == 'true'
+        run: >-
           cargo test -p amiss-api
           normalize::tests::real::cargo_configurations_preserve_record_boundaries
           --locked -- --ignored --exact
@@ -113,7 +154,7 @@ jobs:
           AMISS_RUSTDOC_TOOLCHAIN: nightly-2026-08-28
       - id: current-similarity-cache
         name: Find the current similarity manifest
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: needs.changes.outputs.code == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -121,11 +162,11 @@ jobs:
           path: ${{ runner.temp }}/amiss-similarity/manifest
           key: similarity-v1-${{ steps.similarity.outputs.policy }}-${{ steps.similarity.outputs.current_tree }}
       - name: Stage the current similarity manifest
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.current-similarity-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.code == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.current-similarity-cache.outputs.cache-hit != 'true'
         shell: bash
         run: install -D -m 0644 "${{ runner.temp }}/amiss-similarity/current.manifest" "${{ runner.temp }}/amiss-similarity/manifest"
       - name: Save the current similarity manifest
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.current-similarity-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.code == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.current-similarity-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -138,6 +179,8 @@ jobs:
   # commits, verifies the manifest, runs, and annotates. One job dogfoods the
   # engine and the whole distribution lane.
   self-scan:
+    needs: changes
+    if: (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'merge_group') && (needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -148,6 +191,7 @@ jobs:
           # and the event's before must be in the checkout, so pushes stay 0.
           fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
           persist-credentials: false
+      - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -210,6 +254,8 @@ jobs:
   # enforcement decision. Nothing here may fail the suite, so every defect
   # degrades into one summary line and exit zero.
   external-advisory:
+    needs: changes
+    if: (github.event_name == 'pull_request' || github.event_name == 'push' || github.event_name == 'merge_group') && (needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -217,6 +263,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: .
@@ -312,6 +359,8 @@ jobs:
           key: external-evidence-v1-amiss-probe-default-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.sha }}-${{ github.run_attempt }}
 
   fuzz:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -319,6 +368,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
+        with:
+          tools: cargo-deny cargo-shear
+      - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: |
@@ -337,6 +389,8 @@ jobs:
       - run: cargo shear --locked fuzz
 
   packaging:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -353,6 +407,8 @@ jobs:
           cargo package --locked "${members[@]}"
 
   platform-tests:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -378,6 +434,7 @@ jobs:
         with:
           tool: cargo-nextest@${{ steps.bench.outputs.nextest }}
           fallback: none
+      - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: .
@@ -386,6 +443,8 @@ jobs:
       - run: cargo nextest run -p amiss-scan --test suite -E 'test(/^eligibility::/)' --release --locked
 
   coverage:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -393,12 +452,19 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/tools
+        with:
+          tools: cargo-llvm-cov cargo-nextest
+      - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: rustup component add llvm-tools-preview
-      - run: cargo llvm-cov nextest --workspace --locked --lcov --output-path lcov.info
-      - run: cargo llvm-cov report --fail-under-lines 85
+      - run: >-
+          cargo llvm-cov nextest --workspace --locked --lcov --output-path lcov.info
+          --exclude-from-report amiss-fixtures
+          --exclude-from-report amiss-controller-fixtures
+          --exclude-from-report amiss-controller-bootstrap-fixture
+          --fail-under-lines 85
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-lcov

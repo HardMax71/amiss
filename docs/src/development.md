@@ -11,8 +11,10 @@ expectation in the finding.
 
 Gate-tool versions live in one place, the `workspace.metadata.tools` tables of the root
 manifest. Runtime consumers use Cargo's projection directly: the CI tools composite and
-ratchet hooks query `cargo metadata` with jq, GitHub's `hashFiles` keys the shared tool cache,
-and the agent lanes install through the composite. A documentation-contract test parses the
+ratchet hooks query `cargo metadata` with jq. The pinned tool names and versions key a shared
+cache warmed by main; jobs install only their requested tools on a miss, and pull requests
+never save partial benches. The agent lanes use the same composite and gh-aw's native Copilot
+installer without private CLI caches. A documentation-contract test parses the
 manifest independently and refuses any workflow spelling a declared tool at another version.
 Bumping a tool is one edit.
 
@@ -34,11 +36,28 @@ incremental sessions older than two days; cargo never collects superseded builds
 repository mints a fresh copy of every test binary on each lockfile or version change. Five days
 held 86 GB and the sweep reclaimed nothing from it, because every generation was inside the
 window. The hook
-is a no-op where cargo-sweep is not installed. CI runs the same two hook stages, so a hook
-that passes locally passes remotely unless the hook table itself has a bug. What CI adds on
+is a no-op where cargo-sweep is not installed. Code CI runs the same two hook stages. What CI adds on
 top is the work that does not belong on a developer's machine: the fuzz packages, whose
 release builds and separate lockfiles cost minutes, and mutation, which costs ten of them for
-a change of any size. A push should not buy what a pull request already measures.
+a code change. A push should not buy what a pull request already measures.
+
+The shared [change detector](https://github.com/HardMax71/amiss/blob/main/.github/workflows/changes.yml)
+compares Git revisions, including renames and deletions. Documentation-only changes retain the
+cheap hooks, documentation contracts, book build, and self-scan, but skip unrelated platform,
+coverage, fuzz, packaging, and mutation builds. Reviewer-only changes retain the cheap hooks
+and Actions analysis. Rust, fixtures, schemas, build configuration, and unknown paths take the
+full code lane. The required workflow always starts, and `gates` fails if classification fails;
+there are no workflow-level path filters. Weekly and manual CI runs force full code validation.
+
+Coverage executes the whole workspace with instrumentation and keeps the 85% line floor, but
+excludes the three fixture-only packages from the report. It does not replace uninstrumented
+platform tests or the release-mode eligibility checks. Rust caches remain separate across
+platforms and build settings; disposable CI runners remove their unused floating `stable`
+toolchain before restoring them so runner image updates cannot invalidate the pinned-toolchain key.
+
+The test profile strips debug information from executable fixtures, which are repeatedly copied
+and verified. Symbols and assertions remain; source-line backtraces can be restored locally with
+`CARGO_PROFILE_TEST_STRIP=none`. Development and release profiles are unchanged.
 
 Two similarly named files point in opposite directions. `.pre-commit-config.yaml` is the hook
 table this repository runs on itself through prek. `.pre-commit-hooks.yaml` is the hook this
@@ -72,15 +91,16 @@ mutation lanes publish a non-gating measurement of that property, in three sizes
 [per pull request](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants.yml),
 [per push to main](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants-baseline.yml),
 and [on demand](https://github.com/HardMax71/amiss/blob/main/.github/workflows/mutants-sweep.yml),
-each on its own trigger so no lane ever shows as skipped beside another's run.
+each on its own trigger.
 
 Every pull request measures only the mutants the change itself reaches, over shards counted
 from the mutants the diff actually reaches rather than from a guess, because listing them needs
-no build. That lane asks the whole workspace whether each mutant lives, at about twenty seconds
+no build. Zero mutants skip the worker entirely; nonempty diffs use ten mutants per shard,
+capped at eight shards. That lane asks the whole workspace whether each mutant lives, at about twenty seconds
 per mutant. The shards used to pay a worse floor, a cold workspace build plus a baseline test
 pass repeated in every shard; now each shard restores the build cache that the baseline job
-saves on every push to main, and skips its own baseline because ci proves the same commit in
-the same run, so what remains is the build delta against the last merge and the mutants
+saves on code pushes to main, and skips its own baseline because required CI proves the same commit,
+so what remains is the build delta against the last merge and the mutants
 themselves. A release pull request measures its version and generated-file diff like every other
 pull request. The code it packages was already measured before each change reached `main`; measuring
 the accumulated release again would duplicate that work and eventually exceed the bounded PR lane.

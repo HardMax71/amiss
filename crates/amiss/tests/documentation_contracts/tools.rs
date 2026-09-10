@@ -134,10 +134,10 @@ fn the_tools_composite_reads_the_bench() {
         raw.contains("cargo metadata --locked --format-version 1 --no-deps --offline")
             && raw.contains(".prebuilt | to_entries")
             && raw.contains(".source | to_entries")
-            && raw.contains("hashFiles('Cargo.toml')")
+            && raw.contains("steps.bench.outputs.key")
             && raw.contains("runner.arch")
             && raw.contains("fallback: none"),
-        "the composite must query cargo and use GitHub's manifest hash"
+        "the composite must query cargo and key its cache by the tool bench"
     );
     assert!(
         !raw.contains("scripts/tools.sh"),
@@ -287,8 +287,8 @@ fn the_dispatcher_setup_action_is_sha_pinned() {
     );
 }
 
-/// Every agent lane's copilot version is one fact: the env literal, both
-/// engine blocks, and every installer argument in the lock spell it alike,
+/// Every agent lane's copilot version is one fact: both engine blocks
+/// and every installer argument in the lock spell it alike,
 /// and the three lanes spell the same version.
 #[test]
 fn the_agent_lanes_spell_one_copilot_version() {
@@ -299,23 +299,18 @@ fn the_agent_lanes_spell_one_copilot_version() {
             .expect("the lane is readable");
         let spellings: Vec<&str> = source
             .lines()
-            .filter_map(|line| {
-                let trimmed = line.trim();
-                ["version: \"", "COPILOT_CLI_VERSION: \""]
-                    .iter()
-                    .find_map(|key| trimmed.strip_prefix(key))
-            })
+            .filter_map(|line| line.trim().strip_prefix("version: \""))
             .filter_map(|tail| tail.strip_suffix('"'))
             .collect();
         let version = spellings.first().copied().expect("the lane pins a version");
         assert_eq!(
             spellings.len(),
-            3,
-            "{lane} gained or lost a version literal; env plus two engine blocks carry it"
+            2,
+            "{lane} gained or lost a version literal; two engine blocks carry it"
         );
         assert_eq!(
             spellings,
-            vec![version; 3],
+            vec![version; 2],
             "{lane} spells more than one copilot version"
         );
         let lock = fs::read_to_string(root.join(format!(".github/workflows/{lane}.lock.yml")))
@@ -325,10 +320,6 @@ fn the_agent_lanes_spell_one_copilot_version() {
                 .count(),
             lock.matches("install_copilot_cli.sh").count(),
             "a {lane} lock installer call carries another copilot version"
-        );
-        assert!(
-            lock.contains(&format!("COPILOT_CLI_VERSION: {version}")),
-            "the {lane} lock's workflow env does not carry the pinned version"
         );
         versions.push(version.to_owned());
     }
