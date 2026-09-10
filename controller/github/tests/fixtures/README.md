@@ -145,3 +145,8 @@ webhook-workflow-commit.json projects the unchanged workflow_run.head_commit
 from the published completion example linked above. Null emails and optional
 date/username fields in tests are synthetic cases from the pinned webhook
 contract. The REST workflow fixtures keep their distinct nullable-author contract.
+
+webhook-workflow-run.json projects the complete unchanged workflow_run from that
+published completion example. It retains all 34 supplied fields; optional referenced
+workflows, nullable actors and PR entries, and additional terminal states in tests
+are synthetic cases from GitHub's pinned OpenAPI contract, not new live captures.

@@ -3,14 +3,16 @@ use amiss_wire::model::Oid;
 use js_int::UInt;
 use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
-use serde_with::{As, TryFromInto};
+use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
+use strum::{Display, EnumString};
 
+use crate::check::CheckRunStatus;
 use crate::repository::pull::PullRepositoryRecord;
-use crate::workflow::{WorkflowCommit, WorkflowPullRequest};
+use crate::workflow::{ReferencedWorkflow, WorkflowCommit, WorkflowPullRequest};
 
 pub mod repository;
 
-use repository::WorkflowRepository;
+use repository::{WorkflowOwner, WorkflowRepository};
 
 #[serde_with::apply(Option<_> => #[serde(skip_serializing_if = "Option::is_none")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -112,19 +114,66 @@ pub struct Workflow {
     pub badge_url: String,
 }
 
+#[serde_with::apply(
+    u64 => #[serde(with = "As::<TryFromInto<UInt>>")],
+    Option<_> => #[serde(default, deserialize_with = "deserialize_some", skip_serializing_if = "Option::is_none")],
+)]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct WorkflowRun {
     pub id: u64,
     pub event: String,
-    pub status: String,
-    pub conclusion: Option<String>,
+    pub status: CheckRunStatus,
+    #[serde_with(skip_apply)]
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub conclusion: Option<WorkflowRunConclusion>,
     pub workflow_id: u64,
     pub run_attempt: u64,
     pub head_sha: Oid,
     pub head_commit: WorkflowCommit<Committer>,
     pub repository: WorkflowRepository,
     pub head_repository: WorkflowRepository,
-    pub pull_requests: Vec<WorkflowPullRequest>,
+    pub pull_requests: Vec<Option<WorkflowPullRequest>>,
+    pub actor: Nullable<WorkflowOwner>,
+    pub artifacts_url: String,
+    pub cancel_url: String,
+    pub check_suite_id: UInt,
+    pub check_suite_node_id: String,
+    pub check_suite_url: String,
+    pub created_at: String,
+    pub head_branch: Nullable<String>,
+    pub html_url: String,
+    pub jobs_url: String,
+    pub logs_url: String,
+    pub name: Nullable<String>,
+    pub node_id: String,
+    pub path: String,
+    pub previous_attempt_url: Nullable<String>,
+    pub rerun_url: String,
+    pub run_number: UInt,
+    pub run_started_at: String,
+    pub triggering_actor: Nullable<WorkflowOwner>,
+    pub updated_at: String,
+    pub url: String,
+    pub workflow_url: String,
+    pub display_title: Option<String>,
+    pub referenced_workflows: Option<Nullable<Vec<ReferencedWorkflow>>>,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum WorkflowRunConclusion {
+    ActionRequired,
+    Cancelled,
+    Failure,
+    Neutral,
+    Skipped,
+    Stale,
+    Success,
+    TimedOut,
+    StartupFailure,
 }
 
 #[serde_with::apply(Option<_> => #[serde(

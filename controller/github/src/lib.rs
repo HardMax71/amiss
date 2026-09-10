@@ -26,8 +26,8 @@ use amiss_controller::{
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-use crate::webhook::{GitHubPayload, WorkflowRun};
-use crate::workflow::WorkflowPullRequest;
+use crate::check::CheckRunStatus;
+use crate::webhook::{GitHubPayload, WorkflowRun, WorkflowRunConclusion};
 
 pub use acquisition::{
     GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubAcquisitionSource,
@@ -307,7 +307,7 @@ impl PullRequestFacts {
         let Some((completion, run)) = configured_workflow(&payload, workflow_completion) else {
             return Ok(None);
         };
-        if run.conclusion.as_deref() != Some("success") {
+        if run.conclusion != Some(WorkflowRunConclusion::Success) {
             return Ok(None);
         }
         let (installation_id, repository_id, repository) =
@@ -455,7 +455,7 @@ fn workflow_pull_request<'a>(
         .workflow
         .as_ref()
         .is_none_or(|workflow| positive(workflow.id) == Some(run.workflow_id));
-    (run.status == "completed"
+    (run.status == CheckRunStatus::Completed
         && positive(run.id).is_some()
         && positive(run.workflow_id).is_some()
         && positive(run.run_attempt).is_some()
@@ -474,11 +474,9 @@ fn workflow_pull_request<'a>(
         && completion.repository == *repository)
         .then_some(())
         .ok_or(Authentication)?;
-    let Ok(pull_requests) = <&[WorkflowPullRequest; 1]>::try_from(run.pull_requests.as_slice())
-    else {
+    let [Some(pull_request)] = run.pull_requests.as_slice() else {
         return Ok(None);
     };
-    let [pull_request] = pull_requests;
     (positive(run.head_repository.id).is_some()
         && positive(pull_request.id).is_some()
         && positive(pull_request.number).is_some()

@@ -57,6 +57,9 @@ mod webhook_root;
 #[path = "json_contracts/webhook_commit.rs"]
 mod webhook_commit;
 
+#[path = "json_contracts/webhook_run.rs"]
+mod webhook_run;
+
 #[test]
 fn reference_captures_share_the_complete_object_without_losing_fields() {
     let input = include_str!("fixtures/git-reference.json");
