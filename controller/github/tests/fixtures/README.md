@@ -170,3 +170,9 @@ to the corresponding opened-example members. All five fields and their complete
 nested records are unchanged, with pretty-printing and a trailing newline.
 Nullable accounts, deleted head repositories and numeric timestamps in tests
 are explicit synthetic cases from the two pinned contracts, not live captures.
+
+PR account, reviewer, team, milestone and auto-merge contract tests construct
+schema-backed cases rather than live captures. OpenAPI permits Mannequin only
+in PR participant accounts and requires fewer fields for requested teams than
+for reviewer teams. Both contracts bound parent teams to one level; optional
+deleted and notification_setting fields come from OpenAPI and Octokit respectively.

@@ -10,6 +10,7 @@ use crate::check::CheckRunStatus;
 use crate::repository::pull::PullRepositoryRecord;
 use crate::workflow::{ReferencedWorkflow, WorkflowCommit, WorkflowPullRequest};
 
+pub mod pull;
 pub mod repository;
 
 use repository::{WorkflowOwner, WorkflowRepository};

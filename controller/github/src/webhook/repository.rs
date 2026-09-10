@@ -66,8 +66,8 @@ pub struct WorkflowRepository {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkflowOwner {
+#[serde(deny_unknown_fields, bound(deserialize = "Kind: Deserialize<'de>"))]
+pub struct WorkflowOwner<Kind = AccountKind> {
     pub login: String,
     pub id: UInt,
     pub avatar_url: Option<String>,
@@ -88,7 +88,7 @@ pub struct WorkflowOwner {
     pub starred_url: Option<String>,
     pub subscriptions_url: Option<String>,
     #[serde(rename = "type")]
-    pub kind: Option<AccountKind>,
+    pub kind: Option<Kind>,
     pub url: Option<String>,
     pub user_view_type: Option<String>,
 }

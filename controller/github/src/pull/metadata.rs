@@ -24,7 +24,7 @@ pub struct LabelRecord {
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct MilestoneRecord {
+pub struct MilestoneRecord<User = OwnerRecord> {
     pub url: String,
     pub html_url: String,
     pub labels_url: String,
@@ -34,7 +34,7 @@ pub struct MilestoneRecord {
     pub state: State,
     pub title: String,
     pub description: Nullable<String>,
-    pub creator: Nullable<OwnerRecord>,
+    pub creator: Nullable<User>,
     pub open_issues: UInt,
     pub closed_issues: UInt,
     pub created_at: String,
@@ -44,12 +44,18 @@ pub struct MilestoneRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AutoMergeRecord {
-    pub enabled_by: OwnerRecord,
+#[serde(
+    deny_unknown_fields,
+    bound(deserialize = "User: Deserialize<'de>, Message: Deserialize<'de>")
+)]
+pub struct AutoMergeRecord<User = OwnerRecord, Message = String> {
+    #[serde(deserialize_with = "User::deserialize")]
+    pub enabled_by: User,
     pub merge_method: MergeMethod,
-    pub commit_title: String,
-    pub commit_message: String,
+    #[serde(deserialize_with = "Message::deserialize")]
+    pub commit_title: Message,
+    #[serde(deserialize_with = "Message::deserialize")]
+    pub commit_message: Message,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
