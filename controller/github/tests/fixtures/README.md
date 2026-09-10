@@ -101,3 +101,7 @@ the boolean review and merge-queue settings missing from the pinned OpenAPI
 description. Both are false in the capture; true, omitted and malformed values
 in tests are synthetic variations. No rules or repository settings were changed.
 Only a final newline is added to the captured JSON for repository hygiene.
+
+branch-rules-synthetic.json is the existing 23-variant contract example, not a
+provider capture. Optional parameters and integration IDs use omission, as
+declared by the endpoint schema; supplied nulls are negative test cases.

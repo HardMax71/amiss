@@ -30,6 +30,7 @@ pub use acquisition::{
     GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubAcquisitionSource,
     GitHubFetchPlan, github_fetch_plan,
 };
+pub use live::rules;
 pub use live::{GitHubApp, GitHubClientError, GitHubTimeouts};
 pub use workflow_artifact::{GitHubArtifactError, decode_workflow_artifact};
 

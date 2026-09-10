@@ -25,6 +25,10 @@ fn current_effective_rule_pages_decode_all_observed_settings() {
         }
         let encoded = serde_json::to_vec(&rules).unwrap();
         assert_eq!(
+            amiss_fixtures::canonical_json(&encoded).unwrap(),
+            amiss_fixtures::canonical_json(input).unwrap()
+        );
+        assert_eq!(
             serde_json::from_slice::<Vec<BranchRule>>(&encoded).unwrap(),
             rules
         );
@@ -122,7 +126,7 @@ fn real_effective_rules_keep_source_and_unattributed_review_policy() -> Result<(
         Some(RulesetSourceType::Repository)
     );
     assert_eq!(rule.ruleset_source.as_deref(), Some("HardMax71/amiss"));
-    assert_eq!(rule.ruleset_id, Some(18_948_623));
+    assert_eq!(rule.ruleset_id.map(u64::from), Some(18_948_623));
     assert_eq!(
         rule.parameters
             .as_ref()
@@ -154,31 +158,7 @@ fn real_effective_rules_keep_source_and_unattributed_review_policy() -> Result<(
 
 #[test]
 fn every_published_rule_shape_is_typed() {
-    let input = br#"[
-        {"type":"creation"},
-        {"type":"update","parameters":{"update_allows_fetch_and_merge":true}},
-        {"type":"deletion"},
-        {"type":"required_linear_history"},
-        {"type":"merge_queue","parameters":{"check_response_timeout_minutes":60,"grouping_strategy":"ALLGREEN","max_entries_to_build":5,"max_entries_to_merge":5,"merge_method":"SQUASH","min_entries_to_merge":1,"min_entries_to_merge_wait_minutes":5}},
-        {"type":"required_deployments","parameters":{"required_deployment_environments":["production"]}},
-        {"type":"required_signatures"},
-        {"type":"pull_request","parameters":{"allowed_merge_methods":["merge","squash","rebase"],"dismiss_stale_reviews_on_push":true,"dismissal_restriction":{"allowed_actors":[{"id":1,"type":"User"},{"id":2,"type":"Team"},{"id":3,"type":"IntegrationInstallation"},{"id":4,"type":"RepositoryRole"}],"enabled":true},"require_code_owner_review":true,"require_last_push_approval":true,"required_approving_review_count":2,"required_review_thread_resolution":true,"required_reviewers":[{"file_patterns":["*.rs"],"minimum_approvals":1,"reviewer":{"id":2,"type":"Team"}}]}},
-        {"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"amiss/provider","integration_id":99},{"context":"unbound","integration_id":null}],"strict_required_status_checks_policy":true}},
-        {"type":"non_fast_forward"},
-        {"type":"commit_message_pattern","parameters":{"operator":"starts_with","pattern":"issue"}},
-        {"type":"commit_author_email_pattern","parameters":{"operator":"ends_with","pattern":"@example.com"}},
-        {"type":"committer_email_pattern","parameters":{"operator":"contains","pattern":"example"}},
-        {"type":"branch_name_pattern","parameters":{"operator":"regex","pattern":"^main$","name":"main","negate":false}},
-        {"type":"tag_name_pattern","parameters":{"operator":"starts_with","pattern":"v"}},
-        {"type":"workflows","parameters":{"do_not_enforce_on_create":true,"workflows":[{"path":".github/workflows/ci.yml","ref":"main","repository_id":1,"sha":"0123456789abcdef0123456789abcdef01234567"}]}},
-        {"type":"code_scanning","parameters":{"code_scanning_tools":[{"alerts_threshold":"errors_and_warnings","security_alerts_threshold":"high_or_higher","tool":"CodeQL"}]}},
-        {"type":"copilot_code_review","parameters":{"review_draft_pull_requests":false,"review_on_push":true}},
-        {"type":"license_compliance_scanning"},
-        {"type":"file_path_restriction","parameters":{"restricted_file_paths":["secrets/**"]}},
-        {"type":"max_file_path_length","parameters":{"max_file_path_length":32767}},
-        {"type":"file_extension_restriction","parameters":{"restricted_file_extensions":["*.exe"]}},
-        {"type":"max_file_size","parameters":{"max_file_size":100}}
-    ]"#;
+    let input = include_bytes!("../../../tests/fixtures/branch-rules-synthetic.json");
     let (rules, _): (Vec<BranchRule>, _) =
         decode_bounded_json(input.as_slice(), None, input.len(), |bytes| {
             serde_json::from_slice(bytes)
@@ -249,7 +229,7 @@ fn rule_tags_and_nested_parameters_are_closed() {
     for input in [
         r#"{"type":"update"}"#,
         r#"{"type":"pull_request"}"#,
-        r#"{"type":"workflows","parameters":null}"#,
+        r#"{"type":"workflows"}"#,
         r#"{"type":"copilot_code_review","parameters":{}}"#,
         r#"{"type":"deletion","ruleset_source_type":"Organization"}"#,
     ] {

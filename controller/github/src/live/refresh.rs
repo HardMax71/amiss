@@ -219,7 +219,7 @@ fn rules_authorize(config: &Config, rules: &[BranchRule]) -> bool {
             .iter()
             .filter(|required| required.context == config.required_status_name)
         {
-            if required.integration_id != Some(config.app_id)
+            if required.integration_id.map(u64::from) != Some(config.app_id)
                 || !parameters.strict_required_status_checks_policy
             {
                 bound = false;

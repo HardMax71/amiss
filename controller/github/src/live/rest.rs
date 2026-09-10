@@ -222,7 +222,7 @@ impl HttpRest {
             let request = self.transport.client.get(self.transport.url(&route)?);
             let batch: Vec<BranchRule> =
                 decode_body(self.transport.execute(request, deadline)?, |bytes| {
-                    serde_json::from_slice(bytes)
+                    amiss_wire::read_json(bytes, u64::MAX)
                 })?;
             for rule in &batch {
                 rule.validate(&())

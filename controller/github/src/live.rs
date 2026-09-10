@@ -6,7 +6,7 @@ mod publication;
 mod refresh;
 mod relation;
 mod rest;
-mod rules;
+pub mod rules;
 mod verify;
 
 use std::sync::Arc;

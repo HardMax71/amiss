@@ -28,7 +28,7 @@ use super::model::{
 };
 use super::publication::{CheckRunDecision, publication_decision, validate_created};
 use super::rest::{GitHubRest, OperationDeadline};
-use super::rules::{BranchRule, RequiredStatus, RequiredStatusParameters, RuleParameters};
+use super::rules::{BranchRule, RequiredStatus, RequiredStatusParameters, RequiredStatusRule};
 use super::{Client, Config};
 
 const APP_ID: u64 = 99;
@@ -207,7 +207,7 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
         ),
     ] {
         let mut data = fixture.data.clone();
-        data.rules = vec![BranchRule::RequiredStatusChecks(RuleParameters {
+        data.rules = vec![BranchRule::RequiredStatusChecks(RequiredStatusRule {
             ruleset_source_type: None,
             ruleset_source: None,
             ruleset_id: None,
@@ -218,13 +218,59 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
                     .into_iter()
                     .map(|(context, integration_id)| RequiredStatus {
                         context: context.to_owned(),
-                        integration_id,
+                        integration_id: integration_id.map(|id| id.try_into().unwrap()),
                     })
                     .collect(),
             },
         })];
         let snapshot = super::refresh::snapshot(&fixture.config, fixture.request(), &data).unwrap();
         assert_eq!(snapshot.state, state);
+    }
+}
+
+#[test]
+fn decoded_rule_pages_keep_every_matching_authorization_binding() {
+    let fixture = Fixture::new();
+    for (pages, state) in [
+        (
+            vec![vec![required_rule(Some(APP_ID), true)]],
+            ChangeState::Active,
+        ),
+        (
+            vec![
+                vec![required_rule(Some(APP_ID), true)],
+                vec![required_rule(None, true)],
+            ],
+            ChangeState::AuthorizationRevoked,
+        ),
+        (
+            vec![
+                vec![required_rule(Some(APP_ID), true)],
+                vec![required_rule(Some(APP_ID + 1), true)],
+            ],
+            ChangeState::AuthorizationRevoked,
+        ),
+        (
+            vec![
+                vec![required_rule(Some(APP_ID), false)],
+                vec![required_rule(Some(APP_ID), true)],
+            ],
+            ChangeState::AuthorizationRevoked,
+        ),
+    ] {
+        let mut data = fixture.data.clone();
+        data.rules.clear();
+        for page in pages {
+            let input = serde_json::to_vec(&page).unwrap();
+            let rules: Vec<BranchRule> = amiss_wire::read_json(&input, u64::MAX).unwrap();
+            data.rules.extend(rules);
+        }
+        assert_eq!(
+            super::refresh::snapshot(&fixture.config, fixture.request(), &data)
+                .unwrap()
+                .state,
+            state
+        );
     }
 }
 
@@ -1064,7 +1110,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
 }
 
 fn required_rule(integration_id: Option<u64>, strict: bool) -> BranchRule {
-    BranchRule::RequiredStatusChecks(RuleParameters {
+    BranchRule::RequiredStatusChecks(RequiredStatusRule {
         ruleset_source_type: None,
         ruleset_source: None,
         ruleset_id: None,
@@ -1073,7 +1119,7 @@ fn required_rule(integration_id: Option<u64>, strict: bool) -> BranchRule {
             do_not_enforce_on_create: None,
             required_status_checks: vec![RequiredStatus {
                 context: "amiss/provider".to_owned(),
-                integration_id,
+                integration_id: integration_id.map(|id| id.try_into().unwrap()),
             }],
         },
     })
