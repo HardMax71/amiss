@@ -123,3 +123,9 @@ webhook-pull-changes.json is synthetic, following the closed changes object in
 [Octokit's pinned edited-PR schema](https://github.com/octokit/webhooks/blob/7dd7fa56498a827a08b71919fae89428f5e8e283/payload-schemas/api.github.com/pull_request/edited.schema.json).
 It includes previous base ref and SHA, body and title. That revision has no
 published edited-PR payload example; this is not presented as a captured delivery.
+
+webhook-workflow-repository.json projects the unchanged workflow_run.repository
+from the published completion example linked above; its head_repository member
+is identical. Every member and value is retained with pretty-printing and a
+trailing newline. Nullable and minimally populated owners in tests follow the
+official OpenAPI contract, which is broader than Octokit's owner reference.

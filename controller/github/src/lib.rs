@@ -26,7 +26,7 @@ use amiss_controller::{
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-use crate::webhook::{GitHubPayload, Repository, WorkflowRun};
+use crate::webhook::{GitHubPayload, WorkflowRun};
 use crate::workflow::WorkflowPullRequest;
 
 pub use acquisition::{
@@ -346,21 +346,27 @@ fn authenticated_repository(
         .as_ref()
         .ok_or(ProviderError::Authentication)?;
     let repository_id = positive(repository.id).ok_or(ProviderError::Authentication)?;
-    let identity =
-        github_repository_identity(provider, repository).ok_or(ProviderError::Authentication)?;
+    let identity = github_repository_identity(
+        provider,
+        &repository.name,
+        &repository.full_name,
+        &repository.owner.login,
+    )
+    .ok_or(ProviderError::Authentication)?;
     Ok((installation_id, repository_id, identity))
 }
 
 fn github_repository_identity(
     provider: &ProviderIdentity,
-    repository: &Repository,
+    name: &str,
+    full_name: &str,
+    owner: &str,
 ) -> Option<RepositoryIdentity> {
-    (repository.full_name == format!("{}/{}", repository.owner.login, repository.name))
-        .then_some(())?;
+    (full_name == format!("{owner}/{name}")).then_some(())?;
     RepositoryIdentity::new(
         provider.instance.as_str().to_owned(),
-        repository.owner.login.to_ascii_lowercase(),
-        repository.name.to_ascii_lowercase(),
+        owner.to_ascii_lowercase(),
+        name.to_ascii_lowercase(),
     )
 }
 
@@ -438,6 +444,8 @@ fn workflow_pull_request<'a>(
     use ProviderError::Authentication;
 
     let raw_repository = payload.repository.as_ref().ok_or(Authentication)?;
+    let owner = run.repository.owner.as_ref().ok_or(Authentication)?;
+    let head_owner = run.head_repository.owner.as_ref().ok_or(Authentication)?;
     let workflow_matches = payload
         .workflow
         .as_ref()
@@ -447,9 +455,17 @@ fn workflow_pull_request<'a>(
         && positive(run.workflow_id).is_some()
         && positive(run.run_attempt).is_some()
         && workflow_matches
-        && run.repository == *raw_repository
-        && github_repository_identity(provider, &run.repository).as_ref() == Some(repository)
-        && github_repository_identity(provider, &run.head_repository).is_some()
+        && run.repository.id == raw_repository.id
+        && run.repository.name == raw_repository.name
+        && run.repository.full_name == raw_repository.full_name
+        && owner.login == raw_repository.owner.login
+        && github_repository_identity(
+            provider,
+            &run.head_repository.name,
+            &run.head_repository.full_name,
+            &head_owner.login,
+        )
+        .is_some()
         && completion.repository == *repository)
         .then_some(())
         .ok_or(Authentication)?;

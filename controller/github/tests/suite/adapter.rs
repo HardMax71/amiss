@@ -16,6 +16,7 @@ use amiss_controller::{
     ReplayWindow, RunIdentity, RunRefs, SemanticEvidenceExpectation, SignedTimePolicy,
     UntrustedDelivery, WebhookKey, WebhookKeyring, WorkflowArtifactExpectation,
 };
+use amiss_controller_github::webhook::repository::WorkflowRepository;
 use amiss_controller_github::webhook::{
     BaseChange, GitHubPayload, Installation, Owner, PreviousReference, PullRequestChanges,
     Repository, Workflow, WorkflowRun,
@@ -330,6 +331,85 @@ fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
         authenticate_target(&source, &body, &other_target),
         Err(ProviderError::AuthorizationRevoked)
     );
+}
+
+#[test]
+fn signed_workflow_repositories_reject_unknown_metadata() {
+    let source = GitHubPullRequestSource::new(
+        provider(),
+        webhook(),
+        &[workflow_artifact("docs-evidence.yml")],
+    );
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let payload = workflow_payload();
+    let run = payload.workflow_run.as_ref().unwrap();
+    let body = serde_json::to_string(&payload).unwrap();
+    for record in [&run.repository, &run.head_repository] {
+        let repository = serde_json::to_string(record).unwrap();
+        assert_eq!(body.matches(&repository).count(), 1);
+        for invalid in [
+            repository.replacen('{', r#"{"unknown":true,"#, 1),
+            repository.replacen(r#""owner":{"#, r#""owner":{"unknown":true,"#, 1),
+        ] {
+            assert_ne!(invalid, repository);
+            let changed = body.replacen(&repository, &invalid, 1);
+            assert_eq!(
+                authenticate_target(&source, changed.as_bytes(), &target),
+                Err(ProviderError::Authentication)
+            );
+        }
+    }
+}
+
+#[test]
+fn workflow_repository_identity_is_independent_of_retained_metadata() {
+    let source = GitHubPullRequestSource::new(
+        provider(),
+        webhook(),
+        &[workflow_artifact("docs-evidence.yml")],
+    );
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let payload = workflow_payload();
+    let original = authenticate_target(&source, &serde_json::to_vec(&payload).unwrap(), &target)
+        .unwrap()
+        .unwrap();
+    let mut metadata = payload.clone();
+    let run = metadata.workflow_run.as_mut().unwrap();
+    run.repository.node_id = "distinct-root-metadata".to_owned();
+    run.repository.owner.as_mut().unwrap().name = Some("Display name".to_owned());
+    run.head_repository.owner.as_mut().unwrap().email =
+        Some(amiss_wire::assessment::Nullable::Null);
+    let accepted = authenticate_target(&source, &serde_json::to_vec(&metadata).unwrap(), &target)
+        .unwrap()
+        .unwrap();
+    assert_eq!(accepted.delivery(), original.delivery());
+
+    let mutations: [fn(&mut WorkflowRun); 8] = [
+        |run| run.repository.id += 1,
+        |run| run.repository.name = "other".to_owned(),
+        |run| run.repository.full_name = "other/widget".to_owned(),
+        |run| run.repository.owner.as_mut().unwrap().login = "other".to_owned(),
+        |run| run.repository.owner = None,
+        |run| run.head_repository.owner = None,
+        |run| run.head_repository.owner.as_mut().unwrap().login = "other".to_owned(),
+        |run| {
+            run.head_repository.owner.as_mut().unwrap().login = "bad name".to_owned();
+            run.head_repository.full_name = "bad name/widget".to_owned();
+        },
+    ];
+    for (index, mutate) in mutations.into_iter().enumerate() {
+        let mut candidate = payload.clone();
+        mutate(candidate.workflow_run.as_mut().unwrap());
+        let input = serde_json::to_vec(&candidate).unwrap();
+        assert_eq!(
+            authenticate_target(&source, &input, &target),
+            Err(ProviderError::Authentication),
+            "mutation {index}"
+        );
+        candidate.workflow_run.as_mut().unwrap().conclusion = Some("failure".to_owned());
+        let input = serde_json::to_vec(&candidate).unwrap();
+        assert_eq!(authenticate_target(&source, &input, &target), Ok(None));
+    }
 }
 
 #[test]
@@ -949,6 +1029,18 @@ fn workflow_artifact(workflow_identity: &str) -> WorkflowArtifactExpectation {
 }
 
 fn workflow_payload() -> GitHubPayload {
+    let mut run_repository: WorkflowRepository = serde_json::from_slice(include_bytes!(
+        "../fixtures/webhook-workflow-repository.json"
+    ))
+    .unwrap();
+    run_repository.id = 101;
+    "widget".clone_into(&mut run_repository.name);
+    "HardMax71/widget".clone_into(&mut run_repository.full_name);
+    "HardMax71".clone_into(&mut run_repository.owner.as_mut().unwrap().login);
+    let mut head_repository = run_repository.clone();
+    head_repository.id = 202;
+    "Contributor/widget".clone_into(&mut head_repository.full_name);
+    "Contributor".clone_into(&mut head_repository.owner.as_mut().unwrap().login);
     let repository = Repository {
         id: 101,
         name: "widget".to_owned(),
@@ -991,15 +1083,8 @@ fn workflow_payload() -> GitHubPayload {
             workflow_id: 321,
             run_attempt: 2,
             head_sha: oid('b'),
-            repository,
-            head_repository: Repository {
-                id: 202,
-                name: "widget".to_owned(),
-                full_name: "Contributor/widget".to_owned(),
-                owner: Owner {
-                    login: "Contributor".to_owned(),
-                },
-            },
+            repository: run_repository,
+            head_repository,
             pull_requests: vec![WorkflowPullRequest {
                 id: 4_201,
                 number: 42,

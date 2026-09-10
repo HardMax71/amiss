@@ -6,6 +6,10 @@ use serde_with::{As, TryFromInto};
 
 use crate::workflow::WorkflowPullRequest;
 
+pub mod repository;
+
+use repository::WorkflowRepository;
+
 #[serde_with::apply(Option<_> => #[serde(skip_serializing_if = "Option::is_none")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct GitHubPayload {
@@ -114,7 +118,7 @@ pub struct WorkflowRun {
     pub workflow_id: u64,
     pub run_attempt: u64,
     pub head_sha: Oid,
-    pub repository: Repository,
-    pub head_repository: Repository,
+    pub repository: WorkflowRepository,
+    pub head_repository: WorkflowRepository,
     pub pull_requests: Vec<WorkflowPullRequest>,
 }
