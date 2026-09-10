@@ -33,6 +33,9 @@ pub const GITHUB_WEBHOOK_REPOSITORY: &[u8] =
 /// Unchanged PR member shared by Octokit's published opened and synchronize examples.
 pub const GITHUB_WEBHOOK_PULL: &[u8] = include_bytes!("../data/github-webhook-pull.json");
 
+/// Unchanged submitted-review event from Octokit's published webhook examples.
+pub const GITHUB_WEBHOOK_REVIEW: &[u8] = include_bytes!("../data/github-webhook-review.json");
+
 /// Constructed GitLab policy-job claims matching the provider's complete token fields.
 pub const GITLAB_POLICY_CLAIMS: &[u8] = include_bytes!("../data/gitlab-policy-claims.json");
 

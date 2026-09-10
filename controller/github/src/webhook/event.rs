@@ -3,11 +3,13 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use super::pull::request::{PullRequestWebhook, SynchronizePullRequest};
+use super::review::ReviewEvent;
 use super::{GitHubPayload, PullRequest};
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum GitHubEvent {
+    Review(Box<ReviewEvent>),
     PullRequest(Box<GitHubPayload<PullRequestWebhook, PullAction>>),
     Synchronize(Box<GitHubPayload<SynchronizePullRequest, SynchronizeAction>>),
     Activity(Box<GitHubPayload<PullRequest, ActivityAction>>),
@@ -56,8 +58,6 @@ pub enum ActivityAction {
     Unlocked,
     Created,
     Deleted,
-    Dismissed,
-    Submitted,
     Resolved,
     Unresolved,
     Completed,

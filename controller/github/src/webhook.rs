@@ -13,6 +13,7 @@ use crate::workflow::{ReferencedWorkflow, WorkflowCommit, WorkflowPullRequest};
 pub mod event;
 pub mod pull;
 pub mod repository;
+pub mod review;
 
 use pull::request::PullRequestWebhook;
 use repository::{WorkflowOwner, WorkflowRepository};
@@ -28,6 +29,8 @@ pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
     pub repository: Option<PullRepositoryRecord>,
     pub number: Option<u64>,
     pub pull_request: Option<Pull>,
+    #[serde(default, deserialize_with = "deserialize_some")]
+    pub review: Option<review::ReviewRecord>,
     pub workflow: Option<Workflow>,
     pub workflow_run: Option<WorkflowRun>,
 }
@@ -65,6 +68,23 @@ pub struct Installation {
     #[serde(with = "As::<TryFromInto<UInt>>")]
     pub id: u64,
     pub node_id: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Organization {
+    pub login: String,
+    pub id: UInt,
+    pub node_id: String,
+    pub url: String,
+    pub repos_url: String,
+    pub events_url: String,
+    pub hooks_url: String,
+    pub issues_url: String,
+    pub members_url: String,
+    pub public_members_url: String,
+    pub avatar_url: String,
+    pub description: Nullable<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

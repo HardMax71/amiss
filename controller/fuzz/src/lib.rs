@@ -382,6 +382,7 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
         repository: Some(root),
         number: Some(42),
         pull_request: Some(pull),
+        review: None,
         workflow: None,
         workflow_run: None,
     };

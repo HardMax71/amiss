@@ -8,6 +8,7 @@ use strum::{Display, EnumString};
 use super::repository::WorkflowOwner;
 
 pub mod request;
+pub mod review;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,

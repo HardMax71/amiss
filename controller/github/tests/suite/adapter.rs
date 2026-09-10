@@ -3,6 +3,8 @@
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
 
+mod reviews;
+
 use amiss_controller_fixtures::clock::TestClock;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -65,6 +67,7 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
         repository: Some(repository),
         number: Some(42),
         pull_request: Some(pull),
+        review: None,
         workflow: None,
         workflow_run: None,
     })
@@ -1426,6 +1429,7 @@ fn workflow_payload() -> GitHubPayload {
         repository: Some(repository),
         number: None,
         pull_request: None,
+        review: None,
         workflow: Some(Workflow {
             id: 321,
             node_id: "workflow-321".to_owned(),

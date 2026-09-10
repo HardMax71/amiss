@@ -269,7 +269,11 @@ impl PullRequestFacts {
 
         let event: GitHubEvent = serde_json::from_slice(body).map_err(|_defect| Authentication)?;
         let payload = match event {
+            GitHubEvent::Review(_) => return Ok(None),
             GitHubEvent::PullRequest(payload) => {
+                if payload.review.is_some() {
+                    return Err(Authentication);
+                }
                 let Some(pull_request) = payload.pull_request.as_ref() else {
                     return Ok(None);
                 };
@@ -298,6 +302,9 @@ impl PullRequestFacts {
                 .map(Some);
             }
             GitHubEvent::Synchronize(payload) => {
+                if payload.review.is_some() {
+                    return Err(Authentication);
+                }
                 let Some(pull) = payload.pull_request.as_ref() else {
                     return Ok(None);
                 };
@@ -326,6 +333,9 @@ impl PullRequestFacts {
             }
             GitHubEvent::Activity(payload) => payload,
         };
+        if payload.review.is_some() {
+            return Err(Authentication);
+        }
         if payload.pull_request.is_some() {
             return Ok(None);
         }
