@@ -7,6 +7,20 @@ use strum::{Display, EnumString};
 
 use super::repository::WorkflowOwner;
 
+pub mod request;
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+#[strum(serialize_all = "kebab-case")]
+pub enum LockReason {
+    Resolved,
+    OffTopic,
+    #[strum(serialize = "too heated")]
+    TooHeated,
+    Spam,
+}
+
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
 )]

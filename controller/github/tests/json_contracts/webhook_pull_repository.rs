@@ -99,7 +99,7 @@ fn webhook_pull_repository_keeps_all_declared_additions() {
         );
     }
     record.role_name = Some(Nullable::Null);
-    record.owner = Nullable::Null;
+    record.owner = None;
     record.pushed_at = Nullable::Null;
     let encoded = serde_json::to_vec(&record).unwrap();
     assert_eq!(

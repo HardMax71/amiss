@@ -30,6 +30,9 @@ pub const GITEA_PULL_WEBHOOK: &[u8] = include_bytes!("../data/gitea-pull-webhook
 pub const GITHUB_WEBHOOK_REPOSITORY: &[u8] =
     include_bytes!("../data/github-webhook-repository.json");
 
+/// Unchanged PR member shared by Octokit's published opened and synchronize examples.
+pub const GITHUB_WEBHOOK_PULL: &[u8] = include_bytes!("../data/github-webhook-pull.json");
+
 /// Constructed GitLab policy-job claims matching the provider's complete token fields.
 pub const GITLAB_POLICY_CLAIMS: &[u8] = include_bytes!("../data/gitlab-policy-claims.json");
 

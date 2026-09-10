@@ -176,3 +176,9 @@ schema-backed cases rather than live captures. OpenAPI permits Mannequin only
 in PR participant accounts and requires fewer fields for requested teams than
 for reviewer teams. Both contracts bound parent teams to one level; optional
 deleted and notification_setting fields come from OpenAPI and Octokit respectively.
+
+GITHUB_WEBHOOK_PULL in amiss-fixtures retains the complete unchanged pull_request
+member from both linked opened and synchronize examples; the two members are identical.
+Ordinary webhooks inherit the REST PR contract with eight optional merge-policy fields.
+Synchronize instead has 36 required fields, nullable participants and optional merge
+details. Contract tests construct the documented differences; they are not live captures.

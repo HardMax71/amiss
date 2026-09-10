@@ -27,7 +27,9 @@ pub struct PullRepository {
     pub id: u64,
     pub name: String,
     pub full_name: String,
-    pub owner: Nullable<WorkflowOwner>,
+    #[serde_with(skip_apply)]
+    #[serde(deserialize_with = "Option::deserialize")]
+    pub owner: Option<WorkflowOwner>,
     pub node_id: String,
     pub private: bool,
     pub html_url: String,
