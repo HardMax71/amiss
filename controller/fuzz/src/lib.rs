@@ -1,4 +1,5 @@
 mod gitea;
+mod tests;
 
 use amiss_controller_fixtures::clock::TestClock;
 use std::collections::BTreeSet;
@@ -13,13 +14,15 @@ use amiss_controller::{
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitea::{DedicatedReviewer, GiteaPullRequestSource};
 use amiss_controller_github::GitHubPullRequestSource;
+use amiss_controller_github::webhook::{
+    Base, GitHubPayload, Head, Installation, Owner, PullRequest, Repository,
+};
 use amiss_controller_gitlab::claims::{Claims, RequestHint};
 use amiss_controller_gitlab::{GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust};
 use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-use serde_json::{Value, json};
 use sha2::Sha256;
 
 const WEBHOOK_SECRET: &[u8] = b"amiss-controller-fuzz-webhook-secret";
@@ -27,7 +30,6 @@ const GITLAB_HOST: &str = "gitlab.example.test";
 const GITLAB_AUDIENCE: &str = "amiss-controller";
 const GITLAB_KID: &str = "current";
 const REPLAY_RETENTION_MILLIS: i64 = 660_000;
-const SHA1: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 #[expect(
     clippy::expect_used,
@@ -100,26 +102,7 @@ static GITLAB_SIGNING_KEY: LazyLock<EncodingKey> = LazyLock::new(|| {
 /// longer satisfies the fixed ingress policy.
 pub fn provider_webhooks(data: &[u8]) {
     {
-        let repository = json!({
-            "id": 11,
-            "name": "widget",
-            "full_name": "acme/widget",
-            "owner": {"login": "acme"}
-        });
-        let body = json!({
-            "action": "opened",
-            "changes": null,
-            "installation": {"id": 22, "node_id": "installation-twenty-two"},
-            "repository": repository,
-            "number": 42,
-            "pull_request": {
-                "id": 33,
-                "number": 42,
-                "head": {"sha": SHA1, "ref": "topic"},
-                "base": {"ref": "main", "repo": repository}
-            }
-        });
-        let exercise = prepare_webhook(body, data, "GitHub");
+        let exercise = prepare_webhook(data);
         let provider = provider("github", "github.example.test");
         let trust_set = opaque("github-webhooks");
         let source = GitHubPullRequestSource::new(
@@ -372,51 +355,94 @@ fn authenticate_webhook<S>(
     clippy::expect_used,
     reason = "generated webhook JSON must remain serializable"
 )]
-fn prepare_webhook<'a>(
-    mut body: Value,
-    data: &'a [u8],
-    family: &'static str,
-) -> WebhookExercise<'a> {
-    let mutation = data.get(1..).unwrap_or_default();
-    let (target, replacement) = match selection(data, 10) {
-        1 => (body.pointer_mut("/action"), json!("synchronize")),
-        2 => (body.pointer_mut("/action"), json!(text(mutation))),
-        3 => (body.pointer_mut("/number"), json!(number(mutation))),
-        4 => (
-            body.pointer_mut("/pull_request/number"),
-            json!(number(mutation)),
-        ),
-        5 => (
-            body.pointer_mut("/pull_request/id"),
-            json!(number(mutation)),
-        ),
-        6 => (
-            body.pointer_mut("/pull_request/head/sha"),
-            json!(text(mutation)),
-        ),
-        7 => (
-            body.pointer_mut("/pull_request/head/ref"),
-            json!(text(mutation)),
-        ),
-        8 => (
-            body.pointer_mut("/pull_request/base/ref"),
-            json!(text(mutation)),
-        ),
-        9 => (body.pointer_mut("/repository/name"), json!(text(mutation))),
-        _ => (None, Value::Null),
+fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
+    type Change = fn(&mut GitHubPayload, &[u8]);
+    let repository = Repository {
+        id: 11,
+        name: "widget".to_owned(),
+        full_name: "acme/widget".to_owned(),
+        owner: Owner {
+            login: "acme".to_owned(),
+        },
     };
-    if let Some(target) = target {
-        *target = replacement;
+    let mut payload = GitHubPayload {
+        action: Some("opened".to_owned()),
+        changes: None,
+        installation: Some(Installation {
+            id: 22,
+            node_id: "installation-twenty-two".to_owned(),
+        }),
+        repository: Some(repository.clone()),
+        number: Some(42),
+        pull_request: Some(PullRequest {
+            id: 33,
+            number: 42,
+            head: Head {
+                sha: oid('b'),
+                branch: "topic".to_owned(),
+            },
+            base: Base {
+                branch: "main".to_owned(),
+                repo: repository,
+            },
+        }),
+        workflow: None,
+        workflow_run: None,
+    };
+    let changes: [(usize, Change); 8] = [
+        (1, |p, _| p.action = Some("synchronize".to_owned())),
+        (2, |p, bytes| p.action = Some(text(bytes))),
+        (3, |p, bytes| p.number = Some(number(bytes))),
+        (4, |p, bytes| {
+            p.pull_request
+                .as_mut()
+                .expect("the fixture has a PR")
+                .number = number(bytes);
+        }),
+        (5, |p, bytes| {
+            p.pull_request.as_mut().expect("the fixture has a PR").id = number(bytes);
+        }),
+        (7, |p, bytes| {
+            p.pull_request
+                .as_mut()
+                .expect("the fixture has a PR")
+                .head
+                .branch = text(bytes);
+        }),
+        (8, |p, bytes| {
+            p.pull_request
+                .as_mut()
+                .expect("the fixture has a PR")
+                .base
+                .branch = text(bytes);
+        }),
+        (9, |p, bytes| {
+            p.repository
+                .as_mut()
+                .expect("the fixture has a repository")
+                .name = text(bytes);
+        }),
+    ];
+    let selector = selection(data, 10);
+    let mutation = data.get(1..).unwrap_or_default();
+    if let Some((_, change)) = changes.iter().find(|(index, _)| *index == selector) {
+        change(&mut payload, mutation);
     }
-    let target_matches = body
-        .pointer("/pull_request/base/ref")
-        .and_then(Value::as_str)
-        == Some("main");
+    let pull = payload.pull_request.as_ref().expect("the fixture has a PR");
+    let target_matches = pull.base.branch == "main";
+    let mut body = serde_json::to_string(&payload).expect("the typed payload serializes");
+    if selector == 6 {
+        // Malformed commit IDs enter only after the typed payload reaches the wire boundary.
+        let original = serde_json::to_string(&pull.head.sha).expect("the head ID serializes");
+        let replacement = serde_json::to_string(&text(mutation)).expect("the mutation serializes");
+        assert_eq!(body.matches(&original).count(), 1);
+        body = body.replacen(&original, &replacement, 1);
+    }
     WebhookExercise {
-        body: serde_json::to_vec(&body).expect("the generated body serializes"),
+        body: body.into_bytes(),
         data,
         target_matches,
-        family,
+        family: "GitHub",
     }
 }
 

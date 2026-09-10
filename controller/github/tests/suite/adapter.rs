@@ -16,6 +16,9 @@ use amiss_controller::{
     ReplayWindow, RunIdentity, RunRefs, SemanticEvidenceExpectation, SignedTimePolicy,
     UntrustedDelivery, WebhookKey, WebhookKeyring, WorkflowArtifactExpectation,
 };
+use amiss_controller_github::webhook::{
+    GitHubPayload, Installation, Owner, Repository, Workflow, WorkflowRun,
+};
 use amiss_controller_github::workflow::{
     WorkflowPullRef, WorkflowPullRepository, WorkflowPullRequest,
 };
@@ -27,7 +30,6 @@ use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
 };
 use hmac::{Hmac, KeyInit as _, Mac as _};
-use serde_json::json;
 use sha2::Sha256;
 
 const NOW: i64 = 1_800_000_000_000;
@@ -301,19 +303,20 @@ fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
         &[workflow_artifact("docs-evidence.yml")],
     );
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    for (pointer, value) in [
-        ("/action", json!("in_progress")),
-        ("/workflow/path", json!(".github/workflows/other.yml")),
-        ("/workflow_run/conclusion", json!("failure")),
-        ("/workflow_run/pull_requests", json!([])),
-    ] {
+    let changes: [fn(&mut GitHubPayload); 4] = [
+        |p| p.action = Some("in_progress".to_owned()),
+        |p| p.workflow.as_mut().unwrap().path = ".github/workflows/other.yml".to_owned(),
+        |p| p.workflow_run.as_mut().unwrap().conclusion = Some("failure".to_owned()),
+        |p| p.workflow_run.as_mut().unwrap().pull_requests.clear(),
+    ];
+    for (index, change) in changes.into_iter().enumerate() {
         let mut payload = workflow_payload();
-        *payload.pointer_mut(pointer).unwrap() = value;
+        change(&mut payload);
         let body = serde_json::to_vec(&payload).unwrap();
         assert_eq!(
             authenticate_target(&source, &body, &target),
             Ok(None),
-            "{pointer}"
+            "change {index}"
         );
     }
     let check_run =
@@ -455,30 +458,28 @@ fn contradictory_configured_completion_fields_fail_authentication() {
         &[workflow_artifact("docs-evidence.yml")],
     );
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    for (pointer, value) in [
-        ("/workflow/id", json!(999)),
-        ("/workflow_run/status", json!("in_progress")),
-        ("/workflow_run/run_attempt", json!(0)),
-        ("/workflow_run/head_sha", json!("f".repeat(40))),
-        ("/workflow_run/repository/full_name", json!("other/widget")),
-        ("/workflow_run/pull_requests/0/head/repo/id", json!(999)),
-        ("/workflow_run/pull_requests/0/base/repo/id", json!(999)),
-        (
-            "/workflow_run/pull_requests/0/head/repo/name",
-            json!("other"),
-        ),
-        (
-            "/workflow_run/pull_requests/0/base/repo/name",
-            json!("other"),
-        ),
-    ] {
+    let changes: [fn(&mut Workflow, &mut WorkflowRun); 9] = [
+        |workflow, _| workflow.id = 999,
+        |_, run| run.status = "in_progress".to_owned(),
+        |_, run| run.run_attempt = 0,
+        |_, run| run.head_sha = oid('f'),
+        |_, run| run.repository.full_name = "other/widget".to_owned(),
+        |_, run| run.pull_requests[0].head.repo.id = 999,
+        |_, run| run.pull_requests[0].base.repo.id = 999,
+        |_, run| run.pull_requests[0].head.repo.name = "other".to_owned(),
+        |_, run| run.pull_requests[0].base.repo.name = "other".to_owned(),
+    ];
+    for (index, change) in changes.into_iter().enumerate() {
         let mut payload = workflow_payload();
-        *payload.pointer_mut(pointer).unwrap() = value;
+        change(
+            payload.workflow.as_mut().unwrap(),
+            payload.workflow_run.as_mut().unwrap(),
+        );
         let body = serde_json::to_vec(&payload).unwrap();
         assert_eq!(
             authenticate_target(&source, &body, &target),
             Err(ProviderError::Authentication),
-            "{pointer}"
+            "change {index}"
         );
     }
 }
@@ -863,70 +864,83 @@ fn workflow_artifact(workflow_identity: &str) -> WorkflowArtifactExpectation {
     }
 }
 
-fn workflow_payload() -> serde_json::Value {
-    let repository = json!({
-        "id": 101,
-        "name": "widget",
-        "full_name": "HardMax71/widget",
-        "owner": {"login": "HardMax71"}
-    });
-    let pull_request = WorkflowPullRequest {
-        id: 4_201,
-        number: 42,
-        url: "https://api.github.com/repos/HardMax71/widget/pulls/42".to_owned(),
-        head: WorkflowPullRef {
-            branch: "topic".to_owned(),
-            sha: oid('b'),
-            repo: WorkflowPullRepository {
-                id: 202,
-                name: "widget".to_owned(),
-                url: "https://api.github.com/repos/Contributor/widget".to_owned(),
-            },
-        },
-        base: WorkflowPullRef {
-            branch: "main".to_owned(),
-            sha: oid('a'),
-            repo: WorkflowPullRepository {
-                id: 101,
-                name: "widget".to_owned(),
-                url: "https://api.github.com/repos/HardMax71/widget".to_owned(),
-            },
+fn workflow_payload() -> GitHubPayload {
+    let repository = Repository {
+        id: 101,
+        name: "widget".to_owned(),
+        full_name: "HardMax71/widget".to_owned(),
+        owner: Owner {
+            login: "HardMax71".to_owned(),
         },
     };
-    json!({
-        "action": "completed",
-        "installation": {"id": 7, "node_id": "installation-seven"},
-        "repository": repository,
-        "workflow": {
-            "id": 321,
-            "path": ".github/workflows/docs-evidence.yml",
-            "node_id": "workflow-321",
-            "name": "Documentation evidence",
-            "state": "active",
-            "created_at": "2020-10-02T12:42:30.000Z",
-            "updated_at": "2020-10-03T19:24:48.000Z",
-            "url": "https://api.github.com/repos/HardMax71/widget/actions/workflows/321",
-            "html_url": "https://github.com/HardMax71/widget/blob/main/.github/workflows/docs-evidence.yml",
-            "badge_url": "https://github.com/HardMax71/widget/workflows/Documentation%20evidence/badge.svg"
-        },
-        "workflow_run": {
-            "id": 9001,
-            "event": "pull_request",
-            "status": "completed",
-            "conclusion": "success",
-            "workflow_id": 321,
-            "run_attempt": 2,
-            "head_sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            "repository": repository,
-            "head_repository": {
-                "id": 202,
-                "name": "widget",
-                "full_name": "Contributor/widget",
-                "owner": {"login": "Contributor"}
+    GitHubPayload {
+        action: Some("completed".to_owned()),
+        changes: None,
+        installation: Some(Installation {
+            id: 7,
+            node_id: "installation-seven".to_owned(),
+        }),
+        repository: Some(repository.clone()),
+        number: None,
+        pull_request: None,
+        workflow: Some(Workflow {
+            id: 321,
+            node_id: "workflow-321".to_owned(),
+            name: "Documentation evidence".to_owned(),
+            path: ".github/workflows/docs-evidence.yml".to_owned(),
+            state: "active".to_owned(),
+            created_at: "2020-10-02T12:42:30.000Z".to_owned(),
+            updated_at: "2020-10-03T19:24:48.000Z".to_owned(),
+            url: "https://api.github.com/repos/HardMax71/widget/actions/workflows/321".to_owned(),
+            html_url:
+                "https://github.com/HardMax71/widget/blob/main/.github/workflows/docs-evidence.yml"
+                    .to_owned(),
+            badge_url:
+                "https://github.com/HardMax71/widget/workflows/Documentation%20evidence/badge.svg"
+                    .to_owned(),
+        }),
+        workflow_run: Some(WorkflowRun {
+            id: 9_001,
+            event: "pull_request".to_owned(),
+            status: "completed".to_owned(),
+            conclusion: Some("success".to_owned()),
+            workflow_id: 321,
+            run_attempt: 2,
+            head_sha: oid('b'),
+            repository,
+            head_repository: Repository {
+                id: 202,
+                name: "widget".to_owned(),
+                full_name: "Contributor/widget".to_owned(),
+                owner: Owner {
+                    login: "Contributor".to_owned(),
+                },
             },
-            "pull_requests": [pull_request]
-        }
-    })
+            pull_requests: vec![WorkflowPullRequest {
+                id: 4_201,
+                number: 42,
+                url: "https://api.github.com/repos/HardMax71/widget/pulls/42".to_owned(),
+                head: WorkflowPullRef {
+                    branch: "topic".to_owned(),
+                    sha: oid('b'),
+                    repo: WorkflowPullRepository {
+                        id: 202,
+                        name: "widget".to_owned(),
+                        url: "https://api.github.com/repos/Contributor/widget".to_owned(),
+                    },
+                },
+                base: WorkflowPullRef {
+                    branch: "main".to_owned(),
+                    sha: oid('a'),
+                    repo: WorkflowPullRepository {
+                        id: 101,
+                        name: "widget".to_owned(),
+                        url: "https://api.github.com/repos/HardMax71/widget".to_owned(),
+                    },
+                },
+            }],
+        }),
+    }
 }
 
 fn webhook() -> GitHubWebhook {

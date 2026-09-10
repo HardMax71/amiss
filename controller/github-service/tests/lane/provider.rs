@@ -6,10 +6,12 @@ use amiss_controller::{
     IngressPolicy, OidPair, ProviderError, Publication, RunIdentity, RunRefs, UntrustedDelivery,
 };
 use amiss_controller_fixtures::clock::TestClock;
+use amiss_controller_github::webhook::{
+    Base, GitHubPayload, Head, Installation, Owner, PullRequest, Repository,
+};
 use amiss_controller_github::{GitHubApi, GitHubPullRequest, GitHubPullRequestSource};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
-use serde_json::json;
 use sha2::Sha256;
 
 const INSTALLATION_ID: u64 = 7;
@@ -49,34 +51,38 @@ impl SignedEvent {
     }
 
     pub(super) fn for_target(candidate: &Oid, target: &str, secret: &[u8]) -> Self {
-        let body = serde_json::to_vec(&json!({
-            "action": "synchronize",
-            "installation": { "id": INSTALLATION_ID, "node_id": "installation-seven" },
-            "repository": {
-                "id": REPOSITORY_ID,
-                "name": "widget",
-                "full_name": "acme/widget",
-                "owner": { "login": "acme" }
+        let repository = Repository {
+            id: REPOSITORY_ID,
+            name: "widget".to_owned(),
+            full_name: "acme/widget".to_owned(),
+            owner: Owner {
+                login: "acme".to_owned(),
             },
-            "number": PULL_REQUEST_NUMBER,
-            "pull_request": {
-                "id": PULL_REQUEST_ID,
-                "number": PULL_REQUEST_NUMBER,
-                "head": {
-                    "sha": candidate.as_str(),
-                    "ref": "topic"
+        };
+        let body = serde_json::to_vec(&GitHubPayload {
+            action: Some("synchronize".to_owned()),
+            changes: None,
+            installation: Some(Installation {
+                id: INSTALLATION_ID,
+                node_id: "installation-seven".to_owned(),
+            }),
+            repository: Some(repository.clone()),
+            number: Some(PULL_REQUEST_NUMBER),
+            pull_request: Some(PullRequest {
+                id: PULL_REQUEST_ID,
+                number: PULL_REQUEST_NUMBER,
+                head: Head {
+                    sha: candidate.clone(),
+                    branch: "topic".to_owned(),
                 },
-                "base": {
-                    "ref": target,
-                    "repo": {
-                        "id": REPOSITORY_ID,
-                        "name": "widget",
-                        "full_name": "acme/widget",
-                        "owner": { "login": "acme" }
-                    }
-                }
-            }
-        }))
+                base: Base {
+                    branch: target.to_owned(),
+                    repo: repository,
+                },
+            }),
+            workflow: None,
+            workflow_run: None,
+        })
         .unwrap();
         Self::signed(body, secret)
     }
