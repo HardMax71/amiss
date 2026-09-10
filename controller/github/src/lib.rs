@@ -2,6 +2,7 @@
 
 mod acquisition;
 pub mod artifact;
+pub mod check;
 pub mod commit;
 mod live;
 pub mod owner;

@@ -41,3 +41,10 @@ event=pull_request, status=success, exclude_pull_requests=true, per_page=2 and
 page=1. The GET retains the linked pull request; the filtered page has an empty
 pull_requests array. Both were captured read-only on 2026-09-10 with API version
 2022-11-28. Nullable states and referenced workflows added in tests are synthetic.
+
+The GitHub app fixture is the complete app member of
+[check run 102692011089](https://api.github.com/repos/HardMax71/amiss/check-runs/102692011089),
+captured read-only on 2026-09-10 with API version 2022-11-28. Its 23 permission
+entries have string values; permission names are open in the upstream contract.
+Enterprise owners and optional/null metadata in tests are schema-backed synthetic
+cases, not captured enterprise data. No check run or app was created or changed.

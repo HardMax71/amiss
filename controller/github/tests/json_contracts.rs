@@ -6,6 +6,9 @@ use amiss_wire::model::ObjectFormat;
 #[path = "json_contracts/artifact.rs"]
 mod artifact;
 
+#[path = "json_contracts/check_app.rs"]
+mod check_app;
+
 #[path = "json_contracts/owner.rs"]
 mod owner;
 

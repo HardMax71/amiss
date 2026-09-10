@@ -1019,7 +1019,14 @@ fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
             title: Some(expected.output.title.clone()),
             summary: Some(expected.output.summary.clone()),
         },
-        app: Some(CheckRunApp { id: app_id }),
+        app: Some(CheckRunApp {
+            id: app_id,
+            ..amiss_wire::read_json(
+                include_bytes!("../../tests/fixtures/github-app.json"),
+                u64::MAX,
+            )
+            .unwrap()
+        }),
     }
 }
 

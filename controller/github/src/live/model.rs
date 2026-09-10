@@ -1,6 +1,7 @@
 use amiss_wire::model::Oid;
 use serde::{Deserialize, Serialize};
 
+pub(super) use crate::check::CheckRunApp;
 pub(super) use crate::commit::GitCommitRecord;
 pub(super) use crate::owner::OwnerRecord;
 pub(super) use crate::reference::RefRecord;
@@ -83,11 +84,6 @@ pub(super) struct CheckRunRecord {
 pub(super) struct CheckRunOutputRecord {
     pub title: Option<String>,
     pub summary: Option<String>,
-}
-
-#[derive(Clone, Deserialize)]
-pub(super) struct CheckRunApp {
-    pub id: u64,
 }
 
 #[derive(Deserialize)]
