@@ -34,7 +34,7 @@ const NOW: i64 = 1_800_000_000_000;
 const SECRET: &[u8] = b"github-webhook-secret";
 const BODY: &[u8] = br#"{
   "action":"opened",
-  "installation":{"id":7},
+  "installation":{"id":7,"node_id":"installation-seven"},
   "repository":{
     "id":101,
     "name":"widget",
@@ -317,7 +317,7 @@ fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
         );
     }
     let check_run =
-        br#"{"action":"completed","check_run":{"id":89721586894},"installation":{"id":7}}"#;
+        br#"{"action":"completed","check_run":{"id":89721586894},"installation":{"id":7,"node_id":"installation-seven"}}"#;
     assert_eq!(authenticate_target(&source, check_run, &target), Ok(None));
 
     let other_target = BranchRef::new("refs/heads/release".to_owned()).unwrap();
@@ -326,6 +326,66 @@ fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
         authenticate_target(&source, &body, &other_target),
         Err(ProviderError::AuthorizationRevoked)
     );
+}
+
+#[test]
+fn signed_webhook_metadata_is_complete_closed_and_checked() {
+    let completion_source = GitHubPullRequestSource::new(
+        provider(),
+        webhook(),
+        &[workflow_artifact("docs-evidence.yml")],
+    );
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let body = serde_json::to_string(&workflow_payload()).unwrap();
+    assert!(matches!(
+        authenticate_target(&completion_source, body.as_bytes(), &target),
+        Ok(Some(_))
+    ));
+    for (old, new) in [
+        (
+            r#""node_id":"installation-seven""#,
+            r#""node_id":"installation-seven","unknown":true"#,
+        ),
+        (r#","node_id":"installation-seven""#, ""),
+        (r#""node_id":"installation-seven""#, r#""node_id":false"#),
+        (r#""id":7"#, r#""id":9007199254740992"#),
+        (
+            r#""node_id":"workflow-321""#,
+            r#""node_id":"workflow-321","unknown":true"#,
+        ),
+        (r#","node_id":"workflow-321""#, ""),
+        (r#""name":"Documentation evidence""#, r#""name":null"#),
+        (r#""id":321"#, r#""id":9007199254740992"#),
+    ] {
+        assert_eq!(body.matches(old).count(), 1, "{old}");
+        let changed = body.replacen(old, new, 1);
+        assert!(
+            matches!(
+                authenticate_target(&completion_source, changed.as_bytes(), &target),
+                Err(ProviderError::Authentication)
+            ),
+            "accepted {new}"
+        );
+    }
+    let body = std::str::from_utf8(BODY).unwrap();
+    for (old, new) in [
+        (
+            r#""node_id":"installation-seven""#,
+            r#""node_id":"installation-seven","unknown":true"#,
+        ),
+        (r#","node_id":"installation-seven""#, ""),
+        (r#""id":7"#, r#""id":9007199254740992"#),
+    ] {
+        assert_eq!(body.matches(old).count(), 1, "{old}");
+        let changed = body.replacen(old, new, 1);
+        assert!(
+            matches!(
+                authenticate_target(&source(), changed.as_bytes(), &target),
+                Err(ProviderError::Authentication)
+            ),
+            "accepted {new}"
+        );
+    }
 }
 
 #[test]
@@ -429,7 +489,7 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
     let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     for action in ["created", "completed"] {
         let body = format!(
-            r#"{{"action":"{action}","check_run":{{"id":89721586894}},"installation":{{"id":7}}}}"#
+            r#"{{"action":"{action}","check_run":{{"id":89721586894}},"installation":{{"id":7,"node_id":"installation-seven"}}}}"#
         );
         assert_eq!(
             authenticate_target(&source, body.as_bytes(), &main),
@@ -438,7 +498,7 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
     }
 
     let check_suite =
-        br#"{"action":"completed","check_suite":{"id":9321},"installation":{"id":7}}"#;
+        br#"{"action":"completed","check_suite":{"id":9321},"installation":{"id":7,"node_id":"installation-seven"}}"#;
     assert_eq!(authenticate_target(&source, check_suite, &main), Ok(None));
 
     let issue = br#"{
@@ -450,7 +510,7 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
         "full_name":"HardMax71/widget",
         "owner":{"login":"HardMax71"}
       },
-      "installation":{"id":7}
+      "installation":{"id":7,"node_id":"installation-seven"}
     }"#;
     assert_eq!(authenticate_target(&source, issue, &main), Ok(None));
 
@@ -565,7 +625,7 @@ fn rejects_malformed_or_internally_inconsistent_signed_payloads() {
         ),
         replaced_once(BODY, r#""ref":"topic""#, r#""ref":"bad ref""#),
         replaced_once(BODY, r#""ref":"main""#, r#""ref":"bad..ref""#),
-        br#"{"installation":{"id":7}}"#.to_vec(),
+        br#"{"installation":{"id":7,"node_id":"installation-seven"}}"#.to_vec(),
     ];
     for body in cases {
         let adapter = adapter(FakeApi::new(dummy_snapshot()));
@@ -835,11 +895,19 @@ fn workflow_payload() -> serde_json::Value {
     };
     json!({
         "action": "completed",
-        "installation": {"id": 7},
+        "installation": {"id": 7, "node_id": "installation-seven"},
         "repository": repository,
         "workflow": {
             "id": 321,
-            "path": ".github/workflows/docs-evidence.yml"
+            "path": ".github/workflows/docs-evidence.yml",
+            "node_id": "workflow-321",
+            "name": "Documentation evidence",
+            "state": "active",
+            "created_at": "2020-10-02T12:42:30.000Z",
+            "updated_at": "2020-10-03T19:24:48.000Z",
+            "url": "https://api.github.com/repos/HardMax71/widget/actions/workflows/321",
+            "html_url": "https://github.com/HardMax71/widget/blob/main/.github/workflows/docs-evidence.yml",
+            "badge_url": "https://github.com/HardMax71/widget/workflows/Documentation%20evidence/badge.svg"
         },
         "workflow_run": {
             "id": 9001,

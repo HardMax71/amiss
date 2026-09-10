@@ -27,7 +27,7 @@ pub(super) const CHECK_RUN_BODY: &[u8] = br#"{
     "app":{"id":4392947},
     "pull_requests":[]
   },
-  "installation":{"id":7},
+  "installation":{"id":7,"node_id":"installation-seven"},
   "repository":{
     "id":101,
     "name":"widget",
@@ -51,7 +51,7 @@ impl SignedEvent {
     pub(super) fn for_target(candidate: &Oid, target: &str, secret: &[u8]) -> Self {
         let body = serde_json::to_vec(&json!({
             "action": "synchronize",
-            "installation": { "id": INSTALLATION_ID },
+            "installation": { "id": INSTALLATION_ID, "node_id": "installation-seven" },
             "repository": {
                 "id": REPOSITORY_ID,
                 "name": "widget",

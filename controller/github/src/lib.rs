@@ -10,6 +10,7 @@ pub mod owner;
 pub mod pull;
 pub mod reference;
 pub mod repository;
+pub mod webhook;
 pub mod workflow;
 mod workflow_artifact;
 
@@ -24,8 +25,8 @@ use amiss_controller::{
 };
 use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
-use serde::Deserialize;
 
+use crate::webhook::{GitHubPayload, Repository, WorkflowRun};
 use crate::workflow::WorkflowPullRequest;
 
 pub use acquisition::{
@@ -614,92 +615,4 @@ fn parse_change_id(raw: &str) -> Option<(u64, u64, u64)> {
 
 fn github_ref(branch: &str) -> Option<BranchRef> {
     BranchRef::new(format!("refs/heads/{branch}"))
-}
-
-#[derive(Deserialize)]
-struct GitHubPayload {
-    action: Option<String>,
-    changes: Option<PullRequestChanges>,
-    installation: Option<Installation>,
-    repository: Option<Repository>,
-    number: Option<u64>,
-    pull_request: Option<PullRequest>,
-    workflow: Option<Workflow>,
-    workflow_run: Option<WorkflowRun>,
-}
-
-#[derive(Deserialize)]
-struct PullRequestChanges {
-    base: Option<BaseChange>,
-}
-
-#[derive(Deserialize)]
-struct BaseChange {
-    #[serde(rename = "ref")]
-    reference: PreviousReference,
-}
-
-#[derive(Deserialize)]
-struct PreviousReference {
-    from: String,
-}
-
-#[derive(Deserialize)]
-struct Installation {
-    id: u64,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq)]
-struct Repository {
-    id: u64,
-    name: String,
-    full_name: String,
-    owner: Owner,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq)]
-struct Owner {
-    login: String,
-}
-
-#[derive(Deserialize)]
-struct PullRequest {
-    id: u64,
-    number: u64,
-    head: Head,
-    base: Base,
-}
-
-#[derive(Deserialize)]
-struct Head {
-    sha: Oid,
-    #[serde(rename = "ref")]
-    branch: String,
-}
-
-#[derive(Deserialize)]
-struct Base {
-    #[serde(rename = "ref")]
-    branch: String,
-    repo: Repository,
-}
-
-#[derive(Deserialize)]
-struct Workflow {
-    id: u64,
-    path: String,
-}
-
-#[derive(Deserialize)]
-struct WorkflowRun {
-    id: u64,
-    event: String,
-    status: String,
-    conclusion: Option<String>,
-    workflow_id: u64,
-    run_attempt: u64,
-    head_sha: Oid,
-    repository: Repository,
-    head_repository: Repository,
-    pull_requests: Vec<WorkflowPullRequest>,
 }

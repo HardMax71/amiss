@@ -42,6 +42,9 @@ mod workflow;
 #[path = "json_contracts/webhook_refs.rs"]
 mod webhook_refs;
 
+#[path = "json_contracts/webhook_metadata.rs"]
+mod webhook_metadata;
+
 #[test]
 fn reference_captures_share_the_complete_object_without_losing_fields() {
     let input = include_str!("fixtures/git-reference.json");

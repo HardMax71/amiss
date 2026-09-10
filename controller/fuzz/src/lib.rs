@@ -109,7 +109,7 @@ pub fn provider_webhooks(data: &[u8]) {
         let body = json!({
             "action": "opened",
             "changes": null,
-            "installation": {"id": 22},
+            "installation": {"id": 22, "node_id": "installation-twenty-two"},
             "repository": repository,
             "number": 42,
             "pull_request": {

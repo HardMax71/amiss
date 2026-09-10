@@ -112,3 +112,9 @@ Its values and members are unchanged; the projection is pretty-printed with a
 final newline. This is a public example, not a new live webhook capture or a
 positive full-envelope authentication fixture. The existing workflow-run.json
 separately supplies the real REST counterpart.
+
+webhook-workflow.json projects the unchanged workflow member from the same
+published completion example. webhook-installation.json projects installation
+from [Octokit's ready-for-review example](https://github.com/octokit/webhooks/blob/7dd7fa56498a827a08b71919fae89428f5e8e283/payload-examples/api.github.com/pull_request/ready_for_review.with-installation.payload.json).
+Both retain every member and value, pretty-printed with one trailing newline.
+They are published examples, not newly captured live deliveries.
