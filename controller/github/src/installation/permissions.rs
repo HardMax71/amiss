@@ -9,8 +9,11 @@ use strum::{Display, EnumString};
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct AppPermissions {
+#[serde(
+    deny_unknown_fields,
+    bound(deserialize = "Plan: Deserialize<'de>, Workflows: Deserialize<'de>")
+)]
+pub struct AppPermissions<Plan = ReadOnly, Workflows = WriteOnly> {
     pub actions: Option<ReadWrite>,
     pub administration: Option<ReadWrite>,
     pub artifact_metadata: Option<ReadWrite>,
@@ -46,7 +49,7 @@ pub struct AppPermissions {
     pub organization_packages: Option<ReadWrite>,
     pub organization_personal_access_token_requests: Option<ReadWrite>,
     pub organization_personal_access_tokens: Option<ReadWrite>,
-    pub organization_plan: Option<ReadOnly>,
+    pub organization_plan: Option<Plan>,
     pub organization_projects: Option<ReadWriteAdmin>,
     pub organization_secrets: Option<ReadWrite>,
     pub organization_self_hosted_runners: Option<ReadWrite>,
@@ -65,7 +68,7 @@ pub struct AppPermissions {
     pub starring: Option<ReadWrite>,
     pub statuses: Option<ReadWrite>,
     pub vulnerability_alerts: Option<ReadWrite>,
-    pub workflows: Option<WriteOnly>,
+    pub workflows: Option<Workflows>,
 }
 
 #[derive(
@@ -88,17 +91,37 @@ pub enum ReadWriteAdmin {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "snake_case")]
 pub enum ReadOnly {
+    #[default]
     Read,
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 #[strum(serialize_all = "snake_case")]
 pub enum WriteOnly {
+    #[default]
     Write,
 }

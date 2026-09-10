@@ -36,6 +36,10 @@ pub const GITHUB_WEBHOOK_PULL: &[u8] = include_bytes!("../data/github-webhook-pu
 /// Unchanged submitted-review event from Octokit's published webhook examples.
 pub const GITHUB_WEBHOOK_REVIEW: &[u8] = include_bytes!("../data/github-webhook-review.json");
 
+/// Complete published check-suite event, including app permissions and PR references.
+pub const GITHUB_WEBHOOK_CHECK_SUITE: &[u8] =
+    include_bytes!("../data/github-webhook-check-suite.json");
+
 /// Complete PR member shared by the published review and review-thread examples.
 pub const GITHUB_WEBHOOK_REVIEW_PULL: &[u8] =
     include_bytes!("../data/github-webhook-review-pull.json");

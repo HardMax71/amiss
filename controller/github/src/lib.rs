@@ -270,22 +270,22 @@ impl PullRequestFacts {
 
         let event: GitHubEvent = serde_json::from_slice(body).map_err(|_defect| Authentication)?;
         let payload = match event {
-            GitHubEvent::ReviewThread(_)
+            GitHubEvent::CheckSuite(_)
+            | GitHubEvent::ReviewThread(_)
             | GitHubEvent::Review(_)
             | GitHubEvent::ReviewComment(_) => return Ok(None),
             GitHubEvent::PullRequest(payload) => {
                 if payload.review.is_some()
                     || payload.thread.is_some()
+                    || payload.check_suite.is_some()
                     || matches!(payload.comment, Some(Comment::Review(_)))
+                    || (payload.pull_request.is_some() && payload.comment.is_some())
                 {
                     return Err(Authentication);
                 }
                 let Some(pull_request) = payload.pull_request.as_ref() else {
                     return Ok(None);
                 };
-                if payload.comment.is_some() {
-                    return Err(Authentication);
-                }
                 if workflow_completion.is_some() || !supported_action(&payload) {
                     return Ok(None);
                 }
@@ -313,16 +313,15 @@ impl PullRequestFacts {
             GitHubEvent::Synchronize(payload) => {
                 if payload.review.is_some()
                     || payload.thread.is_some()
+                    || payload.check_suite.is_some()
                     || matches!(payload.comment, Some(Comment::Review(_)))
+                    || (payload.pull_request.is_some() && payload.comment.is_some())
                 {
                     return Err(Authentication);
                 }
                 let Some(pull) = payload.pull_request.as_ref() else {
                     return Ok(None);
                 };
-                if payload.comment.is_some() {
-                    return Err(Authentication);
-                }
                 if workflow_completion.is_some() || payload.action.is_none() {
                     return Ok(None);
                 }
@@ -350,6 +349,7 @@ impl PullRequestFacts {
         };
         if payload.review.is_some()
             || payload.thread.is_some()
+            || payload.check_suite.is_some()
             || matches!(payload.comment, Some(Comment::Review(_)))
             || (payload.pull_request.is_some()
                 && (payload.comment.is_some()

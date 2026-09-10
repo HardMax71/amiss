@@ -3,6 +3,7 @@
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
 
+mod check_suites;
 mod review_comments;
 mod review_threads;
 mod reviews;
@@ -72,6 +73,7 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
         review: None,
         comment: None,
         thread: None,
+        check_suite: None,
         workflow: None,
         workflow_run: None,
     })
@@ -795,8 +797,7 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
         );
     }
 
-    let check_suite =
-        br#"{"action":"completed","check_suite":{"id":9321},"installation":{"id":7,"node_id":"installation-seven"}}"#;
+    let check_suite = amiss_fixtures::GITHUB_WEBHOOK_CHECK_SUITE;
     assert_eq!(authenticate_target(&source, check_suite, &main), Ok(None));
 
     let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
@@ -826,12 +827,15 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
 fn malformed_supported_delivery_is_not_no_work() {
     let source = source();
     let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let malformed = br#"{"action":"opened","pull_request":{}}"#;
-
-    assert_eq!(
-        authenticate_target(&source, malformed, &main),
-        Err(ProviderError::Authentication)
-    );
+    for malformed in [
+        br#"{"action":"opened","pull_request":{}}"#.as_slice(),
+        br#"{"action":"completed","check_suite":{"id":9321},"installation":{"id":7,"node_id":"installation-seven"}}"#.as_slice(),
+    ] {
+        assert_eq!(
+            authenticate_target(&source, malformed, &main),
+            Err(ProviderError::Authentication)
+        );
+    }
 }
 
 #[test]
@@ -1436,6 +1440,7 @@ fn workflow_payload() -> GitHubPayload {
         review: None,
         comment: None,
         thread: None,
+        check_suite: None,
         workflow: Some(Workflow {
             id: 321,
             node_id: "workflow-321".to_owned(),

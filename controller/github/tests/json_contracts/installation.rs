@@ -238,10 +238,8 @@ fn installation_permissions_only_accept_their_declared_levels() {
             assert!(amiss_wire::read_json::<AppPermissions>(input.as_bytes(), u64::MAX).is_err());
         }
     }
-    assert_eq!(
-        serde_json::to_string(&AppPermissions::default()).unwrap(),
-        "{}"
-    );
+    let empty: AppPermissions = AppPermissions::default();
+    assert_eq!(serde_json::to_string(&empty).unwrap(), "{}");
 }
 
 #[test]

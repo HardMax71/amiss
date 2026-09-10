@@ -6,12 +6,14 @@ use super::comment::ReviewCommentEvent;
 
 use super::pull::request::{PullRequestWebhook, SynchronizePullRequest};
 use super::review::ReviewEvent;
+use super::suite::CheckSuiteEvent;
 use super::thread::ReviewThreadEvent;
 use super::{GitHubPayload, PullRequest};
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum GitHubEvent {
+    CheckSuite(Box<CheckSuiteEvent>),
     ReviewThread(Box<ReviewThreadEvent>),
     ReviewComment(Box<ReviewCommentEvent>),
     Review(Box<ReviewEvent>),
