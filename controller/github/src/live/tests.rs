@@ -20,10 +20,11 @@ use amiss_wire::report::{Disposition, FindingKind};
 use crate::GitHubPullRequest;
 use crate::check::{CheckRunApp, CheckRunConclusion, CheckRunOutputRecord, CheckRunStatus};
 use crate::owner::OwnerRecord;
+use crate::pull::{PullRefRecord, State};
 
 use super::model::{
-    CheckRunRecord, CommitRecord, CreateCheckRun, PullRefRecord, PullRepositoryRecord,
-    PullRequestRecord, RefreshData, RepositoryRecord,
+    CheckRunRecord, CommitRecord, CreateCheckRun, PullRepositoryRecord, PullRequestRecord,
+    RefreshData, RepositoryRecord,
 };
 use super::publication::{CheckRunDecision, publication_decision, validate_created};
 use super::rest::{GitHubRest, OperationDeadline};
@@ -225,23 +226,19 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
         let snapshot = super::refresh::snapshot(&fixture.config, fixture.request(), &data).unwrap();
         assert_eq!(snapshot.state, state);
     }
-
-    let mut unknown_state = fixture.data.clone();
-    unknown_state.pull_request.state = "unknown".to_owned();
-    unknown_state.rules.clear();
-    assert_eq!(
-        super::refresh::snapshot(&fixture.config, fixture.request(), &unknown_state),
-        Err(ProviderError::InvalidResponse)
-    );
 }
 
 #[test]
 fn closed_and_provider_revocation_are_distinct() {
     let mut fixture = Fixture::new();
-    fixture.data.pull_request.state = "closed".to_owned();
-    let closed =
-        super::refresh::snapshot(&fixture.config, fixture.request(), &fixture.data).unwrap();
-    assert_eq!(closed.state, ChangeState::Closed);
+    fixture.data.pull_request.state = State::Closed;
+    fixture.data.gate.parents.clear();
+    for mergeable in [None, Some(false), Some(true)] {
+        fixture.data.pull_request.mergeable = mergeable;
+        let closed =
+            super::refresh::snapshot(&fixture.config, fixture.request(), &fixture.data).unwrap();
+        assert_eq!(closed.state, ChangeState::Closed);
+    }
 
     let client = Client {
         config: fixture.config.clone(),
@@ -981,12 +978,13 @@ impl GitHubRest for FakeRest {
 }
 
 fn refresh_data(candidate: &Oid) -> RefreshData {
-    let captured: PullRepositoryRecord = amiss_wire::read_json(
-        include_bytes!("../../tests/fixtures/pull-repository.json"),
+    let captured: PullRequestRecord = amiss_wire::read_json(
+        include_bytes!("../../tests/fixtures/pull-request.json"),
         u64::MAX,
     )
     .unwrap();
-    let owner = captured.owner.clone();
+    let repository = captured.base.repo.clone().unwrap();
+    let owner = repository.owner.clone();
     let base_repository = PullRepositoryRecord {
         id: 101,
         name: "widget".to_owned(),
@@ -995,7 +993,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             login: "Acme".to_owned(),
             ..owner.clone()
         },
-        ..captured.clone()
+        ..repository.clone()
     };
     RefreshData {
         repository: RepositoryRecord {
@@ -1013,7 +1011,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
         pull_request: PullRequestRecord {
             id: 4_201,
             number: 42,
-            state: "open".to_owned(),
+            state: State::Open,
             mergeable: Some(true),
             merge_commit_sha: Some(oid('e')),
             head: PullRefRecord {
@@ -1032,7 +1030,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
                         login: "Contributor".to_owned(),
                         ..owner
                     },
-                    ..captured
+                    ..repository
                 }),
             },
             base: PullRefRecord {
@@ -1042,6 +1040,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
                 user: base_repository.owner.clone(),
                 repo: Some(base_repository),
             },
+            ..captured
         },
         target: CommitRecord {
             sha: oid('a'),
@@ -1283,7 +1282,7 @@ fn a_publication_target_is_current_only_in_every_field() {
     );
 
     let mut closed_absent = authoritative.clone();
-    closed_absent.state = "closed".to_owned();
+    closed_absent.state = State::Closed;
     closed_absent.head.repo = None;
     assert_eq!(
         current(&closed_absent),

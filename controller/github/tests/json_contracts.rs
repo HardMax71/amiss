@@ -24,6 +24,9 @@ mod pull_repository;
 #[path = "json_contracts/pull_ref.rs"]
 mod pull_ref;
 
+#[path = "json_contracts/pull_request.rs"]
+mod pull_request;
+
 #[path = "json_contracts/repository.rs"]
 mod repository;
 

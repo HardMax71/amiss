@@ -79,3 +79,9 @@ captured on 2026-09-10 with API version 2022-11-28. It is a collection of respon
 members, not a server listing response. The closed Rust PR has a null head
 repository despite the schema's nonnullable reference. No nonempty clone token
 is present, and no pull request or repository was changed.
+
+The pull-request fixtures retain those same complete open and closed GET responses,
+including the closed PR's real label. Milestone, auto-merge, requested-team and
+stack instances in contract tests are synthetic schema-backed cases, not captured
+provider behavior. Their absence from these responses does not make them optional
+where the API declares otherwise. No token was created or nonempty clone token retained.

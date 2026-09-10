@@ -4,6 +4,7 @@ use amiss_controller::{
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::GitHubPullRequest;
+use crate::pull::State;
 
 use super::Config;
 use super::model::{PullRepositoryRecord, PullRequestRecord, RefreshData, RepositoryRecord};
@@ -68,12 +69,7 @@ pub(super) fn snapshot(
     {
         return Err(ProviderError::InvalidResponse);
     }
-    let open = match data.pull_request.state.as_str() {
-        "open" => true,
-        "closed" => false,
-        _ => return Err(ProviderError::InvalidResponse),
-    };
-    let gate_ready = gate_ready(data, open, base, current_head, &data.current_head.tree)?;
+    let gate_ready = gate_ready(data, base, current_head, &data.current_head.tree)?;
 
     let refs = RunRefs {
         forge: ForgeDialect::Github,
@@ -99,7 +95,7 @@ pub(super) fn snapshot(
         ChangeState::Superseded
     } else if !authorized {
         ChangeState::AuthorizationRevoked
-    } else if !open {
+    } else if data.pull_request.state == State::Closed {
         ChangeState::Closed
     } else if gate_ready {
         ChangeState::Active
@@ -121,10 +117,6 @@ pub(super) fn publication_target_is_current(
 ) -> Result<bool, ProviderError> {
     validate_request(config, pull_request)?;
     validate_pull_request(config, pull_request, authoritative)?;
-    match authoritative.state.as_str() {
-        "open" | "closed" => {}
-        _ => return Err(ProviderError::InvalidResponse),
-    }
     if [&authoritative.head.sha, &authoritative.base.sha]
         .into_iter()
         .chain(authoritative.merge_commit_sha.as_ref())
@@ -141,7 +133,6 @@ pub(super) fn publication_target_is_current(
 
 fn gate_ready(
     data: &RefreshData,
-    open: bool,
     base: &Oid,
     candidate: &Oid,
     candidate_tree: &Oid,
@@ -149,7 +140,7 @@ fn gate_ready(
     if data.pull_request.merge_commit_sha.as_ref() != Some(&data.gate.sha) {
         return Err(ProviderError::InvalidResponse);
     }
-    if !open {
+    if data.pull_request.state == State::Closed {
         return Ok(false);
     }
     match data.pull_request.mergeable {
@@ -210,7 +201,7 @@ fn validate_pull_request(
             pull_repository_identity(config, repository)?;
             Ok(())
         }
-        None if authoritative.state == "closed" => Ok(()),
+        None if authoritative.state == State::Closed => Ok(()),
         None => Err(ProviderError::InvalidResponse),
     }
 }

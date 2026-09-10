@@ -1,26 +1,15 @@
 use amiss_wire::model::Oid;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::check::{CheckRunConclusion, CheckRunStatus};
 pub(super) use crate::check::{CheckRunPage, CheckRunRecord};
 pub(super) use crate::commit::GitCommitRecord;
-pub(super) use crate::pull::PullRefRecord;
+pub(super) use crate::pull::PullRequestRecord;
 pub(super) use crate::reference::RefRecord;
 pub(super) use crate::repository::RepositoryRecord;
 pub(super) use crate::repository::pull::PullRepositoryRecord;
 
 use super::rules::BranchRule;
-
-#[derive(Clone, Deserialize)]
-pub(super) struct PullRequestRecord {
-    pub id: u64,
-    pub number: u64,
-    pub state: String,
-    pub mergeable: Option<bool>,
-    pub merge_commit_sha: Option<Oid>,
-    pub head: PullRefRecord,
-    pub base: PullRefRecord,
-}
 
 #[derive(Clone)]
 pub(super) struct CommitRecord {
