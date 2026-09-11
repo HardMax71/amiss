@@ -1,8 +1,4 @@
-use amiss_controller_gitea::{
-    content::{ContentRecord, ContentResponse},
-    repository::RepositoryRecord,
-    user::UserRecord,
-};
+use amiss_controller_gitea::{repository::RepositoryRecord, user::UserRecord};
 use amiss_wire::assessment::Nullable;
 use js_int::{MAX_SAFE_INT, MAX_SAFE_UINT, UInt};
 
@@ -138,36 +134,5 @@ fn nested_repository_counts_and_optional_branches_are_bounded()
     }
     repository.size = MAX_SAFE_UINT + 1;
     assert!(serde_json::to_vec(&repository).is_err());
-    Ok(())
-}
-
-#[test]
-fn file_sizes_are_bounded_through_both_content_shapes() -> Result<(), Box<dyn std::error::Error>> {
-    for input in [
-        include_bytes!("../fixtures/gitea-file.json").as_slice(),
-        include_bytes!("../fixtures/forgejo-file.json").as_slice(),
-    ] {
-        let mut file: ContentRecord = serde_json::from_slice(input)?;
-        file.size = MAX_SAFE_UINT;
-        file.lfs_size = Some(UInt::MAX);
-        assert_integer_contract(
-            &ContentResponse::Entry(Box::new(file.clone())),
-            MAX_SAFE_INT,
-        )?;
-        assert_integer_contract(
-            &ContentResponse::Directory(vec![file.clone()]),
-            MAX_SAFE_INT,
-        )?;
-        for size in [None, Some(UInt::MIN), Some(UInt::MAX)] {
-            file.lfs_size = size;
-            let encoded = serde_json::to_vec(&file)?;
-            assert_eq!(
-                amiss_wire::read_json::<ContentRecord>(&encoded, u64::MAX)?,
-                file
-            );
-        }
-        file.size = MAX_SAFE_UINT + 1;
-        assert!(serde_json::to_vec(&file).is_err());
-    }
     Ok(())
 }

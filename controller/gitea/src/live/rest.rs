@@ -1,16 +1,18 @@
 mod tests;
 
 pub(super) use amiss_controller::OperationDeadline;
-use amiss_controller::{ForgeFact, ForgeNegative, ProviderError};
+use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, send_request};
 pub(super) use amiss_controller::{
     ForgePresence as Presence, ForgeRefFamily as RefFamily, ForgeVisibility as Visibility,
 };
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
+use reqwest::blocking::Response;
 use secrecy::SecretString;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use crate::GiteaPullRequest;
-use crate::content::ContentResponse;
 
 use super::model::{
     BranchProtectionRecord, BranchRecord, CommitRecord, CommitStatusRecord, CreateCommitStatus,
@@ -21,13 +23,21 @@ use super::{Config, GiteaClientError, GiteaTimeouts};
 
 mod transport;
 
-use self::transport::Transport;
+use self::transport::{Transport, classified, decode_body, map_error};
 
 const PAGE_SIZE: usize = 50;
 const MAX_PAGES: u32 = 20;
 // The paginated siblings trust at most ten hundred-row pages; one
 // unpaginated answer claiming more than that is not trusted either.
 const REF_CEILING: usize = 1000;
+
+#[derive(Serialize)]
+struct PageQuery {
+    page: u32,
+    limit: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sort: Option<&'static str>,
+}
 
 /// The read-only verification surface, apart from refresh and publication
 /// on purpose: a verifier holding this can state facts and nothing else.
@@ -131,26 +141,25 @@ impl HttpRest {
         })
     }
 
-    fn reviews(
+    fn pages<T: DeserializeOwned>(
         &self,
-        pull_request: GiteaPullRequest<'_>,
+        route: &str,
+        sort: Option<&'static str>,
         deadline: OperationDeadline,
-    ) -> Result<Vec<ReviewRecord>, ProviderError> {
-        let prefix = repository_route(pull_request.repository_owner, pull_request.repository_name);
-        let mut reviews = Vec::new();
+    ) -> Result<Vec<T>, ProviderError> {
+        let url = self.transport.url(route)?;
+        let mut records = Vec::new();
         for page in 1..=MAX_PAGES {
-            let batch: Vec<ReviewRecord> = self.transport.get(
-                &format!(
-                    "{prefix}/pulls/{}/reviews?page={page}&limit={PAGE_SIZE}",
-                    pull_request.number
-                ),
-                deadline,
-                |bytes| amiss_wire::read_json(bytes, u64::MAX),
-            )?;
+            let request = self.transport.client.get(url.clone()).query(&PageQuery {
+                page,
+                limit: PAGE_SIZE,
+                sort,
+            });
+            let batch: Vec<T> = decode_body(send_request(request, deadline, map_error)?)?;
             let complete = page_complete(batch.len())?;
-            reviews.extend(batch);
+            records.extend(batch);
             if complete {
-                return Ok(reviews);
+                return Ok(records);
             }
         }
         Err(ProviderError::InvalidResponse)
@@ -163,9 +172,7 @@ impl GiteaRest for HttpRest {
     }
 
     fn current_user(&self, deadline: OperationDeadline) -> Result<UserRecord, ProviderError> {
-        self.transport.get("/user", deadline, |bytes| {
-            amiss_wire::read_json(bytes, u64::MAX)
-        })
+        self.transport.get("/user", deadline, decode_body)
     }
 
     fn relation_head(
@@ -180,16 +187,14 @@ impl GiteaRest for HttpRest {
             .filter(|branch| !branch.is_empty())
             .ok_or(ProviderError::InvalidResponse)?;
         let prefix = repository_route(repository.owner(), repository.name());
-        let repository = self.transport.get(&prefix, deadline, |bytes| {
-            amiss_wire::read_json(bytes, u64::MAX)
-        })?;
+        let repository = self.transport.get(&prefix, deadline, decode_body)?;
         let commit = self.transport.get(
             &format!(
                 "{prefix}/git/commits/{}?stat=false&verification=false&files=false",
                 path_segment(branch)
             ),
             deadline,
-            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+            decode_body,
         )?;
         Ok((repository, commit))
     }
@@ -202,13 +207,11 @@ impl GiteaRest for HttpRest {
     ) -> Result<RefreshData, ProviderError> {
         let prefix = repository_route(pull_request.repository_owner, pull_request.repository_name);
         let reviewer = self.current_user(deadline)?;
-        let repository: RepositoryRecord = self.transport.get(&prefix, deadline, |bytes| {
-            amiss_wire::read_json(bytes, u64::MAX)
-        })?;
+        let repository: RepositoryRecord = self.transport.get(&prefix, deadline, decode_body)?;
         let authoritative: PullRequestRecord = self.transport.get(
             &format!("{prefix}/pulls/{}", pull_request.number),
             deadline,
-            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+            decode_body,
         )?;
         let base_sha = authoritative
             .base
@@ -226,7 +229,7 @@ impl GiteaRest for HttpRest {
                 path_segment(&authoritative.base.branch)
             ),
             deadline,
-            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+            decode_body,
         )?;
         let protection: BranchProtectionRecord = self.transport.get(
             &format!(
@@ -234,12 +237,12 @@ impl GiteaRest for HttpRest {
                 protection_rule_path(&target_branch)?
             ),
             deadline,
-            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+            decode_body,
         )?;
         let target: CommitRecord = self.transport.get(
             &format!("{prefix}/git/commits/{}", path_segment(base_sha.as_str())),
             deadline,
-            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+            decode_body,
         )?;
         let candidate: CommitRecord = self.transport.get(
             &format!(
@@ -247,7 +250,7 @@ impl GiteaRest for HttpRest {
                 path_segment(pull_request.candidate_commit.as_str())
             ),
             deadline,
-            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+            decode_body,
         )?;
         let current_head = if *head_sha == candidate.sha {
             candidate.clone()
@@ -255,10 +258,14 @@ impl GiteaRest for HttpRest {
             self.transport.get(
                 &format!("{prefix}/git/commits/{}", path_segment(head_sha.as_str())),
                 deadline,
-                |bytes| amiss_wire::read_json(bytes, u64::MAX),
+                decode_body,
             )?
         };
-        let reviews = self.reviews(pull_request, deadline)?;
+        let reviews = self.pages(
+            &format!("{prefix}/pulls/{}/reviews", pull_request.number),
+            None,
+            deadline,
+        )?;
         Ok(RefreshData {
             reviewer,
             repository,
@@ -284,9 +291,7 @@ impl GiteaRest for HttpRest {
             pull_request.number
         ))?;
         let request = self.transport.client.post(url).json(review);
-        self.transport.execute(request, deadline, |bytes| {
-            amiss_wire::read_json(bytes, u64::MAX)
-        })
+        decode_body(send_request(request, deadline, map_error)?)
     }
 
     fn commit_statuses(
@@ -296,23 +301,11 @@ impl GiteaRest for HttpRest {
         deadline: OperationDeadline,
     ) -> Result<Vec<CommitStatusRecord>, ProviderError> {
         let prefix = repository_route(repository.owner(), repository.name());
-        let mut statuses = Vec::new();
-        for page in 1..=MAX_PAGES {
-            let batch: Vec<CommitStatusRecord> = self.transport.get(
-                &format!(
-                    "{prefix}/statuses/{}?sort=highestindex&page={page}&limit={PAGE_SIZE}",
-                    path_segment(commit.as_str())
-                ),
-                deadline,
-                |bytes| amiss_wire::read_json(bytes, u64::MAX),
-            )?;
-            let complete = page_complete(batch.len())?;
-            statuses.extend(batch);
-            if complete {
-                return Ok(statuses);
-            }
-        }
-        Err(ProviderError::InvalidResponse)
+        self.pages(
+            &format!("{prefix}/statuses/{}", path_segment(commit.as_str())),
+            Some("highestindex"),
+            deadline,
+        )
     }
 
     fn create_commit_status(
@@ -328,9 +321,7 @@ impl GiteaRest for HttpRest {
             path_segment(commit.as_str())
         ))?;
         let request = self.transport.client.post(url).json(status);
-        self.transport.execute(request, deadline, |bytes| {
-            amiss_wire::read_json(bytes, u64::MAX)
-        })
+        decode_body(send_request(request, deadline, map_error)?)
     }
 }
 
@@ -348,17 +339,11 @@ impl GiteaVerification for HttpRest {
         deadline: OperationDeadline,
     ) -> Result<Visibility, ProviderError> {
         let route = format!("/repos/{}/{}", path_segment(owner), path_segment(name));
-        Ok(
-            match self
-                .transport
-                .get_fact::<RepositoryRecord, _>(&route, deadline, |bytes| {
-                    amiss_wire::read_json(bytes, u64::MAX)
-                })? {
-                Ok(_) => Visibility::Readable,
-                Err(ForgeNegative::Missing) => Visibility::Missing,
-                Err(ForgeNegative::Denied) => Visibility::Denied,
-            },
-        )
+        Ok(match self.transport.get(&route, deadline, classified)? {
+            Ok(_) => Visibility::Readable,
+            Err(ForgeNegative::Missing) => Visibility::Missing,
+            Err(ForgeNegative::Denied) => Visibility::Denied,
+        })
     }
 
     fn matching_refs(
@@ -376,13 +361,7 @@ impl GiteaVerification for HttpRest {
             family.as_ref(),
             path_segment(prefix),
         );
-        Ok(ref_listing(
-            self.transport
-                .get_fact::<Vec<RefRecord>, _>(&route, deadline, |bytes| {
-                    serde_json::from_slice(bytes)
-                })?,
-            family,
-        ))
+        ref_listing(self.transport.get(&route, deadline, classified)?, family)
     }
 
     fn content_presence(
@@ -401,17 +380,13 @@ impl GiteaVerification for HttpRest {
             encoded.join("/"),
             path_segment(reference),
         );
-        let fact = self
-            .transport
-            .get_fact::<ContentResponse, _>(&route, deadline, |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
-            })?;
+        let fact = self.transport.get(&route, deadline, classified)?;
         Ok(fact.map_or_else(
             |negative| match negative {
                 ForgeNegative::Missing => Presence::Absent,
                 ForgeNegative::Denied => Presence::Unknown,
             },
-            |_content| Presence::Present,
+            |_response| Presence::Present,
         ))
     }
 
@@ -428,11 +403,7 @@ impl GiteaVerification for HttpRest {
             path_segment(name),
             path_segment(revision),
         );
-        self.transport
-            .get_fact(&route, deadline, |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
-            })
-            .map(listed_commit)
+        listed_commit(self.transport.get(&route, deadline, classified)?)
     }
 }
 
@@ -442,28 +413,38 @@ impl GiteaVerification for HttpRest {
 /// Either way a truncated candidate set could become a false refutation
 /// downstream: no fact. Only a 2xx listing within the ceiling is one, and
 /// its empty array is the empty match set.
-fn ref_listing(fact: ForgeFact<Vec<RefRecord>>, family: RefFamily) -> Option<Vec<String>> {
+fn ref_listing(
+    fact: ForgeFact<Response>,
+    family: RefFamily,
+) -> Result<Option<Vec<String>>, ProviderError> {
+    let Ok(response) = fact else {
+        return Ok(None);
+    };
+    let records: Vec<RefRecord> = decode_body(response)?;
     let qualifier = format!("refs/{}/", family.as_ref());
-    match fact {
-        Ok(records) if records.len() <= REF_CEILING => Some(
-            records
-                .into_iter()
-                .filter_map(|record| record.reference.strip_prefix(&qualifier).map(str::to_owned))
-                .collect(),
-        ),
-        Ok(_) | Err(ForgeNegative::Missing | ForgeNegative::Denied) => None,
-    }
+    Ok((records.len() <= REF_CEILING).then(|| {
+        records
+            .into_iter()
+            .filter_map(|record| record.reference.strip_prefix(&qualifier).map(str::to_owned))
+            .collect()
+    }))
 }
 
 /// The commit list route answers 200 with an empty array for an empty
 /// repository, whatever the revision asked: only a listed commit is
 /// presence, and the empty page is no fact.
-fn listed_commit(fact: ForgeFact<Vec<CommitRecord>>) -> Presence {
+fn listed_commit(fact: ForgeFact<Response>) -> Result<Presence, ProviderError> {
     match fact {
-        Ok(commits) if commits.is_empty() => Presence::Unknown,
-        Ok(_) => Presence::Present,
-        Err(ForgeNegative::Missing) => Presence::Absent,
-        Err(ForgeNegative::Denied) => Presence::Unknown,
+        Ok(response) => {
+            let commits: Vec<CommitRecord> = decode_body(response)?;
+            Ok(if commits.is_empty() {
+                Presence::Unknown
+            } else {
+                Presence::Present
+            })
+        }
+        Err(ForgeNegative::Missing) => Ok(Presence::Absent),
+        Err(ForgeNegative::Denied) => Ok(Presence::Unknown),
     }
 }
 

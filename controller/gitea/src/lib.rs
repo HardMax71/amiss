@@ -3,7 +3,6 @@
 mod adapter;
 pub mod branch;
 pub mod commit;
-pub mod content;
 mod fetch_plan;
 mod identity;
 pub mod issue;

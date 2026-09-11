@@ -83,7 +83,7 @@ pub use orchestration::{
 pub use plans::{PlanError, PlanRegistry, PlanScope, ResolvedPlan, register_plan, resolve_plan};
 pub use provider::{
     AdapterRegistry, AuthenticatedDelivery, ForgeFact, ForgeNegative, GitObject, OperationDeadline,
-    ProviderAdapter, ProviderError, RegistryError, ResolvedCommit,
+    ProviderAdapter, ProviderError, RegistryError, ResolvedCommit, send_request,
 };
 pub use publication_audit::{
     PublicationAuditBundle, PublicationAuditDigests, validate_publication_audit,

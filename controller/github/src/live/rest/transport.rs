@@ -14,7 +14,9 @@ use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 use serde::Serialize;
 use url::Url;
 
-use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, decode_bounded_json};
+use amiss_controller::{
+    ForgeFact, ForgeNegative, ProviderError, decode_bounded_json, send_request,
+};
 
 use crate::installation::InstallationToken;
 
@@ -168,10 +170,11 @@ impl Transport {
         deadline: OperationDeadline,
     ) -> Result<Response, ProviderError> {
         let token = self.token(deadline)?;
-        github_headers(request, &token, ProviderError::AuthorizationRevoked)?
-            .timeout(deadline.remaining()?)
-            .send()
-            .map_err(|error| map_error(&error))
+        send_request(
+            github_headers(request, &token, ProviderError::AuthorizationRevoked)?,
+            deadline,
+            map_error,
+        )
     }
 
     fn token(&self, deadline: OperationDeadline) -> Result<SecretString, ProviderError> {

@@ -2,24 +2,26 @@ mod tests;
 
 use std::time::Duration;
 
-use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, decode_bounded_json};
+use amiss_controller::{
+    ForgeFact, ForgeNegative, ProviderError, decode_bounded_json, send_request,
+};
 use reqwest::StatusCode;
-use reqwest::blocking::{Client, RequestBuilder};
-use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
+use reqwest::blocking::{Client, Response};
+use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderMap, HeaderValue};
 use secrecy::{ExposeSecret as _, SecretString};
+use serde::de::DeserializeOwned;
 use url::Url;
 
 use super::super::{GiteaClientError, GiteaTimeouts};
 use super::OperationDeadline;
 
 const MAX_API_BASE_BYTES: usize = 2_048;
-const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;
+pub(super) const MAX_RESPONSE_BYTES: usize = 8 * 1_024 * 1_024;
 const GITEA_JSON: &str = "application/json";
 
 pub(super) struct Transport {
     pub(super) client: Client,
     api_base: String,
-    authorization: SecretString,
     operation_timeout: Duration,
 }
 
@@ -33,7 +35,17 @@ impl Transport {
         let api_base = validate_api_base(api_base, provider_instance)?;
         let authorization = SecretString::from(format!("token {}", token.expose_secret()));
         drop(token);
+        let mut token_header =
+            HeaderValue::from_str(authorization.expose_secret()).map_err(|_defect| {
+                GiteaClientError::Configuration("the token is not a valid HTTP header")
+            })?;
+        drop(authorization);
+        token_header.set_sensitive(true);
         let client = Client::builder()
+            .default_headers(HeaderMap::from_iter([
+                (ACCEPT, HeaderValue::from_static(GITEA_JSON)),
+                (AUTHORIZATION, token_header),
+            ]))
             .connect_timeout(timeouts.connect)
             .redirect(reqwest::redirect::Policy::none())
             .https_only(true)
@@ -42,7 +54,6 @@ impl Transport {
         Ok(Self {
             client,
             api_base,
-            authorization,
             operation_timeout: timeouts.operation,
         })
     }
@@ -51,67 +62,17 @@ impl Transport {
         OperationDeadline::after(self.operation_timeout)
     }
 
-    pub(super) fn get<T, E>(
+    pub(super) fn get<T>(
         &self,
         route: &str,
         deadline: OperationDeadline,
-        decode: impl FnOnce(&[u8]) -> Result<T, E>,
+        handle: impl FnOnce(Response) -> Result<T, ProviderError>,
     ) -> Result<T, ProviderError> {
-        self.execute(self.client.get(self.url(route)?), deadline, decode)
-    }
-
-    /// A verification GET whose negative answers are facts: the absence or
-    /// refusal of what the route names, distinct from a failed call.
-    pub(super) fn get_fact<T, E>(
-        &self,
-        route: &str,
-        deadline: OperationDeadline,
-        decode: impl FnOnce(&[u8]) -> Result<T, E>,
-    ) -> Result<ForgeFact<T>, ProviderError> {
-        let request = self.client.get(self.url(route)?);
-        let response = self
-            .authorized(request)?
-            .timeout(deadline.remaining()?)
-            .send()
-            .map_err(|error| map_error(&error))?;
-        let status = response.status();
-        match classified(status).ok_or_else(|| map_status(status))? {
-            Ok(()) => {
-                let declared = response.content_length();
-                decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, decode)
-                    .map(|(value, _length)| Ok(value))
-            }
-            Err(negative) => Ok(Err(negative)),
-        }
-    }
-
-    pub(super) fn execute<T, E>(
-        &self,
-        request: RequestBuilder,
-        deadline: OperationDeadline,
-        decode: impl FnOnce(&[u8]) -> Result<T, E>,
-    ) -> Result<T, ProviderError> {
-        let response = self
-            .authorized(request)?
-            .timeout(deadline.remaining()?)
-            .send()
-            .map_err(|error| map_error(&error))?;
-        let status = response.status();
-        if !status.is_success() {
-            return Err(map_status(status));
-        }
-        let declared = response.content_length();
-        decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, decode)
-            .map(|(value, _length)| value)
-    }
-
-    fn authorized(&self, request: RequestBuilder) -> Result<RequestBuilder, ProviderError> {
-        let mut authorization = HeaderValue::from_str(self.authorization.expose_secret())
-            .map_err(|_defect| ProviderError::Authentication)?;
-        authorization.set_sensitive(true);
-        Ok(request
-            .header(ACCEPT, GITEA_JSON)
-            .header(AUTHORIZATION, authorization))
+        handle(send_request(
+            self.client.get(self.url(route)?),
+            deadline,
+            map_error,
+        )?)
     }
 
     pub(super) fn url(&self, route: &str) -> Result<Url, ProviderError> {
@@ -121,6 +82,18 @@ impl Transport {
         Url::parse(&format!("{}{route}", self.api_base))
             .map_err(|_defect| ProviderError::InvalidResponse)
     }
+}
+
+pub(super) fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
+    let status = response.status();
+    if !status.is_success() {
+        return Err(map_status(status));
+    }
+    let declared = response.content_length();
+    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES, |bytes| {
+        serde_json::from_slice(bytes)
+    })
+    .map(|(value, _length)| value)
 }
 
 fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GiteaClientError> {
@@ -157,7 +130,7 @@ fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, Gitea
     Ok(canonical)
 }
 
-fn map_error(error: &reqwest::Error) -> ProviderError {
+pub(super) fn map_error(error: &reqwest::Error) -> ProviderError {
     if let Some(status) = error.status() {
         return map_status(status);
     }
@@ -171,12 +144,13 @@ fn map_error(error: &reqwest::Error) -> ProviderError {
 /// The verification statuses that are facts: 404 and 422 are the absence of
 /// what the route names, a 403 is a standing refusal since Gitea carries no
 /// rate-limit signal, and everything else classifies as a data call would.
-fn classified(status: StatusCode) -> Option<ForgeFact<()>> {
+pub(super) fn classified(response: Response) -> Result<ForgeFact<Response>, ProviderError> {
+    let status = response.status();
     match status.as_u16() {
-        200..300 => Some(Ok(())),
-        404 | 422 => Some(Err(ForgeNegative::Missing)),
-        403 => Some(Err(ForgeNegative::Denied)),
-        _ => None,
+        200..300 => Ok(Ok(response)),
+        404 | 422 => Ok(Err(ForgeNegative::Missing)),
+        403 => Ok(Err(ForgeNegative::Denied)),
+        _ => Err(map_status(status)),
     }
 }
 

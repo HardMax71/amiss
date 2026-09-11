@@ -14,7 +14,7 @@ amiss-wire = { path = "../../crates/amiss-wire" }
 json-serde.workspace = true
 js_int.workspace = true
 percent-encoding.workspace = true
-reqwest.workspace = true
+reqwest = { workspace = true, features = ["query"] }
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -28,6 +28,7 @@ amiss-controller-fixtures.workspace = true
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 hex.workspace = true
 hmac.workspace = true
+http = "1"
 sha2.workspace = true
 
 [lints]

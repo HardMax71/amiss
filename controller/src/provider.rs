@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use amiss_wire::model::{ObjectKind, Oid};
+use reqwest::blocking::{RequestBuilder, Response};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -53,6 +54,22 @@ pub type ForgeFact<T> = Result<T, ForgeNegative>;
 
 #[derive(Clone, Copy)]
 pub struct OperationDeadline(Instant);
+
+/// Sends a provider request within the remaining operation budget.
+///
+/// # Errors
+///
+/// Returns an expired deadline or the provider's classification of a transport failure.
+pub fn send_request(
+    request: RequestBuilder,
+    deadline: OperationDeadline,
+    classify: impl FnOnce(&reqwest::Error) -> ProviderError,
+) -> Result<Response, ProviderError> {
+    request
+        .timeout(deadline.remaining()?)
+        .send()
+        .map_err(|error| classify(&error))
+}
 
 impl OperationDeadline {
     /// Starts an operation budget from the current instant.

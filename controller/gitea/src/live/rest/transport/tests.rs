@@ -30,6 +30,25 @@ fn the_status_table_is_exact() {
 }
 
 #[test]
+fn native_client_configuration_rejects_invalid_tokens() {
+    let timeouts = GiteaTimeouts::new(Duration::from_secs(1), Duration::from_secs(3)).unwrap();
+    for invalid in ["token\r\nAccept: text/plain", "token\0suffix"] {
+        assert_eq!(
+            Transport::new(
+                "forge.example",
+                "https://forge.example/api/v1",
+                SecretString::from(invalid),
+                timeouts,
+            )
+            .err(),
+            Some(super::super::super::GiteaClientError::Configuration(
+                "the token is not a valid HTTP header"
+            ))
+        );
+    }
+}
+
+#[test]
 fn a_route_is_one_absolute_unrepeated_path() {
     let timeouts = GiteaTimeouts::new(Duration::from_secs(1), Duration::from_secs(3)).unwrap();
     let transport = Transport::new(
@@ -143,13 +162,53 @@ fn a_deadline_keeps_a_positive_remainder_or_refuses() {
 
 #[test]
 fn verification_statuses_classify_facts_apart_from_failures() {
-    let of = |code: u16| super::classified(StatusCode::from_u16(code).unwrap());
-    assert_eq!(of(200), Some(Ok(())));
-    assert_eq!(of(404), Some(Err(ForgeNegative::Missing)));
-    assert_eq!(of(422), Some(Err(ForgeNegative::Missing)));
-    assert_eq!(of(403), Some(Err(ForgeNegative::Denied)));
-    assert_eq!(of(429), None);
-    assert_eq!(of(500), None);
-    assert_eq!(of(401), None);
-    assert_eq!(of(302), None);
+    let of = |code: u16| {
+        let response = http::Response::builder()
+            .status(code)
+            .body("not JSON")
+            .unwrap();
+        super::classified(response.into()).map(|fact| fact.map(|_response| ()))
+    };
+    assert_eq!(of(200), Ok(Ok(())));
+    assert_eq!(of(404), Ok(Err(ForgeNegative::Missing)));
+    assert_eq!(of(422), Ok(Err(ForgeNegative::Missing)));
+    assert_eq!(of(403), Ok(Err(ForgeNegative::Denied)));
+    assert_eq!(of(429), Err(ProviderError::Unavailable));
+    assert_eq!(of(500), Err(ProviderError::Unavailable));
+    assert_eq!(of(401), Err(ProviderError::AuthorizationRevoked));
+    assert_eq!(of(302), Err(ProviderError::InvalidResponse));
+}
+
+#[test]
+fn data_responses_classify_http_errors_before_decoding() {
+    for code in [401, 403, 404, 408, 422, 429, 500, 503] {
+        for body in ["[]", "not JSON"] {
+            let response = http::Response::builder().status(code).body(body).unwrap();
+            assert_eq!(
+                super::decode_body::<Vec<crate::reference::RefRecord>>(response.into()),
+                Err(map_status(StatusCode::from_u16(code).unwrap()))
+            );
+        }
+    }
+}
+
+#[test]
+fn verification_status_does_not_require_or_decode_a_response_body() {
+    for body in [
+        include_bytes!("../../../../tests/fixtures/gitea-file.json").as_slice(),
+        include_bytes!("../../../../tests/fixtures/forgejo-file.json").as_slice(),
+        include_bytes!("../../../../tests/fixtures/gitea-directory.json").as_slice(),
+        include_bytes!("../../../../tests/fixtures/forgejo-directory.json").as_slice(),
+        b"not JSON",
+        b"",
+    ] {
+        let response = http::Response::builder()
+            .status(200)
+            .header(http::header::CONTENT_LENGTH, u64::MAX)
+            .body(body)
+            .unwrap();
+        assert!(super::classified(response.into()).unwrap().is_ok());
+    }
+    let response = http::Response::new(vec![b' '; MAX_RESPONSE_BYTES + 1]);
+    assert!(super::classified(response.into()).unwrap().is_ok());
 }
