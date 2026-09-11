@@ -67,6 +67,19 @@ fn exact_live_snapshot_accepts_gitea_and_forgejo() {
         assert_eq!(snapshot.run.trees.base, oid('c'));
         assert_eq!(snapshot.run.trees.candidate, oid('d'));
         assert_eq!(snapshot.gate_commit, oid('b'));
+        let changed = Fixture::mutated(namespace, |data| {
+            let minimal = serde_json::to_string(&data.pull_request).unwrap();
+            let metadata = minimal.replacen(
+                '{',
+                r#"{"title":false,"labels":42,"milestone":[],"review_comments":{},"extra":null,"#,
+                1,
+            );
+            data.pull_request = serde_json::from_str(&metadata).unwrap();
+        });
+        assert_eq!(
+            changed.client.refresh(changed.pull_request()).unwrap(),
+            snapshot
+        );
     }
 }
 

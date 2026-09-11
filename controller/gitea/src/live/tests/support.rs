@@ -30,10 +30,6 @@ pub(super) const GITEA_PROTECTION: &str =
 pub(super) const FORGEJO_PROTECTION: &str =
     include_str!("../../../tests/fixtures/forgejo-protection.json");
 
-static PULL: LazyLock<PullRequestRecord> = LazyLock::new(|| {
-    serde_json::from_slice(include_bytes!("../../../tests/fixtures/gitea-pull.json")).unwrap()
-});
-
 pub(super) static USER: LazyLock<UserRecord> = LazyLock::new(|| {
     serde_json::from_slice(include_bytes!("../../../tests/fixtures/gitea-user.json")).unwrap()
 });
@@ -402,20 +398,17 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
             merged: false,
             merge_base: Some(oid('a')),
             head: PullRefRecord {
-                label: "topic".to_owned(),
                 sha: Some(oid('b')),
                 branch: "topic".to_owned(),
                 repo_id: 202,
                 repo: Some(head_repository),
             },
             base: PullRefRecord {
-                label: "main".to_owned(),
                 sha: Some(oid('a')),
                 branch: "main".to_owned(),
                 repo_id: 101,
                 repo: Some(target_repository),
             },
-            ..PULL.clone()
         },
         target_branch: BranchRecord {
             name: "main".to_owned(),
