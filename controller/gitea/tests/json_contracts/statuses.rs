@@ -4,7 +4,7 @@ use amiss_controller_gitea::status::{CommitStatusRecord, CommitStatusState, Crea
 fn complete_status_pages_retain_metadata_and_nullable_creators()
 -> Result<(), Box<dyn std::error::Error>> {
     let input = include_bytes!("../fixtures/commit-status.json");
-    let mut status: CommitStatusRecord = amiss_wire::read_json(input, u64::MAX)?;
+    let mut status: CommitStatusRecord = serde_json::from_slice(input)?;
     assert_eq!(status.created_at, "2026-08-31T12:00:00Z");
     assert_eq!(status.updated_at, status.created_at);
     assert_eq!(
@@ -50,7 +50,7 @@ fn status_records_reject_unknown_missing_and_normalized_fields()
             r#""created_at": "2026-08-31T12:00:00Z""#,
             r#""created_at": false"#,
         ),
-        (r#""id": 77"#, r#""id": 77, "extra": true"#),
+        (r#""id": 77"#, r#""id": 77, "login": null"#),
     ] {
         let changed = input.replace(old, new);
         assert_ne!(changed, input);

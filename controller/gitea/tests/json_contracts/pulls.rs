@@ -21,7 +21,7 @@ fn live_pulls_retain_complete_provider_and_branch_metadata()
     ] {
         let (pull, length): (PullRequestRecord, _) =
             decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })?;
         assert_eq!(length, input.len());
         assert_eq!(pull.number, number);
@@ -62,7 +62,7 @@ fn live_pulls_retain_complete_provider_and_branch_metadata()
 #[test]
 fn pull_nullability_and_omitted_counts_do_not_collapse() -> Result<(), Box<dyn std::error::Error>> {
     let original: PullRequestRecord =
-        amiss_wire::read_json(include_bytes!("../fixtures/gitea-pull.json"), u64::MAX)?;
+        serde_json::from_slice(include_bytes!("../fixtures/gitea-pull.json"))?;
     let mut empty = PullRequestRecord {
         user: None,
         labels: None,
@@ -178,7 +178,7 @@ fn pull_inputs_reject_unknown_members_and_invalid_scalar_shapes()
         }
     }
     let mut pull: PullRequestRecord =
-        amiss_wire::read_json(include_bytes!("../fixtures/gitea-pull.json"), u64::MAX)?;
+        serde_json::from_slice(include_bytes!("../fixtures/gitea-pull.json"))?;
     for id in [0, js_int::MAX_SAFE_UINT] {
         pull.id = id;
         let encoded = serde_json::to_vec(&pull)?;
@@ -243,7 +243,7 @@ fn pull_refs_preserve_deleted_repository_and_missing_commit_data()
 fn nested_issue_metadata_stays_closed_and_uses_one_state_contract()
 -> Result<(), Box<dyn std::error::Error>> {
     let original: PullRequestRecord =
-        amiss_wire::read_json(include_bytes!("../fixtures/forgejo-pull.json"), u64::MAX)?;
+        serde_json::from_slice(include_bytes!("../fixtures/forgejo-pull.json"))?;
     let label: &Label = original
         .labels
         .as_ref()

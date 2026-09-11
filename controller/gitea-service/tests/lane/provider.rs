@@ -31,8 +31,7 @@ impl SignedEvent {
     }
 
     pub(super) fn for_target(candidate: &Oid, target: &str, secret: &[u8]) -> Self {
-        let mut payload: PullRequestPayload =
-            amiss_wire::read_json(GITEA_PULL_WEBHOOK, u64::MAX).unwrap();
+        let mut payload: PullRequestPayload = serde_json::from_slice(GITEA_PULL_WEBHOOK).unwrap();
         payload.action = HookIssueAction::Synchronized;
         let pull = payload.pull_request.as_mut().unwrap();
         pull.head.sha = Some(candidate.clone());

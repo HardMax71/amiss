@@ -4,7 +4,7 @@ use amiss_controller_gitea::review::{
 };
 
 #[test]
-fn review_captures_retain_complete_user_and_team_metadata() -> Result<(), Box<dyn std::error::Error>>
+fn review_captures_retain_user_identity_and_team_metadata() -> Result<(), Box<dyn std::error::Error>>
 {
     for (input, count) in [
         (include_str!("../fixtures/gitea-reviews.json"), 1),
@@ -12,7 +12,7 @@ fn review_captures_retain_complete_user_and_team_metadata() -> Result<(), Box<dy
     ] {
         let (reviews, length): (Vec<ReviewRecord>, _) =
             decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })?;
         assert_eq!(length, input.len());
         assert_eq!(reviews.len(), count);
@@ -46,7 +46,7 @@ fn review_captures_retain_complete_user_and_team_metadata() -> Result<(), Box<dy
         for (old, new) in [
             (r#""state":"#, r#""extra":true,"state":"#),
             (r#""state":"#, r#""sta\u0074e":"APPROVED","state":"#),
-            (r#""login_name":"#, r#""extra":true,"login_name":"#),
+            (r#""login":"#, r#""login":false,"login":"#),
             (r#""state":"APPROVED""#, r#""state":"UNKNOWN""#),
             (r#""state":"APPROVED""#, r#""state":"""#),
             (r#""state":"APPROVED""#, r#""state":{"APPROVED":null}"#),

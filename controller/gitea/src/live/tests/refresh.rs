@@ -302,8 +302,6 @@ fn unrelated_historical_reviews_cannot_brick_the_lane() {
             user: Some(UserRecord {
                 id: 99,
                 login: "former-reviewer".to_owned(),
-                username: "former-reviewer".to_owned(),
-                ..data.reviewer.clone()
             }),
             state: ReviewState::RequestReview,
             body: String::new(),

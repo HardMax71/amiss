@@ -13,8 +13,8 @@ mod tests;
     reason = "the shared typed fixture must remain valid"
 )]
 static FIXTURE: LazyLock<(PullRequestPayload, String)> = LazyLock::new(|| {
-    let payload: PullRequestPayload = amiss_wire::read_json(GITEA_PULL_WEBHOOK, u64::MAX)
-        .expect("the shared webhook fixture is complete");
+    let payload: PullRequestPayload =
+        serde_json::from_slice(GITEA_PULL_WEBHOOK).expect("the shared webhook fixture is valid");
     let body = serde_json::to_string(&payload).expect("the typed webhook serializes");
     (payload, body)
 });

@@ -79,7 +79,7 @@ fn repository_captures_keep_omission_null_and_nested_parents_distinct() {
     ] {
         let (repository, length): (RepositoryRecord, _) =
             decode_bounded_json(input, None, input.len(), |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })
             .unwrap();
         assert_eq!(length, input.len());
@@ -101,11 +101,8 @@ fn repository_captures_keep_omission_null_and_nested_parents_distinct() {
 
 #[test]
 fn transfers_and_repository_settings_are_closed_typed_data() {
-    let mut repository: RepositoryRecord = amiss_wire::read_json(
-        include_bytes!("../fixtures/gitea-repository.json"),
-        u64::MAX,
-    )
-    .unwrap();
+    let mut repository: RepositoryRecord =
+        serde_json::from_slice(include_bytes!("../fixtures/gitea-repository.json")).unwrap();
     repository.external_tracker = Some(ExternalTracker {
         external_tracker_url: "https://tracker.example".to_owned(),
         external_tracker_format: "https://tracker.example/{user}/{repo}/{index}".to_owned(),
@@ -215,7 +212,7 @@ fn malformed_repositories_cannot_prove_visibility() {
             r#""internal_tracker":{"#,
             r#""internal_tracker":{"unknown":true,"#,
         ),
-        (r#""owner":{"#, r#""owner":{"unknown":true,"#),
+        (r#""owner":{"#, r#""owner":{"id":false,"#),
         (
             r#""permissions":{"admin":false,"push":false,"pull":true}"#,
             r#""permissions":[false,false,true]"#,

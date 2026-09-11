@@ -8,7 +8,7 @@ use amiss_wire::model::{ObjectFormat, Oid};
 
 #[test]
 fn webhook_metadata_retains_both_edit_shapes() -> Result<(), Box<dyn std::error::Error>> {
-    let mut payload: PullRequestPayload = amiss_wire::read_json(GITEA_PULL_WEBHOOK, u64::MAX)?;
+    let mut payload: PullRequestPayload = serde_json::from_slice(GITEA_PULL_WEBHOOK)?;
     let label = Label {
         id: 1,
         name: "docs".to_owned(),
@@ -66,7 +66,7 @@ fn webhook_metadata_retains_both_edit_shapes() -> Result<(), Box<dyn std::error:
 
 #[test]
 fn webhook_nullable_and_omitted_fields_remain_distinct() -> Result<(), Box<dyn std::error::Error>> {
-    let original: PullRequestPayload = amiss_wire::read_json(GITEA_PULL_WEBHOOK, u64::MAX)?;
+    let original: PullRequestPayload = serde_json::from_slice(GITEA_PULL_WEBHOOK)?;
     let empty = PullRequestPayload {
         repository: None,
         pull_request: None,
@@ -101,14 +101,20 @@ fn webhook_nullable_and_omitted_fields_remain_distinct() -> Result<(), Box<dyn s
             "{field}"
         );
     }
-    for replacement in ["null", "true", r#""bad-id""#] {
+    let null_commit = wire.replacen(r#""commit_id":"""#, r#""commit_id":null"#, 1);
+    assert_ne!(null_commit, wire);
+    assert_eq!(
+        serde_json::from_str::<PullRequestPayload>(&null_commit)?,
+        empty
+    );
+    for replacement in ["true", r#""bad-id""#] {
         let changed = wire.replacen(
             r#""commit_id":"""#,
             &format!(r#""commit_id":{replacement}"#),
             1,
         );
         assert_ne!(changed, wire);
-        assert!(amiss_wire::read_json::<PullRequestPayload>(changed.as_bytes(), u64::MAX).is_err());
+        assert!(serde_json::from_str::<PullRequestPayload>(&changed).is_err());
     }
     let missing = wire.replacen(",\"commit_id\":\"\"", "", 1);
     assert_ne!(missing, wire);
@@ -125,7 +131,7 @@ fn webhook_objects_reject_undeclared_and_malformed_data() -> Result<(), Box<dyn 
         (r#""action":"opened""#, r#""action":"opened","extra":true"#),
         (r#""repository":{"#, r#""repository":{"extra":true,"#),
         (r#""pull_request":{"#, r#""pull_request":{"extra":true,"#),
-        (r#""sender":{"#, r#""sender":{"extra":true,"#),
+        (r#""sender":{"#, r#""sender":{"id":false,"#),
         (r#""action":"opened""#, r#""action":{"opened":null}"#),
         (r#""number":42"#, r#""number":9007199254740992"#),
         (r#""number":42"#, r#""number":-1"#),

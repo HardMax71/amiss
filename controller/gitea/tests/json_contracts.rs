@@ -29,51 +29,53 @@ mod statuses;
 mod webhooks;
 
 use amiss_controller::{ProviderError, decode_bounded_json};
-use amiss_controller_gitea::user::{UserRecord, UserVisibility};
+use amiss_controller_gitea::user::UserRecord;
 
 #[test]
-fn user_profiles_preserve_both_provider_shapes_and_reject_projection_loss() {
-    for (input, pronouns) in [
-        (include_str!("fixtures/gitea-user.json"), None),
-        (include_str!("fixtures/forgejo-user.json"), Some("")),
+fn user_profiles_keep_only_the_consumed_identity() {
+    for input in [
+        include_str!("fixtures/gitea-user.json"),
+        include_str!("fixtures/forgejo-user.json"),
     ] {
         let (user, length): (UserRecord, _) =
             decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })
             .unwrap();
         assert_eq!(length, input.len());
-        assert_eq!(user.pronouns.as_deref(), pronouns);
         assert_eq!(user.id, 77);
-        assert_eq!(user.username, user.login);
-        assert_eq!(user.visibility, UserVisibility::Public);
-        assert_eq!(user.last_login, "0001-01-01T00:00:00Z");
-        for visibility in [
-            UserVisibility::Public,
-            UserVisibility::Limited,
-            UserVisibility::Private,
+        assert_eq!(user.login, "amiss-controller");
+        for encoded in [
+            serde_json::to_vec(&user).unwrap(),
+            serde_json::to_vec(&(user.id, &user.login)).unwrap(),
         ] {
-            let response = UserRecord {
-                visibility,
-                ..user.clone()
-            };
-            let encoded = serde_json::to_vec(&response).unwrap();
             assert_eq!(
-                amiss_wire::read_json::<UserRecord>(&encoded, u64::MAX).unwrap(),
-                response
+                serde_json::from_slice::<UserRecord>(&encoded).unwrap(),
+                user
             );
         }
+        for (old, new) in [
+            (
+                r#""id": 77"#,
+                r#""id": 77, "extra": {"future": [null,true]}"#,
+            ),
+            (r#""source_id": 0"#, r#""source_id": false"#),
+            (r#""login_name": "","#, ""),
+            (r#""visibility": "public""#, r#""visibility": "future""#),
+            (r#""username": "amiss-controller""#, r#""username": null"#),
+        ] {
+            let changed = input.replace(old, new);
+            assert_ne!(changed, input);
+            assert_eq!(serde_json::from_str::<UserRecord>(&changed).unwrap(), user);
+        }
         for (original, replacement) in [
-            (r#""id": 77"#, r#""id": 77, "unknown": true"#),
             (r#""id": 77"#, r#""id": -1"#),
             (r#""id": 77"#, r#""id": 77, "\u0069d": 77"#),
             (r#""id": 77"#, r#""id": 9007199254740992"#),
-            (r#""source_id": 0"#, r#""source_id": false"#),
-            (r#""login_name": "","#, ""),
-            (r#""username": "amiss-controller""#, r#""username": null"#),
-            (r#""is_admin": false"#, r#""is_admin": 0"#),
-            (r#""visibility": "public""#, r#""visibility": "unknown""#),
-            (r#""followers_count": "#, r#""followers_count": -"#),
+            (r#""id": 77,"#, ""),
+            (r#""login": "amiss-controller","#, ""),
+            (r#""login": "amiss-controller""#, r#""login": null"#),
+            (r#""login":"#, r#""login": "other", "login":"#),
         ] {
             let invalid = input.replace(original, replacement);
             assert_ne!(invalid, input);
@@ -82,17 +84,22 @@ fn user_profiles_preserve_both_provider_shapes_and_reject_projection_loss() {
                     invalid.as_bytes(),
                     None,
                     invalid.len(),
-                    |bytes| amiss_wire::read_json(bytes, u64::MAX)
+                    |bytes| serde_json::from_slice(bytes)
                 ),
                 Err(ProviderError::InvalidResponse)
             );
         }
+        assert_eq!(
+            decode_bounded_json::<UserRecord, _>(
+                input.as_bytes(),
+                None,
+                input.len() - 1,
+                |bytes| { serde_json::from_slice(bytes) }
+            ),
+            Err(ProviderError::InvalidResponse)
+        );
     }
-    let input = include_str!("fixtures/forgejo-user.json");
-    let invalid = input.replace(r#""pronouns": """#, r#""pronouns": null"#);
-    assert_ne!(invalid, input);
-    assert!(amiss_wire::read_json::<UserRecord>(invalid.as_bytes(), u64::MAX).is_err());
     for invalid in ["null", "true", "[]", "{}", "[{}]"] {
-        assert!(amiss_wire::read_json::<UserRecord>(invalid.as_bytes(), u64::MAX).is_err());
+        assert!(serde_json::from_str::<UserRecord>(invalid).is_err());
     }
 }

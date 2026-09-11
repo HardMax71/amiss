@@ -78,8 +78,8 @@ impl GiteaPullRequestSource {
             return Err(ProviderError::Authentication);
         }
         // IngressCheck already bounds the signed body before this decoder runs.
-        let payload: PullRequestPayload = amiss_wire::read_json(input.body, u64::MAX)
-            .map_err(|_defect| ProviderError::Authentication)?;
+        let payload: PullRequestPayload =
+            serde_json::from_slice(input.body).map_err(|_defect| ProviderError::Authentication)?;
         let target_edited = matches!(
             payload.changes.as_ref(),
             Some(PullRequestChanges::Gitea { reference: Some(previous), .. }

@@ -54,42 +54,17 @@ where
 }
 
 #[test]
-fn direct_user_counts_cannot_bypass_the_strict_profile() -> Result<(), Box<dyn std::error::Error>> {
+fn user_identity_keeps_the_safe_integer_boundary() -> Result<(), Box<dyn std::error::Error>> {
     for input in [
         include_bytes!("../fixtures/gitea-user.json").as_slice(),
         include_bytes!("../fixtures/forgejo-user.json").as_slice(),
     ] {
         let mut user: UserRecord = serde_json::from_slice(input)?;
-        for count in [
-            &mut user.id,
-            &mut user.followers_count,
-            &mut user.following_count,
-            &mut user.starred_repos_count,
-        ] {
-            *count = MAX_SAFE_UINT;
-        }
-        for source in [-MAX_SAFE_INT, 0, MAX_SAFE_INT] {
-            user.source_id = source;
-            assert_integer_contract(&user, MAX_SAFE_INT)?;
-            if source.is_negative() {
-                assert_integer_contract(&user, source)?;
-            }
-        }
-        for invalid in [i64::MIN, -MAX_SAFE_INT - 1, MAX_SAFE_INT + 1, i64::MAX] {
-            user.source_id = invalid;
-            assert!(serde_json::to_vec(&user).is_err());
-        }
-        user.source_id = 0;
+        user.id = MAX_SAFE_UINT;
+        assert_integer_contract(&user, MAX_SAFE_INT)?;
         user.id = MAX_SAFE_UINT + 1;
         assert!(serde_json::to_vec(&user).is_err());
-        for count in [
-            &mut user.id,
-            &mut user.followers_count,
-            &mut user.following_count,
-            &mut user.starred_repos_count,
-        ] {
-            *count = 0;
-        }
+        user.id = 0;
         assert_eq!(
             serde_json::from_slice::<UserRecord>(&serde_json::to_vec(&user)?)?,
             user

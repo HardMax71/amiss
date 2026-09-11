@@ -31,34 +31,21 @@ pub(super) const FORGEJO_PROTECTION: &str =
     include_str!("../../../tests/fixtures/forgejo-protection.json");
 
 static PULL: LazyLock<PullRequestRecord> = LazyLock::new(|| {
-    amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/gitea-pull.json"),
-        u64::MAX,
-    )
-    .unwrap()
+    serde_json::from_slice(include_bytes!("../../../tests/fixtures/gitea-pull.json")).unwrap()
 });
 
 pub(super) static USER: LazyLock<UserRecord> = LazyLock::new(|| {
-    amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/gitea-user.json"),
-        u64::MAX,
-    )
-    .unwrap()
+    serde_json::from_slice(include_bytes!("../../../tests/fixtures/gitea-user.json")).unwrap()
 });
 
 pub(super) static STATUS: LazyLock<CommitStatusRecord> = LazyLock::new(|| {
-    amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/commit-status.json"),
-        u64::MAX,
-    )
-    .unwrap()
+    serde_json::from_slice(include_bytes!("../../../tests/fixtures/commit-status.json")).unwrap()
 });
 
 pub(super) static REVIEW: LazyLock<ReviewRecord> = LazyLock::new(|| {
-    amiss_wire::read_json::<Vec<ReviewRecord>>(
-        include_bytes!("../../../tests/fixtures/gitea-reviews.json"),
-        u64::MAX,
-    )
+    serde_json::from_slice::<Vec<ReviewRecord>>(include_bytes!(
+        "../../../tests/fixtures/gitea-reviews.json"
+    ))
     .unwrap()
     .pop()
     .unwrap()
@@ -390,7 +377,7 @@ fn repository_for(namespace: &str) -> RepositoryRecord {
     } else {
         include_bytes!("../../../tests/fixtures/forgejo-repository.json").as_slice()
     };
-    amiss_wire::read_json(input, u64::MAX).unwrap()
+    serde_json::from_slice(input).unwrap()
 }
 
 fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord) -> RefreshData {
@@ -401,8 +388,6 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
         owner: UserRecord {
             id: 203,
             login: "contributor".to_owned(),
-            username: "contributor".to_owned(),
-            ..USER.clone()
         },
         ..repository.clone()
     };
@@ -452,8 +437,6 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
             user: Some(UserRecord {
                 id: 88,
                 login: "human".to_owned(),
-                username: "human".to_owned(),
-                ..USER.clone()
             }),
             state: ReviewState::Comment,
             body: "looks interesting".to_owned(),

@@ -362,8 +362,6 @@ fn foreign_or_malformed_latest_contexts_are_not_overwritten() {
     latest.creator = Some(UserRecord {
         id: 88,
         login: "another-writer".to_owned(),
-        username: "another-writer".to_owned(),
-        ..super::support::USER.clone()
     });
     assert!(matches!(
         status_decision(&fixture.client.config, expected.clone(), &[latest]),
@@ -457,7 +455,6 @@ fn the_relation_credential_must_authenticate_as_the_dedicated_reviewer() {
     let fixture = Fixture::mutated("gitea", |data| {
         data.reviewer.id = 88;
         data.reviewer.login = "another-writer".to_owned();
-        data.reviewer.username = "another-writer".to_owned();
     });
     let (status, target) = status_fixture(&fixture);
     assert_eq!(
@@ -571,8 +568,6 @@ fn record(fixture: &Fixture, expected: &CreateCommitStatus) -> CommitStatusRecor
         creator: Some(UserRecord {
             id: fixture.client.config.reviewer.id,
             login: fixture.client.config.reviewer.login.clone(),
-            username: fixture.client.config.reviewer.login.clone(),
-            ..super::support::USER.clone()
         }),
         status: expected.state,
         target_url: expected.target_url.clone(),

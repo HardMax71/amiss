@@ -105,7 +105,7 @@ fn signed_webhooks_reject_unknown_root_fields() {
 fn repository_metadata_differences_preserve_the_signed_identity() {
     let adapter = adapter("gitea", dummy_snapshot("gitea"));
     let original = authenticated(&adapter, BODY, provider("gitea")).unwrap();
-    let mut payload: PullRequestPayload = amiss_wire::read_json(BODY, u64::MAX).unwrap();
+    let mut payload: PullRequestPayload = serde_json::from_slice(BODY).unwrap();
     let base = payload
         .pull_request
         .as_mut()
@@ -132,6 +132,49 @@ fn repository_metadata_differences_preserve_the_signed_identity() {
 }
 
 #[test]
+fn signed_user_profiles_ignore_metadata_but_require_identity() {
+    let adapter = adapter("gitea", dummy_snapshot("gitea"));
+    let original = authenticated(&adapter, BODY, provider("gitea")).unwrap();
+    let metadata = replaced_once(BODY, r#""owner":{"#, r#""owner":{"extra":[null,true],"#);
+    let payload: PullRequestPayload = serde_json::from_slice(BODY).unwrap();
+    let owner = &payload.repository.as_ref().unwrap().owner;
+    let minimal = serde_json::to_vec(&payload).unwrap();
+    let owner_json = serde_json::to_string(owner).unwrap();
+    let positional = serde_json::to_string(&(owner.id, &owner.login)).unwrap();
+    for body in [
+        metadata,
+        replaced_once(&minimal, &owner_json, &positional),
+        replaced_once(BODY, r#""commit_id":"""#, r#""commit_id":null"#),
+        minimal.clone(),
+    ] {
+        let changed = authenticated(&adapter, &body, provider("gitea")).unwrap();
+        assert_eq!(changed.delivery().change, original.delivery().change);
+        assert_eq!(
+            changed.delivery().provider_run,
+            original.delivery().provider_run
+        );
+        assert_ne!(
+            changed.delivery().identity.delivery,
+            original.delivery().identity.delivery
+        );
+    }
+    for (old, new) in [
+        (r#""id":"#, r#""missing_id":"#),
+        (r#""login":"#, r#""missing_login":"#),
+        (r#""id":"#, r#""id":false,"id":"#),
+        (r#""login":"#, r#""login":null,"login":"#),
+    ] {
+        let invalid_owner = owner_json.replace(old, new);
+        assert_ne!(invalid_owner, owner_json);
+        let invalid = replaced_once(&minimal, &owner_json, &invalid_owner);
+        assert_eq!(
+            authenticated(&adapter, &invalid, provider("gitea")),
+            Err(ProviderError::Authentication)
+        );
+    }
+}
+
+#[test]
 fn signed_webhooks_reject_lost_or_invalid_typed_facts() {
     let adapter = adapter("gitea", dummy_snapshot("gitea"));
     for replacement in [String::new(), "b".repeat(64)] {
@@ -152,17 +195,12 @@ fn signed_webhooks_reject_lost_or_invalid_typed_facts() {
             Err(ProviderError::Authentication)
         );
     }
-    let body = replaced_once(BODY, r#""commit_id":"""#, r#""commit_id":null"#);
-    assert_eq!(
-        authenticated(&adapter, &body, provider("gitea")),
-        Err(ProviderError::Authentication)
-    );
     let body = replaced_once(BODY, r#""repo_id":101"#, r#""repo_id":-1"#);
     assert_eq!(
         authenticated(&adapter, &body, provider("gitea")),
         Err(ProviderError::Authentication)
     );
-    let mut payload: PullRequestPayload = amiss_wire::read_json(BODY, u64::MAX).unwrap();
+    let mut payload: PullRequestPayload = serde_json::from_slice(BODY).unwrap();
     payload.pull_request.as_mut().unwrap().head.repo = None;
     let body = serde_json::to_vec(&payload).unwrap();
     assert_eq!(
