@@ -6,14 +6,17 @@ use super::super::model::RefRecord;
 use super::{Presence, REF_CEILING, RefFamily, listed_commit, ref_listing};
 
 #[test]
-fn ref_responses_cannot_discard_unknown_data() {
+fn ref_responses_ignore_unconsumed_provider_metadata() {
     for input in [
         include_str!("../../../tests/fixtures/gitea-refs.json"),
         include_str!("../../../tests/fixtures/forgejo-refs.json"),
     ] {
         let changed = input.replace(r#""object":{"#, r#""extra":true,"object":{"#);
         assert_ne!(changed, input);
-        assert!(serde_json::from_str::<Vec<RefRecord>>(&changed).is_err());
+        assert_eq!(
+            serde_json::from_str::<Vec<RefRecord>>(&changed).unwrap(),
+            serde_json::from_str::<Vec<RefRecord>>(input).unwrap()
+        );
     }
 }
 
@@ -25,11 +28,8 @@ fn ref_responses_cannot_discard_unknown_data() {
 /// not proven whole.
 #[test]
 fn a_ref_listing_is_a_fact_only_when_positively_complete() {
-    let records: Vec<RefRecord> = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/gitea-refs.json"),
-        u64::MAX,
-    )
-    .unwrap();
+    let records: Vec<RefRecord> =
+        serde_json::from_slice(include_bytes!("../../../tests/fixtures/gitea-refs.json")).unwrap();
     let reference = &records[0];
     assert_eq!(
         ref_listing(Err(ForgeNegative::Missing), RefFamily::Heads),

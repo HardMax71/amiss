@@ -206,7 +206,7 @@ impl Transport {
             ProviderError::Authentication,
         )?;
         let minted: InstallationToken =
-            decode_body(response, |bytes| amiss_wire::read_json(bytes, u64::MAX))?;
+            decode_body(response, |bytes| serde_json::from_slice(bytes))?;
         Ok(SecretString::from(minted.token))
     }
 

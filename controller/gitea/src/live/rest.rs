@@ -379,7 +379,7 @@ impl GiteaVerification for HttpRest {
         Ok(ref_listing(
             self.transport
                 .get_fact::<Vec<RefRecord>, _>(&route, deadline, |bytes| {
-                    amiss_wire::read_json(bytes, u64::MAX)
+                    serde_json::from_slice(bytes)
                 })?,
             family,
         ))

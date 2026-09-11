@@ -250,7 +250,7 @@ impl HttpRest {
         decode_body(
             self.transport
                 .execute(self.transport.client.get(url), deadline)?,
-            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+            |bytes| serde_json::from_slice(bytes),
         )
     }
 
@@ -432,7 +432,7 @@ impl GitHubRelationRest for HttpRest {
         );
         let reference: RefRecord =
             decode_body(self.transport.execute(request, deadline)?, |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })?;
         let commit = self.git_commit(&owner, &name, &reference.object.sha, deadline)?;
         Ok((reference, commit))
@@ -485,7 +485,7 @@ impl GitHubVerification for HttpRest {
         let Ok(response) = self.transport.request_fact(Method::GET, &route, deadline)? else {
             return Ok(None);
         };
-        decode_body(response, |bytes| amiss_wire::read_json(bytes, u64::MAX)).map(Some)
+        decode_body(response, |bytes| serde_json::from_slice(bytes)).map(Some)
     }
 
     fn content_presence(

@@ -3,7 +3,8 @@ use amiss_controller_gitea::reference::{GitObject, RefRecord};
 use amiss_wire::model::ObjectKind;
 
 #[test]
-fn public_ref_captures_require_complete_git_objects() -> Result<(), Box<dyn std::error::Error>> {
+fn reference_inputs_keep_consumed_facts_from_both_providers()
+-> Result<(), Box<dyn std::error::Error>> {
     for (input, reference, sha) in [
         (
             include_str!("../fixtures/gitea-refs.json"),
@@ -18,7 +19,7 @@ fn public_ref_captures_require_complete_git_objects() -> Result<(), Box<dyn std:
     ] {
         let (records, length): (Vec<RefRecord>, _) =
             decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })?;
         assert_eq!(length, input.len());
         assert_eq!(records.len(), 1);
@@ -26,20 +27,23 @@ fn public_ref_captures_require_complete_git_objects() -> Result<(), Box<dyn std:
         assert_eq!(record.reference, reference);
         assert_eq!(record.object.kind, ObjectKind::Commit);
         assert_eq!(record.object.sha.as_str(), sha);
-        assert!(record.url.ends_with(&format!("/git/{reference}")));
-        assert!(record.object.url.ends_with(&format!("/git/commits/{sha}")));
+        for candidate in [
+            serde_json::to_string(&records)?,
+            input.replacen('{', r#"{"future":{"nested":[1.5,null,true]},"#, 1),
+            input.replacen(r#""object":{"#, r#""object":{"future":false,"#, 1),
+        ] {
+            assert_eq!(serde_json::from_str::<Vec<RefRecord>>(&candidate)?, records);
+        }
         assert_eq!(
             decode_bounded_json::<Vec<RefRecord>, _>(
                 input.as_bytes(),
                 None,
                 input.len() - 1,
-                |bytes| { amiss_wire::read_json(bytes, u64::MAX) }
+                |bytes| serde_json::from_slice(bytes)
             ),
             Err(ProviderError::InvalidResponse)
         );
         for (old, new) in [
-            (r#""ref":"#, r#""extra":true,"ref":"#),
-            (r#""type":"#, r#""extra":true,"type":"#),
             (r#""type":"#, r#""ty\u0070e":"commit","type":"#),
             (r#""type":"commit""#, r#""type":"unknown""#),
             (r#""type":"commit""#, r#""type":null"#),
@@ -48,10 +52,12 @@ fn public_ref_captures_require_complete_git_objects() -> Result<(), Box<dyn std:
             (r#""type":"commit""#, r#""type":["commit"]"#),
             (r#""type":"commit""#, r#""type":{"commit":null}"#),
         ] {
-            let changed = input.replace(old, new);
-            assert_ne!(changed, input);
-            assert!(serde_json::from_str::<Vec<RefRecord>>(&changed).is_err());
-            assert!(amiss_wire::read_json::<Vec<RefRecord>>(changed.as_bytes(), u64::MAX).is_err());
+            let invalid = input.replace(old, new);
+            assert_ne!(invalid, input);
+            assert!(
+                serde_json::from_str::<Vec<RefRecord>>(&invalid).is_err(),
+                "{new}"
+            );
         }
         for invalid in [
             String::new(),
@@ -60,35 +66,23 @@ fn public_ref_captures_require_complete_git_objects() -> Result<(), Box<dyn std:
             "a".repeat(39),
             "a".repeat(41),
         ] {
-            let changed = input.replace(sha, &invalid);
-            assert_ne!(changed, input);
-            assert!(serde_json::from_str::<Vec<RefRecord>>(&changed).is_err());
+            assert!(serde_json::from_str::<Vec<RefRecord>>(&input.replace(sha, &invalid)).is_err());
         }
-        let encoded = serde_json::to_string(&records)?;
-        for field in [
-            format!(",\"url\":{}", serde_json::to_string(&record.url)?),
-            format!(",\"url\":{}", serde_json::to_string(&record.object.url)?),
-            format!(",\"object\":{}", serde_json::to_string(&record.object)?),
-        ] {
-            let changed = encoded.replace(&field, "");
-            assert_ne!(changed, encoded);
-            assert!(serde_json::from_str::<Vec<RefRecord>>(&changed).is_err());
-        }
-        let null_object = encoded.replace(&serde_json::to_string(&record.object)?, "null");
-        assert_ne!(null_object, encoded);
-        assert!(serde_json::from_str::<Vec<RefRecord>>(&null_object).is_err());
-        let positional = serde_json::to_vec(&[(
-            &record.reference,
-            &record.url,
-            (&record.object.kind, &record.object.sha, &record.object.url),
-        )])?;
+        let positional =
+            serde_json::to_vec(&[(&record.reference, (&record.object.kind, &record.object.sha))])?;
         assert_eq!(
             serde_json::from_slice::<Vec<RefRecord>>(&positional)?,
             records
         );
-        assert!(amiss_wire::read_json::<Vec<RefRecord>>(&positional, u64::MAX).is_err());
-        for invalid in [b"null".as_slice(), b"{}", b"true", b"1", b"[{}]"] {
-            assert!(amiss_wire::read_json::<Vec<RefRecord>>(invalid, u64::MAX).is_err());
+        for invalid in [
+            "null",
+            "{}",
+            "true",
+            "1",
+            "[{}]",
+            r#"[{"ref":"main","object":null}]"#,
+        ] {
+            assert!(serde_json::from_str::<Vec<RefRecord>>(invalid).is_err());
         }
     }
     Ok(())
@@ -111,13 +105,9 @@ fn object_kinds_use_the_shared_git_vocabulary() -> Result<(), Box<dyn std::error
             let object = GitObject {
                 kind,
                 sha: sha.parse()?,
-                url: String::new(),
             };
             let encoded = serde_json::to_vec(&object)?;
-            assert_eq!(
-                amiss_wire::read_json::<GitObject>(&encoded, u64::MAX)?,
-                object
-            );
+            assert_eq!(serde_json::from_slice::<GitObject>(&encoded)?, object);
         }
     }
     Ok(())

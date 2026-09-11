@@ -25,12 +25,10 @@ pub struct ResolvedCommit {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct GitObject {
     #[serde(rename = "type")]
     pub kind: ObjectKind,
     pub sha: Oid,
-    pub url: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]

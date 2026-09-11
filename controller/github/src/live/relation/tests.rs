@@ -263,15 +263,12 @@ fn fixture() -> (Client<FakeRelationRest>, RelationSubject) {
         .unwrap()
         .clone();
     subject.scope.integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
-    let mut reference: RefRecord = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/git-reference.json"),
-        u64::MAX,
-    )
-    .unwrap();
-    let mut head: GitCommitRecord = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/git-commit-unsigned.json"),
-        u64::MAX,
-    )
+    let mut reference: RefRecord =
+        serde_json::from_slice(include_bytes!("../../../tests/fixtures/git-reference.json"))
+            .unwrap();
+    let mut head: GitCommitRecord = serde_json::from_slice(include_bytes!(
+        "../../../tests/fixtures/git-commit-unsigned.json"
+    ))
     .unwrap();
     reference.reference = subject.target.as_str().to_owned();
     head.sha = oid(ObjectFormat::Sha1, '3');

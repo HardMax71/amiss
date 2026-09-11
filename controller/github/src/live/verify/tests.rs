@@ -55,7 +55,7 @@ impl GitHubVerification for ScriptedRest {
 
     fn matching_refs(
         &self,
-        owner: &str,
+        _owner: &str,
         name: &str,
         family: RefFamily,
         prefix: &str,
@@ -82,18 +82,9 @@ impl GitHubVerification for ScriptedRest {
                 .filter(|candidate| candidate.starts_with(prefix))
                 .map(|candidate| RefRecord {
                     reference: format!("refs/{}/{candidate}", family.as_ref()),
-                    node_id: format!("fixture-{candidate}"),
-                    url: format!(
-                        "https://api.github.com/repos/{owner}/{name}/git/refs/{}/{candidate}",
-                        family.as_ref()
-                    ),
                     object: amiss_controller::GitObject {
                         kind: ObjectKind::Commit,
                         sha: Oid::new(ObjectFormat::Sha1, "1".repeat(40)).unwrap(),
-                        url: format!(
-                            "https://api.github.com/repos/{owner}/{name}/git/commits/{}",
-                            "1".repeat(40)
-                        ),
                     },
                 })
                 .collect(),
@@ -132,11 +123,9 @@ const OID: &str = "0123456789abcdef0123456789abcdef01234567";
 
 #[test]
 fn complete_reference_lists_are_not_paginated_by_row_count() {
-    let captured: RefRecord = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/git-reference.json"),
-        u64::MAX,
-    )
-    .unwrap();
+    let captured: RefRecord =
+        serde_json::from_slice(include_bytes!("../../../tests/fixtures/git-reference.json"))
+            .unwrap();
     let destination = "https://github.com/HardMax71/amiss/blob/github/typed-commit-flow/README.md";
     let plan = external_plan(&[destination]).unwrap();
     for (family, kind, count) in [
@@ -152,30 +141,20 @@ fn complete_reference_lists_are_not_paginated_by_row_count() {
         let mut records: Vec<RefRecord> = (0..count - 1)
             .map(|index| RefRecord {
                 reference: format!("refs/{}/github/branch-{index}", family.as_ref()),
-                node_id: format!("fixture-{index}"),
-                url: format!(
-                    "https://api.github.com/repos/HardMax71/amiss/git/refs/{}/github/branch-{index}",
-                    family.as_ref()
-                ),
                 object: captured.object.clone(),
             })
             .collect();
         records.push(RefRecord {
             reference: format!("refs/{}/github/typed-commit-flow", family.as_ref()),
-            url: format!(
-                "https://api.github.com/repos/HardMax71/amiss/git/refs/{}/github/typed-commit-flow",
-                family.as_ref()
-            ),
             object: amiss_controller::GitObject {
                 kind,
                 ..captured.object.clone()
             },
-            ..captured.clone()
         });
         let bytes = serde_json::to_vec(&records).unwrap();
         let (decoded, length) =
             amiss_controller::decode_bounded_json(bytes.as_slice(), None, bytes.len(), |bytes| {
-                amiss_wire::read_json::<Vec<RefRecord>>(bytes, u64::MAX)
+                serde_json::from_slice::<Vec<RefRecord>>(bytes)
             })
             .unwrap();
         assert_eq!(length, bytes.len());
@@ -201,11 +180,9 @@ fn complete_reference_lists_are_not_paginated_by_row_count() {
 
 #[test]
 fn every_reference_record_must_match_the_requested_scope() {
-    let captured: RefRecord = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/git-reference.json"),
-        u64::MAX,
-    )
-    .unwrap();
+    let captured: RefRecord =
+        serde_json::from_slice(include_bytes!("../../../tests/fixtures/git-reference.json"))
+            .unwrap();
     let plan = external_plan(&[
         "https://github.com/HardMax71/amiss/blob/github/typed-commit-flow/README.md",
     ])
