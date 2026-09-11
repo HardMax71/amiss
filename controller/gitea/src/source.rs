@@ -9,7 +9,7 @@ use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 use crate::DedicatedReviewer;
 use crate::identity::{branch_ref, canonical_host, canonical_segment, change_id, provider_run};
 use crate::repository::RepositoryRecord;
-use crate::webhook::{HookIssueAction, PullRequestChanges, PullRequestPayload};
+use crate::webhook::{HookIssueAction, PullRequestPayload};
 
 const DELIVERY_DOMAIN: &str = "amiss/controller-gitea-family-delivery-v1";
 
@@ -80,12 +80,11 @@ impl GiteaPullRequestSource {
         // IngressCheck already bounds the signed body before this decoder runs.
         let payload: PullRequestPayload =
             serde_json::from_slice(input.body).map_err(|_defect| ProviderError::Authentication)?;
-        let target_edited = matches!(
-            payload.changes.as_ref(),
-            Some(PullRequestChanges::Gitea { reference: Some(previous), .. }
-                | PullRequestChanges::Forgejo { reference: Some(previous), .. })
-                if branch_ref(&previous.from).is_some()
-        );
+        let target_edited = payload
+            .changes
+            .as_ref()
+            .and_then(|changes| changes.reference.as_ref())
+            .is_some_and(|previous| branch_ref(&previous.from).is_some());
         if !(matches!(
             payload.action,
             HookIssueAction::Opened | HookIssueAction::Reopened | HookIssueAction::Synchronized
@@ -93,14 +92,8 @@ impl GiteaPullRequestSource {
         {
             return Err(ProviderError::Authentication);
         }
-        let repository = payload
-            .repository
-            .as_ref()
-            .ok_or(ProviderError::Authentication)?;
-        let pull = payload
-            .pull_request
-            .as_ref()
-            .ok_or(ProviderError::Authentication)?;
+        let repository = &payload.repository;
+        let pull = &payload.pull_request;
         let base = pull
             .base
             .repo

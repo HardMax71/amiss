@@ -36,14 +36,8 @@ enum PullField<'a> {
 )]
 pub(super) fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
     let (payload, wire) = &*FIXTURE;
-    let pull = payload
-        .pull_request
-        .as_ref()
-        .expect("the fixture has a pull");
-    let repository = payload
-        .repository
-        .as_ref()
-        .expect("the fixture has a repository");
+    let pull = &payload.pull_request;
+    let repository = &payload.repository;
     let head = pull.head.sha.as_ref().expect("the fixture has a head ID");
     let action = payload.action.to_string();
     let synchronized = HookIssueAction::Synchronized.to_string();

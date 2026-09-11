@@ -88,17 +88,45 @@ fn both_supported_namespaces_bind_the_same_signed_facts() {
 }
 
 #[test]
-fn signed_webhooks_reject_unknown_root_fields() {
+fn signed_webhooks_ignore_metadata_without_changing_the_bound_facts() {
     let adapter = adapter("gitea", dummy_snapshot("gitea"));
-    let body = replaced_once(
-        BODY,
-        r#""action":"opened""#,
-        r#""action":"opened","unexpected":true"#,
-    );
-    assert_eq!(
-        authenticated(&adapter, &body, provider("gitea")),
-        Err(ProviderError::Authentication)
-    );
+    let original = authenticated(&adapter, BODY, provider("gitea")).unwrap();
+    let payload: PullRequestPayload = serde_json::from_slice(BODY).unwrap();
+    let minimal = serde_json::to_vec(&payload).unwrap();
+    for body in [
+        replaced_once(
+            BODY,
+            r#""action":"opened""#,
+            r#""action":"opened","unexpected":true"#,
+        ),
+        replaced_once(
+            &minimal,
+            r#""action":"opened""#,
+            r#""action":"opened","sender":false,"review":42,"commit_id":{},"before":null,"after":true,"label":[],"changes":null"#,
+        ),
+        minimal,
+    ] {
+        let changed = authenticated(&adapter, &body, provider("gitea")).unwrap();
+        assert_eq!(changed.delivery().change, original.delivery().change);
+        assert_eq!(
+            changed.delivery().provider_run,
+            original.delivery().provider_run
+        );
+        assert_ne!(
+            changed.delivery().identity.delivery,
+            original.delivery().identity.delivery
+        );
+        assert_eq!(
+            authenticate_with_signature(
+                &adapter,
+                &body,
+                &signature(BODY),
+                provider("gitea"),
+                SignedTimePolicy::ReplayOnly,
+            ),
+            Err(ProviderError::Authentication)
+        );
+    }
 }
 
 #[test]
@@ -106,14 +134,7 @@ fn repository_metadata_differences_preserve_the_signed_identity() {
     let adapter = adapter("gitea", dummy_snapshot("gitea"));
     let original = authenticated(&adapter, BODY, provider("gitea")).unwrap();
     let mut payload: PullRequestPayload = serde_json::from_slice(BODY).unwrap();
-    let base = payload
-        .pull_request
-        .as_mut()
-        .unwrap()
-        .base
-        .repo
-        .as_mut()
-        .unwrap();
+    let base = payload.pull_request.base.repo.as_mut().unwrap();
     base.description = "A different metadata view".to_owned();
     base.owner.id = 999;
     let permissions = base.permissions.as_mut().unwrap();
@@ -137,7 +158,7 @@ fn signed_user_profiles_ignore_metadata_but_require_identity() {
     let original = authenticated(&adapter, BODY, provider("gitea")).unwrap();
     let metadata = replaced_once(BODY, r#""owner":{"#, r#""owner":{"extra":[null,true],"#);
     let payload: PullRequestPayload = serde_json::from_slice(BODY).unwrap();
-    let owner = &payload.repository.as_ref().unwrap().owner;
+    let owner = &payload.repository.owner;
     let minimal = serde_json::to_vec(&payload).unwrap();
     let owner_json = serde_json::to_string(owner).unwrap();
     let positional = serde_json::to_string(&(owner.id, &owner.login)).unwrap();
@@ -184,36 +205,35 @@ fn signed_webhooks_reject_lost_or_invalid_typed_facts() {
             Err(ProviderError::Authentication)
         );
     }
-    for field in ["before", "after", "changes", "label"] {
-        let body = replaced_once(
-            BODY,
-            r#""action":"opened""#,
-            &format!(r#""action":"opened","{field}":null"#),
-        );
-        assert_eq!(
-            authenticated(&adapter, &body, provider("gitea")),
-            Err(ProviderError::Authentication)
-        );
-    }
     let body = replaced_once(BODY, r#""repo_id":101"#, r#""repo_id":-1"#);
     assert_eq!(
         authenticated(&adapter, &body, provider("gitea")),
         Err(ProviderError::Authentication)
     );
     let mut payload: PullRequestPayload = serde_json::from_slice(BODY).unwrap();
-    payload.pull_request.as_mut().unwrap().head.repo = None;
-    let body = serde_json::to_vec(&payload).unwrap();
-    assert_eq!(
-        authenticated(&adapter, &body, provider("gitea")),
-        Err(ProviderError::Authentication)
-    );
-    payload.pull_request = None;
-    let body = serde_json::to_vec(&payload).unwrap();
-    assert_eq!(
-        authenticated(&adapter, &body, provider("gitea")),
-        Err(ProviderError::Authentication)
-    );
-    payload.repository = None;
+    let minimal = serde_json::to_vec(&payload).unwrap();
+    for (field, value) in [
+        (
+            "repository",
+            serde_json::to_string(&payload.repository).unwrap(),
+        ),
+        (
+            "pull_request",
+            serde_json::to_string(&payload.pull_request).unwrap(),
+        ),
+    ] {
+        for replacement in [
+            format!(r#""missing_{field}":{value}"#),
+            format!(r#""{field}":null"#),
+        ] {
+            let body = replaced_once(&minimal, &format!(r#""{field}":{value}"#), &replacement);
+            assert_eq!(
+                authenticated(&adapter, &body, provider("gitea")),
+                Err(ProviderError::Authentication)
+            );
+        }
+    }
+    payload.pull_request.head.repo = None;
     let body = serde_json::to_vec(&payload).unwrap();
     assert_eq!(
         authenticated(&adapter, &body, provider("gitea")),
@@ -258,6 +278,18 @@ fn only_run_defining_actions_are_accepted() {
         authenticated(&adapter, &invalid_edit, provider("gitea")),
         Err(ProviderError::Authentication)
     );
+    for changes in [
+        "null",
+        "{}",
+        r#"{"ref":null}"#,
+        r#"{"title":{"from":"develop"}}"#,
+    ] {
+        let body = replaced_once(&edited, r#"{"ref":{"from":"develop"}}"#, changes);
+        assert_eq!(
+            authenticated(&adapter, &body, provider("gitea")),
+            Err(ProviderError::Authentication)
+        );
+    }
     for action in ["closed", "labeled", "edited"] {
         let body = replaced_once(
             BODY,

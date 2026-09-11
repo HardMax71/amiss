@@ -33,7 +33,7 @@ impl SignedEvent {
     pub(super) fn for_target(candidate: &Oid, target: &str, secret: &[u8]) -> Self {
         let mut payload: PullRequestPayload = serde_json::from_slice(GITEA_PULL_WEBHOOK).unwrap();
         payload.action = HookIssueAction::Synchronized;
-        let pull = payload.pull_request.as_mut().unwrap();
+        let pull = &mut payload.pull_request;
         pull.head.sha = Some(candidate.clone());
         target.clone_into(&mut pull.base.branch);
         let body = serde_json::to_vec(&payload).unwrap();
