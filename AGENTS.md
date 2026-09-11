@@ -30,9 +30,11 @@ runs the same stages, so local green and remote green are the same thing.
   restatement of the code.
 - The wire is one rolling contract. A report change moves the schema in `spec/`, both
   examples (with a recomputed payload digest), the writer, and the docs together.
-- Provider input structs model consumed fields and use native Serde behavior for extra
-  metadata. Keep Amiss-owned contracts strict; do not require provider responses to
-  round-trip through a complete replica of their upstream schema.
+- Provider input structs model only fields Amiss consumes and use native Serde behavior
+  to ignore unrelated upstream metadata. Every consumed field remains typed and
+  validated, including required fields and routing identities. Do not retain unused
+  fields in untyped values or require a complete replica of the upstream schema.
+  Keep Amiss-owned configuration, policies, and signed wire contracts strict.
 - Blocks between `amiss-doc-contract` markers in `docs/` copy a value a Rust source owns,
   and a test asserts the two are equal. Nothing writes the block for you: move the Rust
   source and the block together, because editing either one alone fails CI.
