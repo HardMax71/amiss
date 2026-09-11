@@ -1,126 +1,64 @@
 use amiss_controller::{ProviderError, decode_bounded_json};
-use amiss_controller_gitea::commit::{CommitFileStatus, CommitRecord, CommitSigner, CommitStats};
+use amiss_controller_gitea::commit::CommitRecord;
 
 #[test]
-fn captured_commits_retain_accounts_and_disabled_metadata() {
-    for (input, metadata) in [
-        (
-            include_bytes!("../fixtures/gitea-commit-full.json").as_slice(),
-            true,
-        ),
-        (
-            include_bytes!("../fixtures/forgejo-commit-full.json").as_slice(),
-            true,
-        ),
-        (
-            include_bytes!("../fixtures/gitea-commit-disabled.json").as_slice(),
-            false,
-        ),
-        (
-            include_bytes!("../fixtures/forgejo-commit-disabled.json").as_slice(),
-            false,
-        ),
+fn captured_commits_keep_only_the_consumed_graph() {
+    for input in [
+        include_str!("../fixtures/gitea-commit-full.json"),
+        include_str!("../fixtures/forgejo-commit-full.json"),
+        include_str!("../fixtures/gitea-commit-disabled.json"),
+        include_str!("../fixtures/forgejo-commit-disabled.json"),
     ] {
         let (commit, length): (CommitRecord, _) =
-            decode_bounded_json(input, None, input.len(), |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+            decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
+                serde_json::from_slice(bytes)
             })
             .unwrap();
         assert_eq!(length, input.len());
-        assert_eq!(commit.files.is_some(), metadata);
-        assert_eq!(commit.stats.is_some(), metadata);
-        assert_eq!(commit.commit.verification.is_some(), metadata);
         assert_eq!(commit.parents.len(), 1);
-        assert_eq!(commit.parents[0].created, "0001-01-01T00:00:00Z");
         assert_eq!(commit.commit.tree.sha, commit.sha);
         assert_ne!(commit.parents[0].sha, commit.sha);
-        let committer = commit.committer.as_ref().unwrap();
-        assert_eq!(commit.author.is_some(), committer.pronouns.is_some());
-        if let Some(stats) = &commit.stats {
-            assert_eq!(stats.total, stats.additions + stats.deletions);
-        }
-        let mut page = vec![commit];
-        let encoded = serde_json::to_vec(&page).unwrap();
-        let (decoded, _) = decode_bounded_json::<Vec<CommitRecord>, _>(
-            encoded.as_slice(),
-            None,
-            encoded.len(),
-            |bytes| amiss_wire::read_json(bytes, u64::MAX),
-        )
-        .unwrap();
-        assert_eq!(decoded, page);
-        if metadata {
-            for count in [0, js_int::MAX_SAFE_UINT] {
-                page[0].stats = Some(CommitStats {
-                    total: count,
-                    additions: count,
-                    deletions: count,
-                });
-                let encoded = serde_json::to_vec(&page).unwrap();
-                assert_eq!(
-                    amiss_wire::read_json::<Vec<CommitRecord>>(&encoded, u64::MAX).unwrap(),
-                    page
-                );
-            }
-            super::numbers::assert_integer_contract(&page, js_int::MAX_SAFE_INT).unwrap();
-            page[0].stats.as_mut().unwrap().deletions = js_int::MAX_SAFE_UINT + 1;
-            assert!(serde_json::to_vec(&page).is_err());
-        }
-    }
-    let mut commit: CommitRecord = amiss_wire::read_json(
-        include_bytes!("../fixtures/gitea-commit-full.json"),
-        u64::MAX,
-    )
-    .unwrap();
-    commit.parents.clear();
-    let verification = commit.commit.verification.as_mut().unwrap();
-    verification.signer = Some(CommitSigner {
-        name: "Fixture signer".to_owned(),
-        email: "signer@example.com".to_owned(),
-        username: "signer".to_owned(),
-    });
-    for status in [
-        CommitFileStatus::Added,
-        CommitFileStatus::Removed,
-        CommitFileStatus::Modified,
-    ] {
-        commit.files.as_mut().unwrap()[0].status = status;
-        let encoded = serde_json::to_vec(&commit).unwrap();
+        let minimal = serde_json::to_vec(&commit).unwrap();
+        assert!(minimal.len() < input.len());
         assert_eq!(
-            amiss_wire::read_json::<CommitRecord>(&encoded, u64::MAX).unwrap(),
+            serde_json::from_slice::<CommitRecord>(&minimal).unwrap(),
+            commit
+        );
+        for (old, new) in [
+            (
+                r#""html_url":"#,
+                r#""extra":{"future":[null,true]},"html_url":"#,
+            ),
+            (
+                r#""commit":{"#,
+                r#""commit":{"extra":{"future":[null,true]},"#,
+            ),
+            (r#""tree":{"#, r#""tree":{"extra":{"future":[null,true]},"#),
+            (
+                r#""parents":[{"#,
+                r#""parents":[{"extra":{"future":[null,true]},"#,
+            ),
+        ] {
+            let changed = input.replace(old, new);
+            assert_ne!(changed, input);
+            assert_eq!(
+                serde_json::from_str::<CommitRecord>(&changed).unwrap(),
+                commit
+            );
+        }
+        let positional =
+            serde_json::to_vec(&(&commit.sha, &commit.commit, &commit.parents)).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<CommitRecord>(&positional).unwrap(),
             commit
         );
     }
-    assert!(
-        amiss_wire::read_json::<Vec<CommitRecord>>(b"[]", 2)
-            .unwrap()
-            .is_empty()
-    );
 }
 
 #[test]
-fn a_commit_page_cannot_hide_malformed_or_discarded_records() {
+fn commit_graphs_reject_missing_invalid_and_duplicate_consumed_fields() {
     let input = include_str!("../fixtures/gitea-commit-full.json");
-    for (original, replacement) in [
-        (r#""html_url":"#, r#""unknown":true,"html_url":"#),
-        (r#""commit":{"#, r#""commit":{"unknown":true,"#),
-        (
-            r#""author":{"name":"#,
-            r#""author":{"unknown":true,"name":"#,
-        ),
-        (r#""tree":{"#, r#""tree":{"unknown":true,"#),
-        (r#""verification":{"#, r#""verification":{"unknown":true,"#),
-        (
-            r#""committer":{"id":"#,
-            r#""committer":{"unknown":true,"id":"#,
-        ),
-        (r#""parents":[{"#, r#""parents":[{"unknown":true,"#),
-        (r#""files":[{"#, r#""files":[{"unknown":true,"#),
-        (r#""stats":{"#, r#""stats":{"unknown":true,"#),
-        (
-            r#""stats":{"total":58,"additions":27,"deletions":31}"#,
-            r#""stats":[58,27,31]"#,
-        ),
+    for (old, new) in [
         (
             r#""sha":"555f1ae516acccb818f1510af58e6098f24f3c42""#,
             r#""sha":"not-an-id""#,
@@ -129,16 +67,13 @@ fn a_commit_page_cannot_hide_malformed_or_discarded_records() {
             r#""sha":"1c690c5ff862f85ef44b90a5e8f426b669b0128c""#,
             r#""sha":"not-an-id""#,
         ),
+        (r#""sha":"#, r#""sha":null,"sha":"#),
+        (r#""sha":"#, r#""missing_sha":"#),
+        (r#""commit":"#, r#""missing_commit":"#),
+        (r#""tree":"#, r#""missing_tree":"#),
         (r#""parents":"#, r#""missing_parents":"#),
-        (r#""author":null,"#, ""),
-        (r#""signer":null"#, r#""signer":{}"#),
-        (r#""status":"added""#, r#""status":"unknown""#),
-        (r#""verified":false"#, r#""verified":"false""#),
-        (r#""total":58"#, r#""total":-1"#),
-        (r#""total":58"#, r#""total":9007199254740992"#),
-        (r#""total":58"#, r#""total":58,"\u0074otal":58"#),
     ] {
-        let invalid = input.replace(original, replacement);
+        let invalid = input.replace(old, new);
         assert_ne!(invalid, input);
         let page = format!("[{invalid}]");
         assert_eq!(
@@ -146,22 +81,54 @@ fn a_commit_page_cannot_hide_malformed_or_discarded_records() {
                 page.as_bytes(),
                 None,
                 page.len(),
-                |bytes| amiss_wire::read_json(bytes, u64::MAX)
+                |bytes| serde_json::from_slice(bytes)
             ),
             Err(ProviderError::InvalidResponse)
         );
     }
-    let disabled = include_str!("../fixtures/gitea-commit-disabled.json");
-    for missing in [
-        r#""files":null,"#,
-        r#","stats":null"#,
-        r#","verification":null"#,
-    ] {
-        let invalid = disabled.replace(missing, "");
-        assert_ne!(invalid, disabled);
-        assert!(amiss_wire::read_json::<CommitRecord>(invalid.as_bytes(), u64::MAX).is_err());
-    }
     for invalid in ["null", "{}", "[null]", "[true]", "[{}]", "[[]]"] {
-        assert!(amiss_wire::read_json::<Vec<CommitRecord>>(invalid.as_bytes(), u64::MAX).is_err());
+        assert!(serde_json::from_str::<Vec<CommitRecord>>(invalid).is_err());
+    }
+    for suffix in [" {}", " trailing"] {
+        assert!(serde_json::from_str::<CommitRecord>(&format!("{input}{suffix}")).is_err());
+    }
+    assert_eq!(
+        decode_bounded_json::<CommitRecord, _>(input.as_bytes(), None, input.len() - 1, |bytes| {
+            serde_json::from_slice(bytes)
+        }),
+        Err(ProviderError::InvalidResponse)
+    );
+}
+
+#[test]
+fn commit_inputs_do_not_require_unused_metadata_or_nonempty_parents() {
+    let input = include_str!("../fixtures/gitea-commit-full.json");
+    let mut commit: CommitRecord = serde_json::from_str(input).unwrap();
+    commit.parents.clear();
+    let minimal = serde_json::to_string(&commit).unwrap();
+    assert_eq!(
+        serde_json::from_str::<CommitRecord>(&minimal).unwrap(),
+        commit
+    );
+    assert!(
+        serde_json::from_str::<Vec<CommitRecord>>("[]")
+            .unwrap()
+            .is_empty()
+    );
+    for (old, new) in [
+        (r#""verification":{"#, r#""verification":{"unknown":true,"#),
+        (
+            r#""stats":{"total":58,"additions":27,"deletions":31}"#,
+            r#""stats":"unused""#,
+        ),
+        (r#""author":null,"#, ""),
+        (r#""status":"added""#, r#""status":{"unrelated":true}"#),
+    ] {
+        let changed = input.replace(old, new);
+        assert_ne!(changed, input);
+        assert_eq!(
+            serde_json::from_str::<CommitRecord>(&changed).unwrap(),
+            serde_json::from_str::<CommitRecord>(input).unwrap()
+        );
     }
 }

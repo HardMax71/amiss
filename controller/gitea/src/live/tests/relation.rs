@@ -292,10 +292,9 @@ fn all_relation_verdicts_map_to_the_two_provider_states() {
 
 #[test]
 fn commit_status_requests_and_responses_use_the_native_wire_shape() {
-    let head: CommitRecord = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/gitea-commit-full.json"),
-        u64::MAX,
-    )
+    let head: CommitRecord = serde_json::from_slice(include_bytes!(
+        "../../../tests/fixtures/gitea-commit-full.json"
+    ))
     .unwrap();
     assert_eq!(
         head.sha.as_str(),

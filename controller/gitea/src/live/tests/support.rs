@@ -64,14 +64,6 @@ pub(super) static REVIEW: LazyLock<ReviewRecord> = LazyLock::new(|| {
     .unwrap()
 });
 
-static COMMIT: LazyLock<CommitRecord> = LazyLock::new(|| {
-    amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/gitea-commit-full.json"),
-        u64::MAX,
-    )
-    .unwrap()
-});
-
 pub(super) static BRANCH: LazyLock<BranchRecord> = LazyLock::new(|| {
     amiss_wire::read_json(
         include_bytes!("../../../tests/fixtures/gitea-branch.json"),
@@ -337,24 +329,12 @@ pub(super) fn commit(commit: char, tree: char, parents: &[char]) -> CommitRecord
     CommitRecord {
         sha: oid(commit),
         commit: CommitBodyRecord {
-            tree: CommitMetaRecord {
-                sha: oid(tree),
-                ..COMMIT.commit.tree.clone()
-            },
-            ..COMMIT.commit.clone()
+            tree: CommitMetaRecord { sha: oid(tree) },
         },
         parents: parents
             .iter()
-            .map(|parent| CommitMetaRecord {
-                sha: oid(*parent),
-                url: format!(
-                    "https://forge.example/api/v1/repos/acme/widget/git/commits/{}",
-                    oid(*parent)
-                ),
-                created: "0001-01-01T00:00:00Z".to_owned(),
-            })
+            .map(|parent| CommitMetaRecord { sha: oid(*parent) })
             .collect(),
-        ..COMMIT.clone()
     }
 }
 
