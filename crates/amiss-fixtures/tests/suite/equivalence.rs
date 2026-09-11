@@ -35,3 +35,16 @@ fn stage(root: &std::path::Path, path: &str, body: &str) {
     std::fs::create_dir_all(file.parent().unwrap()).unwrap();
     std::fs::write(file, body).unwrap();
 }
+
+#[test]
+fn rejection_fixtures_require_changed_invalid_inputs() {
+    for (old, new) in [("1", "2"), ("missing", "2")] {
+        assert!(
+            std::panic::catch_unwind(|| {
+                amiss_fixtures::assert_json_rejections::<u64>("1", &[(old, new)]);
+            })
+            .is_err()
+        );
+    }
+    amiss_fixtures::assert_json_rejections::<u64>("1", &[("1", "false"), ("1", "-1")]);
+}

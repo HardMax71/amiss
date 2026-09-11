@@ -94,6 +94,16 @@ fn reviews_are_exact_commit_bound_and_idempotent() {
         fixture.client.publish(fixture.pull_request(), &publication),
         Ok(())
     );
+    {
+        let mut state = fixture.rest.state.lock().unwrap();
+        let review = state.data.reviews.last_mut().unwrap();
+        let wire = serde_json::to_string(review).unwrap().replacen(
+            '{',
+            r#"{"official":null,"team":42,"updated_at":false,"extra":[],"#,
+            1,
+        );
+        *review = serde_json::from_str(&wire).unwrap();
+    }
     assert_eq!(
         fixture.client.publish(fixture.pull_request(), &publication),
         Ok(())
@@ -295,7 +305,6 @@ fn a_created_review_is_exact_fresh_and_owned() {
         commit_id: Some(oid('b')),
         stale,
         dismissed,
-        ..super::support::REVIEW.clone()
     };
 
     let sound = review(9, 77, "amiss-controller", false, false);

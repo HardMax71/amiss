@@ -79,6 +79,25 @@ pub fn canonical_json(bytes: &[u8]) -> serde_json::Result<Vec<u8>> {
     Ok(canonical)
 }
 
+/// Applies each wire mutation independently and requires native Serde to reject it.
+///
+/// # Panics
+///
+/// A mutation changes nothing or produces an accepted input.
+pub fn assert_json_rejections<T: serde::de::DeserializeOwned>(
+    input: &str,
+    replacements: &[(&str, &str)],
+) {
+    for &(old, new) in replacements {
+        let changed = input.replace(old, new);
+        assert_ne!(changed, input, "mutation {old:?} -> {new:?}");
+        assert!(
+            serde_json::from_str::<T>(&changed).is_err(),
+            "accepted mutation {old:?} -> {new:?}"
+        );
+    }
+}
+
 /// Repository-local variables Git exports to hooks. They must not select the
 /// repository, index, object store, or configuration for a fixture command.
 /// Keep this list in sync with `git rev-parse --local-env-vars`; the integration

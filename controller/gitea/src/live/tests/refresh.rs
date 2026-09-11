@@ -75,6 +75,14 @@ fn exact_live_snapshot_accepts_gitea_and_forgejo() {
                 1,
             );
             data.pull_request = serde_json::from_str(&metadata).unwrap();
+            let wire = serde_json::to_string(&data.target_branch)
+                .unwrap()
+                .replacen(
+                    '{',
+                    r#"{"enable_status_check":42,"user_can_push":null,"extra":false,"#,
+                    1,
+                );
+            data.target_branch = serde_json::from_str(&wire).unwrap();
         });
         assert_eq!(
             changed.client.refresh(changed.pull_request()).unwrap(),
@@ -308,7 +316,6 @@ fn unrelated_historical_reviews_cannot_brick_the_lane() {
             commit_id: None,
             stale: false,
             dismissed: false,
-            ..super::support::REVIEW.clone()
         });
         data.reviews.push(ReviewRecord {
             id: 0,
@@ -321,7 +328,6 @@ fn unrelated_historical_reviews_cannot_brick_the_lane() {
             commit_id: None,
             stale: false,
             dismissed: false,
-            ..super::support::REVIEW.clone()
         });
     });
     assert_eq!(
@@ -353,7 +359,6 @@ fn dedicated_reviewer_rows_are_strict() {
                 commit_id: Some(oid('b')),
                 stale: false,
                 dismissed: false,
-                ..super::support::REVIEW.clone()
             };
             data.reviews.push(review);
             mutate(data.reviews.last_mut().unwrap());

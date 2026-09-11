@@ -439,6 +439,7 @@ version = "0.27.0"
 dependencies = [
  "amiss-wire",
  "flate2",
+ "serde",
  "serde-transcode",
  "serde_json",
  "serde_json_canonicalizer",

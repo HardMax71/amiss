@@ -6,7 +6,6 @@ use crate::user::UserRecord;
 
 #[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct CommitStatusRecord {
     pub id: u64,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -15,9 +14,6 @@ pub struct CommitStatusRecord {
     pub target_url: String,
     pub description: String,
     pub context: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub url: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]

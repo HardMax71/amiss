@@ -1,17 +1,23 @@
 use amiss_controller_gitea::status::{CommitStatusRecord, CommitStatusState, CreateCommitStatus};
 
 #[test]
-fn complete_status_pages_retain_metadata_and_nullable_creators()
--> Result<(), Box<dyn std::error::Error>> {
-    let input = include_bytes!("../fixtures/commit-status.json");
-    let mut status: CommitStatusRecord = serde_json::from_slice(input)?;
-    assert_eq!(status.created_at, "2026-08-31T12:00:00Z");
-    assert_eq!(status.updated_at, status.created_at);
-    assert_eq!(
-        status.url,
-        "https://forge.example/api/v1/repos/acme/widget/statuses/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-    );
+fn status_pages_keep_owned_feedback_and_nullable_creators() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut status: CommitStatusRecord =
+        serde_json::from_slice(include_bytes!("../fixtures/commit-status.json"))?;
+    assert_eq!(status.status, CommitStatusState::Success);
+    assert_eq!(status.context, "Amiss cross-repository");
     assert_eq!(status.creator.as_ref().ok_or("missing creator")?.id, 77);
+    let minimal = serde_json::to_string(&status)?;
+    let metadata = minimal.replacen(
+        '{',
+        r#"{"created_at":false,"updated_at":42,"url":null,"extra":[],"#,
+        1,
+    );
+    assert_eq!(
+        serde_json::from_str::<CommitStatusRecord>(&metadata)?,
+        status
+    );
     for creator in [
         None,
         Some(serde_json::from_slice(include_bytes!(
@@ -23,8 +29,19 @@ fn complete_status_pages_retain_metadata_and_nullable_creators()
     ] {
         status.creator = creator;
         status.id = js_int::MAX_SAFE_UINT;
-        let page = vec![status.clone()];
-        super::numbers::assert_integer_contract(&page, js_int::MAX_SAFE_INT)?;
+        super::numbers::assert_integer_contract(&vec![status.clone()], js_int::MAX_SAFE_INT)?;
+        let positional = serde_json::to_vec(&(
+            status.id,
+            &status.creator,
+            status.status,
+            &status.target_url,
+            &status.description,
+            &status.context,
+        ))?;
+        assert_eq!(
+            serde_json::from_slice::<CommitStatusRecord>(&positional)?,
+            status
+        );
     }
     status.id = js_int::MAX_SAFE_UINT + 1;
     assert!(serde_json::to_vec(&status).is_err());
@@ -32,56 +49,48 @@ fn complete_status_pages_retain_metadata_and_nullable_creators()
 }
 
 #[test]
-fn status_records_reject_unknown_missing_and_normalized_fields()
+fn status_records_require_owned_identity_and_feedback_fields()
 -> Result<(), Box<dyn std::error::Error>> {
-    let input = include_str!("../fixtures/commit-status.json");
-    for (old, new) in [
-        (r#""id": 42"#, r#""id": 42, "extra": true"#),
-        (r#""id": 42"#, r#""id": 42, "\u0069d": 42"#),
-        (r#""status": "success""#, r#""status": "unknown""#),
-        (r#""status": "success""#, r#""status": 1"#),
-        (r#""created_at": "2026-08-31T12:00:00Z","#, ""),
-        (r#""updated_at": "2026-08-31T12:00:00Z","#, ""),
-        (
-            r#""url": "https://forge.example/api/v1/repos/acme/widget/statuses/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"#,
-            r#""url": null"#,
-        ),
-        (
-            r#""created_at": "2026-08-31T12:00:00Z""#,
-            r#""created_at": false"#,
-        ),
-        (r#""id": 77"#, r#""id": 77, "login": null"#),
-    ] {
-        let changed = input.replace(old, new);
-        assert_ne!(changed, input);
-        assert!(serde_json::from_str::<CommitStatusRecord>(&changed).is_err());
-        assert!(amiss_wire::read_json::<CommitStatusRecord>(changed.as_bytes(), u64::MAX).is_err());
-        assert!(
-            amiss_wire::read_json::<Vec<CommitStatusRecord>>(
-                format!("[{changed}]").as_bytes(),
-                u64::MAX
-            )
-            .is_err()
-        );
-    }
-    let status: CommitStatusRecord = serde_json::from_str(input)?;
-    let creator = status.creator.as_ref().ok_or("missing creator")?;
+    let status: CommitStatusRecord =
+        serde_json::from_slice(include_bytes!("../fixtures/commit-status.json"))?;
     let encoded = serde_json::to_string(&status)?;
-    let removed = encoded.replace(
-        &format!("\"creator\":{},", serde_json::to_string(creator)?),
-        "",
-    );
-    assert_ne!(removed, encoded);
-    assert!(serde_json::from_str::<CommitStatusRecord>(&removed).is_err());
-    assert!(amiss_wire::read_json::<CommitStatusRecord>(removed.as_bytes(), u64::MAX).is_err());
-    for invalid in [
-        "null",
-        "[]",
-        "{}",
-        "true",
-        "[42,null,\"success\",\"\",\"\",\"\",\"\",\"\",\"\"]",
+    for (field, value) in [
+        ("id", status.id.to_string()),
+        ("creator", serde_json::to_string(&status.creator)?),
+        ("status", serde_json::to_string(&status.status)?),
+        ("target_url", serde_json::to_string(&status.target_url)?),
+        ("description", serde_json::to_string(&status.description)?),
+        ("context", serde_json::to_string(&status.context)?),
     ] {
-        assert!(amiss_wire::read_json::<CommitStatusRecord>(invalid.as_bytes(), u64::MAX).is_err());
+        for replacement in [
+            format!(r#""missing_{field}":{value}"#),
+            format!(r#""{field}":{value},"{field}":{value}"#),
+        ] {
+            let invalid = encoded.replacen(&format!(r#""{field}":{value}"#), &replacement, 1);
+            assert_ne!(invalid, encoded);
+            assert!(
+                serde_json::from_str::<CommitStatusRecord>(&invalid).is_err(),
+                "{field}"
+            );
+        }
+    }
+    for (old, new) in [
+        (r#""id":42"#, r#""id":42,"\u0069d":42"#),
+        (r#""status":"success""#, r#""status":"unknown""#),
+        (r#""status":"success""#, r#""status":1"#),
+        (r#""id":77"#, r#""id":77,"login":null"#),
+        (r#""description":"#, r#""description":null,"description":"#),
+    ] {
+        let invalid = encoded.replacen(old, new, 1);
+        assert_ne!(invalid, encoded);
+        assert!(
+            serde_json::from_str::<CommitStatusRecord>(&invalid).is_err(),
+            "{new}"
+        );
+        assert!(serde_json::from_str::<Vec<CommitStatusRecord>>(&format!("[{invalid}]")).is_err());
+    }
+    for invalid in ["null", "[]", "{}", "true", "[42,null]"] {
+        assert!(serde_json::from_str::<CommitStatusRecord>(invalid).is_err());
     }
     Ok(())
 }
@@ -114,7 +123,7 @@ fn status_states_keep_the_provider_spellings_in_both_directions()
             request
         );
         assert_eq!(
-            amiss_wire::read_json::<CommitStatusRecord>(&serde_json::to_vec(&response)?, u64::MAX)?,
+            serde_json::from_slice::<CommitStatusRecord>(&serde_json::to_vec(&response)?)?,
             response
         );
     }

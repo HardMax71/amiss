@@ -305,12 +305,15 @@ fn commit_status_requests_and_responses_use_the_native_wire_shape() {
     let decoded: CommitStatusRecord =
         serde_json::from_str(include_str!("../../../tests/fixtures/commit-status.json")).unwrap();
     assert_eq!(decoded.id, 42);
-    assert_eq!(decoded.creator.unwrap().id, 77);
+    assert_eq!(decoded.creator.as_ref().unwrap().id, 77);
     assert_eq!(decoded.status, CommitStatusState::Success);
 
     let input = include_str!("../../../tests/fixtures/commit-status.json");
     let unknown = input.replacen('{', r#"{"unknown":true,"#, 1);
-    assert!(serde_json::from_str::<CommitStatusRecord>(&unknown).is_err());
+    assert_eq!(
+        serde_json::from_str::<CommitStatusRecord>(&unknown).unwrap(),
+        decoded
+    );
 
     let request = CreateCommitStatus {
         state: CommitStatusState::Failure,
@@ -386,6 +389,12 @@ fn relation_status_shape_and_created_response_are_checked_exactly() {
         Ok(StatusDecision::Create(_))
     ));
     let created = record(&fixture, &expected);
+    let wire = serde_json::to_string(&created).unwrap().replacen(
+        '{',
+        r#"{"created_at":false,"updated_at":null,"url":42,"extra":true,"#,
+        1,
+    );
+    let created: CommitStatusRecord = serde_json::from_str(&wire).unwrap();
     assert_eq!(
         validate_created(&fixture.client.config, &expected, &created),
         Ok(())
@@ -573,6 +582,5 @@ fn record(fixture: &Fixture, expected: &CreateCommitStatus) -> CommitStatusRecor
         target_url: expected.target_url.clone(),
         description: expected.description.clone(),
         context: expected.context.clone(),
-        ..super::support::STATUS.clone()
     }
 }

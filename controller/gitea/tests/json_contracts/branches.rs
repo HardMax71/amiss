@@ -2,85 +2,71 @@ use amiss_controller::{ProviderError, decode_bounded_json};
 use amiss_controller_gitea::branch::{BranchRecord, PayloadCommitRecord};
 
 #[test]
-fn branch_captures_retain_all_commit_and_control_metadata() -> Result<(), Box<dyn std::error::Error>>
+fn branch_captures_keep_the_tip_and_effective_protection() -> Result<(), Box<dyn std::error::Error>>
 {
-    for (input, name, sha, contexts) in [
+    for (input, name, sha) in [
         (
             include_str!("../fixtures/gitea-branch.json"),
             "main",
             "58931b5d170d54e3f7e8da9873404f6311e8ecd6",
-            1,
         ),
         (
             include_str!("../fixtures/forgejo-branch.json"),
             "forgejo",
             "ee74d47e1e302a1f129b0ce4c6b2584503a13790",
-            6,
         ),
     ] {
         let (branch, length): (BranchRecord, _) =
             decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })?;
         assert_eq!(length, input.len());
         assert_eq!(branch.name, name);
         assert!(branch.protected);
         assert_eq!(branch.required_approvals, 1);
-        assert!(branch.enable_status_check);
+        assert!(branch.effective_branch_protection_name.is_empty());
         assert_eq!(
-            branch
-                .status_check_contexts
-                .as_ref()
-                .ok_or("missing contexts")?
-                .len(),
-            contexts
-        );
-        assert!(!branch.user_can_push);
-        assert!(!branch.user_can_merge);
-        let commit = branch.commit.as_ref().ok_or("missing commit")?;
-        assert_eq!(commit.id.as_str(), sha);
-        assert!(!commit.message.is_empty());
-        assert!(commit.url.ends_with(sha));
-        assert!(
-            !commit
-                .author
-                .as_ref()
-                .ok_or("missing author")?
-                .username
-                .is_empty()
-        );
-        assert!(
-            !commit
-                .committer
-                .as_ref()
-                .ok_or("missing committer")?
-                .name
-                .is_empty()
-        );
-        let verification = commit.verification.as_ref().ok_or("missing verification")?;
-        assert!(!verification.verified);
-        assert_eq!(verification.reason, "gpg.error.not_signed_commit");
-        assert!(!commit.timestamp.is_empty());
-        assert_eq!(
-            (&commit.added, &commit.removed, &commit.modified),
-            (&None, &None, &None)
+            branch.commit.as_ref().ok_or("missing commit")?.id.as_str(),
+            sha
         );
         assert_eq!(
             decode_bounded_json::<BranchRecord, _>(
                 input.as_bytes(),
                 None,
                 input.len() - 1,
-                |bytes| amiss_wire::read_json(bytes, u64::MAX)
+                |bytes| serde_json::from_slice(bytes),
             ),
             Err(ProviderError::InvalidResponse)
         );
+        let minimal = serde_json::to_string(&branch)?;
+        let metadata = minimal
+            .replacen('{', r#"{"extra":true,"enable_status_check":null,"status_check_contexts":{},"user_can_push":42,"user_can_merge":[],"#, 1)
+            .replacen(r#""commit":{"#, r#""commit":{"message":null,"author":true,"verification":[],"added":42,"#, 1);
+        assert_eq!(serde_json::from_str::<BranchRecord>(&metadata)?, branch);
+        for field in [
+            "name",
+            "commit",
+            "protected",
+            "required_approvals",
+            "effective_branch_protection_name",
+        ] {
+            let missing = minimal.replacen(
+                &format!(r#""{field}":"#),
+                &format!(r#""missing_{field}":"#),
+                1,
+            );
+            assert_ne!(missing, minimal);
+            assert!(
+                serde_json::from_str::<BranchRecord>(&missing).is_err(),
+                "{field}"
+            );
+        }
         for (old, new) in [
-            (r#""commit":{"#, r#""extra":true,"commit":{"#),
-            (r#""timestamp":"#, r#""extra":true,"timestamp":"#),
-            (r#""username":"#, r#""extra":true,"username":"#),
-            (r#""verified":"#, r#""extra":true,"verified":"#),
-            (r#""protected":"#, r#""protec\u0074ed":true,"protected":"#),
-            (r#""user_can_push":false"#, r#""user_can_push":0"#),
+            (r#""protected":true"#, r#""protected":null"#),
+            (
+                r#""protected":true"#,
+                r#""protected":true,"protec\u0074ed":true"#,
+            ),
             (
                 r#""required_approvals":1"#,
                 r#""required_approvals":9007199254740992"#,
@@ -90,37 +76,26 @@ fn branch_captures_retain_all_commit_and_control_metadata() -> Result<(), Box<dy
                 r#""required_approvals":-9007199254740992"#,
             ),
             (r#""required_approvals":1"#, r#""required_approvals":1.0"#),
-            (r#""added":null"#, r#""added":[1]"#),
+            (r#""commit":{"#, r#""commit":{"id":null,"#),
         ] {
-            let changed = input.replace(old, new);
-            assert_ne!(changed, input);
-            assert!(serde_json::from_str::<BranchRecord>(&changed).is_err());
-            assert!(amiss_wire::read_json::<BranchRecord>(changed.as_bytes(), u64::MAX).is_err());
+            let invalid = minimal.replacen(old, new, 1);
+            assert_ne!(invalid, minimal);
+            assert!(
+                serde_json::from_str::<BranchRecord>(&invalid).is_err(),
+                "{new}"
+            );
         }
     }
     Ok(())
 }
 
 #[test]
-fn branch_and_payload_fields_cannot_be_omitted() -> Result<(), Box<dyn std::error::Error>> {
-    let branch: BranchRecord = serde_json::from_str(include_str!("../fixtures/gitea-branch.json"))?;
-    let encoded = serde_json::to_string(&branch)?;
-    for field in [
-        format!("\"commit\":{},", serde_json::to_string(&branch.commit)?),
-        format!(
-            "\"status_check_contexts\":{},",
-            serde_json::to_string(&branch.status_check_contexts)?
-        ),
-        "\"enable_status_check\":true,".to_owned(),
-        "\"user_can_push\":false,".to_owned(),
-        "\"user_can_merge\":false,".to_owned(),
-    ] {
-        let changed = encoded.replace(&field, "");
-        assert_ne!(changed, encoded);
-        assert!(serde_json::from_str::<BranchRecord>(&changed).is_err());
-    }
-    let commit = branch.commit.ok_or("missing commit")?;
-    let encoded = serde_json::to_string(&commit)?;
+fn branch_commit_ids_and_approval_counts_remain_checked() -> Result<(), Box<dyn std::error::Error>>
+{
+    let mut branch: BranchRecord =
+        serde_json::from_slice(include_bytes!("../fixtures/gitea-branch.json"))?;
+    let commit = branch.commit.as_ref().ok_or("missing commit")?;
+    let encoded = serde_json::to_string(commit)?;
     for invalid in [
         "g".repeat(40),
         "A".repeat(40),
@@ -131,90 +106,31 @@ fn branch_and_payload_fields_cannot_be_omitted() -> Result<(), Box<dyn std::erro
         assert_ne!(changed, encoded);
         assert!(serde_json::from_str::<PayloadCommitRecord>(&changed).is_err());
     }
-    for field in [
-        format!("\"message\":{},", serde_json::to_string(&commit.message)?),
-        format!("\"url\":{},", serde_json::to_string(&commit.url)?),
-        format!("\"author\":{},", serde_json::to_string(&commit.author)?),
-        format!(
-            "\"committer\":{},",
-            serde_json::to_string(&commit.committer)?
-        ),
-        format!(
-            "\"verification\":{},",
-            serde_json::to_string(&commit.verification)?
-        ),
-        format!(
-            "\"timestamp\":{},",
-            serde_json::to_string(&commit.timestamp)?
-        ),
-        ",\"added\":null".to_owned(),
-        ",\"removed\":null".to_owned(),
-        ",\"modified\":null".to_owned(),
-    ] {
-        let changed = encoded.replace(&field, "");
-        assert_ne!(changed, encoded);
-        assert!(serde_json::from_str::<PayloadCommitRecord>(&changed).is_err());
-    }
-    Ok(())
-}
-
-#[test]
-fn nullable_branch_metadata_is_explicit_and_lossless() -> Result<(), Box<dyn std::error::Error>> {
-    let branch: BranchRecord =
-        serde_json::from_slice(include_bytes!("../fixtures/forgejo-branch.json"))?;
-    let commit = branch.commit.as_ref().ok_or("missing commit")?;
-    for files in [None, Some(Vec::new()), Some(vec!["src/lib.rs".to_owned()])] {
-        let payload = PayloadCommitRecord {
+    assert!(serde_json::from_str::<PayloadCommitRecord>("{}").is_err());
+    for commit in [
+        None,
+        Some(PayloadCommitRecord {
             id: "a".repeat(64).parse()?,
-            author: None,
-            committer: None,
-            verification: None,
-            added: files.clone(),
-            removed: files.clone(),
-            modified: files.clone(),
-            ..commit.clone()
-        };
-        for commit in [None, Some(payload)] {
-            let response = BranchRecord {
-                commit,
-                status_check_contexts: files.clone(),
-                required_approvals: js_int::MAX_SAFE_INT,
-                ..branch.clone()
-            };
-            let encoded = serde_json::to_vec(&response)?;
-            assert_eq!(
-                amiss_wire::read_json::<BranchRecord>(&encoded, u64::MAX)?,
-                response
-            );
+        }),
+    ] {
+        branch.commit = commit;
+        for required_approvals in [js_int::MIN_SAFE_INT, js_int::MAX_SAFE_INT] {
+            branch.required_approvals = required_approvals;
+            let wire = serde_json::to_vec(&branch)?;
+            assert_eq!(serde_json::from_slice::<BranchRecord>(&wire)?, branch);
+            let positional = serde_json::to_vec(&(
+                &branch.name,
+                &branch.commit,
+                branch.protected,
+                branch.required_approvals,
+                &branch.effective_branch_protection_name,
+            ))?;
+            assert_eq!(serde_json::from_slice::<BranchRecord>(&positional)?, branch);
         }
     }
-    let positional = serde_json::to_vec(&(
-        &branch.name,
-        &branch.commit,
-        branch.protected,
-        branch.required_approvals,
-        branch.enable_status_check,
-        &branch.status_check_contexts,
-        branch.user_can_push,
-        branch.user_can_merge,
-        &branch.effective_branch_protection_name,
-    ))?;
-    assert_eq!(serde_json::from_slice::<BranchRecord>(&positional)?, branch);
-    assert!(amiss_wire::read_json::<BranchRecord>(&positional, u64::MAX).is_err());
-    let minimum = BranchRecord {
-        required_approvals: js_int::MIN_SAFE_INT,
-        ..branch.clone()
-    };
-    assert_eq!(
-        amiss_wire::read_json::<BranchRecord>(&serde_json::to_vec(&minimum)?, u64::MAX)?,
-        minimum
-    );
     for required_approvals in [js_int::MIN_SAFE_INT - 1, js_int::MAX_SAFE_INT + 1] {
-        let response = BranchRecord {
-            required_approvals,
-            ..branch.clone()
-        };
-        assert!(serde_json::to_vec(&response).is_err());
+        branch.required_approvals = required_approvals;
+        assert!(serde_json::to_vec(&branch).is_err());
     }
     Ok(())
 }

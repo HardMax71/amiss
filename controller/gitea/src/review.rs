@@ -4,30 +4,20 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, DeserializeFromStr, NoneAsEmptyString, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
-use crate::repository::Team;
 use crate::user::UserRecord;
 
 #[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ReviewRecord {
     pub id: u64,
     #[serde(deserialize_with = "Option::deserialize")]
     pub user: Option<UserRecord>,
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub team: Option<Team>,
     pub state: ReviewState,
     pub body: String,
     #[serde(with = "As::<NoneAsEmptyString>")]
     pub commit_id: Option<Oid>,
     pub stale: bool,
-    pub official: bool,
     pub dismissed: bool,
-    pub comments_count: u64,
-    pub submitted_at: String,
-    pub updated_at: String,
-    pub html_url: String,
-    pub pull_request_url: String,
 }
 
 #[derive(

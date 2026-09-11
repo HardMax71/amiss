@@ -34,24 +34,12 @@ pub(super) static USER: LazyLock<UserRecord> = LazyLock::new(|| {
     serde_json::from_slice(include_bytes!("../../../tests/fixtures/gitea-user.json")).unwrap()
 });
 
-pub(super) static STATUS: LazyLock<CommitStatusRecord> = LazyLock::new(|| {
-    serde_json::from_slice(include_bytes!("../../../tests/fixtures/commit-status.json")).unwrap()
-});
-
 pub(super) static REVIEW: LazyLock<ReviewRecord> = LazyLock::new(|| {
     serde_json::from_slice::<Vec<ReviewRecord>>(include_bytes!(
         "../../../tests/fixtures/gitea-reviews.json"
     ))
     .unwrap()
     .pop()
-    .unwrap()
-});
-
-pub(super) static BRANCH: LazyLock<BranchRecord> = LazyLock::new(|| {
-    amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/gitea-branch.json"),
-        u64::MAX,
-    )
     .unwrap()
 });
 
@@ -134,7 +122,6 @@ impl GiteaRest for FakeRest {
             commit_id: Some(review.commit_id.clone()),
             stale: false,
             dismissed: false,
-            ..REVIEW.clone()
         };
         state.data.reviews.push(created.clone());
         Ok(created)
@@ -167,7 +154,6 @@ impl GiteaRest for FakeRest {
             target_url: status.target_url.clone(),
             description: status.description.clone(),
             context: status.context.clone(),
-            ..STATUS.clone()
         };
         state.statuses.insert(0, created.clone());
         Ok(created)
@@ -412,14 +398,10 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
         },
         target_branch: BranchRecord {
             name: "main".to_owned(),
-            commit: Some(PayloadCommitRecord {
-                id: oid('a'),
-                ..BRANCH.commit.clone().unwrap()
-            }),
+            commit: Some(PayloadCommitRecord { id: oid('a') }),
             protected: true,
             required_approvals: 1,
             effective_branch_protection_name: "main".to_owned(),
-            ..BRANCH.clone()
         },
         protection,
         target: commit('a', 'c', &[]),
@@ -436,7 +418,6 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
             commit_id: Some(oid('b')),
             stale: false,
             dismissed: false,
-            ..REVIEW.clone()
         }],
     }
 }
