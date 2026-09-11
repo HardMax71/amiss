@@ -8,7 +8,6 @@ use amiss_controller::{
     ProviderIdentity, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
     WorkflowArtifactExpectation,
 };
-use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{hb, sha256};
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 use js_int::UInt;
@@ -53,10 +52,9 @@ fn exact_provider_records_select_and_retain_the_planned_template() {
     let selected = select_workflow_artifact(
         &expectation,
         &run,
-        amiss_wire::read_json(
+        serde_json::from_slice(
             &serde_json::to_vec(&artifact_page(&run, &expectation.artifact_name, &archive))
                 .unwrap(),
-            u64::MAX,
         )
         .unwrap(),
     )
@@ -67,7 +65,7 @@ fn exact_provider_records_select_and_retain_the_planned_template() {
         expectation.semantic.acquisition_identity
     );
     assert_eq!(acquired.bytes.as_ref(), payload);
-    let defects: [fn(&mut WorkflowArtifactPage); 12] = [
+    let defects: [fn(&mut WorkflowArtifactPage); 8] = [
         |page| page.total_count = 2,
         |page| page.artifacts.push(page.artifacts[0].clone()),
         |page| page.artifacts.clear(),
@@ -76,10 +74,6 @@ fn exact_provider_records_select_and_retain_the_planned_template() {
         |page| page.artifacts[0].size_in_bytes = 0,
         |page| page.artifacts[0].size_in_bytes = u64::MAX,
         |page| page.artifacts[0].expired = true,
-        |page| page.artifacts[0].digest = None,
-        |page| page.artifacts[0].digest = Some(Nullable::Null),
-        |page| page.artifacts[0].workflow_run = None,
-        |page| page.artifacts[0].workflow_run = Some(Nullable::Null),
     ];
     for defect in defects {
         let mut page = artifact_page(&run, &expectation.artifact_name, &archive);
@@ -89,22 +83,15 @@ fn exact_provider_records_select_and_retain_the_planned_template() {
             "each artifact response clause is load bearing"
         );
     }
-    let defects: [fn(&mut ArtifactRunRecord); 8] = [
-        |linked| linked.id = None,
-        |linked| *linked.id.as_mut().unwrap() += 1,
-        |linked| linked.repository_id = None,
-        |linked| *linked.repository_id.as_mut().unwrap() += 1,
-        |linked| linked.head_repository_id = None,
-        |linked| *linked.head_repository_id.as_mut().unwrap() += 1,
-        |linked| linked.head_sha = None,
-        |linked| linked.head_sha = Some(Oid::new(ObjectFormat::Sha1, "f".repeat(40)).unwrap()),
+    let defects: [fn(&mut ArtifactRunRecord); 4] = [
+        |linked| linked.id += 1,
+        |linked| linked.repository_id += 1,
+        |linked| linked.head_repository_id += 1,
+        |linked| linked.head_sha = Oid::new(ObjectFormat::Sha1, "f".repeat(40)).unwrap(),
     ];
     for defect in defects {
         let mut page = artifact_page(&run, &expectation.artifact_name, &archive);
-        let Some(Nullable::Value(linked)) = page.artifacts[0].workflow_run.as_mut() else {
-            panic!("the fixture has a complete linked run");
-        };
-        defect(linked);
+        defect(&mut page.artifacts[0].workflow_run);
         assert!(
             select_workflow_artifact(&expectation, &run, page).is_err(),
             "each supplied linked identity must match the selected run"
@@ -285,24 +272,16 @@ fn artifact_page(run: &WorkflowRunRecord, name: &str, archive: &[u8]) -> Workflo
         total_count: 1,
         artifacts: vec![WorkflowArtifactRecord {
             id: 73,
-            node_id: "MDg6QXJ0aWZhY3Q3Mw==".to_owned(),
             name: name.to_owned(),
             size_in_bytes: u64::try_from(archive.len()).unwrap(),
-            url: "https://api.github.com/repos/acme/widget/actions/artifacts/73".to_owned(),
-            archive_download_url:
-                "https://api.github.com/repos/acme/widget/actions/artifacts/73/zip".to_owned(),
             expired: false,
-            created_at: None,
-            expires_at: None,
-            updated_at: None,
-            digest: Some(Nullable::Value(sha256(archive))),
-            workflow_run: Some(Nullable::Value(ArtifactRunRecord {
-                id: Some(run.id),
-                repository_id: Some(run.repository.id),
-                head_repository_id: Some(run.head_repository.id),
-                head_branch: Some("feature/docs".to_owned()),
-                head_sha: Some(run.head_sha.clone()),
-            })),
+            digest: sha256(archive),
+            workflow_run: ArtifactRunRecord {
+                id: run.id,
+                repository_id: run.repository.id,
+                head_repository_id: run.head_repository.id,
+                head_sha: run.head_sha.clone(),
+            },
         }],
     }
 }

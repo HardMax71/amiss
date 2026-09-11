@@ -187,7 +187,7 @@ impl HttpRest {
         );
         let artifact_page: WorkflowArtifactPage =
             decode_body(self.transport.execute(request, deadline)?, |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })?;
         let artifact = select_workflow_artifact(expectation, &run, artifact_page)?;
 

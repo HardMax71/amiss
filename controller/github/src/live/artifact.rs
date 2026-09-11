@@ -1,7 +1,6 @@
 mod tests;
 
 use amiss_controller::{AcquiredSemanticTemplate, ProviderError, WorkflowArtifactExpectation};
-use amiss_wire::assessment::Nullable;
 use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::{ObjectFormat, Oid};
 use js_int::UInt;
@@ -95,26 +94,22 @@ pub(super) fn select_workflow_artifact(
     page: WorkflowArtifactPage,
 ) -> Result<SelectedArtifact, ProviderError> {
     let artifact = exactly_one(page.total_count, page.artifacts)?;
-    let (Some(Nullable::Value(digest)), Some(Nullable::Value(linked))) =
-        (artifact.digest, artifact.workflow_run)
-    else {
-        return Err(ProviderError::InvalidResponse);
-    };
+    let linked = artifact.workflow_run;
     if artifact.id == 0
         || artifact.name != expectation.artifact_name
         || !(1..=expectation.archive_byte_limit).contains(&artifact.size_in_bytes)
         || artifact.expired
-        || linked.id != Some(run.id)
-        || linked.repository_id != Some(run.repository.id)
-        || linked.head_repository_id != Some(run.head_repository.id)
-        || linked.head_sha.as_ref() != Some(&run.head_sha)
+        || linked.id != run.id
+        || linked.repository_id != run.repository.id
+        || linked.head_repository_id != run.head_repository.id
+        || linked.head_sha != run.head_sha
     {
         return Err(ProviderError::InvalidResponse);
     }
     Ok(SelectedArtifact {
         id: artifact.id,
         size: artifact.size_in_bytes,
-        digest,
+        digest: artifact.digest,
     })
 }
 
