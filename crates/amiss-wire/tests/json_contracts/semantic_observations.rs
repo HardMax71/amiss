@@ -136,12 +136,12 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
         let malformed_envelope = format!(
             r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{malformed_payload},"payload_digest":"{malformed_digest}"}}"#
         );
-        assert_eq!(
+        assert!(matches!(
             semantic::parse(malformed_envelope.as_bytes())
                 .unwrap_err()
                 .kind,
-            amiss_wire::de::ErrorKind::InvalidValue
-        );
+            amiss_wire::de::ErrorKind::Deserialize(source) if source.is_data()
+        ));
     }
 }
 

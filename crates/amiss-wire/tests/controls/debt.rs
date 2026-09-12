@@ -48,10 +48,10 @@ fn rejects_debt_digest_and_order_defects() {
         "2026-08-01T00:00:00Z",
     );
     let doc = debt_snapshot("2026-07-02T00:00:00Z", &[bad_key]);
-    assert_eq!(
+    assert!(matches!(
         parse_debt_snapshot(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::DigestMismatch
-    );
+    ));
 
     let bad_fact = debt_item(
         "debt/readme",
@@ -61,10 +61,10 @@ fn rejects_debt_digest_and_order_defects() {
         "2026-08-01T00:00:00Z",
     );
     let doc = debt_snapshot("2026-07-02T00:00:00Z", &[bad_fact]);
-    assert_eq!(
+    assert!(matches!(
         parse_debt_snapshot(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::DigestMismatch
-    );
+    ));
 
     let first = debt_item(
         "debt/b",
@@ -81,10 +81,10 @@ fn rejects_debt_digest_and_order_defects() {
         "2026-08-01T00:00:00Z",
     );
     let doc = debt_snapshot("2026-07-02T00:00:00Z", &[first, second]);
-    assert_eq!(
+    assert!(matches!(
         parse_debt_snapshot(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::UnsortedSet
-    );
+    ));
 
     let first = debt_item(
         "debt/a",
@@ -101,10 +101,10 @@ fn rejects_debt_digest_and_order_defects() {
         "2026-08-01T00:00:00Z",
     );
     let doc = debt_snapshot("2026-07-02T00:00:00Z", &[first, second]);
-    assert_eq!(
+    assert!(matches!(
         parse_debt_snapshot(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::DuplicateMember
-    );
+    ));
 
     let late = debt_item(
         "debt/readme",
@@ -114,10 +114,10 @@ fn rejects_debt_digest_and_order_defects() {
         "2026-08-01T00:00:00Z",
     );
     let doc = debt_snapshot("2026-07-02T00:00:00Z", &[late]);
-    assert_eq!(
+    assert!(matches!(
         parse_debt_snapshot(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::Inconsistent
-    );
+    ));
 
     let inverted = debt_item(
         "debt/readme",
@@ -127,8 +127,8 @@ fn rejects_debt_digest_and_order_defects() {
         "2026-07-01T00:00:00Z",
     );
     let doc = debt_snapshot("2026-08-02T00:00:00Z", &[inverted]);
-    assert_eq!(
+    assert!(matches!(
         parse_debt_snapshot(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::Inconsistent
-    );
+    ));
 }

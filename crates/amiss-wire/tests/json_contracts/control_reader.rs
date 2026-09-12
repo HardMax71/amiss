@@ -37,12 +37,12 @@ fn policy_reader_keeps_nested_records_object_shaped() -> Result<(), Box<dyn std:
     ] {
         let changed = text.replace(&valid, &invalid);
         assert_ne!(changed, text);
-        assert_eq!(
+        assert!(matches!(
             controls::parse_scanner_policy(changed.as_bytes())
                 .unwrap_err()
                 .kind,
             ErrorKind::InvalidValue
-        );
+        ));
     }
     Ok(())
 }
@@ -81,19 +81,19 @@ fn debt_and_fact_readers_keep_nested_objects_without_changing_identities()
         let text = serde_json::to_string(&debt)?;
         let changed = text.replace(&object, &positional);
         assert_ne!(changed, text);
-        assert_eq!(
+        assert!(matches!(
             controls::parse_debt_snapshot(changed.as_bytes())
                 .unwrap_err()
                 .kind,
             ErrorKind::InvalidValue
-        );
+        ));
         let text = serde_json::to_string(fact)?;
         let changed = text.replace(&object, &positional);
         assert_ne!(changed, text);
-        assert_eq!(
+        assert!(matches!(
             controls::parse_fact(changed.as_bytes()).unwrap_err().kind,
             ErrorKind::InvalidValue
-        );
+        ));
     }
     let (bytes, digest) = controls::canonical_debt_snapshot(&debt)?;
     let replay = controls::parse_debt_snapshot(&bytes)?;
@@ -173,12 +173,12 @@ fn semantic_templates_reject_positional_records_at_the_shared_boundary()
         let positional = serde_json::to_string(&(&record.key, &record.value))?;
         let changed = text.replace(&object, &positional);
         assert_ne!(changed, text);
-        assert_eq!(
+        assert!(matches!(
             semantic::parse_template(changed.as_bytes())
                 .unwrap_err()
                 .kind,
             ErrorKind::InvalidValue
-        );
+        ));
     }
     Ok(())
 }

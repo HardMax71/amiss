@@ -39,7 +39,7 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
         assert!(serde_json::from_str::<ScannerPolicy>(&altered).is_err());
         let defect = parse_scanner_policy(altered.as_bytes()).unwrap_err();
         assert_eq!(defect.path, "$.projection_assertions");
-        assert_eq!(defect.kind, ErrorKind::WrongType);
+        assert!(matches!(defect.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
 }
 

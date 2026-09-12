@@ -44,9 +44,9 @@ fn evidence_models_reject_unknown_fields() {
                 matches!(
                     external::parse_evidence(extended.as_bytes()),
                     Err(EvidenceDefect::Wire(Error {
-                        kind: ErrorKind::UnknownField,
+                        kind: ErrorKind::Deserialize(source),
                         ..
-                    }))
+                    })) if source.is_data()
                 ),
             ],
             [true; 2],
@@ -171,9 +171,9 @@ fn evidence_keeps_derived_validation_and_nonnull_optional_fields() {
         assert!(matches!(
             external::parse_evidence(changed.as_bytes()),
             Err(EvidenceDefect::Wire(Error {
-                kind: ErrorKind::WrongType,
+                kind: ErrorKind::Deserialize(source),
                 ..
-            }))
+            })) if source.is_data()
         ));
     }
     document.producer.name.clear();
@@ -201,38 +201,41 @@ fn evidence_capture_keeps_strict_bounds_and_requires_an_object() {
     assert!(matches!(
         external::parse_evidence(bounded.as_bytes()),
         Err(EvidenceDefect::Wire(Error {
-            kind: ErrorKind::UnknownField,
+            kind: ErrorKind::Deserialize(source),
             ..
-        }))
+        })) if source.is_data()
     ));
     let too_deep = bounded.replace(&nested, &format!("[{nested}]"));
     assert!(matches!(
         external::parse_evidence(too_deep.as_bytes()),
         Err(EvidenceDefect::Wire(Error {
-            kind: ErrorKind::UnknownField,
+            kind: ErrorKind::Deserialize(source),
             ..
-        }))
+        })) if source.is_data()
     ));
-    for (invalid, expected) in [
-        (
-            br#"{"future":0,"\u0066uture":1}"#.as_slice(),
-            ErrorKind::UnknownField,
-        ),
-        (br#"{"future":-0}"#, ErrorKind::UnknownField),
-        (br#"{"future":0.5}"#, ErrorKind::UnknownField),
-        (br#"{"future":1e0}"#, ErrorKind::UnknownField),
-        (br#"{"future":9007199254740992}"#, ErrorKind::UnknownField),
-        (b"{} {}", ErrorKind::MissingField),
-        (
-            invalid_utf8.as_slice(),
-            ErrorKind::Utf8(std::str::from_utf8(&invalid_utf8).unwrap_err()),
-        ),
+    for invalid in [
+        br#"{"future":0,"\u0066uture":1}"#.as_slice(),
+        br#"{"future":-0}"#,
+        br#"{"future":0.5}"#,
+        br#"{"future":1e0}"#,
+        br#"{"future":9007199254740992}"#,
+        b"{} {}",
     ] {
         let Err(EvidenceDefect::Wire(error)) = external::parse_evidence(invalid) else {
             panic!("malformed evidence must fail during typed input decoding");
         };
-        assert_eq!(error.kind, expected, "{invalid:?}");
+        assert!(
+            matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()),
+            "{invalid:?}"
+        );
     }
+    assert!(matches!(
+        external::parse_evidence(&invalid_utf8),
+        Err(EvidenceDefect::Wire(Error {
+            kind: ErrorKind::Utf8(source),
+            ..
+        })) if source == std::str::from_utf8(&invalid_utf8).unwrap_err()
+    ));
     let oversized = vec![b' '; usize::try_from(external::EXTERNAL_DOCUMENT_BYTES + 1).unwrap()];
     assert!(matches!(
         external::parse_evidence(&oversized),

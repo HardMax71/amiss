@@ -40,15 +40,15 @@ fn typed_publication_assessment_keeps_bounded_output_and_validated_engine_identi
     assert!(exact <= PUBLICATION_DOCUMENT_BYTES);
     assert_eq!(publication::parse_assessment(&bytes).unwrap(), assessment);
     amiss_wire::write_json(&assessment, std::io::sink(), exact).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&assessment, std::io::sink(), exact - 1)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
     for invalid in [String::new(), format!("{version}a"), "1 bad".to_owned()] {
         let error = publication::assess(&plan, Some(&evidence), &invalid, engine).unwrap_err();
         assert_eq!(error.path, "$.payload.engine.engine_version");
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert!(matches!(error.kind, ErrorKind::InvalidValue));
     }
 }

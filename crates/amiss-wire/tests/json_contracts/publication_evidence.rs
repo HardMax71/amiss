@@ -102,25 +102,25 @@ fn typed_evidence_moves_resources_but_output_still_enforces_the_aggregate_limit(
     assert_eq!(assessment.payload.verdict, PublicationVerdict::Refuted);
 
     let mut oversized = Vec::new();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&evidence, &mut oversized, PUBLICATION_DOCUMENT_BYTES)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
     let exact = u64::try_from(oversized.len()).unwrap();
     assert!(exact > PUBLICATION_DOCUMENT_BYTES);
-    assert_eq!(
+    assert!(matches!(
         publication::parse_evidence(&oversized).unwrap_err().kind,
         ErrorKind::LimitExceeded
-    );
+    ));
     amiss_wire::write_json(&evidence, std::io::sink(), exact).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&evidence, std::io::sink(), exact - 1)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
 
     let mut input = evidence.payload;
     input.deployment.record.uri.truncate(prefix.len());

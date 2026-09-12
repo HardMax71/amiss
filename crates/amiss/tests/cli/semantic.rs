@@ -172,7 +172,7 @@ fn a_template_cannot_choose_its_candidate() {
     assert_eq!((code, stderr.as_str()), (2, ""));
     let body = payload(&stdout);
     assert_eq!(body["result"]["complete"], false);
-    assert_eq!(body["errors"][0]["code"], "UNKNOWN_FIELD");
+    assert_eq!(body["errors"][0]["code"], "CONFIGURATION_INVALID");
 }
 
 #[test]

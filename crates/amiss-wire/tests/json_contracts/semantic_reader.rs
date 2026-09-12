@@ -23,7 +23,7 @@ fn decoded_semantic_models_own_observations_after_the_input_bytes_are_dropped() 
         assert!(!observations.is_empty());
         assert!(observations.iter().all(|row| matches!(row, Cow::Owned(_))));
     }
-    assert_eq!(semantic::validate(&document), Ok(()));
+    semantic::validate(&document).unwrap();
     assert_eq!(
         semantic::envelope(document.payload.clone()).unwrap(),
         document
@@ -67,7 +67,7 @@ fn generated_semantic_digests_keep_the_exact_payload_preimage() {
             document.payload_digest,
             hb(semantic::PAYLOAD_SCHEMA, &preimage)
         );
-        assert_eq!(semantic::validate(&document), Ok(()));
+        semantic::validate(&document).unwrap();
         let mut bytes = Vec::new();
         amiss_wire::write_json(&document, &mut bytes, semantic::SEMANTIC_EVIDENCE_BYTES).unwrap();
         assert_eq!(semantic::parse(&bytes).unwrap(), document);
@@ -84,7 +84,7 @@ fn generated_semantic_digests_keep_the_exact_payload_preimage() {
             semantic::SEMANTIC_EVIDENCE_BYTES,
         )
         .unwrap_err();
-        assert_eq!(defect.kind, ErrorKind::InvalidValue);
+        assert!(matches!(defect.kind, ErrorKind::InvalidValue));
         assert_eq!(defect.path, "$");
     }
 }
@@ -94,14 +94,14 @@ fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
     let bytes = include_bytes!("../../../../spec/examples/scanner-semantic-evidence.json");
     let original: semantic::SemanticEvidenceEnvelope<'static> =
         serde_json::from_slice(bytes).unwrap();
-    assert_eq!(semantic::validate(&original), Ok(()));
+    semantic::validate(&original).unwrap();
 
     let mut tampered = original.clone();
     tampered.payload.complete = !tampered.payload.complete;
-    assert_eq!(
+    assert!(matches!(
         semantic::validate(&tampered).unwrap_err().kind,
         ErrorKind::DigestMismatch
-    );
+    ));
 
     for (observations, kind) in [
         (
@@ -136,10 +136,15 @@ fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
             &serde_json_canonicalizer::to_vec(&document.payload).unwrap(),
         );
         let defect = semantic::validate(&document).unwrap_err();
-        assert_eq!(defect.kind, kind);
         assert_eq!(
-            semantic::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err(),
-            defect
+            std::mem::discriminant(&defect.kind),
+            std::mem::discriminant(&kind)
+        );
+        let parsed = semantic::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+        assert_eq!(parsed.path, defect.path);
+        assert_eq!(
+            std::mem::discriminant(&parsed.kind),
+            std::mem::discriminant(&defect.kind)
         );
     }
 
@@ -150,10 +155,12 @@ fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
         &serde_json_canonicalizer::to_vec(&document.payload).unwrap(),
     );
     let defect = semantic::validate(&document).unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::InvalidValue);
+    assert!(matches!(defect.kind, ErrorKind::InvalidValue));
     assert_eq!(defect.path, "$.payload.producer.version");
+    let parsed = semantic::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+    assert_eq!(parsed.path, defect.path);
     assert_eq!(
-        semantic::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err(),
-        defect
+        std::mem::discriminant(&parsed.kind),
+        std::mem::discriminant(&defect.kind)
     );
 }

@@ -87,18 +87,18 @@ fn waiver_instants_bind_at_their_exact_boundaries() {
         .expect("an item created at the bundle instant is not from the future");
 
     let backdated = waiver_bundle(&[item("2026-07-02T00:00:01Z", "2026-07-02T00:00:00Z")]);
-    assert_eq!(
+    assert!(matches!(
         parse_waiver_bundle(backdated.as_bytes()).unwrap_err().kind,
         ErrorKind::Inconsistent
-    );
+    ));
 
     let from_the_future = waiver_bundle(&[item("2026-07-04T00:00:00Z", "2026-07-05T00:00:00Z")]);
-    assert_eq!(
+    assert!(matches!(
         parse_waiver_bundle(from_the_future.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::Inconsistent
-    );
+    ));
 }
 
 #[test]
@@ -225,9 +225,11 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
     let first = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
     let second = waiver_item("waiver/two", &key, &fact, "team:release-engineering");
     let doc = waiver_bundle(&[first, second]);
-    assert_eq!(
-        parse_waiver_bundle(doc.as_bytes()).unwrap_err().kind,
-        ErrorKind::DuplicateMember,
+    assert!(
+        matches!(
+            parse_waiver_bundle(doc.as_bytes()).unwrap_err().kind,
+            ErrorKind::DuplicateMember
+        ),
         "duplicate (candidate_tree, finding_key) pair"
     );
 
@@ -236,18 +238,18 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
         "\"not_before\": \"2026-09-01T00:00:00Z\"",
     );
     let doc = waiver_bundle(&[bad_window]);
-    assert_eq!(
+    assert!(matches!(
         parse_waiver_bundle(doc.as_bytes()).unwrap_err().kind,
         ErrorKind::Inconsistent
-    );
+    ));
 
     let bad_residual = waiver_item("waiver/one", &key, &fact, "team:release-engineering").replace(
         "\"residual_disposition\": \"warn\"",
         "\"residual_disposition\": \"record\"",
     );
     let doc = waiver_bundle(&[bad_residual]);
-    assert_eq!(
+    assert!(matches!(
         parse_waiver_bundle(doc.as_bytes()).unwrap_err().kind,
-        ErrorKind::InvalidValue
-    );
+        ErrorKind::Deserialize(source) if source.is_data()
+    ));
 }

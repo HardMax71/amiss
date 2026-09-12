@@ -45,16 +45,16 @@ fn typed_locale_assessment_retains_full_results_and_bounded_output() {
     let exact = u64::try_from(bytes.len()).unwrap();
     assert!(exact <= ASSESSMENT_DOCUMENT_BYTES);
     amiss_wire::write_json(&assessment, std::io::sink(), exact).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&assessment, std::io::sink(), exact - 1)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
     for invalid in [String::new(), format!("{version}a"), "1 bad".to_owned()] {
         let error = locale::assess(&plan, Some(&evidence), &invalid, engine).unwrap_err();
         assert_eq!(error.path, "$.payload.engine.engine_version");
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert!(matches!(error.kind, ErrorKind::InvalidValue));
     }
 }
 
@@ -126,22 +126,18 @@ fn locale_assessment_requires_objects_and_schema_tags() -> Result<(), Box<dyn st
         (serde_json::to_string(&document.schema)?, "$.schema"),
         (serde_json::to_string(&payload.schema)?, "$.payload.schema"),
     ] {
-        for (invalid, kind) in [
-            ("null", ErrorKind::WrongType),
-            ("false", ErrorKind::WrongType),
-            (r#""unknown""#, ErrorKind::InvalidValue),
-        ] {
+        for invalid in ["null", "false", r#""unknown""#] {
             let changed = text.replacen(&tag, invalid, 1);
             assert_ne!(changed, text);
             let error = locale::parse_assessment(changed.as_bytes()).unwrap_err();
             assert_eq!(error.path, path);
-            assert_eq!(error.kind, kind);
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
         }
         let missing = text.replacen(&format!("\"schema\":{tag},"), "", 1);
         assert_ne!(missing, text);
         let error = locale::parse_assessment(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
     Ok(())
 }
@@ -167,7 +163,7 @@ fn nullable_locale_assessment_fields_remain_required_with_precise_errors() {
             serde_json::from_str::<locale::LocaleCoverageAssessmentEnvelope>(&missing).is_err()
         );
         let error = locale::parse_assessment(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
 }

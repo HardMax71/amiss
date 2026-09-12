@@ -70,34 +70,34 @@ fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
     assert_ne!(malformed, wire);
     let defect = external::parse_plan(malformed.as_bytes()).unwrap_err();
     assert_eq!(defect.path, "$.payload.engine.engine_version");
-    assert_eq!(defect.kind, ErrorKind::WrongType);
+    assert!(matches!(defect.kind, ErrorKind::Deserialize(source) if source.is_data()));
     plan.payload.engine.engine_version.clear();
     let defect = external::validate_plan_envelope(&plan).unwrap_err();
     assert_eq!(defect.path, "$.payload_digest");
-    assert_eq!(defect.kind, ErrorKind::DigestMismatch);
-    assert_eq!(
+    assert!(matches!(defect.kind, ErrorKind::DigestMismatch));
+    assert!(matches!(
         external::parse_plan(&serde_json::to_vec(&plan).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::DigestMismatch
-    );
+    ));
     plan.payload_digest = hb(
         external::PLAN_PAYLOAD_SCHEMA,
         &serde_json_canonicalizer::to_vec(&plan.payload).unwrap(),
     );
     let defect = external::validate_plan_envelope(&plan).unwrap_err();
     assert_eq!(defect.path, "$.payload.engine.engine_version");
-    assert_eq!(defect.kind, ErrorKind::InvalidValue);
-    assert_eq!(
+    assert!(matches!(defect.kind, ErrorKind::InvalidValue));
+    assert!(matches!(
         external::parse_plan(&serde_json::to_vec(&plan).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
-    );
+    ));
     plan.payload.retained_count = u64::MAX;
     let defect = external::validate_plan_envelope(&plan).unwrap_err();
     assert_eq!(defect.path, "$.payload");
-    assert_eq!(defect.kind, ErrorKind::InvalidValue);
+    assert!(matches!(defect.kind, ErrorKind::InvalidValue));
 
     let mut assessment: ExternalAssessmentEnvelope = serde_json::from_slice(ASSESSMENT).unwrap();
     let version = serde_json::to_string(&assessment.payload.producer.version).unwrap();
@@ -109,7 +109,7 @@ fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
         panic!("the producer version must be a string");
     };
     assert_eq!(defect.path, "$.payload.producer.version");
-    assert_eq!(defect.kind, ErrorKind::WrongType);
+    assert!(matches!(defect.kind, ErrorKind::Deserialize(source) if source.is_data()));
     assessment.payload.producer.version.clear();
     assert!(matches!(
         external::parse_assessment(&serde_json::to_vec(&assessment).unwrap()),
@@ -141,8 +141,8 @@ fn assessments_share_the_closed_engine_and_producer_descriptors() {
         else {
             panic!("the shared {field} descriptor must reject unknown fields");
         };
-        assert_eq!(error.path, format!("$.payload.{field}.future"));
-        assert_eq!(error.kind, ErrorKind::UnknownField);
+        assert_eq!(error.path, format!("$.payload.{field}"));
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
 }
 
@@ -150,42 +150,27 @@ fn assessments_share_the_closed_engine_and_producer_descriptors() {
 fn closed_external_plans_reject_invalid_numbers_and_deep_unknown_fields() {
     let document: ExternalPlanEnvelope = serde_json::from_slice(PLAN).unwrap();
     let wire = serde_json::to_string(&document).unwrap();
-    for (member, expected, path) in [
-        (
-            "\"retained_count\":-0",
-            ErrorKind::WrongType,
-            "$.payload.retained_count",
-        ),
-        (
-            "\"retained_count\":0.0",
-            ErrorKind::WrongType,
-            "$.payload.retained_count",
-        ),
-        (
-            "\"retained_count\":0e0",
-            ErrorKind::WrongType,
-            "$.payload.retained_count",
-        ),
+    for (member, path) in [
+        ("\"retained_count\":-0", "$.payload.retained_count"),
+        ("\"retained_count\":0.0", "$.payload.retained_count"),
+        ("\"retained_count\":0e0", "$.payload.retained_count"),
         (
             "\"retained_count\":9007199254740992",
-            ErrorKind::InvalidValue,
             "$.payload.retained_count",
         ),
-        (
-            "\"retained_count\":0,\"retained_count\":0",
-            ErrorKind::InvalidValue,
-            "$.payload",
-        ),
+        ("\"retained_count\":0,\"retained_count\":0", "$.payload"),
         (
             "\"retained_count\":0,\"retained_\\u0063ount\":0",
-            ErrorKind::InvalidValue,
             "$.payload",
         ),
     ] {
         let changed = wire.replace("\"retained_count\":0", member);
         assert_ne!(changed, wire);
         let defect = external::parse_plan(changed.as_bytes()).unwrap_err();
-        assert_eq!(defect.kind, expected, "{member}: {defect:?}");
+        assert!(
+            matches!(defect.kind, ErrorKind::Deserialize(ref source) if source.is_data()),
+            "{member}: {defect:?}"
+        );
         assert_eq!(defect.path, path, "{member}");
     }
     let nested = format!("{}null{}", "[".repeat(510), "]".repeat(510));
@@ -193,12 +178,11 @@ fn closed_external_plans_reject_invalid_numbers_and_deep_unknown_fields() {
         "\"payload\":{",
         &format!("\"payload\":{{\"future\":{nested},"),
     );
-    assert_eq!(
-        external::parse_plan(changed.as_bytes()).unwrap_err().kind,
-        ErrorKind::UnknownField
+    assert!(
+        matches!(external::parse_plan(changed.as_bytes()).unwrap_err().kind, ErrorKind::Deserialize(source) if source.is_data())
     );
     let too_deep = changed.replace(&nested, &format!("[{nested}]"));
     let defect = external::parse_plan(too_deep.as_bytes()).unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::UnknownField);
-    assert_eq!(defect.path, "$.payload.future");
+    assert!(matches!(defect.kind, ErrorKind::Deserialize(source) if source.is_data()));
+    assert_eq!(defect.path, "$.payload");
 }

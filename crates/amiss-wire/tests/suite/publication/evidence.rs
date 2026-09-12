@@ -65,7 +65,7 @@ fn publication_evidence_refuses_non_success_and_unsafe_attempts() {
         invalid.deployment.provider_run_attempt = provider_run_attempt;
         let error = evidence(invalid).unwrap_err();
         assert_eq!(error.path, "$.payload.deployment.provider_run_attempt");
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert!(matches!(error.kind, ErrorKind::InvalidValue));
     }
 
     let envelope = evidence(publication_evidence()).unwrap();
@@ -78,7 +78,7 @@ fn publication_evidence_refuses_non_success_and_unsafe_attempts() {
     assert_ne!(failed, text);
     let error = parse_evidence(failed.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.deployment.outcome");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
 }
 
 #[test]
@@ -87,5 +87,5 @@ fn publication_evidence_requires_immutable_deployment_resources() {
     relative_record.deployment.record.uri = "deployments/987".to_owned();
     let error = evidence(relative_record).unwrap_err();
     assert_eq!(error.path, "$.payload.deployment.record.uri");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 }

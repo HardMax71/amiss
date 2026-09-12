@@ -78,7 +78,7 @@ fn constraint_repository_is_an_object_in_the_model_and_reader() {
     assert_ne!(changed, text);
     let error = parse_execution_constraint(changed.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.action_repository");
-    assert_eq!(error.kind, ErrorKind::WrongType);
+    assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     assert!(serde_json::from_str::<ExecutionConstraintDescriptor>(&changed).is_err());
     let (bytes, digest) = controls::canonical_execution_constraint(&descriptor).unwrap();
     let replay = parse_execution_constraint(&bytes).unwrap();

@@ -151,7 +151,7 @@ fn typed<T>(
 /// Maps one strict external-input defect into the scanner's public analysis taxonomy.
 #[must_use]
 pub fn configuration_detail(error: &Error) -> ErrorDetail {
-    let analysis = match error.kind {
+    let analysis = match &error.kind {
         ErrorKind::Utf8(_) => AnalysisErrorCode::InvalidUtf8,
         ErrorKind::Json(json) => match json.kind {
             JsonErrorKind::InvalidUtf8 => AnalysisErrorCode::InvalidUtf8,
@@ -168,15 +168,15 @@ pub fn configuration_detail(error: &Error) -> ErrorDetail {
             | JsonErrorKind::FractionOrExponent
             | JsonErrorKind::IntegerOutOfRange => AnalysisErrorCode::InvalidJson,
         },
-        ErrorKind::Deserialize { .. } => AnalysisErrorCode::InvalidJson,
-        ErrorKind::UnknownField => AnalysisErrorCode::UnknownField,
+        ErrorKind::Deserialize(source) if source.is_data() => {
+            AnalysisErrorCode::ConfigurationInvalid
+        }
+        ErrorKind::Deserialize(_) => AnalysisErrorCode::InvalidJson,
         ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
         ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,
-        ErrorKind::MissingField
-        | ErrorKind::WrongType
-        | ErrorKind::InvalidValue
-        | ErrorKind::LimitExceeded
-        | ErrorKind::Inconsistent => AnalysisErrorCode::ConfigurationInvalid,
+        ErrorKind::InvalidValue | ErrorKind::LimitExceeded | ErrorKind::Inconsistent => {
+            AnalysisErrorCode::ConfigurationInvalid
+        }
     };
     code(analysis)
 }

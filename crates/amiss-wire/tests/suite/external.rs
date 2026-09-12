@@ -291,7 +291,7 @@ fn known_optional_plan_fields_do_not_accept_null() {
         .replace(&payload, &malformed_payload)
         .replace(&written.payload_digest.to_string(), &digest.to_string());
     let error = parse_plan(bytes.as_bytes()).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::WrongType);
+    assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     assert_eq!(error.path, "$.payload.introduced[0].repository.form");
 }
 
@@ -315,7 +315,7 @@ fn malformed_known_plan_fields_are_refused_after_binding() {
     })
     .unwrap();
     let error = parse_plan(&serde_json_canonicalizer::to_vec(&written).unwrap()).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
     assert_eq!(error.path, "$.payload.introduced[0].destination");
 }
 

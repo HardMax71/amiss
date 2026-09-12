@@ -71,10 +71,10 @@ fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
         .unwrap()
         .replace(&payload, &unknown)
         .replace(&document.payload_digest.to_string(), &digest.to_string());
-    assert_eq!(
+    assert!(matches!(
         semantic::parse(encoded.as_bytes()).unwrap_err().kind,
-        ErrorKind::InvalidValue
-    );
+        ErrorKind::Deserialize(source) if source.is_data()
+    ));
 
     let template: SemanticEvidenceTemplate<'static> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-template.json"
@@ -86,10 +86,10 @@ fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
     let unknown_producer = producer.replace("\"record-set\"", "\"future-producer\"");
     let unknown = original.replace(&producer, &unknown_producer);
     assert_ne!(original, unknown);
-    assert_eq!(
+    assert!(matches!(
         semantic::parse_template(unknown.as_bytes())
             .unwrap_err()
             .kind,
-        ErrorKind::InvalidValue
-    );
+        ErrorKind::Deserialize(source) if source.is_data()
+    ));
 }

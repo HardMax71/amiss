@@ -93,37 +93,37 @@ fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
     assert_eq!(statement.valid_until.as_str(), "2026-07-12T10:10:00Z");
 
     let too_long = TIME_STATEMENT.replace("10:10:00Z", "10:10:01Z");
-    assert_eq!(
+    assert!(matches!(
         parse_trusted_time(too_long.as_bytes()).unwrap_err().kind,
         ErrorKind::InvalidValue
-    );
+    ));
     let not_after = TIME_STATEMENT.replace("10:10:00Z", "10:00:00Z");
-    assert_eq!(
+    assert!(matches!(
         parse_trusted_time(not_after.as_bytes()).unwrap_err().kind,
         ErrorKind::InvalidValue
-    );
+    ));
     let trailing_separator = TIME_STATEMENT.replace("pipeline/01J2Z9-7", "pipeline/");
-    assert_eq!(
+    assert!(matches!(
         parse_trusted_time(trailing_separator.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
-    );
+    ));
     let uppercase_provider = TIME_STATEMENT.replace("gitlab-ci", "GitLab-CI");
-    assert_eq!(
+    assert!(matches!(
         parse_trusted_time(uppercase_provider.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
-    );
+    ));
     let impossible_day = TIME_STATEMENT.replace("2026-07-12T10:10:00Z", "2026-02-30T10:10:00Z");
     let error = parse_trusted_time(impossible_day.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.valid_until");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     let slash_host = TIME_STATEMENT.replace("gitlab.com", "gitlab.example/internal");
     let error = parse_trusted_time(slash_host.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.repository");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
     let numeric_run = TIME_STATEMENT.replace("pipeline/01J2Z9-7", "987654321");
     assert!(parse_trusted_time(numeric_run.as_bytes()).is_ok());
 }

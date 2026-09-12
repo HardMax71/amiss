@@ -109,10 +109,10 @@ fn typed_intake_can_consume_evidence_while_the_controller_retains_it() {
         expected_context_digest: hb("test", b"wrong context"),
         ..retained.clone()
     };
-    assert_eq!(
+    assert!(matches!(
         validated_envelope(invalid, PATH).unwrap_err().kind,
         ErrorKind::DigestMismatch
-    );
+    ));
     let accepted = validated_envelope(supplied, PATH).unwrap();
     assert_eq!(&accepted, retained.value.as_ref());
     assert_ne!(
@@ -157,17 +157,19 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
             &serde_json_canonicalizer::to_vec(&value.payload).unwrap(),
         );
         assert_eq!(
-            validated_envelope(
-                SuppliedSemanticEvidence {
-                    value: value.into(),
-                    expected_context_digest
-                },
-                PATH
-            )
-            .map(drop)
-            .expect_err("intake refuses the typed semantic defect")
-            .kind,
-            kind
+            std::mem::discriminant(
+                &validated_envelope(
+                    SuppliedSemanticEvidence {
+                        value: value.into(),
+                        expected_context_digest
+                    },
+                    PATH
+                )
+                .map(drop)
+                .expect_err("intake refuses the typed semantic defect")
+                .kind
+            ),
+            std::mem::discriminant(&kind)
         );
     }
 
@@ -183,10 +185,10 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
             expected_context_digest: hb("test", b"wrong context"),
         },
     ] {
-        assert_eq!(
+        assert!(matches!(
             validated_envelope(supplied, PATH).unwrap_err().kind,
             ErrorKind::DigestMismatch
-        );
+        ));
     }
 }
 
@@ -227,7 +229,7 @@ fn in_process_intake_keeps_the_exact_encoded_byte_ceiling() {
             let defect = result
                 .map(drop)
                 .expect_err("intake refuses an over-limit envelope");
-            assert_eq!(defect.kind, ErrorKind::LimitExceeded);
+            assert!(matches!(defect.kind, ErrorKind::LimitExceeded));
             assert_eq!(defect.path, "$");
         }
         let Observation::Site(SiteBuildObservation::GeneratedRoute { route, .. }) =

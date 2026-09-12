@@ -78,23 +78,15 @@ fn every_manifest_record_requires_object_input() -> Result<(), Box<dyn std::erro
             ))?,
         ),
     ];
-    let mut rejections = Vec::new();
     for (object, positional) in cases {
         assert_eq!(text.matches(&object).count(), 1);
         let changed = text.replacen(&object, &positional, 1);
         assert_ne!(changed, text);
         assert_eq!(serde_json::from_str::<ReleaseManifest>(&changed)?, manifest);
-        rejections.push(parse_release_manifest(changed.as_bytes()).err());
+        assert!(matches!(
+            parse_release_manifest(changed.as_bytes()),
+            Err(Error { path, kind: ErrorKind::InvalidValue }) if path == "$"
+        ));
     }
-    assert_eq!(
-        rejections,
-        vec![
-            Some(Error {
-                path: "$".to_owned(),
-                kind: ErrorKind::InvalidValue,
-            });
-            6
-        ]
-    );
     Ok(())
 }

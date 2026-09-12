@@ -100,12 +100,12 @@ fn owned_evidence_preserves_roles_safe_counts_and_bounded_output() {
     let exact = u64::try_from(bytes.len()).unwrap();
     assert!(exact <= RELATION_DOCUMENT_BYTES);
     amiss_wire::write_json(&envelope, std::io::sink(), exact).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&envelope, std::io::sink(), exact - 1)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
 
     let mut input = envelope.payload;
     input.subjects[0].base = RelationProjectionSlot::Projected(RelationProjectedValue {
@@ -120,7 +120,7 @@ fn owned_evidence_preserves_roles_safe_counts_and_bounded_output() {
         });
         let error = relation::evidence(input.clone()).unwrap_err();
         assert_eq!(error.path, "$.payload.subjects[0].base.value_bytes");
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert!(matches!(error.kind, ErrorKind::InvalidValue));
     }
 }
 
@@ -159,22 +159,18 @@ fn evidence_requires_object_shapes_and_both_schema_tags() -> Result<(), Box<dyn 
         (serde_json::to_string(&document.schema)?, "$.schema"),
         (serde_json::to_string(&payload.schema)?, "$.payload.schema"),
     ] {
-        for (invalid, kind) in [
-            ("null", ErrorKind::WrongType),
-            ("false", ErrorKind::WrongType),
-            (r#""unknown""#, ErrorKind::InvalidValue),
-        ] {
+        for invalid in ["null", "false", r#""unknown""#] {
             let changed = text.replacen(&tag, invalid, 1);
             assert_ne!(changed, text);
             let error = relation::parse_evidence(changed.as_bytes()).unwrap_err();
             assert_eq!(error.path, path);
-            assert_eq!(error.kind, kind);
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
         }
         let missing = text.replacen(&format!("\"schema\":{tag},"), "", 1);
         assert_ne!(missing, text);
         let error = relation::parse_evidence(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
     Ok(())
 }
@@ -198,8 +194,8 @@ fn all_nullable_projection_slots_remain_required_in_the_model_and_reader() {
             assert_ne!(changed, text);
             assert!(serde_json::from_str::<relation::RelationEvidenceEnvelope>(&changed).is_err());
             let error = relation::parse_evidence(changed.as_bytes()).unwrap_err();
-            assert_eq!(error.path, format!("$.payload.subjects[{index}].{field}"));
-            assert_eq!(error.kind, ErrorKind::MissingField);
+            assert_eq!(error.path, format!("$.payload.subjects[{index}]"));
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
         }
     }
 }

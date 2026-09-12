@@ -496,27 +496,33 @@ fn a_policy_at_exactly_the_entry_budget_is_within_it() {
 
 #[test]
 fn a_malformed_policy_names_the_anchor_and_the_specific_defect() {
-    let dir = TempDir::new().unwrap();
-    let root = dir.path();
-    git(root, &["init", "-q"]);
-    fs::write(root.join("README.md"), "base\n").unwrap();
-    git(root, &["add", "."]);
-    git(root, &["commit", "-qm", "base"]);
-    fs::create_dir_all(root.join(".amiss")).unwrap();
-    fs::write(root.join(".amiss/scanner-policy.json"), b"{").unwrap();
-    let (repo, base, candidate) = two_commits(root);
+    for (input, expected) in [
+        ("{", ["CONFIGURATION_INVALID", "INVALID_JSON"].as_slice()),
+        ("{}", ["CONFIGURATION_INVALID"].as_slice()),
+        (r#"{"future":null}"#, ["CONFIGURATION_INVALID"].as_slice()),
+        (r#"{"schema":false}"#, ["CONFIGURATION_INVALID"].as_slice()),
+    ] {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        git(root, &["init", "-q"]);
+        fs::write(root.join("README.md"), "base\n").unwrap();
+        git(root, &["add", "."]);
+        git(root, &["commit", "-qm", "base"]);
+        fs::create_dir_all(root.join(".amiss")).unwrap();
+        fs::write(root.join(".amiss/scanner-policy.json"), input).unwrap();
+        let (repo, base, candidate) = two_commits(root);
 
-    let report = payload(&shell(None), &repo, &base, &candidate);
-    assert_eq!(report["exit_code"], 2);
-    let codes: Vec<&str> = report["errors"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter(|row| row["path"] == ".amiss/scanner-policy.json")
-        .map(|row| row["code"].as_str().unwrap())
-        .collect();
-    assert!(codes.contains(&"CONFIGURATION_INVALID"), "{codes:?}");
-    assert!(codes.contains(&"INVALID_JSON"), "{codes:?}");
+        let report = payload(&shell(None), &repo, &base, &candidate);
+        assert_eq!(report["exit_code"], 2, "{input}");
+        let codes: Vec<&str> = report["errors"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|row| row["path"] == ".amiss/scanner-policy.json")
+            .map(|row| row["code"].as_str().unwrap())
+            .collect();
+        assert_eq!(codes, expected, "{input}");
+    }
 }
 
 /// The complete-findings ceiling is the one array bound in the report with no

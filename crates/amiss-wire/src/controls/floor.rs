@@ -48,7 +48,7 @@ pub struct OrganizationFloor {
 
 /// A floor rejection: a schema-layer defect, or the combined
 /// `organization-policy-entries` count crossing its effective limit.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug)]
 pub enum FloorDefect {
     Schema(Error),
     Entries {

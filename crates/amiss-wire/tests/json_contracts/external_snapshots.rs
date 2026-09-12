@@ -158,6 +158,8 @@ fn external_plan_snapshots_round_trip_without_positional_or_extra_fields() {
         );
         let error = parse_plan(malformed.as_bytes()).unwrap_err();
         assert_eq!(error.path, "$.payload.report");
-        assert_eq!(error.kind, amiss_wire::de::ErrorKind::WrongType);
+        assert!(
+            matches!(error.kind, amiss_wire::de::ErrorKind::Deserialize(source) if source.is_data())
+        );
     }
 }

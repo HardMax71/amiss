@@ -51,12 +51,12 @@ fn owned_plan_moves_bounded_sources_and_writes_only_at_the_output_boundary() {
     let exact = u64::try_from(bytes.len()).unwrap();
     assert!(exact <= RELATION_DOCUMENT_BYTES);
     amiss_wire::write_json(&envelope, std::io::sink(), exact).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&envelope, std::io::sink(), exact - 1)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
 
     let mut input = envelope.payload;
     let ProjectionSource::NamedRegion(selection) = &mut input.subjects[0].source else {
@@ -65,8 +65,13 @@ fn owned_plan_moves_bounded_sources_and_writes_only_at_the_output_boundary() {
     selection.start_marker.push('a');
     let error = relation::plan_payload_digest(&input).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].source");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
-    assert_eq!(relation::plan(input).unwrap_err(), error);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
+    let parsed = relation::plan(input).unwrap_err();
+    assert_eq!(parsed.path, error.path);
+    assert_eq!(
+        std::mem::discriminant(&parsed.kind),
+        std::mem::discriminant(&error.kind)
+    );
 }
 
 #[test]
@@ -128,22 +133,18 @@ fn complete_plan_requires_schema_tags_and_objects_at_every_nested_level()
         (serde_json::to_string(&document.schema)?, "$.schema"),
         (serde_json::to_string(&payload.schema)?, "$.payload.schema"),
     ] {
-        for (invalid, kind) in [
-            ("null", ErrorKind::WrongType),
-            ("false", ErrorKind::WrongType),
-            (r#""unknown""#, ErrorKind::InvalidValue),
-        ] {
+        for invalid in ["null", "false", r#""unknown""#] {
             let changed = text.replacen(&tag, invalid, 1);
             assert_ne!(changed, text);
             let error = relation::parse_plan(changed.as_bytes()).unwrap_err();
             assert_eq!(error.path, path);
-            assert_eq!(error.kind, kind);
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
         }
         let missing = text.replacen(&format!("\"schema\":{tag},"), "", 1);
         assert_ne!(missing, text);
         let error = relation::parse_plan(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
     Ok(())
 }

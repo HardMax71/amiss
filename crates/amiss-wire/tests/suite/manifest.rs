@@ -141,7 +141,7 @@ fn the_executable_row_holds_every_clause_of_the_closure_law() {
     for (files, reason) in cases {
         let broken = artifact(ConstraintPlatform::LinuxX8664, "amiss-linux-x86_64", files);
         let defect = canonical_release_manifest(&manifest(broken)).expect_err(reason);
-        assert_eq!(defect.kind, ErrorKind::Inconsistent, "{reason}");
+        assert!(matches!(defect.kind, ErrorKind::Inconsistent), "{reason}");
     }
 }
 
@@ -164,7 +164,7 @@ fn canonical_generation_revalidates_directly_constructed_models() {
     wrong_lock_digest.dependency_lock_digest = digest('9');
     let defect =
         canonical_release_manifest(&wrong_lock_digest).expect_err("mismatched lock digest");
-    assert_eq!(defect.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(defect.kind, ErrorKind::DigestMismatch));
 
     let mut invalid_mode = manifest(artifact(
         ConstraintPlatform::LinuxX8664,
@@ -304,7 +304,7 @@ fn the_lock_holds_one_to_thirty_two_sorted_files() {
             manifest_raw("sha1", &"a".repeat(40), &lock_with(count), &one_artifact()).as_bytes(),
         )
         .expect_err(reason);
-        assert_eq!(defect.kind, ErrorKind::LimitExceeded, "{reason}");
+        assert!(matches!(defect.kind, ErrorKind::LimitExceeded), "{reason}");
     }
 
     let misordered = lock_with(2).replace("deps/f00", "deps/f09");
@@ -312,7 +312,7 @@ fn the_lock_holds_one_to_thirty_two_sorted_files() {
         manifest_raw("sha1", &"a".repeat(40), &misordered, &one_artifact()).as_bytes(),
     )
     .expect_err("descending lock files");
-    assert_eq!(defect.kind, ErrorKind::UnsortedSet);
+    assert!(matches!(defect.kind, ErrorKind::UnsortedSet));
 }
 
 #[test]
@@ -339,11 +339,11 @@ fn artifacts_cover_at_most_the_closed_platform_set() {
     let defect =
         parse_release_manifest(manifest_raw("sha1", &"a".repeat(40), LOCK, &seven).as_bytes())
             .expect_err("a seventh artifact");
-    assert_eq!(defect.kind, ErrorKind::LimitExceeded);
+    assert!(matches!(defect.kind, ErrorKind::LimitExceeded));
 
     let defect = parse_release_manifest(manifest_raw("sha1", &"a".repeat(40), LOCK, "").as_bytes())
         .expect_err("no artifacts");
-    assert_eq!(defect.kind, ErrorKind::LimitExceeded);
+    assert!(matches!(defect.kind, ErrorKind::LimitExceeded));
 }
 
 #[test]
@@ -391,7 +391,7 @@ fn runtime_files_hold_one_to_two_hundred_fifty_six_rows() {
             .as_bytes(),
         )
         .expect_err(reason);
-        assert_eq!(defect.kind, ErrorKind::LimitExceeded, "{reason}");
+        assert!(matches!(defect.kind, ErrorKind::LimitExceeded), "{reason}");
     }
 }
 

@@ -54,9 +54,8 @@ fn supplied_time_is_a_closed_object_and_keeps_its_canonical_identity() {
     ))
     .unwrap();
     assert_eq!(parse_trusted_time(object.as_bytes()).unwrap(), *statement);
-    assert_eq!(
-        parse_trusted_time(positional.as_bytes()).unwrap_err().kind,
-        ErrorKind::WrongType
+    assert!(
+        matches!(parse_trusted_time(positional.as_bytes()).unwrap_err().kind, ErrorKind::Deserialize(source) if source.is_data())
     );
     let compact = serde_json::to_string(&request).unwrap();
     for invalid in [
@@ -99,7 +98,7 @@ fn trusted_time_requires_an_object_repository() {
     let invalid = encoded.replace(&repository, &positional);
     assert_ne!(invalid, encoded);
     let error = parse_trusted_time(invalid.as_bytes()).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::WrongType);
+    assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     assert_eq!(error.path, "$.repository");
     assert!(serde_json::from_str::<amiss_wire::controls::TrustedTimeStatement>(&invalid).is_err());
 }
@@ -122,10 +121,7 @@ fn trusted_time_reader_keeps_complete_input_and_checked_attempts() {
         assert_eq!(error.path, "$");
         assert!(matches!(
             error.kind,
-            ErrorKind::Deserialize {
-                category: serde_json::error::Category::Syntax,
-                ..
-            }
+            ErrorKind::Deserialize(source) if source.is_syntax()
         ));
     }
     assert!(parse_trusted_time(format!(" \n{example}\r\t").as_bytes()).is_ok());

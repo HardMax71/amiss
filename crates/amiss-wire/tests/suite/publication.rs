@@ -103,13 +103,13 @@ fn publication_plan_refuses_ambiguous_resources_and_git_objects() {
     mismatched_git.docs.tree = oid('b', ObjectFormat::Sha256);
     let error = plan(mismatched_git).unwrap_err();
     assert_eq!(error.path, "$.payload.docs.tree_oid");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 
     let mut fragment = publication_plan();
     fragment.target.canonical_url = "https://docs.example.com/#candidate".to_owned();
     let error = plan(fragment).unwrap_err();
     assert_eq!(error.path, "$.payload.target.canonical_url");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 
     for invalid in [
         "https://user@docs.example.com/",
@@ -120,14 +120,14 @@ fn publication_plan_refuses_ambiguous_resources_and_git_objects() {
         invalid_authority.target.canonical_url = invalid.to_owned();
         let error = plan(invalid_authority).unwrap_err();
         assert_eq!(error.path, "$.payload.target.canonical_url");
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert!(matches!(error.kind, ErrorKind::InvalidValue));
     }
 
     let mut relative_resource = publication_plan();
     relative_resource.product.uri = "registry.example.com/widget:latest".to_owned();
     let error = plan(relative_resource).unwrap_err();
     assert_eq!(error.path, "$.payload.product.uri");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 }
 
 #[test]
@@ -142,48 +142,43 @@ fn publication_plan_refuses_repository_values_that_bypass_construction() {
 
     let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload.docs.repository");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 }
 
 #[test]
 fn publication_plan_reports_derived_shape_errors_at_their_fields() {
     let document = plan(publication_plan()).unwrap();
     let text = serde_json::to_string(&document).unwrap();
-    for (field, original, replacement, expected_path, expected_kind) in [
+    for (field, original, replacement, expected_path) in [
         (
             "report_payload_digest",
             serde_json::to_string(&document.payload.report_payload_digest).unwrap(),
             serde_json::to_string(&format!("sha256:{}", "z".repeat(64))).unwrap(),
             "$.payload.report_payload_digest",
-            ErrorKind::InvalidValue,
         ),
         (
             "report_payload_digest",
             serde_json::to_string(&document.payload.report_payload_digest).unwrap(),
             "false".to_owned(),
             "$.payload.report_payload_digest",
-            ErrorKind::WrongType,
         ),
         (
             "commit_oid",
             serde_json::to_string(&document.payload.docs.commit).unwrap(),
             serde_json::to_string(&"z".repeat(40)).unwrap(),
             "$.payload.docs.commit_oid",
-            ErrorKind::InvalidValue,
         ),
         (
             "provider",
             serde_json::to_string(&document.payload.target.provider).unwrap(),
             r#""invalid identity""#.to_owned(),
             "$.payload.target.provider",
-            ErrorKind::InvalidValue,
         ),
         (
             "schema",
             serde_json::to_string(&document.payload.schema).unwrap(),
             r#""unknown""#.to_owned(),
             "$.payload.schema",
-            ErrorKind::InvalidValue,
         ),
     ] {
         let changed = text.replacen(
@@ -194,7 +189,7 @@ fn publication_plan_reports_derived_shape_errors_at_their_fields() {
         assert_ne!(changed, text);
         let error = parse_plan(changed.as_bytes()).unwrap_err();
         assert_eq!(error.path, expected_path);
-        assert_eq!(error.kind, expected_kind);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
 
     let missing = text.replacen(
@@ -207,8 +202,8 @@ fn publication_plan_reports_derived_shape_errors_at_their_fields() {
     );
     assert_ne!(missing, text);
     let error = parse_plan(missing.as_bytes()).unwrap_err();
-    assert_eq!(error.path, "$.payload.schema");
-    assert_eq!(error.kind, ErrorKind::MissingField);
+    assert_eq!(error.path, "$.payload");
+    assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
 }
 
 #[test]
@@ -218,7 +213,7 @@ fn publication_plan_refuses_tampering_and_open_shapes() {
     document.payload_digest = digest('f');
     let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload_digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
 
     let open = text.replacen(
         "\"report_payload_digest\":",
@@ -228,5 +223,5 @@ fn publication_plan_refuses_tampering_and_open_shapes() {
     assert_ne!(open, text);
     let error = parse_plan(open.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.unknown");
-    assert_eq!(error.kind, ErrorKind::UnknownField);
+    assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
 }

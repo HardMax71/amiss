@@ -40,12 +40,12 @@ fn owned_locale_evidence_preserves_inventories_through_assessment_and_output() {
     assert_eq!(locale::parse_evidence(&bytes).unwrap(), document);
     let exact = u64::try_from(bytes.len()).unwrap();
     amiss_wire::write_json(&document, std::io::sink(), exact).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&document, std::io::sink(), exact - 1)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
     let mut invalid_source = document.payload.clone();
     invalid_source.source.pages[0].key.push('k');
     let mut invalid_target = document.payload;
@@ -56,7 +56,7 @@ fn owned_locale_evidence_preserves_inventories_through_assessment_and_output() {
     ] {
         let error = locale::evidence(input).unwrap_err();
         assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert!(matches!(error.kind, ErrorKind::InvalidValue));
     }
 }
 
@@ -79,20 +79,20 @@ fn locale_evidence_keeps_individual_and_combined_inventory_limits() {
         resource_digest,
         origin: origin.clone(),
     });
-    assert_eq!(
+    assert!(matches!(
         locale::evidence(input.clone()).err(),
         Some(Error {
-            path: "$.payload.target.pages".to_owned(),
+            path,
             kind: ErrorKind::LimitExceeded,
-        })
-    );
+        }) if path == "$.payload.target.pages"
+    ));
     input.source.pages.push(LocaleSourcePage {
         key: "z".to_owned(),
         resource_digest,
     });
     let error = locale::evidence(input.clone()).unwrap_err();
     assert_eq!(error.path, "$.payload.source.pages");
-    assert_eq!(error.kind, ErrorKind::LimitExceeded);
+    assert!(matches!(error.kind, ErrorKind::LimitExceeded));
     input.target.pages = input
         .source
         .pages
@@ -105,12 +105,12 @@ fn locale_evidence_keeps_individual_and_combined_inventory_limits() {
         .collect();
     let error = locale::evidence(input).unwrap_err();
     assert_eq!(error.path, "$.payload.target.pages");
-    assert_eq!(error.kind, ErrorKind::LimitExceeded);
+    assert!(matches!(error.kind, ErrorKind::LimitExceeded));
     let oversized = vec![b' '; usize::try_from(EVIDENCE_DOCUMENT_BYTES).unwrap() + 1];
-    assert_eq!(
+    assert!(matches!(
         locale::parse_evidence(&oversized).unwrap_err().kind,
         ErrorKind::LimitExceeded
-    );
+    ));
 }
 
 #[test]
@@ -268,8 +268,8 @@ fn locale_evidence_nullable_fields_require_explicit_presence()
         assert_ne!(missing, text);
         assert!(serde_json::from_str::<locale::LocaleCoverageEvidenceEnvelope>(&missing).is_err());
         let error = locale::parse_evidence(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
     Ok(())
 }
@@ -286,22 +286,18 @@ fn locale_evidence_schema_tags_remain_required_and_closed() -> Result<(), Box<dy
             "$.payload.schema",
         ),
     ] {
-        for (invalid, kind) in [
-            ("null", ErrorKind::WrongType),
-            ("false", ErrorKind::WrongType),
-            (r#""unknown""#, ErrorKind::InvalidValue),
-        ] {
+        for invalid in ["null", "false", r#""unknown""#] {
             let changed = text.replacen(&tag, invalid, 1);
             assert_ne!(changed, text);
             let error = locale::parse_evidence(changed.as_bytes()).unwrap_err();
             assert_eq!(error.path, path);
-            assert_eq!(error.kind, kind);
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
         }
         let missing = text.replacen(&format!("\"schema\":{tag},"), "", 1);
         assert_ne!(missing, text);
         let error = locale::parse_evidence(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
     Ok(())
 }

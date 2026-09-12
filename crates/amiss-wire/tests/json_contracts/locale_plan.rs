@@ -42,19 +42,19 @@ fn owned_locale_plan_preserves_page_allocations_and_bounded_output() {
     let exact = u64::try_from(bytes.len()).unwrap();
     assert!(exact <= LOCALE_DOCUMENT_BYTES);
     amiss_wire::write_json(&envelope, std::io::sink(), exact).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&envelope, std::io::sink(), exact - 1)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
     let mut invalid = envelope.payload;
     invalid.policy.required = LocalePageRequirement::Named {
         keys: vec!["k".repeat(PAGE_KEY_BYTES + 1)],
     };
     let error = locale::plan(invalid).unwrap_err();
     assert_eq!(error.path, "$.payload.policy.required.keys[0]");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 }
 
 #[test]
@@ -158,22 +158,18 @@ fn locale_plan_schema_tags_and_nullable_fields_remain_required()
             "$.payload.schema",
         ),
     ] {
-        for (invalid, kind) in [
-            ("null", ErrorKind::WrongType),
-            ("false", ErrorKind::WrongType),
-            (r#""unknown""#, ErrorKind::InvalidValue),
-        ] {
+        for invalid in ["null", "false", r#""unknown""#] {
             let changed = text.replacen(&tag, invalid, 1);
             assert_ne!(changed, text);
             let error = locale::parse_plan(changed.as_bytes()).unwrap_err();
             assert_eq!(error.path, path);
-            assert_eq!(error.kind, kind);
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
         }
         let missing = text.replacen(&format!("\"schema\":{tag},"), "", 1);
         assert_ne!(missing, text);
         let error = locale::parse_plan(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
     for (member, path) in [
         ("\"product\":null,", "$.payload.product"),
@@ -184,8 +180,8 @@ fn locale_plan_schema_tags_and_nullable_fields_remain_required()
         assert_ne!(missing, text);
         assert!(serde_json::from_str::<locale::LocaleCoveragePlanEnvelope>(&missing).is_err());
         let error = locale::parse_plan(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
     Ok(())
 }

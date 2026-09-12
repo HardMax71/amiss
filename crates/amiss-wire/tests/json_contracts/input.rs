@@ -85,17 +85,15 @@ where
     assert_eq!(text.matches(&object).count(), 1);
     let changed = text.replacen(&object, &positional, 1);
     assert_ne!(changed, text);
-    assert_eq!(
-        read(changed.as_bytes()).err(),
-        Some(Error {
-            path: "$".to_owned(),
-            kind: if object == text {
-                ErrorKind::WrongType
-            } else {
-                ErrorKind::InvalidValue
-            },
-        })
-    );
+    let error = read(changed.as_bytes())
+        .err()
+        .ok_or("positional JSON must be rejected")?;
+    assert_eq!(error.path, "$");
+    if object == text {
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
+    } else {
+        assert!(matches!(error.kind, ErrorKind::InvalidValue));
+    }
     Ok(())
 }
 

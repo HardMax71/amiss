@@ -152,17 +152,17 @@ fn covered(roots: &BTreeSet<RepoPath>, path: &[u8]) -> bool {
 
 fn specific_code(kind: &ErrorKind) -> AnalysisErrorCode {
     match kind {
-        ErrorKind::Utf8(_) | ErrorKind::Json(_) | ErrorKind::Deserialize { .. } => {
+        ErrorKind::Deserialize(source) if source.is_data() => {
+            AnalysisErrorCode::ConfigurationInvalid
+        }
+        ErrorKind::Utf8(_) | ErrorKind::Json(_) | ErrorKind::Deserialize(_) => {
             AnalysisErrorCode::InvalidJson
         }
-        ErrorKind::UnknownField => AnalysisErrorCode::UnknownField,
         ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
         ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,
-        ErrorKind::MissingField
-        | ErrorKind::WrongType
-        | ErrorKind::InvalidValue
-        | ErrorKind::LimitExceeded
-        | ErrorKind::Inconsistent => AnalysisErrorCode::ConfigurationInvalid,
+        ErrorKind::InvalidValue | ErrorKind::LimitExceeded | ErrorKind::Inconsistent => {
+            AnalysisErrorCode::ConfigurationInvalid
+        }
     }
 }
 

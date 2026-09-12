@@ -106,36 +106,36 @@ fn parses_an_execution_constraint_descriptor() {
     assert_eq!(descriptor.action_repository.owner(), "platform/security");
 
     let slash_host = CONSTRAINT.replace("github.com", "git.example/internal");
-    assert_eq!(
+    assert!(matches!(
         parse_execution_constraint(slash_host.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
-    );
+    ));
     let malformed_owner =
         CONSTRAINT.replace("\"owner\": \"acme\"", "\"owner\": \"platform//security\"");
-    assert_eq!(
+    assert!(matches!(
         parse_execution_constraint(malformed_owner.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
-    );
+    ));
 
     let trailing_space = CONSTRAINT.replace("assurance\"", "assurance \"");
-    assert_eq!(
+    assert!(matches!(
         parse_execution_constraint(trailing_space.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
-    );
+    ));
     let short_oid = CONSTRAINT.replace(
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     );
-    assert_eq!(
+    assert!(matches!(
         parse_execution_constraint(short_oid.as_bytes())
             .unwrap_err()
             .kind,
-        ErrorKind::InvalidValue
-    );
+        ErrorKind::Deserialize(source) if source.is_data()
+    ));
 }

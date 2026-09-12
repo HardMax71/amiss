@@ -168,38 +168,30 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
         ",\"based_on_source_digest\":{}",
         serde_json::to_string(&digest('6')).unwrap()
     );
-    for (member, replacement, path, kind) in [
+    for (member, replacement, path) in [
         (
             r#""kind":"fallback""#.to_owned(),
             r#""kind":"generated""#.to_owned(),
             "$.payload.target.pages[1].origin.kind",
-            ErrorKind::InvalidValue,
         ),
         (
             origin,
             "null".to_owned(),
             "$.payload.target.pages[0].origin",
-            ErrorKind::WrongType,
         ),
         (
             lineage.clone(),
             r#","based_on_source_digest":"source-v1""#.to_owned(),
             "$.payload.target.pages[0].origin",
-            ErrorKind::InvalidValue,
         ),
-        (
-            lineage,
-            String::new(),
-            "$.payload.target.pages[0].origin.based_on_source_digest",
-            ErrorKind::MissingField,
-        ),
+        (lineage, String::new(), "$.payload.target.pages[0].origin"),
     ] {
         assert_eq!(text.matches(&member).count(), 1);
         let changed = text.replacen(&member, &replacement, 1);
         assert_ne!(changed, text);
         let error = parse_evidence(changed.as_bytes()).unwrap_err();
         assert_eq!(error.path, path);
-        assert_eq!(error.kind, kind);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
 }
 
@@ -215,13 +207,13 @@ fn locale_evidence_refuses_invalid_page_keys_and_tampering() {
     );
     let error = evidence(invalid_key).unwrap_err();
     assert_eq!(error.path, "$.payload.source.pages[1].key");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 
     let mut tampered = evidence(locale_evidence()).unwrap();
     tampered.payload_digest = digest('f');
     let error = parse_evidence(&serde_json::to_vec(&tampered).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload_digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
 }
 
 #[test]
@@ -235,14 +227,20 @@ fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
         (unsorted, ErrorKind::UnsortedSet),
         (duplicate, ErrorKind::DuplicateMember),
     ] {
-        assert_eq!(evidence(document.payload.clone()).unwrap_err().kind, kind);
+        assert_eq!(
+            std::mem::discriminant(&evidence(document.payload.clone()).unwrap_err().kind),
+            std::mem::discriminant(&kind)
+        );
         document.payload_digest = amiss_wire::digest::hb(
             EVIDENCE_PAYLOAD_SCHEMA,
             &serde_json_canonicalizer::to_vec(&document.payload).unwrap(),
         );
         let error = parse_evidence(&serde_json::to_vec(&document).unwrap()).unwrap_err();
         assert_eq!(error.path, "$.payload.source.pages");
-        assert_eq!(error.kind, kind);
+        assert_eq!(
+            std::mem::discriminant(&error.kind),
+            std::mem::discriminant(&kind)
+        );
     }
 
     let text = serde_json::to_string(&envelope).unwrap();
@@ -257,21 +255,16 @@ fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
         ),
     ] {
         assert_eq!(text.matches(&inventory).count(), 1);
-        for (member, replacement, field, kind) in [
-            (
-                r#""complete":true"#,
-                r#""complete":"true""#,
-                "complete",
-                ErrorKind::WrongType,
-            ),
-            (r#""product":null,"#, "", "product", ErrorKind::MissingField),
+        for (member, replacement, suffix) in [
+            (r#""complete":true"#, r#""complete":"true""#, ".complete"),
+            (r#""product":null,"#, "", ""),
         ] {
             assert_eq!(inventory.matches(member).count(), 1);
             let changed = text.replacen(&inventory, &inventory.replacen(member, replacement, 1), 1);
             assert_ne!(changed, text);
             let error = parse_evidence(changed.as_bytes()).unwrap_err();
-            assert_eq!(error.path, format!("{path}.{field}"));
-            assert_eq!(error.kind, kind);
+            assert_eq!(error.path, format!("{path}{suffix}"));
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
         }
     }
 }

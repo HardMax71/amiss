@@ -77,7 +77,7 @@ fn a_policy_that_names_a_command_or_a_plugin_is_refused_and_nothing_runs() {
         .map(|error| error["code"].as_str().unwrap())
         .collect();
     codes.sort_unstable();
-    assert_eq!(codes, vec!["CONFIGURATION_INVALID", "UNKNOWN_FIELD"]);
+    assert_eq!(codes, vec!["CONFIGURATION_INVALID"]);
     assert_eq!(payload["result"]["complete"], false);
     assert_eq!(payload["result"]["status"], "incomplete");
     assert!(

@@ -121,25 +121,25 @@ fn floor_schema_kind(defect: FloorDefect) -> ErrorKind {
 fn rejects_floor_bound_defects() {
     let doc = String::from_utf8(FLOOR.to_vec()).unwrap();
     let wrong_ceiling = doc.replace("268435456", "268435455");
-    assert_eq!(
+    assert!(matches!(
         floor_schema_kind(parse_organization_floor(wrong_ceiling.as_bytes()).unwrap_err()),
         ErrorKind::InvalidValue
-    );
+    ));
 
     let wrong_errors = doc.replace("\"maximum\": 64", "\"maximum\": 65");
-    assert_eq!(
+    assert!(matches!(
         floor_schema_kind(parse_organization_floor(wrong_errors.as_bytes()).unwrap_err()),
         ErrorKind::InvalidValue
-    );
+    ));
 
     let unsorted_limits = doc.replace(
         "{ \"resource\": \"machine-json-bytes\", \"maximum\": 268435456 },\n    { \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 }",
         "{ \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 },\n    { \"resource\": \"machine-json-bytes\", \"maximum\": 268435456 }",
     );
-    assert_eq!(
+    assert!(matches!(
         floor_schema_kind(parse_organization_floor(unsorted_limits.as_bytes()).unwrap_err()),
         ErrorKind::UnsortedSet
-    );
+    ));
 }
 
 #[test]
@@ -150,13 +150,13 @@ fn canonical_floor_rechecks_mutable_public_fields() {
         .first_mut()
         .expect("the fixture has resource limits")
         .maximum = -1;
-    assert_eq!(
+    assert!(matches!(
         canonical_organization_floor(&floor).unwrap_err(),
-        FloorDefect::Schema(amiss_wire::de::Error::new(
-            "$.resource_limits[0].maximum",
-            ErrorKind::InvalidValue,
-        ))
-    );
+        FloorDefect::Schema(amiss_wire::de::Error {
+            path,
+            kind: ErrorKind::InvalidValue,
+        }) if path == "$.resource_limits[0].maximum"
+    ));
 }
 
 #[test]
@@ -175,13 +175,13 @@ fn canonical_floor_keeps_resource_limits_inside_safe_integers() {
         .first_mut()
         .expect("the fixture has resource limits")
         .maximum = MAX_SAFE_INTEGER + 1;
-    assert_eq!(
+    assert!(matches!(
         canonical_organization_floor(&floor).unwrap_err(),
-        FloorDefect::Schema(amiss_wire::de::Error::new(
-            "$.resource_limits[0].maximum",
-            ErrorKind::InvalidValue,
-        ))
-    );
+        FloorDefect::Schema(amiss_wire::de::Error {
+            path,
+            kind: ErrorKind::InvalidValue,
+        }) if path == "$.resource_limits[0].maximum"
+    ));
 }
 
 #[test]
@@ -210,13 +210,13 @@ fn rejects_floors_over_the_combined_entry_limit() {
         inventory = paths(60_000, "docs/a"),
         controls = paths(45_000, "ops/b"),
     );
-    assert_eq!(
+    assert!(matches!(
         parse_organization_floor(doc.as_bytes()).unwrap_err(),
         FloorDefect::Entries {
             configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
-            observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT + 1,
-        }
-    );
+            observed_lower_bound,
+        } if observed_lower_bound == ORGANIZATION_POLICY_ENTRIES_LIMIT + 1
+    ));
 }
 
 #[test]
@@ -295,13 +295,13 @@ fn rejects_floors_inconsistent_with_their_own_declared_entry_limit() {
     { "resource": "organization-policy-entries", "maximum": 3 }
   ]
 }"#;
-    assert_eq!(
+    assert!(matches!(
         parse_organization_floor(doc).unwrap_err(),
         FloorDefect::Entries {
             configured_limit: 3,
             observed_lower_bound: 4,
         }
-    );
+    ));
 }
 
 #[test]

@@ -44,17 +44,17 @@ fn typed_relation_assessment_preserves_the_committed_document_and_output_limit()
     let exact = u64::try_from(bytes.len()).unwrap();
     assert!(exact <= RELATION_DOCUMENT_BYTES);
     amiss_wire::write_json(&assessment, std::io::sink(), exact).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&assessment, std::io::sink(), exact - 1)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
     for invalid in [String::new(), format!("{version}a"), "1 bad".to_owned()] {
         let error =
             relation::assess(&plan, Some(&evidence), &invalid, engine.engine_digest).unwrap_err();
         assert_eq!(error.path, "$.payload.engine.engine_version");
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert!(matches!(error.kind, ErrorKind::InvalidValue));
     }
 }
 
@@ -72,22 +72,18 @@ fn relation_assessment_schema_tags_and_object_shapes_are_closed() {
             "$.payload.schema",
         ),
     ] {
-        for (invalid, kind) in [
-            ("null", ErrorKind::WrongType),
-            ("[]", ErrorKind::WrongType),
-            (r#""unknown""#, ErrorKind::InvalidValue),
-        ] {
+        for invalid in ["null", "[]", r#""unknown""#] {
             let changed = text.replacen(&schema, invalid, 1);
             assert_ne!(changed, text);
             let error = relation::parse_assessment(changed.as_bytes()).unwrap_err();
             assert_eq!(error.path, path);
-            assert_eq!(error.kind, kind);
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
         }
         let missing = text.replacen(&format!("\"schema\":{schema},"), "", 1);
         assert_ne!(missing, text);
         let error = relation::parse_assessment(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
     for (object, positional, path) in [
         (
@@ -123,19 +119,18 @@ fn relation_assessment_schema_tags_and_object_shapes_are_closed() {
             "$.payload.subject",
         ),
     ] {
-        for (replacement, path, kind) in [
-            (positional, path.to_owned(), ErrorKind::WrongType),
+        for (replacement, path) in [
+            (positional, path.to_owned()),
             (
                 object.replacen('{', r#"{"unknown":true,"#, 1),
-                format!("{path}.unknown"),
-                ErrorKind::UnknownField,
+                path.to_owned(),
             ),
         ] {
             let changed = text.replacen(&object, &replacement, 1);
             assert_ne!(changed, text);
             let error = relation::parse_assessment(changed.as_bytes()).unwrap_err();
             assert_eq!(error.path, path);
-            assert_eq!(error.kind, kind);
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
         }
     }
 }

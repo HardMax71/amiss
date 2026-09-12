@@ -179,3 +179,9 @@ exit-2 log says how to unblock the run without this page open.
 - `TRUSTED_TIME_INVALID`: a control that needs trusted time has no statement that verifies, absent or failing its binding; the run will not act on an unverified clock
 - `INTERNAL_ERROR`: an engine invariant failed; this is a defect in Amiss, not in the input, and the run has no trustworthy result
 <!-- amiss-doc-contract:error-meanings:end -->
+
+Native Serde shape failures in policy and control inputs use `CONFIGURATION_INVALID`,
+including missing and unknown fields. Wire-reader errors retain Serde's original message,
+source position, and tracked path; a missing field can point to its containing object.
+The `UNKNOWN_FIELD` code remains in the wire vocabulary, but these readers no longer
+derive it by parsing error messages. Malformed JSON and invalid UTF-8 keep their separate codes.

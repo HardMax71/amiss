@@ -78,7 +78,7 @@ fn adoption_retains_source_identities_for_the_final_writer_to_verify() {
     snapshot.items = items(&stale, &adoption).unwrap().0;
     assert_eq!(snapshot.items[0].accepted_fact_digest, wrong);
     let error = canonical_debt_snapshot(&snapshot).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
     assert_eq!(error.path, "$.items[0].accepted_fact_digest");
 
     let mut stale = built;
@@ -86,7 +86,7 @@ fn adoption_retains_source_identities_for_the_final_writer_to_verify() {
     snapshot.items = items(&stale, &adoption).unwrap().0;
     assert_eq!(snapshot.items[0].finding_key, wrong);
     let error = canonical_debt_snapshot(&snapshot).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
     assert_eq!(error.path, "$.items[0].finding_key");
 }
 

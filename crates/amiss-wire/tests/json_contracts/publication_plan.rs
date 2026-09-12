@@ -48,15 +48,15 @@ fn typed_publication_plan_moves_its_resources_and_keeps_bounded_output() {
     let exact = u64::try_from(bytes.len()).unwrap();
     assert!(exact <= PUBLICATION_DOCUMENT_BYTES);
     amiss_wire::write_json(&plan, std::io::sink(), exact).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&plan, std::io::sink(), exact - 1)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
     let mut invalid = plan.payload;
     invalid.product.uri.push('a');
     let error = publication::plan(invalid).unwrap_err();
     assert_eq!(error.path, "$.payload.product.uri");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 }

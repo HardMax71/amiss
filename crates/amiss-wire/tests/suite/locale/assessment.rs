@@ -593,14 +593,14 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
     mutated_plan.payload_digest = digest('f');
     let error = assess(&mutated_plan, None, "0.26.0", digest('a')).unwrap_err();
     assert_eq!(error.path, "$.plan.payload_digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
 
     let valid_plan = plan(locale_plan()).unwrap();
     let mut mutated_evidence = locale::evidence(locale_evidence()).unwrap();
     mutated_evidence.payload_digest = digest('f');
     let error = assess(&valid_plan, Some(&mutated_evidence), "0.26.0", digest('a')).unwrap_err();
     assert_eq!(error.path, "$.evidence.payload_digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
 
     let evidence = locale::evidence(locale_evidence()).unwrap();
     let document = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
@@ -631,7 +631,10 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
         amiss_wire::write_json(&document, &mut bytes, ASSESSMENT_DOCUMENT_BYTES).unwrap();
         let error = parse_assessment(&bytes).unwrap_err();
         assert_eq!(error.path, path);
-        assert_eq!(error.kind, kind);
+        assert_eq!(
+            std::mem::discriminant(&error.kind),
+            std::mem::discriminant(&kind)
+        );
     }
 }
 

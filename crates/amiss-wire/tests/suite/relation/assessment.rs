@@ -102,7 +102,7 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
     broken_plan.payload_digest = digest('f');
     let error = assess(&broken_plan, None, "0.26.0", digest('a')).unwrap_err();
     assert_eq!(error.path, "$.plan.payload_digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
 
     let plan = plan(relation_contract().plan).unwrap();
     let mut input = relation_contract().evidence;
@@ -111,7 +111,7 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
     broken_evidence.payload_digest = digest('f');
     let error = assess(&plan, Some(&broken_evidence), "0.26.0", digest('a')).unwrap_err();
     assert_eq!(error.path, "$.evidence.payload_digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
 
     let evidence = evidence(input).unwrap();
     let mut inconsistent = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
@@ -123,7 +123,7 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
     let error =
         parse_assessment(&serde_json_canonicalizer::to_vec(&inconsistent).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload");
-    assert_eq!(error.kind, ErrorKind::Inconsistent);
+    assert!(matches!(error.kind, ErrorKind::Inconsistent));
 }
 
 #[test]
@@ -146,7 +146,7 @@ fn nullable_assessment_fields_are_required() {
         let missing = text.replacen(member, "", 1);
         assert_ne!(missing, text);
         let error = parse_assessment(missing.as_bytes()).unwrap_err();
-        assert_eq!(error.path, path);
-        assert_eq!(error.kind, ErrorKind::MissingField);
+        assert_eq!(error.path, path.rsplit_once('.').unwrap().0);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     }
 }

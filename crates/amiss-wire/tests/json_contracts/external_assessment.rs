@@ -60,7 +60,10 @@ fn assessment_checks_mutable_plan_identity_and_laws_before_evidence() {
             panic!("invalid plans must be refused before evidence validation");
         };
         assert_eq!(defect.path, path);
-        assert_eq!(defect.kind, kind);
+        assert_eq!(
+            std::mem::discriminant(&defect.kind),
+            std::mem::discriminant(&kind)
+        );
     }
     changed.payload_digest = hb(
         PLAN_PAYLOAD_SCHEMA,
@@ -113,8 +116,8 @@ fn assessment_models_reject_extra_fields_with_matching_digests() {
     let Err(AssessmentDefect::Wire(error)) = parse_assessment(extended.as_bytes()) else {
         panic!("the envelope must reject extra fields");
     };
-    assert_eq!(error.path, "$.future");
-    assert_eq!(error.kind, ErrorKind::UnknownField);
+    assert_eq!(error.path, "$");
+    assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
 
     for (offset, _) in payload.match_indices('{') {
         let mut extended = payload.clone();
@@ -133,9 +136,9 @@ fn assessment_models_reject_extra_fields_with_matching_digests() {
                 matches!(
                     parse_assessment(changed.as_bytes()),
                     Err(AssessmentDefect::Wire(Error {
-                        kind: ErrorKind::UnknownField,
+                        kind: ErrorKind::Deserialize(source),
                         ..
-                    }))
+                    })) if source.is_data()
                 ),
             ],
             [true; 2],
@@ -218,9 +221,9 @@ fn assessment_positional_forms_fail_with_original_and_rebound_digests() {
     assert!(matches!(
         parse_assessment(&positional),
         Err(AssessmentDefect::Wire(Error {
-            kind: ErrorKind::WrongType,
+            kind: ErrorKind::Deserialize(source),
             ..
-        }))
+        })) if source.is_data()
     ));
 }
 
@@ -270,9 +273,9 @@ fn assessments_keep_derived_errors_before_digest_mismatches() {
         assert!(matches!(
             parse_assessment(changed.as_bytes()),
             Err(AssessmentDefect::Wire(Error {
-                kind: ErrorKind::WrongType,
+                kind: ErrorKind::Deserialize(source),
                 ..
-            }))
+            })) if source.is_data()
         ));
     }
 }

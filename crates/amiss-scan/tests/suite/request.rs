@@ -30,7 +30,10 @@ fn typed_configuration_errors_distinguish_syntax_from_invalid_data() {
         (trailing.as_bytes(), AnalysisErrorCode::InvalidJson),
         (b"null", AnalysisErrorCode::ConfigurationInvalid),
         (b"{}", AnalysisErrorCode::ConfigurationInvalid),
-        (b"{\"future\": null}", AnalysisErrorCode::UnknownField),
+        (
+            b"{\"future\": null}",
+            AnalysisErrorCode::ConfigurationInvalid,
+        ),
         (b"{\"controller\":\"\xff\"}", AnalysisErrorCode::InvalidUtf8),
         (
             b"{\"controller\":\"\xc3(\"}",

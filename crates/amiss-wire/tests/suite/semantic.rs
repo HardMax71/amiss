@@ -135,9 +135,8 @@ fn strict_templates_have_no_candidate_or_report_binding_surface() {
     let valid = String::from_utf8(valid).unwrap();
     for field in ["candidate_identity_digest", "source_report_payload_digest"] {
         let invalid = valid.replacen('{', &format!(r#"{{"{field}":"{A}","#), 1);
-        assert_eq!(
-            parse_template(invalid.as_bytes()).unwrap_err().kind,
-            ErrorKind::UnknownField
+        assert!(
+            matches!(parse_template(invalid.as_bytes()).unwrap_err().kind, ErrorKind::Deserialize(source) if source.is_data())
         );
     }
 }
@@ -147,31 +146,31 @@ fn template_observations_must_already_be_canonical_sets() {
     let mut input = evidence_template(vec![observation("a"), observation("z")]);
     assert!(parse_template(&serde_json_canonicalizer::to_vec(&input).unwrap()).is_ok());
     std::sync::Arc::make_mut(&mut input.observations).reverse();
-    assert_eq!(
+    assert!(matches!(
         parse_template(&serde_json_canonicalizer::to_vec(&input).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::UnsortedSet
-    );
+    ));
 }
 
 #[test]
 fn duplicate_observations_are_refused() {
     let rows = vec![observation("a"); 2];
-    assert_eq!(
+    assert!(matches!(
         envelope(evidence(rows.clone())).unwrap_err().kind,
         ErrorKind::DuplicateMember
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         template(evidence_template(rows.clone())).unwrap_err().kind,
         ErrorKind::DuplicateMember
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         parse_template(&serde_json_canonicalizer::to_vec(&evidence_template(rows)).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::DuplicateMember
-    );
+    ));
 }
 
 #[test]
@@ -297,16 +296,16 @@ fn serialized_semantic_bytes_enforce_the_complete_document_ceiling() {
     assert_eq!(bytes.len(), limit);
     assert!(parse_template(&bytes).is_ok());
     let document = envelope(evidence(vec![Observation::Record(records.clone())])).unwrap();
-    assert_eq!(
+    assert!(matches!(
         amiss_wire::write_json(&document, std::io::sink(), SEMANTIC_EVIDENCE_BYTES)
             .unwrap_err()
             .kind,
         ErrorKind::LimitExceeded
-    );
+    ));
     records.records[0].value.push('x');
     let error = template(evidence_template(vec![Observation::Record(records)])).unwrap_err();
     assert_eq!(error.path, "$");
-    assert_eq!(error.kind, ErrorKind::LimitExceeded);
+    assert!(matches!(error.kind, ErrorKind::LimitExceeded));
 }
 
 #[test]
@@ -329,36 +328,39 @@ fn incomplete_pre_report_evidence_round_trips_without_claiming_absence() {
 fn producer_versions_and_input_bytes_are_bounded_before_parsing() {
     let mut input = evidence(Vec::new());
     input.producer.version = "bad version".to_owned();
-    assert_eq!(envelope(input).unwrap_err().kind, ErrorKind::InvalidValue);
+    assert!(matches!(
+        envelope(input).unwrap_err().kind,
+        ErrorKind::InvalidValue
+    ));
     let oversized = vec![b' '; usize::try_from(SEMANTIC_EVIDENCE_BYTES).unwrap() + 1];
-    assert_eq!(
+    assert!(matches!(
         parse(&oversized).unwrap_err().kind,
         ErrorKind::LimitExceeded
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         parse_template(&oversized).unwrap_err().kind,
         ErrorKind::LimitExceeded
-    );
+    ));
 }
 
 #[test]
 fn tampered_and_unsorted_payloads_are_refused() {
     let mut document = envelope(evidence(vec![observation("a"), observation("z")])).unwrap();
     document.payload.observations.reverse();
-    assert_eq!(
+    assert!(matches!(
         parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::DigestMismatch
-    );
+    ));
     document.payload_digest = hb(
         PAYLOAD_SCHEMA,
         &serde_json_canonicalizer::to_vec(&document.payload).unwrap(),
     );
-    assert_eq!(
+    assert!(matches!(
         parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::UnsortedSet
-    );
+    ));
 }

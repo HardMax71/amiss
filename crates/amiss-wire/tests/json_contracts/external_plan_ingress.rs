@@ -80,8 +80,8 @@ fn external_plan_objects_reject_extra_fields_with_matching_digests() {
 
     let extended = wire.replacen('{', "{\"future\":true,", 1);
     let error = parse_plan(extended.as_bytes()).unwrap_err();
-    assert_eq!(error.path, "$.future");
-    assert_eq!(error.kind, ErrorKind::UnknownField);
+    assert_eq!(error.path, "$");
+    assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
 
     for (offset, _) in payload.match_indices('{') {
         let mut extended = payload.clone();
@@ -99,7 +99,10 @@ fn external_plan_objects_reject_extra_fields_with_matching_digests() {
             "the model accepted an extra field: {extended}"
         );
         let error = parse_plan(input.as_bytes()).unwrap_err();
-        assert_ne!(error.kind, ErrorKind::DigestMismatch, "{extended}");
+        assert!(
+            matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()),
+            "{extended}"
+        );
     }
 }
 
@@ -196,5 +199,5 @@ fn external_plan_ingress_preserves_equivalent_json_and_checks_actual_changes() {
     changed.payload.retained_count += 1;
     let error = parse_plan(&serde_json::to_vec(&changed).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload_digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
 }

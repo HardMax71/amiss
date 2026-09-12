@@ -95,7 +95,7 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     broken.payload_digest = digest('f');
     let error = assess(&broken, None, "0.26.0", digest('a')).unwrap_err();
     assert_eq!(error.path, "$.plan.payload_digest");
-    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert!(matches!(error.kind, ErrorKind::DigestMismatch));
 
     let valid_plan = plan(publication_plan()).unwrap();
     let mut inconsistent = assess(&valid_plan, None, "0.26.0", digest('a')).unwrap();
@@ -107,7 +107,7 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     let error =
         parse_assessment(&serde_json_canonicalizer::to_vec(&inconsistent).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload");
-    assert_eq!(error.kind, ErrorKind::Inconsistent);
+    assert!(matches!(error.kind, ErrorKind::Inconsistent));
 
     let mut mismatched = publication_evidence();
     mismatched.docs.commit = oid('c', ObjectFormat::Sha1);
@@ -122,5 +122,5 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     let error =
         parse_assessment(&serde_json_canonicalizer::to_vec(&unsorted).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload.reasons");
-    assert_eq!(error.kind, ErrorKind::UnsortedSet);
+    assert!(matches!(error.kind, ErrorKind::UnsortedSet));
 }

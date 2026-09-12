@@ -61,16 +61,18 @@ fn row_order_duplicates_and_closed_metadata_are_refused() {
             ErrorKind::DuplicateMember,
         ),
     ] {
-        assert_eq!(parse_input(&input(records)).unwrap_err().kind, kind);
+        assert_eq!(
+            std::mem::discriminant(&parse_input(&input(records)).unwrap_err().kind),
+            std::mem::discriminant(&kind)
+        );
     }
 
     let source = String::from_utf8(input("[]")).unwrap();
     assert!(parse_input(source.as_bytes()).is_ok());
     let unknown = source.replacen('{', r#"{"producer_version":"2","#, 1);
     assert_ne!(unknown, source);
-    assert_eq!(
-        parse_input(unknown.as_bytes()).unwrap_err().kind,
-        ErrorKind::UnknownField
+    assert!(
+        matches!(parse_input(unknown.as_bytes()).unwrap_err().kind, ErrorKind::Deserialize(source) if source.is_data())
     );
 }
 
@@ -84,7 +86,7 @@ fn directly_constructed_inputs_reuse_the_reader_laws() {
 
     let error = template(source).unwrap_err();
     assert_eq!(error.path, "$.records");
-    assert_eq!(error.kind, ErrorKind::UnsortedSet);
+    assert!(matches!(error.kind, ErrorKind::UnsortedSet));
 }
 
 #[test]
@@ -93,16 +95,16 @@ fn record_strings_use_the_scanner_consumer_bounds() {
         r#"[{"key":"","value":"value"}]"#,
         r#"[{"key":"key","value":"line\nfeed"}]"#,
     ] {
-        assert_eq!(
+        assert!(matches!(
             parse_input(&input(records)).unwrap_err().kind,
             ErrorKind::InvalidValue
-        );
+        ));
     }
 
     let oversized = "k".repeat(amiss_wire::semantic::RECORD_KEY_BYTES.saturating_add(1));
     let records = format!(r#"[{{"key":"{oversized}","value":"value"}}]"#);
-    assert_eq!(
+    assert!(matches!(
         parse_input(&input(&records)).unwrap_err().kind,
         ErrorKind::InvalidValue
-    );
+    ));
 }

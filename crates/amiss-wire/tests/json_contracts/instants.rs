@@ -184,7 +184,7 @@ fn trusted_time_lifetime_preserves_calendar_boundaries_and_whole_seconds() {
         );
         if let Err(error) = read {
             assert_eq!(error.path, "$.valid_until");
-            assert_eq!(error.kind, ErrorKind::InvalidValue);
+            assert!(matches!(error.kind, ErrorKind::InvalidValue));
         }
     }
 }

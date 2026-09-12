@@ -80,7 +80,7 @@ fn bounded_output_counts_encoded_bytes_for_buffers_and_sinks() {
         let outputs: [&mut dyn std::io::Write; 2] = [&mut bytes, &mut sink];
         for output in outputs {
             let defect = write_json(&producer, output, limit).unwrap_err();
-            assert_eq!(defect.kind, ErrorKind::LimitExceeded);
+            assert!(matches!(defect.kind, ErrorKind::LimitExceeded));
             assert_eq!(defect.path, "$");
         }
     }
@@ -91,12 +91,12 @@ fn bounded_output_counts_encoded_bytes_for_buffers_and_sinks() {
         length,
     )
     .unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::InvalidValue);
+    assert!(matches!(defect.kind, ErrorKind::InvalidValue));
     let mut planned = parse_plan(include_bytes!(
         "../../../../spec/examples/scanner-external-plan.json"
     ))
     .unwrap();
     planned.payload.retained_count = u64::MAX;
     let defect = write_json(&planned, std::io::sink(), EXTERNAL_DOCUMENT_BYTES).unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::InvalidValue);
+    assert!(matches!(defect.kind, ErrorKind::InvalidValue));
 }

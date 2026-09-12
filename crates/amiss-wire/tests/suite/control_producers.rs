@@ -93,13 +93,13 @@ fn trusted_time_model_and_writer_share_the_parser_contract() {
         invalid.provider_run_attempt = attempt;
         let error = canonical_trusted_time(&invalid).unwrap_err();
         assert_eq!(error.path, "$.provider_run_attempt");
-        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert!(matches!(error.kind, ErrorKind::InvalidValue));
     }
     let mut invalid = trusted_time_statement();
     invalid.valid_until = invalid.evaluation_instant.clone();
     let error = canonical_trusted_time(&invalid).unwrap_err();
     assert_eq!(error.path, "$.valid_until");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 }
 
 #[test]
@@ -114,12 +114,12 @@ fn execution_constraint_model_and_writer_share_the_parser_contract() {
     invalid.action_object_format = ObjectFormat::Sha256;
     let error = canonical_execution_constraint(&invalid).unwrap_err();
     assert_eq!(error.path, "$.action_commit_oid");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
     let mut invalid = execution_constraint();
     invalid.required_status_name = " trailing ".to_owned();
     let error = canonical_execution_constraint(&invalid).unwrap_err();
     assert_eq!(error.path, "$.required_status_name");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 }
 
 #[test]

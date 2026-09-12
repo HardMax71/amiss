@@ -50,25 +50,25 @@ fn relation_plan_requires_two_sorted_distinct_subjects_and_a_known_trigger() {
     unsorted.subjects.reverse();
     let error = plan(unsorted).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
-    assert_eq!(error.kind, ErrorKind::UnsortedSet);
+    assert!(matches!(error.kind, ErrorKind::UnsortedSet));
 
     let mut repeated_role = relation_contract().plan;
     repeated_role.subjects[1].role = repeated_role.subjects[0].role.clone();
     let error = plan(repeated_role).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
-    assert_eq!(error.kind, ErrorKind::DuplicateMember);
+    assert!(matches!(error.kind, ErrorKind::DuplicateMember));
 
     let mut repeated_repository = relation_contract().plan;
     repeated_repository.subjects[1].repository = repeated_repository.subjects[0].repository.clone();
     let error = plan(repeated_repository).unwrap_err();
     assert_eq!(error.path, "$.payload");
-    assert_eq!(error.kind, ErrorKind::Inconsistent);
+    assert!(matches!(error.kind, ErrorKind::Inconsistent));
 
     let mut foreign_trigger = relation_contract().plan;
     foreign_trigger.trigger_role = identity("release");
     let error = plan(foreign_trigger).unwrap_err();
     assert_eq!(error.path, "$.payload");
-    assert_eq!(error.kind, ErrorKind::Inconsistent);
+    assert!(matches!(error.kind, ErrorKind::Inconsistent));
 }
 
 #[test]
@@ -77,13 +77,13 @@ fn relation_plan_refuses_mixed_objects_and_incompatible_sources() {
     mixed.subjects[0].candidate.tree = oid('f', ObjectFormat::Sha256);
     let error = plan(mixed).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].candidate.tree_oid");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 
     let mut incompatible = relation_contract().plan;
     incompatible.projection = ProjectionKind::CodeTextV1;
     let error = plan(incompatible).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].source");
-    assert_eq!(error.kind, ErrorKind::Inconsistent);
+    assert!(matches!(error.kind, ErrorKind::Inconsistent));
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn relation_plan_refuses_repository_values_that_bypass_construction() {
 
     let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].repository");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 }
 
 #[test]
@@ -208,19 +208,19 @@ fn relation_evidence_refuses_role_and_value_shape_drift() {
     unsorted.subjects.reverse();
     let error = evidence(unsorted).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
-    assert_eq!(error.kind, ErrorKind::UnsortedSet);
+    assert!(matches!(error.kind, ErrorKind::UnsortedSet));
 
     let mut repeated = relation_contract().evidence;
     repeated.subjects[1].role = repeated.subjects[0].role.clone();
     let error = evidence(repeated).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
-    assert_eq!(error.kind, ErrorKind::DuplicateMember);
+    assert!(matches!(error.kind, ErrorKind::DuplicateMember));
 
     let mut unsafe_bytes = relation_contract().evidence;
     unsafe_bytes.subjects[0].base = RelationProjectionSlot::Projected(projected('a', u64::MAX));
     let error = evidence(unsafe_bytes).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].base.value_bytes");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
+    assert!(matches!(error.kind, ErrorKind::InvalidValue));
 }
 
 #[test]
@@ -261,7 +261,7 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
         assert_ne!(tampered, text);
         let error = parse(tampered.as_bytes()).unwrap_err();
         assert_eq!(error.path, "$.payload_digest");
-        assert_eq!(error.kind, ErrorKind::DigestMismatch);
+        assert!(matches!(error.kind, ErrorKind::DigestMismatch));
 
         let open = text.replacen(
             &format!("\"{first_payload_field}\":"),
@@ -271,11 +271,11 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
         assert_ne!(open, text);
         let error = parse(open.as_bytes()).unwrap_err();
         assert_eq!(error.path, "$.payload.unknown");
-        assert_eq!(error.kind, ErrorKind::UnknownField);
+        assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
 
         let oversized = vec![b' '; usize::try_from(RELATION_DOCUMENT_BYTES).unwrap() + 1];
         let error = parse(&oversized).unwrap_err();
         assert_eq!(error.path, "$");
-        assert_eq!(error.kind, ErrorKind::LimitExceeded);
+        assert!(matches!(error.kind, ErrorKind::LimitExceeded));
     }
 }

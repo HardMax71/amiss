@@ -91,7 +91,7 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
     )
     .unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::InvalidValue);
+    assert!(matches!(defect.kind, ErrorKind::Deserialize(source) if source.is_data()));
     assert!(
         defect
             .path
@@ -108,7 +108,7 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
     )
     .unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::WrongType);
+    assert!(matches!(defect.kind, ErrorKind::Deserialize(source) if source.is_data()));
     assert!(
         defect
             .path
@@ -120,7 +120,7 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
     );
     let defect = parse_fact(fact.as_bytes()).unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::WrongType);
+    assert!(matches!(defect.kind, ErrorKind::Deserialize(source) if source.is_data()));
     assert_eq!(
         defect.path,
         "$.key_input.scope.normalized_target_intent.commit_oid"
@@ -290,124 +290,106 @@ fn structural_resolution_facts_accept_typed_mismatch_targets() {
 }
 
 #[test]
-fn structural_resolution_facts_reject_nonstructural_kinds() {
-    let cases = [
+fn structural_resolution_facts_reject_invalid_shapes() {
+    for (finding_kind, path, cases) in [
         (
-            "resolved",
-            r#"{"kind":"resolved","target":{"kind":"tree","path":"docs"}}"#,
-        ),
-        (
-            "unsupported-target",
-            r#"{"kind":"unsupported-target","reason":"symlink","path":"docs/link.md"}"#,
-        ),
-        (
-            "unsupported-semantics",
-            r#"{"kind":"unsupported-semantics","reason":"site-route"}"#,
-        ),
-        (
-            "unsupported-version",
-            r#"{"kind":"unsupported-version","scope":{"kind":"unknown-path"}}"#,
-        ),
-        ("invalid", r#"{"kind":"invalid","reason":"syntax"}"#),
-        ("external", r#"{"kind":"external","reason":"url"}"#),
-    ];
-
-    for (kind, resolution) in cases {
-        let error = parse_debt_fact_case(
             "explicit-target-missing",
+            "$.items[0].accepted_fact.evidence.resolution.kind",
+            [
+                (
+                    "resolved",
+                    r#"{"kind":"resolved","target":{"kind":"tree","path":"docs"}}"#,
+                ),
+                (
+                    "unsupported-target",
+                    r#"{"kind":"unsupported-target","reason":"symlink","path":"docs/link.md"}"#,
+                ),
+                (
+                    "unsupported-semantics",
+                    r#"{"kind":"unsupported-semantics","reason":"site-route"}"#,
+                ),
+                (
+                    "unsupported-version",
+                    r#"{"kind":"unsupported-version","scope":{"kind":"unknown-path"}}"#,
+                ),
+                (
+                    "invalid",
+                    r#"{"kind":"invalid","reason":"syntax"}"#,
+                ),
+                (
+                    "external",
+                    r#"{"kind":"external","reason":"url"}"#,
+                ),
+            ]
+            .as_slice(),
+        ),
+        (
             "explicit-target-missing",
-            resolution,
-        )
-        .unwrap_err();
-        assert_eq!(error.kind, ErrorKind::InvalidValue, "{kind}");
-        assert!(error.path.ends_with(".resolution.kind"), "{kind}");
-    }
-}
-
-#[test]
-fn structural_resolution_facts_reject_bad_missing_reasons_and_legacy_bags() {
-    let cases = [
-        (
-            "wrong-family reason",
-            r#"{"kind":"missing","reason":"symlink","path":"docs/missing.md"}"#,
-            ErrorKind::InvalidValue,
+            "$.items[0].accepted_fact.evidence.resolution",
+            [
+                (
+                    "wrong-family reason",
+                    r#"{"kind":"missing","reason":"symlink","path":"docs/missing.md"}"#,
+                ),
+                (
+                    "missing reason",
+                    r#"{"kind":"missing","path":"docs/missing.md"}"#,
+                ),
+                (
+                    "legacy nullable bag",
+                    r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null,"status":"missing","code":"path-not-found","entry_kind":null,"git_mode":null,"raw_digest":null,"projection_digest":null,"content_availability":"not-applicable"}"#,
+                ),
+            ]
+            .as_slice(),
         ),
         (
-            "missing reason",
-            r#"{"kind":"missing","path":"docs/missing.md"}"#,
-            ErrorKind::MissingField,
-        ),
-        (
-            "legacy nullable bag",
-            r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null,"status":"missing","code":"path-not-found","entry_kind":null,"git_mode":null,"raw_digest":null,"projection_digest":null,"content_availability":"not-applicable"}"#,
-            ErrorKind::UnknownField,
-        ),
-    ];
-
-    for (case, resolution, expected) in cases {
-        let error = parse_debt_fact_case(
-            "explicit-target-missing",
-            "explicit-target-missing",
-            resolution,
-        )
-        .unwrap_err();
-        assert_eq!(error.kind, expected, "{case}");
-    }
-}
-
-#[test]
-fn structural_resolution_facts_reject_invalid_target_and_content_shapes() {
-    let cases = [
-        (
-            "non-object target",
-            r#"{"kind":"type-mismatch","target":"docs"}"#,
-            ErrorKind::WrongType,
-        ),
-        (
-            "unknown target kind",
-            r#"{"kind":"type-mismatch","target":{"kind":"symlink","path":"docs/link"}}"#,
-            ErrorKind::InvalidValue,
-        ),
-        (
-            "tree carrying blob content",
-            r#"{"kind":"type-mismatch","target":{"kind":"tree","path":"docs","mode":"100644"}}"#,
-            ErrorKind::UnknownField,
-        ),
-        (
-            "special-entry blob mode",
-            r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"docs/link.md","mode":"120000","content":{"kind":"lfs-pointer","raw_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}}"#,
-            ErrorKind::InvalidValue,
-        ),
-        (
-            "missing blob content",
-            r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"docs/guide.md","mode":"100644"}}"#,
-            ErrorKind::MissingField,
-        ),
-        (
-            "available content without projection digest",
-            r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"docs/guide.md","mode":"100644","content":{"kind":"available","raw_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}}"#,
-            ErrorKind::MissingField,
-        ),
-        (
-            "LFS content with projection digest",
-            r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"assets/model.bin","mode":"100644","content":{"kind":"lfs-pointer","raw_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111","projection_digest":"sha256:2222222222222222222222222222222222222222222222222222222222222222"}}}"#,
-            ErrorKind::UnknownField,
-        ),
-        (
-            "unknown content kind",
-            r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"docs/guide.md","mode":"100644","content":{"kind":"inline","raw_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}}"#,
-            ErrorKind::InvalidValue,
-        ),
-    ];
-
-    for (case, resolution, expected) in cases {
-        let error = parse_debt_fact_case(
             "explicit-target-type-mismatch",
-            "explicit-target-type-mismatch",
-            resolution,
-        )
-        .unwrap_err();
-        assert_eq!(error.kind, expected, "{case}");
+            "$.items[0].accepted_fact.evidence.resolution",
+            [
+                (
+                    "non-object target",
+                    r#"{"kind":"type-mismatch","target":"docs"}"#,
+                ),
+                (
+                    "unknown target kind",
+                    r#"{"kind":"type-mismatch","target":{"kind":"symlink","path":"docs/link"}}"#,
+                ),
+                (
+                    "tree carrying blob content",
+                    r#"{"kind":"type-mismatch","target":{"kind":"tree","path":"docs","mode":"100644"}}"#,
+                ),
+                (
+                    "special-entry blob mode",
+                    r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"docs/link.md","mode":"120000","content":{"kind":"lfs-pointer","raw_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}}"#,
+                ),
+                (
+                    "missing blob content",
+                    r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"docs/guide.md","mode":"100644"}}"#,
+                ),
+                (
+                    "available content without projection digest",
+                    r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"docs/guide.md","mode":"100644","content":{"kind":"available","raw_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}}"#,
+                ),
+                (
+                    "LFS content with projection digest",
+                    r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"assets/model.bin","mode":"100644","content":{"kind":"lfs-pointer","raw_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111","projection_digest":"sha256:2222222222222222222222222222222222222222222222222222222222222222"}}}"#,
+                ),
+                (
+                    "unknown content kind",
+                    r#"{"kind":"type-mismatch","target":{"kind":"blob","path":"docs/guide.md","mode":"100644","content":{"kind":"inline","raw_digest":"sha256:1111111111111111111111111111111111111111111111111111111111111111"}}}"#,
+                ),
+            ]
+            .as_slice(),
+        ),
+    ] {
+        for &(case, resolution) in cases {
+            let error = parse_debt_fact_case(finding_kind, finding_kind, resolution).unwrap_err();
+            assert!(
+                matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()),
+                "{case}"
+            );
+            assert_eq!(error.path, path, "{case}");
+        }
     }
 }
 
@@ -432,7 +414,7 @@ fn structural_resolution_facts_reject_finding_kind_mismatches() {
 
     for (case, fact_kind, key_kind, resolution) in cases {
         let error = parse_debt_fact_case(fact_kind, key_kind, resolution).unwrap_err();
-        assert_eq!(error.kind, ErrorKind::Inconsistent, "{case}");
+        assert!(matches!(error.kind, ErrorKind::Inconsistent), "{case}");
     }
 }
 
@@ -458,14 +440,14 @@ fn structural_fact_validation_rejects_invalid_programmatic_states() {
                 .clone(),
         },
     };
-    assert_eq!(
+    assert!(matches!(
         canonical_fact(&mismatched).unwrap_err().kind,
         ErrorKind::Inconsistent
-    );
+    ));
 
     mismatched.finding_kind = amiss_wire::controls::EligibleFindingKind::ExplicitTargetTypeMismatch;
-    assert_eq!(
+    assert!(matches!(
         canonical_fact(&mismatched).unwrap_err().kind,
         ErrorKind::Inconsistent
-    );
+    ));
 }

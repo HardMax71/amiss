@@ -1,6 +1,6 @@
 use crate::{digest::Digest, json};
 
-#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 #[error("{kind} at {path}")]
 pub struct Error {
     pub path: String,
@@ -8,24 +8,14 @@ pub struct Error {
     pub kind: ErrorKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum ErrorKind {
     #[error("{0}")]
     Utf8(#[source] std::str::Utf8Error),
     #[error("{0}")]
-    Json(json::Error),
-    #[error("{category:?} JSON error at line {line} column {column}")]
-    Deserialize {
-        category: serde_json::error::Category,
-        line: usize,
-        column: usize,
-    },
-    #[error("required field is missing")]
-    MissingField,
-    #[error("field is unknown")]
-    UnknownField,
-    #[error("value has the wrong type")]
-    WrongType,
+    Json(#[source] json::Error),
+    #[error("{0}")]
+    Deserialize(#[from] serde_json::Error),
     #[error("value is invalid")]
     InvalidValue,
     #[error("set is not sorted")]
@@ -82,61 +72,18 @@ pub fn deserialize_json<T: serde::de::DeserializeOwned + serde::Serialize>(
         deserializer.end()?;
         Ok(document)
     })
-    .map_err(|error| {
-        deserialize_error("$", &serde_path_to_error::Error::new(track.path(), error))
+    .map_err(|source| {
+        let path = track.path().to_string();
+        Error {
+            path: if path == "." {
+                "$".to_owned()
+            } else {
+                format!("$.{path}")
+            },
+            kind: ErrorKind::Deserialize(source),
+        }
     })?;
     let digest = crate::digest::verified_json_digest(domain, bytes, &document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     Ok((document, digest))
-}
-
-pub(crate) fn deserialize_error(
-    base: &str,
-    defect: &serde_path_to_error::Error<serde_json::Error>,
-) -> Error {
-    let error = defect.inner();
-    let message = error.to_string();
-    let (kind, member) = if !error.is_data() {
-        (
-            ErrorKind::Deserialize {
-                category: error.classify(),
-                line: error.line(),
-                column: error.column(),
-            },
-            None,
-        )
-    } else if let Some(member) = message
-        .strip_prefix("missing field `")
-        .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
-    {
-        (ErrorKind::MissingField, Some(member))
-    } else if let Some(member) = message
-        .strip_prefix("unknown field `")
-        .and_then(|rest| rest.split_once('`').map(|(member, _rest)| member))
-    {
-        (ErrorKind::UnknownField, Some(member))
-    } else if message.starts_with("invalid type:") {
-        (ErrorKind::WrongType, None)
-    } else {
-        (ErrorKind::InvalidValue, None)
-    };
-    let raw_path = defect.path().to_string();
-    let mut path = if raw_path == "." {
-        base.to_owned()
-    } else {
-        format!("{base}.{raw_path}")
-    };
-    if let Some(member) = member
-        && defect
-            .path()
-            .iter()
-            .next_back()
-            .map(ToString::to_string)
-            .as_deref()
-            != Some(member)
-    {
-        path.push('.');
-        path.push_str(member);
-    }
-    Error { path, kind }
 }
