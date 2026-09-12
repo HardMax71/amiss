@@ -33,7 +33,9 @@ behavior it adds or changes, and stays inside the boundaries described in
 Serialization uses Serde derives, declarative attributes, and library adapters.
 Do not add handwritten Serde implementations, visitors, JSON codecs, or forwarding
 serialization helpers. Keep domain validation separate from library serialization
-calls; the accepted JSON behavior is described in
+calls. Let derives infer generic bounds instead of adding `serde(bound)`, and use plain
+`Option<T>` for ordinary optional fields. Provider responses ignore unused fields;
+Amiss-owned closed formats remain strict. The accepted JSON behavior is described in
 [Architecture](docs/src/architecture.md).
 Important tests are exercised against deliberately broken behavior before they
 are trusted. Documentation passes through the same gate as everything else:

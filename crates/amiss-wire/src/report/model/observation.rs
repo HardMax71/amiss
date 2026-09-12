@@ -72,25 +72,16 @@ pub struct SourceSpan {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(deny_unknown_fields)]
 pub struct TargetIntent<P = RepoPath> {
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_oid: Option<Oid>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub external_scheme: Option<String>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub fragment_digest: Option<Digest>,
     pub kind: super::super::IntentKind,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub query_digest: Option<Digest>,
     pub raw_destination_digest: Digest,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub repository_path: Option<P>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub target_kind: Option<TargetKind>,
 }
 
@@ -159,11 +150,7 @@ pub struct Occurrence<P = RepoPath, R = Resolution<P>> {
     pub adapter_id: Adapter,
     pub block_kind: BlockKind,
     pub document: P,
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub external_destination: Option<String>,
     pub intent: TargetIntent<P>,
     pub observation_id: Digest,
@@ -292,15 +279,10 @@ pub enum Impact {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(deserialize = "P: Deserialize<'de>, R: Deserialize<'de>")
-)]
+#[serde(deny_unknown_fields)]
 pub struct ObservationComparison<P = RepoPath, R = Resolution<P>> {
     pub alternatives: CorrelationAlternatives<P, R>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub base: Option<Occurrence<P, R>>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub candidate: Option<Occurrence<P, R>>,
     pub correlation: Correlation,
     pub correlation_reason: CorrelationReason,

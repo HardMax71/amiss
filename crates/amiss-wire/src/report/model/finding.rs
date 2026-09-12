@@ -38,15 +38,9 @@ pub type RepositoryTargetIntent<P = RepoPath> =
     crate::controls::TargetIntent<RepositoryIntentPath<P>>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "kebab-case",
-    deny_unknown_fields,
-    bound(deserialize = "P: Deserialize<'de>")
-)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum FindingKeyScope<P = RepoPath> {
     Control {
-        #[serde(deserialize_with = "Option::deserialize")]
         control_path: Option<P>,
         rule_id: String,
     },
@@ -97,7 +91,6 @@ pub struct ControlStateSource {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ControlStateInput {
-    #[serde(deserialize_with = "Option::deserialize")]
     pub path: Option<RepoPathText>,
     pub rule_id: String,
     pub schema: ControlStateSchema,
@@ -195,7 +188,6 @@ pub struct RowsProjectionDifference {
 pub enum ProjectionDifference<R = RowsProjectionDifference> {
     Count {
         expected_count: u64,
-        #[serde(deserialize_with = "Option::deserialize")]
         observed_count: Option<u64>,
     },
     Rows(R),
@@ -219,7 +211,6 @@ pub enum ExceptionDiagnostic {
         authorized_fact_digest: Digest,
         candidate_tree: TreeIdentity,
         created_at: UtcInstant,
-        #[serde(deserialize_with = "Option::deserialize")]
         current_fact_digest: Option<Digest>,
         expires_at: UtcInstant,
         finding_key: Digest,
@@ -235,14 +226,7 @@ pub enum ExceptionDiagnostic {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Display)]
 #[strum(serialize_all = "kebab-case")]
-#[serde(
-    tag = "kind",
-    rename_all = "kebab-case",
-    deny_unknown_fields,
-    bound(
-        deserialize = "P: Deserialize<'de>, R: Deserialize<'de>, S: Deserialize<'de>, D: Deserialize<'de>, M: Deserialize<'de>"
-    )
-)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum FindingFactEvidence<
     P = RepoPath,
     R = Resolution<P>,
@@ -263,23 +247,16 @@ pub enum FindingFactEvidence<
         line: u64,
         name: String,
         observed: ClaimObserved,
-        #[serde(deserialize_with = "Option::deserialize")]
         observed_digest: Option<Digest>,
         sources: Vec<ControlStateSource>,
         target_path: RepoPathText,
     },
     Control {
-        #[serde(deserialize_with = "Option::deserialize")]
         base_control_digest: Option<Digest>,
-        #[serde(deserialize_with = "Option::deserialize")]
         base_control_state: Option<ControlStateInput>,
-        #[serde(deserialize_with = "Option::deserialize")]
         candidate_control_digest: Option<Digest>,
-        #[serde(deserialize_with = "Option::deserialize")]
         candidate_control_state: Option<ControlStateInput>,
-        #[serde(deserialize_with = "Option::deserialize")]
         control_path: Option<P>,
-        #[serde(deserialize_with = "Option::deserialize")]
         exception: Option<Box<ExceptionDiagnostic>>,
         rule_id: String,
     },
@@ -295,21 +272,13 @@ pub enum FindingFactEvidence<
         comparison: Box<ObservationComparison<P, R>>,
     },
     Projection {
-        #[serde(
-            default,
-            deserialize_with = "json_serde::deserialize_some",
-            skip_serializing_if = "Option::is_none"
-        )]
+        #[serde(skip_serializing_if = "Option::is_none")]
         difference: Option<D>,
-        #[serde(deserialize_with = "Option::deserialize")]
         expected_bytes: Option<u64>,
-        #[serde(deserialize_with = "Option::deserialize")]
         expected_digest: Option<Digest>,
         name: String,
         observed: ProjectionObserved,
-        #[serde(deserialize_with = "Option::deserialize")]
         observed_bytes: Option<u64>,
-        #[serde(deserialize_with = "Option::deserialize")]
         observed_digest: Option<Digest>,
         projection: ProjectionKind,
         sink: ProjectionSink,
@@ -446,12 +415,10 @@ pub enum LocationSide {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(deny_unknown_fields)]
 pub struct FindingLocation<P = RepoPath> {
-    #[serde(deserialize_with = "Option::deserialize")]
     pub path: Option<P>,
     pub side: LocationSide,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub span: Option<SourceSpan>,
 }
 
@@ -534,30 +501,21 @@ pub struct WaiverApplication {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(deserialize = "P: Deserialize<'de>, E: Deserialize<'de>")
-)]
+#[serde(deny_unknown_fields)]
 pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
     pub aggregation: FindingAggregation,
     pub attribution: Attribution,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub base_fact: Option<FindingFactInput<FindingKeyInput<P>, E>>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub base_fact_digest: Option<Digest>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_fact: Option<FindingFactInput<FindingKeyInput<P>, E>>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_fact_digest: Option<Digest>,
     pub configured_disposition: Disposition,
     pub coverage_requirement: CoverageRequirement,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub debt: Option<DebtApplication>,
     pub description: String,
     pub effective_disposition: Disposition,
     pub evidence_class: EvidenceClass,
     pub finding_key: Digest,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub fix: Option<FindingFix>,
     pub invariant_class: InvariantClass,
     pub key_input: FindingKeyInput<P>,
@@ -565,6 +523,5 @@ pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
     pub location: FindingLocation<P>,
     pub observation_ids: Vec<Digest>,
     pub policy_trace: Vec<PolicyStep>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub waiver: Option<WaiverApplication>,
 }

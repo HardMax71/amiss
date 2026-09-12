@@ -94,7 +94,7 @@ fn clock_shape_and_binding_defects_remain_distinct() {
                 .filter(|(name, _)| name != "evaluation_instant")
                 .collect();
         })),
-        AcceptanceDefect::Shape
+        AcceptanceDefect::Noncanonical
     );
 }
 

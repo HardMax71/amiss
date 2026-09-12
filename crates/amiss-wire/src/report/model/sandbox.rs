@@ -193,6 +193,5 @@ pub struct SandboxProvenance {
     pub descriptor: SandboxDescriptor,
     pub descriptor_digest: Digest,
     pub enforcement_source: SandboxEnforcementSource,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub verification: Option<SandboxVerification>,
 }

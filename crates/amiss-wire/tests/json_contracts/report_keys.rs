@@ -24,7 +24,7 @@ fn finding_keys_require_closed_scope_tags() {
 }
 
 #[test]
-fn finding_key_intents_preserve_required_nullable_fields() {
+fn finding_key_intents_reject_wrong_field_types() {
     let intent: RepositoryTargetIntent = RepositoryTargetIntent {
         commit_oid: None,
         fragment_digest: None,
@@ -41,21 +41,20 @@ fn finding_key_intents_preserve_required_nullable_fields() {
     );
     for field in ["fragment_digest", "query_digest"] {
         let member = format!("\"{field}\":null");
-        for invalid in [
-            encoded.replace(&member, &format!("\"{field}\":{{}}")),
-            encoded.replace(&format!("{member},"), ""),
-        ] {
-            assert_ne!(invalid, encoded);
-            assert!(serde_json::from_str::<RepositoryTargetIntent>(&invalid).is_err());
-        }
+        let invalid = encoded.replace(&member, &format!("\"{field}\":{{}}"));
+        assert_ne!(invalid, encoded);
+        assert!(serde_json::from_str::<RepositoryTargetIntent>(&invalid).is_err());
     }
     let invalid = encoded.replacen('{', "{\"commit_oid\":null,", 1);
     assert_ne!(invalid, encoded);
-    assert!(serde_json::from_str::<RepositoryTargetIntent>(&invalid).is_err());
-    for invalid in [
-        r#"{"kind":"control","rule_id":"rule"}"#,
-        r#"{"control_path":{},"kind":"control","rule_id":"rule"}"#,
-    ] {
-        assert!(serde_json::from_str::<FindingKeyScope>(invalid).is_err());
-    }
+    assert_eq!(
+        serde_json::from_str::<RepositoryTargetIntent>(&invalid).unwrap(),
+        intent
+    );
+    assert!(
+        serde_json::from_str::<FindingKeyScope>(
+            r#"{"control_path":{},"kind":"control","rule_id":"rule"}"#
+        )
+        .is_err()
+    );
 }

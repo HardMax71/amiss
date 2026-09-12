@@ -118,7 +118,7 @@ fn control_extensions_keep_the_strict_parser_depth_boundary() {
 }
 
 #[test]
-fn missing_nullable_control_members_are_not_null() {
+fn missing_nullable_control_members_are_noncanonical() {
     for (name, key) in [("debt_snapshot", "digest"), ("sandbox", "verification")] {
         let deviation = Deviation::post(move |payload| {
             let Value::Object(members) = ((payload)
@@ -133,6 +133,10 @@ fn missing_nullable_control_members_are_not_null() {
                 .filter(|(name, _)| name != key)
                 .collect();
         });
-        assert_eq!(refused(deviation), AcceptanceDefect::Shape, "{name}.{key}");
+        assert_eq!(
+            refused(deviation),
+            AcceptanceDefect::Noncanonical,
+            "{name}.{key}"
+        );
     }
 }

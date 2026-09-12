@@ -21,7 +21,6 @@ pub const PAGE_ITEMS_LIMIT: usize = crate::semantic::SEMANTIC_OBSERVATIONS_LIMIT
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct LocaleCoverageEvidenceEnvelope<T = LocaleCoverageEvidence> {
     pub schema: EvidenceEnvelopeSchema,
     pub payload: T,

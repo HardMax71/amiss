@@ -134,7 +134,6 @@ impl SnapshotRequest {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SuppliedControl<T> {
-    #[serde(bound(deserialize = "T: Deserialize<'de>"))]
     pub value: T,
     pub expected_digest: Digest,
     pub trust_source: RequestTrust,
@@ -204,15 +203,10 @@ pub enum ControlsRequestSchema {
 #[serde(deny_unknown_fields)]
 pub struct ControlsRequest {
     pub schema: ControlsRequestSchema,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub organization_floor: Option<SuppliedControl<OrganizationFloor>>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub debt_snapshot: Option<SuppliedControl<DebtSnapshot>>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub waiver_bundle: Option<SuppliedControl<WaiverBundle>>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub trusted_time: Option<SuppliedTime>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub execution_constraint: Option<SuppliedControl<ExecutionConstraintDescriptor>>,
     pub semantic_evidence: Vec<SuppliedSemanticEvidence>,
 }

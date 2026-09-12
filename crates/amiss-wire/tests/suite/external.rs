@@ -482,7 +482,7 @@ fn additive_plan_fields_are_digest_bound_but_inert() {
 }
 
 #[test]
-fn known_optional_plan_fields_do_not_accept_null() {
+fn a_repository_tail_requires_a_present_form() {
     let written = planned(introduced("https://github.com/acme/widgets/blob/main/a.md"));
     let mut document = written;
     let repository = document
@@ -492,8 +492,8 @@ fn known_optional_plan_fields_do_not_accept_null() {
     repository.insert("form".to_owned(), Value::Null);
     let error =
         parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA)).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::WrongType);
-    assert_eq!(error.path, "$.payload.introduced[0].repository.form");
+    assert_eq!(error.kind, ErrorKind::Inconsistent);
+    assert_eq!(error.path, "$.payload.introduced[0].repository");
 }
 
 #[test]
@@ -756,7 +756,7 @@ fn forge_row(destination: &str, repository: &str, tail: Option<&str>) -> Value {
 }
 
 #[test]
-fn additive_evidence_fields_are_inert_but_known_nulls_are_refused() {
+fn additive_evidence_fields_and_optional_nulls_are_inert() {
     let bytes = std::fs::read(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../spec/examples/scanner-external-evidence.json"
@@ -778,7 +778,7 @@ fn additive_evidence_fields_are_inert_but_known_nulls_are_refused() {
         .insert("failure".to_owned(), Value::Null);
     assert!(
         parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
-            .is_err()
+            .is_ok()
     );
 }
 
@@ -935,19 +935,16 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
     };
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
-    for field in ["reason", "retarget"] {
-        let mut null = document.clone();
-        null.pointer_mut("/payload/verdicts/0")
-            .and_then(Value::as_object_mut)
-            .expect("the assessment has one verdict")
-            .insert(field.to_owned(), Value::Null);
-        let bytes = refresh_payload_digest(&mut null, ASSESSMENT_PAYLOAD_SCHEMA);
-        let defect = parse_assessment(&bytes);
-        assert!(
-            matches!(defect, Err(AssessmentDefect::Wire(_))),
-            "{defect:?}"
-        );
-    }
+    let mut null = document.clone();
+    null.pointer_mut("/payload/verdicts/0")
+        .and_then(Value::as_object_mut)
+        .expect("the assessment has one verdict")
+        .insert("reason".to_owned(), Value::Null);
+    let bytes = refresh_payload_digest(&mut null, ASSESSMENT_PAYLOAD_SCHEMA);
+    assert!(matches!(
+        parse_assessment(&bytes),
+        Err(AssessmentDefect::Contract(_))
+    ));
 
     let mut inconsistent = document.clone();
     *inconsistent

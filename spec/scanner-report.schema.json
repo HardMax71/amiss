@@ -2,6 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:amiss:schema:scanner-report",
   "title": "Amiss scanner report envelope",
+  "$comment": "This schema describes emitted report objects. Direct Serde decoding also accepts missing ordinary optional fields as null; report admission requires the original envelope to match its typed canonical representation before trusting its digest.",
   "type": "object",
   "additionalProperties": false,
   "required": [

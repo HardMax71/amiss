@@ -50,7 +50,9 @@ fields as well as the engine block; a local action tag cannot conceal a forge-ac
 
 Document, feedback and analysis-error rows reject unknown members too, including nested
 source spans and byte-path objects. An unavailable feedback tag cannot hide available items.
-Nullable fields remain explicit: `null` is not an omitted member or an empty object.
+Writers retain explicit nullable members. Direct Serde decoding treats an omitted ordinary
+`Option<T>` field as `None`, like `null`; report admission still checks the original envelope
+against its typed canonical representation, so omitted output members cannot borrow its digest.
 
 Resolution tags select closed bodies: fields belonging to another kind or reason are
 rejected. Targets, blob evidence and version scopes reuse the producer's types; a fragment
@@ -67,11 +69,12 @@ writer, so Rust field declaration order does not affect identity or adoption rep
 
 Projection sources reuse the policy producer's model through report decoding. Their tags
 select closed bodies; a record-set tag cannot hide a record-value selection. A tree-path
-suffix may be absent, but an explicit `null` is rejected by policy and report readers alike.
+suffix may be absent or null when decoded directly. Writers omit an absent suffix; report
+admission rejects an explicit null that would change during typed canonicalization.
 
 Projection differences and debt/waiver diagnostics also use their enum's own tag to select
 a closed body. Diagnostic trees must be objects. A count's `observed_count` and a waiver's
-`current_fact_digest` remain required even when null. Canonical fact bytes stay unchanged.
+`current_fact_digest` are emitted even when null. Canonical fact bytes stay unchanged.
 
 Finding facts reject unknown members throughout their evidence and control-state objects.
 One tagged evidence enum serves both report construction and borrowed adoption preimages;
@@ -82,7 +85,7 @@ comparisons must be objects, not positional arrays.
 Finding rows, locations, aggregation, fixes, policy steps and applied debt/waiver metadata
 reject unknown members. Evaluation carries applied exceptions directly into the report;
 it retains their provenance without cloning the accepted or authorized fact again.
-Nullable finding fields remain required, and canonical report bytes stay unchanged.
+Nullable finding fields remain explicit on output, and canonical report bytes stay unchanged.
 
 The evaluation records `candidate_ref` and `target_ref` separately. The candidate ref is the
 source branch used for same-repository URL resolution; the target ref is the protected branch
@@ -95,7 +98,8 @@ Candidate identity is serialized from the same typed evaluation carried by the r
 with `evaluation_instant` and `trusted_time` excluded and the candidate-identity schema
 added. The report reader and sealed acceptance reject unknown evaluation and snapshot
 members, as the published schema requires; they never discard extra identity data before
-hashing it. Missing or wrongly typed clock fields fail sealed identity decoding. A null
+hashing it. Missing clock fields fail the canonical comparison; wrongly typed clock fields
+fail decoding. A null
 instant or a string that disagrees with the trusted statement fails control verification.
 
 An exact same-repository forge URL carries an optional `commit_oid` in its target intent and

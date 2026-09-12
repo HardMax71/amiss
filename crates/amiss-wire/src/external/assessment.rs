@@ -34,7 +34,6 @@ pub enum AssessDefect {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "P: Deserialize<'de>"))]
 pub struct ExternalAssessmentEnvelope<P = ExternalAssessment> {
     pub schema: ExternalAssessmentEnvelopeSchema,
     pub payload: P,
@@ -103,17 +102,9 @@ pub struct ExternalVerdictRow {
     #[validate(length(1..), inner(length(chars, 1..)))]
     pub documents: Vec<String>,
     pub verdict: ExternalVerdict,
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<ExternalReason>,
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     #[validate(length(chars, 1..=16_384))]
     pub retarget: Option<String>,
 }

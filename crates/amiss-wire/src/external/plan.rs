@@ -18,7 +18,6 @@ use crate::resolution::VersionScope;
 use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "P: Deserialize<'de>"))]
 pub struct ExternalPlanEnvelope<P = ExternalPlan> {
     pub schema: ExternalPlanEnvelopeSchema,
     pub payload: P,
@@ -34,7 +33,6 @@ pub enum ExternalPlanEnvelopeSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>"))]
 pub struct ExternalPlan<B = BTreeMap<String, serde_json::Value>, C = B> {
     pub schema: ExternalPlanPayloadSchema,
     pub engine: ExternalEngine,
@@ -60,7 +58,6 @@ pub struct ExternalEngine {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>"))]
 pub struct ExternalPlanReport<B = BTreeMap<String, serde_json::Value>, C = B> {
     pub payload_digest: Digest,
     pub base: B,
@@ -73,11 +70,7 @@ pub struct ExternalDestination {
     pub destination: String,
     pub scheme: String,
     pub documents: Vec<String>,
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub repository: Option<ExternalRepository>,
 }
 
@@ -87,17 +80,9 @@ pub struct ExternalRepository {
     pub dialect: ForgeDialect,
     pub owner: String,
     pub name: String,
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub form: Option<String>,
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tail: Option<String>,
 }
 

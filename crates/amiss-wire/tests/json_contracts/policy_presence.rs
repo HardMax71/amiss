@@ -44,7 +44,7 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
     assert_ne!(absent_digest, present_digest);
 
     let encoded = String::from_utf8(present).unwrap();
-    for invalid in ["null", "false", "42", r#""""#, "{}"] {
+    for invalid in ["false", "42", r#""""#, "{}"] {
         let altered = encoded.replace(
             "\"projection_assertions\":[]",
             &format!("\"projection_assertions\":{invalid}"),
@@ -58,7 +58,7 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
 }
 
 #[test]
-fn projection_suffix_preserves_absence_without_accepting_null() {
+fn projection_suffix_normalizes_null_to_absence() {
     let mut policy: ScannerPolicy = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-policy.json"
     ))
@@ -92,16 +92,16 @@ fn projection_suffix_preserves_absence_without_accepting_null() {
     assert_ne!(digests[0], digests[1]);
     let source = &policy.projection_assertions.as_ref().unwrap()[0].source;
     let encoded_source = serde_json::to_string(source).unwrap();
-    let invalid_source = encoded_source.replacen('{', "{\"suffix\":null,", 1);
+    let null_source = encoded_source.replacen('{', "{\"suffix\":null,", 1);
     let encoded_policy = serde_json::to_string(&policy).unwrap();
-    let invalid_policy = encoded_policy.replace(&encoded_source, &invalid_source);
-    assert_ne!(invalid_policy, encoded_policy);
+    let null_policy = encoded_policy.replace(&encoded_source, &null_source);
+    assert_ne!(null_policy, encoded_policy);
     assert_eq!(
-        [
-            serde_json::from_str::<ProjectionSource>(&invalid_source).is_err(),
-            serde_json::from_str::<ScannerPolicy>(&invalid_policy).is_err(),
-            parse_scanner_policy(invalid_policy.as_bytes()).is_err(),
-        ],
-        [true; 3]
+        serde_json::from_str::<ProjectionSource>(&null_source).unwrap(),
+        *source
+    );
+    assert_eq!(
+        parse_scanner_policy(null_policy.as_bytes()).unwrap(),
+        policy
     );
 }

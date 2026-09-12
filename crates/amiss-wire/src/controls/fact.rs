@@ -62,17 +62,11 @@ pub enum FactEvidenceKind {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct TargetIntent<P = RepoPathText> {
-    #[serde(
-        default,
-        skip_serializing_if = "Option::is_none",
-        deserialize_with = "json_serde::deserialize_some"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub commit_oid: Option<Oid>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub fragment_digest: Option<Digest>,
     pub kind: TargetIntentKind,
     pub path: P,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub query_digest: Option<Digest>,
     pub target_kind: TargetKind,
 }
@@ -95,10 +89,7 @@ pub struct FindingScope {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(deserialize = "F: Deserialize<'de>, S: Deserialize<'de>")
-)]
+#[serde(deny_unknown_fields)]
 pub struct FindingKeyInput<F = EligibleFindingKind, S = FindingScope> {
     pub finding_kind: F,
     pub schema: FindingKeyInputSchema,
@@ -106,15 +97,9 @@ pub struct FindingKeyInput<F = EligibleFindingKind, S = FindingScope> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    tag = "reason",
-    rename_all = "kebab-case",
-    deny_unknown_fields,
-    bound(deserialize = "P: Deserialize<'de>")
-)]
+#[serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum MissingResolution<P = RepoPathText> {
     HeadingAnchorNotFound {
-        #[serde(deserialize_with = "Option::deserialize")]
         near: Option<String>,
         path: P,
     },
@@ -123,11 +108,10 @@ pub enum MissingResolution<P = RepoPathText> {
         path: P,
     },
     PathNotFound {
-        #[serde(deserialize_with = "Option::deserialize")]
         near: Option<P>,
         path: P,
         #[serde(
-            default,
+            default = "Option::default",
             deserialize_with = "json_serde::deserialize_some",
             skip_serializing_if = "Option::is_none"
         )]
@@ -151,10 +135,7 @@ pub struct FactEvidence {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(deserialize = "K: Deserialize<'de>, E: Deserialize<'de>, F: Deserialize<'de>")
-)]
+#[serde(deny_unknown_fields)]
 pub struct Fact<K = FindingKeyInput, E = FactEvidence, F = EligibleFindingKind> {
     pub evidence: E,
     pub finding_kind: F,

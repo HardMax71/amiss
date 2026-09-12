@@ -94,7 +94,6 @@ pub enum DocumentGitMode {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DocumentSide<M = DocumentGitMode> {
-    #[serde(deserialize_with = "Option::deserialize")]
     pub adapter_id: Option<Adapter>,
     pub byte_count: u64,
     pub content_availability: ContentAvailability,
@@ -108,10 +107,8 @@ pub struct DocumentSide<M = DocumentGitMode> {
     pub opaque_html_regions: u64,
     pub opaque_mdx_bytes: u64,
     pub opaque_mdx_regions: u64,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub raw_digest: Option<Digest>,
     pub status: DocumentStatus,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub unsupported_reason: Option<UnsupportedReason>,
 }
 
@@ -127,14 +124,9 @@ pub enum DocumentChange {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(deserialize = "P: Deserialize<'de>, S: Deserialize<'de>")
-)]
+#[serde(deny_unknown_fields)]
 pub struct DocumentResult<P = RepoPath, S = DocumentSide> {
-    #[serde(deserialize_with = "Option::deserialize")]
     pub base: Option<S>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub candidate: Option<S>,
     pub change: DocumentChange,
     pub classification: DocumentClassification,

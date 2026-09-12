@@ -29,7 +29,6 @@ pub const PUBLICATION_URI_BYTES: usize = 16_384;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct PublicationPlanEnvelope<T = PublicationPlan> {
     pub schema: PlanEnvelopeSchema,
     pub payload: T,

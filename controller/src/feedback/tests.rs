@@ -179,7 +179,10 @@ fn malformed_feedback_cannot_turn_into_plausible_counts_or_labels() {
         .as_object_mut()
         .unwrap()
         .remove("target");
-    assert!(feedback_lines(Some(&serde_json::to_vec(&missing).unwrap()), false).is_empty());
+    assert_eq!(
+        feedback_lines(Some(&serde_json::to_vec(&missing).unwrap()), false),
+        feedback_lines(Some(&bytes), false)
+    );
 }
 
 #[test]

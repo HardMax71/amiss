@@ -8,7 +8,7 @@ use sha2::Digest as _;
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
 #[test]
-fn positional_rows_are_rejected_with_original_and_rebound_digests() {
+fn normalized_fields_are_rejected_with_original_and_rebound_digests() {
     let report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
     let payload =
         String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
@@ -16,32 +16,36 @@ fn positional_rows_are_rejected_with_original_and_rebound_digests() {
     let object = String::from_utf8(serde_json_canonicalizer::to_vec(step).unwrap()).unwrap();
     let sequence =
         serde_json::to_string(&(step.after, step.before, &step.rule_id, step.source)).unwrap();
-    let changed = payload.replace(&object, &sequence);
-    assert_ne!(payload, changed);
-    let wire = std::str::from_utf8(REPORT)
-        .unwrap()
-        .replace(&payload, &changed);
-    let rebound = wire.replace(
-        &report.payload_digest.to_string(),
-        &amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-                .chain_update([0_u8])
-                .chain_update(changed.as_bytes())
-                .finalize()
-                .0,
-        )
-        .to_string(),
-    );
-    let refused = [wire, rebound].map(|input| {
-        assert_eq!(
-            serde_json::from_str::<ReportEnvelope>(&input)
-                .unwrap()
-                .payload,
-            report.payload
+    for changed in [
+        payload.replace(&object, &sequence),
+        payload.replace("\"evaluation_instant\":null,", ""),
+    ] {
+        assert_ne!(payload, changed);
+        let wire = std::str::from_utf8(REPORT)
+            .unwrap()
+            .replace(&payload, &changed);
+        let rebound = wire.replace(
+            &report.payload_digest.to_string(),
+            &amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(changed.as_bytes())
+                    .finalize()
+                    .0,
+            )
+            .to_string(),
         );
-        validate_envelope(input.as_bytes()).map(drop)
-    });
-    assert_eq!(refused, [Err(ReportDefect::NotAReport); 2]);
+        let refused = [wire, rebound].map(|input| {
+            assert_eq!(
+                serde_json::from_str::<ReportEnvelope>(&input)
+                    .unwrap()
+                    .payload,
+                report.payload
+            );
+            validate_envelope(input.as_bytes()).map(drop)
+        });
+        assert_eq!(refused, [Err(ReportDefect::NotAReport); 2]);
+    }
 }
 
 #[test]

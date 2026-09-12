@@ -14,7 +14,6 @@ pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/relation-evidence-payload";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct RelationEvidenceEnvelope<T = RelationEvidence> {
     pub schema: EvidenceEnvelopeSchema,
     pub payload: T,

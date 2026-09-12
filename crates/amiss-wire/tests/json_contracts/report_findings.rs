@@ -1,7 +1,7 @@
 use amiss_wire::report::{
     Disposition, FixKind,
     model::{
-        ByteSpan, DebtApplication, Finding, FindingFix, PolicySource, PolicyStep, ReportEnvelope,
+        ByteSpan, DebtApplication, FindingFix, PolicySource, PolicyStep, ReportEnvelope,
         WaiverApplication,
     },
 };
@@ -93,46 +93,4 @@ pub(super) fn reports() -> [ReportEnvelope; 2] {
         },
     });
     [debt, waiver]
-}
-
-#[test]
-fn nullable_finding_fields_remain_required() {
-    let [report, _waiver_report] = reports();
-    let mut finding = report.payload.findings.into_iter().next().unwrap();
-    finding.base_fact = None;
-    finding.base_fact_digest = None;
-    finding.candidate_fact = None;
-    finding.candidate_fact_digest = None;
-    finding.debt = None;
-    finding.waiver = None;
-    finding.fix = None;
-    finding.location.path = None;
-    finding.location.span = None;
-    let encoded = serde_json::to_string(&finding).unwrap();
-    assert_eq!(serde_json::from_str::<Finding>(&encoded).unwrap(), finding);
-    for field in [
-        "base_fact",
-        "base_fact_digest",
-        "candidate_fact",
-        "candidate_fact_digest",
-        "debt",
-        "waiver",
-        "fix",
-        "path",
-        "span",
-    ] {
-        let member = format!("\"{field}\":null");
-        for invalid in [
-            encoded.replace(&member, &format!("\"{field}\":{{}}")),
-            encoded
-                .replace(&format!("{member},"), "")
-                .replace(&format!(",{member}"), ""),
-        ] {
-            assert_ne!(invalid, encoded, "{field}");
-            assert!(
-                serde_json::from_str::<Finding>(&invalid).is_err(),
-                "{field}: {invalid}"
-            );
-        }
-    }
 }
