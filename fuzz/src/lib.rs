@@ -68,34 +68,13 @@ pub fn json(bytes: &[u8]) {
 ///
 /// Panics when a control parser is nondeterministic.
 pub fn controls(bytes: &[u8]) {
-    assert_eq!(
-        amiss_wire::controls::parse_scanner_policy(bytes),
-        amiss_wire::controls::parse_scanner_policy(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_organization_floor(bytes),
-        amiss_wire::controls::parse_organization_floor(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_debt_snapshot(bytes),
-        amiss_wire::controls::parse_debt_snapshot(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_waiver_bundle(bytes),
-        amiss_wire::controls::parse_waiver_bundle(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_trusted_time(bytes),
-        amiss_wire::controls::parse_trusted_time(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_execution_constraint(bytes),
-        amiss_wire::controls::parse_execution_constraint(bytes),
-    );
-    assert_eq!(
-        amiss_wire::manifest::parse_release_manifest(bytes),
-        amiss_wire::manifest::parse_release_manifest(bytes),
-    );
+    deterministic(bytes, amiss_wire::controls::parse_scanner_policy);
+    deterministic(bytes, amiss_wire::controls::parse_organization_floor);
+    deterministic(bytes, amiss_wire::controls::parse_debt_snapshot);
+    deterministic(bytes, amiss_wire::controls::parse_waiver_bundle);
+    deterministic(bytes, amiss_wire::controls::parse_trusted_time);
+    deterministic(bytes, amiss_wire::controls::parse_execution_constraint);
+    deterministic(bytes, amiss_wire::manifest::parse_release_manifest);
 }
 
 /// The three request parsers: no panic escapes, and parsing is
@@ -105,18 +84,18 @@ pub fn controls(bytes: &[u8]) {
 ///
 /// Panics when a request parser is nondeterministic.
 pub fn requests(bytes: &[u8]) {
-    assert_eq!(
-        amiss_wire::requests::EvaluationRequest::parse(bytes),
-        amiss_wire::requests::EvaluationRequest::parse(bytes),
-    );
-    assert_eq!(
-        amiss_wire::requests::SnapshotRequest::parse(bytes),
-        amiss_wire::requests::SnapshotRequest::parse(bytes),
-    );
-    assert_eq!(
-        amiss_wire::requests::ControlsRequest::parse(bytes),
-        amiss_wire::requests::ControlsRequest::parse(bytes),
-    );
+    deterministic(bytes, amiss_wire::requests::EvaluationRequest::parse);
+    deterministic(bytes, amiss_wire::requests::SnapshotRequest::parse);
+    deterministic(bytes, amiss_wire::requests::ControlsRequest::parse);
+}
+
+fn deterministic<T: PartialEq + std::fmt::Debug, E: std::fmt::Debug>(
+    bytes: &[u8],
+    parse: impl Fn(&[u8]) -> Result<T, E>,
+) {
+    let [first, second] =
+        [parse(bytes), parse(bytes)].map(|result| result.map_err(|error| format!("{error:?}")));
+    assert_eq!(first, second, "parsing is deterministic");
 }
 
 /// Both document adapters under the contract ceilings: a parser panic is
