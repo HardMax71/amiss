@@ -9,26 +9,56 @@ pub use build::{construct, construct_incomplete};
 pub use identity::candidate_identity_digest;
 
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::digest::Digest;
 use amiss_wire::json::{Value, canonical};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::EngineProvenance;
 pub use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
+use amiss_wire::{codec, de::Error};
+use serde::Serialize;
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/scanner-report-envelope";
 pub const INDEX_PROJECTION_SCHEMA: &str = "amiss/scanner-index-projection";
 pub const SNAPSHOT_SCHEMA: &str = "amiss/scanner-snapshot";
 
-/// The canonical logical-index projection and the synthetic snapshot input
-/// built over it, with both digests.
-#[must_use]
+#[derive(Serialize)]
+struct IndexEntry<'a> {
+    entry_kind: &'static str,
+    git_mode: amiss_wire::controls::GitMode,
+    object_format: &'static str,
+    object_oid: &'a str,
+    path: &'a RepoPath,
+    skip_worktree: bool,
+}
+
+#[derive(Serialize)]
+struct IndexProjection<'a> {
+    entries: Vec<IndexEntry<'a>>,
+    schema: &'static str,
+}
+
+#[derive(Serialize)]
+struct SnapshotInput<'a> {
+    base_commit_oid: &'a str,
+    base_object_format: &'static str,
+    identity_scope: &'static str,
+    index_projection_digest: Digest,
+    kind: &'static str,
+    schema: &'static str,
+}
+
+/// The logical-index projection and synthetic snapshot identity.
+///
+/// # Errors
+///
+/// The index cannot be represented in the strict JSON profile.
 pub fn synthetic_candidate(
     base_object_format: &'static str,
     base_commit_oid: &str,
     entries: &[(RepoPath, amiss_wire::controls::GitMode, String, bool)],
     skip_worktree_paths: u64,
-) -> IndexCandidate {
-    let rows: Vec<Value> = entries
+) -> Result<IndexCandidate, Error> {
+    let entries = entries
         .iter()
         .map(|(path, mode, oid, skip)| {
             let entry_kind = match mode {
@@ -38,38 +68,40 @@ pub fn synthetic_candidate(
                 | amiss_wire::controls::GitMode::ExecutableFile
                 | amiss_wire::controls::GitMode::Tree => "blob",
             };
-            object(vec![
-                ("path", path.to_value()),
-                ("entry_kind", string(entry_kind)),
-                ("git_mode", string(mode.as_ref())),
-                ("object_format", string(base_object_format)),
-                ("object_oid", string(oid)),
-                ("skip_worktree", Value::Bool(*skip)),
-            ])
+            IndexEntry {
+                entry_kind,
+                git_mode: *mode,
+                object_format: base_object_format,
+                object_oid: oid,
+                path,
+                skip_worktree: *skip,
+            }
         })
         .collect();
-    let projection = object(vec![
-        ("schema", string(INDEX_PROJECTION_SCHEMA)),
-        ("entries", Value::array(rows)),
-    ]);
-    let projection_digest = hj(INDEX_PROJECTION_SCHEMA, &projection);
-    let snapshot_input = object(vec![
-        ("schema", string(SNAPSHOT_SCHEMA)),
-        ("kind", string("index")),
-        ("identity_scope", string("complete-logical-index")),
-        ("base_object_format", string(base_object_format)),
-        ("base_commit_oid", string(base_commit_oid)),
-        ("index_projection_digest", digest_value(projection_digest)),
-    ]);
-    let snapshot_digest = hj(SNAPSHOT_SCHEMA, &snapshot_input);
-    IndexCandidate {
+    let projection = IndexProjection {
+        entries,
+        schema: INDEX_PROJECTION_SCHEMA,
+    };
+    let projection_digest = codec::digest(INDEX_PROJECTION_SCHEMA, &projection)?;
+    let snapshot_digest = codec::digest(
+        SNAPSHOT_SCHEMA,
+        &SnapshotInput {
+            base_commit_oid,
+            base_object_format,
+            identity_scope: "complete-logical-index",
+            index_projection_digest: projection_digest,
+            kind: "index",
+            schema: SNAPSHOT_SCHEMA,
+        },
+    )?;
+    Ok(IndexCandidate {
         base_object_format,
         base_commit_oid: base_commit_oid.to_owned(),
         projection_digest,
-        entry_count: u64::try_from(entries.len()).unwrap_or(u64::MAX),
+        entry_count: u64::try_from(projection.entries.len()).unwrap_or(u64::MAX),
         snapshot_digest,
         skip_worktree_paths,
-    }
+    })
 }
 
 /// One snapshot's identity in the evaluation block.
@@ -149,33 +181,4 @@ impl Built {
         wire.push(b'\n');
         wire
     }
-}
-
-fn string(text: &str) -> Value {
-    Value::string(text.to_owned())
-}
-
-fn nullable(text: Option<&str>) -> Value {
-    text.map_or(Value::Null, string)
-}
-
-fn nullable_path(path: Option<&RepoPath>) -> Value {
-    path.map_or(Value::Null, RepoPath::to_value)
-}
-
-fn integer(value: u64) -> Value {
-    Value::Integer(i64::try_from(value).unwrap_or(i64::MAX))
-}
-
-fn digest_value(digest: Digest) -> Value {
-    Value::string(digest.to_string())
-}
-
-fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::object(
-        members
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-    )
 }

@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::fs;
 
 use amiss_git::{GitLimits, GitResources, Repository};

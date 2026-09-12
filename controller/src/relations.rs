@@ -84,11 +84,10 @@ pub fn verify_relation_plan(
     plan: &RelationPlanEnvelope,
     transition: &RelationTransition,
 ) -> Result<(), RelationAcquisitionError> {
-    let rebuilt = amiss_wire::relation::plan(&plan.payload)
+    plan.verify("$.plan")
         .map_err(|_defect| RelationAcquisitionError::InvalidTransition)?;
     let registered = transition.relation.plan.as_ref();
-    (rebuilt.text("payload_digest") == Some(&plan.payload_digest.to_string())
-        && plan.payload.relation.identity == registered.identity
+    (plan.payload.relation.identity == registered.identity
         && plan.payload.relation.context_digest == registered.context_digest
         && plan.payload.coordination == transition.coordination
         && plan.payload.trigger_role == transition.relation.trigger_role

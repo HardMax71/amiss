@@ -1,8 +1,11 @@
 use std::cmp::Ordering;
 
-use crate::controls::{ConstraintPlatform, GitMode, decode_enum, root};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::{Digest, hj};
+use serde::{Deserialize, Serialize};
+
+use crate::codec;
+use crate::controls::{ConstraintPlatform, GitMode};
+use crate::de::{Error, ErrorKind, fail};
+use crate::digest::Digest;
 use crate::json::Value;
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
@@ -13,9 +16,8 @@ pub const DEPENDENCY_LOCK_DOMAIN: &str = "amiss/scanner-dependency-lock";
 pub const RUNTIME_CONTRACT: &str = "manifest-closed";
 pub const ENVIRONMENT_CONTRACT: &str = "scanner-process-env";
 
-/// One runtime file of the reviewed action closure: a regular blob in the
-/// pinned action tree with its exact mode and plain SHA-256.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeFile {
     pub path: RepoPathText,
     pub role: RuntimeRole,
@@ -24,16 +26,25 @@ pub struct RuntimeFile {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::AsRefStr,
+    strum::EnumString,
+    strum::IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RuntimeRole {
     Executable,
     DynamicLibrary,
     RuntimeData,
 }
 
-/// One published platform artifact and its complete runtime closure.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReleaseArtifact {
     pub platform: ConstraintPlatform,
@@ -44,24 +55,19 @@ pub struct ReleaseArtifact {
     pub runtime_files: Vec<RuntimeFile>,
 }
 
-/// The build namespace: the repository and exact commit the release was
-/// built from.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct BuildSource {
     pub repository: RepositoryIdentity,
     pub object_format: ObjectFormat,
     pub commit_oid: Oid,
 }
 
-/// Every build lockfile by canonical path and raw-evidence digest.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DependencyLockInput {
     pub files: Vec<(RepoPathText, Digest)>,
 }
 
-/// The strict release manifest: the reviewed release label, its build
-/// namespace, the complete dependency-lock set, and one to six artifacts
-/// sorted by platform.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReleaseManifest {
     pub digest: Digest,
@@ -72,67 +78,107 @@ pub struct ReleaseManifest {
     pub artifacts: Vec<ReleaseArtifact>,
 }
 
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ManifestDocument {
+    schema: String,
+    engine_version: String,
+    build_source: BuildSource,
+    dependency_lock: LockDocument,
+    dependency_lock_digest: Digest,
+    artifacts: Vec<ArtifactDocument>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LockDocument {
+    schema: String,
+    files: Vec<LockFile>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LockFile {
+    path: RepoPathText,
+    raw_digest: Digest,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ArtifactDocument {
+    platform: ConstraintPlatform,
+    artifact_name: ArtifactId,
+    tree_path: RepoPathText,
+    binary_sha256: Digest,
+    engine_digest: Digest,
+    runtime_contract: String,
+    environment_contract: String,
+    runtime_files: Vec<RuntimeFile>,
+}
+
 impl ReleaseManifest {
-    /// Parses the manifest blob under the strict JSON rules, verifying the
-    /// closed shape, the sorted-unique orders, and the lock-set digest.
+    /// Parses the closed manifest and checks ordering, runtime closure, and lock-set digest.
     ///
     /// # Errors
     ///
-    /// The first typed defect: shape, unknown field, invalid value, a
-    /// noncanonical array order, a limit crossing, or a digest mismatch.
+    /// The document has a syntax, shape, ordering, identity, or digest defect.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        Self::decode(root(bytes)?)
+        Self::decode(&codec::decode(bytes)?)
     }
 
-    /// Decodes an already-parsed value, which is how the wrapper checks the
-    /// embedded manifest against the blob it parsed.
+    /// Decodes an embedded manifest without serializing and reparsing it.
     ///
     /// # Errors
     ///
-    /// As [`ReleaseManifest::parse`].
-    pub fn decode(value: Value) -> Result<Self, Error> {
-        let digest = hj(MANIFEST_DOMAIN, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, MANIFEST_SCHEMA)
-        })?;
-        let engine_version = obj.required("engine_version", decode_version)?;
-        let build_source = obj.required("build_source", decode_build_source)?;
-        let lock_path = obj.field("dependency_lock");
-        let lock_value = obj.take("dependency_lock")?;
-        let computed_lock = hj(DEPENDENCY_LOCK_DOMAIN, &lock_value);
-        let dependency_lock = decode_lock(&lock_path, lock_value)?;
-        let dependency_lock_digest = de::digest(
-            &obj.field("dependency_lock_digest"),
-            obj.take("dependency_lock_digest")?,
-        )?;
-        if dependency_lock_digest != computed_lock {
-            return fail(
-                &obj.field("dependency_lock_digest"),
-                ErrorKind::InvalidValue,
-            );
+    /// As [`Self::parse`].
+    pub fn decode(value: &Value) -> Result<Self, Error> {
+        let digest = codec::digest(MANIFEST_DOMAIN, value)?;
+        let document: ManifestDocument = codec::from_value("$", value)?;
+        if document.schema != MANIFEST_SCHEMA {
+            return fail("$.schema", ErrorKind::InvalidValue);
         }
-        let artifacts_path = obj.field("artifacts");
-        let artifacts = decode_nonempty_set(
-            &artifacts_path,
-            obj.take("artifacts")?,
-            6,
-            decode_artifact,
-            |a, b| a.platform.as_ref().cmp(b.platform.as_ref()),
-        )?;
-        obj.finish()?;
+        validate_version(&document.engine_version)?;
+        if document.build_source.commit_oid.object_format() != document.build_source.object_format {
+            return fail("$.build_source.commit_oid", ErrorKind::InvalidValue);
+        }
+        if document.dependency_lock.schema != DEPENDENCY_LOCK_SCHEMA {
+            return fail("$.dependency_lock.schema", ErrorKind::InvalidValue);
+        }
+        let files = &document.dependency_lock.files;
+        bounded_set("$.dependency_lock.files", files, 32, |a, b| {
+            a.path.cmp(&b.path)
+        })?;
+        if codec::digest(DEPENDENCY_LOCK_DOMAIN, &document.dependency_lock)?
+            != document.dependency_lock_digest
+        {
+            return fail("$.dependency_lock_digest", ErrorKind::InvalidValue);
+        }
+        bounded_set("$.artifacts", &document.artifacts, 6, |a, b| {
+            a.platform.as_ref().cmp(b.platform.as_ref())
+        })?;
+        let artifacts = document
+            .artifacts
+            .into_iter()
+            .enumerate()
+            .map(|(index, artifact)| artifact.checked(&format!("$.artifacts[{index}]")))
+            .collect::<Result<_, _>>()?;
         Ok(Self {
             digest,
-            engine_version,
-            build_source,
-            dependency_lock,
-            dependency_lock_digest,
+            engine_version: document.engine_version,
+            build_source: document.build_source,
+            dependency_lock: DependencyLockInput {
+                files: document
+                    .dependency_lock
+                    .files
+                    .into_iter()
+                    .map(|file| (file.path, file.raw_digest))
+                    .collect(),
+            },
+            dependency_lock_digest: document.dependency_lock_digest,
             artifacts,
         })
     }
 
-    /// The one artifact matching both the selected platform and name, per
-    /// the manifest's no-repeated-platform law.
     #[must_use]
     pub fn select(
         &self,
@@ -145,9 +191,48 @@ impl ReleaseManifest {
     }
 }
 
+impl ArtifactDocument {
+    fn checked(self, path: &str) -> Result<ReleaseArtifact, Error> {
+        if self.runtime_contract != RUNTIME_CONTRACT {
+            return fail(&format!("{path}.runtime_contract"), ErrorKind::InvalidValue);
+        }
+        if self.environment_contract != ENVIRONMENT_CONTRACT {
+            return fail(
+                &format!("{path}.environment_contract"),
+                ErrorKind::InvalidValue,
+            );
+        }
+        let files_path = format!("{path}.runtime_files");
+        bounded_set(&files_path, &self.runtime_files, 256, |a, b| {
+            a.path.cmp(&b.path)
+        })?;
+        for (index, file) in self.runtime_files.iter().enumerate() {
+            if !matches!(
+                file.git_mode,
+                GitMode::RegularFile | GitMode::ExecutableFile
+            ) {
+                return fail(
+                    &format!("{files_path}[{index}].git_mode"),
+                    ErrorKind::InvalidValue,
+                );
+            }
+        }
+        let artifact = ReleaseArtifact {
+            platform: self.platform,
+            artifact_name: self.artifact_name,
+            tree_path: self.tree_path,
+            binary_sha256: self.binary_sha256,
+            engine_digest: self.engine_digest,
+            runtime_files: self.runtime_files,
+        };
+        if artifact.executable().is_none() {
+            return fail(&files_path, ErrorKind::Inconsistent);
+        }
+        Ok(artifact)
+    }
+}
+
 impl ReleaseArtifact {
-    /// The single `executable` row, which the closure law requires to name
-    /// `tree_path` with mode `100755` and the artifact's own checksum.
     #[must_use]
     pub fn executable(&self) -> Option<&RuntimeFile> {
         let mut rows = self
@@ -166,13 +251,12 @@ impl ReleaseArtifact {
     }
 }
 
-fn decode_version(path: &str, value: Value) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
+fn validate_version(raw: &str) -> Result<(), Error> {
     let (core, pre) = raw
         .split_once('-')
-        .map_or((raw.as_str(), None), |(core, pre)| (core, Some(pre)));
+        .map_or((raw, None), |(core, pre)| (core, Some(pre)));
     let numeric: Vec<&str> = core.split('.').collect();
-    let shaped = raw.len() <= 64
+    if raw.len() <= 64
         && numeric.len() == 3
         && numeric
             .iter()
@@ -185,154 +269,28 @@ fn decode_version(path: &str, value: Value) -> Result<String, Error> {
                         || byte == b'.'
                         || byte == b'-'
                 })
-        });
-    if shaped {
-        Ok(raw)
+        })
+    {
+        Ok(())
     } else {
-        fail(path, ErrorKind::InvalidValue)
+        fail("$.engine_version", ErrorKind::InvalidValue)
     }
 }
 
-fn decode_build_source(path: &str, value: Value) -> Result<BuildSource, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let repository = obj.required("repository", crate::controls::decode_repository)?;
-    let format_path = obj.field("object_format");
-    let object_format = decode_enum(&format_path, obj.take("object_format")?)?;
-    let commit_path = obj.field("commit_oid");
-    let commit_oid = Oid::new(
-        object_format,
-        de::string(&commit_path, obj.take("commit_oid")?)?,
-    )
-    .ok_or_else(|| Error::new(&commit_path, ErrorKind::InvalidValue))?;
-    obj.finish()?;
-    Ok(BuildSource {
-        repository,
-        object_format,
-        commit_oid,
-    })
-}
-
-fn decode_lock(path: &str, value: Value) -> Result<DependencyLockInput, Error> {
-    let mut obj = Obj::new(path, value)?;
-    obj.required("schema", |path, value| {
-        de::const_str(path, value, DEPENDENCY_LOCK_SCHEMA)
-    })?;
-    let files_path = obj.field("files");
-    let rows = de::array(&files_path, obj.take("files")?)?;
-    obj.finish()?;
-    if rows.is_empty() || rows.len() > 32 {
-        return fail(&files_path, ErrorKind::LimitExceeded);
-    }
-    let mut files: Vec<(RepoPathText, Digest)> = Vec::with_capacity(rows.len());
-    for (index, row) in rows.into_iter().enumerate() {
-        let row_path = format!("{files_path}[{index}]");
-        let mut file = Obj::new(&row_path, row)?;
-        let member = file.required("path", decode_repo_path)?;
-        let raw_digest = file.required("raw_digest", de::digest)?;
-        file.finish()?;
-        files.push((member, raw_digest));
-    }
-    sorted_unique(&files_path, &files, |a, b| a.0.as_str().cmp(b.0.as_str()))?;
-    Ok(DependencyLockInput { files })
-}
-
-fn decode_artifact(path: &str, value: Value) -> Result<ReleaseArtifact, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let platform = obj.required("platform", decode_enum)?;
-    let artifact_name = obj.required("artifact_name", decode_artifact_id)?;
-    let tree_path = obj.required("tree_path", decode_repo_path)?;
-    let binary_sha256 = obj.required("binary_sha256", de::digest)?;
-    let engine_digest = obj.required("engine_digest", de::digest)?;
-    obj.required("runtime_contract", |path, value| {
-        de::const_str(path, value, RUNTIME_CONTRACT)
-    })?;
-    obj.required("environment_contract", |path, value| {
-        de::const_str(path, value, ENVIRONMENT_CONTRACT)
-    })?;
-    let files_path = obj.field("runtime_files");
-    let runtime_files = decode_nonempty_set(
-        &files_path,
-        obj.take("runtime_files")?,
-        256,
-        decode_runtime_file,
-        |a, b| a.path.as_str().cmp(b.path.as_str()),
-    )?;
-    obj.finish()?;
-    let artifact = ReleaseArtifact {
-        platform,
-        artifact_name,
-        tree_path,
-        binary_sha256,
-        engine_digest,
-        runtime_files,
-    };
-    if artifact.executable().is_none() {
-        return fail(&files_path, ErrorKind::Inconsistent);
-    }
-    Ok(artifact)
-}
-
-fn decode_runtime_file(path: &str, value: Value) -> Result<RuntimeFile, Error> {
-    let mut file = Obj::new(path, value)?;
-    let member = file.required("path", decode_repo_path)?;
-    let role = file.required("role", decode_enum)?;
-    let mode_path = file.field("git_mode");
-    let git_mode = match de::string(&mode_path, file.take("git_mode")?)?.as_str() {
-        "100644" => GitMode::RegularFile,
-        "100755" => GitMode::ExecutableFile,
-        _ => return fail(&mode_path, ErrorKind::InvalidValue),
-    };
-    let file_sha256 = file.required("file_sha256", de::digest)?;
-    file.finish()?;
-    Ok(RuntimeFile {
-        path: member,
-        role,
-        git_mode,
-        file_sha256,
-    })
-}
-
-fn decode_nonempty_set<T>(
-    path: &str,
-    value: Value,
-    maximum: usize,
-    decode: impl Fn(&str, Value) -> Result<T, Error>,
-    compare: impl Fn(&T, &T) -> Ordering,
-) -> Result<Vec<T>, Error> {
-    let rows = de::array(path, value)?;
-    if rows.is_empty() || rows.len() > maximum {
-        return fail(path, ErrorKind::LimitExceeded);
-    }
-    let items = rows
-        .into_iter()
-        .enumerate()
-        .map(|(index, row)| decode(&format!("{path}[{index}]"), row))
-        .collect::<Result<Vec<_>, _>>()?;
-    sorted_unique(path, &items, compare)?;
-    Ok(items)
-}
-
-fn sorted_unique<T>(
+fn bounded_set<T>(
     path: &str,
     items: &[T],
+    maximum: usize,
     compare: impl Fn(&T, &T) -> Ordering,
 ) -> Result<(), Error> {
-    for pair in items.windows(2) {
-        if let [left, right] = pair
-            && compare(left, right) != Ordering::Less
-        {
-            return fail(path, ErrorKind::UnsortedSet);
-        }
+    if items.is_empty() || items.len() > maximum {
+        return fail(path, ErrorKind::LimitExceeded);
+    }
+    if items
+        .windows(2)
+        .any(|pair| matches!(pair, [left, right] if compare(left, right) != Ordering::Less))
+    {
+        return fail(path, ErrorKind::UnsortedSet);
     }
     Ok(())
-}
-
-fn decode_repo_path(path: &str, value: Value) -> Result<RepoPathText, Error> {
-    RepoPathText::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn decode_artifact_id(path: &str, value: Value) -> Result<ArtifactId, Error> {
-    ArtifactId::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
 }

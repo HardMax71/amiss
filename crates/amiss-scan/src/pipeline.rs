@@ -65,6 +65,15 @@ pub(crate) fn detail(error: &Error, path: Option<&RepoPath>) -> ErrorDetail {
     }
 }
 
+fn projection_failure(path: Option<&RepoPath>) -> ErrorDetail {
+    ErrorDetail {
+        code: AnalysisErrorCode::ReportConstructionFailed,
+        path: path.cloned(),
+        path_bytes: None,
+        resource: None,
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(crate) struct ObservationContext<'a> {
     pub(crate) engine: &'a EngineProvenance,
@@ -119,7 +128,8 @@ pub(crate) fn side_observations(
                     continue;
                 };
                 let (_descriptor, adapter_contract_digest) =
-                    adapter_contract(context.engine, adapter);
+                    adapter_contract(context.engine, adapter)
+                        .map_err(|_defect| projection_failure(Some(&record.path)))?;
                 for occurrence in &scanned.occurrences {
                     let (intent, resolution, external_destination) = resolver
                         .resolve_scanned(
@@ -139,7 +149,8 @@ pub(crate) fn side_observations(
                         projection_digest: occurrence.projection_digest,
                         intent: &intent,
                         raw_destination_digest: occurrence.raw_destination_digest,
-                    });
+                    })
+                    .map_err(|_defect| projection_failure(Some(&record.path)))?;
                     observations.push(Observation {
                         id,
                         adapter_contract_digest,
@@ -304,7 +315,7 @@ impl PipelineFailure {
         Self::new(setup, vec![detail])
     }
 
-    fn into_built(self) -> Built {
+    fn into_built(self) -> Result<Built, amiss_wire::de::Error> {
         construct_incomplete(&self.0.setup, &self.0.details)
     }
 }
@@ -347,7 +358,7 @@ fn conclude(
     site: &crate::semantic::SiteEvaluation,
     outcomes: &CandidateOutcomes,
     failures: &[ErrorDetail],
-) -> Built {
+) -> Result<Built, amiss_wire::de::Error> {
     if !failures.is_empty() {
         return construct_incomplete(setup, failures);
     }

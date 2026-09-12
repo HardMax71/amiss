@@ -4,6 +4,7 @@
     reason = "tests mutate values produced by the checked locale evidence writer"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::{collections::BTreeMap, fs, path::Path};
 
 use amiss_wire::de::ErrorKind;
@@ -56,6 +57,7 @@ pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
     let planned = locale_plan();
     let plan_value = plan(&planned).unwrap();
     LocaleCoverageEvidence {
+        schema: amiss_wire::codec::Schema::default(),
         plan_payload_digest: hj(
             amiss_wire::locale::PLAN_PAYLOAD_SCHEMA,
             plan_value.member("payload").unwrap(),
@@ -189,10 +191,7 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
     let origin = member_mut(pages.first_mut().unwrap(), "origin");
     *member_mut(origin, "based_on_source_digest") = Value::string("source-v1");
     let error = parse_evidence(&sealed(invalid_lineage)).unwrap_err();
-    assert_eq!(
-        error.path,
-        "$.payload.target.pages[0].origin.based_on_source_digest"
-    );
+    assert_eq!(error.path, "$.payload.target.pages[0].origin");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
@@ -264,7 +263,7 @@ fn member_mut<'a>(value: &'a mut Value, name: &str) -> &'a mut Value {
     };
     members
         .iter_mut()
-        .find(|(key, _value)| key == name)
+        .find(|(key, _value)| key.as_str() == name)
         .map(|(_key, value)| value)
         .unwrap()
 }

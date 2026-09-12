@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::fs;
 use std::path::Path;
 use std::process::ExitStatus;
@@ -49,7 +50,7 @@ fn entry<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
     };
     members
         .iter_mut()
-        .find(|(name, _)| name == key)
+        .find(|(name, _)| name.as_str() == key)
         .map(|(_, member)| member)
         .expect("a present member")
 }
@@ -58,25 +59,15 @@ fn set(value: &mut Value, key: &str, member: Value) {
     let Value::Object(members) = value else {
         panic!("not an object");
     };
-    if let Some(slot) = members.iter_mut().find(|(name, _)| name == key) {
-        slot.1 = member;
-        return;
-    }
-    let at = members
-        .iter()
-        .position(|(name, _)| name.as_str() > key)
-        .unwrap_or(members.len());
-    let mut expanded = std::mem::take(members).into_vec();
-    expanded.insert(at, (key.to_owned(), member));
-    *members = expanded.into_boxed_slice();
+    members.insert(key.to_owned(), member);
 }
 
 fn text(value: &Value, key: &str) -> String {
     let Value::Object(members) = value else {
         panic!("not an object");
     };
-    match members.iter().find(|(name, _)| name == key) {
-        Some((_, Value::String(text))) => text.to_string(),
+    match members.iter().find(|(name, _)| name.as_str() == key) {
+        Some((_, Value::String(text))) => text.clone(),
         _ => panic!("no text member {key}"),
     }
 }
@@ -131,8 +122,10 @@ fn identity_digest(evaluation: &Value) -> String {
     };
     let mut identity: Vec<(String, Value)> = members
         .iter()
-        .filter(|(name, _)| name != "evaluation_instant" && name != "trusted_time")
-        .cloned()
+        .filter(|(name, _)| {
+            name.as_str() != "evaluation_instant" && name.as_str() != "trusted_time"
+        })
+        .map(|(name, value)| (name.clone(), value.clone()))
         .collect();
     identity.push((
         "schema".to_owned(),
@@ -169,7 +162,7 @@ fn statement_value(repository: &Value, ties: &StatementTies, identity: &str) -> 
     set(
         &mut statement,
         "provider_run_attempt",
-        Value::Integer(i64::try_from(ATTEMPT).unwrap()),
+        Value::from(i64::try_from(ATTEMPT).unwrap()),
     );
     set(
         &mut statement,
@@ -370,7 +363,7 @@ fn the_sealed_golden_clears_acceptance_and_settlement() {
 #[test]
 fn a_complete_block_report_is_accepted_at_class_one() {
     let (wire, expectations) = golden(Deviation::pre(|payload| {
-        set(entry(payload, "result"), "exit_code", Value::Integer(1));
+        set(entry(payload, "result"), "exit_code", Value::from(1));
         set(entry(payload, "result"), "status", string("block"));
     }));
     assert_eq!(accept(&wire, &expectations), Ok(1));

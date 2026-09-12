@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 
 /// The five closed source adapters. Every wire string an adapter contributes
@@ -15,10 +16,14 @@ use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
     EnumIter,
     EnumString,
     IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum Adapter {
     #[strum(serialize = "asciidoc")]
+    #[serde(rename = "asciidoc")]
     AsciiDoc,
     Markdown,
     Mdx,

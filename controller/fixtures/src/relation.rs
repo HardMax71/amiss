@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::sync::Arc;
 
 use amiss_controller::{
@@ -64,7 +65,7 @@ pub fn relation_audit_with_coordination(
         report,
         plan,
         evidence,
-        assessment: json::canonical(&assessment),
+        assessment: codec::canonical(&assessment).ok()?,
     })
 }
 

@@ -121,3 +121,19 @@ fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
     let numeric_run = TIME_STATEMENT.replace("pipeline/01J2Z9-7", "987654321");
     assert!(TrustedTimeStatement::parse(numeric_run.as_bytes()).is_ok());
 }
+
+#[test]
+fn embedded_serde_preserves_the_control_digest_and_enforces_domain_checks() {
+    let control: TrustedTimeStatement = serde_json::from_str(TIME_STATEMENT).unwrap();
+    assert_eq!(
+        control,
+        TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap()
+    );
+    let value = amiss_wire::codec::to_value(&control).unwrap();
+    assert_eq!(value, json::parse(TIME_STATEMENT.as_bytes()).unwrap());
+    assert_eq!(control.digest(), hj(control.schema(), &value));
+    let invalid = TIME_STATEMENT.replace("10:10:00Z", "10:10:01Z");
+    assert!(serde_json::from_str::<TrustedTimeStatement>(&invalid).is_err());
+    let invalid = TIME_STATEMENT.replace("pipeline/01J2Z9-7", "pipeline/");
+    assert!(serde_json::from_str::<TrustedTimeStatement>(&invalid).is_err());
+}

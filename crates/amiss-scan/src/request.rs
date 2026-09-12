@@ -4,7 +4,7 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::Digest;
-use amiss_wire::json::{ErrorKind as JsonErrorKind, canonical};
+use amiss_wire::json::{ErrorKind as JsonErrorKind, Value};
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 use amiss_wire::requests::{ControlsRequest, RequestTrust, SuppliedControl};
 
@@ -34,8 +34,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .organization_floor
         .as_ref()
         .map(|supplied| {
-            let bytes = canonical(&supplied.value);
-            let floor = OrganizationFloor::parse(&bytes).map_err(floor_detail)?;
+            let floor = OrganizationFloor::from_value(&supplied.value).map_err(floor_detail)?;
             if floor.digest() != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
@@ -49,7 +48,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .debt_snapshot
         .as_ref()
         .map(|supplied| {
-            typed(supplied, DebtSnapshot::parse, DebtSnapshot::digest).map(
+            typed(supplied, DebtSnapshot::from_value, DebtSnapshot::digest).map(
                 |(snapshot, trust_source)| DebtInput {
                     snapshot,
                     trust_source,
@@ -61,7 +60,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .waiver_bundle
         .as_ref()
         .map(|supplied| {
-            typed(supplied, WaiverBundle::parse, WaiverBundle::digest).map(
+            typed(supplied, WaiverBundle::from_value, WaiverBundle::digest).map(
                 |(bundle, trust_source)| WaiverInput {
                     bundle,
                     trust_source,
@@ -73,8 +72,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .trusted_time
         .as_ref()
         .map(|supplied| {
-            let bytes = canonical(&supplied.value);
-            let statement = TrustedTimeStatement::parse(&bytes)
+            let statement = TrustedTimeStatement::from_value(&supplied.value)
                 .map_err(|error| configuration_detail(&error))?;
             if statement.digest() != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
@@ -93,7 +91,7 @@ pub fn controls(request: &ControlsRequest) -> Result<ControlInputs, ErrorDetail>
         .map(|supplied| {
             typed(
                 supplied,
-                ExecutionConstraintDescriptor::parse,
+                ExecutionConstraintDescriptor::from_value,
                 ExecutionConstraintDescriptor::digest,
             )
             .map(|(descriptor, trust_source)| ConstraintInput {
@@ -135,11 +133,10 @@ fn floor_detail(error: FloorDefect) -> ErrorDetail {
 
 fn typed<T>(
     supplied: &SuppliedControl,
-    parse: impl FnOnce(&[u8]) -> Result<T, Error>,
+    parse: impl FnOnce(&Value) -> Result<T, Error>,
     digest: impl FnOnce(&T) -> Digest,
 ) -> Result<(T, RequestTrust), ErrorDetail> {
-    let bytes = canonical(&supplied.value);
-    let value = parse(&bytes).map_err(|error| configuration_detail(&error))?;
+    let value = parse(&supplied.value).map_err(|error| configuration_detail(&error))?;
     if digest(&value) != supplied.expected_digest {
         return Err(code(AnalysisErrorCode::DigestMismatch));
     }

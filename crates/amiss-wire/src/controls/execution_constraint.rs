@@ -1,29 +1,45 @@
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use super::mapping::wire_fields;
+use super::{check_schema, root};
+use crate::codec;
+use crate::de::{Error, ErrorKind, fail};
 use crate::digest::{Digest, hj};
-use crate::json::{Value, canonical};
+use crate::json::Value;
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
-
-use super::value::{object, repository, text};
-use super::{decode_enum, decode_repo_path, decode_repository, root};
+use serde::{Deserialize, Serialize};
 
 const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint";
 const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap";
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::AsRefStr,
+    strum::EnumString,
+    strum::IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 pub enum ConstraintPlatform {
     #[strum(serialize = "linux-x86_64")]
+    #[serde(rename = "linux-x86_64")]
     LinuxX8664,
     #[strum(serialize = "linux-aarch64")]
+    #[serde(rename = "linux-aarch64")]
     LinuxAarch64,
     #[strum(serialize = "macos-x86_64")]
+    #[serde(rename = "macos-x86_64")]
     MacosX8664,
     #[strum(serialize = "macos-aarch64")]
+    #[serde(rename = "macos-aarch64")]
     MacosAarch64,
     #[strum(serialize = "windows-x86_64")]
+    #[serde(rename = "windows-x86_64")]
     WindowsX8664,
     #[strum(serialize = "windows-aarch64")]
+    #[serde(rename = "windows-aarch64")]
     WindowsAarch64,
 }
 
@@ -32,15 +48,7 @@ pub enum ConstraintPlatform {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExecutionConstraintDescriptor {
     digest: Digest,
-    action_repository: RepositoryIdentity,
-    action_object_format: ObjectFormat,
-    action_commit_oid: Oid,
-    action_tree_oid: Oid,
-    manifest_path: RepoPathText,
-    release_manifest_digest: Digest,
-    selected_platform: ConstraintPlatform,
-    required_status_name: String,
-    bootstrap_digest: Digest,
+    input: ExecutionConstraintInput,
 }
 
 /// The controller-owned fields of an execution constraint. The schema and
@@ -56,15 +64,6 @@ pub struct ExecutionConstraintInput {
     pub selected_platform: ConstraintPlatform,
     pub required_status_name: String,
     pub bootstrap_digest: Digest,
-}
-
-fn decode_status_name(path: &str, value: Value) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
-    if valid_required_status_name(&raw) {
-        Ok(raw)
-    } else {
-        fail(path, ErrorKind::InvalidValue)
-    }
 }
 
 #[must_use]
@@ -95,47 +94,47 @@ impl ExecutionConstraintDescriptor {
 
     #[must_use]
     pub fn action_repository(&self) -> &RepositoryIdentity {
-        &self.action_repository
+        &self.input.action_repository
     }
 
     #[must_use]
     pub const fn action_object_format(&self) -> ObjectFormat {
-        self.action_object_format
+        self.input.action_object_format
     }
 
     #[must_use]
     pub fn action_commit_oid(&self) -> &Oid {
-        &self.action_commit_oid
+        &self.input.action_commit_oid
     }
 
     #[must_use]
     pub fn action_tree_oid(&self) -> &Oid {
-        &self.action_tree_oid
+        &self.input.action_tree_oid
     }
 
     #[must_use]
     pub fn manifest_path(&self) -> &RepoPathText {
-        &self.manifest_path
+        &self.input.manifest_path
     }
 
     #[must_use]
     pub const fn release_manifest_digest(&self) -> Digest {
-        self.release_manifest_digest
+        self.input.release_manifest_digest
     }
 
     #[must_use]
     pub const fn selected_platform(&self) -> ConstraintPlatform {
-        self.selected_platform
+        self.input.selected_platform
     }
 
     #[must_use]
     pub fn required_status_name(&self) -> &str {
-        &self.required_status_name
+        &self.input.required_status_name
     }
 
     #[must_use]
     pub const fn bootstrap_digest(&self) -> Digest {
-        self.bootstrap_digest
+        self.input.bootstrap_digest
     }
 
     /// Builds a descriptor through the same grammar, consistency, and digest
@@ -148,7 +147,10 @@ impl ExecutionConstraintDescriptor {
     /// A field violates [`Self::parse`], including an object ID that does not
     /// match `action_object_format` or an invalid required status name.
     pub fn new(input: ExecutionConstraintInput) -> Result<Self, Error> {
-        Self::parse(&canonical(&execution_constraint_value(input)))
+        let payload = Constraint::from(input);
+        payload.check()?;
+        let digest = codec::digest(EXECUTION_CONSTRAINT_SCHEMA, &payload)?;
+        Ok(Self::from_payload(payload, digest))
     }
 
     /// # Errors
@@ -156,37 +158,71 @@ impl ExecutionConstraintDescriptor {
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
     /// grammar values.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let digest = hj(EXECUTION_CONSTRAINT_SCHEMA, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, EXECUTION_CONSTRAINT_SCHEMA)
-        })?;
-        let action_repository = obj.required("action_repository", decode_repository)?;
-        let action_object_format = obj.required("action_object_format", decode_enum)?;
-        let commit_path = obj.field("action_commit_oid");
-        let action_commit_oid = Oid::new(
-            action_object_format,
-            de::string(&commit_path, obj.take("action_commit_oid")?)?,
-        )
-        .ok_or_else(|| Error::new(&commit_path, ErrorKind::InvalidValue))?;
-        let tree_path = obj.field("action_tree_oid");
-        let action_tree_oid = Oid::new(
-            action_object_format,
-            de::string(&tree_path, obj.take("action_tree_oid")?)?,
-        )
-        .ok_or_else(|| Error::new(&tree_path, ErrorKind::InvalidValue))?;
-        let manifest_path = obj.required("manifest_path", decode_repo_path)?;
-        let release_manifest_digest = obj.required("release_manifest_digest", de::digest)?;
-        let selected_platform = obj.required("selected_platform", decode_enum)?;
-        let required_status_name = obj.required("required_status_name", decode_status_name)?;
-        obj.required("bootstrap_contract", |path, value| {
-            de::const_str(path, value, ACTION_BOOTSTRAP_CONTRACT)
-        })?;
-        let bootstrap_digest = obj.required("bootstrap_digest", de::digest)?;
-        obj.finish()?;
-        Ok(Self {
+        Self::from_value(&root(bytes)?)
+    }
+
+    /// Checks an already decoded control without serializing it again.
+    ///
+    /// # Errors
+    ///
+    /// A field violates the closed shape or the control's domain laws.
+    pub fn from_value(value: &Value) -> Result<Self, Error> {
+        let payload: Constraint = codec::from_value("$", value)?;
+        payload.check()?;
+        Ok(Self::from_payload(
+            payload,
+            hj(EXECUTION_CONSTRAINT_SCHEMA, value),
+        ))
+    }
+
+    fn from_payload(payload: Constraint, digest: Digest) -> Self {
+        Self {
             digest,
+            input: payload.into(),
+        }
+    }
+
+    /// Serializes one valid descriptor to its unique canonical JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// The stored descriptor violates its domain laws or its derived digest
+    /// does not match the canonical value.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
+        let payload = Constraint::from(ExecutionConstraintInput::from(self));
+        payload.check()?;
+        if codec::digest(EXECUTION_CONSTRAINT_SCHEMA, &payload)? != self.digest {
+            return fail("$.digest", ErrorKind::DigestMismatch);
+        }
+        codec::canonical(&payload)
+    }
+}
+
+impl From<&ExecutionConstraintDescriptor> for ExecutionConstraintInput {
+    fn from(value: &ExecutionConstraintDescriptor) -> Self {
+        value.input.clone()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Constraint {
+    schema: String,
+    action_repository: RepositoryIdentity,
+    action_object_format: ObjectFormat,
+    action_commit_oid: Oid,
+    action_tree_oid: Oid,
+    manifest_path: RepoPathText,
+    release_manifest_digest: Digest,
+    selected_platform: ConstraintPlatform,
+    required_status_name: String,
+    bootstrap_contract: String,
+    bootstrap_digest: Digest,
+}
+
+wire_fields! {
+    Constraint <=> ExecutionConstraintInput (input) {
+        fields [
             action_repository,
             action_object_format,
             action_commit_oid,
@@ -196,70 +232,79 @@ impl ExecutionConstraintDescriptor {
             selected_platform,
             required_status_name,
             bootstrap_digest,
-        })
-    }
-
-    /// Serializes one valid descriptor to its unique canonical JSON bytes.
-    ///
-    /// # Errors
-    ///
-    /// The stored descriptor no longer round-trips through [`Self::parse`] or
-    /// its derived digest does not match the canonical value.
-    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        let bytes = canonical(&execution_constraint_value(self.into()));
-        let parsed = Self::parse(&bytes)?;
-        if parsed.digest != self.digest {
-            return fail("$.digest", ErrorKind::DigestMismatch);
-        }
-        Ok(bytes)
+        ],
+        mapped [],
+        wire {
+            schema: EXECUTION_CONSTRAINT_SCHEMA.to_owned(),
+            bootstrap_contract: ACTION_BOOTSTRAP_CONTRACT.to_owned(),
+        },
+        domain {}
     }
 }
 
-impl From<&ExecutionConstraintDescriptor> for ExecutionConstraintInput {
-    fn from(descriptor: &ExecutionConstraintDescriptor) -> Self {
-        Self {
-            action_repository: descriptor.action_repository.clone(),
-            action_object_format: descriptor.action_object_format,
-            action_commit_oid: descriptor.action_commit_oid.clone(),
-            action_tree_oid: descriptor.action_tree_oid.clone(),
-            manifest_path: descriptor.manifest_path.clone(),
-            release_manifest_digest: descriptor.release_manifest_digest,
-            selected_platform: descriptor.selected_platform,
-            required_status_name: descriptor.required_status_name.clone(),
-            bootstrap_digest: descriptor.bootstrap_digest,
+impl Constraint {
+    fn check(&self) -> Result<(), Error> {
+        check_schema("$.schema", &self.schema, EXECUTION_CONSTRAINT_SCHEMA)?;
+        check_schema(
+            "$.bootstrap_contract",
+            &self.bootstrap_contract,
+            ACTION_BOOTSTRAP_CONTRACT,
+        )?;
+        for (path, oid) in [
+            ("$.action_commit_oid", &self.action_commit_oid),
+            ("$.action_tree_oid", &self.action_tree_oid),
+        ] {
+            if oid.object_format() != self.action_object_format {
+                return fail(path, ErrorKind::InvalidValue);
+            }
         }
+        if !valid_required_status_name(&self.required_status_name) {
+            return fail("$.required_status_name", ErrorKind::InvalidValue);
+        }
+        Ok(())
     }
 }
 
-fn execution_constraint_value(input: ExecutionConstraintInput) -> Value {
-    let ExecutionConstraintInput {
-        action_repository,
-        action_object_format,
-        action_commit_oid,
-        action_tree_oid,
-        manifest_path,
-        release_manifest_digest,
-        selected_platform,
-        required_status_name,
-        bootstrap_digest,
-    } = input;
-    object(vec![
-        ("schema", text(EXECUTION_CONSTRAINT_SCHEMA)),
-        ("action_repository", repository(&action_repository)),
-        ("action_object_format", text(action_object_format.as_ref())),
-        ("action_commit_oid", text(action_commit_oid.as_str())),
-        ("action_tree_oid", text(action_tree_oid.as_str())),
-        ("manifest_path", text(manifest_path.as_str())),
-        (
-            "release_manifest_digest",
-            text(&release_manifest_digest.to_string()),
-        ),
-        ("selected_platform", text(selected_platform.as_ref())),
-        (
-            "required_status_name",
-            Value::String(required_status_name.into()),
-        ),
-        ("bootstrap_contract", text(ACTION_BOOTSTRAP_CONTRACT)),
-        ("bootstrap_digest", text(&bootstrap_digest.to_string())),
-    ])
+#[derive(Serialize)]
+struct ConstraintView<'a> {
+    action_commit_oid: &'a Oid,
+    action_object_format: ObjectFormat,
+    action_repository: &'a RepositoryIdentity,
+    action_tree_oid: &'a Oid,
+    bootstrap_contract: &'static str,
+    bootstrap_digest: Digest,
+    manifest_path: &'a RepoPathText,
+    release_manifest_digest: Digest,
+    required_status_name: &'a str,
+    schema: &'static str,
+    selected_platform: ConstraintPlatform,
+}
+
+impl Serialize for ExecutionConstraintDescriptor {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        ConstraintView {
+            action_commit_oid: &self.input.action_commit_oid,
+            action_object_format: self.input.action_object_format,
+            action_repository: &self.input.action_repository,
+            action_tree_oid: &self.input.action_tree_oid,
+            bootstrap_contract: ACTION_BOOTSTRAP_CONTRACT,
+            bootstrap_digest: self.input.bootstrap_digest,
+            manifest_path: &self.input.manifest_path,
+            release_manifest_digest: self.input.release_manifest_digest,
+            required_status_name: &self.input.required_status_name,
+            schema: EXECUTION_CONSTRAINT_SCHEMA,
+            selected_platform: self.input.selected_platform,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExecutionConstraintDescriptor {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let payload = Constraint::deserialize(codec::object(deserializer))?;
+        payload.check().map_err(serde::de::Error::custom)?;
+        let digest = codec::digest(EXECUTION_CONSTRAINT_SCHEMA, &payload)
+            .map_err(serde::de::Error::custom)?;
+        Ok(Self::from_payload(payload, digest))
+    }
 }

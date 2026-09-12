@@ -1,57 +1,64 @@
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::digest::hj;
+use serde::Deserialize;
+use serde_json::Map;
+
+use crate::codec::{self, Schema};
+use crate::digest::Digest;
 use crate::json::Value;
 use crate::model::ForgeDialect;
 use crate::report::validate_envelope;
 
-use super::{PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, object, string};
+use super::PlanDefect;
+use super::document::{DestinationRow, Engine, Plan, ReportBinding, RepositoryShape};
 
-/// One side's view of a destination: its scheme and every document naming it.
 struct Entry {
     scheme: String,
     documents: BTreeSet<String>,
 }
 
-/// Derives the external plan from one complete scanner report: the distinct
-/// destinations delegated to evidence that the candidate introduced and the
-/// base lost, each with its documents, bound to the payload digest the
-/// derivation verified.
-/// The engine never fetches a destination; the plan only names the work an
-/// evidence producer may do.
+#[derive(Deserialize)]
+struct Evaluation {
+    base: Map<String, Value>,
+    candidate: Map<String, Value>,
+    mode: String,
+    #[serde(default)]
+    repository: Option<DeclaredRepository>,
+    #[serde(default)]
+    forge: Option<ForgeDialect>,
+}
+
+#[derive(Deserialize)]
+struct DeclaredRepository {
+    host: String,
+}
+
+#[derive(Deserialize)]
+struct Report {
+    evaluation: Evaluation,
+}
+
+/// Derives sorted introduced and removed external destinations from a complete report.
 ///
 /// # Errors
 ///
-/// Returns the first [`PlanDefect`] when the value is not a report envelope,
-/// its digest does not hold, it is incomplete, or a delegated occurrence
-/// lacks a field the exactly-when contract promises.
+/// The report is invalid or incomplete, or a delegated occurrence lacks its required facts.
 pub fn plan(
     envelope: &Value,
     engine_version: &str,
     engine_digest: &str,
 ) -> Result<Value, PlanDefect> {
-    let (payload, recorded, _verdict) = validate_envelope(envelope)?;
-    let complete = payload
-        .member("result")
-        .and_then(|result| result.member("complete"));
-    if complete != Some(&Value::Bool(true)) {
+    let (payload, recorded, verdict) = validate_envelope(envelope)?;
+    if verdict == crate::ExitClass::Failure {
         return Err(PlanDefect::Incomplete);
     }
-    let Some(Value::Array(observations)) = payload.member("observations") else {
-        return Err(PlanDefect::NotAReport);
-    };
-    let Some(evaluation) = payload.member("evaluation") else {
-        return Err(PlanDefect::NotAReport);
-    };
-    let (Some(base_identity), Some(candidate_identity), Some(mode)) = (
-        evaluation.member("base"),
-        evaluation.member("candidate"),
-        evaluation.member("mode"),
-    ) else {
-        return Err(PlanDefect::NotAReport);
-    };
-
+    let Report { evaluation } =
+        codec::from_value("$.payload", payload).map_err(|_defect| PlanDefect::NotAReport)?;
+    let observations = payload
+        .get("observations")
+        .and_then(Value::as_array)
+        .ok_or(PlanDefect::NotAReport)?;
     let base = collect(observations, "base")?;
     let candidate = collect(observations, "candidate")?;
     let retained = candidate
@@ -60,87 +67,114 @@ pub fn plan(
         .count();
     let recognition = Recognition {
         declared: evaluation
-            .member("repository")
-            .and_then(|repository| repository.text("host"))
-            .zip(evaluation.text("forge")),
+            .repository
+            .as_ref()
+            .zip(evaluation.forge.as_ref())
+            .map(|(repository, dialect)| (repository.host.as_str(), dialect.as_ref())),
     };
-
-    let plan_payload = object(vec![
-        ("schema", string(PLAN_PAYLOAD_SCHEMA)),
-        (
-            "engine",
-            object(vec![
-                ("engine_version", string(engine_version)),
-                ("engine_digest", string(engine_digest)),
-            ]),
-        ),
-        (
-            "report",
-            object(vec![
-                ("payload_digest", string(recorded)),
-                ("base", base_identity.clone()),
-                ("candidate", candidate_identity.clone()),
-                ("mode", mode.clone()),
-            ]),
-        ),
-        ("introduced", rows(&candidate, &base, &recognition)),
-        ("removed", rows(&base, &candidate, &recognition)),
-        (
-            "retained_count",
-            Value::Integer(i64::try_from(retained).unwrap_or(i64::MAX)),
-        ),
-    ]);
-    let digest = hj(PLAN_PAYLOAD_SCHEMA, &plan_payload);
-    Ok(object(vec![
-        ("schema", string(PLAN_ENVELOPE_SCHEMA)),
-        ("payload", plan_payload),
-        ("payload_digest", string(&digest.to_string())),
-    ]))
+    let introduced = rows(&candidate, &base, &recognition);
+    let removed = rows(&base, &candidate, &recognition);
+    let plan = Plan {
+        schema: Schema::default(),
+        engine: Engine::new(engine_version, engine_digest)
+            .map_err(|_defect| PlanDefect::NotAReport)?,
+        report: ReportBinding {
+            payload_digest: Digest::from_wire(recorded).ok_or(PlanDefect::NotAReport)?,
+            base: evaluation.base,
+            candidate: evaluation.candidate,
+            mode: evaluation.mode,
+        },
+        introduced,
+        removed,
+        retained_count: u64::try_from(retained).map_err(|_defect| PlanDefect::MalformedExternal)?,
+    };
+    codec::seal_value(&plan).map_err(|_defect| PlanDefect::MalformedExternal)
 }
 
-/// One side's destinations delegated to another evidence layer.
+#[derive(Deserialize)]
+struct Kind<'a> {
+    kind: &'a str,
+}
+
+#[derive(Deserialize)]
+struct Resolution<'a> {
+    #[serde(default)]
+    reason: Option<&'a str>,
+}
+
+#[derive(Deserialize)]
+struct Historical<'a> {
+    #[serde(borrow)]
+    scope: Kind<'a>,
+}
+
+#[derive(Deserialize)]
+struct Delegated<'a> {
+    document: &'a str,
+    external_destination: &'a str,
+}
+
+#[derive(Deserialize)]
+struct Intent<'a> {
+    external_scheme: &'a str,
+}
+
+#[derive(Deserialize)]
+struct Request<'a> {
+    #[serde(borrow)]
+    intent: Intent<'a>,
+}
+
 fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>, PlanDefect> {
     let mut entries: BTreeMap<String, Entry> = BTreeMap::new();
     for row in observations {
-        let Some(occurrence) = row.member(side) else {
+        let Some(occurrence) = row.get(side) else {
             continue;
         };
-        let resolution = occurrence.member("resolution");
-        let external = resolution.and_then(|value| value.text("kind")) == Some("external");
-        let historical = resolution.and_then(|value| value.text("kind"))
-            == Some("unsupported-version")
-            && resolution
-                .and_then(|value| value.member("scope"))
-                .and_then(|scope| scope.text("kind"))
-                == Some("known-commit");
-        if (!external && !historical)
-            || matches!(
-                resolution.and_then(|value| value.text("reason")),
-                Some("intersphinx-inventory" | "site-build")
-            )
-        {
+        let Some(resolution) = occurrence.get("resolution") else {
+            continue;
+        };
+        let Ok(kind) = codec::borrow_value::<Kind<'_>>("$.resolution", resolution) else {
+            continue;
+        };
+        let historical = match kind.kind {
+            "external" => false,
+            "unsupported-version" => {
+                let historical: Historical<'_> = codec::borrow_value("$.resolution", resolution)
+                    .map_err(|_defect| PlanDefect::MalformedExternal)?;
+                if historical.scope.kind != "known-commit" {
+                    continue;
+                }
+                true
+            }
+            _ => continue,
+        };
+        let selected: Resolution<'_> = codec::borrow_value("$.resolution", resolution)
+            .map_err(|_defect| PlanDefect::MalformedExternal)?;
+        if matches!(
+            selected.reason,
+            Some("intersphinx-inventory" | "site-build")
+        ) {
             continue;
         }
-        let destination = occurrence
-            .text("external_destination")
-            .filter(|value| !value.is_empty());
-        let document = occurrence
-            .text("document")
-            .filter(|value| !value.is_empty());
+        let delegated: Delegated<'_> = codec::borrow_value("$.occurrence", occurrence)
+            .map_err(|_defect| PlanDefect::MalformedExternal)?;
         let scheme = if historical {
-            Some("https")
+            "https"
         } else {
-            occurrence
-                .member("intent")
-                .and_then(|intent| intent.text("external_scheme"))
-                .filter(|value| !value.is_empty())
+            codec::borrow_value::<Request<'_>>("$.occurrence", occurrence)
+                .map_err(|_defect| PlanDefect::MalformedExternal)?
+                .intent
+                .external_scheme
         };
-        let (Some(destination), Some(document), Some(scheme)) = (destination, document, scheme)
-        else {
+        if delegated.document.is_empty()
+            || delegated.external_destination.is_empty()
+            || scheme.is_empty()
+        {
             return Err(PlanDefect::MalformedExternal);
-        };
+        }
         let entry = entries
-            .entry(destination.to_owned())
+            .entry(delegated.external_destination.to_owned())
             .or_insert_with(|| Entry {
                 scheme: scheme.to_owned(),
                 documents: BTreeSet::new(),
@@ -148,38 +182,26 @@ fn collect(observations: &[Value], side: &str) -> Result<BTreeMap<String, Entry>
         if entry.scheme != scheme {
             return Err(PlanDefect::MalformedExternal);
         }
-        entry.documents.insert(document.to_owned());
+        entry.documents.insert(delegated.document.to_owned());
     }
     Ok(entries)
 }
 
-/// The destinations present here and absent on the other side, one sorted
-/// row each, with the forge shape attached where a host is recognized.
 fn rows(
     entries: &BTreeMap<String, Entry>,
     other: &BTreeMap<String, Entry>,
     recognition: &Recognition<'_>,
-) -> Value {
-    Value::Array(
-        entries
-            .iter()
-            .filter(|(destination, _)| !other.contains_key(*destination))
-            .map(|(destination, entry)| {
-                let mut members = vec![
-                    ("destination", string(destination)),
-                    ("scheme", string(&entry.scheme)),
-                    (
-                        "documents",
-                        Value::Array(entry.documents.iter().map(|path| string(path)).collect()),
-                    ),
-                ];
-                if let Some(repository) = repository_value(destination, recognition) {
-                    members.push(("repository", repository));
-                }
-                object(members)
-            })
-            .collect(),
-    )
+) -> Vec<DestinationRow> {
+    entries
+        .iter()
+        .filter(|(destination, _)| !other.contains_key(*destination))
+        .map(|(destination, entry)| DestinationRow {
+            destination: destination.clone(),
+            scheme: entry.scheme.clone(),
+            documents: entry.documents.iter().cloned().collect(),
+            repository: repository_shape(destination, recognition),
+        })
+        .collect()
 }
 
 /// The forge hosts this run can name: the built-in table plus the report's
@@ -203,7 +225,7 @@ impl Recognition<'_> {
 /// by the dialect's grammar, the segment after them verbatim as the form,
 /// and everything later as one opaque tail, since splitting revision from
 /// path needs the other repository's refs, which branch slashes hide.
-fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<Value> {
+fn repository_shape(destination: &str, recognition: &Recognition<'_>) -> Option<RepositoryShape> {
     let rest = destination.strip_prefix("https://")?;
     let (host, path) = rest.split_at(rest.find(['/', '?', '#']).unwrap_or(rest.len()));
     let dialect = recognition.dialect(host)?;
@@ -257,21 +279,21 @@ fn repository_value(destination: &str, recognition: &Recognition<'_>) -> Option<
         let (name, owner) = project.split_last()?;
         (Cow::Owned(owner.join("/")), *name, form, tail)
     };
-    let mut members = vec![
-        ("dialect", string(dialect)),
-        ("host", string(host)),
-        ("name", string(name)),
-        ("owner", string(&owner)),
-    ];
-    if let Some(form) = form {
-        members.push(("form", string(form)));
-        if !tail.is_empty() {
-            let mut tail = tail.join("/");
-            if directory {
-                tail.push('/');
-            }
-            members.push(("tail", string(&tail)));
+    let tail = if form.is_some() && !tail.is_empty() {
+        let mut joined = tail.join("/");
+        if directory {
+            joined.push('/');
         }
-    }
-    Some(object(members))
+        Some(joined)
+    } else {
+        None
+    };
+    Some(RepositoryShape {
+        dialect: dialect.parse().ok()?,
+        host: host.to_owned(),
+        owner: owner.into_owned(),
+        name: name.to_owned(),
+        form: form.map(str::to_owned),
+        tail,
+    })
 }

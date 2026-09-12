@@ -1,18 +1,18 @@
+use super::mapping::wire_fields;
 use garde::Validate;
 use serde::{Deserialize, Serialize};
 
-use crate::codec::{self, MAX_SAFE_INTEGER};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use crate::codec::{self, MAX_SAFE_INTEGER, rule};
+use crate::de::{Error, ErrorKind, fail};
 use crate::digest::{Digest, hj};
 use crate::extraction::governed_name_valid;
-use crate::json::{self, Value};
+use crate::json::Value;
 use crate::model::{Adapter, ArtifactId, RepoPathText};
 use crate::semantic::RECORD_KEY_BYTES;
 
 use super::{
-    Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA,
-    decode_disposition_rule, decode_enum, decode_items, decode_path_set, decode_repo_path, root,
-    sorted_set,
+    Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA, check_len,
+    check_schema, non_null, root, sorted_set,
 };
 
 /// Maximum UTF-8 byte length of one exact document suffix selector.
@@ -47,44 +47,32 @@ pub enum ProjectionKind {
     DecimalCountV1,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DocumentInclude {
     pub path: RepoPathText,
     pub kind: IncludeKind,
+    #[serde(
+        default,
+        deserialize_with = "non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub suffix: Option<String>,
+    #[serde(
+        default,
+        deserialize_with = "non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     pub adapter: Option<Adapter>,
 }
 
 /// Projects one validated include row through the scanner-policy wire shape.
-#[must_use]
-pub fn document_include_value(include: DocumentInclude) -> Value {
-    let mut fields = vec![
-        ("path".into(), Value::String(include.path.as_str().into())),
-        ("kind".into(), Value::String(include.kind.as_ref().into())),
-    ];
-    if let Some(suffix) = include.suffix {
-        fields.push(("suffix".into(), Value::String(suffix.into())));
-    }
-    if let Some(adapter) = include.adapter {
-        fields.push(("adapter".into(), Value::String(adapter.as_ref().into())));
-    }
-    Value::Object(fields.into_boxed_slice())
-}
-
-fn exact_suffix(path: &str, value: Value) -> Result<String, Error> {
-    let suffix = de::string(path, value)?;
-    if suffix.len() > DOCUMENT_SUFFIX_BYTES || valid_suffix(&suffix, &()).is_err() {
-        return fail(path, ErrorKind::InvalidValue);
-    }
-    Ok(suffix)
-}
-
-fn rule(valid: bool, message: &'static str) -> garde::Result {
-    if valid {
-        Ok(())
-    } else {
-        Err(garde::Error::new(message))
-    }
+///
+/// # Errors
+///
+/// The include cannot be represented in the strict JSON profile.
+pub fn document_include_value(include: &DocumentInclude) -> Result<Value, Error> {
+    codec::to_value(include)
 }
 
 fn valid_suffix<C>(value: &str, _context: &C) -> garde::Result {
@@ -110,32 +98,8 @@ fn valid_record_key<C>(value: &str, _context: &C) -> garde::Result {
     )
 }
 
-fn decode_include(path: &str, value: Value) -> Result<DocumentInclude, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let include_path = obj.required("path", decode_repo_path)?;
-    let kind = obj.required("kind", decode_enum)?;
-    let suffix_path = obj.field("suffix");
-    let raw_suffix = obj.take_optional("suffix");
-    if raw_suffix.is_some() && kind != IncludeKind::Tree {
-        return fail(&suffix_path, ErrorKind::Inconsistent);
-    }
-    let suffix = raw_suffix
-        .map(|value| exact_suffix(&suffix_path, value))
-        .transpose()?;
-    let adapter = obj
-        .take_optional("adapter")
-        .map(|value| decode_enum(&obj.field("adapter"), value))
-        .transpose()?;
-    obj.finish()?;
-    Ok(DocumentInclude {
-        path: include_path,
-        kind,
-        suffix,
-        adapter,
-    })
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct FindingDisposition {
     pub finding_kind: PromotableFindingKind,
     pub disposition: Disposition,
@@ -144,6 +108,7 @@ pub struct FindingDisposition {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 #[garde(allow_unvalidated)]
+#[serde(remote = "Self")]
 pub struct BlobLineSelection {
     pub path: RepoPathText,
     #[garde(range(min = 1, max = MAX_SAFE_INTEGER))]
@@ -155,6 +120,7 @@ pub struct BlobLineSelection {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 #[garde(allow_unvalidated)]
+#[serde(remote = "Self")]
 pub struct NamedRegionSelection {
     pub path: RepoPathText,
     #[garde(length(bytes, min = 1, max = SOURCE_MARKER_BYTES), custom(valid_marker))]
@@ -166,9 +132,14 @@ pub struct NamedRegionSelection {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 #[garde(allow_unvalidated)]
+#[serde(remote = "Self")]
 pub struct TreePathSelection {
     pub root: RepoPathText,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        deserialize_with = "non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
     #[garde(inner(length(bytes, max = DOCUMENT_SUFFIX_BYTES), custom(valid_suffix)))]
     pub suffix: Option<String>,
     #[garde(range(min = 1, max = MAX_SAFE_INTEGER))]
@@ -178,6 +149,7 @@ pub struct TreePathSelection {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 #[garde(allow_unvalidated)]
+#[serde(remote = "Self")]
 pub struct RecordValueSelection {
     pub set: ArtifactId,
     #[garde(length(bytes, min = 1, max = RECORD_KEY_BYTES), custom(valid_record_key))]
@@ -187,6 +159,7 @@ pub struct RecordValueSelection {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
 #[serde(deny_unknown_fields)]
 #[garde(allow_unvalidated)]
+#[serde(remote = "Self")]
 pub struct RecordSetSelection {
     pub set: ArtifactId,
 }
@@ -194,6 +167,7 @@ pub struct RecordSetSelection {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
 #[serde(tag = "kind", rename_all = "kebab-case")]
 #[garde(allow_unvalidated)]
+#[serde(remote = "Self")]
 pub enum ProjectionSource {
     BlobLines(#[garde(dive)] BlobLineSelection),
     NamedRegion(#[garde(dive)] NamedRegionSelection),
@@ -220,7 +194,8 @@ impl ProjectionSource {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "Assertion", into = "Assertion")]
 pub struct ProjectionAssertion {
     pub document: RepoPathText,
     pub name: String,
@@ -228,17 +203,32 @@ pub struct ProjectionAssertion {
     pub source: ProjectionSource,
 }
 
-#[expect(
-    clippy::needless_pass_by_value,
-    reason = "uniform consuming decoder signature"
-)]
-fn decode_projection_source(path: &str, value: Value) -> Result<ProjectionSource, Error> {
-    let source: ProjectionSource = codec::from_value(path, &value)?;
-    source.check(path)?;
-    Ok(source)
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Assertion {
+    document: RepoPathText,
+    name: String,
+    projection: ProjectionKind,
+    sink: AssertionSink,
+    source: ProjectionSource,
 }
 
-fn compatible(
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+enum AssertionSink {
+    #[serde(rename = "previous-code")]
+    PreviousCode,
+}
+
+wire_fields! {
+    Assertion <=> ProjectionAssertion (input) {
+        fields [document, name, projection, source],
+        mapped [],
+        wire { sink: AssertionSink::PreviousCode },
+        domain {}
+    }
+}
+
+pub(crate) fn compatible_source(
     projection: ProjectionKind,
     source: &ProjectionSource,
     path: &str,
@@ -272,7 +262,7 @@ pub fn check_projection_source(
 ) -> Result<(), Error> {
     codec::constrained(source, "$")?;
     source.check("$")?;
-    compatible(projection, source, "$")
+    compatible_source(projection, source, "$")
 }
 
 /// Parses one standalone projection source through the scanner-policy grammar.
@@ -290,42 +280,13 @@ pub fn parse_projection_source(
     Ok(source)
 }
 
-pub(crate) fn decode_checked_projection_source(
-    path: &str,
-    value: Value,
-    projection: ProjectionKind,
-) -> Result<ProjectionSource, Error> {
-    let source = decode_projection_source(path, value)?;
-    compatible(projection, &source, path)?;
-    Ok(source)
-}
-
-fn decode_projection_assertion(path: &str, value: Value) -> Result<ProjectionAssertion, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let document = obj.required("document", decode_repo_path)?;
-    let name = obj.required("name", de::string)?;
-    if !governed_name_valid(&name) {
-        return fail(&obj.field("name"), ErrorKind::InvalidValue);
-    }
-    let projection = obj.required("projection", decode_enum)?;
-    obj.required("sink", |path, value| {
-        de::const_str(path, value, PREVIOUS_CODE_SINK)
-    })?;
-    let source = obj.required("source", decode_projection_source)?;
-    compatible(projection, &source, path)?;
-    obj.finish()?;
-    Ok(ProjectionAssertion {
-        document,
-        name,
-        projection,
-        source,
-    })
-}
-
-/// The hand-codec value of one source, until the last hand writer moves.
-#[must_use]
-pub fn projection_source_value(source: &ProjectionSource) -> Value {
-    codec::to_value(source).unwrap_or(Value::Null)
+/// Projects one source through its typed wire shape.
+///
+/// # Errors
+///
+/// The source cannot be represented in the strict JSON profile.
+pub fn projection_source_value(source: &ProjectionSource) -> Result<Value, Error> {
+    codec::to_value(source)
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -361,67 +322,16 @@ impl ScannerPolicy {
         protected_inventory.sort();
         finding_dispositions
             .sort_by(|left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()));
-        let include_rows: Vec<Value> = document_includes
-            .into_iter()
-            .map(document_include_value)
-            .collect();
-        let inventory: Vec<Value> = protected_inventory
-            .into_iter()
-            .map(|path| Value::String(path.as_str().into()))
-            .collect();
-        let assertions: Vec<Value> = projection_assertions
-            .into_iter()
-            .map(|assertion| {
-                Value::Object(Box::new([
-                    (
-                        "document".into(),
-                        Value::String(assertion.document.as_str().into()),
-                    ),
-                    ("name".into(), Value::String(assertion.name.into())),
-                    (
-                        "projection".into(),
-                        Value::String(assertion.projection.as_ref().into()),
-                    ),
-                    ("sink".into(), Value::String(PREVIOUS_CODE_SINK.into())),
-                    ("source".into(), projection_source_value(&assertion.source)),
-                ]))
-            })
-            .collect();
-        let dispositions: Vec<Value> = finding_dispositions
-            .into_iter()
-            .map(|row| {
-                Value::Object(Box::new([
-                    (
-                        "finding_kind".into(),
-                        Value::String(row.finding_kind.as_ref().into()),
-                    ),
-                    (
-                        "disposition".into(),
-                        Value::String(row.disposition.as_ref().into()),
-                    ),
-                ]))
-            })
-            .collect();
-        let value = Value::Object(Box::new([
-            ("schema".into(), Value::String(SCANNER_POLICY_SCHEMA.into())),
-            (
-                "document_includes".into(),
-                Value::Array(include_rows.into_boxed_slice()),
-            ),
-            (
-                "projection_assertions".into(),
-                Value::Array(assertions.into_boxed_slice()),
-            ),
-            (
-                "protected_inventory".into(),
-                Value::Array(inventory.into_boxed_slice()),
-            ),
-            (
-                "finding_dispositions".into(),
-                Value::Array(dispositions.into_boxed_slice()),
-            ),
-        ]));
-        Self::parse(&json::canonical(&value))
+        let payload = Policy {
+            schema: SCANNER_POLICY_SCHEMA.to_owned(),
+            document_includes,
+            projection_assertions: Some(projection_assertions),
+            protected_inventory,
+            finding_dispositions,
+        };
+        payload.check()?;
+        let digest = codec::digest(SCANNER_POLICY_SCHEMA, &payload)?;
+        Ok(Self::from_payload(payload, digest))
     }
 
     #[must_use]
@@ -454,54 +364,165 @@ impl ScannerPolicy {
     /// Fails on strict-JSON defects, schema-shape violations, unknown fields,
     /// invalid grammar values, and unsorted or duplicate set members.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let digest = hj(SCANNER_POLICY_SCHEMA, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, SCANNER_POLICY_SCHEMA)
-        })?;
+        Self::from_value(&root(bytes)?)
+    }
 
-        let includes_path = obj.field("document_includes");
-        let includes = de::array(&includes_path, obj.take("document_includes")?)?;
-        let document_includes = decode_items(&includes_path, includes, 100_000, decode_include)?;
-        sorted_set(&includes_path, &document_includes, |a, b| {
+    /// Checks an already decoded scanner policy without serializing it again.
+    ///
+    /// # Errors
+    ///
+    /// The policy has an invalid shape, value, ordering, or duplicate member.
+    pub fn from_value(value: &Value) -> Result<Self, Error> {
+        let payload: Policy = codec::from_value("$", value)?;
+        payload.check()?;
+        Ok(Self::from_payload(
+            payload,
+            hj(SCANNER_POLICY_SCHEMA, value),
+        ))
+    }
+
+    fn from_payload(payload: Policy, digest: Digest) -> Self {
+        Self {
+            digest,
+            document_includes: payload.document_includes,
+            projection_assertions: payload.projection_assertions.unwrap_or_default(),
+            protected_inventory: payload.protected_inventory,
+            finding_dispositions: payload.finding_dispositions,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Policy {
+    schema: String,
+    document_includes: Vec<DocumentInclude>,
+    #[serde(
+        default,
+        deserialize_with = "non_null",
+        skip_serializing_if = "Option::is_none"
+    )]
+    projection_assertions: Option<Vec<ProjectionAssertion>>,
+    protected_inventory: Vec<RepoPathText>,
+    finding_dispositions: Vec<FindingDisposition>,
+}
+
+impl Policy {
+    fn check(&self) -> Result<(), Error> {
+        check_schema("$.schema", &self.schema, SCANNER_POLICY_SCHEMA)?;
+        check_len("$.document_includes", self.document_includes.len(), 100_000)?;
+        for (index, include) in self.document_includes.iter().enumerate() {
+            if let Some(suffix) = &include.suffix {
+                let path = format!("$.document_includes[{index}].suffix");
+                if include.kind != IncludeKind::Tree {
+                    return fail(&path, ErrorKind::Inconsistent);
+                }
+                if suffix.len() > DOCUMENT_SUFFIX_BYTES || valid_suffix(suffix, &()).is_err() {
+                    return fail(&path, ErrorKind::InvalidValue);
+                }
+            }
+        }
+        sorted_set("$.document_includes", &self.document_includes, |a, b| {
             (a.path.as_str(), a.kind).cmp(&(b.path.as_str(), b.kind))
         })?;
-
-        let assertions_path = obj.field("projection_assertions");
-        let projection_assertions = match obj.take_optional("projection_assertions") {
-            Some(value) => decode_items(
-                &assertions_path,
-                de::array(&assertions_path, value)?,
-                100_000,
-                decode_projection_assertion,
-            )?,
-            None => Vec::new(),
-        };
-        sorted_set(&assertions_path, &projection_assertions, |left, right| {
-            (left.document.as_str(), left.name.as_str())
-                .cmp(&(right.document.as_str(), right.name.as_str()))
+        let assertions = self.projection_assertions.as_deref().unwrap_or_default();
+        check_len("$.projection_assertions", assertions.len(), 100_000)?;
+        for (index, assertion) in assertions.iter().enumerate() {
+            let path = format!("$.projection_assertions[{index}]");
+            if !governed_name_valid(&assertion.name) {
+                return fail(&format!("{path}.name"), ErrorKind::InvalidValue);
+            }
+            let source_path = format!("{path}.source");
+            codec::constrained(&assertion.source, &source_path)?;
+            assertion.source.check(&source_path)?;
+            compatible_source(assertion.projection, &assertion.source, &path)?;
+        }
+        sorted_set("$.projection_assertions", assertions, |a, b| {
+            (a.document.as_str(), a.name.as_str()).cmp(&(b.document.as_str(), b.name.as_str()))
         })?;
+        check_len(
+            "$.protected_inventory",
+            self.protected_inventory.len(),
+            100_000,
+        )?;
+        sorted_set("$.protected_inventory", &self.protected_inventory, Ord::cmp)?;
+        check_len("$.finding_dispositions", self.finding_dispositions.len(), 3)?;
+        sorted_set(
+            "$.finding_dispositions",
+            &self.finding_dispositions,
+            |a, b| a.finding_kind.as_ref().cmp(b.finding_kind.as_ref()),
+        )
+    }
+}
 
-        let inventory_path = obj.field("protected_inventory");
-        let protected_inventory =
-            decode_path_set(&inventory_path, obj.take("protected_inventory")?)?;
+impl Serialize for ProjectionSource {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
 
-        let dispositions_path = obj.field("finding_dispositions");
-        let raw = de::array(&dispositions_path, obj.take("finding_dispositions")?)?;
-        let finding_dispositions =
-            decode_items(&dispositions_path, raw, 3, decode_disposition_rule)?;
-        sorted_set(&dispositions_path, &finding_dispositions, |a, b| {
-            a.finding_kind.as_ref().cmp(b.finding_kind.as_ref())
-        })?;
+impl<'de> Deserialize<'de> for ProjectionSource {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(codec::object(deserializer))
+    }
+}
 
-        obj.finish()?;
-        Ok(Self {
-            digest,
-            document_includes,
-            projection_assertions,
-            protected_inventory,
-            finding_dispositions,
-        })
+impl Serialize for BlobLineSelection {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for BlobLineSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(codec::object(deserializer))
+    }
+}
+
+impl Serialize for NamedRegionSelection {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for NamedRegionSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(codec::object(deserializer))
+    }
+}
+
+impl Serialize for TreePathSelection {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for TreePathSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(codec::object(deserializer))
+    }
+}
+
+impl Serialize for RecordValueSelection {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RecordValueSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(codec::object(deserializer))
+    }
+}
+
+impl Serialize for RecordSetSelection {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RecordSetSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(codec::object(deserializer))
     }
 }

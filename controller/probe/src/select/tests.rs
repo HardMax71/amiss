@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use amiss_wire::json::parse;
+use amiss_wire::json::{Value, parse};
 
 use super::targets;
 
@@ -15,13 +15,16 @@ fn only_unshaped_https_destinations_are_selected_up_to_the_cap() {
     ]);
     let parsed = parse(&report).unwrap();
     let engine = parsed
-        .member("payload")
-        .and_then(|payload| payload.member("engine"))
+        .get("payload")
+        .and_then(|payload| payload.get("engine"))
         .unwrap();
     let plan = amiss_wire::external::plan(
         &parsed,
-        engine.text("engine_version").unwrap(),
-        engine.text("engine_digest").unwrap(),
+        engine
+            .get("engine_version")
+            .and_then(Value::as_str)
+            .unwrap(),
+        engine.get("engine_digest").and_then(Value::as_str).unwrap(),
     )
     .unwrap();
 
@@ -43,4 +46,10 @@ fn only_unshaped_https_destinations_are_selected_up_to_the_cap() {
         vec!["https://a.example/one", "https://b.example/two"],
     );
     assert_eq!(skipped, 1);
+}
+
+#[test]
+fn an_explicit_null_repository_still_excludes_a_destination_from_probing() {
+    let plan = parse(br#"{"payload":{"introduced":[{"destination":"https://a.example/plain","scheme":"https"},{"destination":"https://b.example/shaped","scheme":"https","repository":null}]}}"#).unwrap();
+    assert_eq!(targets(&plan, 64), (vec!["https://a.example/plain"], 0));
 }

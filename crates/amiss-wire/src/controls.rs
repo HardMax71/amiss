@@ -1,11 +1,8 @@
 use std::cmp::Ordering;
-use std::str::FromStr;
 
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use crate::codec::non_null;
+use crate::de::{Error, ErrorKind, fail};
 use crate::json::{self, Value};
-use crate::model::{
-    ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdentity, TreeIdentity, UtcInstant,
-};
 
 pub use crate::semantic::RECORD_KEY_BYTES;
 
@@ -16,12 +13,12 @@ mod execution_constraint;
 mod fact;
 mod floor;
 mod item;
+mod mapping;
 mod policy;
 mod resources;
 mod taxonomy;
 /// Trusted-time statement grammar, digest, and bounded-lifetime parser.
 mod trusted_time;
-pub(crate) mod value;
 mod waiver;
 
 pub use debt::{DebtItem, DebtSnapshot};
@@ -34,7 +31,7 @@ pub use floor::{
     FloorDefect, FloorDisposition, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor,
     ResourceLimit,
 };
-pub(crate) use policy::decode_checked_projection_source;
+pub(crate) use policy::compatible_source;
 pub use policy::{
     BLOB_LINES_SOURCE, BlobLineSelection, DOCUMENT_SUFFIX_BYTES, DocumentInclude,
     FindingDisposition, NAMED_REGION_SOURCE, NamedRegionSelection, PREVIOUS_CODE_SINK,
@@ -61,12 +58,6 @@ const WAIVER_BUNDLE_SCHEMA: &str = "amiss/waiver-bundle";
 pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key";
 pub const FACT_DOMAIN: &str = "amiss/scanner-fact";
 
-pub(crate) fn decode_enum<T: FromStr>(path: &str, value: Value) -> Result<T, Error> {
-    let raw = de::string(path, value)?;
-    raw.parse()
-        .map_err(|_unknown| Error::new(path, ErrorKind::InvalidValue))
-}
-
 /// The one restricted-JSON root every control document parses through.
 ///
 /// # Errors
@@ -76,19 +67,20 @@ pub fn root(bytes: &[u8]) -> Result<Value, Error> {
     json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
 }
 
-fn decode_items<T>(
-    path: &str,
-    raw: Vec<Value>,
-    limit: usize,
-    decode: impl Fn(&str, Value) -> Result<T, Error>,
-) -> Result<Vec<T>, Error> {
-    if raw.len() > limit {
-        return fail(path, ErrorKind::LimitExceeded);
+fn check_len(path: &str, length: usize, limit: usize) -> Result<(), Error> {
+    if length > limit {
+        fail(path, ErrorKind::LimitExceeded)
+    } else {
+        Ok(())
     }
-    raw.into_iter()
-        .enumerate()
-        .map(|(index, value)| decode(&format!("{path}[{index}]"), value))
-        .collect()
+}
+
+fn check_schema(path: &str, actual: &str, expected: &str) -> Result<(), Error> {
+    if actual == expected {
+        Ok(())
+    } else {
+        fail(path, ErrorKind::InvalidValue)
+    }
 }
 
 fn sorted_set<T>(
@@ -108,30 +100,6 @@ fn sorted_set<T>(
     Ok(())
 }
 
-fn decode_disposition_rule(path: &str, value: Value) -> Result<FindingDisposition, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let finding_kind = obj.required("finding_kind", decode_enum)?;
-    let disposition = obj.required("disposition", decode_enum)?;
-    obj.finish()?;
-    Ok(FindingDisposition {
-        finding_kind,
-        disposition,
-    })
-}
-
-fn decode_resource_limit(path: &str, value: Value) -> Result<ResourceLimit, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let resource = obj.required("resource", ResourceName::decode)?;
-    let maximum_path = obj.field("maximum");
-    let maximum = de::integer(&maximum_path, obj.take("maximum")?)?;
-    obj.finish()?;
-    if in_bounds(resource, maximum) {
-        Ok(ResourceLimit { resource, maximum })
-    } else {
-        fail(&maximum_path, ErrorKind::InvalidValue)
-    }
-}
-
 /// Two resources fix their own maximum: the retained-error count is a small
 /// range, and the report reservation may be declared but never moved.
 fn in_bounds(resource: ResourceName, maximum: i64) -> bool {
@@ -144,87 +112,14 @@ fn in_bounds(resource: ResourceName, maximum: i64) -> bool {
     }
 }
 
-fn decode_path_set(path: &str, value: Value) -> Result<Vec<RepoPathText>, Error> {
-    decode_path_items(path, de::array(path, value)?)
-}
-
-fn decode_path_items(path: &str, raw: Vec<Value>) -> Result<Vec<RepoPathText>, Error> {
-    let paths = decode_items(path, raw, 100_000, decode_repo_path)?;
-    sorted_set(path, &paths, |a, b| a.as_str().cmp(b.as_str()))?;
-    Ok(paths)
-}
-
-fn decode_owner_items(path: &str, raw: Vec<Value>) -> Result<Vec<OwnerId>, Error> {
-    let owners = decode_items(path, raw, 10_000, decode_owner)?;
-    sorted_set(path, &owners, |a, b| a.as_str().cmp(b.as_str()))?;
-    Ok(owners)
-}
-
-fn decode_repo_path(path: &str, value: Value) -> Result<RepoPathText, Error> {
-    RepoPathText::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn decode_artifact_id(path: &str, value: Value) -> Result<ArtifactId, Error> {
-    ArtifactId::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn decode_owner(path: &str, value: Value) -> Result<OwnerId, Error> {
-    OwnerId::new(de::string(path, value)?).ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn decode_branch_ref(path: &str, value: Value) -> Result<BranchRef, Error> {
-    BranchRef::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-fn decode_instant(path: &str, value: Value) -> Result<UtcInstant, Error> {
-    UtcInstant::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-pub(crate) fn decode_repository(path: &str, value: Value) -> Result<RepositoryIdentity, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let host = obj.required("host", de::string)?;
-    let owner = obj.required("owner", de::string)?;
-    let name = obj.required("name", de::string)?;
-    obj.finish()?;
-    RepositoryIdentity::new(host, owner, name)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-pub(crate) fn decode_provider_run_id(path: &str, value: Value) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
+pub(crate) fn valid_provider_run_id(raw: &str) -> bool {
     let bytes = raw.as_bytes();
     let allowed = |byte: &u8| {
         byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'-')
     };
-    if bytes.is_empty()
-        || bytes.len() > 128
-        || !bytes.first().is_some_and(u8::is_ascii_alphanumeric)
-        || !bytes.last().is_some_and(u8::is_ascii_alphanumeric)
-        || !bytes.iter().all(allowed)
-    {
-        return fail(path, ErrorKind::InvalidValue);
-    }
-    Ok(raw)
-}
-
-pub(crate) fn decode_provider_id(path: &str, value: Value) -> Result<String, Error> {
-    let raw = de::string(path, value)?;
-    if ArtifactId::new(raw.clone()).is_some() {
-        Ok(raw)
-    } else {
-        fail(path, ErrorKind::InvalidValue)
-    }
-}
-
-fn decode_tree(path: &str, value: Value) -> Result<TreeIdentity, Error> {
-    let mut obj = Obj::new(path, value)?;
-    let object_format = obj.required("object_format", decode_enum)?;
-    let tree_oid = obj.required("tree_oid", de::string)?;
-    obj.finish()?;
-    TreeIdentity::new(object_format, tree_oid)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
+    !bytes.is_empty()
+        && bytes.len() <= 128
+        && bytes.first().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes.last().is_some_and(u8::is_ascii_alphanumeric)
+        && bytes.iter().all(allowed)
 }

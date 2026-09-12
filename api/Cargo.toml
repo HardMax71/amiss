@@ -17,7 +17,7 @@ amiss-controller-files = { path = "../controller/files" }
 amiss-wire = { path = "../crates/amiss-wire" }
 rustdoc-types = "=0.61.0"
 serde.workspace = true
-serde_json = { workspace = true, features = ["unbounded_depth"] }
+serde_json.workspace = true
 thiserror.workspace = true
 trustfall.workspace = true
 trustfall-rustdoc-adapter.workspace = true

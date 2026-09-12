@@ -26,10 +26,13 @@ fn member(value: &Value, key: &str, label: &str) -> Value {
     let Value::Object(members) = value else {
         panic!("{label} is an object")
     };
-    members.iter().find(|(name, _)| name == key).map_or_else(
-        || panic!("{label} has no {key}"),
-        |(_, found)| found.clone(),
-    )
+    members
+        .iter()
+        .find(|(name, _)| name.as_str() == key)
+        .map_or_else(
+            || panic!("{label} has no {key}"),
+            |(_, found)| found.clone(),
+        )
 }
 
 fn text(value: &Value, key: &str, label: &str) -> String {
@@ -37,7 +40,7 @@ fn text(value: &Value, key: &str, label: &str) -> String {
     let Value::String(found) = found else {
         panic!("{label}.{key} is a string, found {found:?}")
     };
-    found.into_string()
+    found
 }
 
 fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
@@ -45,7 +48,7 @@ fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
     let Value::Array(found) = found else {
         panic!("{label}.{key} is an array, found {found:?}")
     };
-    found.into_vec()
+    found
 }
 
 fn path(raw: &str) -> RepoPath {
@@ -59,7 +62,7 @@ fn tree(vectors: &Value) -> BTreeSet<String> {
             let Value::String(entry) = entry else {
                 panic!("a tree entry is a string")
             };
-            entry.into_string()
+            entry
         })
         .collect()
 }
@@ -110,7 +113,7 @@ fn the_published_vectors_drive_every_router() {
         for rule in &ROUTERS {
             let found = member(&harvest, rule.name, &format!("case {id}"));
             let want = if let Value::String(source) = found {
-                Some(source.into_string())
+                Some(source)
             } else if found == Value::Null {
                 None
             } else {

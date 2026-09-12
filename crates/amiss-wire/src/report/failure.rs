@@ -1,15 +1,16 @@
-use std::collections::BTreeSet;
-
-use crate::digest::{Digest, hj};
-use crate::json::{Value, canonical};
-use crate::model::Adapter;
-use strum::IntoEnumIterator;
-
-use super::error::error_row;
+use super::error::{ErrorRow, error_projection};
 use super::{
     ADAPTER_CONTRACT_SCHEMA, AnalysisErrorCode, BUILT_IN_POLICY, COMPATIBILITY, ENGINE_CONTRACT,
-    ENVELOPE_SCHEMA, ErrorDetail, PAYLOAD_SCHEMA, object, string,
+    ENVELOPE_SCHEMA, ErrorDetail, PAYLOAD_SCHEMA,
 };
+use crate::codec;
+use crate::de::Error;
+use crate::digest::Digest;
+use crate::json::{Value, canonical};
+use crate::model::Adapter;
+use serde::Serialize;
+use std::collections::BTreeSet;
+use strum::IntoEnumIterator;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EngineProvenance {
@@ -21,7 +22,7 @@ pub struct EngineProvenance {
 /// invocation rejection: every detail array empty, every count zero, unavailable
 /// evaluation and controls with their reason sets, exit class 2.
 ///
-/// Returns `None` when `codes` is empty or contains a non-invocation code.
+/// Returns `None` when `codes` is empty or contains a non-invocation code, or emission fails.
 #[must_use]
 pub fn invocation_failure_wire(
     engine: &EngineProvenance,
@@ -45,7 +46,7 @@ pub fn invocation_failure_envelope(
 /// its byte stream was completely captured.
 ///
 /// Returns `None` when no code is supplied or a code has no evaluation
-/// reason, exactly as the invocation form.
+/// reason, or the projection cannot be emitted, exactly as the invocation form.
 #[must_use]
 pub fn unavailable_evaluation_wire(
     engine: &EngineProvenance,
@@ -77,186 +78,250 @@ pub fn unavailable_evaluation_envelope(
         return None;
     }
     let mut reasons = Vec::new();
-    let mut errors: Vec<(AnalysisErrorCode, &'static str)> = Vec::new();
+    let mut errors = Vec::new();
     for code in codes {
         let route = code.route()?;
-        reasons.push(Value::String(route.evaluation_reason?.into()));
-        errors.push((*code, route.phase));
+        reasons.push(route.evaluation_reason?);
+        errors.push(ErrorDetail {
+            code: *code,
+            path: None,
+            path_bytes: None,
+            resource: None,
+        });
     }
-    errors.sort_by(|a, b| a.0.as_ref().cmp(b.0.as_ref()));
-    let error_rows: Vec<Value> = errors
+    errors.sort_by(|a, b| a.code.as_ref().cmp(b.code.as_ref()));
+    let error_rows = errors
         .iter()
-        .map(|(code, phase)| {
-            error_row(
-                &ErrorDetail {
-                    code: *code,
-                    path: None,
-                    path_bytes: None,
-                    resource: None,
-                },
-                phase,
-            )
-        })
+        .map(|detail| error_projection(detail, detail.phase()))
         .collect();
-    let error_count = i64::try_from(error_rows.len()).ok()?;
-
-    let payload = object(vec![
-        ("schema", string(PAYLOAD_SCHEMA)),
-        ("compatibility", string(COMPATIBILITY)),
-        ("engine", engine_block(engine)),
-        (
-            "evaluation",
-            object(vec![
-                ("status", string("unavailable")),
-                (
-                    "request_digest",
-                    evaluation_request_digest
-                        .map_or(Value::Null, |digest| string(&digest.to_string())),
-                ),
-                ("reasons", Value::Array(reasons.into_boxed_slice())),
-            ]),
-        ),
-        (
-            "controls",
-            object(vec![
-                ("status", string("unavailable")),
-                (
-                    "request_digest",
-                    controls_request_digest
-                        .map_or(Value::Null, |digest| string(&digest.to_string())),
-                ),
-                ("reasons", Value::Array(Box::new([string("not-parsed")]))),
-            ]),
-        ),
-        ("feedback", object(vec![("status", string("unavailable"))])),
-        (
-            "result",
-            object(vec![
-                ("complete", Value::Bool(false)),
-                ("status", string("incomplete")),
-                ("exit_code", Value::Integer(2)),
-                ("finding_count", Value::Integer(0)),
-                ("error_count", Value::Integer(error_count)),
-            ]),
-        ),
-        ("summary", zero_summary()),
-        ("documents", Value::Array(Box::default())),
-        ("observations", Value::Array(Box::default())),
-        ("findings", Value::Array(Box::default())),
-        ("errors", Value::Array(error_rows.into_boxed_slice())),
-    ]);
-
-    let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
-    Some(object(vec![
-        ("schema", string(ENVELOPE_SCHEMA)),
-        ("payload", payload),
-        ("payload_digest", string(&payload_digest.to_string())),
-    ]))
+    let payload = FailurePayload {
+        compatibility: COMPATIBILITY,
+        controls: Unavailable {
+            reasons: vec!["not-parsed"],
+            request_digest: controls_request_digest,
+            status: "unavailable",
+        },
+        documents: [],
+        engine: engine_projection(engine).ok()?,
+        errors: error_rows,
+        evaluation: Unavailable {
+            reasons,
+            request_digest: evaluation_request_digest,
+            status: "unavailable",
+        },
+        feedback: Status {
+            status: "unavailable",
+        },
+        findings: [],
+        observations: [],
+        result: FailureResult {
+            complete: false,
+            error_count: errors.len(),
+            exit_code: 2,
+            finding_count: 0,
+            status: "incomplete",
+        },
+        schema: PAYLOAD_SCHEMA,
+        summary: Summary::default(),
+    };
+    let payload_digest = codec::digest(PAYLOAD_SCHEMA, &payload).ok()?;
+    codec::to_value(&FailureEnvelope {
+        payload,
+        payload_digest,
+        schema: ENVELOPE_SCHEMA,
+    })
+    .ok()
 }
 
-/// One adapter's complete contract descriptor and its digest, which every
-/// occurrence embeds through its observation-identity input.
-#[must_use]
-pub fn adapter_contract(engine: &EngineProvenance, adapter: Adapter) -> (Value, Digest) {
+#[derive(Serialize)]
+struct FailureEnvelope<'a> {
+    payload: FailurePayload<'a>,
+    payload_digest: Digest,
+    schema: &'static str,
+}
+
+#[derive(Serialize)]
+struct FailurePayload<'a> {
+    compatibility: &'static str,
+    controls: Unavailable,
+    documents: [(); 0],
+    engine: EngineBlock<'a>,
+    errors: Vec<ErrorRow<'a>>,
+    evaluation: Unavailable,
+    feedback: Status,
+    findings: [(); 0],
+    observations: [(); 0],
+    result: FailureResult,
+    schema: &'static str,
+    summary: Summary,
+}
+
+#[derive(Serialize)]
+struct Unavailable {
+    reasons: Vec<&'static str>,
+    request_digest: Option<Digest>,
+    status: &'static str,
+}
+
+#[derive(Serialize)]
+struct Status {
+    status: &'static str,
+}
+
+#[derive(Serialize)]
+struct FailureResult {
+    complete: bool,
+    error_count: usize,
+    exit_code: u8,
+    finding_count: u8,
+    status: &'static str,
+}
+
+#[derive(Serialize)]
+struct AdapterDescriptor<'a> {
+    adapter_id: Adapter,
+    frontmatter_contract: &'static str,
+    grammar_profile: &'static str,
+    parser_name: &'static str,
+    parser_version: &'a str,
+    schema: &'static str,
+    source_projection: &'static str,
+    structural_address: &'static str,
+}
+
+fn adapter_descriptor(engine: &EngineProvenance, adapter: Adapter) -> AdapterDescriptor<'_> {
     let metadata = adapter.metadata();
-    let descriptor = object(vec![
-        ("schema", string(ADAPTER_CONTRACT_SCHEMA)),
-        ("adapter_id", string(adapter.as_ref())),
-        ("parser_name", string(metadata.parser_name)),
-        ("parser_version", string(&engine.version)),
-        ("grammar_profile", string(metadata.grammar_profile)),
-        (
-            "frontmatter_contract",
-            string(metadata.frontmatter_contract),
-        ),
-        ("source_projection", string(metadata.source_projection)),
-        ("structural_address", string(metadata.structural_address)),
-    ]);
-    let digest = hj(ADAPTER_CONTRACT_SCHEMA, &descriptor);
-    (descriptor, digest)
+    AdapterDescriptor {
+        adapter_id: adapter,
+        frontmatter_contract: metadata.frontmatter_contract,
+        grammar_profile: metadata.grammar_profile,
+        parser_name: metadata.parser_name,
+        parser_version: &engine.version,
+        schema: ADAPTER_CONTRACT_SCHEMA,
+        source_projection: metadata.source_projection,
+        structural_address: metadata.structural_address,
+    }
 }
 
-/// The complete engine block: contract, version, digest, provenance, policy
-/// version, and the three adapter descriptors with their digests.
-#[must_use]
-pub fn engine_block(engine: &EngineProvenance) -> Value {
-    let adapter_rows: Vec<Value> = Adapter::iter()
+/// One adapter's complete contract descriptor and its digest.
+///
+/// # Errors
+///
+/// The contract cannot be represented in the strict JSON profile.
+pub fn adapter_contract(
+    engine: &EngineProvenance,
+    adapter: Adapter,
+) -> Result<(Value, Digest), Error> {
+    let descriptor = adapter_descriptor(engine, adapter);
+    let digest = codec::digest(ADAPTER_CONTRACT_SCHEMA, &descriptor)?;
+    Ok((codec::to_value(&descriptor)?, digest))
+}
+
+#[derive(Serialize)]
+struct AdapterContract<'a> {
+    adapter_id: Adapter,
+    contract_descriptor: AdapterDescriptor<'a>,
+    contract_digest: Digest,
+}
+
+#[derive(Serialize)]
+struct EngineBlock<'a> {
+    action_provenance: LocalProvenance,
+    adapters: Vec<AdapterContract<'a>>,
+    built_in_policy: &'static str,
+    engine_contract: &'static str,
+    engine_digest: Digest,
+    engine_version: &'a str,
+}
+
+#[derive(Serialize)]
+struct LocalProvenance {
+    kind: &'static str,
+}
+
+fn engine_projection(engine: &EngineProvenance) -> Result<EngineBlock<'_>, Error> {
+    let adapters = Adapter::iter()
         .map(|adapter| {
-            let (descriptor, digest) = adapter_contract(engine, adapter);
-            object(vec![
-                ("adapter_id", string(adapter.as_ref())),
-                ("contract_descriptor", descriptor),
-                ("contract_digest", string(&digest.to_string())),
-            ])
+            let descriptor = adapter_descriptor(engine, adapter);
+            Ok(AdapterContract {
+                adapter_id: adapter,
+                contract_digest: codec::digest(ADAPTER_CONTRACT_SCHEMA, &descriptor)?,
+                contract_descriptor: descriptor,
+            })
         })
-        .collect();
-    object(vec![
-        ("engine_contract", string(ENGINE_CONTRACT)),
-        ("engine_version", string(&engine.version)),
-        ("engine_digest", string(&engine.digest.to_string())),
-        ("action_provenance", object(vec![("kind", string("local"))])),
-        ("built_in_policy", string(BUILT_IN_POLICY)),
-        ("adapters", Value::Array(adapter_rows.into_boxed_slice())),
-    ])
+        .collect::<Result<_, Error>>()?;
+    Ok(EngineBlock {
+        action_provenance: LocalProvenance { kind: "local" },
+        adapters,
+        built_in_policy: BUILT_IN_POLICY,
+        engine_contract: ENGINE_CONTRACT,
+        engine_digest: engine.digest,
+        engine_version: &engine.version,
+    })
 }
 
-fn zero_summary() -> Value {
-    let documents = [
-        "discovered",
-        "outside_document_set",
-        "scanned",
-        "unsupported",
-        "excluded_builtin",
-        "unlinked",
-        "frontmatter_documents",
-        "opaque_mdx_documents",
-        "opaque_html_documents",
-        "opaque_mdx_regions",
-        "opaque_mdx_bytes",
-        "opaque_html_regions",
-        "opaque_html_bytes",
-        "frontmatter_regions",
-        "frontmatter_bytes",
-    ];
-    let references = [
-        "extracted",
-        "explicit_local",
-        "same_repository",
-        "external_out_of_scope",
-        "unsupported",
-        "resolved",
-        "missing",
-    ];
-    let findings = [
-        "total",
-        "record",
-        "warn",
-        "fail",
-        "introduced",
-        "pre_existing",
-        "resolved",
-        "unknown",
-        "not_applicable",
-        "debt_tolerated",
-        "waived",
-        "analysis_errors",
-        "unsupported_capabilities",
-    ];
-    object(vec![
-        ("counts_complete", Value::Bool(false)),
-        ("documents", zero_counts(&documents)),
-        ("references", zero_counts(&references)),
-        ("findings", zero_counts(&findings)),
-        ("governed_claims", Value::Integer(0)),
-        ("unattested_claims", Value::Integer(0)),
-    ])
+/// The engine block with provenance, policy, and adapter contracts.
+///
+/// # Errors
+///
+/// A contract cannot be represented in the strict JSON profile.
+pub fn engine_block(engine: &EngineProvenance) -> Result<Value, Error> {
+    codec::to_value(&engine_projection(engine)?)
 }
 
-fn zero_counts(fields: &[&str]) -> Value {
-    Value::Object(
-        fields
-            .iter()
-            .map(|field| ((*field).into(), Value::Integer(0)))
-            .collect(),
-    )
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct DocumentCounts {
+    pub discovered: u64,
+    pub excluded_builtin: u64,
+    pub frontmatter_bytes: u64,
+    pub frontmatter_documents: u64,
+    pub frontmatter_regions: u64,
+    pub opaque_html_bytes: u64,
+    pub opaque_html_documents: u64,
+    pub opaque_html_regions: u64,
+    pub opaque_mdx_bytes: u64,
+    pub opaque_mdx_documents: u64,
+    pub opaque_mdx_regions: u64,
+    pub outside_document_set: u64,
+    pub scanned: u64,
+    pub unlinked: u64,
+    pub unsupported: u64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct ReferenceCounts {
+    pub explicit_local: u64,
+    pub external_out_of_scope: u64,
+    pub extracted: u64,
+    pub missing: u64,
+    pub resolved: u64,
+    pub same_repository: u64,
+    pub unsupported: u64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct FindingCounts {
+    pub analysis_errors: u64,
+    pub debt_tolerated: u64,
+    pub fail: u64,
+    pub introduced: u64,
+    pub not_applicable: u64,
+    pub pre_existing: u64,
+    pub record: u64,
+    pub resolved: u64,
+    pub total: u64,
+    pub unknown: u64,
+    pub unsupported_capabilities: u64,
+    pub waived: u64,
+    pub warn: u64,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct Summary {
+    pub counts_complete: bool,
+    pub documents: DocumentCounts,
+    pub findings: FindingCounts,
+    pub governed_claims: u64,
+    pub references: ReferenceCounts,
+    pub unattested_claims: u64,
 }

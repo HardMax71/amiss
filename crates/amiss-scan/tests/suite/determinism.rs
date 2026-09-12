@@ -123,6 +123,7 @@ fn run(pair: &Pair) -> Vec<u8> {
         &pair.base,
         &pair.candidate,
     )
+    .unwrap()
     .wire()
 }
 
@@ -193,8 +194,9 @@ fn index_and_commit_modes_agree_on_every_fact_and_disclose_their_mode() {
         &bare_shell(),
         &fixture.base,
         &fixture.candidate,
-    );
-    let from_index = staged_index(&repo, &engine(), None, &bare_shell(), &fixture.base);
+    )
+    .unwrap();
+    let from_index = staged_index(&repo, &engine(), None, &bare_shell(), &fixture.base).unwrap();
 
     let commit: serde_json::Value = serde_json::from_slice(&from_commit.wire()).unwrap();
     let index: serde_json::Value = serde_json::from_slice(&from_index.wire()).unwrap();

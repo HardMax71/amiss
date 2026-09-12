@@ -13,6 +13,7 @@ name = "amiss-probe"
 path = "src/main.rs"
 
 [dependencies]
+serde.workspace = true
 amiss-wire = { path = "../../crates/amiss-wire" }
 reqwest.workspace = true
 url.workspace = true

@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
@@ -42,7 +43,7 @@ pub(super) fn sources_value(sources: &[(Digest, u64)]) -> Value {
                 Value::object(vec![
                     (
                         "multiplicity".to_owned(),
-                        Value::Integer(i64::try_from(*multiplicity).unwrap_or(i64::MAX)),
+                        Value::from(i64::try_from(*multiplicity).unwrap_or(i64::MAX)),
                     ),
                     (
                         "digest".to_owned(),
@@ -155,7 +156,7 @@ pub(super) fn claim_finding(group: &ClaimGroup, profile: Profile) -> Finding {
         ("target_path".to_owned(), group.target_path.to_value()),
         (
             "line".to_owned(),
-            Value::Integer(i64::try_from(group.line).unwrap_or(i64::MAX)),
+            Value::from(i64::try_from(group.line).unwrap_or(i64::MAX)),
         ),
         (
             "expected_digest".to_owned(),

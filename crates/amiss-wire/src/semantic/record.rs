@@ -1,7 +1,10 @@
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
-use crate::controls::value::{object, text};
-use crate::de::{self, Error, ErrorKind, Obj};
+use serde::{Deserialize, Serialize};
+
+use crate::codec;
+use crate::de::{Error, ErrorKind, fail};
 use crate::digest::Digest;
 use crate::json::Value;
 use crate::model::ArtifactId;
@@ -27,43 +30,75 @@ pub struct Observation {
     pub records: BTreeMap<String, String>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InputDocument {
+    schema: String,
+    producer_identity: ArtifactId,
+    context_digest: Digest,
+    input_digest: Digest,
+    complete: bool,
+    name: ArtifactId,
+    records: Vec<Record>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ObservationDocument {
+    kind: String,
+    name: ArtifactId,
+    records: Vec<Record>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Record {
+    key: String,
+    value: String,
+}
+
 /// Parses one bounded normalized record-set input.
 ///
 /// # Errors
 ///
-/// Fails on oversized or malformed strict JSON, unknown fields, invalid identities or digests,
-/// and records that are not bounded, control-free, sorted, and unique by key.
+/// The document has a shape defect or its record rows exceed the sorted, bounded contract.
 pub fn parse_input(bytes: &[u8]) -> Result<Input, Error> {
-    let mut input = super::parse_document(bytes)?;
-    input.required("schema", |path, value| {
-        de::const_str(path, value, INPUT_SCHEMA)
-    })?;
-    let producer_identity = input.required("producer_identity", super::decode_id)?;
-    let context_digest = input.required("context_digest", de::digest)?;
-    let input_digest = input.required("input_digest", de::digest)?;
-    let complete = input.required("complete", de::boolean)?;
-    let name = input.required("name", super::decode_id)?;
-    let records = input.required("records", decode_records)?;
-    input.finish()?;
+    let input: InputDocument = super::parse_document(bytes)?;
+    if input.schema != INPUT_SCHEMA {
+        return fail("$.schema", ErrorKind::InvalidValue);
+    }
     Ok(Input {
-        producer_identity,
-        context_digest,
-        input_digest,
-        complete,
-        set: Observation { name, records },
+        producer_identity: input.producer_identity,
+        context_digest: input.context_digest,
+        input_digest: input.input_digest,
+        complete: input.complete,
+        set: Observation {
+            name: input.name,
+            records: checked_records("$.records", input.records)?,
+        },
     })
 }
 
-/// Produces the canonical semantic template value for one validated record-set input.
+/// Produces the canonical semantic template for a record set.
 ///
 /// # Errors
 ///
-/// Fails only if the fixed producer contract or the encoded template exceeds the semantic
-/// evidence bounds.
+/// The records or the encoded template exceed the semantic evidence contract.
 pub fn template(input: Input) -> Result<Value, Error> {
     let producer_kind = ArtifactId::new(PRODUCER_KIND.to_owned())
         .ok_or_else(|| Error::new("$.producer.kind", ErrorKind::InvalidValue))?;
-    let observation = observation_value(input.set);
+    let records: Vec<_> = input
+        .set
+        .records
+        .into_iter()
+        .map(|(key, value)| Record { key, value })
+        .collect();
+    validate_records("$.observations[0].records", &records)?;
+    let observation = codec::to_value(&ObservationDocument {
+        kind: PRODUCER_KIND.to_owned(),
+        name: input.set.name,
+        records,
+    })?;
     super::template(SemanticEvidenceTemplate {
         producer_kind,
         producer_identity: input.producer_identity,
@@ -75,45 +110,52 @@ pub fn template(input: Input) -> Result<Value, Error> {
     })
 }
 
-/// Decodes the closed record-set observation grammar shared by producers and the scanner.
+/// Decodes the closed record-set observation grammar shared by producer and scanner.
 ///
 /// # Errors
 ///
-/// Fails on an incorrect kind, unknown fields, an invalid set name, or invalid record rows.
-pub fn decode_observation(path: &str, value: Value) -> Result<Observation, Error> {
-    let mut observation = Obj::new(path, value)?;
-    observation.required("kind", |path, value| {
-        de::const_str(path, value, PRODUCER_KIND)
-    })?;
-    let name = observation.required("name", super::decode_id)?;
-    let records = observation.required("records", decode_records)?;
-    observation.finish()?;
-    Ok(Observation { name, records })
-}
-
-fn decode_records(path: &str, value: Value) -> Result<BTreeMap<String, String>, Error> {
-    de::sorted_map(path, value, SEMANTIC_OBSERVATIONS_LIMIT, |path, value| {
-        let mut row = Obj::new(path, value)?;
-        let key = row.required("key", |path, value| {
-            de::bounded_text(path, value, super::RECORD_KEY_BYTES)
-        })?;
-        let value = row.required("value", |path, value| {
-            de::bounded_text(path, value, super::RECORD_VALUE_BYTES)
-        })?;
-        row.finish()?;
-        Ok((key, value))
+/// The observation has a shape defect or invalid, repeated, or unsorted records.
+pub fn decode_observation(path: &str, value: &Value) -> Result<Observation, Error> {
+    let observation: ObservationDocument = codec::from_value(path, value)?;
+    if observation.kind != PRODUCER_KIND {
+        return fail(&format!("{path}.kind"), ErrorKind::InvalidValue);
+    }
+    Ok(Observation {
+        name: observation.name,
+        records: checked_records(&format!("{path}.records"), observation.records)?,
     })
 }
 
-fn observation_value(observation: Observation) -> Value {
-    let records = observation
-        .records
+fn checked_records(path: &str, records: Vec<Record>) -> Result<BTreeMap<String, String>, Error> {
+    validate_records(path, &records)?;
+    Ok(records
         .into_iter()
-        .map(|(key, value)| object(vec![("key", text(&key)), ("value", text(&value))]))
-        .collect();
-    object(vec![
-        ("kind", text(PRODUCER_KIND)),
-        ("name", text(observation.name.as_str())),
-        ("records", Value::array(records)),
-    ])
+        .map(|record| (record.key, record.value))
+        .collect())
+}
+
+fn validate_records(path: &str, records: &[Record]) -> Result<(), Error> {
+    if records.len() > SEMANTIC_OBSERVATIONS_LIMIT {
+        return fail(path, ErrorKind::LimitExceeded);
+    }
+    for (index, record) in records.iter().enumerate() {
+        for (name, value, limit) in [
+            ("key", &record.key, super::RECORD_KEY_BYTES),
+            ("value", &record.value, super::RECORD_VALUE_BYTES),
+        ] {
+            if value.is_empty() || value.len() > limit || value.chars().any(char::is_control) {
+                return fail(&format!("{path}[{index}].{name}"), ErrorKind::InvalidValue);
+            }
+        }
+    }
+    for pair in records.windows(2) {
+        if let [left, right] = pair {
+            match left.key.cmp(&right.key) {
+                Ordering::Equal => return fail(path, ErrorKind::DuplicateMember),
+                Ordering::Greater => return fail(path, ErrorKind::UnsortedSet),
+                Ordering::Less => {}
+            }
+        }
+    }
+    Ok(())
 }

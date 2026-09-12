@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;

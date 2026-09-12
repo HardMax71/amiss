@@ -1,15 +1,16 @@
 use std::collections::BTreeMap;
 
 use amiss_controller_files::read_bounded_at;
-use amiss_wire::digest::{Digest, hb, hj};
+use amiss_wire::digest::{Digest, hb};
 use amiss_wire::json::Value;
 use amiss_wire::model::RepoPathText;
 use cap_std::fs::Dir;
+use serde::Serialize;
 
 mod context;
 mod html;
 
-use context::{BuildPages, pages, render_context, site_build_context};
+use context::{pages, render_context, site_build_context};
 use html::{page_facts, reachable_sources};
 
 pub const MDBOOK_RENDER_CONTEXT_BYTES: u64 = 16_777_216;
@@ -30,7 +31,7 @@ pub struct SiteBuildContext {
 pub enum MdBookEvidenceError {
     #[error("the mdBook renderer context exceeds its byte ceiling")]
     ContextBytes,
-    #[error("the mdBook renderer context is not strict JSON")]
+    #[error("the mdBook renderer context is invalid JSON")]
     Context(#[source] amiss_wire::json::Error),
     #[error("the mdBook renderer context has an invalid shape")]
     ContextShape,
@@ -74,11 +75,10 @@ pub fn mdbook_site_evidence(
     if u64::try_from(context_bytes.len()).unwrap_or(u64::MAX) > MDBOOK_RENDER_CONTEXT_BYTES {
         return Err(MdBookEvidenceError::ContextBytes);
     }
-    let context = amiss_wire::json::parse(context_bytes).map_err(MdBookEvidenceError::Context)?;
     let (expectation, base, repository_book_root) = site_build_context(site)?;
-    let (source_directory, items, config_digest) = render_context(&context)?;
+    let (source_directory, items, config_digest) = render_context(context_bytes)?;
     let build = pages(
-        items,
+        &items,
         &source_directory,
         repository_book_root.as_deref(),
         &base,
@@ -109,25 +109,24 @@ pub fn mdbook_site_evidence(
             &mut href_count,
         )?;
         links.insert(route.clone(), destinations);
-        let html_digest = Value::string(hb(HTML_DOMAIN, &html).to_string());
-        let (kind, source) = page.source.as_ref().map_or_else(
-            || ("site-generated-route", Value::Null),
-            |source| ("site-route", Value::string(source.clone())),
+        inputs.push(PageInput {
+            route,
+            source: page.source.as_deref(),
+            html_digest: hb(HTML_DOMAIN, &html),
+        });
+        observations.push(
+            amiss_wire::codec::to_value(&RouteObservation {
+                kind: if page.source.is_some() {
+                    "site-route"
+                } else {
+                    "site-generated-route"
+                },
+                route,
+                source: page.source.as_deref(),
+                anchors,
+            })
+            .map_err(|_defect| MdBookEvidenceError::Evidence)?,
         );
-        inputs.push(Value::object(vec![
-            ("route".to_owned(), Value::string(route.clone())),
-            ("source".to_owned(), source.clone()),
-            ("html_digest".to_owned(), html_digest),
-        ]));
-        observations.push(Value::object(vec![
-            ("kind".to_owned(), Value::string(kind.to_owned())),
-            ("route".to_owned(), Value::string(route.clone())),
-            ("source".to_owned(), source),
-            (
-                "anchors".to_owned(),
-                Value::array(anchors.into_iter().map(Value::string).collect()),
-            ),
-        ]));
     }
     let reachable = reachable_sources(&build.entrypoint, &links, &build.rows)?;
     if anchor_count
@@ -137,28 +136,28 @@ pub fn mdbook_site_evidence(
     {
         return Err(MdBookEvidenceError::Navigation);
     }
-    let navigation = navigation_observation(&build, reachable);
-    observations.push(navigation.clone());
-
-    let input_digest = hj(
-        INPUT_DOMAIN,
-        &Value::object(vec![
-            (
-                "mdbook_version".to_owned(),
-                Value::string(MDBOOK_VERSION.to_owned()),
-            ),
-            (
-                "context_digest".to_owned(),
-                Value::string(expectation.context_digest.to_string()),
-            ),
-            (
-                "config_digest".to_owned(),
-                Value::string(config_digest.to_string()),
-            ),
-            ("navigation".to_owned(), navigation),
-            ("pages".to_owned(), Value::array(inputs)),
-        ]),
+    let navigation = NavigationObservation {
+        entrypoints: [build.entrypoint.as_str()],
+        kind: "site-navigation",
+        manifest: &build.manifest,
+        reachable,
+        root: build.source_root.as_deref(),
+    };
+    observations.push(
+        amiss_wire::codec::to_value(&navigation)
+            .map_err(|_defect| MdBookEvidenceError::Evidence)?,
     );
+    let input_digest = amiss_wire::codec::digest(
+        INPUT_DOMAIN,
+        &BuildInput {
+            mdbook_version: MDBOOK_VERSION,
+            context_digest: expectation.context_digest,
+            config_digest,
+            navigation,
+            pages: inputs,
+        },
+    )
+    .map_err(|_defect| MdBookEvidenceError::Evidence)?;
     amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
         candidate_identity_digest,
         source_report_payload_digest: None,
@@ -185,27 +184,35 @@ pub fn mdbook_site_expectation(
     site_build_context(site).map(|(expectation, _base, _root)| expectation)
 }
 
-fn navigation_observation(build: &BuildPages, reachable: Vec<String>) -> Value {
-    Value::object(vec![
-        (
-            "entrypoints".to_owned(),
-            Value::array(vec![Value::string(build.entrypoint.clone())]),
-        ),
-        (
-            "kind".to_owned(),
-            Value::string("site-navigation".to_owned()),
-        ),
-        ("manifest".to_owned(), Value::string(build.manifest.clone())),
-        (
-            "reachable".to_owned(),
-            Value::array(reachable.into_iter().map(Value::string).collect()),
-        ),
-        (
-            "root".to_owned(),
-            build
-                .source_root
-                .as_ref()
-                .map_or(Value::Null, |root| Value::string(root.clone())),
-        ),
-    ])
+#[derive(Serialize)]
+struct RouteObservation<'a> {
+    kind: &'static str,
+    route: &'a str,
+    source: Option<&'a str>,
+    anchors: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct PageInput<'a> {
+    route: &'a str,
+    source: Option<&'a str>,
+    html_digest: Digest,
+}
+
+#[derive(Serialize)]
+struct NavigationObservation<'a> {
+    entrypoints: [&'a str; 1],
+    kind: &'static str,
+    manifest: &'a str,
+    reachable: Vec<String>,
+    root: Option<&'a str>,
+}
+
+#[derive(Serialize)]
+struct BuildInput<'a> {
+    mdbook_version: &'static str,
+    context_digest: Digest,
+    config_digest: Digest,
+    navigation: NavigationObservation<'a>,
+    pages: Vec<PageInput<'a>>,
 }

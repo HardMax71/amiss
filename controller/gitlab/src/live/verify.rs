@@ -6,6 +6,7 @@ use amiss_controller::{
     forge_evidence, forge_repository_evidence, ref_span, spelled_segments,
 };
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 use serde::Deserialize;
 
 use super::GitLabClient;

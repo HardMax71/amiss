@@ -1,34 +1,25 @@
 mod tests;
 
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 
 #[derive(Clone, Copy)]
-pub(crate) struct View<'value>(&'value [(String, Value)]);
+pub(crate) struct View<'value>(Option<&'value Value>);
 
 impl<'value> View<'value> {
     pub(crate) fn of(value: &'value Value) -> Self {
-        match value {
-            Value::Object(members) => Self(members),
-            Value::Null
-            | Value::Bool(_)
-            | Value::Integer(_)
-            | Value::String(_)
-            | Value::Array(_) => Self(&[]),
-        }
+        Self(Some(value))
     }
 
     pub(crate) fn field(self, name: &str) -> Option<&'value Value> {
-        self.0
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value)
+        self.0.and_then(|value| value.get(name))
     }
 
     pub(crate) fn view(self, name: &str) -> Self {
         if let Some(value) = self.field(name) {
             Self::of(value)
         } else {
-            Self(&[])
+            Self(None)
         }
     }
 
@@ -47,24 +38,20 @@ impl<'value> View<'value> {
     pub(crate) fn atom_or_dash(self, name: &str) -> String {
         match self.field(name) {
             Some(Value::String(value)) => amiss_wire::human::atom(value),
-            Some(Value::Object(members)) => match members.as_ref() {
-                [(key, Value::String(hex))] if key == "bytes_hex" => {
+            Some(Value::Object(members)) => match members.get("bytes_hex") {
+                Some(Value::String(hex)) if members.len() == 1 => {
                     amiss_wire::human::atom_bytes(&amiss_wire::human::decode_hex(hex))
                 }
                 _ => "-".to_owned(),
             },
-            Some(Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_)) | None => {
+            Some(Value::Null | Value::Bool(_) | Value::Number(_) | Value::Array(_)) | None => {
                 "-".to_owned()
             }
         }
     }
 
     pub(crate) fn number(self, name: &str) -> i64 {
-        if let Some(Value::Integer(value)) = self.field(name) {
-            *value
-        } else {
-            0
-        }
+        self.field(name).and_then(Value::as_i64).unwrap_or(0)
     }
 
     pub(crate) fn rows(self, name: &str) -> impl ExactSizeIterator<Item = Self> + Clone + 'value {

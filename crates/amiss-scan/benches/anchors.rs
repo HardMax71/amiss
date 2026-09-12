@@ -61,7 +61,10 @@ fn mirror_corpus_20_locales(bencher: Bencher<'_, '_>) {
     let repo = amiss_git::Repository::open(root, ObjectFormat::Sha1)
         .unwrap_or_else(|defect| panic!("open: {defect:?}"));
     let shell = shell();
-    bencher.bench_local(|| commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate));
+    bencher.bench_local(|| {
+        commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate)
+            .unwrap_or_else(|defect| panic!("report projection: {defect}"))
+    });
 }
 
 /// Repeated headings exercise each renderer's collision suffix sequence.
@@ -122,6 +125,7 @@ fn missing_anchor_corpus(bencher: Bencher<'_, '_>) {
             black_box(&base),
             black_box(&candidate),
         )
+        .unwrap_or_else(|defect| panic!("report projection: {defect}"))
     });
 }
 

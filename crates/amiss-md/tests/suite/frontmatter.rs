@@ -8,7 +8,7 @@ use std::fs;
 use std::path::Path;
 
 use amiss_md::frontmatter::{MAX_BYTES, Region, recognize};
-use amiss_wire::json::{Value, parse};
+use amiss_wire::json::{Map, Value, parse};
 
 const REQUIRED_VECTOR_IDS: [&str; 11] = [
     "FM-001-no-bom-exact-bound",
@@ -25,90 +25,84 @@ const REQUIRED_VECTOR_IDS: [&str; 11] = [
 ];
 const DOCUMENT_SUFFIX: &[u8] = b"body";
 
-fn object<'a>(value: &'a Value, context: &str) -> &'a [(String, Value)] {
+fn object<'a>(value: &'a Value, context: &str) -> &'a Map<String, Value> {
     let Value::Object(members) = value else {
         panic!("{context} is an object")
     };
     members
 }
 
-fn member<'a>(members: &'a [(String, Value)], name: &str, context: &str) -> &'a Value {
+fn member<'a>(members: &'a Map<String, Value>, name: &str, context: &str) -> &'a Value {
     members
-        .iter()
-        .find(|(key, _value)| key == name)
-        .map_or_else(
-            || panic!("{context} has a {name} member"),
-            |(_key, value)| value,
-        )
+        .get(name)
+        .unwrap_or_else(|| panic!("{context} has a {name} member"))
 }
 
-fn string<'a>(members: &'a [(String, Value)], name: &str, context: &str) -> &'a str {
+fn string<'a>(members: &'a Map<String, Value>, name: &str, context: &str) -> &'a str {
     let Value::String(value) = member(members, name, context) else {
         panic!("{context}.{name} is a string")
     };
     value
 }
 
-fn boolean(members: &[(String, Value)], name: &str, context: &str) -> bool {
+fn boolean(members: &Map<String, Value>, name: &str, context: &str) -> bool {
     let Value::Bool(value) = member(members, name, context) else {
         panic!("{context}.{name} is a boolean")
     };
     *value
 }
 
-fn nonnegative_integer(members: &[(String, Value)], name: &str, context: &str) -> usize {
-    let Value::Integer(value) = member(members, name, context) else {
+fn nonnegative_integer(members: &Map<String, Value>, name: &str, context: &str) -> usize {
+    let Value::Number(value) = member(members, name, context) else {
         panic!("{context}.{name} is an integer")
     };
-    usize::try_from(*value).unwrap_or_else(|_error| panic!("{context}.{name} is nonnegative"))
+    nonnegative(value.as_u64(), name, context)
+}
+
+fn nonnegative(value: Option<u64>, name: &str, context: &str) -> usize {
+    value
+        .and_then(|value| usize::try_from(value).ok())
+        .unwrap_or_else(|| panic!("{context}.{name} is nonnegative"))
 }
 
 fn optional_string<'a>(
-    members: &'a [(String, Value)],
+    members: &'a Map<String, Value>,
     name: &str,
     context: &str,
 ) -> Option<&'a str> {
     match member(members, name, context) {
         Value::Null => None,
         Value::String(value) => Some(value),
-        Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_) => {
+        Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_) => {
             panic!("{context}.{name} is a string or null")
         }
     }
 }
 
-fn optional_integer(members: &[(String, Value)], name: &str, context: &str) -> Option<usize> {
-    match member(members, name, context) {
-        Value::Null => None,
-        Value::Integer(value) => Some(
-            usize::try_from(*value)
-                .unwrap_or_else(|_error| panic!("{context}.{name} is nonnegative")),
-        ),
-        Value::Bool(_) | Value::String(_) | Value::Array(_) | Value::Object(_) => {
-            panic!("{context}.{name} is an integer or null")
-        }
+fn optional_integer(members: &Map<String, Value>, name: &str, context: &str) -> Option<usize> {
+    let value = member(members, name, context);
+    if value.is_null() {
+        return None;
     }
+    assert!(value.is_number(), "{context}.{name} is an integer or null");
+    Some(nonnegative(value.as_u64(), name, context))
 }
 
-fn assert_shape(members: &[(String, Value)], expected: &[&str], context: &str) {
-    let actual: BTreeSet<&str> = members.iter().map(|(key, _value)| key.as_str()).collect();
+fn assert_shape(members: &Map<String, Value>, expected: &[&str], context: &str) {
+    let actual: BTreeSet<&str> = members.keys().map(String::as_str).collect();
     let expected: BTreeSet<&str> = expected.iter().copied().collect();
     assert_eq!(actual, expected, "{context} has the closed member set");
 }
 
-fn newline(members: &[(String, Value)], context: &str) -> &'static [u8] {
-    match members
-        .iter()
-        .find(|(key, _value)| key == "newline")
-        .map(|(_key, value)| value)
-    {
+fn newline(members: &Map<String, Value>, context: &str) -> &'static [u8] {
+    match members.get("newline") {
         None => b"\n",
-        Some(Value::String(value)) if value.as_ref() == "crlf" => b"\r\n",
-        Some(Value::String(value)) if value.as_ref() == "cr" => b"\r",
-        Some(Value::String(value)) if value.as_ref() == "lf" => b"\n",
+        Some(Value::String(value)) if value.as_str() == "crlf" => b"\r\n",
+        Some(Value::String(value)) if value.as_str() == "cr" => b"\r",
+        Some(Value::String(value)) if value.as_str() == "lf" => b"\n",
         Some(Value::String(value)) => panic!("{context}.newline has unknown value {value:?}"),
         Some(
-            Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_),
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_),
         ) => panic!("{context}.newline is a string"),
     }
 }
@@ -128,7 +122,7 @@ struct Vector<'a> {
 impl<'a> Vector<'a> {
     fn read(case: &'a Value) -> Self {
         let members = object(case, "frontmatter vector case");
-        let has_newline = members.iter().any(|(key, _value)| key == "newline");
+        let has_newline = members.contains_key("newline");
         let required = [
             "id",
             "bom_count",

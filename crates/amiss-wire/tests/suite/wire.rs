@@ -1,6 +1,7 @@
 use amiss_wire::ExitClass;
-use amiss_wire::de::{self, Error as DecodeError, ErrorKind as DecodeErrorKind, Obj};
+use amiss_wire::de::ErrorKind as DecodeErrorKind;
 use amiss_wire::digest::{hb, hb_stream, hj, sha256, sha256_stream};
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::json::{Error, ErrorKind, MAX_SAFE_INTEGER, Value, canonical, parse};
 
 #[expect(clippy::unwrap_used, reason = "test helper on inputs that must fail")]
@@ -19,14 +20,14 @@ fn exit_codes_are_contract() {
 fn accepts_the_restricted_grammar() {
     assert_eq!(parse(b"null").unwrap(), Value::Null);
     assert_eq!(parse(b" true ").unwrap(), Value::Bool(true));
-    assert_eq!(parse(b"-1").unwrap(), Value::Integer(-1));
+    assert_eq!(parse(b"-1").unwrap(), Value::from(-1));
     assert_eq!(
         parse(b"9007199254740991").unwrap(),
-        Value::Integer(MAX_SAFE_INTEGER)
+        Value::from(MAX_SAFE_INTEGER)
     );
     assert_eq!(
         parse(b"-9007199254740991").unwrap(),
-        Value::Integer(-9_007_199_254_740_991)
+        Value::from(-9_007_199_254_740_991_i64)
     );
     assert_eq!(
         parse(br#""A\/\n""#).unwrap(),
@@ -39,7 +40,7 @@ fn accepts_the_restricted_grammar() {
     assert_eq!(
         parse(b"[0, {\"a\": []}]").unwrap(),
         Value::array(vec![
-            Value::Integer(0),
+            Value::from(0),
             Value::object(vec![("a".to_owned(), Value::array(Vec::new()))]),
         ])
     );
@@ -95,18 +96,24 @@ fn rejects_past_the_depth_limit() {
 }
 
 #[test]
-fn error_offsets_point_at_the_defect() {
+fn error_offsets_name_the_serde_detection_point() {
     let cases: &[(&[u8], ErrorKind, usize)] = &[
         (b"1 2", ErrorKind::TrailingContent, 2),
-        (br#"{"a":1,"a":2}"#, ErrorKind::DuplicateKey, 7),
-        (br#""\u00g0""#, ErrorKind::InvalidEscape, 5),
-        (b"\"\\u0g", ErrorKind::InvalidEscape, 4),
-        (b"\"\\u00g", ErrorKind::InvalidEscape, 5),
-        (b"\"\\u00", ErrorKind::UnexpectedEnd, 5),
+        (br#"{"a":1,"a":2}"#, ErrorKind::DuplicateKey, 9),
+        (br#""\u00g0""#, ErrorKind::InvalidEscape, 6),
+        (b"\"\\u0g", ErrorKind::UnexpectedEnd, 4),
+        (b"\"\\u00g", ErrorKind::UnexpectedEnd, 5),
+        (b"\"\\u00", ErrorKind::UnexpectedEnd, 4),
     ];
-    for &(input, kind, offset) in cases {
-        assert_eq!(parse(input).unwrap_err(), Error { kind, offset });
-    }
+    let actual: Vec<_> = cases
+        .iter()
+        .map(|(input, _, _)| parse(input).unwrap_err())
+        .collect();
+    let expected: Vec<_> = cases
+        .iter()
+        .map(|&(_, kind, offset)| Error { kind, offset })
+        .collect();
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -189,34 +196,25 @@ fn streamed_byte_digests_are_the_digest_of_the_concatenated_bytes() {
 }
 
 #[test]
-fn required_object_members_decode_through_their_exact_paths() {
-    let mut object = Obj::new(
-        "$.outer",
-        Value::object(vec![(
-            "required".to_owned(),
-            Value::string("value".to_owned()),
-        )]),
-    )
-    .unwrap();
-    assert_eq!(object.required("required", de::string).unwrap(), "value");
-    object.finish().unwrap();
-
-    let mut missing = Obj::new("$.outer", Value::object(Vec::new())).unwrap();
-    assert_eq!(
-        missing.required("required", de::string).unwrap_err(),
-        DecodeError::new("$.outer.required", DecodeErrorKind::MissingField)
-    );
-
-    let mut invalid = Obj::new(
-        "$.outer",
-        Value::object(vec![("required".to_owned(), Value::Bool(true))]),
-    )
-    .unwrap();
-    assert_eq!(
-        invalid.required("required", de::integer).unwrap_err(),
-        DecodeError::new("$.outer.required", DecodeErrorKind::WrongType)
-    );
-    assert_eq!(invalid.field("next"), "$.outer.next");
+fn derived_members_decode_through_their_exact_paths() {
+    #[derive(Debug, serde::Deserialize)]
+    #[serde(deny_unknown_fields)]
+    struct Fields {
+        required: String,
+    }
+    let value = parse(br#"{"required":"value"}"#).unwrap();
+    let fields: Fields = amiss_wire::codec::from_value("$.outer", &value).unwrap();
+    assert_eq!(fields.required, "value");
+    for (wire, expected) in [
+        ("{}", DecodeErrorKind::MissingField),
+        (r#"{"required":true}"#, DecodeErrorKind::WrongType),
+    ] {
+        let error =
+            amiss_wire::codec::from_value::<Fields>("$.outer", &parse(wire.as_bytes()).unwrap())
+                .unwrap_err();
+        assert_eq!(error.kind, expected);
+        assert_eq!(error.path, "$.outer.required");
+    }
 }
 
 /// The identity grammar after the host opened: a host is any nonempty

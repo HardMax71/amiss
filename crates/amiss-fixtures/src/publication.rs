@@ -25,6 +25,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
     let mut plan_envelope = parse_plan(PLAN).ok()?;
     plan_envelope.payload.report_payload_digest = Digest::from_wire(report_payload_digest)?;
     plan_envelope.payload.docs = DocsCandidate {
+        object_format: ObjectFormat::Sha1,
         repository: RepositoryIdentity::new(
             "git.example.internal".to_owned(),
             "group/subgroup".to_owned(),
@@ -65,7 +66,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
         report,
         plan: plan_bytes,
         evidence,
-        assessment: json::canonical(&assessment),
+        assessment: amiss_wire::codec::canonical(&assessment).ok()?,
     })
 }
 

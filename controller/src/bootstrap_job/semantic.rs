@@ -131,7 +131,7 @@ fn bind_input(
     let value = amiss_wire::semantic::bind_template(template, candidate_identity_digest)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     let envelope_bytes = json::canonical(&value);
-    let envelope = amiss_wire::semantic::parse(&envelope_bytes)
+    let envelope = amiss_wire::semantic::decode(&value)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     if envelope.payload.candidate_identity_digest != candidate_identity_digest
         || envelope.payload.source_report_payload_digest.is_some()

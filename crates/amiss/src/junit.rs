@@ -123,7 +123,7 @@ fn text_path(holder: View<'_>) -> Option<&str> {
     match holder.field("path") {
         Some(Value::String(path)) => Some(path),
         Some(
-            Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Object(_) | Value::Array(_),
+            Value::Null | Value::Bool(_) | Value::Number(_) | Value::Object(_) | Value::Array(_),
         )
         | None => None,
     }

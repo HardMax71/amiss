@@ -1,10 +1,10 @@
 use std::cmp::Ordering;
 use std::sync::Arc;
 
-use crate::controls::value::{object, text};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
-use crate::digest::{Digest, hj};
-use crate::json::{self, Value, canonical, canonical_length};
+use crate::codec;
+use crate::de::{Error, ErrorKind, fail};
+use crate::digest::Digest;
+use crate::json::{Value, canonical_length};
 use crate::model::ArtifactId;
 
 pub mod record;
@@ -48,6 +48,8 @@ pub struct SemanticEvidenceTemplate {
     pub observations: Arc<[Value]>,
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Producer {
     kind: ArtifactId,
     identity: ArtifactId,
@@ -56,71 +58,124 @@ struct Producer {
     input_digest: Digest,
 }
 
-/// Parses one complete, digest-bound semantic evidence envelope.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Subject {
+    candidate_identity_digest: Digest,
+    #[serde(deserialize_with = "codec::nullable")]
+    source_report_payload_digest: Option<Digest>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PayloadDocument {
+    schema: String,
+    subject: Subject,
+    producer: Producer,
+    complete: bool,
+    observations: Vec<Value>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TemplateDocument {
+    schema: String,
+    producer: Producer,
+    complete: bool,
+    observations: Vec<Value>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EnvelopeDocument {
+    schema: String,
+    payload: Value,
+    payload_digest: Digest,
+}
+
+/// Parses one bounded, complete, digest-bound semantic evidence envelope.
 ///
 /// # Errors
 ///
-/// Fails on an oversized stream, strict-JSON or shape defects, a payload digest mismatch,
-/// invalid producer identity, or observations that are not bounded sorted objects with kinds.
+/// The document has a syntax, shape, identity, ordering, limit, or digest defect.
 pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope, Error> {
-    let mut envelope = parse_document(bytes)?;
-    envelope.required("schema", |path, value| {
-        de::const_str(path, value, ENVELOPE_SCHEMA)
-    })?;
-    let payload = envelope.take("payload")?;
-    let payload_digest = envelope.required("payload_digest", de::digest)?;
-    envelope.finish()?;
-    if hj(PAYLOAD_SCHEMA, &payload) != payload_digest {
+    decode(&parse_document(bytes)?)
+}
+
+/// Checks an embedded envelope directly, retaining unknown observations in its digest.
+///
+/// # Errors
+///
+/// As [`parse`].
+pub fn decode(value: &Value) -> Result<SemanticEvidenceEnvelope, Error> {
+    codec::check_value("$", value)?;
+    if canonical_length(value) > SEMANTIC_EVIDENCE_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    let envelope: EnvelopeDocument = codec::borrow_value("$", value)?;
+    if envelope.schema != ENVELOPE_SCHEMA {
+        return fail("$.schema", ErrorKind::InvalidValue);
+    }
+    if codec::digest(PAYLOAD_SCHEMA, &envelope.payload)? != envelope.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
+    let payload: PayloadDocument = codec::owned_value("$.payload", envelope.payload)?;
+    if payload.schema != PAYLOAD_SCHEMA {
+        return fail("$.payload.schema", ErrorKind::InvalidValue);
+    }
+    validate_producer("$.payload.producer", &payload.producer)?;
+    validate_observations("$.payload.observations", &payload.observations)?;
     Ok(SemanticEvidenceEnvelope {
-        payload: decode_payload("$.payload", payload)?,
-        payload_digest,
+        payload: SemanticEvidence {
+            candidate_identity_digest: payload.subject.candidate_identity_digest,
+            source_report_payload_digest: payload.subject.source_report_payload_digest,
+            producer_kind: payload.producer.kind,
+            producer_identity: payload.producer.identity,
+            producer_version: payload.producer.version,
+            context_digest: payload.producer.context_digest,
+            input_digest: payload.producer.input_digest,
+            complete: payload.complete,
+            observations: payload.observations,
+        },
+        payload_digest: envelope.payload_digest,
     })
 }
 
-/// Parses one candidate-independent semantic evidence template.
+/// Parses a candidate-independent template with bounded, sorted observations.
 ///
 /// # Errors
 ///
-/// Fails on an oversized stream, strict-JSON or shape defects, invalid producer identity, or
-/// observations that are not bounded sorted objects with kinds.
+/// The document has a syntax, shape, identity, ordering, or limit defect.
 pub fn parse_template(bytes: &[u8]) -> Result<SemanticEvidenceTemplate, Error> {
-    let mut template = parse_document(bytes)?;
-    template.required("schema", |path, value| {
-        de::const_str(path, value, TEMPLATE_SCHEMA)
-    })?;
-    let producer = decode_producer(&mut template)?;
-    let complete = template.required("complete", de::boolean)?;
-    let observations_path = template.field("observations");
-    let observations = de::array(&observations_path, template.take("observations")?)?;
-    template.finish()?;
-    validate_observations(&observations_path, &observations)?;
+    let document: TemplateDocument = parse_document(bytes)?;
+    if document.schema != TEMPLATE_SCHEMA {
+        return fail("$.schema", ErrorKind::InvalidValue);
+    }
+    validate_producer("$.producer", &document.producer)?;
+    validate_observations("$.observations", &document.observations)?;
     Ok(SemanticEvidenceTemplate {
-        producer_kind: producer.kind,
-        producer_identity: producer.identity,
-        producer_version: producer.version,
-        context_digest: producer.context_digest,
-        input_digest: producer.input_digest,
-        complete,
-        observations: Arc::from(observations),
+        producer_kind: document.producer.kind,
+        producer_identity: document.producer.identity,
+        producer_version: document.producer.version,
+        context_digest: document.producer.context_digest,
+        input_digest: document.producer.input_digest,
+        complete: document.complete,
+        observations: document.observations.into(),
     })
 }
 
-fn parse_document(bytes: &[u8]) -> Result<Obj, Error> {
+fn parse_document<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    let value = json::parse(bytes).map_err(|error| Error::new("$", ErrorKind::Json(error)))?;
-    Obj::new("$", value)
+    codec::decode(bytes)
 }
 
-/// Binds a candidate-independent template to one exact scanner candidate.
+/// Binds a validated template to one exact candidate.
 ///
 /// # Errors
 ///
-/// Fails when the template violates the same bounds [`envelope`] enforces or the resulting
-/// envelope exceeds the byte ceiling.
+/// The template or the resulting envelope exceeds the semantic evidence contract.
 pub fn bind_template(
     template: &SemanticEvidenceTemplate,
     candidate_identity_digest: Digest,
@@ -138,19 +193,12 @@ pub fn bind_template(
     })
 }
 
-/// Builds the unique candidate-independent value for one semantic evidence template.
-/// Observation order is canonicalized before the value is emitted.
+/// Builds a canonical template, ordering observations independently of traversal order.
 ///
 /// # Errors
 ///
-/// Fails when producer metadata or an observation violates the same bounds [`parse_template`]
-/// enforces, when observations repeat, or when the resulting template exceeds the byte ceiling.
+/// Metadata, observations, or encoded size violate the semantic evidence contract.
 pub fn template(input: SemanticEvidenceTemplate) -> Result<Value, Error> {
-    if !producer_version_valid(&input.producer_version) {
-        return fail("$.producer.version", ErrorKind::InvalidValue);
-    }
-    let observations =
-        ordered_observations("$.observations", input.observations.as_ref().to_vec())?;
     let producer = Producer {
         kind: input.producer_kind,
         identity: input.producer_identity,
@@ -158,99 +206,61 @@ pub fn template(input: SemanticEvidenceTemplate) -> Result<Value, Error> {
         context_digest: input.context_digest,
         input_digest: input.input_digest,
     };
-    let mut members = vec![("schema", text(TEMPLATE_SCHEMA))];
-    members.extend(semantic_body(&producer, input.complete, observations));
-    let value = object(members);
-    if canonical_length(&value) > SEMANTIC_EVIDENCE_BYTES {
-        fail("$", ErrorKind::LimitExceeded)
-    } else {
-        Ok(value)
-    }
-}
-
-/// Builds the unique digest-bound value for one semantic evidence payload.
-/// Observation order is canonicalized, so traversal order cannot change its identity.
-///
-/// # Errors
-///
-/// Fails when producer metadata or an observation violates the same bounds [`parse`] enforces,
-/// when observations repeat, or when the resulting envelope exceeds the byte ceiling.
-pub fn envelope(mut evidence: SemanticEvidence) -> Result<Value, Error> {
-    if !producer_version_valid(&evidence.producer_version) {
-        return fail("$.payload.producer.version", ErrorKind::InvalidValue);
-    }
-    evidence.observations = ordered_observations("$.payload.observations", evidence.observations)?;
-    let payload = payload_value(evidence);
-    let payload_digest = hj(PAYLOAD_SCHEMA, &payload);
-    let value = object(vec![
-        ("schema", text(ENVELOPE_SCHEMA)),
-        ("payload", payload),
-        ("payload_digest", text(&payload_digest.to_string())),
-    ]);
-    if canonical_length(&value) > SEMANTIC_EVIDENCE_BYTES {
-        fail("$", ErrorKind::LimitExceeded)
-    } else {
-        Ok(value)
-    }
-}
-
-fn decode_payload(path: &str, value: Value) -> Result<SemanticEvidence, Error> {
-    let mut payload = Obj::new(path, value)?;
-    payload.required("schema", |path, value| {
-        de::const_str(path, value, PAYLOAD_SCHEMA)
-    })?;
-    let subject_path = payload.field("subject");
-    let mut subject = Obj::new(&subject_path, payload.take("subject")?)?;
-    let candidate_identity_digest = subject.required("candidate_identity_digest", de::digest)?;
-    let source_path = subject.field("source_report_payload_digest");
-    let source_report_payload_digest = de::nullable(subject.take("source_report_payload_digest")?)
-        .map(|value| de::digest(&source_path, value))
-        .transpose()?;
-    subject.finish()?;
-    let producer = decode_producer(&mut payload)?;
-    let complete = payload.required("complete", de::boolean)?;
-    let observations_path = payload.field("observations");
-    let observations = de::array(&observations_path, payload.take("observations")?)?;
-    payload.finish()?;
-    validate_observations(&observations_path, &observations)?;
-    Ok(SemanticEvidence {
-        candidate_identity_digest,
-        source_report_payload_digest,
-        producer_kind: producer.kind,
-        producer_identity: producer.identity,
-        producer_version: producer.version,
-        context_digest: producer.context_digest,
-        input_digest: producer.input_digest,
-        complete,
-        observations,
+    validate_producer("$.producer", &producer)?;
+    bounded_value(&TemplateDocument {
+        schema: TEMPLATE_SCHEMA.to_owned(),
+        producer,
+        complete: input.complete,
+        observations: ordered_observations("$.observations", input.observations.as_ref().to_vec())?,
     })
 }
 
-fn decode_producer(parent: &mut Obj) -> Result<Producer, Error> {
-    let producer_path = parent.field("producer");
-    let mut producer = Obj::new(&producer_path, parent.take("producer")?)?;
-    let decoded = Producer {
-        kind: producer.required("kind", decode_id)?,
-        identity: producer.required("identity", decode_id)?,
-        version: producer.required("version", decode_open_identity)?,
-        context_digest: producer.required("context_digest", de::digest)?,
-        input_digest: producer.required("input_digest", de::digest)?,
+/// Builds a digest-bound envelope, ordering observations independently of traversal order.
+///
+/// # Errors
+///
+/// Metadata, observations, or encoded size violate the semantic evidence contract.
+pub fn envelope(evidence: SemanticEvidence) -> Result<Value, Error> {
+    let producer = Producer {
+        kind: evidence.producer_kind,
+        identity: evidence.producer_identity,
+        version: evidence.producer_version,
+        context_digest: evidence.context_digest,
+        input_digest: evidence.input_digest,
     };
-    producer.finish()?;
-    Ok(decoded)
+    validate_producer("$.payload.producer", &producer)?;
+    let payload = codec::to_value(&PayloadDocument {
+        schema: PAYLOAD_SCHEMA.to_owned(),
+        subject: Subject {
+            candidate_identity_digest: evidence.candidate_identity_digest,
+            source_report_payload_digest: evidence.source_report_payload_digest,
+        },
+        producer,
+        complete: evidence.complete,
+        observations: ordered_observations("$.payload.observations", evidence.observations)?,
+    })?;
+    let payload_digest = codec::digest(PAYLOAD_SCHEMA, &payload)?;
+    bounded_value(&EnvelopeDocument {
+        schema: ENVELOPE_SCHEMA.to_owned(),
+        payload,
+        payload_digest,
+    })
 }
 
-fn decode_id(path: &str, value: Value) -> Result<ArtifactId, Error> {
-    ArtifactId::new(de::string(path, value)?)
-        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))
-}
-
-pub(crate) fn decode_open_identity(path: &str, value: Value) -> Result<String, Error> {
-    let version = de::string(path, value)?;
-    if producer_version_valid(&version) {
-        Ok(version)
+fn bounded_value<T: serde::Serialize>(document: &T) -> Result<Value, Error> {
+    let value = codec::to_value(document)?;
+    if canonical_length(&value) > SEMANTIC_EVIDENCE_BYTES {
+        fail("$", ErrorKind::LimitExceeded)
     } else {
-        fail(path, ErrorKind::InvalidValue)
+        Ok(value)
+    }
+}
+
+fn validate_producer(path: &str, producer: &Producer) -> Result<(), Error> {
+    if producer_version_valid(&producer.version) {
+        Ok(())
+    } else {
+        fail(&format!("{path}.version"), ErrorKind::InvalidValue)
     }
 }
 
@@ -272,9 +282,8 @@ fn validate_observations(path: &str, observations: &[Value]) -> Result<(), Error
     }
     let mut previous: Option<Vec<u8>> = None;
     for (index, observation) in observations.iter().enumerate() {
-        let item_path = format!("{path}[{index}]");
-        validate_observation(&item_path, observation)?;
-        let current = canonical(observation);
+        validate_observation(&format!("{path}[{index}]"), observation)?;
+        let current = codec::canonical(observation)?;
         match previous.as_deref().map(|value| value.cmp(&current)) {
             Some(Ordering::Equal) => return fail(path, ErrorKind::DuplicateMember),
             Some(Ordering::Greater) => return fail(path, ErrorKind::UnsortedSet),
@@ -285,15 +294,12 @@ fn validate_observations(path: &str, observations: &[Value]) -> Result<(), Error
 }
 
 fn validate_observation(path: &str, observation: &Value) -> Result<(), Error> {
-    let Value::Object(_) = observation else {
-        return fail(path, ErrorKind::WrongType);
-    };
-    let kind_path = format!("{path}.kind");
-    observation
-        .text("kind")
-        .and_then(|kind| ArtifactId::new(kind.to_owned()))
-        .ok_or_else(|| Error::new(&kind_path, ErrorKind::InvalidValue))?;
-    Ok(())
+    #[derive(serde::Deserialize)]
+    struct ObservationKind {
+        #[serde(rename = "kind")]
+        _kind: ArtifactId,
+    }
+    codec::from_value::<ObservationKind>(path, observation).map(|_| ())
 }
 
 fn ordered_observations(path: &str, observations: Vec<Value>) -> Result<Vec<Value>, Error> {
@@ -303,9 +309,13 @@ fn ordered_observations(path: &str, observations: Vec<Value>) -> Result<Vec<Valu
     let mut keyed = Vec::with_capacity(observations.len());
     for (index, observation) in observations.into_iter().enumerate() {
         let item_path = format!("{path}[{index}]");
-        let encoded = canonical(&observation);
-        let observation = json::parse(&encoded)
-            .map_err(|error| Error::new(&item_path, ErrorKind::Json(error)))?;
+        let encoded = codec::canonical(&observation).map_err(|mut error| {
+            error.path = format!(
+                "{item_path}{}",
+                error.path.strip_prefix('$').unwrap_or_default()
+            );
+            error
+        })?;
         validate_observation(&item_path, &observation)?;
         keyed.push((encoded, observation));
     }
@@ -317,68 +327,4 @@ fn ordered_observations(path: &str, observations: Vec<Value>) -> Result<Vec<Valu
         return fail(path, ErrorKind::DuplicateMember);
     }
     Ok(keyed.into_iter().map(|(_, value)| value).collect())
-}
-
-fn payload_value(evidence: SemanticEvidence) -> Value {
-    let SemanticEvidence {
-        candidate_identity_digest,
-        source_report_payload_digest,
-        producer_kind,
-        producer_identity,
-        producer_version,
-        context_digest,
-        input_digest,
-        complete,
-        observations,
-    } = evidence;
-    let producer = Producer {
-        kind: producer_kind,
-        identity: producer_identity,
-        version: producer_version,
-        context_digest,
-        input_digest,
-    };
-    let mut members = vec![
-        ("schema", text(PAYLOAD_SCHEMA)),
-        (
-            "subject",
-            object(vec![
-                (
-                    "candidate_identity_digest",
-                    text(&candidate_identity_digest.to_string()),
-                ),
-                (
-                    "source_report_payload_digest",
-                    source_report_payload_digest
-                        .map_or(Value::Null, |digest| text(&digest.to_string())),
-                ),
-            ]),
-        ),
-    ];
-    members.extend(semantic_body(&producer, complete, observations));
-    object(members)
-}
-
-fn semantic_body(
-    producer: &Producer,
-    complete: bool,
-    observations: Vec<Value>,
-) -> Vec<(&'static str, Value)> {
-    vec![
-        (
-            "producer",
-            object(vec![
-                ("kind", text(producer.kind.as_str())),
-                ("identity", text(producer.identity.as_str())),
-                ("version", text(&producer.version)),
-                ("context_digest", text(&producer.context_digest.to_string())),
-                ("input_digest", text(&producer.input_digest.to_string())),
-            ]),
-        ),
-        ("complete", Value::Bool(complete)),
-        (
-            "observations",
-            Value::Array(observations.into_boxed_slice()),
-        ),
-    ]
 }

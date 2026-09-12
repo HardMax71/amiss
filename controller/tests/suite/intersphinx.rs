@@ -3,6 +3,7 @@
     reason = "the fixture constructs known-valid bounded inventories"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::io::Write as _;
 
 use amiss_controller::{

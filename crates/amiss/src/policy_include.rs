@@ -3,7 +3,6 @@ use std::process::ExitCode;
 use amiss_git::{GitLimits, GitResources, Repository, parse_index_file};
 use amiss_scan::policy::{Includes, PolicySide};
 use amiss_wire::controls::document_include_value;
-use amiss_wire::json;
 use amiss_wire::model::RepoPath;
 
 use crate::invocation::{PolicyIncludeInvocation, PolicyIncludePreview};
@@ -15,12 +14,14 @@ pub(crate) fn run(invocation: &PolicyIncludeInvocation) -> ExitCode {
         return ExitCode::FAILURE;
     };
     let result = match &invocation.preview {
-        None => crate::output::write_json(&document_include_value(include.clone())),
+        None => document_include_value(include)
+            .map_err(std::io::Error::other)
+            .and_then(|value| crate::output::write_json(&value)),
         Some(preview) => {
             let Some(paths) = staged_paths(invocation, preview) else {
                 return ExitCode::FAILURE;
             };
-            crate::output::write_json_array(&paths, |path| json::canonical(&path.to_value()))
+            crate::output::write_json_array(&paths)
         }
     };
     match result {

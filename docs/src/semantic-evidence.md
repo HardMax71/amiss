@@ -168,8 +168,11 @@ from canonical paths, and the adapter may retain crate-relative type paths and c
 parameter names. ASCII whitespace is collapsed so ordinary multiline `where` predicates remain
 representable. Malformed input, an unsupported format, a crate-target or target-triple mismatch,
 an ambiguous path, a duplicate row, more than 100,000 rows, a context above 64 KiB, or Rustdoc JSON
-above 32 MiB refuses the output instead of weakening completeness. Raw Rustdoc numeric IDs appear
-in neither keys nor values.
+above 32 MiB refuses the output instead of weakening completeness. Rustdoc decoding keeps Serde's
+128-level recursion guard and requires end of input after the complete crate; excessive recursive
+types and trailing content are invalid Rustdoc JSON. This upstream format retains its own number
+grammar, including fractions and integers outside Amiss's safe-integer profile. Raw Rustdoc numeric
+IDs appear in neither keys nor values.
 
 The scanner needs no Rust-specific control to attach one of those values to visible documentation.
 This projection assertion selects the producer row for `example::check`:
@@ -259,6 +262,10 @@ original repository source, when one exists, remain distinct after preprocessing
 rendered chapter's independent `index.html` copy is read separately. Every other route follows the
 HTML renderer's `.html` path rule beneath one trusted publication prefix, with URI path segments
 encoded from the actual output names.
+
+The renderer context keeps upstream numeric values, including fractional configuration settings
+and 64-bit integers, in the configuration digest. Duplicate object keys, excessive nesting,
+and trailing JSON remain invalid.
 
 The producer reads only the rendered pages named by the context, with one 16 MiB context
 ceiling and one 16 MiB aggregate HTML ceiling. A no-follow directory capability bounds every page

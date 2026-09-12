@@ -1,5 +1,6 @@
 use amiss_wire::controls::ConstraintPlatform;
 use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, hj, sha256};
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::json::{Value, canonical};
 use amiss_wire::manifest::{
     DEPENDENCY_LOCK_DOMAIN, DEPENDENCY_LOCK_SCHEMA, ENVIRONMENT_CONTRACT, MANIFEST_DOMAIN,

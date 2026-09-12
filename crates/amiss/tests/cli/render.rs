@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::fs;
 use std::process::{Command, Stdio};
 
@@ -37,9 +38,8 @@ fn member_mut<'value>(value: &'value mut Value, name: &str) -> &'value mut Value
         panic!("expected an object");
     };
     members
-        .iter_mut()
-        .find(|(key, _value)| key == name)
-        .map_or_else(|| panic!("missing {name}"), |(_key, value)| value)
+        .get_mut(name)
+        .unwrap_or_else(|| panic!("missing {name}"))
 }
 
 fn bind_digest(envelope: &mut Value) {

@@ -7,6 +7,7 @@
 
 mod support;
 
+use amiss_wire::json::ValueExt as _;
 use std::ffi::OsStr;
 use std::fs;
 use std::io::{Read as _, Write as _};
@@ -115,7 +116,7 @@ fn entry<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
     };
     members
         .iter_mut()
-        .find(|(name, _)| name == key)
+        .find(|(name, _)| name.as_str() == key)
         .map(|(_, member)| member)
         .expect("a present member")
 }
@@ -124,17 +125,7 @@ fn set(value: &mut Value, key: &str, member: Value) {
     let Value::Object(members) = value else {
         panic!("not an object");
     };
-    if let Some(slot) = members.iter_mut().find(|(name, _)| name == key) {
-        slot.1 = member;
-        return;
-    }
-    let at = members
-        .iter()
-        .position(|(name, _)| name.as_str() > key)
-        .unwrap_or(members.len());
-    let mut expanded = std::mem::take(members).into_vec();
-    expanded.insert(at, (key.to_owned(), member));
-    *members = expanded.into_boxed_slice();
+    members.insert(key.to_owned(), member);
 }
 
 fn string(raw: &str) -> Value {
@@ -223,7 +214,7 @@ fn bind_statement(
     set(
         &mut statement,
         "provider_run_attempt",
-        Value::Integer(i64::try_from(time.provider_run_attempt).unwrap()),
+        Value::from(i64::try_from(time.provider_run_attempt).unwrap()),
     );
     set(&mut statement, "evaluation_instant", string(INSTANT));
     set(&mut statement, "valid_until", string(VALID_UNTIL));
@@ -288,7 +279,7 @@ fn bind_envelope(
     set(
         entry(payload, "result"),
         "exit_code",
-        Value::Integer(exit_class),
+        Value::from(exit_class),
     );
     if exit_class == 1 {
         set(entry(payload, "result"), "status", string("block"));
@@ -407,8 +398,19 @@ struct Invocation {
 }
 
 fn invoke(staged: &Release, run: &Run, result_name: &str, scratch_link: bool) -> Invocation {
+    invoke_with_controls_edit(staged, run, result_name, scratch_link, |_controls| {})
+}
+
+fn invoke_with_controls_edit(
+    staged: &Release,
+    run: &Run,
+    result_name: &str,
+    scratch_link: bool,
+    edit: impl FnOnce(&Path),
+) -> Invocation {
     let scratch = tempfile::tempdir().expect("a scratch root");
     let paths = run.requests.write(scratch.path());
+    edit(&paths.controls);
     let report = scratch.path().join("report");
     let result = scratch.path().join(result_name);
     fs::write(&report, b"").unwrap();
@@ -635,9 +637,20 @@ fn request_ceiling(staged: &Release) {
     );
 
     let mut over = sealed_run(staged);
-    inflate_controls(&mut over, REQUEST_STREAM_BYTES + 1);
+    inflate_controls(&mut over, REQUEST_STREAM_BYTES);
     plant(&over, &over.wire, "0");
-    let invocation = invoke(staged, &over, "result", false);
+    let invocation = invoke_with_controls_edit(staged, &over, "result", false, |controls| {
+        fs::OpenOptions::new()
+            .append(true)
+            .open(controls)
+            .unwrap()
+            .write_all(b" ")
+            .unwrap();
+        assert_eq!(
+            fs::metadata(controls).unwrap().len(),
+            REQUEST_STREAM_BYTES + 1
+        );
+    });
     assert_eq!(settled(&invocation), Some(BootstrapResult::TamperedRuntime));
     stderr_names(&invocation, "controls-request-invalid", "over the ceiling");
 }

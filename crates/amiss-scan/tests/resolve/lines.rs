@@ -3,6 +3,7 @@ use amiss_scan::{Error, Resolution, ScanLimits};
 use amiss_wire::controls::{GitMode, ResourceName};
 use amiss_wire::digest::{hb, hj};
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::model::{Adapter, ForgeDialect};
 use amiss_wire::resolution::{BlobContent, BlobMode, Missing, Target, UnsupportedSemantics};
 

@@ -3,6 +3,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::fs;
 use std::path::Path;
 
@@ -473,4 +474,40 @@ fn a_stream_may_reach_the_ceiling_and_not_pass_it() {
             .kind(),
         std::io::ErrorKind::InvalidData
     );
+}
+
+#[test]
+fn nullable_request_members_are_required_and_object_ids_match_the_declared_format() {
+    for field in [
+        "repository",
+        "forge",
+        "candidate_ref",
+        "target_ref",
+        "default_branch_ref",
+        "candidate_commit_oid",
+    ] {
+        let mut document: Value =
+            serde_json::from_slice(&request_example("scanner-evaluation-request.json")).unwrap();
+        document.as_object_mut().unwrap().remove(field);
+        let error = EvaluationRequest::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::MissingField, "{field}");
+    }
+    for field in [
+        "organization_floor",
+        "debt_snapshot",
+        "waiver_bundle",
+        "trusted_time",
+        "execution_constraint",
+    ] {
+        let mut document: Value =
+            serde_json::from_slice(&ControlsRequest::default().canonical_bytes().unwrap()).unwrap();
+        document.as_object_mut().unwrap().remove(field);
+        let error = ControlsRequest::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::MissingField, "{field}");
+    }
+    let mut request = EvaluationRequest::index(Profile::Enforce, ObjectFormat::Sha1, oid('1'));
+    request.object_format = ObjectFormat::Sha256;
+    let error = request.canonical_bytes().unwrap_err();
+    assert_eq!(error.path, "$.base_commit_oid");
+    assert_eq!(error.kind, ErrorKind::InvalidValue);
 }

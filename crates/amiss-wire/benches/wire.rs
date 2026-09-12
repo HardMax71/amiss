@@ -6,6 +6,7 @@ use amiss_wire::external::{
     EVIDENCE_SCHEMA, PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, assess, evidence_file,
     probe_evidence_row,
 };
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::json::{Value, canonical, canonical_length, parse};
 use divan::counter::BytesCount;
 use divan::{Bencher, black_box};
@@ -18,7 +19,7 @@ fn main() {
 }
 
 /// A synthetic wire-shaped value: wide sorted-on-emit objects, escape-dense
-/// strings, and nested rows, around eight megabytes canonical.
+/// strings, and nested rows, around 4.3 megabytes canonical.
 fn synthetic_value() -> Value {
     let mut rows = Vec::new();
     for index in 0..8_192_usize {
@@ -27,7 +28,7 @@ fn synthetic_value() -> Value {
             ("path".to_owned(), Value::string(text.repeat(8))),
             (
                 "index".to_owned(),
-                Value::Integer(i64::try_from(index).unwrap_or(0)),
+                Value::from(i64::try_from(index).unwrap_or(0)),
             ),
             (
                 "nested".to_owned(),
@@ -117,7 +118,7 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
             Value::Array(rows) => Some(rows.len()),
             Value::Null
             | Value::Bool(_)
-            | Value::Integer(_)
+            | Value::Number(_)
             | Value::String(_)
             | Value::Object(_) => None,
         });
@@ -138,7 +139,7 @@ fn assessment_fixture(count: usize) -> (Value, Value) {
     let destinations: Vec<String> = (0..count)
         .map(|index| format!("https://example.com/resource-{index:05}"))
         .collect();
-    let introduced = destinations
+    let introduced: Vec<Value> = destinations
         .iter()
         .map(|destination| {
             Value::object(vec![
@@ -151,20 +152,22 @@ fn assessment_fixture(count: usize) -> (Value, Value) {
             ])
         })
         .collect();
-    let payload = Value::object(vec![
-        ("introduced".to_owned(), Value::array(introduced)),
-        (
-            "report".to_owned(),
-            Value::object(vec![(
-                "payload_digest".to_owned(),
-                Value::string(SAMPLE_DIGEST.to_owned()),
-            )]),
-        ),
-        (
-            "schema".to_owned(),
-            Value::string(PLAN_PAYLOAD_SCHEMA.to_owned()),
-        ),
-    ]);
+    let payload = serde_json::json!({
+        "schema": PLAN_PAYLOAD_SCHEMA,
+        "engine": {
+            "engine_version": "0.0.0",
+            "engine_digest": SAMPLE_DIGEST,
+        },
+        "report": {
+            "payload_digest": SAMPLE_DIGEST,
+            "base": {},
+            "candidate": {},
+            "mode": "commit-pair",
+        },
+        "introduced": introduced,
+        "removed": [],
+        "retained_count": 0,
+    });
     let payload_digest = hj(PLAN_PAYLOAD_SCHEMA, &payload).to_string();
     let plan = Value::object(vec![
         ("payload".to_owned(), payload),
@@ -180,9 +183,10 @@ fn assessment_fixture(count: usize) -> (Value, Value) {
         .map(|destination| {
             probe_evidence_row(destination, "get", Some(200), None, None, "bench-instant")
         })
-        .collect();
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_else(|defect| panic!("benchmark evidence row: {defect}"));
     let evidence = evidence_file(&plan, "benchmark", "0.0.0", rows)
-        .unwrap_or_else(|| panic!("benchmark plan has no payload digest"));
+        .unwrap_or_else(|defect| panic!("benchmark evidence document: {defect}"));
     assert_eq!(evidence.text("schema"), Some(EVIDENCE_SCHEMA));
     (plan, evidence)
 }

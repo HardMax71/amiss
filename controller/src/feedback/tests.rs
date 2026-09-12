@@ -224,3 +224,18 @@ fn provider_feedback_accepts_only_the_previous_additive_projection() {
         expected
     ));
 }
+
+#[test]
+fn positional_byte_targets_remain_inert() {
+    let bytes = report(&serde_json::json!({
+        "existing_count": 0,
+        "items": [item("fix", &serde_json::json!(["6162"]), 1)],
+        "status": "available"
+    }));
+    assert_eq!(
+        feedback_lines(Some(&bytes), false)
+            .get(1)
+            .map(String::as_str),
+        Some("- Fix target - affected places 1")
+    );
+}

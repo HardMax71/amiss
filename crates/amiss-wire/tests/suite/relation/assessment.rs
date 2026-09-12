@@ -1,7 +1,9 @@
 use super::{digest, identity, relation_evidence, relation_plan};
+use amiss_wire::json::ValueExt as _;
 
 use std::{fs, path::Path};
 
+use amiss_wire::codec;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json;
@@ -23,10 +25,7 @@ fn assessed(
     plan: &RelationPlanEnvelope,
     evidence: Option<&RelationEvidenceEnvelope>,
 ) -> RelationAssessmentEnvelope {
-    parse_assessment(&json::canonical(
-        &assess(plan, evidence, "0.26.0", digest('a')).unwrap(),
-    ))
-    .unwrap()
+    assess(plan, evidence, "0.26.0", digest('a')).unwrap()
 }
 
 #[test]
@@ -55,7 +54,7 @@ fn complete_projection_pairs_classify_all_four_equality_transitions() {
         assert_eq!(assessment.payload.verdict, expected);
         assert_eq!(assessment.payload.reason, None);
         assert_eq!(
-            assessment.payload.evidence_payload_digest,
+            assessment.payload.subject.evidence_payload_digest,
             Some(evidence.payload_digest)
         );
     }
@@ -104,7 +103,7 @@ fn absent_unbound_misrouted_and_partial_evidence_stays_unproven() {
         assert_eq!(assessment.payload.verdict, RelationVerdict::Unproven);
         assert_eq!(assessment.payload.reason, Some(expected));
         assert_eq!(
-            assessment.payload.evidence_payload_digest,
+            assessment.payload.subject.evidence_payload_digest,
             evidence.as_ref().map(|value| value.payload_digest)
         );
     }
@@ -129,13 +128,13 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
 
     let evidence = evidence_envelope(&input);
     let value = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let inconsistent = String::from_utf8(json::canonical(&value))
+    let recorded = value.payload_digest.to_string();
+    let inconsistent = String::from_utf8(codec::canonical(&value).unwrap())
         .unwrap()
         .replace("\"introduced-drift\"", "\"unproven\"");
     let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
-        recorded,
+        &recorded,
         &hj(
             ASSESSMENT_PAYLOAD_SCHEMA,
             inconsistent_value.member("payload").unwrap(),
@@ -160,13 +159,13 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
     let replayed = assess(
         &plan,
         Some(&evidence),
-        &published.payload.engine_version,
-        published.payload.engine_digest,
+        &published.payload.engine.engine_version,
+        published.payload.engine.engine_digest,
     )
     .unwrap();
 
     assert_eq!(
-        json::canonical(&replayed),
+        codec::canonical(&replayed).unwrap(),
         json::canonical(&json::parse(&published_bytes).unwrap())
     );
 }

@@ -3,6 +3,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::alloc::System;
 use std::collections::BTreeSet;
 use std::fs;
@@ -38,22 +39,18 @@ fn set_member(value: &mut Value, key: &str, replacement: Value) {
     let Value::Object(members) = value else {
         panic!("expected an object at {key}");
     };
-    let slot = members
-        .iter_mut()
-        .find(|(name, _)| name == key)
-        .unwrap_or_else(|| panic!("missing member {key}"));
-    slot.1 = replacement;
+    *members
+        .get_mut(key)
+        .unwrap_or_else(|| panic!("missing member {key}")) = replacement;
 }
 
 fn member_mut<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
     let Value::Object(members) = value else {
         panic!("expected an object at {key}");
     };
-    &mut members
-        .iter_mut()
-        .find(|(name, _)| name == key)
+    members
+        .get_mut(key)
         .unwrap_or_else(|| panic!("missing member {key}"))
-        .1
 }
 
 /// A maximal schema-valid `RepoPath`: 4,096 characters dominated by quotes,
@@ -188,10 +185,10 @@ fn maximal_error(index: usize) -> Value {
             "resource",
             string("aggregate-git-compressed-object-bytes-per-evaluation"),
         ),
-        ("configured_limit", Value::Integer(9_007_199_254_740_991)),
+        ("configured_limit", Value::from(9_007_199_254_740_991_u64)),
         (
             "observed_lower_bound",
-            Value::Integer(9_007_199_254_740_991),
+            Value::from(9_007_199_254_740_991_u64),
         ),
     ])
 }
@@ -202,9 +199,9 @@ fn assert_schema_valid(wire: &[u8]) {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
-    let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
+    let schema_json: Value = serde_json::from_str(&schema_text).unwrap();
     let validator = jsonschema::validator_for(&schema_json).unwrap();
-    let envelope_json: serde_json::Value = serde_json::from_slice(wire).unwrap();
+    let envelope_json: Value = serde_json::from_slice(wire).unwrap();
     let defects: Vec<String> = validator
         .iter_errors(&envelope_json)
         .map(|error| format!("{}: {error}", error.instance_path()))
@@ -240,9 +237,9 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     let Value::Object(mut envelope_members) = envelope else {
         panic!("envelope is an object");
     };
-    let payload = &mut envelope_members
+    let payload = envelope_members
         .iter_mut()
-        .find(|(name, _)| name == "payload")
+        .find(|(name, _)| name.as_str() == "payload")
         .unwrap()
         .1;
     set_member(
@@ -271,7 +268,7 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     set_member(
         member_mut(payload, "result"),
         "error_count",
-        Value::Integer(64),
+        Value::from(64),
     );
     let payload_digest = hj(PAYLOAD_SCHEMA, payload);
 
@@ -358,7 +355,7 @@ fn the_schema_path_union_accepts_and_refuses_at_pair_alignment() {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
-    let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
+    let schema_json: Value = serde_json::from_str(&schema_text).unwrap();
     let harness = serde_json::json!({
         "$defs": schema_json["$defs"],
         "$ref": "#/$defs/RepoPath",

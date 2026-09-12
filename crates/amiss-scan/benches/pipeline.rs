@@ -43,7 +43,10 @@ fn commit_pair_500_docs(bencher: Bencher<'_, '_>) {
     let repo = amiss_git::Repository::open(dir.path(), ObjectFormat::Sha1)
         .unwrap_or_else(|defect| panic!("open: {defect:?}"));
     let shell = bench_shell();
-    bencher.bench_local(|| commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate));
+    bencher.bench_local(|| {
+        commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate)
+            .unwrap_or_else(|defect| panic!("report projection: {defect}"))
+    });
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -101,7 +104,10 @@ fn projection_source_15_mb(bencher: Bencher<'_, '_>, shape: ProjectionShape) {
     let repo = amiss_git::Repository::open(dir.path(), ObjectFormat::Sha1)
         .unwrap_or_else(|defect| panic!("open: {defect:?}"));
     let shell = bench_shell();
-    bencher.bench_local(|| commit_pair(&repo, &shell.engine, None, &shell, &candidate, &candidate));
+    bencher.bench_local(|| {
+        commit_pair(&repo, &shell.engine, None, &shell, &candidate, &candidate)
+            .unwrap_or_else(|defect| panic!("report projection: {defect}"))
+    });
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -168,6 +174,7 @@ fn construct_reports(bencher: Bencher<'_, '_>, case: (ReportShape, usize)) {
                 black_box(comparisons),
                 black_box(&[]),
             )
+            .unwrap_or_else(|defect| panic!("report projection: {defect}"))
         });
 }
 

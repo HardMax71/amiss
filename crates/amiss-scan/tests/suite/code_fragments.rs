@@ -109,7 +109,8 @@ fn run(
         &shell,
         &base,
         &candidate,
-    );
+    )
+    .unwrap();
     serde_json::from_slice::<serde_json::Value>(&built.wire()).unwrap()["payload"].clone()
 }
 

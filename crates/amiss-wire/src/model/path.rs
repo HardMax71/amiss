@@ -1,4 +1,5 @@
 use crate::json::Value;
+use crate::json::ValueExt as _;
 
 use super::identity::Invalid;
 
@@ -47,6 +48,39 @@ enum Repr {
     Bytes(Vec<u8>),
 }
 
+struct Hex<'a>(&'a [u8]);
+
+impl std::fmt::Display for Hex<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for byte in self.0 {
+            write!(formatter, "{byte:02x}")?;
+        }
+        Ok(())
+    }
+}
+
+impl serde::Serialize for Hex<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+impl serde::Serialize for RepoPath {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        #[derive(serde::Serialize)]
+        struct BytesPath<'a> {
+            bytes_hex: Hex<'a>,
+        }
+        match &self.0 {
+            Repr::Text(text) => serializer.serialize_str(text),
+            Repr::Bytes(bytes) => BytesPath {
+                bytes_hex: Hex(bytes),
+            }
+            .serialize(serializer),
+        }
+    }
+}
+
 impl RepoPath {
     /// The primary constructor: validates the byte grammar, then holds the
     /// path as text exactly when the bytes decode as UTF-8.
@@ -87,10 +121,10 @@ impl RepoPath {
     #[must_use]
     pub fn to_value(&self) -> Value {
         match &self.0 {
-            Repr::Text(text) => Value::String(text.clone().into()),
-            Repr::Bytes(bytes) => Value::Object(Box::new([(
+            Repr::Text(text) => Value::String(text.clone()),
+            Repr::Bytes(bytes) => Value::object(Vec::from([(
                 "bytes_hex".into(),
-                Value::String(hex_lower(bytes).into()),
+                Value::String(hex_lower(bytes)),
             )])),
         }
     }

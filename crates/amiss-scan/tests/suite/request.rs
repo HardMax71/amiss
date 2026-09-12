@@ -6,6 +6,7 @@
 use amiss_fixtures::{SiteObservation, record_set, site_navigation, site_observation};
 use amiss_scan::request::controls;
 use amiss_wire::digest::{Digest, hb};
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::json::{Value, parse};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::report::AnalysisErrorCode;

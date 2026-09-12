@@ -49,6 +49,7 @@ pub fn validate_publication_audit(
     }
     let report = accepted_report(bundle.report)?;
     let report_docs = DocsCandidate {
+        object_format: report.candidate.commit.object_format(),
         repository: report.repository,
         commit: report.candidate.commit,
         tree: report.candidate.tree,
@@ -70,11 +71,11 @@ pub fn validate_publication_audit(
     let replayed = assess(
         &plan,
         evidence.as_ref(),
-        &assessment.payload.engine_version,
-        assessment.payload.engine_digest,
+        &assessment.payload.engine.engine_version,
+        assessment.payload.engine.engine_digest,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    if replayed.text("payload_digest") != Some(&assessment.payload_digest.to_string()) {
+    if replayed.payload_digest != assessment.payload_digest {
         return Err(ArtifactError::Corrupt);
     }
     Ok(PublicationAuditDigests {

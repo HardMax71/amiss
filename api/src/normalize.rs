@@ -110,8 +110,8 @@ pub(crate) fn function_declarations(
     expected_target_triple: &str,
 ) -> Result<Normalized, Error> {
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    deserializer.disable_recursion_limit();
     let crate_ = rustdoc_types::Crate::deserialize(&mut deserializer).map_err(Error::Json)?;
+    deserializer.end().map_err(Error::Json)?;
     if crate_.format_version != expected_format
         || crate_.format_version != rustdoc_types::FORMAT_VERSION
     {

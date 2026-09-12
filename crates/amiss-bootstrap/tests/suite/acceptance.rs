@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
@@ -210,9 +211,9 @@ fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
     match value {
         Value::Object(members) => members
             .iter()
-            .find(|(name, _)| name == key)
+            .find(|(name, _)| name.as_str() == key)
             .map(|(_, member)| member),
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Array(_) => {
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) | Value::Array(_) => {
             None
         }
     }
@@ -220,7 +221,7 @@ fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
 
 fn text(value: &Value, key: &str) -> Option<String> {
     match member(value, key) {
-        Some(Value::String(text)) => Some(text.to_string()),
+        Some(Value::String(text)) => Some(text.clone()),
         _ => None,
     }
 }
@@ -392,7 +393,7 @@ fn a_statement_issued_for_another_repository_is_refused() {
         panic!("statement digest is text")
     };
     if let Some(sealed) = expectations.sealed.as_mut() {
-        sealed.trusted_time_digest = digest.into_string();
+        sealed.trusted_time_digest = digest;
     }
     assert_eq!(
         accept(&foreign, &expectations),
@@ -477,7 +478,9 @@ fn seal_evaluation(evaluation: &mut Value) -> String {
     };
     let mut identity: Vec<(String, Value)> = members
         .into_iter()
-        .filter(|(name, _value)| name != "evaluation_instant" && name != "trusted_time")
+        .filter(|(name, _value)| {
+            name.as_str() != "evaluation_instant" && name.as_str() != "trusted_time"
+        })
         .collect();
     identity.push((
         "schema".to_owned(),
@@ -507,7 +510,7 @@ fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String
             Value::string(identity_digest.to_owned()),
         ),
         ("provider_run_id", Value::string("pipeline/42".to_owned())),
-        ("provider_run_attempt", Value::Integer(2)),
+        ("provider_run_attempt", Value::from(2)),
         (
             "evaluation_instant",
             Value::string("2026-07-12T10:00:00Z".to_owned()),
@@ -593,11 +596,7 @@ fn member_mut<'value>(value: &'value mut Value, key: &str) -> &'value mut Value 
     let Value::Object(members) = value else {
         panic!("value is an object");
     };
-    &mut members
-        .iter_mut()
-        .find(|(name, _value)| name == key)
-        .expect("member exists")
-        .1
+    members.get_mut(key).expect("member exists")
 }
 
 fn set_member(value: &mut Value, key: &str, replacement: Value) {
@@ -608,10 +607,7 @@ fn insert_member(value: &mut Value, key: &str, member: Value) {
     let Value::Object(members) = value else {
         panic!("value is an object");
     };
-    assert!(members.iter().all(|(name, _value)| name != key));
-    let mut expanded = std::mem::take(members).into_vec();
-    expanded.push((key.to_owned(), member));
-    *members = expanded.into_boxed_slice();
+    assert!(members.insert(key.to_owned(), member).is_none());
 }
 
 fn object(rows: Vec<(&str, Value)>) -> Value {

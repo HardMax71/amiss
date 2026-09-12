@@ -3,7 +3,10 @@ use std::process::ExitCode;
 
 use amiss_scan::report::Built;
 use amiss_wire::controls::DebtSnapshot;
+use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
+use amiss_wire::model::{BranchRef, RepositoryIdentity};
+use serde::Serialize;
 
 use crate::invocation::{Adoption, Invocation, ProviderIdentity};
 use crate::payload::{member, text};
@@ -34,13 +37,17 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         println!("amiss adopt: the report carries no candidate tree; nothing recorded");
         return ExitCode::from(2);
     };
+    let snapshot = match amiss_wire::codec::to_value(&snapshot).and_then(|value| {
+        DebtSnapshot::from_value(&value)?;
+        Ok(value)
+    }) {
+        Ok(snapshot) => snapshot,
+        Err(_defect) => {
+            println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
+            return ExitCode::from(2);
+        }
+    };
     let bytes = amiss_wire::json::canonical(&snapshot);
-    // The engine's own reader is the gate: a file it would refuse is never
-    // written.
-    if DebtSnapshot::parse(&bytes).is_err() {
-        println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
-        return ExitCode::from(2);
-    }
     // Exclusive creation closes the race the early existence check leaves.
     let written = fs::OpenOptions::new()
         .write(true)
@@ -64,7 +71,7 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
 /// Every blocking, debt-eligible finding becomes one item carrying the fact
 /// the adoption accepts; blocking rows outside the eligible kinds are
 /// counted and left to be fixed instead.
-fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize, usize) {
+fn items<'a>(envelope: &'a Value, adoption: &'a Adoption) -> (Vec<DebtRow<'a>>, usize, usize) {
     let mut rows = Vec::new();
     let mut ineligible = 0_usize;
     let mut factless = 0_usize;
@@ -96,89 +103,74 @@ fn items(envelope: &Value, adoption: &Adoption) -> (Vec<Value>, usize, usize) {
             continue;
         };
         let full = key.strip_prefix("sha256:").unwrap_or(key);
-        rows.push(Value::object(vec![
-            ("debt_id".to_owned(), Value::string(format!("debt/{full}"))),
-            ("finding_key".to_owned(), Value::string(key.to_owned())),
-            ("accepted_fact".to_owned(), fact.clone()),
-            (
-                "accepted_fact_digest".to_owned(),
-                Value::string(fact_digest.to_owned()),
-            ),
-            ("owner".to_owned(), Value::string(adoption.owner.clone())),
-            ("reason".to_owned(), Value::string(adoption.reason.clone())),
-            (
-                "created_at".to_owned(),
-                Value::string(adoption.created_at.clone()),
-            ),
-            (
-                "expires_at".to_owned(),
-                Value::string(adoption.expires_at.clone()),
-            ),
-        ]));
+        rows.push(DebtRow {
+            debt_id: format!("debt/{full}"),
+            finding_key: key,
+            accepted_fact: fact,
+            accepted_fact_digest: fact_digest,
+            owner: &adoption.owner,
+            reason: &adoption.reason,
+            created_at: &adoption.created_at,
+            expires_at: &adoption.expires_at,
+        });
     }
     (rows, ineligible, factless)
 }
 
-fn snapshot(
-    envelope: &Value,
-    identity: &ProviderIdentity,
-    adoption: &Adoption,
+#[derive(Serialize)]
+struct DebtRow<'a> {
+    debt_id: String,
+    finding_key: &'a str,
+    accepted_fact: &'a Value,
+    accepted_fact_digest: &'a str,
+    owner: &'a str,
+    reason: &'a str,
+    created_at: &'a str,
+    expires_at: &'a str,
+}
+
+#[derive(Serialize)]
+struct Snapshot<'a> {
+    schema: &'static str,
+    repository: &'a RepositoryIdentity,
+    #[serde(rename = "ref")]
+    ref_name: &'a BranchRef,
+    organization_floor_digest: &'a str,
+    adoption_tree: AdoptionTree<'a>,
+    adoption_report_payload_digest: Digest,
+    created_at: &'a str,
+    items: Vec<DebtRow<'a>>,
+}
+
+#[derive(Serialize)]
+struct AdoptionTree<'a> {
+    object_format: &'a str,
+    tree_oid: &'a str,
+}
+
+fn snapshot<'a>(
+    envelope: &'a Value,
+    identity: &'a ProviderIdentity,
+    adoption: &'a Adoption,
     built: &Built,
-    items: Vec<Value>,
-) -> Option<Value> {
+    items: Vec<DebtRow<'a>>,
+) -> Option<Snapshot<'a>> {
     let candidate = member(envelope, "payload")
         .and_then(|payload| member(payload, "evaluation"))
         .and_then(|evaluation| member(evaluation, "candidate"))?;
     let tree = member(candidate, "tree_oid").and_then(text)?;
     let object_format = member(candidate, "object_format").and_then(text)?;
-    Some(Value::object(vec![
-        (
-            "schema".to_owned(),
-            Value::string("amiss/debt-snapshot".to_owned()),
-        ),
-        (
-            "repository".to_owned(),
-            Value::object(vec![
-                (
-                    "host".to_owned(),
-                    Value::string(identity.repository.host().to_owned()),
-                ),
-                (
-                    "owner".to_owned(),
-                    Value::string(identity.repository.owner().to_owned()),
-                ),
-                (
-                    "name".to_owned(),
-                    Value::string(identity.repository.name().to_owned()),
-                ),
-            ]),
-        ),
-        (
-            "ref".to_owned(),
-            Value::string(identity.ref_name.as_str().to_owned()),
-        ),
-        (
-            "organization_floor_digest".to_owned(),
-            Value::string(adoption.floor_digest.clone()),
-        ),
-        (
-            "adoption_tree".to_owned(),
-            Value::object(vec![
-                (
-                    "object_format".to_owned(),
-                    Value::string(object_format.to_owned()),
-                ),
-                ("tree_oid".to_owned(), Value::string(tree.to_owned())),
-            ]),
-        ),
-        (
-            "adoption_report_payload_digest".to_owned(),
-            Value::string(built.payload_digest.to_string()),
-        ),
-        (
-            "created_at".to_owned(),
-            Value::string(adoption.created_at.clone()),
-        ),
-        ("items".to_owned(), Value::array(items)),
-    ]))
+    Some(Snapshot {
+        schema: "amiss/debt-snapshot",
+        repository: &identity.repository,
+        ref_name: &identity.ref_name,
+        organization_floor_digest: &adoption.floor_digest,
+        adoption_tree: AdoptionTree {
+            object_format,
+            tree_oid: tree,
+        },
+        adoption_report_payload_digest: built.payload_digest,
+        created_at: &adoption.created_at,
+        items,
+    })
 }

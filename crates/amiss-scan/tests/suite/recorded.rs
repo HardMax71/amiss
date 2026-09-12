@@ -160,7 +160,8 @@ fn payload(fixture: &Recorded, profile: Profile) -> (i64, serde_json::Value) {
         &shell(profile),
         &fixture.base,
         &fixture.candidate,
-    );
+    )
+    .unwrap();
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     (built.exit_code, wire["payload"].clone())
 }

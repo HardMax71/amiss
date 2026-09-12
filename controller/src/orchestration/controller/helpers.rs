@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::time::Duration;
 
 use amiss_wire::model::Oid;

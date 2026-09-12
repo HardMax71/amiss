@@ -23,7 +23,8 @@ pub(super) fn insert_record_set(
         .try_into()
         .map_err(|_values| Error::new(&observations_path, ErrorKind::Inconsistent))?;
     let observation_path = format!("{path}.payload.observations[0]");
-    let decoded = amiss_wire::semantic::record::decode_observation(&observation_path, observation)?;
+    let decoded =
+        amiss_wire::semantic::record::decode_observation(&observation_path, &observation)?;
     match sets.entry(decoded.name) {
         Entry::Vacant(slot) => {
             slot.insert(RecordSet {

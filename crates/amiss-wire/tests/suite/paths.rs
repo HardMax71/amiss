@@ -1,4 +1,5 @@
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::model::{RepoPath, RepoPathText};
 
 /// Every byte string over this alphabet up to length four: enough to cross

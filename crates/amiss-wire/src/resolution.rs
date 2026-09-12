@@ -1,23 +1,35 @@
+mod serde_impl;
+use serde_impl::{deserialize_shape, guarded_serde, serialize_shape};
+
+use serde::{Deserialize, Serialize};
+
 use crate::digest::Digest;
 use crate::model::Oid;
 use strum::{AsRefStr, EnumDiscriminants, EnumIter, EnumString};
 
 /// The two ordinary Git blob modes. Trees, symlinks, and gitlinks are
 /// represented by other target types and cannot be smuggled into a blob.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter, Serialize, Deserialize,
+)]
+#[serde(remote = "Self")]
 pub enum BlobMode {
     #[strum(serialize = "100644")]
+    #[serde(rename = "100644")]
     Regular,
     #[strum(serialize = "100755")]
+    #[serde(rename = "100755")]
     Executable,
 }
 
 /// The content evidence retained for a located blob. An available blob has
 /// both digests; an LFS pointer has only the digest of the pointer bytes.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
 #[strum_discriminants(name(BlobContentTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub enum BlobContent {
     Available {
         raw_digest: Digest,
@@ -46,7 +58,9 @@ impl BlobContent {
 }
 
 /// A located ordinary blob and the evidence read from it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct BlobTarget<P> {
     pub path: P,
     pub mode: BlobMode,
@@ -55,10 +69,12 @@ pub struct BlobTarget<P> {
 
 /// A located target. A tree has no blob content; a blob always carries a
 /// valid blob mode and one exact content-evidence shape.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
 #[strum_discriminants(name(TargetTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub enum Target<P> {
     Tree { path: P },
     Blob(BlobTarget<P>),
@@ -84,13 +100,15 @@ impl<P> Target<P> {
 
 /// A target that was absent at a known repository path. Each diagnostic owns
 /// the path required by its wire row.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize)]
 #[strum_discriminants(name(MissingTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
+#[serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum Missing<P> {
     PathNotFound {
         path: P,
+        #[serde(deserialize_with = "crate::codec::nullable")]
         near: Option<P>,
         same_object_at: Option<P>,
     },
@@ -99,6 +117,7 @@ pub enum Missing<P> {
     },
     HeadingAnchorNotFound {
         path: P,
+        #[serde(deserialize_with = "crate::codec::nullable")]
         near: Option<String>,
     },
     LabelNotDeclared,
@@ -107,7 +126,9 @@ pub enum Missing<P> {
 /// A target absent from the tree at a path the repository's own ignore rules
 /// name literally. The declaring file travels with the resolution so a report
 /// carries the claim rather than only its effect.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct DeclaredUntracked<P> {
     pub path: P,
     pub declared_by: P,
@@ -115,10 +136,12 @@ pub struct DeclaredUntracked<P> {
 
 /// A special Git entry that is present but cannot be followed as an ordinary
 /// repository target. Each diagnostic owns the affected path.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
 #[strum_discriminants(name(UnsupportedTargetTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
+#[serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub enum UnsupportedTarget<P> {
     Symlink { path: P },
     Gitlink { path: P },
@@ -158,10 +181,11 @@ impl<P> UnsupportedSemantics<P> {
 
 /// Version-scoped forge references identify a contained path under a named
 /// ref, a full immutable commit and path, or no trustworthy path at all.
-#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants)]
+#[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize)]
 #[strum_discriminants(name(VersionScopeTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum VersionScope<P> {
     KnownPath { path: P },
     KnownCommit { commit_oid: Oid, path: P },
@@ -170,8 +194,12 @@ pub enum VersionScope<P> {
 
 /// A syntax defect that prevents a reference from identifying a repository or
 /// external target.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter, Serialize, Deserialize,
+)]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
+#[serde(remote = "Self")]
 pub enum InvalidReference {
     Uri,
     PercentEncoding,
@@ -185,8 +213,12 @@ pub enum InvalidReference {
 
 /// References that are valid but intentionally outside the evaluated
 /// repository.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString, EnumIter, Serialize, Deserialize,
+)]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
+#[serde(remote = "Self")]
 pub enum ExternalReference {
     Url,
     ForeignRepository,
@@ -228,3 +260,186 @@ impl<P> Resolution<P> {
         }
     }
 }
+
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum ResolutionView<'a, P> {
+    Resolved { target: &'a Target<P> },
+    Missing(&'a Missing<P>),
+    DeclaredUntracked(&'a DeclaredUntracked<P>),
+    TypeMismatch { target: &'a Target<P> },
+    UnsupportedTarget(&'a UnsupportedTarget<P>),
+    UnsupportedSemantics(&'a UnsupportedSemantics<P>),
+    UnsupportedVersion { scope: &'a VersionScope<P> },
+    Invalid { reason: InvalidReference },
+    External { reason: ExternalReference },
+}
+
+serialize_shape! {
+    Resolution<P> as ResolutionView {
+        tuple { Resolved(target), TypeMismatch(target), UnsupportedVersion(scope) }
+        newtype { Missing, DeclaredUntracked, UnsupportedTarget, UnsupportedSemantics }
+        copied { Invalid(reason), External(reason) }
+        unit {}
+        converted {}
+    }
+}
+
+#[derive(Serialize)]
+#[serde(tag = "reason", rename_all = "kebab-case")]
+enum SemanticsView<'a, P> {
+    Query { target: &'a Target<P> },
+    Fragment { target: Target<&'a P> },
+    CodeFragment { target: &'a Target<P> },
+    SiteRoute,
+    NetworkPath,
+    AttributeDependent,
+    DuplicateLabel,
+    ExternalInventory,
+}
+
+serialize_shape! {
+    UnsupportedSemantics<P> as SemanticsView {
+        tuple { Query(target), CodeFragment(target) }
+        newtype {}
+        copied {}
+        unit { SiteRoute, NetworkPath, AttributeDependent, DuplicateLabel, ExternalInventory }
+        converted { Fragment(target) => borrowed_blob }
+    }
+}
+
+fn borrowed_blob<P>(blob: &BlobTarget<P>) -> Target<&P> {
+    Target::Blob(BlobTarget {
+        path: &blob.path,
+        mode: blob.mode,
+        content: blob.content,
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+enum ResolutionInput<P> {
+    Resolved { target: Target<P> },
+    Missing(Missing<P>),
+    DeclaredUntracked(DeclaredUntracked<P>),
+    TypeMismatch { target: Target<P> },
+    UnsupportedTarget(UnsupportedTarget<P>),
+    UnsupportedSemantics(UnsupportedSemantics<P>),
+    UnsupportedVersion { scope: VersionScope<P> },
+    Invalid { reason: InvalidReference },
+    External { reason: ExternalReference },
+}
+
+deserialize_shape! {
+    Resolution<P> from ResolutionInput {
+        tuple {
+            Resolved(target),
+            TypeMismatch(target),
+            UnsupportedVersion(scope),
+            Invalid(reason),
+            External(reason),
+        }
+        newtype { Missing, DeclaredUntracked, UnsupportedTarget, UnsupportedSemantics }
+        named {}
+        unit {}
+        checked {}
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields)]
+enum SemanticsInput<P> {
+    Query { target: Target<P> },
+    Fragment { target: Target<P> },
+    CodeFragment { target: Target<P> },
+    SiteRoute {},
+    NetworkPath {},
+    AttributeDependent {},
+    DuplicateLabel {},
+    ExternalInventory {},
+}
+
+deserialize_shape! {
+    UnsupportedSemantics<P> from SemanticsInput {
+        tuple { Query(target), CodeFragment(target) }
+        newtype {}
+        named {}
+        unit { SiteRoute, NetworkPath, AttributeDependent, DuplicateLabel, ExternalInventory }
+        checked { Fragment(target) => fragment_blob }
+    }
+}
+
+fn fragment_blob<P, E: serde::de::Error>(target: Target<P>) -> Result<BlobTarget<P>, E> {
+    match target {
+        Target::Blob(blob) => Ok(blob),
+        Target::Tree { .. } => Err(E::custom("fragment target must be a blob")),
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields)]
+enum MissingShape<P> {
+    PathNotFound {
+        path: P,
+        #[serde(deserialize_with = "crate::codec::nullable")]
+        near: Option<P>,
+        same_object_at: Option<P>,
+    },
+    LineFragmentOutOfRange {
+        path: P,
+    },
+    HeadingAnchorNotFound {
+        path: P,
+        #[serde(deserialize_with = "crate::codec::nullable")]
+        near: Option<String>,
+    },
+    LabelNotDeclared {},
+}
+
+deserialize_shape! {
+    Missing<P> from MissingShape {
+        tuple {}
+        newtype {}
+        named {
+            PathNotFound { path, near, same_object_at },
+            LineFragmentOutOfRange { path },
+            HeadingAnchorNotFound { path, near }
+        }
+        unit { LabelNotDeclared }
+        checked {}
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+enum VersionInput<P> {
+    KnownPath { path: P },
+    KnownCommit { commit_oid: Oid, path: P },
+    UnknownPath {},
+}
+
+deserialize_shape! {
+    VersionScope<P> from VersionInput {
+        tuple {}
+        newtype {}
+        named { KnownPath { path }, KnownCommit { commit_oid, path } }
+        unit { UnknownPath }
+        checked {}
+    }
+}
+
+guarded_serde!(BlobContent, object);
+
+guarded_serde!(BlobTarget<P>, object);
+
+guarded_serde!(Target<P>, object);
+
+guarded_serde!(DeclaredUntracked<P>, object);
+
+guarded_serde!(UnsupportedTarget<P>, object);
+
+guarded_serde!(BlobMode, string);
+
+guarded_serde!(InvalidReference, string);
+
+guarded_serde!(ExternalReference, string);

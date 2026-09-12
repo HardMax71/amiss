@@ -1,63 +1,86 @@
 use std::collections::BTreeMap;
 
-use crate::controls::value::{object, text};
-use crate::de::{self, Error, ErrorKind, Obj};
+use garde::Validate;
+use serde::{Deserialize, Serialize};
+
+use crate::codec::{self, Document, Envelope, Schema};
+use crate::de::{Error, ErrorKind, fail};
 use crate::digest::Digest;
 use crate::json::Value;
 use crate::model::ArtifactId;
-use crate::publication::{
-    DocsCandidate, PublicationProducer, PublicationResource, decode_identity, decode_resource,
-    docs_value, producer_value, resource_value,
-};
+use crate::publication::{DocsCandidate, PublicationProducer, PublicationResource, bounded_text};
 
-use super::{LocaleCoverageScope, PAGE_KEY_BYTES, decode_facts, scope_value};
+use super::{LocaleCoverageScope, PAGE_KEY_BYTES};
+
+mod pages;
 
 pub const EVIDENCE_ENVELOPE_SCHEMA: &str = "amiss/locale-coverage-evidence-envelope";
 pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/locale-coverage-evidence-payload";
 pub const EVIDENCE_DOCUMENT_BYTES: u64 = crate::semantic::SEMANTIC_EVIDENCE_BYTES;
 pub const PAGE_ITEMS_LIMIT: usize = crate::semantic::SEMANTIC_OBSERVATIONS_LIMIT;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct LocaleCoverageEvidenceEnvelope {
-    pub payload: LocaleCoverageEvidence,
-    pub payload_digest: Digest,
-}
+pub type LocaleCoverageEvidenceEnvelope = Envelope<LocaleCoverageEvidence>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
 pub struct LocaleCoverageEvidence {
+    pub schema: Schema<Self>,
     pub plan_payload_digest: Digest,
+    #[garde(dive)]
     pub docs: DocsCandidate,
+    #[garde(dive)]
     pub scope: LocaleCoverageScope,
+    #[garde(dive)]
     pub producer: PublicationProducer,
+    #[garde(dive)]
     pub source: LocalePageInventory,
+    #[garde(dive)]
     pub target: LocaleTargetInventory,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
 pub struct LocalePageInventory {
     pub input_digest: Digest,
+    #[garde(dive)]
+    #[serde(deserialize_with = "crate::codec::nullable")]
     pub product: Option<PublicationResource>,
     pub complete: bool,
+    #[serde(with = "pages")]
     pub pages: BTreeMap<String, Digest>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
 pub struct LocaleTargetInventory {
     pub input_digest: Digest,
+    #[garde(dive)]
+    #[serde(deserialize_with = "crate::codec::nullable")]
     pub product: Option<PublicationResource>,
     pub complete: bool,
+    #[serde(with = "pages")]
     pub pages: BTreeMap<String, LocaleTargetPage>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
 pub struct LocaleTargetPage {
     pub resource_digest: Digest,
     pub origin: LocaleTargetOrigin,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
+#[garde(allow_unvalidated)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+#[serde(remote = "Self")]
 pub enum LocaleTargetOrigin {
     TargetResource {
+        #[serde(deserialize_with = "crate::codec::nullable")]
         based_on_source_digest: Option<Digest>,
     },
     Fallback {
@@ -66,246 +89,71 @@ pub enum LocaleTargetOrigin {
     },
 }
 
-struct Inventory<T> {
-    input_digest: Digest,
-    product: Option<PublicationResource>,
-    complete: bool,
-    pages: BTreeMap<String, T>,
-}
-
-/// Parses one closed, digest-bound pair of locale page inventories.
-///
-/// # Errors
-///
-/// Fails on oversized or malformed strict JSON, unknown fields, invalid bindings, unsorted,
-/// repeated, or oversized page sets, invalid page keys, or a payload digest mismatch.
-pub fn parse_evidence(bytes: &[u8]) -> Result<LocaleCoverageEvidenceEnvelope, Error> {
-    let (payload, payload_digest) = crate::bounded_envelope::parse(
-        bytes,
-        EVIDENCE_ENVELOPE_SCHEMA,
-        EVIDENCE_PAYLOAD_SCHEMA,
-        EVIDENCE_DOCUMENT_BYTES,
-        decode_evidence,
-    )?;
-    Ok(LocaleCoverageEvidenceEnvelope {
-        payload,
-        payload_digest,
-    })
-}
-
-/// Builds the unique digest-bound value for one pair of locale page inventories.
-///
-/// # Errors
-///
-/// Fails when a public field violates the same closed grammar [`parse_evidence`] enforces or the
-/// encoded document exceeds its byte ceiling.
-pub fn evidence(input: &LocaleCoverageEvidence) -> Result<Value, Error> {
-    let validated = decode_evidence("$.payload", evidence_value(input))?;
-    let payload = evidence_value(&validated);
-    crate::bounded_envelope::build(
-        payload,
-        EVIDENCE_ENVELOPE_SCHEMA,
-        EVIDENCE_PAYLOAD_SCHEMA,
-        EVIDENCE_DOCUMENT_BYTES,
-    )
-}
-
-fn decode_evidence(path: &str, value: Value) -> Result<LocaleCoverageEvidence, Error> {
-    let mut evidence = Obj::new(path, value)?;
-    evidence.required("schema", |path, value| {
-        de::const_str(path, value, EVIDENCE_PAYLOAD_SCHEMA)
-    })?;
-    let plan_payload_digest = evidence.required("plan_payload_digest", de::digest)?;
-    let facts = decode_facts(&mut evidence)?;
-    let source = evidence.required("source", |path, value| {
-        let inventory = decode_inventory(path, value, |page| {
-            page.required("resource_digest", de::digest)
-        })?;
-        Ok(LocalePageInventory {
-            input_digest: inventory.input_digest,
-            product: inventory.product,
-            complete: inventory.complete,
-            pages: inventory.pages,
-        })
-    })?;
-    let target = evidence.required("target", |path, value| {
-        let inventory = decode_inventory(path, value, |page| {
-            let resource_digest = page.required("resource_digest", de::digest)?;
-            let origin = page.required("origin", decode_origin)?;
-            Ok(LocaleTargetPage {
-                resource_digest,
-                origin,
-            })
-        })?;
-        Ok(LocaleTargetInventory {
-            input_digest: inventory.input_digest,
-            product: inventory.product,
-            complete: inventory.complete,
-            pages: inventory.pages,
-        })
-    })?;
-    evidence.finish()?;
-    source
-        .pages
-        .len()
-        .checked_add(target.pages.len())
-        .filter(|total| *total <= PAGE_ITEMS_LIMIT)
-        .ok_or_else(|| Error::new(&format!("{path}.target.pages"), ErrorKind::LimitExceeded))?;
-    Ok(LocaleCoverageEvidence {
-        plan_payload_digest,
-        docs: facts.docs,
-        scope: facts.scope,
-        producer: facts.producer,
-        source,
-        target,
-    })
-}
-
-fn decode_inventory<T>(
-    path: &str,
-    value: Value,
-    mut decode_page: impl FnMut(&mut Obj) -> Result<T, Error>,
-) -> Result<Inventory<T>, Error> {
-    let mut inventory = Obj::new(path, value)?;
-    let input_digest = inventory.required("input_digest", de::digest)?;
-    let product_path = inventory.field("product");
-    let product = de::decode_nullable(&product_path, inventory.take("product")?, decode_resource)?;
-    let complete = inventory.required("complete", de::boolean)?;
-    let pages = inventory.required("pages", |path, value| {
-        de::sorted_map(path, value, PAGE_ITEMS_LIMIT, |path, value| {
-            let mut page = Obj::new(path, value)?;
-            let key = page.required("key", |path, value| {
-                de::bounded_text(path, value, PAGE_KEY_BYTES)
-            })?;
-            let item = decode_page(&mut page)?;
-            page.finish()?;
-            Ok((key, item))
-        })
-    })?;
-    inventory.finish()?;
-    Ok(Inventory {
-        input_digest,
-        product,
-        complete,
-        pages,
-    })
-}
-
-fn decode_origin(path: &str, value: Value) -> Result<LocaleTargetOrigin, Error> {
-    let mut origin = Obj::new(path, value)?;
-    let kind_path = origin.field("kind");
-    let kind = de::string(&kind_path, origin.take("kind")?)?;
-    match kind.as_str() {
-        "target-resource" => {
-            let based_on_path = origin.field("based_on_source_digest");
-            let based_on_source_digest = de::decode_nullable(
-                &based_on_path,
-                origin.take("based_on_source_digest")?,
-                de::digest,
-            )?;
-            origin.finish()?;
-            Ok(LocaleTargetOrigin::TargetResource {
-                based_on_source_digest,
-            })
-        }
-        "fallback" => {
-            let class = origin.required("class", decode_identity)?;
-            let source_resource_digest = origin.required("source_resource_digest", de::digest)?;
-            origin.finish()?;
-            Ok(LocaleTargetOrigin::Fallback {
-                class,
-                source_resource_digest,
-            })
-        }
-        _ => de::fail(&kind_path, ErrorKind::InvalidValue),
+impl Serialize for LocaleTargetOrigin {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
     }
 }
 
-fn evidence_value(evidence: &LocaleCoverageEvidence) -> Value {
-    object(vec![
-        ("schema", text(EVIDENCE_PAYLOAD_SCHEMA)),
-        (
-            "plan_payload_digest",
-            text(&evidence.plan_payload_digest.to_string()),
-        ),
-        ("docs", docs_value(&evidence.docs)),
-        ("scope", scope_value(&evidence.scope)),
-        ("producer", producer_value(&evidence.producer)),
-        (
-            "source",
-            inventory_value(
-                evidence.source.input_digest,
-                evidence.source.product.as_ref(),
-                evidence.source.complete,
-                &evidence.source.pages,
-                |key, resource_digest| {
-                    object(vec![
-                        ("key", text(key)),
-                        ("resource_digest", text(&resource_digest.to_string())),
-                    ])
-                },
-            ),
-        ),
-        (
-            "target",
-            inventory_value(
-                evidence.target.input_digest,
-                evidence.target.product.as_ref(),
-                evidence.target.complete,
-                &evidence.target.pages,
-                |key, page| {
-                    object(vec![
-                        ("key", text(key)),
-                        ("resource_digest", text(&page.resource_digest.to_string())),
-                        (
-                            "origin",
-                            match &page.origin {
-                                LocaleTargetOrigin::TargetResource {
-                                    based_on_source_digest,
-                                } => object(vec![
-                                    ("kind", text("target-resource")),
-                                    (
-                                        "based_on_source_digest",
-                                        based_on_source_digest.map_or(Value::Null, |digest| {
-                                            text(&digest.to_string())
-                                        }),
-                                    ),
-                                ]),
-                                LocaleTargetOrigin::Fallback {
-                                    class,
-                                    source_resource_digest,
-                                } => object(vec![
-                                    ("kind", text("fallback")),
-                                    ("class", text(class.as_str())),
-                                    (
-                                        "source_resource_digest",
-                                        text(&source_resource_digest.to_string()),
-                                    ),
-                                ]),
-                            },
-                        ),
-                    ])
-                },
-            ),
-        ),
-    ])
+impl<'de> Deserialize<'de> for LocaleTargetOrigin {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(codec::object(deserializer))
+    }
 }
 
-fn inventory_value<T>(
-    input_digest: Digest,
-    product: Option<&PublicationResource>,
-    complete: bool,
-    pages: &BTreeMap<String, T>,
-    encode_page: impl Fn(&str, &T) -> Value,
-) -> Value {
-    let pages = pages
-        .iter()
-        .map(|(key, page)| encode_page(key, page))
-        .collect();
-    object(vec![
-        ("input_digest", text(&input_digest.to_string())),
-        ("product", product.map_or(Value::Null, resource_value)),
-        ("complete", Value::Bool(complete)),
-        ("pages", Value::array(pages)),
-    ])
+/// Reads a bounded pair of locale inventories and verifies their digest.
+///
+/// # Errors
+///
+/// The evidence violates its shape, domain constraints, or payload binding.
+pub fn parse_evidence(bytes: &[u8]) -> Result<LocaleCoverageEvidenceEnvelope, Error> {
+    LocaleCoverageEvidenceEnvelope::parse(bytes)
+}
+
+/// Seals one pair of locale page inventories after validating their constraints.
+///
+/// # Errors
+///
+/// The evidence violates its contract or exceeds its page or byte ceiling.
+pub fn evidence(input: &LocaleCoverageEvidence) -> Result<Value, Error> {
+    codec::seal_value(input)
+}
+
+impl Document for LocaleCoverageEvidence {
+    const PAYLOAD_SCHEMA: &'static str = EVIDENCE_PAYLOAD_SCHEMA;
+    const ENVELOPE_SCHEMA: &'static str = EVIDENCE_ENVELOPE_SCHEMA;
+    const LIMIT: u64 = EVIDENCE_DOCUMENT_BYTES;
+
+    fn check(&self, root: &str) -> Result<(), Error> {
+        self.docs.check(&format!("{root}.docs"))?;
+        self.scope.check(&format!("{root}.scope"))?;
+        self.source
+            .pages
+            .len()
+            .checked_add(self.target.pages.len())
+            .filter(|total| *total <= PAGE_ITEMS_LIMIT)
+            .ok_or_else(|| Error::new(&format!("{root}.target.pages"), ErrorKind::LimitExceeded))?;
+        let keys = self
+            .source
+            .pages
+            .keys()
+            .enumerate()
+            .map(|(index, key)| ("source", index, key))
+            .chain(
+                self.target
+                    .pages
+                    .keys()
+                    .enumerate()
+                    .map(|(index, key)| ("target", index, key)),
+            );
+        for (side, index, key) in keys {
+            if !bounded_text(key, PAGE_KEY_BYTES) {
+                return fail(
+                    &format!("{root}.{side}.pages[{index}].key"),
+                    ErrorKind::InvalidValue,
+                );
+            }
+        }
+        Ok(())
+    }
 }

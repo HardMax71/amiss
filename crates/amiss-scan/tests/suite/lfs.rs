@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::fs;
 use std::path::Path;
 
@@ -17,7 +18,7 @@ fn the_pinned_vectors_decide_recognition() {
     };
     let field = |name: &str| {
         root.iter()
-            .find(|(key, _)| key == name)
+            .find(|(key, _)| key.as_str() == name)
             .map(|(_, value)| value)
     };
     assert_eq!(
@@ -28,7 +29,8 @@ fn the_pinned_vectors_decide_recognition() {
         field("contract"),
         Some(&Value::string("lfs-pointer-conservative"))
     );
-    let Some((_, Value::Array(cases))) = root.iter().find(|(key, _)| key == "cases") else {
+    let Some((_, Value::Array(cases))) = root.iter().find(|(key, _)| key.as_str() == "cases")
+    else {
         panic!("vectors hold cases")
     };
     assert!(!cases.is_empty());
@@ -39,7 +41,7 @@ fn the_pinned_vectors_decide_recognition() {
         let get = |name: &str| {
             members
                 .iter()
-                .find(|(key, _)| key == name)
+                .find(|(key, _)| key.as_str() == name)
                 .map(|(_, value)| value)
         };
         let Some(Value::String(id)) = get("id") else {

@@ -3,6 +3,7 @@
     reason = "tests build known-valid locale plan identities and inspect exact refusals"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::{fs, path::Path};
 
 use amiss_wire::de::ErrorKind;
@@ -40,8 +41,10 @@ fn product_resource(digit: char) -> PublicationResource {
 
 fn locale_plan() -> LocaleCoveragePlan {
     LocaleCoveragePlan {
+        schema: amiss_wire::codec::Schema::default(),
         report_payload_digest: digest('1'),
         docs: DocsCandidate {
+            object_format: ObjectFormat::Sha1,
             repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
             commit: oid('a'),
             tree: oid('b'),
@@ -63,13 +66,17 @@ fn locale_plan() -> LocaleCoveragePlan {
         policy: LocaleCoveragePolicy {
             identity: identity("product-docs-coverage"),
             context_digest: digest('4'),
-            required: LocalePageRequirement::Named(vec![
-                "guide/getting-started".to_owned(),
-                "reference/api".to_owned(),
-            ]),
+            required: LocalePageRequirement::Named {
+                keys: vec![
+                    "guide/getting-started".to_owned(),
+                    "reference/api".to_owned(),
+                ],
+            },
             fallbacks: vec![LocaleFallbackRule {
                 class: identity("source-copy"),
-                pages: LocalePageRequirement::Named(vec!["reference/api".to_owned()]),
+                pages: LocalePageRequirement::Named {
+                    keys: vec!["reference/api".to_owned()],
+                },
             }],
             require_target_lineage: false,
         },
@@ -115,7 +122,7 @@ fn locale_plan_round_trips_with_its_payload_digest_and_example() {
 fn locale_plan_keeps_all_source_and_named_policies_distinct() {
     let mut all_source = locale_plan();
     all_source.scope.version = None;
-    all_source.policy.required = LocalePageRequirement::AllSource;
+    all_source.policy.required = LocalePageRequirement::AllSource {};
     all_source.policy.require_target_lineage = true;
 
     let parsed = parse_plan(&json::canonical(&plan(&all_source).unwrap())).unwrap();
@@ -136,7 +143,7 @@ fn fallback_authorizations_are_class_sorted_and_page_scoped() {
     let mut valid = locale_plan();
     valid.policy.fallbacks.push(LocaleFallbackRule {
         class: identity("vendor-copy"),
-        pages: LocalePageRequirement::AllSource,
+        pages: LocalePageRequirement::AllSource {},
     });
     let parsed = parse_plan(&json::canonical(&plan(&valid).unwrap())).unwrap();
     assert_eq!(parsed.payload, valid);
@@ -150,7 +157,7 @@ fn fallback_authorizations_are_class_sorted_and_page_scoped() {
     let mut duplicate = locale_plan();
     duplicate.policy.fallbacks.push(LocaleFallbackRule {
         class: identity("source-copy"),
-        pages: LocalePageRequirement::AllSource,
+        pages: LocalePageRequirement::AllSource {},
     });
     let error = plan(&duplicate).unwrap_err();
     assert_eq!(error.path, "$.payload.policy.fallbacks");
@@ -214,14 +221,16 @@ fn locale_plan_requires_one_sorted_unique_bounded_named_set() {
         ),
     ] {
         let mut candidate = locale_plan();
-        candidate.policy.required = LocalePageRequirement::Named(keys);
+        candidate.policy.required = LocalePageRequirement::Named { keys };
         let error = plan(&candidate).unwrap_err();
         assert_eq!(error.path, path);
         assert_eq!(error.kind, kind);
     }
 
     let mut boundary = locale_plan();
-    boundary.policy.required = LocalePageRequirement::Named(vec!["x".repeat(PAGE_KEY_BYTES)]);
+    boundary.policy.required = LocalePageRequirement::Named {
+        keys: vec!["x".repeat(PAGE_KEY_BYTES)],
+    };
     assert!(plan(&boundary).is_ok());
 }
 

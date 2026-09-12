@@ -152,24 +152,25 @@ pub(super) fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationSchedu
         projection_records: limits.projection_records,
         projection_bytes: limits.projection_bytes,
     };
-    let subjects = plan.subjects.each_ref().map(|subject| BoundPlanSubject {
-        role: subject.role.as_str(),
-        provider_namespace: subject.scope.provider.namespace.as_str(),
-        provider_instance: subject.scope.provider.instance.as_str(),
-        integration: subject.scope.integration.as_str(),
-        repository_host: subject.scope.repository.host(),
-        repository_owner: subject.scope.repository.owner(),
-        repository_name: subject.scope.repository.name(),
-        target: subject.target.as_str(),
-        object_format: subject.object_format.as_ref(),
-        credential: subject.credential.as_str(),
-        source: hj(
-            SOURCE_BINDING_SCHEMA,
-            &projection_source_value(&subject.source),
-        )
-        .to_string(),
-        limits: limits(subject.limits),
+    let [left, right] = plan.subjects.each_ref().map(|subject| {
+        let source = projection_source_value(&subject.source)
+            .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+        Ok::<_, RelationScheduleStoreError>(BoundPlanSubject {
+            role: subject.role.as_str(),
+            provider_namespace: subject.scope.provider.namespace.as_str(),
+            provider_instance: subject.scope.provider.instance.as_str(),
+            integration: subject.scope.integration.as_str(),
+            repository_host: subject.scope.repository.host(),
+            repository_owner: subject.scope.repository.owner(),
+            repository_name: subject.scope.repository.name(),
+            target: subject.target.as_str(),
+            object_format: subject.object_format.as_ref(),
+            credential: subject.credential.as_str(),
+            source: hj(SOURCE_BINDING_SCHEMA, &source).to_string(),
+            limits: limits(subject.limits),
+        })
     });
+    let subjects = [left?, right?];
     let status_destinations = plan
         .status_destinations
         .iter()

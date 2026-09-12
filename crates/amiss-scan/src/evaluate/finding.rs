@@ -1,6 +1,7 @@
 use amiss_wire::controls::Profile;
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 use amiss_wire::resolution::{Missing, Resolution};
@@ -164,7 +165,7 @@ pub(super) fn reference_fact(
             ("resolution".to_owned(), resolution_value(observation)),
             (
                 "occurrence_multiplicity".to_owned(),
-                Value::Integer(i64::try_from(multiplicity).unwrap_or(i64::MAX)),
+                Value::from(i64::try_from(multiplicity).unwrap_or(i64::MAX)),
             ),
         ]),
     )

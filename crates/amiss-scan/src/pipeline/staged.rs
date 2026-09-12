@@ -194,12 +194,15 @@ fn index_candidate_block(
     if !failures.is_empty() {
         return Err(failures);
     }
-    Ok(CandidateBlock::Index(synthetic_candidate(
-        repo.object_format().into(),
-        base_oid.as_str(),
-        &entries,
-        skip_worktree_paths,
-    )))
+    Ok(CandidateBlock::Index(
+        synthetic_candidate(
+            repo.object_format().into(),
+            base_oid.as_str(),
+            &entries,
+            skip_worktree_paths,
+        )
+        .map_err(|_defect| vec![super::projection_failure(None)])?,
+    ))
 }
 
 /// The staged run's candidate identity, or its refusals folded into the
@@ -267,7 +270,7 @@ fn recheck_index(
     base_identity: SnapshotIdentity,
     initial: &[u8],
     built: Built,
-) -> Built {
+) -> Result<Built, amiss_wire::de::Error> {
     if let Err(defect) = repo.verify_index_unchanged(git_resources, initial) {
         let defect = Error::from(defect);
         let changed_setup = setup_shell.with(
@@ -276,7 +279,7 @@ fn recheck_index(
         );
         return construct_incomplete(&changed_setup, &[detail(&defect, None)]);
     }
-    built
+    Ok(built)
 }
 
 const fn unavailable_reason(defect: &Error) -> &'static str {
@@ -360,14 +363,17 @@ fn staged_open(
 /// candidate built from one pinned read of the complete logical index. After
 /// the scan, the current index is reread and compared; a change is solely a
 /// snapshot change.
-#[must_use]
+///
+/// # Errors
+///
+/// The report cannot be represented in the strict JSON profile.
 pub fn staged_index(
     repo: &Repository,
     engine: &EngineProvenance,
     forge: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     base_oid: &Oid,
-) -> Built {
+) -> Result<Built, amiss_wire::de::Error> {
     staged_index_result(repo, engine, forge, setup_shell, base_oid)
         .unwrap_or_else(PipelineFailure::into_built)
 }
@@ -378,7 +384,7 @@ fn staged_index_result(
     forge: Option<&ForgeContext>,
     setup_shell: &SetupShell,
     base_oid: &Oid,
-) -> PipelineResult<Built> {
+) -> PipelineResult<Result<Built, amiss_wire::de::Error>> {
     let (verified_floor, floor_mismatch) = floor_gate(setup_shell);
     let (effective_scan, _effective_git) = effective_limits(verified_floor);
     let setup_shell = &effective_shell(setup_shell, &effective_scan);
@@ -498,7 +504,7 @@ fn staged_finish(
     outcomes: &CandidateOutcomes,
     failures: &[ErrorDetail],
     initial: &[u8],
-) -> Built {
+) -> Result<Built, amiss_wire::de::Error> {
     let base_identity = base_evaluated.identity.clone();
     let built = match (candidate.1, failures) {
         (Some(candidate_side), []) => conclude(
@@ -510,7 +516,7 @@ fn staged_finish(
             &[],
         ),
         _ => construct_incomplete(setup, failures),
-    };
+    }?;
     recheck_index(
         repo,
         git_resources,

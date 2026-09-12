@@ -1,354 +1,324 @@
-use amiss_wire::digest::{Digest, hj};
+use amiss_wire::codec;
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, TrustedTimeStatement};
+use amiss_wire::de::Error;
+use amiss_wire::digest::Digest;
 use amiss_wire::json::Value;
+use amiss_wire::model::{ForgeDialect, RepositoryIdentity, UtcInstant};
 use amiss_wire::report::sandbox_descriptor;
+use amiss_wire::requests::RequestTrust;
+use serde::Serialize;
 
-use super::{
-    CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, SNAPSHOT_SCHEMA, Setup, SnapshotIdentity,
-    digest_value, integer, nullable, object, string,
-};
+use super::{CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, SNAPSHOT_SCHEMA, Setup, SnapshotIdentity};
 
-fn snapshot_value(snapshot: &SnapshotIdentity) -> Value {
-    object(vec![
-        ("kind", string("git-commit")),
-        ("object_format", string(snapshot.object_format)),
-        ("commit_oid", string(&snapshot.commit_oid)),
-        ("tree_oid", string(&snapshot.tree_oid)),
-    ])
+#[derive(Serialize)]
+struct Snapshot<'a> {
+    commit_oid: &'a str,
+    kind: &'static str,
+    object_format: &'static str,
+    tree_oid: &'a str,
 }
 
-fn candidate_value(candidate: &CandidateBlock, snapshot_request: Option<Digest>) -> Value {
-    match candidate {
-        CandidateBlock::Commit(identity) => snapshot_value(identity),
-        CandidateBlock::Index(index) => object(vec![
-            ("kind", string("index")),
-            ("snapshot_schema", string(SNAPSHOT_SCHEMA)),
-            ("identity_scope", string("complete-logical-index")),
-            ("base_object_format", string(index.base_object_format)),
-            ("base_commit_oid", string(&index.base_commit_oid)),
-            (
-                "index_projection_digest",
-                digest_value(index.projection_digest),
-            ),
-            ("entry_count", integer(index.entry_count)),
-            ("snapshot_digest", digest_value(index.snapshot_digest)),
-        ]),
-        CandidateBlock::Unavailable(reasons) => object(vec![
-            ("kind", string("unavailable")),
-            (
-                "request_digest",
-                snapshot_request.map_or(Value::Null, digest_value),
-            ),
-            (
-                "reasons",
-                Value::array(reasons.iter().map(|reason| string(reason)).collect()),
-            ),
-        ]),
+fn snapshot(snapshot: &SnapshotIdentity) -> Snapshot<'_> {
+    Snapshot {
+        commit_oid: &snapshot.commit_oid,
+        kind: "git-commit",
+        object_format: snapshot.object_format,
+        tree_oid: &snapshot.tree_oid,
     }
 }
 
-fn repository_value(identity: &amiss_wire::model::RepositoryIdentity) -> Value {
-    object(vec![
-        ("host", string(identity.host())),
-        ("owner", string(identity.owner())),
-        ("name", string(identity.name())),
-    ])
+#[derive(Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
+enum Candidate<'a> {
+    GitCommit {
+        commit_oid: &'a str,
+        object_format: &'static str,
+        tree_oid: &'a str,
+    },
+    Index {
+        base_commit_oid: &'a str,
+        base_object_format: &'static str,
+        entry_count: u64,
+        identity_scope: &'static str,
+        index_projection_digest: Digest,
+        snapshot_digest: Digest,
+        snapshot_schema: &'static str,
+    },
+    Unavailable {
+        reasons: &'a [&'static str],
+        request_digest: Option<Digest>,
+    },
 }
 
-/// The evaluation's identity rows: everything of the resolved evaluation
-/// value that precedes time, in the candidate-identity preimage order.
-fn identity_rows(setup: &Setup) -> Vec<(&'static str, Value)> {
-    let (mode, event_kind, finality, materialization) = match &setup.candidate {
+fn candidate(candidate: &CandidateBlock, request_digest: Option<Digest>) -> Candidate<'_> {
+    match candidate {
+        CandidateBlock::Commit(identity) => Candidate::GitCommit {
+            commit_oid: &identity.commit_oid,
+            object_format: identity.object_format,
+            tree_oid: &identity.tree_oid,
+        },
+        CandidateBlock::Index(index) => Candidate::Index {
+            base_commit_oid: &index.base_commit_oid,
+            base_object_format: index.base_object_format,
+            entry_count: index.entry_count,
+            identity_scope: "complete-logical-index",
+            index_projection_digest: index.projection_digest,
+            snapshot_digest: index.snapshot_digest,
+            snapshot_schema: SNAPSHOT_SCHEMA,
+        },
+        CandidateBlock::Unavailable(reasons) => Candidate::Unavailable {
+            reasons,
+            request_digest,
+        },
+    }
+}
+
+#[derive(Serialize)]
+struct Identity<'a> {
+    base: Snapshot<'a>,
+    candidate: Candidate<'a>,
+    candidate_ref: Option<&'a str>,
+    default_branch_ref: Option<&'a str>,
+    event_kind: &'static str,
+    finality: &'static str,
+    forge: Option<ForgeDialect>,
+    index_only_materialized_paths: u8,
+    materialization: &'static str,
+    mode: &'static str,
+    repository: Option<&'a RepositoryIdentity>,
+    skip_worktree_paths: u64,
+    target_ref: Option<&'a str>,
+}
+
+fn identity(setup: &Setup) -> Identity<'_> {
+    let (mode, event_kind, finality, materialization, skip_worktree_paths) = match &setup.candidate
+    {
         CandidateBlock::Commit(_) => (
             "commit-pair",
             "explicit-commit-pair",
             "explicit-replay",
             "git-objects",
+            0,
         ),
-        CandidateBlock::Index(_) | CandidateBlock::Unavailable(_) => {
-            ("index", "local-index", "local-nonfinal", "index")
-        }
+        CandidateBlock::Index(index) => (
+            "index",
+            "local-index",
+            "local-nonfinal",
+            "index",
+            index.skip_worktree_paths,
+        ),
+        CandidateBlock::Unavailable(_) => ("index", "local-index", "local-nonfinal", "index", 0),
     };
-    let skip = match &setup.candidate {
-        CandidateBlock::Index(index) => index.skip_worktree_paths,
-        CandidateBlock::Commit(_) | CandidateBlock::Unavailable(_) => 0,
-    };
-    vec![
-        ("mode", string(mode)),
-        ("event_kind", string(event_kind)),
-        ("finality", string(finality)),
-        (
-            "repository",
-            setup
-                .repository
-                .as_ref()
-                .map_or(Value::Null, repository_value),
-        ),
-        ("candidate_ref", nullable(setup.candidate_ref.as_deref())),
-        ("target_ref", nullable(setup.target_ref.as_deref())),
-        (
-            "default_branch_ref",
-            nullable(setup.default_branch_ref.as_deref()),
-        ),
-        ("base", snapshot_value(&setup.base)),
-        (
-            "candidate",
-            candidate_value(&setup.candidate, setup.requests.snapshot),
-        ),
-        ("materialization", string(materialization)),
-        ("skip_worktree_paths", integer(skip)),
-        ("index_only_materialized_paths", integer(0)),
-    ]
-}
-
-/// The rolling candidate identity. The selected forge is resolution-significant,
-/// so it is bound alongside the repository and snapshots.
-fn candidate_identity_value(setup: &Setup) -> Value {
-    identity_value(
-        setup,
-        vec![("schema", string(CANDIDATE_IDENTITY_DOMAIN))],
-        Vec::new(),
-    )
-}
-
-/// The candidate-identity digest a trusted-time statement must carry: `HJ`
-/// over the resolved-evaluation identity, including its forge.
-#[must_use]
-pub fn candidate_identity_digest(setup: &Setup) -> Digest {
-    hj(CANDIDATE_IDENTITY_DOMAIN, &candidate_identity_value(setup))
-}
-
-pub(super) fn evaluation_value(setup: &Setup) -> Value {
-    identity_value(
-        setup,
-        Vec::new(),
-        vec![
-            (
-                "evaluation_instant",
-                setup.policy.time.as_ref().map_or(Value::Null, |time| {
-                    string(time.statement.evaluation_instant().as_str())
-                }),
-            ),
-            ("trusted_time", Value::Bool(setup.policy.time.is_some())),
-        ],
-    )
-}
-
-fn identity_value(
-    setup: &Setup,
-    mut rows: Vec<(&'static str, Value)>,
-    before_forge: Vec<(&'static str, Value)>,
-) -> Value {
-    rows.extend(identity_rows(setup));
-    rows.extend(before_forge);
-    rows.push((
-        "forge",
-        setup
-            .forge
-            .map_or(Value::Null, |dialect| string(dialect.as_ref())),
-    ));
-    object(rows)
-}
-
-fn verified_provenance(control: Option<(Digest, amiss_wire::requests::RequestTrust)>) -> Value {
-    control.map_or_else(
-        || {
-            object(vec![
-                ("status", string("none")),
-                ("digest", Value::Null),
-                ("trust_source", string("none")),
-            ])
-        },
-        |(digest, trust)| {
-            object(vec![
-                ("status", string("verified")),
-                ("digest", digest_value(digest)),
-                ("trust_source", string(trust.as_ref())),
-            ])
-        },
-    )
-}
-
-pub(super) fn controls_value(setup: &Setup) -> Value {
-    if let Some(reason) = setup.controls_unavailable {
-        return object(vec![
-            ("status", string("unavailable")),
-            (
-                "request_digest",
-                setup.requests.controls.map_or(Value::Null, digest_value),
-            ),
-            ("reasons", Value::array(vec![string(reason)])),
-        ]);
+    Identity {
+        base: snapshot(&setup.base),
+        candidate: candidate(&setup.candidate, setup.requests.snapshot),
+        candidate_ref: setup.candidate_ref.as_deref(),
+        default_branch_ref: setup.default_branch_ref.as_deref(),
+        event_kind,
+        finality,
+        forge: setup.forge,
+        index_only_materialized_paths: 0,
+        materialization,
+        mode,
+        repository: setup.repository.as_ref(),
+        skip_worktree_paths,
+        target_ref: setup.target_ref.as_deref(),
     }
-    let (descriptor, descriptor_digest) = sandbox_descriptor();
-    object(vec![
-        ("profile", string(setup.profile.as_ref())),
-        (
-            "base_repository_policy_digest",
-            setup.policy.base_digest.map_or(Value::Null, digest_value),
-        ),
-        (
-            "candidate_repository_policy_digest",
+}
+
+#[derive(Serialize)]
+struct CandidateIdentity<'a> {
+    #[serde(flatten)]
+    identity: Identity<'a>,
+    schema: &'static str,
+}
+
+/// The candidate identity bound by trusted time, including the selected forge.
+///
+/// # Errors
+///
+/// An identity cannot be represented in the strict JSON profile.
+pub fn candidate_identity_digest(setup: &Setup) -> Result<Digest, Error> {
+    codec::digest(
+        CANDIDATE_IDENTITY_DOMAIN,
+        &CandidateIdentity {
+            identity: identity(setup),
+            schema: CANDIDATE_IDENTITY_DOMAIN,
+        },
+    )
+}
+
+#[derive(Serialize)]
+struct EvaluationProjection<'a> {
+    evaluation_instant: Option<&'a UtcInstant>,
+    #[serde(flatten)]
+    identity: Identity<'a>,
+    trusted_time: bool,
+}
+
+pub(super) fn evaluation_value(setup: &Setup) -> Result<Value, Error> {
+    codec::to_value(&EvaluationProjection {
+        evaluation_instant: setup
+            .policy
+            .time
+            .as_ref()
+            .map(|time| time.statement.evaluation_instant()),
+        identity: identity(setup),
+        trusted_time: setup.policy.time.is_some(),
+    })
+}
+
+#[derive(Serialize)]
+struct Provenance {
+    digest: Option<Digest>,
+    status: &'static str,
+    trust_source: &'static str,
+}
+
+fn verified_provenance(control: Option<(Digest, RequestTrust)>) -> Provenance {
+    match control {
+        Some((digest, trust)) => Provenance {
+            digest: Some(digest),
+            status: "verified",
+            trust_source: trust.into(),
+        },
+        None => Provenance {
+            digest: None,
+            status: "none",
+            trust_source: "none",
+        },
+    }
+}
+
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "kebab-case")]
+enum Constraint<'a> {
+    None,
+    Verified {
+        descriptor: &'a ExecutionConstraintDescriptor,
+        descriptor_digest: Digest,
+        trust_source: &'static str,
+    },
+}
+
+#[derive(Serialize)]
+#[serde(tag = "status", rename_all = "kebab-case")]
+enum TimeSource<'a> {
+    None,
+    Verified {
+        statement: &'a TrustedTimeStatement,
+        statement_digest: Digest,
+        trust_source: &'static str,
+    },
+}
+
+#[derive(Serialize)]
+struct Sandbox {
+    assurance: &'static str,
+    descriptor: Value,
+    descriptor_digest: Digest,
+    enforcement_source: &'static str,
+    verification: (),
+}
+
+#[derive(Serialize)]
+struct SemanticEvidence<'a> {
+    payload_digest: Digest,
+    producer: Producer<'a>,
+}
+
+#[derive(Serialize)]
+struct Producer<'a> {
+    identity: &'a str,
+    input_digest: Digest,
+    kind: &'a str,
+    version: &'a str,
+}
+
+#[derive(Serialize)]
+struct Controls<'a> {
+    base_repository_policy_digest: Option<Digest>,
+    candidate_repository_policy_digest: Option<Digest>,
+    debt_snapshot: Provenance,
+    execution_constraint: Constraint<'a>,
+    organization_floor: Provenance,
+    profile: Profile,
+    sandbox: Sandbox,
+    semantic_evidence: Vec<SemanticEvidence<'a>>,
+    trusted_time_source: TimeSource<'a>,
+    waiver_bundle: Provenance,
+}
+
+#[derive(Serialize)]
+struct Unavailable {
+    reasons: [&'static str; 1],
+    request_digest: Option<Digest>,
+    status: &'static str,
+}
+
+pub(super) fn controls_value(setup: &Setup) -> Result<Value, Error> {
+    if let Some(reason) = setup.controls_unavailable {
+        return codec::to_value(&Unavailable {
+            reasons: [reason],
+            request_digest: setup.requests.controls,
+            status: "unavailable",
+        });
+    }
+    let (descriptor, descriptor_digest) = sandbox_descriptor()?;
+    codec::to_value(&Controls {
+        base_repository_policy_digest: setup.policy.base_digest,
+        candidate_repository_policy_digest: setup.policy.candidate_digest,
+        debt_snapshot: verified_provenance(
             setup
                 .policy
-                .candidate_digest
-                .map_or(Value::Null, digest_value),
+                .debt
+                .as_ref()
+                .map(|debt| (debt.digest, debt.trust_source)),
         ),
-        (
-            "organization_floor",
-            verified_provenance(setup.policy.floor),
+        execution_constraint: setup.policy.constraint.as_ref().map_or(
+            Constraint::None,
+            |(descriptor, trust)| Constraint::Verified {
+                descriptor,
+                descriptor_digest: descriptor.digest(),
+                trust_source: (*trust).into(),
+            },
         ),
-        (
-            "debt_snapshot",
-            verified_provenance(
-                setup
-                    .policy
-                    .debt
-                    .as_ref()
-                    .map(|debt| (debt.digest, debt.trust_source)),
-            ),
-        ),
-        (
-            "waiver_bundle",
-            verified_provenance(
-                setup
-                    .policy
-                    .waiver
-                    .as_ref()
-                    .map(|waiver| (waiver.digest, waiver.trust_source)),
-            ),
-        ),
-        (
-            "execution_constraint",
-            setup.policy.constraint.as_ref().map_or_else(
-                || object(vec![("status", string("none"))]),
-                |(descriptor, trust)| {
-                    object(vec![
-                        ("status", string("verified")),
-                        ("descriptor", constraint_descriptor_value(descriptor)),
-                        ("descriptor_digest", digest_value(descriptor.digest())),
-                        ("trust_source", string(trust.as_ref())),
-                    ])
+        organization_floor: verified_provenance(setup.policy.floor),
+        profile: setup.profile,
+        sandbox: Sandbox {
+            assurance: "self-asserted",
+            descriptor,
+            descriptor_digest,
+            enforcement_source: "local-process",
+            verification: (),
+        },
+        semantic_evidence: setup
+            .policy
+            .semantic_evidence
+            .iter()
+            .map(|evidence| SemanticEvidence {
+                payload_digest: evidence.payload_digest,
+                producer: Producer {
+                    identity: evidence.producer_identity.as_str(),
+                    input_digest: evidence.input_digest,
+                    kind: evidence.producer_kind.as_str(),
+                    version: &evidence.producer_version,
                 },
-            ),
+            })
+            .collect(),
+        trusted_time_source: setup.policy.time.as_ref().map_or(TimeSource::None, |time| {
+            TimeSource::Verified {
+                statement: &time.statement,
+                statement_digest: time.digest,
+                trust_source: "external-required-check",
+            }
+        }),
+        waiver_bundle: verified_provenance(
+            setup
+                .policy
+                .waiver
+                .as_ref()
+                .map(|waiver| (waiver.digest, waiver.trust_source)),
         ),
-        (
-            "semantic_evidence",
-            Value::array(
-                setup
-                    .policy
-                    .semantic_evidence
-                    .iter()
-                    .map(semantic_evidence_value)
-                    .collect(),
-            ),
-        ),
-        (
-            "sandbox",
-            object(vec![
-                ("assurance", string("self-asserted")),
-                ("enforcement_source", string("local-process")),
-                ("descriptor", descriptor),
-                ("descriptor_digest", digest_value(descriptor_digest)),
-                ("verification", Value::Null),
-            ]),
-        ),
-        (
-            "trusted_time_source",
-            setup.policy.time.as_ref().map_or_else(
-                || object(vec![("status", string("none"))]),
-                |time| {
-                    object(vec![
-                        ("status", string("verified")),
-                        ("statement", time_statement_value(&time.statement)),
-                        ("statement_digest", digest_value(time.digest)),
-                        ("trust_source", string("external-required-check")),
-                    ])
-                },
-            ),
-        ),
-    ])
-}
-
-fn semantic_evidence_value(evidence: &crate::semantic::Provenance) -> Value {
-    object(vec![
-        ("payload_digest", digest_value(evidence.payload_digest)),
-        (
-            "producer",
-            object(vec![
-                ("kind", string(evidence.producer_kind.as_str())),
-                ("identity", string(evidence.producer_identity.as_str())),
-                ("version", string(&evidence.producer_version)),
-                ("input_digest", digest_value(evidence.input_digest)),
-            ]),
-        ),
-    ])
-}
-
-fn constraint_descriptor_value(
-    descriptor: &amiss_wire::controls::ExecutionConstraintDescriptor,
-) -> Value {
-    object(vec![
-        ("schema", string("amiss/scanner-execution-constraint")),
-        (
-            "action_repository",
-            repository_value(descriptor.action_repository()),
-        ),
-        (
-            "action_object_format",
-            string(descriptor.action_object_format().as_ref()),
-        ),
-        (
-            "action_commit_oid",
-            string(descriptor.action_commit_oid().as_str()),
-        ),
-        (
-            "action_tree_oid",
-            string(descriptor.action_tree_oid().as_str()),
-        ),
-        ("manifest_path", string(descriptor.manifest_path().as_str())),
-        (
-            "release_manifest_digest",
-            digest_value(descriptor.release_manifest_digest()),
-        ),
-        (
-            "selected_platform",
-            string(descriptor.selected_platform().as_ref()),
-        ),
-        (
-            "required_status_name",
-            string(descriptor.required_status_name()),
-        ),
-        ("bootstrap_contract", string("amiss-action-bootstrap")),
-        (
-            "bootstrap_digest",
-            digest_value(descriptor.bootstrap_digest()),
-        ),
-    ])
-}
-
-fn time_statement_value(statement: &amiss_wire::controls::TrustedTimeStatement) -> Value {
-    let mut rows = vec![
-        ("schema", string(statement.schema())),
-        ("controller", string(statement.controller())),
-        ("repository", repository_value(statement.repository())),
-        ("ref", string(statement.ref_name().as_str())),
-        (
-            "candidate_identity_digest",
-            digest_value(statement.candidate_identity_digest()),
-        ),
-    ];
-    rows.push(("provider", string(statement.provider())));
-    rows.extend([
-        ("provider_run_id", string(statement.provider_run_id())),
-        (
-            "provider_run_attempt",
-            integer(statement.provider_run_attempt()),
-        ),
-        (
-            "evaluation_instant",
-            string(statement.evaluation_instant().as_str()),
-        ),
-        ("valid_until", string(statement.valid_until().as_str())),
-    ]);
-    object(rows)
+    })
 }

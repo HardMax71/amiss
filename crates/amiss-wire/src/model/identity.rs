@@ -32,8 +32,23 @@ impl serde::Serialize for ArtifactId {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(try_from = "String")]
 pub struct OwnerId(String);
+
+impl TryFrom<String> for OwnerId {
+    type Error = Invalid;
+
+    fn try_from(raw: String) -> Result<Self, Invalid> {
+        Self::new(raw).ok_or(Invalid("owner"))
+    }
+}
+
+impl serde::Serialize for OwnerId {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
 
 impl OwnerId {
     #[must_use]
@@ -66,8 +81,23 @@ fn id_body_valid(raw: &[u8]) -> bool {
 }
 
 /// Full branch ref under the rolling `ref-format` contract.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(try_from = "String")]
 pub struct BranchRef(String);
+
+impl TryFrom<String> for BranchRef {
+    type Error = Invalid;
+
+    fn try_from(raw: String) -> Result<Self, Invalid> {
+        Self::new(raw).ok_or(Invalid("branch"))
+    }
+}
+
+impl serde::Serialize for BranchRef {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.0)
+    }
+}
 
 impl BranchRef {
     #[must_use]
@@ -105,11 +135,39 @@ impl BranchRef {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, serde::Deserialize)]
+#[serde(try_from = "RepositoryParts")]
 pub struct RepositoryIdentity {
     host: String,
     owner: String,
     name: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RepositoryParts {
+    host: String,
+    owner: String,
+    name: String,
+}
+
+impl TryFrom<RepositoryParts> for RepositoryIdentity {
+    type Error = Invalid;
+
+    fn try_from(parts: RepositoryParts) -> Result<Self, Invalid> {
+        Self::new(parts.host, parts.owner, parts.name).ok_or(Invalid("repository"))
+    }
+}
+
+impl serde::Serialize for RepositoryIdentity {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        let mut repository = serializer.serialize_struct("RepositoryIdentity", 3)?;
+        repository.serialize_field("host", &self.host)?;
+        repository.serialize_field("owner", &self.owner)?;
+        repository.serialize_field("name", &self.name)?;
+        repository.end()
+    }
 }
 
 impl RepositoryIdentity {

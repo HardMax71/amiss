@@ -4,6 +4,7 @@
     reason = "integration assertions over repository-owned correlation vectors"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_md::extract::BlockKind;
@@ -50,10 +51,10 @@ const REQUIRED_VECTOR_IDS: [&str; 25] = [
     "CI-025-native-bitbucket-data-center-equivalent",
 ];
 
-fn field<'a>(members: &'a [(String, Value)], name: &str) -> &'a Value {
+fn field<'a>(members: &'a amiss_wire::json::Map<String, Value>, name: &str) -> &'a Value {
     members
         .iter()
-        .find(|(key, _)| key == name)
+        .find(|(key, _)| key.as_str() == name)
         .map_or_else(|| panic!("missing field {name}"), |(_, value)| value)
 }
 
@@ -61,14 +62,14 @@ fn text(value: &Value, label: &str) -> String {
     let Value::String(text) = value else {
         panic!("{label} must be a string, found {value:?}")
     };
-    text.to_string()
+    text.clone()
 }
 
 fn optional_text(value: &Value, label: &str) -> Option<String> {
     match value {
         Value::Null => None,
-        Value::String(text) => Some(text.to_string()),
-        other @ (Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_)) => {
+        Value::String(text) => Some(text.clone()),
+        other @ (Value::Bool(_) | Value::Number(_) | Value::Array(_) | Value::Object(_)) => {
             panic!("{label} must be a string or null, found {other:?}")
         }
     }
@@ -223,17 +224,16 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
 }
 
 fn validate_target_intents(bytes: &[u8]) {
-    let fixture: serde_json::Value =
-        serde_json::from_slice(bytes).expect("the correlation vectors are JSON");
+    let fixture: Value = serde_json::from_slice(bytes).expect("the correlation vectors are JSON");
     let cases = fixture
         .get("cases")
-        .and_then(serde_json::Value::as_array)
+        .and_then(Value::as_array)
         .expect("the correlation vectors hold cases");
     let target_intent = ReportSchemaFragment::new("TargetIntent");
     for case in cases {
         let id = case
             .get("id")
-            .and_then(serde_json::Value::as_str)
+            .and_then(Value::as_str)
             .expect("a correlation case has an id");
         for side in ["left", "right"] {
             target_intent.assert_value(
@@ -292,12 +292,12 @@ fn the_published_vectors_execute_live_correlation() {
             &format!("{id} right"),
         );
         assert_eq!(
-            canonical(&intent_value(&left_intent, left.raw_destination_digest)),
+            canonical(&intent_value(&left_intent, left.raw_destination_digest).unwrap()),
             canonical(left_value),
             "{id} left target-intent preimage"
         );
         assert_eq!(
-            canonical(&intent_value(&right_intent, right.raw_destination_digest)),
+            canonical(&intent_value(&right_intent, right.raw_destination_digest).unwrap()),
             canonical(right_value),
             "{id} right target-intent preimage"
         );

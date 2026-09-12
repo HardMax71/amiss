@@ -12,7 +12,6 @@ use amiss_controller_git::{
 };
 use amiss_wire::codec;
 use amiss_wire::digest::Digest;
-use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::relation::{assess, parse_plan};
 
@@ -151,12 +150,12 @@ pub fn execute_relation_audit(
         roots: request.roots,
     })?;
     let evidence_bytes = codec::canonical(&evidence)?;
-    let assessment_bytes = json::canonical(&assess(
+    let assessment_bytes = codec::canonical(&assess(
         &plan,
         Some(&evidence),
         request.engine_version,
         request.engine_digest,
-    )?);
+    )?)?;
     let bundle = RelationAuditBundle {
         transition: &request.pending.transition,
         report: request.report,

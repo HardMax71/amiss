@@ -1,13 +1,15 @@
+use amiss_wire::json::ValueExt as _;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::digest::Digest;
-use amiss_wire::json::{Value, canonical};
+use amiss_wire::json::Value;
+use amiss_wire::model::ArtifactId;
 use amiss_wire::requests::SuppliedSemanticEvidence;
 
-use super::decode::{DESTINATION_BYTES, LABEL_BYTES, bounded_text, decode_id, observation_row};
+use super::decode::{DESTINATION_BYTES, LABEL_BYTES, bounded_text};
 use super::record::insert_record_set;
 use super::site::site_build_inputs;
 use super::{Inputs, InventoryLabel, Provenance};
@@ -26,8 +28,7 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
     let mut site_items = 0_usize;
     for (index, supplied) in values.iter().enumerate() {
         let path = format!("$.semantic_evidence[{index}]");
-        let bytes = canonical(&supplied.value);
-        let envelope = amiss_wire::semantic::parse(&bytes)?;
+        let envelope = amiss_wire::semantic::decode(&supplied.value)?;
         if envelope.payload.context_digest != supplied.expected_context_digest {
             return fail(
                 &format!("{path}.expected_context_digest"),
@@ -73,7 +74,7 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
                         insert_label(
                             Arc::make_mut(&mut inputs.labels),
                             &observation_path,
-                            observation,
+                            &observation,
                         )?;
                     }
                 }
@@ -124,24 +125,26 @@ pub(crate) fn parse(values: &[SuppliedSemanticEvidence]) -> Result<Inputs, Error
 fn insert_label(
     labels: &mut BTreeMap<String, InventoryLabel>,
     path: &str,
-    observation: Value,
+    observation: &Value,
 ) -> Result<(), Error> {
-    let mut row = observation_row(path, observation, SPHINX_LABEL)?;
-    let _inventory = row.required("inventory", decode_id)?;
-    let name = row.required("name", |path, value| {
-        bounded_text(path, value, LABEL_BYTES, |label| {
-            !label.is_empty() && label.chars().all(|character| !character.is_control())
-        })
+    let SphinxLabel {
+        kind,
+        _inventory: _,
+        name,
+        destination,
+    } = amiss_wire::codec::from_value(path, observation)?;
+    if kind != SPHINX_LABEL {
+        return fail(&format!("{path}.kind"), ErrorKind::InvalidValue);
+    }
+    bounded_text(&format!("{path}.name"), &name, LABEL_BYTES, |label| {
+        !label.is_empty() && label.chars().all(|character| !character.is_control())
     })?;
-    let destination = row.required("destination", |path, value| {
-        bounded_text(
-            path,
-            value,
-            DESTINATION_BYTES,
-            amiss_wire::uri::http_destination_valid,
-        )
-    })?;
-    row.finish()?;
+    bounded_text(
+        &format!("{path}.destination"),
+        &destination,
+        DESTINATION_BYTES,
+        amiss_wire::uri::http_destination_valid,
+    )?;
     let normalized = amiss_rst::normalized_label(&name);
     if normalized.is_empty() {
         return fail(&format!("{path}.name"), ErrorKind::InvalidValue);
@@ -151,4 +154,14 @@ fn insert_label(
         .and_modify(|label| *label = InventoryLabel::Ambiguous)
         .or_insert(InventoryLabel::Unique(destination));
     Ok(())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SphinxLabel {
+    kind: String,
+    #[serde(rename = "inventory")]
+    _inventory: ArtifactId,
+    name: String,
+    destination: String,
 }

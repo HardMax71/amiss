@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
@@ -33,9 +34,11 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
                 eprintln!("amiss refs: the projection is larger than a scanner report can be");
                 return failure;
             }
-            if let Err(defect) = crate::output::write_json_array(&occurrences, |occurrence| {
-                json::canonical(occurrence)
-            }) && defect.kind() != std::io::ErrorKind::BrokenPipe
+            if let Err(defect) = crate::output::write_json_array(
+                occurrences
+                    .iter()
+                    .map(|occurrence| json::canonical_view(occurrence)),
+            ) && defect.kind() != std::io::ErrorKind::BrokenPipe
             {
                 eprintln!("amiss refs: the projection could not be written");
                 return failure;
@@ -71,7 +74,7 @@ fn matching_occurrences<'report>(
         match candidate {
             Value::Null => {}
             Value::Object(_) => retain(candidate, &target, &mut matched)?,
-            Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Array(_) => {
+            Value::Bool(_) | Value::Number(_) | Value::String(_) | Value::Array(_) => {
                 return Err(MALFORMED.to_owned());
             }
         }

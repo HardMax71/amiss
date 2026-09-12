@@ -1,4 +1,5 @@
 use super::{digest, publication_plan};
+use amiss_wire::json::ValueExt as _;
 
 use std::{fs, path::Path};
 
@@ -16,9 +17,11 @@ pub(super) fn publication_evidence() -> PublicationEvidence {
     let plan_payload_digest =
         Digest::from_wire(planned_value.text("payload_digest").unwrap()).unwrap();
     PublicationEvidence {
+        schema: amiss_wire::codec::Schema::default(),
         plan_payload_digest,
         producer: planned.producer,
         deployment: PublicationDeployment {
+            outcome: amiss_wire::publication::PublicationOutcome::Succeeded,
             record: PublicationResource {
                 uri: "https://api.github.com/repos/acme/widget/pages/deployments/987".to_owned(),
                 digest: digest('8'),

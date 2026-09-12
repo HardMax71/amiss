@@ -1,7 +1,14 @@
-use std::fmt;
+use std::io;
+
+use serde::Serialize;
+use serde::ser::{SerializeMap, SerializeSeq};
 
 use super::{Value, utf16_cmp};
 
+/// Emits a JSON tree with UTF-16 key ordering.
+///
+/// Amiss wire callers validate with `codec::to_value` or `json::parse` first.
+/// Upstream numeric values retain Serde's encoding, which is not a general JCS number formatter.
 #[must_use]
 pub fn canonical(value: &Value) -> Vec<u8> {
     let mut out = String::new();
@@ -9,8 +16,7 @@ pub fn canonical(value: &Value) -> Vec<u8> {
     out.into_bytes()
 }
 
-/// The exact byte length `canonical` would produce, without materializing
-/// it: the counting canonical-serialization pass.
+/// Counts canonical bytes without materializing them.
 #[must_use]
 pub fn canonical_length(value: &Value) -> u64 {
     let mut count = 0_u64;
@@ -23,7 +29,7 @@ pub fn canonical_length(value: &Value) -> u64 {
     count
 }
 
-/// A canonicalization output receives the serialization in ordered pieces.
+/// Receives canonical JSON in ordered pieces.
 pub trait Sink {
     fn write(&mut self, piece: &str);
 }
@@ -35,140 +41,95 @@ impl Sink for String {
 }
 
 pub(crate) struct Callback<F>(pub(crate) F);
-
 impl<F: FnMut(&str)> Sink for Callback<F> {
     fn write(&mut self, piece: &str) {
         self.0(piece);
     }
 }
 
-/// Streams the canonical serialization into the sink using its own
-/// transient scratch; the fatal lane reuses one reserved scratch instead.
+struct SinkWriter<'a, S: ?Sized>(&'a mut S);
+impl<S: Sink + ?Sized> io::Write for SinkWriter<'_, S> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.0
+            .write(std::str::from_utf8(bytes).map_err(io::Error::other)?);
+        Ok(bytes.len())
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// Serializes a typed projection in its declared field order.
+///
+/// # Errors
+///
+/// The projection cannot be represented as JSON.
+pub fn serialize<T: Serialize + ?Sized, S: Sink + ?Sized>(
+    value: &T,
+    sink: &mut S,
+) -> Result<(), serde_json::Error> {
+    serde_json::to_writer(SinkWriter(sink), value)
+}
+
+/// Streams a JSON tree with UTF-16 object ordering and Serde's JSON encoding.
 pub fn stream<S: Sink + ?Sized>(value: &Value, sink: &mut S) {
-    let mut scratch = Scratch::reserved();
-    scratch.stream(value, sink);
+    let _infallible = serde_json::to_writer(SinkWriter(sink), &Canonical(value));
 }
 
-/// The serializer's entire working memory: one member-order buffer per
-/// nesting level, reused across every sibling at that level, and one
-/// integer-format buffer. Streaming allocates nothing else, so a reserved
-/// `Scratch` makes serialization scratch a fixed space.
-pub(crate) struct Scratch {
-    order: Vec<Vec<usize>>,
-    number: String,
+/// Streams one string, including JSON quotes and escapes.
+pub fn write_string<S: Sink + ?Sized>(sink: &mut S, value: &str) {
+    let _infallible = serde_json::to_writer(SinkWriter(sink), value);
 }
 
-impl Scratch {
-    #[must_use]
-    pub(crate) fn reserved() -> Self {
-        Self {
-            order: Vec::new(),
-            number: String::with_capacity(24),
-        }
-    }
+/// Borrows a JSON tree with canonical UTF-16 object ordering.
+#[must_use]
+pub fn canonical_view(value: &Value) -> impl Serialize + '_ {
+    Canonical(value)
+}
 
-    pub(crate) fn stream<S: Sink + ?Sized>(&mut self, value: &Value, sink: &mut S) {
-        self.write_value(value, sink, 0);
-    }
+/// Streams canonical JSON directly into an I/O writer.
+///
+/// # Errors
+///
+/// The first output error, preserving its kind and source.
+pub fn write_to<W: io::Write + ?Sized>(value: &Value, out: &mut W) -> io::Result<()> {
+    serde_json::to_writer(out, &Canonical(value)).map_err(Into::into)
+}
 
-    fn write_value<S: Sink + ?Sized>(&mut self, value: &Value, sink: &mut S, depth: usize) {
-        match value {
-            Value::Null => sink.write("null"),
-            Value::Bool(true) => sink.write("true"),
-            Value::Bool(false) => sink.write("false"),
-            Value::Integer(n) => {
-                self.number.clear();
-                let _infallible = fmt::Write::write_fmt(&mut self.number, format_args!("{n}"));
-                sink.write(&self.number);
-            }
-            Value::String(s) => write_string(sink, s.as_ref()),
-            Value::Array(items) => {
-                sink.write("[");
-                for (i, item) in items.iter().enumerate() {
-                    if i > 0 {
-                        sink.write(",");
-                    }
-                    self.write_value(item, sink, depth.saturating_add(1));
+struct Canonical<'a>(&'a Value);
+impl Serialize for Canonical<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self.0 {
+            Value::Null => serializer.serialize_unit(),
+            Value::Bool(value) => serializer.serialize_bool(*value),
+            Value::Number(value) => value.serialize(serializer),
+            Value::String(value) => serializer.serialize_str(value),
+            Value::Array(values) => {
+                let mut seq = serializer.serialize_seq(Some(values.len()))?;
+                for value in values {
+                    seq.serialize_element(&Self(value))?;
                 }
-                sink.write("]");
+                seq.end()
             }
-            Value::Object(members) => {
-                self.order_members(members, depth);
-                sink.write("{");
-                let mut position = 0_usize;
-                loop {
-                    let member = self
-                        .order
-                        .get(depth)
-                        .and_then(|level| level.get(position))
-                        .and_then(|&index| members.get(index));
-                    let Some((key, value)) = member else { break };
-                    if position > 0 {
-                        sink.write(",");
+            Value::Object(values) => {
+                let mut map = serializer.serialize_map(Some(values.len()))?;
+                if values
+                    .keys()
+                    .zip(values.keys().skip(1))
+                    .all(|(left, right)| utf16_cmp(left, right).is_le())
+                {
+                    for (key, value) in values {
+                        map.serialize_entry(key, &Self(value))?;
                     }
-                    write_string(sink, key);
-                    sink.write(":");
-                    self.write_value(value, sink, depth.saturating_add(1));
-                    position = position.saturating_add(1);
+                } else {
+                    let mut ordered: Vec<_> = values.iter().collect();
+                    ordered.sort_unstable_by(|(left, _), (right, _)| utf16_cmp(left, right));
+                    for (key, value) in ordered {
+                        map.serialize_entry(key, &Self(value))?;
+                    }
                 }
-                sink.write("}");
+                map.end()
             }
         }
     }
-
-    fn order_members(&mut self, members: &[(String, Value)], depth: usize) {
-        while self.order.len() <= depth {
-            self.order.push(Vec::new());
-        }
-        let Some(level) = self.order.get_mut(depth) else {
-            return;
-        };
-        level.clear();
-        level.extend(0..members.len());
-        level.sort_by(|&a, &b| {
-            let left = members.get(a).map_or("", |(key, _)| key);
-            let right = members.get(b).map_or("", |(key, _)| key);
-            utf16_cmp(left, right)
-        });
-    }
-}
-
-/// Writes one string as canonical JSON, including its quotes.
-pub fn write_string<S: Sink + ?Sized>(sink: &mut S, s: &str) {
-    sink.write("\"");
-    let mut plain = 0_usize;
-    for (index, c) in s.char_indices() {
-        let escape: Option<&str> = match c {
-            '"' => Some("\\\""),
-            '\\' => Some("\\\\"),
-            c if u32::from(c) < 0x20 => Some(control_escape(c)),
-            _ => None,
-        };
-        if let Some(text) = escape {
-            if let Some(run) = s.get(plain..index) {
-                sink.write(run);
-            }
-            sink.write(text);
-            plain = index.saturating_add(c.len_utf8());
-        }
-    }
-    if let Some(run) = s.get(plain..) {
-        sink.write(run);
-    }
-    sink.write("\"");
-}
-
-/// The `\u00xx` form for the raw control characters without a short escape,
-/// as a static piece so streaming stays allocation-free.
-fn control_escape(c: char) -> &'static str {
-    const FORMS: [&str; 32] = [
-        "\\u0000", "\\u0001", "\\u0002", "\\u0003", "\\u0004", "\\u0005", "\\u0006", "\\u0007",
-        "\\b", "\\t", "\\n", "\\u000b", "\\f", "\\r", "\\u000e", "\\u000f", "\\u0010", "\\u0011",
-        "\\u0012", "\\u0013", "\\u0014", "\\u0015", "\\u0016", "\\u0017", "\\u0018", "\\u0019",
-        "\\u001a", "\\u001b", "\\u001c", "\\u001d", "\\u001e", "\\u001f",
-    ];
-    FORMS
-        .get(usize::try_from(u32::from(c)).unwrap_or(0))
-        .copied()
-        .unwrap_or("\\u0000")
 }

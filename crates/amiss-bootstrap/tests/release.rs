@@ -4,6 +4,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -151,19 +152,19 @@ fn a_symlinked_engine_path_refuses() {
 fn edit_action_rows(value: &mut Value, edit: &impl Fn(&mut Value) -> bool) {
     match value {
         Value::Array(items) => {
-            let mut retained = std::mem::take(items).into_vec();
+            let mut retained = std::mem::take(items);
             retained.retain_mut(|item| !is_action_row(item) || edit(item));
             for item in &mut retained {
                 edit_action_rows(item, edit);
             }
-            *items = retained.into_boxed_slice();
+            *items = retained;
         }
         Value::Object(members) => {
             for (_key, member) in members.iter_mut() {
                 edit_action_rows(member, edit);
             }
         }
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) => {}
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
     }
 }
 
@@ -193,7 +194,7 @@ fn is_action_row(value: &Value) -> bool {
         return false;
     };
     members.iter().any(|(key, member)| {
-        key == "role" && matches!(member, Value::String(role) if role.as_ref() == "runtime-data")
+        key == "role" && matches!(member, Value::String(role) if role.as_str() == "runtime-data")
     })
 }
 

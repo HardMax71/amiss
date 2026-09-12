@@ -1,12 +1,16 @@
 use std::collections::BTreeMap;
 
-use crate::digest::hj;
+use garde::Validate;
+use serde::Serialize;
+
+use crate::codec::{self, Document, Envelope, Schema};
+use crate::de::ErrorKind;
+use crate::digest::Digest;
 use crate::json::Value;
 
-use super::{
-    ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, EVIDENCE_SCHEMA, PLAN_ENVELOPE_SCHEMA,
-    PLAN_PAYLOAD_SCHEMA, object, string,
-};
+use super::document::{DestinationRow, Engine, Plan, RepositoryShape};
+use super::evidence::{Evidence, EvidenceRow, Method, Producer, Repository, Tail};
+use super::{ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, EVIDENCE_SCHEMA};
 
 /// Why a plan and evidence yield no assessment: the first defect found.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -25,293 +29,161 @@ pub enum AssessDefect {
     MalformedEvidence,
 }
 
-/// One validated evidence observation, either transport or forge facts.
-enum Observed {
-    Probe {
-        method_get: bool,
-        status: Option<i64>,
-        retarget: Option<String>,
-    },
-    Forge {
-        repository: Repository,
-        tail: Option<Tail>,
-    },
+#[derive(Serialize, Validate)]
+#[garde(allow_unvalidated)]
+struct Assessment<'a> {
+    schema: Schema<Self>,
+    engine: Engine,
+    subject: Subject,
+    producer: Producer,
+    verdicts: Vec<JudgmentRow<'a>>,
 }
 
-#[derive(Clone, Copy)]
-enum Repository {
-    Readable,
-    Missing,
-    Denied,
+impl Document for Assessment<'_> {
+    const PAYLOAD_SCHEMA: &'static str = ASSESSMENT_PAYLOAD_SCHEMA;
+    const ENVELOPE_SCHEMA: &'static str = ASSESSMENT_ENVELOPE_SCHEMA;
+    const LIMIT: u64 = u64::MAX;
 }
 
-#[derive(Clone, Copy)]
-enum Tail {
-    Resolved,
-    PathMissing,
-    RevisionMissing,
+#[derive(Serialize)]
+struct Subject {
+    #[serde(rename = "report_payload_digest")]
+    report: Digest,
+    #[serde(rename = "plan_payload_digest")]
+    plan: Digest,
+    #[serde(rename = "evidence_digest")]
+    evidence: Digest,
 }
 
-/// Judges one complete external plan against one producer's evidence: every
-/// introduced destination gets a verdict, missing evidence stays unproven,
-/// and evidence naming anything outside the introduced set invalidates the
-/// whole assessment rather than being skipped. Pure: the same plan and
-/// evidence always yield the same assessment, digest included.
+#[derive(Serialize)]
+struct JudgmentRow<'a> {
+    destination: &'a str,
+    documents: &'a [String],
+    verdict: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    retarget: Option<&'a str>,
+}
+
+pub(super) fn checked_plan(value: &Value) -> Result<Envelope<Plan>, AssessDefect> {
+    Envelope::from_value(value).map_err(|defect| {
+        if defect.kind == ErrorKind::DigestMismatch {
+            AssessDefect::PlanDigestMismatch
+        } else {
+            AssessDefect::NotAPlan
+        }
+    })
+}
+
+/// Judges every introduced destination under the fixed external evidence policy.
 ///
 /// # Errors
 ///
-/// Returns the first [`AssessDefect`] when the plan is not one or fails its
-/// digest, the evidence is not evidence, it binds another plan or names an
-/// unknown destination, or a row breaks its own kind's grammar.
+/// The plan or evidence violates its shape, digest binding, or domain constraints.
 pub fn assess(
     plan: &Value,
     evidence: &Value,
     engine_version: &str,
     engine_digest: &str,
 ) -> Result<Value, AssessDefect> {
-    let (Some(payload), Some(recorded)) = (plan.member("payload"), plan.text("payload_digest"))
-    else {
-        return Err(AssessDefect::NotAPlan);
-    };
-    if plan.text("schema") != Some(PLAN_ENVELOPE_SCHEMA)
-        || payload.text("schema") != Some(PLAN_PAYLOAD_SCHEMA)
-    {
-        return Err(AssessDefect::NotAPlan);
-    }
-    if hj(PLAN_PAYLOAD_SCHEMA, payload).to_string() != recorded {
-        return Err(AssessDefect::PlanDigestMismatch);
-    }
-    let report_digest = payload
-        .member("report")
-        .and_then(|report| report.text("payload_digest"));
-    let (Some(report_digest), Some(Value::Array(introduced))) =
-        (report_digest, payload.member("introduced"))
-    else {
-        return Err(AssessDefect::NotAPlan);
-    };
-
-    if evidence.text("schema") != Some(EVIDENCE_SCHEMA) {
-        return Err(AssessDefect::NotEvidence);
-    }
-    let producer = evidence
-        .member("producer")
-        .filter(|producer| {
-            producer.text("name").is_some_and(|name| !name.is_empty())
-                && producer
-                    .text("version")
-                    .is_some_and(|version| !version.is_empty())
-        })
-        .ok_or(AssessDefect::NotEvidence)?;
-    if evidence.text("plan_payload_digest") != Some(recorded) {
+    let plan = checked_plan(plan)?;
+    let source = evidence;
+    let evidence: Evidence = codec::from_value("$", source).map_err(|defect| {
+        if defect.path.starts_with("$.rows") {
+            AssessDefect::MalformedEvidence
+        } else if defect.path == "$.plan_payload_digest" {
+            AssessDefect::UnboundEvidence
+        } else {
+            AssessDefect::NotEvidence
+        }
+    })?;
+    evidence
+        .check_header()
+        .map_err(|_defect| AssessDefect::NotEvidence)?;
+    if evidence.plan_payload_digest != plan.payload_digest {
         return Err(AssessDefect::UnboundEvidence);
     }
-    let Some(Value::Array(evidence_rows)) = evidence.member("rows") else {
-        return Err(AssessDefect::NotEvidence);
+    let introduced = plan
+        .payload
+        .introduced
+        .iter()
+        .map(|row| (row.destination.as_str(), row.repository.as_ref()))
+        .collect();
+    let observed = observed_rows(&evidence.rows, &introduced)?;
+    let assessment = Assessment {
+        schema: Schema::default(),
+        engine: Engine::new(engine_version, engine_digest)
+            .map_err(|_defect| AssessDefect::NotAPlan)?,
+        subject: Subject {
+            report: plan.payload.report.payload_digest,
+            plan: plan.payload_digest,
+            evidence: codec::digest(EVIDENCE_SCHEMA, source)
+                .map_err(|_defect| AssessDefect::MalformedEvidence)?,
+        },
+        producer: evidence.producer.clone(),
+        verdicts: verdict_rows(&plan.payload.introduced, &observed),
     };
-
-    // The digest only proves the plan is whole; the judged fields must still
-    // fit the assessment contract, so a hand-built plan cannot smuggle rows
-    // the published schema would reject.
-    let mut introduced_by_destination = BTreeMap::new();
-    for introduced_row in introduced {
-        let destination = introduced_row
-            .text("destination")
-            .filter(|destination| !destination.is_empty());
-        let documents = matches!(
-            introduced_row.member("documents"),
-            Some(Value::Array(items)) if !items.is_empty()
-        );
-        let (Some(destination), true) = (destination, documents) else {
-            return Err(AssessDefect::NotAPlan);
-        };
-        if introduced_by_destination
-            .insert(destination, introduced_row.member("repository"))
-            .is_some()
-        {
-            return Err(AssessDefect::NotAPlan);
-        }
-    }
-    let observed = observed_rows(evidence_rows, &introduced_by_destination)?;
-    let assessment = object(vec![
-        ("schema", string(ASSESSMENT_PAYLOAD_SCHEMA)),
-        (
-            "engine",
-            object(vec![
-                ("engine_version", string(engine_version)),
-                ("engine_digest", string(engine_digest)),
-            ]),
-        ),
-        (
-            "subject",
-            object(vec![
-                ("report_payload_digest", string(report_digest)),
-                ("plan_payload_digest", string(recorded)),
-                (
-                    "evidence_digest",
-                    string(&hj(EVIDENCE_SCHEMA, evidence).to_string()),
-                ),
-            ]),
-        ),
-        ("producer", producer.clone()),
-        (
-            "verdicts",
-            Value::Array(verdict_rows(introduced, &observed).into_boxed_slice()),
-        ),
-    ]);
-    let digest = hj(ASSESSMENT_PAYLOAD_SCHEMA, &assessment);
-    Ok(object(vec![
-        ("schema", string(ASSESSMENT_ENVELOPE_SCHEMA)),
-        ("payload", assessment),
-        ("payload_digest", string(&digest.to_string())),
-    ]))
+    codec::seal_value(&assessment).map_err(|_defect| AssessDefect::MalformedEvidence)
 }
 
-/// Every evidence row validated and keyed: a row must name an introduced
-/// destination, name it once, and carry an observation instant.
 fn observed_rows<'e>(
-    evidence_rows: &'e [Value],
-    introduced: &BTreeMap<&str, Option<&Value>>,
-) -> Result<BTreeMap<&'e str, Observed>, AssessDefect> {
-    let mut observed: BTreeMap<&str, Observed> = BTreeMap::new();
-    for row in evidence_rows {
-        let destination = row
-            .text("destination")
-            .ok_or(AssessDefect::MalformedEvidence)?;
+    rows: &'e [EvidenceRow],
+    introduced: &BTreeMap<&str, Option<&RepositoryShape>>,
+) -> Result<BTreeMap<&'e str, &'e EvidenceRow>, AssessDefect> {
+    let mut observed = BTreeMap::new();
+    for (index, row) in rows.iter().enumerate() {
+        let destination = row.destination();
         let shape = introduced
             .get(destination)
             .copied()
             .ok_or(AssessDefect::UnboundEvidence)?;
-        if row.text("checked_at").is_none_or(str::is_empty) {
-            return Err(AssessDefect::MalformedEvidence);
+        row.check(&format!("$.rows[{index}]"))
+            .map_err(|_defect| AssessDefect::MalformedEvidence)?;
+        if let EvidenceRow::ForgeApi(forge) = row {
+            let shape = shape.ok_or(AssessDefect::UnboundEvidence)?;
+            if forge.tail.is_some() && shape.tail.is_none() {
+                return Err(AssessDefect::UnboundEvidence);
+            }
         }
-        let observation = observe(row, shape)?;
-        if observed.insert(destination, observation).is_some() {
+        if observed.insert(destination, row).is_some() {
             return Err(AssessDefect::UnboundEvidence);
         }
     }
     Ok(observed)
 }
 
-/// One verdict row per introduced destination, in the plan's own order.
-fn verdict_rows(introduced: &[Value], observed: &BTreeMap<&str, Observed>) -> Vec<Value> {
+fn verdict_rows<'a>(
+    introduced: &'a [DestinationRow],
+    observed: &BTreeMap<&str, &'a EvidenceRow>,
+) -> Vec<JudgmentRow<'a>> {
     introduced
         .iter()
         .map(|row| {
-            let destination = row.text("destination").unwrap_or_default();
-            let mut members = vec![
-                ("destination", string(destination)),
-                (
-                    "documents",
-                    row.member("documents").cloned().unwrap_or(Value::Null),
-                ),
-            ];
-            let (verdict, reason, retarget) = match observed.get(destination) {
-                None => ("unproven", Some("unexamined"), None),
-                Some(seen) => judge(seen, row.member("repository")),
-            };
-            members.push(("verdict", string(verdict)));
-            if let Some(reason) = reason {
-                members.push(("reason", string(reason)));
+            let (verdict, reason, retarget) = observed
+                .get(row.destination.as_str())
+                .map_or(("unproven", Some("unexamined"), None), |seen| {
+                    judge(seen, row.repository.as_ref())
+                });
+            JudgmentRow {
+                destination: &row.destination,
+                documents: &row.documents,
+                verdict,
+                reason,
+                retarget,
             }
-            if let Some(retarget) = retarget {
-                members.push(("retarget", string(&retarget)));
-            }
-            object(members)
         })
         .collect()
 }
 
-/// One evidence row into its validated observation; forge facts are only
-/// admissible for a destination the plan shaped, and a tail resolution only
-/// where the shape carries a tail to resolve.
-fn observe(row: &Value, shape: Option<&Value>) -> Result<Observed, AssessDefect> {
-    match row.text("kind") {
-        Some("http-probe") => {
-            let method_get = match row.text("method") {
-                Some("get") => true,
-                Some("head") => false,
-                Some(_) | None => return Err(AssessDefect::MalformedEvidence),
-            };
-            let status = row.member("status");
-            let failure = row.member("failure");
-            let status = match (status, failure) {
-                (Some(Value::Integer(status)), None | Some(Value::Null))
-                    if (100..=999).contains(status) =>
-                {
-                    Some(*status)
-                }
-                (None | Some(Value::Null), Some(Value::String(failure)))
-                    if matches!(failure.as_ref(), "dns" | "tls" | "timeout" | "refused") =>
-                {
-                    None
-                }
-                (_, _) => return Err(AssessDefect::MalformedEvidence),
-            };
-            let final_destination = match row.member("final_destination") {
-                Some(Value::String(destination)) if !destination.is_empty() => {
-                    Some(destination.as_ref())
-                }
-                None | Some(Value::Null) => None,
-                Some(_) => return Err(AssessDefect::MalformedEvidence),
-            };
-            let redirect_chain_permanent = match row.member("redirect_chain_permanent") {
-                Some(Value::Bool(true)) if final_destination.is_some() => true,
-                None | Some(Value::Null) => false,
-                Some(_) => return Err(AssessDefect::MalformedEvidence),
-            };
-            Ok(Observed::Probe {
-                method_get,
-                status,
-                retarget: final_destination
-                    .filter(|_destination| redirect_chain_permanent)
-                    .map(str::to_owned),
-            })
-        }
-        Some("forge-api") => {
-            let Some(shape) = shape else {
-                return Err(AssessDefect::UnboundEvidence);
-            };
-            let repository = match row.text("repository") {
-                Some("readable") => Repository::Readable,
-                Some("missing") => Repository::Missing,
-                Some("denied") => Repository::Denied,
-                Some(_) | None => return Err(AssessDefect::MalformedEvidence),
-            };
-            let tail = match (repository, row.member("tail")) {
-                (_, None | Some(Value::Null)) => None,
-                (Repository::Readable, Some(Value::String(tail))) => match tail.as_ref() {
-                    "resolved" => Some(Tail::Resolved),
-                    "path-missing" => Some(Tail::PathMissing),
-                    "revision-missing" => Some(Tail::RevisionMissing),
-                    _ => return Err(AssessDefect::MalformedEvidence),
-                },
-                (_, Some(_)) => return Err(AssessDefect::MalformedEvidence),
-            };
-            if tail.is_some() && shape.member("tail").is_none() {
-                return Err(AssessDefect::UnboundEvidence);
-            }
-            Ok(Observed::Forge { repository, tail })
-        }
-        Some(_) | None => Err(AssessDefect::MalformedEvidence),
-    }
-}
-
-/// The fixed judgment policy: denial and rate limits are never death, a 404
-/// counts only when a GET confirmed it, a missing repository may be a
-/// private one, and a path is absent only after the repository and revision
-/// resolved.
-fn judge(
-    observed: &Observed,
-    shape: Option<&Value>,
-) -> (&'static str, Option<&'static str>, Option<String>) {
+fn judge<'a>(
+    observed: &'a EvidenceRow,
+    shape: Option<&RepositoryShape>,
+) -> (&'static str, Option<&'static str>, Option<&'a str>) {
     match observed {
-        Observed::Probe {
-            method_get,
-            status,
-            retarget,
-        } => {
-            let (verdict, reason) = match status {
-                Some(404 | 410) if *method_get => ("refuted", Some("gone")),
+        EvidenceRow::HttpProbe(probe) => {
+            let (verdict, reason) = match probe.status {
+                Some(404 | 410) if probe.method == Method::Get => ("refuted", Some("gone")),
                 Some(404 | 410) => ("unproven", Some("unconfirmed")),
                 Some(200..=299) => ("reachable", None),
                 Some(300..=399) => ("unproven", Some("unfollowed")),
@@ -319,9 +191,13 @@ fn judge(
                 Some(429) => ("unproven", Some("rate-limited")),
                 None | Some(_) => ("unproven", Some("unavailable")),
             };
-            (verdict, reason, retarget.clone())
+            let retarget = probe
+                .final_destination
+                .as_deref()
+                .filter(|_destination| probe.redirect_chain_permanent == Some(true));
+            (verdict, reason, retarget)
         }
-        Observed::Forge { repository, tail } => match (repository, tail) {
+        EvidenceRow::ForgeApi(forge) => match (forge.repository, forge.tail) {
             (Repository::Missing, _) => ("unproven", Some("repository-unseen"), None),
             (Repository::Denied, _) => ("unproven", Some("denied"), None),
             (Repository::Readable, Some(Tail::Resolved)) => ("reachable", None, None),
@@ -332,8 +208,7 @@ fn judge(
                 ("refuted", Some("revision-missing"), None)
             }
             (Repository::Readable, None) => {
-                let unresolved = shape.is_some_and(|shape| shape.member("tail").is_some());
-                if unresolved {
+                if shape.is_some_and(|shape| shape.tail.is_some()) {
                     ("unproven", Some("unconfirmed"), None)
                 } else {
                     ("reachable", None, None)

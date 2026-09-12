@@ -1,4 +1,6 @@
-use crate::json::{Scratch, Sink, Value, canonical_length};
+use std::io::{self, Write};
+
+use crate::json::{Value, canonical_length};
 
 use super::FATAL_SCRATCH_BYTES;
 
@@ -9,7 +11,6 @@ use super::FATAL_SCRATCH_BYTES;
 /// materializing the wire.
 pub struct FatalSerializer {
     staging: Vec<u8>,
-    scratch: Scratch,
 }
 
 impl FatalSerializer {
@@ -18,7 +19,6 @@ impl FatalSerializer {
     pub fn new() -> Self {
         Self {
             staging: Vec::with_capacity(FATAL_SCRATCH_BYTES),
-            scratch: Scratch::reserved(),
         }
     }
 
@@ -29,17 +29,19 @@ impl FatalSerializer {
     ///
     /// The first writer error; the wire is incomplete in that case and the
     /// caller treats the emission as failed.
-    pub fn emit(&mut self, envelope: &Value, out: &mut dyn std::io::Write) -> std::io::Result<u64> {
+    pub fn emit(&mut self, envelope: &Value, out: &mut dyn Write) -> io::Result<u64> {
         self.staging.clear();
         let mut sink = StagedSink {
             staging: &mut self.staging,
             out,
             written: 0,
-            error: None,
         };
-        self.scratch.stream(envelope, &mut sink);
-        sink.write("\n");
-        let written = sink.flush();
+        let written = (|| {
+            crate::json::write_to(envelope, &mut sink)?;
+            sink.write_all(b"\n")?;
+            sink.drain()?;
+            Ok(sink.written)
+        })();
         self.staging.clear();
         written
     }
@@ -66,54 +68,40 @@ impl Default for FatalSerializer {
 
 struct StagedSink<'a> {
     staging: &'a mut Vec<u8>,
-    out: &'a mut dyn std::io::Write,
+    out: &'a mut dyn Write,
     written: u64,
-    error: Option<std::io::Error>,
 }
 
 impl StagedSink<'_> {
-    fn drain(&mut self) {
-        if self.error.is_none() {
-            match self.out.write_all(self.staging) {
-                Ok(()) => {
-                    self.written = self
-                        .written
-                        .saturating_add(u64::try_from(self.staging.len()).unwrap_or(u64::MAX));
-                }
-                Err(defect) => self.error = Some(defect),
-            }
-        }
+    fn drain(&mut self) -> io::Result<()> {
+        self.out.write_all(self.staging)?;
+        self.written = self
+            .written
+            .saturating_add(u64::try_from(self.staging.len()).unwrap_or(u64::MAX));
         self.staging.clear();
-    }
-
-    fn flush(&mut self) -> std::io::Result<u64> {
-        self.drain();
-        match self.error.take() {
-            Some(defect) => Err(defect),
-            None => Ok(self.written),
-        }
+        Ok(())
     }
 }
 
-impl Sink for StagedSink<'_> {
-    fn write(&mut self, piece: &str) {
-        if piece.len() >= FATAL_SCRATCH_BYTES {
-            self.drain();
-            if self.error.is_none() {
-                match self.out.write_all(piece.as_bytes()) {
-                    Ok(()) => {
-                        self.written = self
-                            .written
-                            .saturating_add(u64::try_from(piece.len()).unwrap_or(u64::MAX));
-                    }
-                    Err(defect) => self.error = Some(defect),
-                }
+impl Write for StagedSink<'_> {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if bytes.len() >= FATAL_SCRATCH_BYTES {
+            self.drain()?;
+            self.out.write_all(bytes)?;
+            self.written = self
+                .written
+                .saturating_add(u64::try_from(bytes.len()).unwrap_or(u64::MAX));
+        } else {
+            if self.staging.len().saturating_add(bytes.len()) > FATAL_SCRATCH_BYTES {
+                self.drain()?;
             }
-            return;
+            self.staging.extend_from_slice(bytes);
         }
-        if self.staging.len().saturating_add(piece.len()) > FATAL_SCRATCH_BYTES {
-            self.drain();
-        }
-        self.staging.extend_from_slice(piece.as_bytes());
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.drain()?;
+        self.out.flush()
     }
 }

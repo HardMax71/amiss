@@ -1,69 +1,44 @@
 use std::cmp::Ordering;
 
-mod read;
+mod profile;
+mod strict;
 mod write;
 
-pub use read::{Error, ErrorKind, parse};
-pub(crate) use write::{Callback, Scratch};
-pub use write::{Sink, canonical, canonical_length, stream, write_string};
+pub(crate) use profile::check as check_profile;
+pub use serde_json::{Map, Value};
+pub(crate) use strict::decode as strict_value;
+pub use strict::{Error, ErrorKind, parse, parse_upstream};
+pub(crate) use write::Callback;
+pub use write::{
+    Sink, canonical, canonical_length, canonical_view, serialize, stream, write_string, write_to,
+};
 
 pub const MAX_SAFE_INTEGER: i64 = 9_007_199_254_740_991;
 
-/// An owned JSON string with no spare mutable capacity.
-pub type Text = Box<str>;
-
-/// An owned strict-JSON tree with fixed-size strings, arrays, and objects.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Value {
-    Null,
-    Bool(bool),
-    Integer(i64),
-    String(Text),
-    Array(Box<[Value]>),
-    /// Keys sorted by UTF-16 code units and unique; `parse` enforces both.
-    Object(Box<[(String, Value)]>),
+/// Convenience projections and lookups on Serde's JSON tree.
+pub trait ValueExt: Sized {
+    fn string(value: impl Into<String>) -> Self;
+    fn array(values: Vec<Self>) -> Self;
+    fn object(values: Vec<(String, Self)>) -> Self;
+    fn member(&self, name: &str) -> Option<&Self>;
+    fn text(&self, name: &str) -> Option<&str>;
 }
 
-impl Value {
-    /// Freezes one owned string into a JSON string value.
-    #[must_use]
-    pub fn string(value: impl Into<Text>) -> Self {
+impl ValueExt for Value {
+    fn string(value: impl Into<String>) -> Self {
         Self::String(value.into())
     }
-
-    /// Freezes a completed sequence into a JSON array value.
-    #[must_use]
-    pub fn array(values: Vec<Self>) -> Self {
-        Self::Array(values.into_boxed_slice())
+    fn array(values: Vec<Self>) -> Self {
+        Self::Array(values)
     }
-
-    /// Freezes a completed member sequence into a JSON object value.
-    #[must_use]
-    pub fn object(values: Vec<(String, Self)>) -> Self {
-        Self::Object(values.into_boxed_slice())
+    fn object(values: Vec<(String, Self)>) -> Self {
+        Self::Object(values.into_iter().collect())
     }
-
-    /// The named member of an object value, or `None` off objects.
-    #[must_use]
-    pub fn member(&self, name: &str) -> Option<&Self> {
-        if let Self::Object(members) = self {
-            members
-                .iter()
-                .find(|(key, _)| key == name)
-                .map(|(_, value)| value)
-        } else {
-            None
-        }
+    fn member(&self, name: &str) -> Option<&Self> {
+        self.get(name)
     }
-
-    /// The named member as a string slice, or `None` when absent or not one.
-    #[must_use]
-    pub fn text(&self, name: &str) -> Option<&str> {
-        if let Some(Self::String(text)) = self.member(name) {
-            Some(text)
-        } else {
-            None
-        }
+    fn text(&self, name: &str) -> Option<&str> {
+        self.get(name).and_then(Self::as_str)
     }
 }
 

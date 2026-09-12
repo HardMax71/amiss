@@ -375,3 +375,178 @@ fn structural_fact_constructor_rejects_invalid_programmatic_states() {
     );
     assert!(Fact::new(key_input, Resolution::Resolved(Target::Tree { path })).is_none());
 }
+
+#[test]
+fn nested_fact_digests_preserve_absent_and_null_members() {
+    let resolution =
+        r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null}"#;
+    let null_resolution =
+        resolution.replace("\"near\":null", "\"near\":null,\"same_object_at\":null");
+    let absent = parse_debt_fact_case(
+        "explicit-target-missing",
+        "explicit-target-missing",
+        resolution,
+    )
+    .unwrap();
+    let present = parse_debt_fact_case(
+        "explicit-target-missing",
+        "explicit-target-missing",
+        &null_resolution,
+    )
+    .unwrap();
+    assert_eq!(
+        absent.items()[0].accepted_fact,
+        present.items()[0].accepted_fact
+    );
+    assert_ne!(
+        absent.items()[0].accepted_fact_digest,
+        present.items()[0].accepted_fact_digest
+    );
+    let key_input = key_input_json("explicit-target-missing");
+    let tampered_fact = fact_json_for("explicit-target-missing", &key_input, &null_resolution);
+    let item = debt_item_json(
+        "debt/presence",
+        &absent.items()[0].finding_key.to_string(),
+        &tampered_fact,
+        &absent.items()[0].accepted_fact_digest.to_string(),
+        ("2026-07-01T00:00:00Z", "2026-08-01T00:00:00Z"),
+    );
+    let document = debt_snapshot("2026-07-02T00:00:00Z", &[item]);
+    let defect = DebtSnapshot::parse(document.as_bytes()).unwrap_err();
+    assert_eq!(defect.kind, ErrorKind::DigestMismatch);
+    assert_eq!(defect.path, "$.items[0].accepted_fact_digest");
+}
+
+#[test]
+fn fact_nullable_members_are_required_and_commit_ids_are_non_null() {
+    let key_input = key_input_json("explicit-target-missing");
+    let resolution =
+        r#"{"kind":"missing","reason":"path-not-found","path":"docs/missing.md","near":null}"#;
+    let missing_digest = key_input.replace("\"query_digest\": null,", "");
+    assert_eq!(
+        parse_debt_fact("explicit-target-missing", &missing_digest, resolution)
+            .unwrap_err()
+            .kind,
+        ErrorKind::MissingField
+    );
+    let null_commit = key_input.replace(
+        "\"kind\": \"repository-path\",",
+        "\"kind\": \"repository-path\",\"commit_oid\":null,",
+    );
+    assert_eq!(
+        parse_debt_fact("explicit-target-missing", &null_commit, resolution)
+            .unwrap_err()
+            .kind,
+        ErrorKind::WrongType
+    );
+    let missing_near = resolution.replace(",\"near\":null", "");
+    assert_eq!(
+        parse_debt_fact("explicit-target-missing", &key_input, &missing_near)
+            .unwrap_err()
+            .kind,
+        ErrorKind::MissingField
+    );
+}
+
+#[test]
+fn empty_resolution_variants_remain_closed_shapes() {
+    let label = r#"{"kind":"missing","reason":"label-not-declared"}"#;
+    assert!(
+        parse_debt_fact_case("explicit-target-missing", "explicit-target-missing", label).is_ok()
+    );
+    let extra = label.replace("\"reason\":", "\"unexpected\":true,\"reason\":");
+    let defect = parse_debt_fact_case("explicit-target-missing", "explicit-target-missing", &extra)
+        .unwrap_err();
+    assert_eq!(defect.kind, ErrorKind::UnknownField);
+    for resolution in [
+        label,
+        r#"{"kind":"unsupported-version","scope":{"kind":"unknown-path"}}"#,
+        r#"{"kind":"unsupported-semantics","reason":"site-route"}"#,
+        r#"{"kind":"unsupported-semantics","reason":"network-path"}"#,
+        r#"{"kind":"unsupported-semantics","reason":"attribute-dependent"}"#,
+        r#"{"kind":"unsupported-semantics","reason":"duplicate-label"}"#,
+        r#"{"kind":"unsupported-semantics","reason":"external-inventory"}"#,
+    ] {
+        let value: Resolution<amiss_wire::model::RepoPathText> =
+            amiss_wire::codec::decode(resolution.as_bytes()).unwrap();
+        assert_eq!(
+            amiss_wire::codec::canonical(&value).unwrap(),
+            json::canonical(&json::parse(resolution.as_bytes()).unwrap())
+        );
+        let extra = resolution.replace(
+            "\"kind\":\"unknown-path\"",
+            "\"kind\":\"unknown-path\",\"unexpected\":true",
+        );
+        let extra = if extra == resolution {
+            resolution.replacen('{', "{\"unexpected\":true,", 1)
+        } else {
+            extra
+        };
+        assert!(
+            amiss_wire::codec::decode::<Resolution<amiss_wire::model::RepoPathText>>(
+                extra.as_bytes()
+            )
+            .is_err(),
+            "{extra}"
+        );
+    }
+}
+
+#[test]
+fn rehashed_structural_facts_reject_array_shapes_before_digest_validation() {
+    let nested = format!(
+        r#"{{"kind":"type-mismatch","target":{{"kind":"blob","path":"docs/file.md","mode":"100644","content":["available","{RAW_DIGEST}","{PROJECTION_DIGEST}"]}}}}"#
+    );
+    for resolution in [
+        r#"["missing","line-fragment-out-of-range","docs/file.md"]"#,
+        nested.as_str(),
+    ] {
+        let kind = if resolution.contains("type-mismatch") {
+            "reference-type-mismatch"
+        } else {
+            "explicit-target-missing"
+        };
+        let defect = parse_debt_fact_case(kind, kind, resolution).unwrap_err();
+        assert_eq!(defect.kind, ErrorKind::WrongType, "{defect:?}");
+    }
+}
+
+#[test]
+fn buffered_resolutions_reject_arrays_and_object_spellings_of_string_enums() {
+    use amiss_wire::model::RepoPathText;
+    use amiss_wire::resolution::BlobTarget;
+
+    for resolution in [
+        r#"["resolved",{"kind":"tree","path":"docs"}]"#.to_owned(),
+        r#"["declared-untracked","docs/file.md",".gitignore"]"#.to_owned(),
+        r#"{"kind":"invalid","reason":{"syntax":null}}"#.to_owned(),
+        r#"{"kind":"external","reason":{"url":null}}"#.to_owned(),
+        format!(
+            r#"{{"kind":"resolved","target":["blob","docs/file.md","100644",{{"kind":"available","raw_digest":"{RAW_DIGEST}","projection_digest":"{PROJECTION_DIGEST}"}}]}}"#
+        ),
+        format!(
+            r#"{{"kind":"resolved","target":{{"kind":"blob","path":"docs/file.md","mode":{{"100644":null}},"content":{{"kind":"available","raw_digest":"{RAW_DIGEST}","projection_digest":"{PROJECTION_DIGEST}"}}}}}}"#
+        ),
+    ] {
+        assert!(
+            serde_json::from_str::<Resolution<RepoPathText>>(&resolution).is_err(),
+            "{resolution}"
+        );
+    }
+    let array = format!(
+        r#"["docs/file.md","100644",{{"kind":"available","raw_digest":"{RAW_DIGEST}","projection_digest":"{PROJECTION_DIGEST}"}}]"#
+    );
+    assert!(serde_json::from_str::<BlobTarget<RepoPathText>>(&array).is_err());
+}
+
+#[test]
+fn buffered_blob_modes_retain_owned_and_borrowed_string_decoding() {
+    let value = serde_json::Value::String("100644".to_owned());
+    let borrowed: BlobMode = amiss_wire::codec::borrow_value("$", &value).unwrap();
+    let owned: BlobMode = serde_json::from_value(value).unwrap();
+    let streamed: BlobMode = serde_json::from_str(r#""100644""#).unwrap();
+    assert_eq!(borrowed, BlobMode::Regular);
+    assert_eq!(owned, borrowed);
+    assert_eq!(streamed, borrowed);
+    assert!(serde_json::from_str::<BlobMode>(r#"{"100644":null}"#).is_err());
+}

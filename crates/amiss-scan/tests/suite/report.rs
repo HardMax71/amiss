@@ -74,7 +74,7 @@ fn snapshot(
         let Some(adapter) = record.classification.adapter() else {
             continue;
         };
-        let adapter_contract_digest = adapter_contract(&engine(), adapter).1;
+        let adapter_contract_digest = adapter_contract(&engine(), adapter).unwrap().1;
         for occurrence in &scanned.occurrences {
             let is_image = occurrence.occurrence.construct.is_image();
             let (intent, resolution) = resolver
@@ -95,7 +95,8 @@ fn snapshot(
                 projection_digest: occurrence.projection_digest,
                 intent: &intent,
                 raw_destination_digest: occurrence.raw_destination_digest,
-            });
+            })
+            .unwrap();
             observations.push(Observation {
                 id,
                 adapter_contract_digest,
@@ -177,6 +178,7 @@ fn report_retaining(
         comparisons,
         &[],
     )
+    .unwrap()
 }
 
 #[expect(
@@ -574,7 +576,7 @@ fn an_observation_row_hashes_the_identity_input_it_renders() {
     let mut setup = bare_setup(64);
     setup.base = identity.clone();
     setup.candidate = CandidateBlock::Commit(identity);
-    let built = construct(&setup, &discovery, &discovery, comparisons, &[]);
+    let built = construct(&setup, &discovery, &discovery, comparisons, &[]).unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let row = &envelope["payload"]["observations"][0]["candidate"];
     let input_bytes = serde_json::to_vec(&row["observation_id_input"]).unwrap();
@@ -614,7 +616,7 @@ fn excluded_discovery(paths: &[&str]) -> SnapshotDiscovery {
 fn document_rows_merge_both_sides_in_strict_raw_path_order() {
     let base = excluded_discovery(&["a-.md", "a/base.md", "a0.md"]);
     let candidate = excluded_discovery(&["a/candidate.md", "a0.md", "a1.md"]);
-    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]);
+    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]).unwrap();
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let rows = wire["payload"]["documents"].as_array().unwrap();
     let actual: Vec<(String, String)> = rows
@@ -647,7 +649,7 @@ fn a_document_that_moved_is_not_unchanged() {
     let moved = candidate.documents.first_mut().unwrap();
     moved.oid = Oid::new(ObjectFormat::Sha1, "c".repeat(40)).unwrap();
 
-    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]);
+    let built = construct(&bare_setup(64), &base, &candidate, Vec::new(), &[]).unwrap();
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let rows = wire["payload"]["documents"].as_array().unwrap();
     let changes: Vec<(&str, &str)> = rows
@@ -679,7 +681,7 @@ fn error_overflow_retains_the_lowest_keys_and_the_sentinel() {
     let details: Vec<ErrorDetail> = (0..5)
         .map(|index| missing_detail(&format!("p{index}")))
         .collect();
-    let built = construct_incomplete(&bare_setup(3), &details);
+    let built = construct_incomplete(&bare_setup(3), &details).unwrap();
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let errors = wire["payload"]["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 3, "E - 1 ordinary errors plus the sentinel");
@@ -704,7 +706,7 @@ fn exactly_the_ceiling_emits_the_set_without_the_sentinel() {
     let details: Vec<ErrorDetail> = (0..3)
         .map(|index| missing_detail(&format!("p{index}")))
         .collect();
-    let built = construct_incomplete(&bare_setup(3), &details);
+    let built = construct_incomplete(&bare_setup(3), &details).unwrap();
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let errors = wire["payload"]["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 3, "at most E keys emit exactly");
@@ -717,7 +719,7 @@ fn exactly_the_ceiling_emits_the_set_without_the_sentinel() {
 #[test]
 fn a_ceiling_of_one_emits_only_the_sentinel() {
     let details = [missing_detail("p0"), missing_detail("p1")];
-    let built = construct_incomplete(&bare_setup(1), &details);
+    let built = construct_incomplete(&bare_setup(1), &details).unwrap();
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let errors = wire["payload"]["errors"].as_array().unwrap();
     assert_eq!(errors.len(), 1, "E = 1 leaves room only for the sentinel");
@@ -851,7 +853,8 @@ fn the_findings_counter_fires_before_the_wire_cap() {
         errors_retained: 64,
     };
     let built =
-        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate);
+        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate)
+            .unwrap();
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let findings = wire["payload"]["findings"].as_array().unwrap();
 
@@ -941,7 +944,7 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let built = construct(&setup, &base_discovery, &candidate_discovery, inflated, &[]);
+    let built = construct(&setup, &base_discovery, &candidate_discovery, inflated, &[]).unwrap();
 
     assert_eq!(built.status, "incomplete");
     assert_eq!(built.exit_code, 2);
@@ -1015,7 +1018,8 @@ fn a_finding_location_carries_the_real_display_positions() {
         &candidate_discovery,
         comparisons,
         &[],
-    );
+    )
+    .unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let span = envelope["payload"]["findings"]
         .as_array()
@@ -1078,7 +1082,8 @@ fn the_evaluation_echoes_a_self_hosted_forge_host() {
     let base = Oid::new(ObjectFormat::Sha1, base_commit).unwrap();
     let candidate = Oid::new(ObjectFormat::Sha1, candidate_commit).unwrap();
     let built =
-        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate);
+        amiss_scan::pipeline::commit_pair(&repo, &engine(), None, &shell, &base, &candidate)
+            .unwrap();
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let repository = &wire["payload"]["evaluation"]["repository"];
     assert_eq!(repository["host"], "ghes.example");

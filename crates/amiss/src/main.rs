@@ -16,6 +16,7 @@ mod repair;
 mod sarif;
 mod view;
 
+use amiss_wire::json::ValueExt as _;
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
@@ -250,13 +251,15 @@ fn run_sealed(reserve: &mut FatalSerializer) -> ExitCode {
         external_defect: external_defect.map(|detail| ("invalid-external-control", detail)),
         errors_retained: 64,
     };
-    let built = evaluate_snapshots(
+    let Some(built) = evaluate_snapshots(
         &repo,
         forge.as_ref(),
         &shell,
         &evaluation.base_commit,
         evaluation.candidate_commit.as_ref(),
-    );
+    ) else {
+        return failure;
+    };
     emit(reserve, &built.envelope);
     exit_class(built.exit_code)
 }
@@ -290,12 +293,24 @@ fn evaluate_snapshots(
     shell: &amiss_scan::pipeline::SetupShell,
     base: &Oid,
     candidate: Option<&Oid>,
-) -> amiss_scan::report::Built {
-    match candidate {
+) -> Option<amiss_scan::report::Built> {
+    constructed(match candidate {
         Some(candidate) => {
             amiss_scan::pipeline::commit_pair(repo, &shell.engine, forge, shell, base, candidate)
         }
         None => amiss_scan::pipeline::staged_index(repo, &shell.engine, forge, shell, base),
+    })
+}
+
+fn constructed(
+    result: Result<amiss_scan::report::Built, amiss_wire::de::Error>,
+) -> Option<amiss_scan::report::Built> {
+    match result {
+        Ok(built) => Some(built),
+        Err(defect) => {
+            diagnose_emission(Err(std::io::Error::other(defect)));
+            None
+        }
     }
 }
 
@@ -362,7 +377,11 @@ fn run(invocation: &Invocation, reserve: &mut FatalSerializer) -> ExitCode {
         CandidateSelector::Commit(candidate) => Some(candidate),
         CandidateSelector::Index => None,
     };
-    let built = evaluate_snapshots(&repo, forge.as_ref(), &shell, &invocation.base, candidate);
+    let Some(built) =
+        evaluate_snapshots(&repo, forge.as_ref(), &shell, &invocation.base, candidate)
+    else {
+        return failure;
+    };
     if invocation.verb == Verb::Fix {
         return repair::run(
             &invocation.repo,
@@ -448,7 +467,9 @@ fn fatal(
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let built = construct_incomplete(&setup, details);
+    let Some(built) = constructed(construct_incomplete(&setup, details)) else {
+        return ExitCode::from(ExitClass::Failure.code());
+    };
     project(
         &built.envelope,
         invocation.format,

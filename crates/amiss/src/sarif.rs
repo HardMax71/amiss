@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::collections::BTreeSet;
 
 use amiss_wire::json::Value;
@@ -48,7 +49,7 @@ pub(crate) fn log(envelope: &Value) -> Value {
 
     let invocation = object(vec![
         ("executionSuccessful", Value::Bool(result.flag("complete"))),
-        ("exitCode", Value::Integer(result.number("exit_code"))),
+        ("exitCode", Value::from(result.number("exit_code"))),
         ("toolExecutionNotifications", Value::array(notifications)),
     ]);
     let driver = object(vec![
@@ -102,7 +103,7 @@ fn result_value(row: View<'_>, present: &[FindingKind]) -> Value {
         .position(|candidate| candidate.as_ref() == kind)
         .and_then(|position| i64::try_from(position).ok())
     {
-        members.push(("ruleIndex", Value::Integer(index)));
+        members.push(("ruleIndex", Value::from(index)));
     }
     if let Some(location) = location_value(row.view("location")) {
         members.push(("locations", Value::array(vec![location])));
@@ -134,8 +135,8 @@ fn fix_value(fix: View<'_>) -> Option<Value> {
                         (
                             "deletedRegion",
                             object(vec![
-                                ("byteLength", Value::Integer(length)),
-                                ("byteOffset", Value::Integer(start)),
+                                ("byteLength", Value::from(length)),
+                                ("byteOffset", Value::from(start)),
                             ]),
                         ),
                         (
@@ -162,10 +163,10 @@ fn location_value(location: View<'_>) -> Option<Value> {
         physical.push((
             "region",
             object(vec![
-                ("endColumn", Value::Integer(span.number("end_column"))),
-                ("endLine", Value::Integer(span.number("end_line"))),
-                ("startColumn", Value::Integer(span.number("start_column"))),
-                ("startLine", Value::Integer(span.number("start_line"))),
+                ("endColumn", Value::from(span.number("end_column"))),
+                ("endLine", Value::from(span.number("end_line"))),
+                ("startColumn", Value::from(span.number("start_column"))),
+                ("startLine", Value::from(span.number("start_line"))),
             ]),
         ));
     }

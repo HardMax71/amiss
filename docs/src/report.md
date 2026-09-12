@@ -5,10 +5,13 @@ newline. Canonical means [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785) cano
 keys sorted, one byte sequence per possible document, so the same input through the same
 engine binary always produces the same bytes. The payload facts agree across platforms; the
 envelope's own digests differ by build, because they name the exact binary that ran. Duplicate keys are rejected everywhere on input, and
-the contract's numbers are integers, never floats.
+the contract's numbers are integers in the inclusive range −9007199254740991 to 9007199254740991,
+never fractions or exponent tokens. Negative zero is refused. Input nesting is limited to 512
+containers; keys are ordered by UTF-16 code units during canonical emission.
 
 The outer envelope has three members: its schema, the payload, and `payload_digest`, a hash
-of the payload's canonical bytes. The payload carries its own schema, `compatibility`
+of the received payload's canonical bytes. Verification retains additive payload fields in that
+hash before interpreting the fields a consumer understands. The payload carries its own schema, `compatibility`
 (the wire's own version, frozen at `1`), and an engine block whose `engine_digest` names the
 binary that produced it. Every digest in the system is domain-separated, meaning the hash
 input starts with a label naming its purpose, so a digest computed for one context cannot be

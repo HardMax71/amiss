@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::collections::BTreeSet;
 
 use amiss_wire::digest::{hb, hj};
@@ -14,7 +15,7 @@ fn member<'a>(value: &'a Value, key: &str) -> &'a Value {
     };
     members
         .iter()
-        .find(|(name, _)| name == key)
+        .find(|(name, _)| name.as_str() == key)
         .map_or_else(|| panic!("missing member {key}"), |(_, value)| value)
 }
 
@@ -29,7 +30,7 @@ fn strings(value: &Value) -> Vec<String> {
             let Value::String(s) = item else {
                 panic!("not a string");
             };
-            s.to_string()
+            s.clone()
         })
         .collect()
 }
@@ -55,14 +56,14 @@ fn builds_the_fatal_incomplete_envelope() {
     let Value::String(schema) = member(&envelope, "schema") else {
         panic!("schema is not a string");
     };
-    assert_eq!(schema.as_ref(), ENVELOPE_SCHEMA);
+    assert_eq!(schema.as_str(), ENVELOPE_SCHEMA);
 
     let payload = member(&envelope, "payload");
     let Value::String(payload_digest) = member(&envelope, "payload_digest") else {
         panic!("payload_digest is not a string");
     };
     assert_eq!(
-        payload_digest.as_ref(),
+        payload_digest.as_str(),
         hj(PAYLOAD_SCHEMA, payload).to_string()
     );
 
@@ -107,15 +108,15 @@ fn builds_the_fatal_incomplete_envelope() {
     let result = member(payload, "result");
     assert_eq!(member(result, "complete"), &Value::Bool(false));
     assert_eq!(member(result, "status"), &Value::string("incomplete"));
-    assert_eq!(member(result, "exit_code"), &Value::Integer(2));
-    assert_eq!(member(result, "finding_count"), &Value::Integer(0));
-    assert_eq!(member(result, "error_count"), &Value::Integer(2));
+    assert_eq!(member(result, "exit_code"), &Value::from(2));
+    assert_eq!(member(result, "finding_count"), &Value::from(0));
+    assert_eq!(member(result, "error_count"), &Value::from(2));
 
     let summary = member(payload, "summary");
     assert_eq!(member(summary, "counts_complete"), &Value::Bool(false));
     assert_eq!(
         member(member(summary, "documents"), "discovered"),
-        &Value::Integer(0)
+        &Value::from(0)
     );
     for detail in ["documents", "observations", "findings"] {
         assert_eq!(member(payload, detail), &Value::array(Vec::new()));

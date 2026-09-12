@@ -1,4 +1,11 @@
+mod string;
+pub use string::string;
+
+mod object;
+pub use object::object;
+
 mod tests;
+mod tree;
 
 use std::cmp::Ordering;
 use std::fmt;
@@ -7,11 +14,10 @@ use std::marker::PhantomData;
 use garde::Validate;
 use serde::de::{DeserializeOwned, Unexpected};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use serde_json::error::Category;
 use serde_path_to_error::Segment;
 
 use crate::de::{Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::digest::{Digest, hj};
 use crate::json;
 
 pub const MAX_SAFE_INTEGER: u64 = (1 << 53) - 1;
@@ -100,17 +106,12 @@ impl<T: Document + Serialize + DeserializeOwned + Validate<Context = ()>> Envelo
     /// A field constraint or a law between fields is violated, or the
     /// canonical document exceeds the byte ceiling.
     pub fn seal(payload: T) -> Result<Self, Error> {
-        validate(&payload, PAYLOAD)?;
-        let payload_digest = digest(T::PAYLOAD_SCHEMA, &payload)?;
-        let envelope = Self {
+        let (_, payload_digest) = sealed_projection(&payload)?;
+        Ok(Self {
             schema: T::ENVELOPE_SCHEMA.to_owned(),
             payload,
             payload_digest,
-        };
-        if u64::try_from(canonical(&envelope)?.len()).unwrap_or(u64::MAX) > T::LIMIT {
-            return fail("$", ErrorKind::LimitExceeded);
-        }
-        Ok(envelope)
+        })
     }
 
     /// Reads one bounded document and checks its constraints, laws, and digest.
@@ -124,16 +125,121 @@ impl<T: Document + Serialize + DeserializeOwned + Validate<Context = ()>> Envelo
         if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > T::LIMIT {
             return fail("$", ErrorKind::LimitExceeded);
         }
-        let envelope: Self = decode(bytes)?;
-        if envelope.schema != T::ENVELOPE_SCHEMA {
+        let value = json::strict_value(bytes).map_err(|(path, defect)| {
+            Error::described(path, ErrorKind::Json(defect), defect.to_string())
+        })?;
+        Self::read_value(&value)
+    }
+
+    /// Validates a complete envelope already held as a JSON tree.
+    ///
+    /// # Errors
+    ///
+    /// The strict profile, shape, constraints, digest, or byte ceiling is invalid.
+    pub fn from_value(value: &json::Value) -> Result<Self, Error> {
+        json::check_profile(value).map_err(|defect| unrepresentable(&defect))?;
+        if json::canonical_length(value) > T::LIMIT {
+            return fail("$", ErrorKind::LimitExceeded);
+        }
+        Self::read_value(value)
+    }
+
+    fn read_value(value: &json::Value) -> Result<Self, Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Fields<'a> {
+            schema: &'a str,
+            payload: serde::de::IgnoredAny,
+            payload_digest: Digest,
+        }
+        let received: Fields<'_> = borrow_value("$", value)?;
+        let serde::de::IgnoredAny = received.payload;
+        if received.schema != T::ENVELOPE_SCHEMA {
             return fail("$.schema", ErrorKind::InvalidValue);
         }
-        validate(&envelope.payload, PAYLOAD)?;
-        if digest(T::PAYLOAD_SCHEMA, &envelope.payload)? != envelope.payload_digest {
+        let raw_payload = value
+            .get("payload")
+            .ok_or_else(|| Error::new(PAYLOAD, ErrorKind::MissingField))?;
+        let received_digest = hj(T::PAYLOAD_SCHEMA, raw_payload);
+        let payload: T = from_value(PAYLOAD, raw_payload)?;
+        validate(&payload, PAYLOAD)?;
+        if received_digest != received.payload_digest {
             return fail("$.payload_digest", ErrorKind::DigestMismatch);
         }
-        Ok(envelope)
+        Ok(Self {
+            schema: received.schema.to_owned(),
+            payload,
+            payload_digest: received.payload_digest,
+        })
     }
+
+    /// Checks a constructed or changed envelope without parsing it again.
+    ///
+    /// # Errors
+    ///
+    /// The schema, constraints, digest, or byte ceiling is invalid.
+    pub fn verify(&self, root: &str) -> Result<(), Error> {
+        if self.schema != T::ENVELOPE_SCHEMA {
+            return fail(&member(root, "schema"), ErrorKind::InvalidValue);
+        }
+        validate(&self.payload, &member(root, "payload"))?;
+        let payload = to_value(&self.payload)?;
+        if hj(T::PAYLOAD_SCHEMA, &payload) != self.payload_digest {
+            return fail(&member(root, "payload_digest"), ErrorKind::DigestMismatch);
+        }
+        let envelope = envelope_value(&self.schema, payload, self.payload_digest)?;
+        if json::canonical_length(&envelope) > T::LIMIT {
+            return fail(root, ErrorKind::LimitExceeded);
+        }
+        Ok(())
+    }
+}
+
+/// Moves an existing payload into a derived envelope without cloning the tree.
+///
+/// # Errors
+///
+/// The envelope cannot be represented as JSON.
+pub fn envelope_value(
+    schema: &str,
+    payload: json::Value,
+    payload_digest: Digest,
+) -> Result<json::Value, Error> {
+    let mut envelope = to_value(&Envelope {
+        schema: schema.to_owned(),
+        payload: (),
+        payload_digest,
+    })?;
+    let slot = envelope
+        .get_mut("payload")
+        .ok_or_else(|| Error::new("$.payload", ErrorKind::Inconsistent))?;
+    *slot = payload;
+    json::check_profile(&envelope).map_err(|defect| unrepresentable(&defect))?;
+    Ok(envelope)
+}
+
+/// Seals a borrowed payload directly into its wire tree.
+///
+/// # Errors
+///
+/// The payload violates its constraints, laws, or document ceiling.
+pub fn seal_value<T: Document + Serialize + Validate<Context = ()>>(
+    payload: &T,
+) -> Result<json::Value, Error> {
+    sealed_projection(payload).map(|(value, _digest)| value)
+}
+
+fn sealed_projection<T: Document + Serialize + Validate<Context = ()>>(
+    payload: &T,
+) -> Result<(json::Value, Digest), Error> {
+    validate(payload, PAYLOAD)?;
+    let payload = to_value(payload)?;
+    let payload_digest = hj(T::PAYLOAD_SCHEMA, &payload);
+    let envelope = envelope_value(T::ENVELOPE_SCHEMA, payload, payload_digest)?;
+    if json::canonical_length(&envelope) > T::LIMIT {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    Ok((envelope, payload_digest))
 }
 
 fn validate<T: Document + Validate<Context = ()>>(payload: &T, root: &str) -> Result<(), Error> {
@@ -152,47 +258,79 @@ pub fn constrained<T: Validate<Context = ()>>(value: &T, root: &str) -> Result<(
         .map_err(|report| constraint_error(root, &report))
 }
 
-/// Reads one subtree of a hand-parsed value into its closed shape, rooting
-/// error paths at `path`.
+/// Deserializes one strict JSON subtree, rooting shape errors at `path`.
 ///
 /// # Errors
 ///
-/// The subtree is not the closed shape or violates a field constraint.
-pub fn from_value<T: DeserializeOwned + Validate<Context = ()>>(
-    path: &str,
-    value: &json::Value,
-) -> Result<T, Error> {
-    let decoded: T = decode(&json::canonical(value)).map_err(|mut error| {
-        if let Some(rerooted) = error
-            .path
-            .strip_prefix('$')
-            .map(|rest| format!("{path}{rest}"))
-        {
-            error.path = rerooted;
-        }
-        error
-    })?;
-    constrained(&decoded, path)?;
-    Ok(decoded)
+/// The subtree violates the Amiss profile or does not match the requested shape.
+pub fn from_value<T: DeserializeOwned>(path: &str, value: &json::Value) -> Result<T, Error> {
+    check_value(path, value)?;
+    borrow_value(path, value)
 }
 
-/// The hand-codec value of any wire value, for the writers not yet moved.
+pub(crate) fn check_value(path: &str, value: &json::Value) -> Result<(), Error> {
+    json::check_profile(value).map_err(|defect| {
+        Error::described(
+            path.to_owned(),
+            ErrorKind::InvalidValue,
+            bare_message(&defect),
+        )
+    })
+}
+
+/// Deserializes borrowed fields from a JSON tree without cloning it.
 ///
 /// # Errors
 ///
-/// The value cannot be canonicalized.
+/// The tree does not match the requested shape.
+pub fn borrow_value<'de, T: Deserialize<'de>>(
+    path: &str,
+    value: &'de json::Value,
+) -> Result<T, Error> {
+    deserialize_tree(path, value)
+}
+
+/// Deserializes a JSON tree by consuming its fields without cloning them.
+///
+/// # Errors
+///
+/// The tree does not match the requested shape.
+pub fn owned_value<T: DeserializeOwned>(path: &str, value: serde_json::Value) -> Result<T, Error> {
+    deserialize_tree(path, value)
+}
+
+fn deserialize_tree<'de, T, D>(path: &str, value: D) -> Result<T, Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de, Error = serde_json::Error>,
+{
+    serde_path_to_error::deserialize(tree::Tree(value)).map_err(|defect| {
+        let rendered = render_path(defect.path());
+        let rooted = rendered
+            .strip_prefix('$')
+            .map_or_else(|| path.to_owned(), |rest| format!("{path}{rest}"));
+        data_error(&[], rooted, &defect.into_inner())
+    })
+}
+
+/// Projects a serializable wire value into a JSON tree.
+///
+/// # Errors
+///
+/// Serialization or the strict numeric profile is invalid.
 pub fn to_value<T: Serialize + ?Sized>(value: &T) -> Result<json::Value, Error> {
-    json::parse(&canonical(value)?).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
+    json::check_profile(value).map_err(|defect| unrepresentable(&defect))?;
+    let value = serde_json::to_value(value).map_err(|defect| unrepresentable(&defect))?;
+    Ok(value)
 }
 
 /// The RFC 8785 bytes of any wire value.
 ///
 /// # Errors
 ///
-/// The value holds a map keyed by something other than strings.
+/// The value violates the integer-only profile, nesting bound, or string-key requirement.
 pub fn canonical<T: Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, Error> {
-    let sorted = serde_json::to_value(value).map_err(|defect| unrepresentable(&defect))?;
-    serde_json::to_vec(&sorted).map_err(|defect| unrepresentable(&defect))
+    Ok(json::canonical(&to_value(value)?))
 }
 
 /// The domain-separated digest over the canonical bytes of any wire value.
@@ -201,7 +339,7 @@ pub fn canonical<T: Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, Error> {
 ///
 /// The value cannot be canonicalized.
 pub fn digest<T: Serialize + ?Sized>(domain: &str, value: &T) -> Result<Digest, Error> {
-    Ok(hb(domain, &canonical(value)?))
+    Ok(hj(domain, &to_value(value)?))
 }
 
 /// Reads one complete strict JSON value into its closed shape.
@@ -210,19 +348,23 @@ pub fn digest<T: Serialize + ?Sized>(domain: &str, value: &T) -> Result<Digest, 
 ///
 /// The bytes are not UTF-8, not one JSON value, or not the closed shape.
 pub fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
-    if let Err(defect) = std::str::from_utf8(bytes) {
-        return Err(json_error(
-            json::ErrorKind::InvalidUtf8,
-            defect.valid_up_to(),
-        ));
+    let value = json::strict_value(bytes).map_err(|(path, defect)| {
+        Error::described(path, ErrorKind::Json(defect), defect.to_string())
+    })?;
+    owned_value("$", value)
+}
+
+/// One garde rule outcome: a refusal carrying `message`, or nothing.
+///
+/// # Errors
+///
+/// `valid` is false.
+pub fn rule(valid: bool, message: &'static str) -> garde::Result {
+    if valid {
+        Ok(())
+    } else {
+        Err(garde::Error::new(message))
     }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let value = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| shape_error(bytes, defect))?;
-    deserializer
-        .end()
-        .map_err(|defect| syntax_error(bytes, &defect))?;
-    Ok(value)
 }
 
 /// A required member that may be null, never absent.
@@ -236,8 +378,15 @@ pub fn nullable<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
     Option::deserialize(deserializer)
 }
 
-fn json_error(kind: json::ErrorKind, offset: usize) -> Error {
-    Error::new("$", ErrorKind::Json(json::Error { kind, offset }))
+/// A present optional member must contain a value, never null.
+///
+/// # Errors
+///
+/// The member is null or does not match `T`.
+pub fn non_null<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+    deserializer: D,
+) -> Result<Option<T>, D::Error> {
+    T::deserialize(deserializer).map(Some)
 }
 
 fn unrepresentable(defect: &serde_json::Error) -> Error {
@@ -248,20 +397,17 @@ fn unrepresentable(defect: &serde_json::Error) -> Error {
     )
 }
 
-fn shape_error(bytes: &[u8], defect: serde_path_to_error::Error<serde_json::Error>) -> Error {
-    let path = render_path(defect.path());
-    let inner = defect.into_inner();
-    match inner.classify() {
-        Category::Data => data_error(bytes, path, &inner),
-        Category::Io | Category::Syntax | Category::Eof => syntax_error(bytes, &inner),
-    }
-}
-
 fn data_error(bytes: &[u8], path: String, defect: &serde_json::Error) -> Error {
     let message = bare_message(defect);
     let (path, kind) = if let Some(field) = quoted_field(&message, "missing field `") {
         (member(&path, field), ErrorKind::MissingField)
-    } else if message.starts_with("unknown field `") {
+    } else if let Some(field) = quoted_field(&message, "unknown field `") {
+        let suffix = format!(".{field}");
+        let path = if path.ends_with(&suffix) {
+            path
+        } else {
+            member(&path, field)
+        };
         (path, ErrorKind::UnknownField)
     } else if let Some(field) = quoted_field(&message, "duplicate field `") {
         let duplicate = json::Error {
@@ -272,37 +418,18 @@ fn data_error(bytes: &[u8], path: String, defect: &serde_json::Error) -> Error {
     } else if message.starts_with("invalid type") {
         (path, ErrorKind::WrongType)
     } else {
-        (path, ErrorKind::InvalidValue)
+        let kind = [
+            ErrorKind::UnsortedSet,
+            ErrorKind::DuplicateMember,
+            ErrorKind::LimitExceeded,
+            ErrorKind::Inconsistent,
+        ]
+        .into_iter()
+        .find(|kind| kind.to_string() == message)
+        .unwrap_or(ErrorKind::InvalidValue);
+        (path, kind)
     };
     Error::described(path, kind, message)
-}
-
-fn syntax_error(bytes: &[u8], defect: &serde_json::Error) -> Error {
-    let message = bare_message(defect);
-    let syntax = json::Error {
-        kind: syntax_kind(&message),
-        offset: offset(bytes, defect.line(), defect.column()),
-    };
-    Error::described("$".to_owned(), ErrorKind::Json(syntax), message)
-}
-
-fn syntax_kind(message: &str) -> json::ErrorKind {
-    [
-        ("EOF while parsing", json::ErrorKind::UnexpectedEnd),
-        ("trailing characters", json::ErrorKind::TrailingContent),
-        ("recursion limit exceeded", json::ErrorKind::DepthLimit),
-        ("control character", json::ErrorKind::ControlCharacter),
-        ("invalid escape", json::ErrorKind::InvalidEscape),
-        (
-            "unexpected end of hex escape",
-            json::ErrorKind::InvalidEscape,
-        ),
-        ("lone leading surrogate", json::ErrorKind::LoneSurrogate),
-        ("invalid unicode code point", json::ErrorKind::LoneSurrogate),
-    ]
-    .into_iter()
-    .find(|(prefix, _)| message.starts_with(prefix))
-    .map_or(json::ErrorKind::UnexpectedByte, |(_, kind)| kind)
 }
 
 fn constraint_error(root: &str, report: &garde::Report) -> Error {
@@ -348,7 +475,7 @@ fn render_path(path: &serde_path_to_error::Path) -> String {
 }
 
 fn quoted_field<'a>(message: &'a str, prefix: &str) -> Option<&'a str> {
-    message.strip_prefix(prefix)?.strip_suffix('`')
+    message.strip_prefix(prefix)?.split('`').next()
 }
 
 fn member(path: &str, name: &str) -> String {

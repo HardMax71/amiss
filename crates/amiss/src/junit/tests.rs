@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 use quick_xml::Reader;
 use quick_xml::events::Event;
 

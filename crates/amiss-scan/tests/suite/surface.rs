@@ -81,7 +81,7 @@ fn scan(stage: impl FnOnce(&Path)) -> (Built, serde_json::Value) {
     )
     .unwrap();
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let built = commit_pair(&repo, &engine(), None, &bare_shell(), &base, &candidate);
+    let built = commit_pair(&repo, &engine(), None, &bare_shell(), &base, &candidate).unwrap();
     let wire: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let payload = wire["payload"].clone();
     (built, payload)

@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
@@ -125,12 +126,21 @@ pub(crate) fn evaluate_with_site(
     for group in inputs.claims {
         findings.push(claim_finding(group, profile));
     }
-    findings.extend(
-        inputs
-            .projections
-            .iter()
-            .filter_map(|outcome| projection_finding(outcome, profile)),
-    );
+    let mut errors = Vec::new();
+    for outcome in inputs.projections {
+        match projection_finding(outcome, profile) {
+            Ok(Some(finding)) => findings.push(finding),
+            Ok(None) => {}
+            Err(_defect) => errors.push(ErrorDetail {
+                code: amiss_wire::report::AnalysisErrorCode::ReportConstructionFailed,
+                path: Some(amiss_wire::model::RepoPath::from(
+                    &outcome.assertion.document,
+                )),
+                path_bytes: None,
+                resource: None,
+            }),
+        }
+    }
     for finding in &mut findings {
         if finding.attribution == Attribution::Resolved || finding.candidate_fact.is_none() {
             continue;
@@ -161,7 +171,8 @@ pub(crate) fn evaluate_with_site(
             }
         }
     }
-    let (exception_findings, errors) = apply_exceptions(&mut findings, policy, profile);
+    let (exception_findings, exception_errors) = apply_exceptions(&mut findings, policy, profile);
+    errors.extend(exception_errors);
     findings.extend(exception_findings);
     for seed in &policy.controls {
         findings.push(control_finding(seed, policy, profile));

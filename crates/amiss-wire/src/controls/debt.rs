@@ -1,13 +1,12 @@
-use std::collections::BTreeSet;
-
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use super::item::{FactInput, check_reason};
+use super::{DEBT_SNAPSHOT_SCHEMA, Fact, check_len, check_schema, root, sorted_set};
+use crate::codec;
+use crate::de::{Error, ErrorKind, fail};
 use crate::digest::{Digest, hj};
+use crate::json::Value;
 use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
-
-use super::{
-    DEBT_SNAPSHOT_SCHEMA, Fact, decode_artifact_id, decode_branch_ref, decode_instant,
-    decode_items, decode_repository, decode_tree, item::decode_item_core, root, sorted_set,
-};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeSet;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DebtItem {
@@ -85,64 +84,94 @@ impl DebtSnapshot {
     /// fact digests that do not recompute, fact-kind/resolution inconsistencies,
     /// causal time-order violations, and unsorted or duplicate items or keys.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let digest = hj(DEBT_SNAPSHOT_SCHEMA, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, DEBT_SNAPSHOT_SCHEMA)
-        })?;
+        Self::from_value(&root(bytes)?)
+    }
 
-        let repository = obj.required("repository", decode_repository)?;
-        let ref_name = obj.required("ref", decode_branch_ref)?;
-        let organization_floor_digest = obj.required("organization_floor_digest", de::digest)?;
-        let adoption_tree = obj.required("adoption_tree", decode_tree)?;
-        let adoption_report_payload_digest =
-            obj.required("adoption_report_payload_digest", de::digest)?;
-        let created_at = obj.required("created_at", decode_instant)?;
-
-        let items_path = obj.field("items");
-        let raw = de::array(&items_path, obj.take("items")?)?;
-        let items = decode_items(&items_path, raw, 100_000, |path, value| {
-            let mut item = Obj::new(path, value)?;
-            let debt_id = item.required("debt_id", decode_artifact_id)?;
-            let core = decode_item_core(&mut item, "accepted_fact")?;
-            item.finish()?;
-            (core.created_at < core.expires_at)
-                .then_some(DebtItem {
-                    debt_id,
-                    finding_key: core.finding_key,
-                    accepted_fact: core.fact,
-                    accepted_fact_digest: core.fact_digest,
-                    owner: core.owner,
-                    reason: core.reason,
-                    created_at: core.created_at,
-                    expires_at: core.expires_at,
+    /// Checks already decoded controls, including the original nested digests.
+    ///
+    /// # Errors
+    ///
+    /// A field, digest, ordering, or causal time law is invalid.
+    pub fn from_value(value: &Value) -> Result<Self, Error> {
+        let payload: Payload = codec::from_value("$", value)?;
+        check_schema("$.schema", &payload.schema, DEBT_SNAPSHOT_SCHEMA)?;
+        check_len("$.items", payload.items.len(), 100_000)?;
+        let items: Vec<DebtItem> = payload
+            .items
+            .into_iter()
+            .enumerate()
+            .map(|(index, item)| {
+                let path = format!("$.items[{index}]");
+                check_reason(&format!("{path}.reason"), &item.reason)?;
+                let fact = item.accepted_fact.check(
+                    &path,
+                    item.finding_key,
+                    item.accepted_fact_digest,
+                    "accepted_fact",
+                )?;
+                if item.created_at >= item.expires_at {
+                    return fail(&path, ErrorKind::Inconsistent);
+                }
+                Ok(DebtItem {
+                    debt_id: item.debt_id,
+                    finding_key: item.finding_key,
+                    accepted_fact: fact,
+                    accepted_fact_digest: item.accepted_fact_digest,
+                    owner: item.owner,
+                    reason: item.reason,
+                    created_at: item.created_at,
+                    expires_at: item.expires_at,
                 })
-                .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
-        })?;
-        sorted_set(&items_path, &items, |a, b| {
+            })
+            .collect::<Result<_, Error>>()?;
+        sorted_set("$.items", &items, |a, b| {
             a.debt_id.as_str().cmp(b.debt_id.as_str())
         })?;
-        let mut keys: BTreeSet<Digest> = BTreeSet::new();
+        let mut keys = BTreeSet::new();
         for item in &items {
             if !keys.insert(item.finding_key) {
-                return fail(&items_path, ErrorKind::DuplicateMember);
+                return fail("$.items", ErrorKind::DuplicateMember);
             }
-            if item.created_at > created_at {
-                return fail(&items_path, ErrorKind::Inconsistent);
+            if item.created_at > payload.created_at {
+                return fail("$.items", ErrorKind::Inconsistent);
             }
         }
-
-        obj.finish()?;
         Ok(Self {
-            digest,
-            repository,
-            ref_name,
-            organization_floor_digest,
-            adoption_tree,
-            adoption_report_payload_digest,
-            created_at,
+            digest: hj(DEBT_SNAPSHOT_SCHEMA, value),
+            repository: payload.repository,
+            ref_name: payload.ref_name,
+            organization_floor_digest: payload.organization_floor_digest,
+            created_at: payload.created_at,
             items,
+            adoption_tree: payload.adoption_tree,
+            adoption_report_payload_digest: payload.adoption_report_payload_digest,
         })
     }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Payload {
+    schema: String,
+    repository: RepositoryIdentity,
+    #[serde(rename = "ref")]
+    ref_name: BranchRef,
+    organization_floor_digest: Digest,
+    created_at: UtcInstant,
+    items: Vec<Item>,
+    adoption_tree: TreeIdentity,
+    adoption_report_payload_digest: Digest,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Item {
+    debt_id: ArtifactId,
+    finding_key: Digest,
+    accepted_fact: FactInput,
+    accepted_fact_digest: Digest,
+    owner: OwnerId,
+    reason: String,
+    created_at: UtcInstant,
+    expires_at: UtcInstant,
 }

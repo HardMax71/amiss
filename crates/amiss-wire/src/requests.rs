@@ -1,10 +1,12 @@
 use std::io::{Read, Write};
 
-use crate::controls::value::{object, positive_safe_integer, text};
-use crate::controls::{decode_enum, decode_provider_id, decode_provider_run_id, root};
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use serde::{Deserialize, Serialize};
+
+use crate::codec::{self, nullable};
+use crate::de::{Error, ErrorKind, fail};
 use crate::digest::Digest;
-use crate::json::{Value, canonical};
+use crate::json::Value;
+use crate::model::ArtifactId;
 
 mod evaluation;
 
@@ -32,9 +34,19 @@ pub const SEMANTIC_EVIDENCE_REQUEST_LIMIT: usize = 64;
 pub const REPOSITORY_HANDLE_ORDINAL: i64 = 3;
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::AsRefStr,
+    strum::EnumString,
+    strum::IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RequestMode {
     CommitPair,
     Index,
@@ -68,28 +80,22 @@ impl SnapshotRequest {
     /// Fails on strict-JSON defects, schema-shape violations, and invalid
     /// grammar values.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, SNAPSHOT_REQUEST_SCHEMA)
-        })?;
-        let materialization_path = obj.field("materialization");
-        let materialization =
-            match de::string(&materialization_path, obj.take("materialization")?)?.as_str() {
-                "git-objects" => RequestMode::CommitPair,
-                "index" => RequestMode::Index,
-                _ => return fail(&materialization_path, ErrorKind::InvalidValue),
-            };
-        let handle_path = obj.field("repository_handle");
-        if de::integer(&handle_path, obj.take("repository_handle")?)? != REPOSITORY_HANDLE_ORDINAL {
-            return fail(&handle_path, ErrorKind::InvalidValue);
+        let request: SnapshotDocument = decode_request(bytes)?;
+        if request.schema != SNAPSHOT_REQUEST_SCHEMA {
+            return fail("$.schema", ErrorKind::InvalidValue);
         }
-        let acquired_path = obj.field("pre_acquired");
-        if obj.take("pre_acquired")? != Value::Bool(true) {
-            return fail(&acquired_path, ErrorKind::InvalidValue);
+        if request.repository_handle != REPOSITORY_HANDLE_ORDINAL {
+            return fail("$.repository_handle", ErrorKind::InvalidValue);
         }
-        obj.finish()?;
-        Ok(Self { materialization })
+        if !request.pre_acquired {
+            return fail("$.pre_acquired", ErrorKind::InvalidValue);
+        }
+        Ok(Self {
+            materialization: match request.materialization {
+                Materialization::GitObjects => RequestMode::CommitPair,
+                Materialization::Index => RequestMode::Index,
+            },
+        })
     }
 
     /// Serializes one valid request to its unique canonical JSON bytes.
@@ -98,14 +104,23 @@ impl SnapshotRequest {
     ///
     /// The constructed fields violate the same laws [`Self::parse`] enforces.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        checked_canonical(&snapshot_value(*self), Self::parse)
+        request_bytes(&SnapshotDocument {
+            schema: SNAPSHOT_REQUEST_SCHEMA.to_owned(),
+            materialization: match self.materialization {
+                RequestMode::CommitPair => Materialization::GitObjects,
+                RequestMode::Index => Materialization::Index,
+            },
+            repository_handle: REPOSITORY_HANDLE_ORDINAL,
+            pre_acquired: true,
+        })
     }
 }
 
 /// One supplied external control: the exact embedded JSON value, the
 /// independently acquired expected semantic digest, and the external trust
 /// source that authorized it.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SuppliedControl {
     pub value: Value,
     pub expected_digest: Digest,
@@ -113,9 +128,19 @@ pub struct SuppliedControl {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::EnumString, strum::IntoStaticStr,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::AsRefStr,
+    strum::EnumString,
+    strum::IntoStaticStr,
+    Serialize,
+    Deserialize,
 )]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum RequestTrust {
     ExternalRequiredCheck,
     OrganizationPolicy,
@@ -123,7 +148,8 @@ pub enum RequestTrust {
 
 /// The supplied trusted-time statement with the provider-authenticated run
 /// context the statement must identify. Its trust source is fixed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SuppliedTime {
     pub value: Value,
     pub expected_digest: Digest,
@@ -134,7 +160,8 @@ pub struct SuppliedTime {
 
 /// One semantic envelope paired with the independently planned build or
 /// inventory context it must identify.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SuppliedSemanticEvidence {
     pub value: Value,
     pub expected_context_digest: Digest,
@@ -142,12 +169,18 @@ pub struct SuppliedSemanticEvidence {
 
 /// The external-input request: five nullable supplied controls and the
 /// bounded semantic-evidence set the trusted caller acquired.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ControlsRequest {
+    #[serde(deserialize_with = "nullable")]
     pub organization_floor: Option<SuppliedControl>,
+    #[serde(deserialize_with = "nullable")]
     pub debt_snapshot: Option<SuppliedControl>,
+    #[serde(deserialize_with = "nullable")]
     pub waiver_bundle: Option<SuppliedControl>,
+    #[serde(deserialize_with = "nullable")]
     pub trusted_time: Option<SuppliedTime>,
+    #[serde(deserialize_with = "nullable")]
     pub execution_constraint: Option<SuppliedControl>,
     pub semantic_evidence: Vec<SuppliedSemanticEvidence>,
 }
@@ -159,26 +192,20 @@ impl ControlsRequest {
     /// grammar values. Embedded control values are shape-checked as objects
     /// only; their own schemas and digests are the consumer's verification.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, CONTROLS_REQUEST_SCHEMA)
-        })?;
-        let organization_floor = obj.required("organization_floor", decode_supplied)?;
-        let debt_snapshot = obj.required("debt_snapshot", decode_supplied)?;
-        let waiver_bundle = obj.required("waiver_bundle", decode_supplied)?;
-        let trusted_time = obj.required("trusted_time", decode_time)?;
-        let execution_constraint = obj.required("execution_constraint", decode_supplied)?;
-        let semantic_evidence = obj.required("semantic_evidence", decode_semantic_evidence)?;
-        obj.finish()?;
-        Ok(Self {
-            organization_floor,
-            debt_snapshot,
-            waiver_bundle,
-            trusted_time,
-            execution_constraint,
-            semantic_evidence,
-        })
+        let request: ControlsDocument = decode_request(bytes)?;
+        if request.schema != CONTROLS_REQUEST_SCHEMA {
+            return fail("$.schema", ErrorKind::InvalidValue);
+        }
+        let controls = Self {
+            organization_floor: request.organization_floor,
+            debt_snapshot: request.debt_snapshot,
+            waiver_bundle: request.waiver_bundle,
+            trusted_time: request.trusted_time,
+            execution_constraint: request.execution_constraint,
+            semantic_evidence: request.semantic_evidence,
+        };
+        controls.validate()?;
+        Ok(controls)
     }
 
     /// Serializes one valid request to its unique canonical JSON bytes.
@@ -187,7 +214,11 @@ impl ControlsRequest {
     ///
     /// The constructed fields violate the same laws [`Self::parse`] enforces.
     pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        checked_canonical(&controls_value(self)?, Self::parse)
+        self.validate()?;
+        request_bytes(&ControlsOutput {
+            schema: CONTROLS_REQUEST_SCHEMA,
+            controls: self,
+        })
     }
 }
 
@@ -266,182 +297,113 @@ fn invalid_frame(message: &'static str) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::InvalidData, message)
 }
 
-fn checked_canonical<T>(
-    value: &Value,
-    parse: impl FnOnce(&[u8]) -> Result<T, Error>,
-) -> Result<Vec<u8>, Error> {
-    let bytes = canonical(value);
-    let _parsed = parse(&bytes)?;
-    Ok(bytes)
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SnapshotDocument {
+    schema: String,
+    materialization: Materialization,
+    repository_handle: i64,
+    pre_acquired: bool,
 }
 
-fn snapshot_value(request: SnapshotRequest) -> Value {
-    object(vec![
-        ("schema", text(SNAPSHOT_REQUEST_SCHEMA)),
-        (
-            "materialization",
-            text(match request.materialization {
-                RequestMode::CommitPair => "git-objects",
-                RequestMode::Index => "index",
-            }),
-        ),
-        (
-            "repository_handle",
-            Value::Integer(REPOSITORY_HANDLE_ORDINAL),
-        ),
-        ("pre_acquired", Value::Bool(true)),
-    ])
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum Materialization {
+    GitObjects,
+    Index,
 }
 
-fn supplied_value(control: &SuppliedControl) -> Value {
-    let mut rows = supplied_rows(&control.value, control.expected_digest);
-    rows.push(("trust_source", text(control.trust_source.as_ref())));
-    object(rows)
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ControlsDocument {
+    schema: String,
+    #[serde(deserialize_with = "nullable")]
+    organization_floor: Option<SuppliedControl>,
+    #[serde(deserialize_with = "nullable")]
+    debt_snapshot: Option<SuppliedControl>,
+    #[serde(deserialize_with = "nullable")]
+    waiver_bundle: Option<SuppliedControl>,
+    #[serde(deserialize_with = "nullable")]
+    trusted_time: Option<SuppliedTime>,
+    #[serde(deserialize_with = "nullable")]
+    execution_constraint: Option<SuppliedControl>,
+    semantic_evidence: Vec<SuppliedSemanticEvidence>,
 }
 
-fn supplied_time_value(time: &SuppliedTime) -> Result<Value, Error> {
-    let mut rows = supplied_rows(&time.value, time.expected_digest);
-    rows.extend([
-        ("provider", text(&time.provider)),
-        ("provider_run_id", text(&time.provider_run_id)),
-        (
-            "provider_run_attempt",
-            positive_safe_integer(
-                "$.trusted_time.provider_run_attempt",
-                time.provider_run_attempt,
-            )?,
-        ),
-    ]);
-    Ok(object(rows))
+#[derive(Serialize)]
+struct ControlsOutput<'a> {
+    schema: &'static str,
+    #[serde(flatten)]
+    controls: &'a ControlsRequest,
 }
 
-fn supplied_rows(value: &Value, expected_digest: Digest) -> Vec<(&'static str, Value)> {
-    vec![
-        ("value", value.clone()),
-        ("expected_digest", text(&expected_digest.to_string())),
-    ]
-}
-
-fn controls_value(request: &ControlsRequest) -> Result<Value, Error> {
-    let mut rows = Vec::with_capacity(7);
-    for (name, control) in [
-        ("organization_floor", request.organization_floor.as_ref()),
-        ("debt_snapshot", request.debt_snapshot.as_ref()),
-        ("waiver_bundle", request.waiver_bundle.as_ref()),
-    ] {
-        rows.push((name, optional_supplied(control)));
-    }
-    let trusted_time = request
-        .trusted_time
-        .as_ref()
-        .map(supplied_time_value)
-        .transpose()?
-        .unwrap_or(Value::Null);
-    rows.push(("trusted_time", trusted_time));
-    rows.push((
-        "execution_constraint",
-        optional_supplied(request.execution_constraint.as_ref()),
-    ));
-    rows.push((
-        "semantic_evidence",
-        Value::array(
-            request
-                .semantic_evidence
-                .iter()
-                .map(|evidence| {
-                    object(vec![
-                        ("value", evidence.value.clone()),
-                        (
-                            "expected_context_digest",
-                            text(&evidence.expected_context_digest.to_string()),
-                        ),
-                    ])
-                })
-                .collect(),
-        ),
-    ));
-    rows.push(("schema", text(CONTROLS_REQUEST_SCHEMA)));
-    Ok(object(rows))
-}
-
-fn decode_semantic_evidence(
-    path: &str,
-    value: Value,
-) -> Result<Vec<SuppliedSemanticEvidence>, Error> {
-    let values = de::array(path, value)?;
-    if values.len() > SEMANTIC_EVIDENCE_REQUEST_LIMIT {
-        return fail(path, ErrorKind::LimitExceeded);
-    }
-    values
-        .into_iter()
-        .enumerate()
-        .map(|(index, value)| {
-            let item_path = format!("{path}[{index}]");
-            let mut item = Obj::new(&item_path, value)?;
-            let value = item.required("value", embedded_value)?;
-            let expected_context_digest = item.required("expected_context_digest", de::digest)?;
-            item.finish()?;
-            Ok(SuppliedSemanticEvidence {
-                value,
-                expected_context_digest,
-            })
-        })
-        .collect()
-}
-
-fn optional_supplied(control: Option<&SuppliedControl>) -> Value {
-    control.map_or(Value::Null, supplied_value)
-}
-
-fn embedded_value(path: &str, value: Value) -> Result<Value, Error> {
-    match value {
-        Value::Object(_) => Ok(value),
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Array(_) => {
-            fail(path, ErrorKind::WrongType)
+impl ControlsRequest {
+    fn validate(&self) -> Result<(), Error> {
+        for (name, supplied) in [
+            ("organization_floor", &self.organization_floor),
+            ("debt_snapshot", &self.debt_snapshot),
+            ("waiver_bundle", &self.waiver_bundle),
+            ("execution_constraint", &self.execution_constraint),
+        ] {
+            if let Some(supplied) = supplied {
+                embedded_object(&format!("$.{name}.value"), &supplied.value)?;
+            }
         }
+        if let Some(time) = &self.trusted_time {
+            embedded_object("$.trusted_time.value", &time.value)?;
+            if ArtifactId::new(time.provider.clone()).is_none() {
+                return fail("$.trusted_time.provider", ErrorKind::InvalidValue);
+            }
+            let run = time.provider_run_id.as_bytes();
+            if run.is_empty()
+                || run.len() > 128
+                || !run.first().is_some_and(u8::is_ascii_alphanumeric)
+                || !run.last().is_some_and(u8::is_ascii_alphanumeric)
+                || !run.iter().all(|byte| {
+                    byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b':' | b'/' | b'-')
+                })
+            {
+                return fail("$.trusted_time.provider_run_id", ErrorKind::InvalidValue);
+            }
+            if !(1..=codec::MAX_SAFE_INTEGER).contains(&time.provider_run_attempt) {
+                return fail(
+                    "$.trusted_time.provider_run_attempt",
+                    ErrorKind::InvalidValue,
+                );
+            }
+        }
+        if self.semantic_evidence.len() > SEMANTIC_EVIDENCE_REQUEST_LIMIT {
+            return fail("$.semantic_evidence", ErrorKind::LimitExceeded);
+        }
+        for (index, supplied) in self.semantic_evidence.iter().enumerate() {
+            embedded_object(
+                &format!("$.semantic_evidence[{index}].value"),
+                &supplied.value,
+            )?;
+        }
+        Ok(())
     }
 }
 
-fn decode_supplied(path: &str, value: Value) -> Result<Option<SuppliedControl>, Error> {
-    let Some(value) = de::nullable(value) else {
-        return Ok(None);
-    };
-    let mut obj = Obj::new(path, value)?;
-    let embedded = obj.required("value", embedded_value)?;
-    let digest_path = obj.field("expected_digest");
-    let expected_digest = de::digest(&digest_path, obj.take("expected_digest")?)?;
-    let trust_source = obj.required("trust_source", decode_enum)?;
-    obj.finish()?;
-    Ok(Some(SuppliedControl {
-        value: embedded,
-        expected_digest,
-        trust_source,
-    }))
+fn embedded_object(path: &str, value: &Value) -> Result<(), Error> {
+    if matches!(value, Value::Object(_)) {
+        Ok(())
+    } else {
+        fail(path, ErrorKind::WrongType)
+    }
 }
 
-fn decode_time(path: &str, value: Value) -> Result<Option<SuppliedTime>, Error> {
-    let Some(value) = de::nullable(value) else {
-        return Ok(None);
-    };
-    let mut obj = Obj::new(path, value)?;
-    let embedded = obj.required("value", embedded_value)?;
-    let digest_path = obj.field("expected_digest");
-    let expected_digest = de::digest(&digest_path, obj.take("expected_digest")?)?;
-    let provider = obj.required("provider", decode_provider_id)?;
-    let run_id_path = obj.field("provider_run_id");
-    let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;
-    let attempt_path = obj.field("provider_run_attempt");
-    let attempt_raw = de::integer(&attempt_path, obj.take("provider_run_attempt")?)?;
-    let provider_run_attempt = u64::try_from(attempt_raw)
-        .ok()
-        .filter(|attempt| *attempt >= 1)
-        .ok_or_else(|| Error::new(&attempt_path, ErrorKind::InvalidValue))?;
-    obj.finish()?;
-    Ok(Some(SuppliedTime {
-        value: embedded,
-        expected_digest,
-        provider,
-        provider_run_id,
-        provider_run_attempt,
-    }))
+fn decode_request<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > REQUEST_STREAM_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    codec::decode(bytes)
+}
+
+fn request_bytes<T: Serialize>(request: &T) -> Result<Vec<u8>, Error> {
+    let bytes = codec::canonical(request)?;
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > REQUEST_STREAM_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    Ok(bytes)
 }

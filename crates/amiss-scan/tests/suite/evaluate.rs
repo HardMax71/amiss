@@ -104,6 +104,10 @@ fn missing_spec(document: &str, target: &str) -> Spec {
     spec(document, target, path_not_found(target))
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixture observation projections are valid"
+)]
 fn observation(from: &Spec) -> Observation {
     let scanned = ScannedOccurrence {
         occurrence: Occurrence {
@@ -126,7 +130,7 @@ fn observation(from: &Spec) -> Observation {
         projection_digest: hb("amiss/scanner-source-projection", from.block.as_bytes()),
         raw_destination_digest: hb("amiss/scanner-raw-destination", b"x"),
     };
-    let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).1;
+    let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).unwrap().1;
     let id = observation_digest(&ObservationIdentity {
         adapter: Adapter::Markdown,
         contract_digest: adapter_contract_digest,
@@ -136,7 +140,8 @@ fn observation(from: &Spec) -> Observation {
         projection_digest: scanned.projection_digest,
         intent: &from.intent,
         raw_destination_digest: scanned.raw_destination_digest,
-    });
+    })
+    .unwrap();
     Observation {
         id,
         adapter_contract_digest,

@@ -3,7 +3,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use amiss_wire::digest::{hb, hj};
+use amiss_wire::digest::hb;
 use amiss_wire::json::Value;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::record::{Input, Observation};
@@ -100,6 +100,12 @@ fn invocation(mut arguments: impl Iterator<Item = OsString>) -> Result<Invocatio
     Ok(Invocation { context, rustdoc })
 }
 
+#[derive(serde::Serialize)]
+struct InputIdentity {
+    context_digest: amiss_wire::digest::Digest,
+    rustdoc_digest: amiss_wire::digest::Digest,
+}
+
 fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Value, Failure> {
     let context = context::parse(context_bytes)?;
     let normalized = normalize::function_declarations(
@@ -109,19 +115,14 @@ fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Value, Failure>
         &context.target_triple,
     )?;
     let rustdoc_digest = hb(RUSTDOC_DOMAIN, rustdoc_bytes);
-    let input_digest = hj(
+    let input_digest = amiss_wire::codec::digest(
         INPUT_DOMAIN,
-        &Value::object(vec![
-            (
-                "context_digest".to_owned(),
-                Value::string(context.digest.to_string()),
-            ),
-            (
-                "rustdoc_digest".to_owned(),
-                Value::string(rustdoc_digest.to_string()),
-            ),
-        ]),
-    );
+        &InputIdentity {
+            context_digest: context.digest,
+            rustdoc_digest,
+        },
+    )
+    .map_err(Failure::Template)?;
     let producer_identity =
         ArtifactId::new(PRODUCER_IDENTITY.to_owned()).ok_or(Failure::ProducerIdentity)?;
     amiss_wire::semantic::record::template(Input {

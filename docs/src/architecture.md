@@ -32,6 +32,26 @@ The graph above is the root workspace. `amiss-wire` is its foundation: strict JS
 canonical output, the digest rules, the report format, and every machine contract. Nothing in
 it knows what a repository is.
 
+Serde owns JSON syntax and the wire's derived record shapes. The shared input visitor checks
+duplicate decoded keys, the safe-integer range, and a 512-container nesting ceiling before typed
+deserialization, including inside ignored extensions. Closed records reject array spellings,
+unknown members, and explicit null where only omission is allowed. Domain validation still checks
+ordering, identities, limits, and cross-field bindings. Envelope digests cover the received payload
+before any typed conversion can normalize its fields.
+
+The wire uses `serde_json::Value` for open data and Serde serialization for escaping and output.
+A borrowed view orders dynamic object keys by UTF-16 code units; fixed digest projections keep
+canonical field order under byte tests. CLI and reserved fatal output stream through the same
+writer and propagate I/O failures. Converting an already parsed subtree to a typed value does not
+serialize it back to bytes. Upstream mdBook metadata admits finite fractions and full-width
+integers separately from the Amiss profile; Rustdoc retains its own bounded typed decoder.
+
+Rust callers now use Serde's `Map`, `Number`, and `String` representations instead of the old JSON
+value variants and manual object decoder. Constructors and report building return serialization
+errors explicitly. JSON syntax offsets name Serde's detection point; shape errors name a field
+path, or the enclosing buffered enum when Serde cannot retain the inner path. These diagnostic
+locations can differ from the deleted parser while scanner analysis codes remain stable.
+
 `amiss-git` reads Git storage behind the never-follow-links boundary: loose objects, packs,
 deltas, and the index, each under a parser that rejects malformed input and a published
 resource ceiling. It repairs nothing.

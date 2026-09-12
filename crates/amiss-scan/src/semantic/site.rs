@@ -1,13 +1,15 @@
+mod tests;
+
+use amiss_wire::json::ValueExt as _;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use amiss_wire::de::{self, Error, ErrorKind, fail};
+use amiss_wire::de::{Error, ErrorKind, fail};
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
+use amiss_wire::model::{RepoPath, RepoPathText};
 
-use super::decode::{
-    DESTINATION_BYTES, LABEL_BYTES, bounded_text, observation_row, repo_path, sorted_set,
-};
+use super::decode::{DESTINATION_BYTES, LABEL_BYTES, bounded_text, sorted_set};
 use super::{
     SiteClaim, SiteDefect, SiteEvaluation, SiteNavigation, SitePageBacking, SiteRoute, SiteTarget,
 };
@@ -19,6 +21,44 @@ const SITE_NAVIGATION: &str = "site-navigation";
 const SITE_CLAIM_DOMAIN: &str = "amiss/scanner-site-claim";
 const SITE_DEFECT_DOMAIN: &str = "amiss/scanner-site-defect";
 
+#[derive(serde::Deserialize)]
+#[serde(tag = "kind", deny_unknown_fields, remote = "Self")]
+enum SiteObservation {
+    #[serde(rename = "site-route")]
+    Route {
+        route: String,
+        source: RepoPathText,
+        anchors: Vec<String>,
+    },
+    #[serde(rename = "site-generated-route")]
+    GeneratedRoute {
+        route: String,
+        #[serde(deserialize_with = "amiss_wire::codec::nullable")]
+        source: Option<RepoPathText>,
+        anchors: Vec<String>,
+    },
+    #[serde(rename = "site-redirect")]
+    Redirect {
+        route: String,
+        source: RepoPathText,
+        destination: String,
+    },
+    #[serde(rename = "site-navigation")]
+    Navigation {
+        #[serde(deserialize_with = "amiss_wire::codec::nullable")]
+        root: Option<RepoPathText>,
+        manifest: RepoPathText,
+        entrypoints: Vec<String>,
+        reachable: Vec<RepoPathText>,
+    },
+}
+
+impl<'de> serde::Deserialize<'de> for SiteObservation {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(amiss_wire::codec::object(deserializer))
+    }
+}
+
 pub(super) fn site_build_inputs(
     routes: &mut Arc<BTreeMap<String, SiteRoute>>,
     path: &str,
@@ -27,142 +67,192 @@ pub(super) fn site_build_inputs(
 ) -> Result<SiteEvaluation, Error> {
     let mut navigation = None;
     for (index, observation) in observations.into_iter().enumerate() {
+        if !matches!(
+            observation.text("kind"),
+            Some(SITE_ROUTE | SITE_GENERATED_ROUTE | SITE_REDIRECT | SITE_NAVIGATION)
+        ) {
+            continue;
+        }
         let observation_path = format!("{path}.payload.observations[{index}]");
-        if observation.text("kind") == Some(SITE_NAVIGATION) {
-            if navigation.is_some() {
-                return fail(&observation_path, ErrorKind::Inconsistent);
-            }
-            let mut row = observation_row(&observation_path, observation, SITE_NAVIGATION)?;
-            let root = row.required("root", |path, value| match de::nullable(value) {
-                None => Ok(None),
-                Some(value) => repo_path(path, value).map(Some),
-            })?;
-            let manifest = row.required("manifest", repo_path)?;
-            let entrypoints = row.required("entrypoints", |path, value| {
-                sorted_set(path, value, item_count, |path, value| {
-                    bounded_text(
-                        path,
-                        value,
-                        DESTINATION_BYTES,
-                        amiss_wire::uri::site_route_valid,
-                    )
-                })
-            })?;
-            let reachable = row.required("reachable", |path, value| {
-                sorted_set(path, value, item_count, repo_path)
-            })?;
-            row.finish()?;
-            if entrypoints.is_empty()
-                || !navigation_contains(root.as_ref(), &manifest)
-                || reachable
-                    .iter()
-                    .any(|source| !navigation_contains(root.as_ref(), source))
-                || reachable.binary_search(&manifest).is_ok()
-            {
-                return fail(&observation_path, ErrorKind::Inconsistent);
-            }
-            navigation = Some((
-                observation_path,
-                SiteNavigation {
-                    root,
-                    manifest,
+        let decoded: SiteObservation =
+            amiss_wire::codec::from_value(&observation_path, &observation)?;
+        match decoded {
+            SiteObservation::Navigation {
+                root,
+                manifest,
+                entrypoints,
+                reachable,
+            } => {
+                if navigation.is_some() {
+                    return fail(&observation_path, ErrorKind::Inconsistent);
+                }
+                let checked = navigation_input(
+                    &observation_path,
+                    root.as_ref(),
+                    &manifest,
                     entrypoints,
-                    reachable,
-                },
-            ));
-        } else if let Some((route, claim)) = site_claim(&observation_path, observation, item_count)?
-        {
-            merge_site_claim(Arc::make_mut(routes), route, claim);
+                    &reachable,
+                    item_count,
+                )?;
+                navigation = Some((observation_path, checked));
+            }
+            SiteObservation::Route {
+                route,
+                source,
+                anchors,
+            } => {
+                let digest = hj(SITE_CLAIM_DOMAIN, &observation);
+                let claim = page_claim(
+                    &observation_path,
+                    &route,
+                    Some(RepoPath::from(&source)),
+                    SitePageBacking::Repository,
+                    anchors,
+                    digest,
+                    item_count,
+                )?;
+                merge_site_claim(Arc::make_mut(routes), route, claim);
+            }
+            SiteObservation::GeneratedRoute {
+                route,
+                source,
+                anchors,
+            } => {
+                let digest = hj(SITE_CLAIM_DOMAIN, &observation);
+                let claim = page_claim(
+                    &observation_path,
+                    &route,
+                    source.as_ref().map(RepoPath::from),
+                    SitePageBacking::Generated,
+                    anchors,
+                    digest,
+                    item_count,
+                )?;
+                merge_site_claim(Arc::make_mut(routes), route, claim);
+            }
+            SiteObservation::Redirect {
+                route,
+                source,
+                destination,
+            } => {
+                route_text(&format!("{observation_path}.route"), &route)?;
+                let target = redirect_target(
+                    &format!("{observation_path}.destination"),
+                    &route,
+                    destination,
+                )?;
+                let claim = SiteClaim {
+                    source: Some(RepoPath::from(&source)),
+                    digest: hj(SITE_CLAIM_DOMAIN, &observation),
+                    target,
+                };
+                merge_site_claim(Arc::make_mut(routes), route, claim);
+            }
         }
     }
     let Some((navigation_path, navigation)) = navigation else {
         return Ok(SiteEvaluation {
             navigation: None,
-            defects: site_defects(routes).into(),
+            defects: site_defects(routes)?.into(),
         });
     };
     validate_navigation(routes, &navigation_path, &navigation)?;
     Ok(SiteEvaluation {
         navigation: Some(Arc::new(navigation)),
-        defects: site_defects(routes).into(),
+        defects: site_defects(routes)?.into(),
     })
 }
 
-fn site_claim(
+fn navigation_input(
     path: &str,
-    observation: Value,
-    anchor_count: &mut usize,
-) -> Result<Option<(String, SiteClaim)>, Error> {
-    let (kind, backing) = match observation.text("kind") {
-        Some(SITE_ROUTE) => (SITE_ROUTE, Some(SitePageBacking::Repository)),
-        Some(SITE_GENERATED_ROUTE) => (SITE_GENERATED_ROUTE, Some(SitePageBacking::Generated)),
-        Some(SITE_REDIRECT) => (SITE_REDIRECT, None),
-        Some(_) | None => return Ok(None),
-    };
-    let digest = hj(SITE_CLAIM_DOMAIN, &observation);
-    let mut row = observation_row(path, observation, kind)?;
-    let route = row.required("route", |path, value| {
-        bounded_text(
-            path,
-            value,
-            DESTINATION_BYTES,
-            amiss_wire::uri::site_route_valid,
-        )
-    })?;
-    let source = row.required("source", |path, value| match backing {
-        Some(SitePageBacking::Generated) => de::nullable(value)
-            .map(|value| repo_path(path, value))
-            .transpose(),
-        Some(SitePageBacking::Repository) | None => repo_path(path, value).map(Some),
-    })?;
-    let target = if let Some(backing) = backing {
-        SiteTarget::Page {
-            backing,
-            anchors: row.required("anchors", |path, value| {
-                sorted_set(path, value, anchor_count, |path, value| {
-                    bounded_text(path, value, LABEL_BYTES, |value| {
-                        !value.is_empty() && value.chars().all(|character| !character.is_control())
-                    })
-                })
-            })?,
-        }
-    } else {
-        let (destination, fragment) = row.required("destination", |path, value| {
-            let mut destination = de::string(path, value)?;
-            if destination.len() > DESTINATION_BYTES {
-                return fail(path, ErrorKind::InvalidValue);
-            }
-            let fragment = destination.find('#').and_then(|separator| {
-                let fragment = destination.get(separator.saturating_add(1)..)?.to_owned();
-                destination.truncate(separator);
-                Some(fragment)
-            });
-            if !amiss_wire::uri::site_route_valid(&destination)
-                || fragment
-                    .as_deref()
-                    .is_some_and(|value| value.chars().any(char::is_control))
-            {
-                return fail(path, ErrorKind::InvalidValue);
-            }
-            Ok((destination, fragment))
-        })?;
-        if route == destination {
-            return fail(&format!("{path}.destination"), ErrorKind::InvalidValue);
-        }
-        SiteTarget::Redirect {
-            destination,
-            fragment,
-        }
-    };
-    row.finish()?;
-    Ok(Some((
+    root: Option<&RepoPathText>,
+    manifest: &RepoPathText,
+    entrypoints: Vec<String>,
+    reachable: &[RepoPathText],
+    item_count: &mut usize,
+) -> Result<SiteNavigation, Error> {
+    let root = root.map(RepoPath::from);
+    let manifest = RepoPath::from(manifest);
+    sorted_set(&format!("{path}.entrypoints"), &entrypoints, item_count)?;
+    sorted_set(&format!("{path}.reachable"), reachable, item_count)?;
+    for (index, route) in entrypoints.iter().enumerate() {
+        route_text(&format!("{path}.entrypoints[{index}]"), route)?;
+    }
+    let reachable: Vec<_> = reachable.iter().map(RepoPath::from).collect();
+    if entrypoints.is_empty()
+        || !navigation_contains(root.as_ref(), &manifest)
+        || reachable
+            .iter()
+            .any(|source| !navigation_contains(root.as_ref(), source))
+        || reachable.binary_search(&manifest).is_ok()
+    {
+        return fail(path, ErrorKind::Inconsistent);
+    }
+    Ok(SiteNavigation {
+        root,
+        manifest,
+        entrypoints,
+        reachable,
+    })
+}
+
+fn route_text(path: &str, route: &str) -> Result<(), Error> {
+    bounded_text(
+        path,
         route,
-        SiteClaim {
-            source,
-            digest,
-            target,
-        },
-    )))
+        DESTINATION_BYTES,
+        amiss_wire::uri::site_route_valid,
+    )
+}
+
+fn page_claim(
+    path: &str,
+    route: &str,
+    source: Option<RepoPath>,
+    backing: SitePageBacking,
+    anchors: Vec<String>,
+    digest: Digest,
+    item_count: &mut usize,
+) -> Result<SiteClaim, Error> {
+    route_text(&format!("{path}.route"), route)?;
+    let anchors_path = format!("{path}.anchors");
+    sorted_set(&anchors_path, &anchors, item_count)?;
+    for (index, anchor) in anchors.iter().enumerate() {
+        bounded_text(
+            &format!("{anchors_path}[{index}]"),
+            anchor,
+            LABEL_BYTES,
+            |value| !value.is_empty() && value.chars().all(|character| !character.is_control()),
+        )?;
+    }
+    Ok(SiteClaim {
+        source,
+        digest,
+        target: SiteTarget::Page { backing, anchors },
+    })
+}
+
+fn redirect_target(path: &str, route: &str, mut destination: String) -> Result<SiteTarget, Error> {
+    if destination.len() > DESTINATION_BYTES {
+        return fail(path, ErrorKind::InvalidValue);
+    }
+    let fragment = destination.find('#').and_then(|separator| {
+        let fragment = destination.get(separator.saturating_add(1)..)?.to_owned();
+        destination.truncate(separator);
+        Some(fragment)
+    });
+    if !amiss_wire::uri::site_route_valid(&destination)
+        || fragment
+            .as_deref()
+            .is_some_and(|value| value.chars().any(char::is_control))
+        || route == destination
+    {
+        return fail(path, ErrorKind::InvalidValue);
+    }
+    Ok(SiteTarget::Redirect {
+        destination,
+        fragment,
+    })
 }
 
 fn merge_site_claim(routes: &mut BTreeMap<String, SiteRoute>, route: String, claim: SiteClaim) {
@@ -203,69 +293,72 @@ fn merge_site_claim(routes: &mut BTreeMap<String, SiteRoute>, route: String, cla
     }
 }
 
-fn site_defects(routes: &BTreeMap<String, SiteRoute>) -> Vec<SiteDefect> {
-    routes
-        .iter()
-        .filter_map(|(route, target)| match target {
+fn site_defects(routes: &BTreeMap<String, SiteRoute>) -> Result<Vec<SiteDefect>, Error> {
+    let mut defects = Vec::new();
+    for (route, target) in routes {
+        let defect = match target {
             SiteRoute::Ambiguous { sources, claims } => {
-                Some(duplicate_route_defect(route, sources, claims))
+                Some(duplicate_route_defect(route, sources, claims)?)
             }
-            SiteRoute::Unique(claim) => broken_redirect_defect(routes, route, claim),
-        })
-        .collect()
+            SiteRoute::Unique(claim) => broken_redirect_defect(routes, route, claim)?,
+        };
+        if let Some(defect) = defect {
+            defects.push(defect);
+        }
+    }
+    Ok(defects)
 }
 
 fn duplicate_route_defect(
     route: &str,
-    sources: &[amiss_wire::model::RepoPath],
+    sources: &[RepoPath],
     claims: &[Digest],
-) -> SiteDefect {
-    let evidence = Value::object(vec![
-        (
-            "claim_digests".to_owned(),
-            Value::array(
-                claims
-                    .iter()
-                    .map(|claim| Value::string(claim.to_string()))
-                    .collect(),
-            ),
-        ),
-        (
-            "kind".to_owned(),
-            Value::string("duplicate-route".to_owned()),
-        ),
-        ("route".to_owned(), Value::string(route.to_owned())),
-        (
-            "sources".to_owned(),
-            Value::array(
-                sources
-                    .iter()
-                    .map(amiss_wire::model::RepoPath::to_value)
-                    .collect(),
-            ),
-        ),
-    ]);
-    SiteDefect {
-        id: site_defect_id("duplicate-route", route),
+) -> Result<SiteDefect, Error> {
+    #[derive(serde::Serialize)]
+    struct Evidence<'a> {
+        claim_digests: &'a [Digest],
+        kind: &'static str,
+        route: &'a str,
+        sources: &'a [RepoPath],
+    }
+    let evidence = amiss_wire::codec::to_value(&Evidence {
+        claim_digests: claims,
+        kind: "duplicate-route",
+        route,
+        sources,
+    })?;
+    Ok(SiteDefect {
+        id: site_defect_id("duplicate-route", route)?,
         evidence,
         source: sources.first().cloned(),
         member_count: u64::try_from(claims.len()).unwrap_or(u64::MAX),
-    }
+    })
 }
 
 fn broken_redirect_defect(
     routes: &BTreeMap<String, SiteRoute>,
     route: &str,
     claim: &SiteClaim,
-) -> Option<SiteDefect> {
+) -> Result<Option<SiteDefect>, Error> {
+    #[derive(serde::Serialize)]
+    struct Evidence<'a> {
+        claim_digest: Digest,
+        destination: &'a str,
+        kind: &'static str,
+        reason: &'a str,
+        route: &'a str,
+        source: &'a RepoPath,
+    }
     let SiteTarget::Redirect {
         destination,
         fragment,
     } = &claim.target
     else {
-        return None;
+        return Ok(None);
     };
-    let source = claim.source.as_ref()?;
+    let Some(source) = claim.source.as_ref() else {
+        return Ok(None);
+    };
     let reason = match routes.get(destination) {
         None => "missing-route",
         Some(SiteRoute::Ambiguous { .. }) => "ambiguous-route",
@@ -277,11 +370,11 @@ fn broken_redirect_defect(
             target: SiteTarget::Page { anchors, .. },
             ..
         })) => {
-            let fragment = fragment
-                .as_deref()
-                .filter(|fragment| !fragment.is_empty())?;
+            let Some(fragment) = fragment.as_deref().filter(|fragment| !fragment.is_empty()) else {
+                return Ok(None);
+            };
             if fragment_target(anchors, fragment) {
-                return None;
+                return Ok(None);
             }
             "missing-anchor"
         }
@@ -291,26 +384,20 @@ fn broken_redirect_defect(
         published.push('#');
         published.push_str(fragment);
     }
-    let evidence = Value::object(vec![
-        (
-            "claim_digest".to_owned(),
-            Value::string(claim.digest.to_string()),
-        ),
-        ("destination".to_owned(), Value::string(published)),
-        (
-            "kind".to_owned(),
-            Value::string("broken-redirect".to_owned()),
-        ),
-        ("reason".to_owned(), Value::string(reason.to_owned())),
-        ("route".to_owned(), Value::string(route.to_owned())),
-        ("source".to_owned(), source.to_value()),
-    ]);
-    Some(SiteDefect {
-        id: site_defect_id("broken-redirect", route),
+    let evidence = amiss_wire::codec::to_value(&Evidence {
+        claim_digest: claim.digest,
+        destination: &published,
+        kind: "broken-redirect",
+        reason,
+        route,
+        source,
+    })?;
+    Ok(Some(SiteDefect {
+        id: site_defect_id("broken-redirect", route)?,
         evidence,
         source: Some(source.clone()),
         member_count: 1,
-    })
+    }))
 }
 
 pub(crate) fn fragment_target(anchors: &[String], fragment: &str) -> bool {
@@ -329,14 +416,13 @@ pub(crate) fn fragment_target(anchors: &[String], fragment: &str) -> bool {
                 .is_some_and(published))
 }
 
-fn site_defect_id(kind: &str, route: &str) -> Digest {
-    hj(
-        SITE_DEFECT_DOMAIN,
-        &Value::object(vec![
-            ("kind".to_owned(), Value::string(kind.to_owned())),
-            ("route".to_owned(), Value::string(route.to_owned())),
-        ]),
-    )
+fn site_defect_id(kind: &str, route: &str) -> Result<Digest, Error> {
+    #[derive(serde::Serialize)]
+    struct Identity<'a> {
+        kind: &'a str,
+        route: &'a str,
+    }
+    amiss_wire::codec::digest(SITE_DEFECT_DOMAIN, &Identity { kind, route })
 }
 
 fn validate_navigation(
@@ -344,7 +430,7 @@ fn validate_navigation(
     path: &str,
     navigation: &SiteNavigation,
 ) -> Result<(), Error> {
-    let page_sources: BTreeSet<&amiss_wire::model::RepoPath> = routes
+    let page_sources: BTreeSet<&RepoPath> = routes
         .values()
         .filter_map(|route| match route {
             SiteRoute::Unique(SiteClaim {
@@ -396,10 +482,7 @@ fn validate_navigation(
     Ok(())
 }
 
-pub(crate) fn navigation_contains(
-    root: Option<&amiss_wire::model::RepoPath>,
-    path: &amiss_wire::model::RepoPath,
-) -> bool {
+pub(crate) fn navigation_contains(root: Option<&RepoPath>, path: &RepoPath) -> bool {
     root.is_none_or(|root| {
         path.as_bytes()
             .strip_prefix(root.as_bytes())

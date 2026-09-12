@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use amiss_wire::json::ValueExt as _;
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -29,7 +30,7 @@ fn only_the_bytes_atom_is_read_as_bytes() {
         ("path", object(&[("bytes_hex", hex.clone())])),
         ("target", object(&[("hex", hex)])),
         ("code", Value::string("plain")),
-        ("count", Value::Integer(3)),
+        ("count", Value::from(3)),
     ]);
     let view = View::of(&row);
 
@@ -66,10 +67,10 @@ fn measurement_report(finding_count: usize) -> Value {
                         (
                             "span",
                             super::object(vec![
-                                ("end_column", Value::Integer(20)),
-                                ("end_line", Value::Integer(1)),
-                                ("start_column", Value::Integer(1)),
-                                ("start_line", Value::Integer(1)),
+                                ("end_column", Value::from(20)),
+                                ("end_line", Value::from(1)),
+                                ("start_column", Value::from(1)),
+                                ("start_line", Value::from(1)),
                             ]),
                         ),
                     ]),
@@ -86,7 +87,7 @@ fn measurement_report(finding_count: usize) -> Value {
                 "result",
                 super::object(vec![
                     ("complete", Value::Bool(true)),
-                    ("exit_code", Value::Integer(1)),
+                    ("exit_code", Value::from(1)),
                 ]),
             ),
         ]),

@@ -2,7 +2,9 @@ use strum::{AsRefStr, EnumIter, IntoEnumIterator, IntoStaticStr};
 
 use crate::json::Value;
 
-use super::{object, string};
+use crate::codec;
+use crate::de::Error;
+use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct AnalysisRoute {
@@ -231,41 +233,35 @@ impl ErrorDetail {
 }
 
 /// One wire error row with its partition phase.
-#[must_use]
-pub fn error_row_value(detail: &ErrorDetail) -> Value {
-    error_row(detail, detail.phase())
+///
+/// # Errors
+///
+/// A detail cannot be represented in the strict JSON profile.
+pub fn error_row_value(detail: &ErrorDetail) -> Result<Value, Error> {
+    codec::to_value(&error_projection(detail, detail.phase()))
 }
 
-pub(super) fn error_row(detail: &ErrorDetail, phase: &str) -> Value {
-    let (resource, limit, observed) = detail.resource.map_or(
-        (Value::Null, Value::Null, Value::Null),
-        |(name, limit, observed)| {
-            (
-                string(name.as_str()),
-                Value::Integer(i64::try_from(limit).unwrap_or(i64::MAX)),
-                Value::Integer(i64::try_from(observed).unwrap_or(i64::MAX)),
-            )
-        },
-    );
-    object(vec![
-        ("phase", string(phase)),
-        ("code", string(detail.code.as_ref())),
-        ("description", string(detail.code.meaning())),
-        (
-            "path",
-            detail
-                .path
-                .as_ref()
-                .map_or(Value::Null, crate::model::RepoPath::to_value),
-        ),
-        (
-            "path_bytes_hex",
-            detail.path_bytes.as_deref().map_or(Value::Null, |bytes| {
-                Value::String(crate::model::hex_lower(bytes).into())
-            }),
-        ),
-        ("resource", resource),
-        ("configured_limit", limit),
-        ("observed_lower_bound", observed),
-    ])
+#[derive(Serialize)]
+pub(super) struct ErrorRow<'a> {
+    code: &'a str,
+    configured_limit: Option<u64>,
+    description: &'static str,
+    observed_lower_bound: Option<u64>,
+    path: Option<&'a crate::model::RepoPath>,
+    path_bytes_hex: Option<String>,
+    phase: &'a str,
+    resource: Option<&'static str>,
+}
+
+pub(super) fn error_projection<'a>(detail: &'a ErrorDetail, phase: &'a str) -> ErrorRow<'a> {
+    ErrorRow {
+        code: detail.code.as_ref(),
+        configured_limit: detail.resource.map(|(_, limit, _)| limit),
+        description: detail.code.meaning(),
+        observed_lower_bound: detail.resource.map(|(_, _, observed)| observed),
+        path: detail.path.as_ref(),
+        path_bytes_hex: detail.path_bytes.as_deref().map(crate::model::hex_lower),
+        phase,
+        resource: detail.resource.map(|(name, _, _)| name.as_str()),
+    }
 }

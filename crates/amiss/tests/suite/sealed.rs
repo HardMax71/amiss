@@ -4,6 +4,7 @@
     reason = "black-box harness over asserted fixture shapes"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::io::Write as _;
 use std::process::{Command, Stdio};
 
@@ -161,7 +162,7 @@ fn a_sealed_run_resolves_against_the_identity_it_was_given() {
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
-    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let envelope: Value = serde_json::from_slice(&output.stdout).unwrap();
     let references = &envelope["payload"]["summary"]["references"];
     assert_eq!(
         references["same_repository"], 1,
@@ -224,7 +225,7 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
     streams.write_to(&mut frame).unwrap();
     let output = run(Some(&fixture.repo), &frame);
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
-    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let envelope: Value = serde_json::from_slice(&output.stdout).unwrap();
     let payload = &envelope["payload"];
     assert_eq!(
         payload["evaluation"]["candidate_ref"],
@@ -319,8 +320,8 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
-    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    let labels: Vec<&serde_json::Value> = envelope["payload"]["observations"]
+    let envelope: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let labels: Vec<&Value> = envelope["payload"]["observations"]
         .as_array()
         .unwrap()
         .iter()
@@ -418,16 +419,16 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
-    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let envelope: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_site_routes(&envelope);
     assert_unlinked(&envelope, &["docs/index.md"]);
     assert_site_defects(&envelope);
 }
 
-fn assert_site_routes(envelope: &serde_json::Value) {
-    let routes: Vec<&serde_json::Value> = envelope
+fn assert_site_routes(envelope: &Value) {
+    let routes: Vec<&Value> = envelope
         .pointer("/payload/observations")
-        .and_then(serde_json::Value::as_array)
+        .and_then(Value::as_array)
         .unwrap()
         .iter()
         .filter(|row| {
@@ -486,8 +487,8 @@ fn assert_site_routes(envelope: &serde_json::Value) {
     );
 }
 
-fn assert_generated_routes(routes: &[&serde_json::Value]) {
-    let generated: Vec<&&serde_json::Value> = routes
+fn assert_generated_routes(routes: &[&Value]) {
+    let generated: Vec<&&Value> = routes
         .iter()
         .filter(|row| {
             row.pointer("/candidate/resolution/reason") == Some(&serde_json::json!("site-build"))
@@ -505,10 +506,10 @@ fn assert_generated_routes(routes: &[&serde_json::Value]) {
     );
 }
 
-fn assert_site_defects(envelope: &serde_json::Value) {
-    let defects: Vec<&serde_json::Value> = envelope
+fn assert_site_defects(envelope: &Value) {
+    let defects: Vec<&Value> = envelope
         .pointer("/payload/findings")
-        .and_then(serde_json::Value::as_array)
+        .and_then(Value::as_array)
         .unwrap()
         .iter()
         .filter(|row| row["kind"] == "site-build-defect")
@@ -664,17 +665,14 @@ fn site_build_observations() -> Vec<Value> {
     ]
 }
 
-fn assert_unlinked(envelope: &serde_json::Value, expected: &[&str]) {
+fn assert_unlinked(envelope: &Value, expected: &[&str]) {
     let paths: Vec<&str> = envelope
         .pointer("/payload/findings")
-        .and_then(serde_json::Value::as_array)
+        .and_then(Value::as_array)
         .unwrap()
         .iter()
         .filter(|row| row["kind"] == "unlinked-document")
-        .filter_map(|row| {
-            row.pointer("/location/path")
-                .and_then(serde_json::Value::as_str)
-        })
+        .filter_map(|row| row.pointer("/location/path").and_then(Value::as_str))
         .collect();
     assert_eq!(paths, expected);
 }
@@ -700,7 +698,7 @@ fn stale_intersphinx_evidence_refuses_the_run() {
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(2), "{:?}", output.stderr);
-    let envelope: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let envelope: Value = serde_json::from_slice(&output.stdout).unwrap();
     let errors = envelope["payload"]["errors"].as_array().unwrap();
     assert!(
         errors

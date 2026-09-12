@@ -1,54 +1,76 @@
-use crate::digest::{Digest, hj};
-use crate::json::Value;
-
 use super::{
     EVALUATOR_MANAGED_MEMORY_BYTES, PRIVATE_TEMPORARY_STORAGE_BYTES, SANDBOX_SCHEMA,
-    WATCHDOG_MILLISECONDS, object, string,
+    WATCHDOG_MILLISECONDS,
 };
+use crate::codec;
+use crate::de::Error;
+use crate::digest::Digest;
+use crate::json::Value;
+use serde::Serialize;
 
-/// The zero-capability sandbox descriptor the engine asserts for itself, and
-/// its digest. A future wrapper verifies rather than asserts it.
-#[must_use]
-pub fn sandbox_descriptor() -> (Value, Digest) {
-    let descriptor = object(vec![
-        ("schema", string(SANDBOX_SCHEMA)),
-        ("profile", string("scanner-zero-capability")),
-        ("isolation", string("process")),
-        ("network", string("denied")),
-        ("child_processes", string("denied")),
-        ("repository_processes", string("denied")),
-        ("credentials", string("absent")),
-        ("secrets", string("absent")),
-        ("shared_cache", string("denied")),
-        ("workspace", string("read-only")),
-        ("environment", string("scanner-process-env")),
-        (
-            "physical_memory",
-            object(vec![(
-                "maximum_bytes",
-                Value::Integer(i64::try_from(EVALUATOR_MANAGED_MEMORY_BYTES).unwrap_or(i64::MAX)),
-            )]),
-        ),
-        (
-            "temporary_storage",
-            object(vec![
-                ("kind", string("private-bounded")),
-                (
-                    "maximum_bytes",
-                    Value::Integer(
-                        i64::try_from(PRIVATE_TEMPORARY_STORAGE_BYTES).unwrap_or(i64::MAX),
-                    ),
-                ),
-            ]),
-        ),
-        (
-            "watchdog",
-            object(vec![(
-                "maximum_milliseconds",
-                Value::Integer(i64::try_from(WATCHDOG_MILLISECONDS).unwrap_or(i64::MAX)),
-            )]),
-        ),
-    ]);
-    let digest = hj(SANDBOX_SCHEMA, &descriptor);
-    (descriptor, digest)
+#[derive(Serialize)]
+struct SandboxDescriptor {
+    child_processes: &'static str,
+    credentials: &'static str,
+    environment: &'static str,
+    isolation: &'static str,
+    network: &'static str,
+    physical_memory: Memory,
+    profile: &'static str,
+    repository_processes: &'static str,
+    schema: &'static str,
+    secrets: &'static str,
+    shared_cache: &'static str,
+    temporary_storage: Storage,
+    watchdog: Watchdog,
+    workspace: &'static str,
+}
+
+#[derive(Serialize)]
+struct Memory {
+    maximum_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct Storage {
+    kind: &'static str,
+    maximum_bytes: u64,
+}
+
+#[derive(Serialize)]
+struct Watchdog {
+    maximum_milliseconds: u64,
+}
+
+/// The zero-capability sandbox descriptor the engine asserts for itself.
+///
+/// # Errors
+///
+/// A declared resource ceiling cannot be represented by the wire profile.
+pub fn sandbox_descriptor() -> Result<(Value, Digest), Error> {
+    let descriptor = SandboxDescriptor {
+        child_processes: "denied",
+        credentials: "absent",
+        environment: "scanner-process-env",
+        isolation: "process",
+        network: "denied",
+        physical_memory: Memory {
+            maximum_bytes: EVALUATOR_MANAGED_MEMORY_BYTES,
+        },
+        profile: "scanner-zero-capability",
+        repository_processes: "denied",
+        schema: SANDBOX_SCHEMA,
+        secrets: "absent",
+        shared_cache: "denied",
+        temporary_storage: Storage {
+            kind: "private-bounded",
+            maximum_bytes: PRIVATE_TEMPORARY_STORAGE_BYTES,
+        },
+        watchdog: Watchdog {
+            maximum_milliseconds: WATCHDOG_MILLISECONDS,
+        },
+        workspace: "read-only",
+    };
+    let digest = codec::digest(SANDBOX_SCHEMA, &descriptor)?;
+    Ok((codec::to_value(&descriptor)?, digest))
 }

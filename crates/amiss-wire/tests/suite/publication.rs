@@ -3,6 +3,7 @@
     reason = "tests build known-valid publication identities and inspect exact refusals"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::{fs, path::Path};
 
 use amiss_wire::de::ErrorKind;
@@ -35,8 +36,10 @@ fn identity(value: &str) -> ArtifactId {
 
 fn publication_plan() -> PublicationPlan {
     PublicationPlan {
+        schema: amiss_wire::codec::Schema::default(),
         report_payload_digest: digest('1'),
         docs: DocsCandidate {
+            object_format: ObjectFormat::Sha1,
             repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
             commit: oid('a', ObjectFormat::Sha1),
             tree: oid('b', ObjectFormat::Sha1),

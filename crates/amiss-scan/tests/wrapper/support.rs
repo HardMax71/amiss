@@ -138,7 +138,7 @@ pub(crate) fn time_input(fx: &Fixture) -> TimeInput {
         controls_unavailable: None,
         requests: amiss_scan::report::RequestDigests::default(),
     };
-    let digest = candidate_identity_digest(&setup);
+    let digest = candidate_identity_digest(&setup).unwrap();
     let doc = format!(
         r#"{{
   "schema": "amiss/scanner-trusted-time-statement",
@@ -171,7 +171,8 @@ pub(crate) fn structural_evidence(fx: &Fixture) -> (String, String, String) {
         &shell(Profile::Enforce),
         &fx.base,
         &fx.candidate,
-    );
+    )
+    .unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let finding = envelope["payload"]["findings"]
         .as_array()
@@ -274,7 +275,7 @@ pub(crate) fn waiver_input(doc: &str) -> WaiverInput {
 }
 
 pub(crate) fn payload(fx: &Fixture, setup: &SetupShell) -> serde_json::Value {
-    let built = commit_pair(&fx.repo, &engine(), None, setup, &fx.base, &fx.candidate);
+    let built = commit_pair(&fx.repo, &engine(), None, setup, &fx.base, &fx.candidate).unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     let schema_text = fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),

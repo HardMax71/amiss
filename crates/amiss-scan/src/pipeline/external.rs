@@ -59,7 +59,8 @@ pub(super) fn external_gate(
 ) -> Result<ExternalVerified, (&'static str, ErrorDetail)> {
     let repository = setup_shell.repository.as_ref();
     let target_ref = setup_shell.target_ref.as_deref();
-    let identity = crate::report::candidate_identity_digest(provisional);
+    let identity = crate::report::candidate_identity_digest(provisional)
+        .map_err(|_defect| ("not-parsed", super::projection_failure(None)))?;
     let time = match &setup_shell.time {
         None => None,
         Some(input) => {

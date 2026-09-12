@@ -1,8 +1,8 @@
 use amiss_wire::controls::ContentAvailability;
-use amiss_wire::json::Value;
+use amiss_wire::digest::Digest;
 use amiss_wire::model::{Adapter, RepoPath};
+use serde::Serialize;
 
-use super::{digest_value, integer, nullable, object, string};
 use crate::discovery::{DocumentRecord, DocumentStatus, SnapshotDiscovery, UnsupportedKind};
 
 fn side_facets(
@@ -54,10 +54,27 @@ fn side_facets(
     }
 }
 
-fn document_side_value(record: Option<&DocumentRecord>) -> Value {
-    let Some(record) = record else {
-        return Value::Null;
-    };
+#[derive(PartialEq, Serialize)]
+struct DocumentSide<'a> {
+    adapter_id: Option<Adapter>,
+    byte_count: u64,
+    content_availability: ContentAvailability,
+    entry_kind: &'static str,
+    entry_oid: &'a str,
+    extracted_references: u64,
+    frontmatter_bytes: u64,
+    frontmatter_regions: u64,
+    git_mode: amiss_wire::controls::GitMode,
+    opaque_html_bytes: u64,
+    opaque_html_regions: u64,
+    opaque_mdx_bytes: u64,
+    opaque_mdx_regions: u64,
+    raw_digest: Option<Digest>,
+    status: &'static str,
+    unsupported_reason: Option<&'static str>,
+}
+
+fn document_side(record: &DocumentRecord) -> DocumentSide<'_> {
     let entry_kind = match record.mode {
         amiss_wire::controls::GitMode::Symlink => "symlink",
         amiss_wire::controls::GitMode::Gitlink => "gitlink",
@@ -65,7 +82,7 @@ fn document_side_value(record: Option<&DocumentRecord>) -> Value {
         | amiss_wire::controls::GitMode::ExecutableFile
         | amiss_wire::controls::GitMode::Tree => "blob",
     };
-    let (status, reason, availability, adapter) = side_facets(record);
+    let (status, unsupported_reason, content_availability, adapter_id) = side_facets(record);
     let scanned = match &record.status {
         DocumentStatus::Scanned(value) => Some(value),
         DocumentStatus::ExcludedBuiltIn
@@ -73,63 +90,32 @@ fn document_side_value(record: Option<&DocumentRecord>) -> Value {
         | DocumentStatus::Failed(_) => None,
     };
     let opaque = scanned.map(|value| &value.opaque);
-    let count =
-        |value: Option<usize>| integer(u64::try_from(value.unwrap_or(0)).unwrap_or(u64::MAX));
+    let count = |value: Option<usize>| u64::try_from(value.unwrap_or(0)).unwrap_or(u64::MAX);
     let byte_sum = |spans: Option<&Vec<(usize, usize)>>| {
-        integer(spans.map_or(0, |list| {
-            list.iter()
-                .map(|(start, end)| u64::try_from(end.saturating_sub(*start)).unwrap_or(u64::MAX))
-                .sum::<u64>()
-        }))
+        spans.map_or(0, |list| {
+            list.iter().fold(0_u64, |total, (start, end)| {
+                total.saturating_add(u64::try_from(end.saturating_sub(*start)).unwrap_or(u64::MAX))
+            })
+        })
     };
-    object(vec![
-        ("entry_kind", string(entry_kind)),
-        ("entry_oid", string(record.oid.as_str())),
-        ("git_mode", string(record.mode.as_ref())),
-        (
-            "raw_digest",
-            record.raw_digest.map_or(Value::Null, digest_value),
-        ),
-        ("status", string(status)),
-        ("unsupported_reason", nullable(reason)),
-        ("content_availability", string(availability.as_ref())),
-        (
-            "adapter_id",
-            adapter.map_or(Value::Null, |value: Adapter| string(value.as_ref())),
-        ),
-        ("byte_count", integer(record.byte_count)),
-        (
-            "frontmatter_regions",
-            integer(
-                opaque
-                    .is_some_and(|value| value.frontmatter_bytes > 0)
-                    .into(),
-            ),
-        ),
-        (
-            "frontmatter_bytes",
-            count(opaque.map(|value| value.frontmatter_bytes)),
-        ),
-        (
-            "opaque_mdx_regions",
-            count(opaque.map(|value| value.mdx.len())),
-        ),
-        ("opaque_mdx_bytes", byte_sum(opaque.map(|value| &value.mdx))),
-        (
-            "opaque_html_regions",
-            count(opaque.map(|value| value.html.len())),
-        ),
-        (
-            "opaque_html_bytes",
-            byte_sum(opaque.map(|value| &value.html)),
-        ),
-        (
-            "extracted_references",
-            integer(scanned.map_or(0, |value| {
-                u64::try_from(value.occurrences.len()).unwrap_or(u64::MAX)
-            })),
-        ),
-    ])
+    DocumentSide {
+        adapter_id,
+        byte_count: record.byte_count,
+        content_availability,
+        entry_kind,
+        entry_oid: record.oid.as_str(),
+        extracted_references: count(scanned.map(|value| value.occurrences.len())),
+        frontmatter_bytes: count(opaque.map(|value| value.frontmatter_bytes)),
+        frontmatter_regions: u64::from(opaque.is_some_and(|value| value.frontmatter_bytes > 0)),
+        git_mode: record.mode,
+        opaque_html_bytes: byte_sum(opaque.map(|value| &value.html)),
+        opaque_html_regions: count(opaque.map(|value| value.html.len())),
+        opaque_mdx_bytes: byte_sum(opaque.map(|value| &value.mdx)),
+        opaque_mdx_regions: count(opaque.map(|value| value.mdx.len())),
+        raw_digest: record.raw_digest,
+        status,
+        unsupported_reason,
+    }
 }
 
 pub(super) struct PairedDocument<'a> {
@@ -208,21 +194,30 @@ fn paired_document<'a>(
     }
 }
 
-pub(super) fn document_result_value(paired: &PairedDocument<'_>) -> Value {
-    let base = document_side_value(paired.base);
-    let candidate = document_side_value(paired.candidate);
+#[derive(Serialize)]
+pub(super) struct DocumentResult<'a> {
+    base: Option<DocumentSide<'a>>,
+    candidate: Option<DocumentSide<'a>>,
+    change: &'static str,
+    classification: &'static str,
+    path: &'a RepoPath,
+}
+
+pub(super) fn document_result_value<'a>(paired: &'a PairedDocument<'_>) -> DocumentResult<'a> {
+    let base = paired.base.map(document_side);
+    let candidate = paired.candidate.map(document_side);
     let change = match (&base, &candidate) {
-        (Value::Null, Value::Null) => "unchanged",
-        (Value::Null, _present) => "added",
-        (_present, Value::Null) => "removed",
-        (left, right) if left == right => "unchanged",
-        _ => "changed",
+        (None, None) => "unchanged",
+        (None, Some(_)) => "added",
+        (Some(_), None) => "removed",
+        (Some(left), Some(right)) if left == right => "unchanged",
+        (Some(_), Some(_)) => "changed",
     };
-    object(vec![
-        ("path", paired.path.to_value()),
-        ("classification", string(paired.classification)),
-        ("base", base),
-        ("candidate", candidate),
-        ("change", string(change)),
-    ])
+    DocumentResult {
+        base,
+        candidate,
+        change,
+        classification: paired.classification,
+        path: &paired.path,
+    }
 }

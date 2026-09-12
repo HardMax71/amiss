@@ -77,8 +77,9 @@ use crate::json::Value;
 
 pub use error::{AnalysisErrorCode, ErrorDetail, error_row_value};
 pub use failure::{
-    EngineProvenance, adapter_contract, engine_block, invocation_failure_envelope,
-    invocation_failure_wire, unavailable_evaluation_envelope, unavailable_evaluation_wire,
+    DocumentCounts, EngineProvenance, FindingCounts, ReferenceCounts, Summary, adapter_contract,
+    engine_block, invocation_failure_envelope, invocation_failure_wire,
+    unavailable_evaluation_envelope, unavailable_evaluation_wire,
 };
 pub use fatal::FatalSerializer;
 pub use finding::{Disposition, FindingKind, FindingMetadata, FindingScope, FixKind, IntentKind};
@@ -140,57 +141,49 @@ pub enum ReportDefect {
 pub fn validate_envelope(
     envelope: &Value,
 ) -> Result<(&Value, &str, crate::ExitClass), ReportDefect> {
-    if envelope.text("schema") != Some(ENVELOPE_SCHEMA) {
+    #[derive(serde::Deserialize)]
+    struct Header<'a> {
+        schema: &'a str,
+        payload_digest: &'a str,
+    }
+    #[derive(serde::Deserialize)]
+    struct Payload<'a> {
+        schema: &'a str,
+        compatibility: &'a str,
+    }
+    #[derive(serde::Deserialize)]
+    struct ResultFields<'a> {
+        complete: bool,
+        status: &'a str,
+        exit_code: i64,
+    }
+
+    crate::json::check_profile(envelope).map_err(|_defect| ReportDefect::NotAReport)?;
+    let header: Header<'_> =
+        crate::codec::borrow_value("$", envelope).map_err(|_defect| ReportDefect::NotAReport)?;
+    if header.schema != ENVELOPE_SCHEMA {
         return Err(ReportDefect::NotAReport);
     }
-    let Some(payload) = envelope.member("payload") else {
-        return Err(ReportDefect::NotAReport);
-    };
-    if payload.text("schema") != Some(PAYLOAD_SCHEMA) {
+    let payload = envelope.get("payload").ok_or(ReportDefect::NotAReport)?;
+    let fields: Payload<'_> = crate::codec::borrow_value("$.payload", payload)
+        .map_err(|_defect| ReportDefect::NotAReport)?;
+    if fields.schema != PAYLOAD_SCHEMA {
         return Err(ReportDefect::NotAReport);
     }
-    match payload.text("compatibility") {
-        Some(COMPATIBILITY) => {}
-        Some(_unsupported) => return Err(ReportDefect::UnsupportedCompatibility),
-        None => return Err(ReportDefect::NotAReport),
+    if fields.compatibility != COMPATIBILITY {
+        return Err(ReportDefect::UnsupportedCompatibility);
     }
-    let Some(recorded) = envelope.text("payload_digest") else {
-        return Err(ReportDefect::NotAReport);
-    };
-    if hj(PAYLOAD_SCHEMA, payload).to_string() != recorded {
+    if hj(PAYLOAD_SCHEMA, payload).to_string() != header.payload_digest {
         return Err(ReportDefect::DigestMismatch);
     }
-    let Some(result) = payload.member("result") else {
-        return Err(ReportDefect::InvalidResult);
-    };
-    let verdict = match (
-        result.member("complete"),
-        result.text("status"),
-        result.member("exit_code"),
-    ) {
-        (Some(Value::Bool(true)), Some("pass"), Some(Value::Integer(0))) => {
-            crate::ExitClass::Success
-        }
-        (Some(Value::Bool(true)), Some("fail"), Some(Value::Integer(1))) => {
-            crate::ExitClass::BlockingFindings
-        }
-        (Some(Value::Bool(false)), Some("incomplete"), Some(Value::Integer(2))) => {
-            crate::ExitClass::Failure
-        }
+    let result = payload.get("result").ok_or(ReportDefect::InvalidResult)?;
+    let result: ResultFields<'_> = crate::codec::borrow_value("$.payload.result", result)
+        .map_err(|_defect| ReportDefect::InvalidResult)?;
+    let verdict = match (result.complete, result.status, result.exit_code) {
+        (true, "pass", 0) => crate::ExitClass::Success,
+        (true, "fail", 1) => crate::ExitClass::BlockingFindings,
+        (false, "incomplete", 2) => crate::ExitClass::Failure,
         (_, _, _) => return Err(ReportDefect::InvalidResult),
     };
-    Ok((payload, recorded, verdict))
-}
-
-fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::Object(
-        members
-            .into_iter()
-            .map(|(key, value)| (key.into(), value))
-            .collect(),
-    )
-}
-
-fn string(value: &str) -> Value {
-    Value::String(value.into())
+    Ok((payload, header.payload_digest, verdict))
 }

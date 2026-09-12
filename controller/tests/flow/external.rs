@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -50,7 +51,7 @@ fn scripted_evidence(visibility: &str, resolution: Option<&str>) -> Value {
     )
     .unwrap();
     let row = forge_evidence_row(DESTINATION, visibility, resolution, "t0");
-    evidence_file(&plan, "scripted", "0", vec![row]).unwrap()
+    evidence_file(&plan, "scripted", "0", vec![row.unwrap()]).unwrap()
 }
 
 fn set_external_policy<L, R>(controller: &mut Controller<L, R>, external_policy: ExternalPolicy) {

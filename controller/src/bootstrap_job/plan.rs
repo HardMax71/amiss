@@ -1,6 +1,7 @@
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::digest::hj;
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 
 use super::controls;
 use super::{
@@ -35,10 +36,7 @@ pub fn check_plan(
         return Err(BootstrapJobError::SemanticEvidence);
     }
     let policy_identity = controls::identity(&policy)?;
-    let constraint = execution
-        .canonical_bytes()
-        .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    controls::validate_request_size(&policy, &policy_identity, &execution, &constraint)?;
+    controls::validate_request_size(&policy, &policy_identity, &execution)?;
     let digest = hj(
         CHECK_PLAN_DOMAIN,
         &plan_value(
@@ -244,11 +242,11 @@ fn workflow_artifact_value(expectation: &WorkflowArtifactExpectation) -> Value {
         ),
         (
             "archive_byte_limit".to_owned(),
-            Value::Integer(i64::try_from(expectation.archive_byte_limit).unwrap_or(i64::MAX)),
+            Value::from(i64::try_from(expectation.archive_byte_limit).unwrap_or(i64::MAX)),
         ),
         (
             "file_byte_limit".to_owned(),
-            Value::Integer(i64::try_from(expectation.file_byte_limit).unwrap_or(i64::MAX)),
+            Value::from(i64::try_from(expectation.file_byte_limit).unwrap_or(i64::MAX)),
         ),
         (
             "candidate_binding".to_owned(),

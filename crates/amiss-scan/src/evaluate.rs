@@ -1,4 +1,5 @@
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
 use amiss_wire::resolution::{

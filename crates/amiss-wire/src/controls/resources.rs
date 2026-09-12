@@ -1,7 +1,6 @@
 use strum::{AsRefStr, EnumIter, EnumString, IntoEnumIterator, IntoStaticStr};
 
-use crate::de::{self, Error, ErrorKind, fail};
-use crate::json::Value;
+use serde::{Deserialize, Serialize};
 
 macro_rules! resource_names {
     ($($variant:ident => $phase:literal),+ $(,)?) => {
@@ -17,8 +16,11 @@ macro_rules! resource_names {
             EnumString,
             EnumIter,
             IntoStaticStr,
+            Serialize,
+            Deserialize,
         )]
         #[strum(serialize_all = "kebab-case")]
+        #[serde(rename_all = "kebab-case")]
         pub enum ResourceName {
             $($variant),+
         }
@@ -41,13 +43,7 @@ macro_rules! resource_names {
                 self.into()
             }
 
-            pub(super) fn decode(path: &str, value: Value) -> Result<Self, Error> {
-                let raw = de::string(path, value)?;
-                let Ok(resource) = raw.parse() else {
-                    return fail(path, ErrorKind::InvalidValue);
-                };
-                Ok(resource)
-            }
+
         }
     };
 }

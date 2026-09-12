@@ -16,11 +16,7 @@ use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use serde_json::json;
 
-fn chapter(
-    path: Option<&str>,
-    source_path: Option<&str>,
-    sub_items: &[serde_json::Value],
-) -> serde_json::Value {
+fn chapter(path: Option<&str>, source_path: Option<&str>, sub_items: &[Value]) -> Value {
     json!({
         "Chapter": {
             "content": "ignored by the evidence projection",
@@ -34,7 +30,7 @@ fn chapter(
     })
 }
 
-fn context(version: &str, html_renderer: bool, items: &[serde_json::Value]) -> Vec<u8> {
+fn context(version: &str, html_renderer: bool, items: &[Value]) -> Vec<u8> {
     let output = if html_renderer {
         json!({"html": {}})
     } else {
@@ -66,12 +62,12 @@ fn site(configuration: &str, route_prefix: &str) -> SiteBuildContext {
 fn observation<'a>(observations: &'a [Value], route: &str) -> &'a Value {
     observations
         .iter()
-        .find(|row| row.text("route") == Some(route))
+        .find(|row| row.get("route").and_then(Value::as_str) == Some(route))
         .unwrap()
 }
 
 fn texts<'a>(observation: &'a Value, name: &str) -> Vec<&'a str> {
-    let Some(Value::Array(values)) = observation.member(name) else {
+    let Some(Value::Array(values)) = observation.get(name) else {
         return Vec::new();
     };
     values
@@ -80,7 +76,7 @@ fn texts<'a>(observation: &'a Value, name: &str) -> Vec<&'a str> {
             Value::String(value) => Some(value.as_ref()),
             Value::Null
             | Value::Bool(_)
-            | Value::Integer(_)
+            | Value::Number(_)
             | Value::Array(_)
             | Value::Object(_) => None,
         })
@@ -131,28 +127,43 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     assert!(parsed.payload.complete);
     assert_eq!(parsed.payload.observations.len(), 4);
     let intro = observation(&parsed.payload.observations, "/manual/intro.html");
-    assert_eq!(intro.text("source"), Some("docs/guide/README.md"));
+    assert_eq!(
+        intro.get("source").and_then(Value::as_str),
+        Some("docs/guide/README.md")
+    );
     assert_eq!(
         texts(intro, "anchors"),
         ["both", "entity&anchor", "intro", "legacy", "named"]
     );
     let index = observation(&parsed.payload.observations, "/manual/index.html");
-    assert_eq!(index.text("source"), Some("docs/guide/README.md"));
+    assert_eq!(
+        index.get("source").and_then(Value::as_str),
+        Some("docs/guide/README.md")
+    );
     assert_eq!(texts(index, "anchors"), ["home"]);
     let nested = observation(
         &parsed.payload.observations,
         "/manual/nested/%C3%BCber%20view.html",
     );
-    assert_eq!(nested.text("source"), Some("docs/guide/nested/chapter.md"));
+    assert_eq!(
+        nested.get("source").and_then(Value::as_str),
+        Some("docs/guide/nested/chapter.md")
+    );
     assert_eq!(texts(nested, "anchors"), ["über-view"]);
     let navigation = parsed
         .payload
         .observations
         .iter()
-        .find(|row| row.text("kind") == Some("site-navigation"))
+        .find(|row| row.get("kind").and_then(Value::as_str) == Some("site-navigation"))
         .unwrap();
-    assert_eq!(navigation.text("root"), Some("docs/guide"));
-    assert_eq!(navigation.text("manifest"), Some("docs/guide/SUMMARY.md"));
+    assert_eq!(
+        navigation.get("root").and_then(Value::as_str),
+        Some("docs/guide")
+    );
+    assert_eq!(
+        navigation.get("manifest").and_then(Value::as_str),
+        Some("docs/guide/SUMMARY.md")
+    );
     assert_eq!(texts(navigation, "entrypoints"), ["/manual/index.html"]);
     assert_eq!(
         texts(navigation, "reachable"),
@@ -186,13 +197,13 @@ fn generated_chapters_need_no_repository_attribution() {
         .payload
         .observations
         .iter()
-        .filter(|row| row.text("kind") == Some("site-generated-route"))
+        .filter(|row| row.get("kind").and_then(Value::as_str) == Some("site-generated-route"))
         .collect();
     assert_eq!(routes.len(), 2);
     assert!(
         routes
             .iter()
-            .all(|route| route.member("source") == Some(&Value::Null))
+            .all(|route| route.get("source") == Some(&Value::Null))
     );
     let generated = observation(&parsed.payload.observations, "/manual/generated.html");
     assert_eq!(texts(generated, "anchors"), ["generated"]);
@@ -200,7 +211,7 @@ fn generated_chapters_need_no_repository_attribution() {
         .payload
         .observations
         .iter()
-        .find(|row| row.text("kind") == Some("site-navigation"))
+        .find(|row| row.get("kind").and_then(Value::as_str) == Some("site-navigation"))
         .unwrap();
     assert_eq!(texts(navigation, "entrypoints"), ["/manual/index.html"]);
     assert!(texts(navigation, "reachable").is_empty());
@@ -248,7 +259,7 @@ fn completed_links_not_chapter_membership_define_navigation() {
         .payload
         .observations
         .iter()
-        .find(|row| row.text("kind") == Some("site-navigation"))
+        .find(|row| row.get("kind").and_then(Value::as_str) == Some("site-navigation"))
         .unwrap();
     assert_eq!(
         texts(navigation, "reachable"),
@@ -457,4 +468,96 @@ fn unrepresentable_published_anchor_fails_the_complete_set() {
         ),
         Err(MdBookEvidenceError::Anchor)
     ));
+}
+
+#[test]
+fn upstream_configuration_numbers_remain_bound_and_json_must_be_complete() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(
+        root.path().join("chapter.html"),
+        "<h1 id='chapter'>Chapter</h1>",
+    )
+    .unwrap();
+    fs::write(
+        root.path().join("index.html"),
+        "<h1 id='chapter'>Chapter</h1>",
+    )
+    .unwrap();
+    let mut renderer: Value = serde_json::from_slice(&context(
+        "0.5.4",
+        true,
+        &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
+    ))
+    .unwrap();
+    renderer["config"]["custom"] = json!({"ratio": 0.5, "wide": u64::MAX});
+    let first_bytes = serde_json::to_vec(&renderer).unwrap();
+    let first = mdbook_site_evidence(
+        hb("amiss/test", b"candidate"),
+        &site("book.toml", "/"),
+        &first_bytes,
+        &output(&root),
+    )
+    .unwrap();
+    renderer["config"]["custom"]["ratio"] = json!(0.25);
+    let second = mdbook_site_evidence(
+        hb("amiss/test", b"candidate"),
+        &site("book.toml", "/"),
+        &serde_json::to_vec(&renderer).unwrap(),
+        &output(&root),
+    )
+    .unwrap();
+    assert_ne!(first, second);
+    let mut trailing = first_bytes;
+    trailing.extend_from_slice(b" {}");
+    assert!(matches!(
+        mdbook_site_evidence(
+            hb("amiss/test", b"candidate"),
+            &site("book.toml", "/"),
+            &trailing,
+            &output(&root)
+        ),
+        Err(MdBookEvidenceError::Context(_))
+    ));
+}
+
+#[test]
+fn upstream_metadata_cannot_hide_duplicate_configuration_members() {
+    let root = tempfile::tempdir().unwrap();
+    let renderer = context(
+        "0.5.4",
+        true,
+        &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
+    );
+    let duplicated = String::from_utf8(renderer)
+        .unwrap()
+        .replace("\"src\":\"guide\"", "\"src\":\"guide\",\"src\":\"guide\"");
+    assert!(matches!(
+        mdbook_site_evidence(
+            hb("amiss/test", b"candidate"),
+            &site("book.toml", "/"),
+            duplicated.as_bytes(),
+            &output(&root)
+        ),
+        Err(MdBookEvidenceError::Context(_))
+    ));
+}
+
+#[test]
+fn chapter_fields_and_separator_tags_keep_their_json_shapes() {
+    let root = tempfile::tempdir().unwrap();
+    for invalid in [
+        json!({"Chapter": ["chapter.md", "chapter.md", []]}),
+        json!({"Separator": null}),
+    ] {
+        let renderer = context("0.5.4", true, &[invalid]);
+        assert!(matches!(
+            mdbook_site_evidence(
+                hb("amiss/test", b"candidate"),
+                &site("book.toml", "/"),
+                &renderer,
+                &output(&root)
+            ),
+            Err(MdBookEvidenceError::ContextShape)
+        ));
+    }
 }

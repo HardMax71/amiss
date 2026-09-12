@@ -1,5 +1,8 @@
+mod tests;
+
 use amiss_wire::controls::{PREVIOUS_CODE_SINK, Profile, projection_source_value};
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
 
@@ -10,7 +13,7 @@ use super::claims::{source_multiplicities, sources_value};
 use super::control::control_fact_finding;
 
 fn difference_value(difference: &Difference) -> Value {
-    let integer = |value| Value::Integer(i64::try_from(value).unwrap_or(i64::MAX));
+    let integer = |value| Value::from(i64::try_from(value).unwrap_or(i64::MAX));
     let rows = |values: &[String]| {
         Value::array(
             values
@@ -71,7 +74,10 @@ fn difference_value(difference: &Difference) -> Value {
     }
 }
 
-pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<Finding> {
+pub(super) fn projection_finding(
+    outcome: &Outcome,
+    profile: Profile,
+) -> Result<Option<Finding>, amiss_wire::de::Error> {
     let Verdict::Drift {
         reason,
         expected_digest,
@@ -81,14 +87,14 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
         ref difference,
     } = outcome.verdict
     else {
-        return None;
+        return Ok(None);
     };
     let nullable_digest = |digest: Option<amiss_wire::digest::Digest>| {
         digest.map_or(Value::Null, |value| Value::string(value.to_string()))
     };
     let nullable_bytes = |bytes: Option<u64>| {
         bytes.map_or(Value::Null, |value| {
-            Value::Integer(i64::try_from(value).unwrap_or(i64::MAX))
+            Value::from(i64::try_from(value).unwrap_or(i64::MAX))
         })
     };
     let assertion = &outcome.assertion;
@@ -105,7 +111,7 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
         ),
         (
             "source".to_owned(),
-            projection_source_value(&assertion.source),
+            projection_source_value(&assertion.source)?,
         ),
         (
             "observed".to_owned(),
@@ -131,7 +137,7 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
     if let Some(difference) = difference.as_ref() {
         evidence.push(("difference".to_owned(), difference_value(difference)));
     }
-    Some(control_fact_finding(
+    Ok(Some(control_fact_finding(
         FindingKind::ProjectionDrift,
         &RepoPath::from(&assertion.document),
         &format!("claim/projection/{}", assertion.name),
@@ -139,5 +145,5 @@ pub(super) fn projection_finding(outcome: &Outcome, profile: Profile) -> Option<
         1,
         (outcome.representative_span, outcome.representative_display),
         profile,
-    ))
+    )))
 }

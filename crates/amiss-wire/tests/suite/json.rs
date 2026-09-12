@@ -1,11 +1,6 @@
 use amiss_wire::digest::{hj, hj_with_length};
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::json::{ErrorKind, Value, canonical, canonical_length, parse};
-
-#[cfg(target_pointer_width = "64")]
-#[test]
-fn an_owned_value_uses_three_machine_words() {
-    assert_eq!(size_of::<Value>(), 24);
-}
 
 #[test]
 fn digest_counting_matches_the_independent_operations() {
@@ -16,7 +11,7 @@ fn digest_counting_matches_the_independent_operations() {
         ),
         (
             "nested".to_owned(),
-            Value::array(vec![Value::Integer(42), Value::Bool(true), Value::Null]),
+            Value::array(vec![Value::from(42), Value::Bool(true), Value::Null]),
         ),
     ]);
     let (digest, length) = hj_with_length("amiss/test", &value);

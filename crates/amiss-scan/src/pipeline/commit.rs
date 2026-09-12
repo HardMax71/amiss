@@ -128,7 +128,10 @@ fn commit_controls(
 /// The complete commit-pair run: both sides, correlation, and construction.
 /// Any accumulated typed error makes the run incomplete with every safely
 /// established row retained; the report is emitted either way.
-#[must_use]
+///
+/// # Errors
+///
+/// The report cannot be represented in the strict JSON profile.
 pub fn commit_pair(
     repo: &Repository,
     engine: &EngineProvenance,
@@ -136,7 +139,7 @@ pub fn commit_pair(
     setup_shell: &SetupShell,
     base_oid: &Oid,
     candidate_oid: &Oid,
-) -> Built {
+) -> Result<Built, amiss_wire::de::Error> {
     commit_pair_result(repo, engine, forge, setup_shell, base_oid, candidate_oid)
         .unwrap_or_else(PipelineFailure::into_built)
 }
@@ -148,7 +151,7 @@ fn commit_pair_result(
     setup_shell: &SetupShell,
     base_oid: &Oid,
     candidate_oid: &Oid,
-) -> PipelineResult<Built> {
+) -> PipelineResult<Result<Built, amiss_wire::de::Error>> {
     let (verified_floor, floor_mismatch) = floor_gate(setup_shell);
     let (scan_limits, git_limits) = effective_limits(verified_floor);
     let setup_shell = &effective_shell(setup_shell, &scan_limits);

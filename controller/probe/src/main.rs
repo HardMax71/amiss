@@ -3,7 +3,7 @@ mod select;
 
 use std::env;
 use std::fs;
-use std::io::Read as _;
+use std::io::{Read as _, Write as _};
 use std::process::ExitCode;
 use std::time::{Duration, Instant, SystemTime};
 
@@ -94,19 +94,28 @@ fn main() -> ExitCode {
                 continue;
             }
         };
+        let Ok(row) = row else {
+            eprintln!("amiss-probe: observation cannot be serialized");
+            return ExitCode::from(2);
+        };
         rows.push(row);
     }
     if skipped > 0 {
         eprintln!("amiss-probe: {skipped} destinations past the run cap or budget stay unproven");
     }
-    let Some(evidence) = evidence_file(&plan, "amiss-probe", env!("CARGO_PKG_VERSION"), rows)
-    else {
+    let Ok(evidence) = evidence_file(&plan, "amiss-probe", env!("CARGO_PKG_VERSION"), rows) else {
         eprintln!("amiss-probe: the plan names no payload digest");
         return ExitCode::from(2);
     };
-    let mut out = String::new();
-    json::stream(&evidence, &mut out);
-    println!("{out}");
+    let Ok(mut out) = amiss_wire::codec::canonical(&evidence) else {
+        eprintln!("amiss-probe: evidence cannot be serialized");
+        return ExitCode::from(2);
+    };
+    out.push(b'\n');
+    if std::io::stdout().lock().write_all(&out).is_err() {
+        eprintln!("amiss-probe: evidence cannot be written");
+        return ExitCode::from(2);
+    }
     ExitCode::SUCCESS
 }
 

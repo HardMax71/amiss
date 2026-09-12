@@ -5,6 +5,7 @@ use amiss_controller::{
     spelled_segments,
 };
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 
 use super::rest::{GitHubVerification, Presence, RefFamily};
 

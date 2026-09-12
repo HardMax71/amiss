@@ -3,7 +3,7 @@ mod tests;
 use std::collections::BTreeSet;
 
 use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::json::{self, Value};
+use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
 use base64::Engine as _;
 use serde::Deserialize;
@@ -106,23 +106,34 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
 }
 
 fn report_digests(report: &[u8]) -> Result<Vec<Digest>, ArtifactError> {
+    if u64::try_from(report.len()).unwrap_or(u64::MAX) > amiss_wire::report::MACHINE_JSON_BYTES {
+        return Err(ArtifactError::TooLarge);
+    }
     let envelope = json::parse(report).map_err(|_defect| ArtifactError::Corrupt)?;
     let (payload, _digest, _verdict) = amiss_wire::report::validate_envelope(&envelope)
         .map_err(|_defect| ArtifactError::Corrupt)?;
-    let evidence = payload
-        .member("controls")
-        .and_then(|controls| controls.member("semantic_evidence"));
-    let Some(evidence) = evidence else {
-        return Ok(Vec::new());
-    };
-    let Value::Array(rows) = evidence else {
-        return Err(ArtifactError::Corrupt);
-    };
-    rows.iter()
-        .map(|row| {
-            row.text("payload_digest")
-                .and_then(Digest::from_wire)
-                .ok_or(ArtifactError::Corrupt)
-        })
-        .collect()
+    let payload: ReportPayload = amiss_wire::codec::from_value("$.payload", payload)
+        .map_err(|_defect| ArtifactError::Corrupt)?;
+    Ok(payload
+        .controls
+        .semantic_evidence
+        .into_iter()
+        .map(|row| row.payload_digest)
+        .collect())
+}
+
+#[derive(Deserialize)]
+struct ReportPayload {
+    controls: ReportControls,
+}
+
+#[derive(Deserialize)]
+struct ReportControls {
+    #[serde(default)]
+    semantic_evidence: Vec<SemanticProvenance>,
+}
+
+#[derive(Deserialize)]
+struct SemanticProvenance {
+    payload_digest: Digest,
 }

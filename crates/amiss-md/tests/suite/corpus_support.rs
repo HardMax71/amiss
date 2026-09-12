@@ -1,4 +1,5 @@
 use amiss_wire::digest::hb;
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::json::{Value, canonical, parse};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;
@@ -104,14 +105,15 @@ pub(crate) fn commonmark(spec_json: &[u8]) -> Result<Vec<Case>, Defect> {
             let Value::Object(members) = row else {
                 return Err(Defect::NotAnExampleArray);
             };
-            let text = |key: &str| match members.iter().find(|(name, _)| name == key) {
-                Some((_, Value::String(value))) => Ok(value.to_string()),
+            let text = |key: &str| match members.get(key) {
+                Some(Value::String(value)) => Ok(value.clone()),
                 _ => Err(Defect::MissingMember),
             };
-            let number = match members.iter().find(|(name, _)| name == "example") {
-                Some((_, Value::Integer(value))) => {
-                    usize::try_from(*value).map_err(|_range| Defect::MissingMember)?
-                }
+            let number = match members.get("example") {
+                Some(Value::Number(value)) => value
+                    .as_u64()
+                    .and_then(|value| usize::try_from(value).ok())
+                    .ok_or(Defect::MissingMember)?,
                 _ => return Err(Defect::MissingMember),
             };
             Ok(Case {
@@ -473,10 +475,7 @@ fn rfind_within(hay: &[u8], needle: &[u8], from: usize, before: usize) -> Option
 }
 
 fn span_value(span: (usize, usize)) -> Value {
-    Value::array(vec![
-        Value::Integer(clamp(span.0)),
-        Value::Integer(clamp(span.1)),
-    ])
+    Value::array(vec![Value::from(clamp(span.0)), Value::from(clamp(span.1))])
 }
 
 fn occurrence_value(entry: &Occurrence) -> Value {
@@ -492,7 +491,7 @@ fn occurrence_value(entry: &Occurrence) -> Value {
                 entry
                     .node_path
                     .iter()
-                    .map(|index| Value::Integer(clamp(*index)))
+                    .map(|index| Value::from(clamp(*index)))
                     .collect(),
             ),
         ),
@@ -571,7 +570,7 @@ fn extraction_members(extraction: &Extraction) -> Vec<(String, Value)> {
             Value::object(vec![
                 (
                     "frontmatter_bytes".to_owned(),
-                    Value::Integer(clamp(extraction.opaque.frontmatter_bytes)),
+                    Value::from(clamp(extraction.opaque.frontmatter_bytes)),
                 ),
                 (
                     "html".to_owned(),
@@ -606,11 +605,11 @@ fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
             let mut members = vec![
                 (
                     "nesting".to_owned(),
-                    Value::Integer(i64::try_from(analysis.work.nesting).unwrap_or(i64::MAX)),
+                    Value::from(i64::try_from(analysis.work.nesting).unwrap_or(i64::MAX)),
                 ),
                 (
                     "nodes".to_owned(),
-                    Value::Integer(i64::try_from(analysis.work.nodes).unwrap_or(i64::MAX)),
+                    Value::from(i64::try_from(analysis.work.nodes).unwrap_or(i64::MAX)),
                 ),
             ];
             if let Some(extraction) = &analysis.extraction {
@@ -693,10 +692,10 @@ pub(crate) fn manifest(cases: &[Case], skipped: &[(&'static str, usize)]) -> Val
                 .find(|(name, _)| name == family)
                 .map_or(0, |(_, count)| *count);
             Value::object(vec![
-                ("cases".to_owned(), Value::Integer(clamp(count))),
+                ("cases".to_owned(), Value::from(clamp(count))),
                 ("family".to_owned(), Value::string((*family).to_owned())),
                 ("input_digest".to_owned(), Value::string((*pin).to_owned())),
-                ("not_a_literal".to_owned(), Value::Integer(clamp(dropped))),
+                ("not_a_literal".to_owned(), Value::from(clamp(dropped))),
             ])
         })
         .collect();

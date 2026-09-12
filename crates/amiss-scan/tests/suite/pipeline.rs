@@ -183,17 +183,19 @@ fn exact_relocation_evidence_requires_one_removed_and_one_added_identity() {
     git(root, &["update-index", "--chmod=+x", "mode-new.bin"]);
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)));
+    let staged = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap());
     git(root, &["commit", "-qm", "candidate"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-    let committed = payload(&commit_pair(
+    let committed = commit_pair(
         &repo,
         &engine(),
         None,
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    ));
+    )
+    .unwrap();
+    let committed = payload(&committed);
 
     for report in [&staged, &committed] {
         let resolution = |path: &str| {
@@ -288,7 +290,8 @@ fn a_historical_absence_never_borrows_candidate_relocation_evidence() {
         &setup,
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     crate::support::assert_report(&envelope, "historical missing path");
     let report = &envelope["payload"];
@@ -346,7 +349,8 @@ fn an_unrepresentable_tree_path_is_disclosed_by_its_bytes() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     let row = payload["errors"]
         .as_array()
@@ -392,7 +396,7 @@ fn an_index_path_is_disclosed_up_to_the_ceiling() {
     .unwrap();
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base));
+    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap();
     let payload = payload(&built);
     let disclosed: Vec<Option<&str>> = payload["errors"]
         .as_array()
@@ -421,7 +425,7 @@ fn an_unreadable_index_names_the_reason_it_left() {
     fs::write(root.join(".git/index"), b"not an index at all").unwrap();
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base));
+    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap();
     let payload = payload(&built);
     assert_eq!(payload["evaluation"]["candidate"]["kind"], "unavailable");
     assert_eq!(
@@ -447,7 +451,7 @@ fn a_staged_policy_raises_the_disposition_of_the_run_that_stages_it() {
     git(root, &["add", "."]);
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base));
+    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap();
     let payload = payload(&built);
     let raised: Vec<&serde_json::Value> = payload["findings"]
         .as_array()
@@ -480,7 +484,7 @@ fn duplicate_html_destinations_scan_cleanly() {
     git(root, &["add", "."]);
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base));
+    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap();
     let payload = payload(&built);
     assert_eq!(built.exit_code, 0, "{payload}");
     assert_eq!(payload["result"]["status"], "pass");
@@ -514,7 +518,8 @@ fn equal_broken_anchors_are_two_observations_in_one_finding() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     assert_eq!(payload["result"]["complete"], true, "{payload}");
     let anchors: Vec<&serde_json::Value> = payload["observations"]
@@ -572,7 +577,8 @@ fn an_attested_value_claim_passes_and_is_counted() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     assert_eq!(built.exit_code, 0, "{payload}");
     assert_eq!(payload["result"]["status"], "pass");
@@ -618,7 +624,7 @@ fn a_code_projection_attests_in_committed_and_staged_snapshots() {
     git(root, &["add", "."]);
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let staged = staged_index(&repo, &engine(), None, &shell(), &oid(&base));
+    let staged = staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap();
     let staged_payload = payload(&staged);
     assert_eq!(staged.exit_code, 0, "{staged_payload}");
     assert_eq!(staged_payload["result"]["status"], "pass");
@@ -642,7 +648,8 @@ fn a_code_projection_attests_in_committed_and_staged_snapshots() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let committed_payload = payload(&committed);
     assert_eq!(committed.exit_code, 0, "{committed_payload}");
     assert_eq!(committed_payload["result"]["status"], "pass");
@@ -676,14 +683,17 @@ fn trailing_blank_lines_remain_projection_content() {
         git(root, &["commit", "-qm", "projected"]);
         let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
         let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-        payload(&commit_pair(
-            &repo,
-            &engine(),
-            None,
-            &shell(),
-            &oid(&base),
-            &oid(&candidate),
-        ))
+        payload(
+            &commit_pair(
+                &repo,
+                &engine(),
+                None,
+                &shell(),
+                &oid(&base),
+                &oid(&candidate),
+            )
+            .unwrap(),
+        )
     };
     let clean = b"```text\nvalue\n```\n[amiss:sample]: <amiss:projection>\n";
     let blank = b"```text\nvalue\n\n```\n[amiss:sample]: <amiss:projection>\n";
@@ -739,7 +749,8 @@ fn a_changed_projection_reports_the_exact_relation_and_visible_sink() {
         &setup,
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     crate::support::assert_report(&envelope, "projection-drift report");
     let payload = payload(&built);
@@ -796,14 +807,17 @@ fn declared_projection_sink_defects_are_findings_not_silent_boundaries() {
         git(root, &["commit", "-qm", "projected"]);
         let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
         let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-        payload(&commit_pair(
-            &repo,
-            &engine(),
-            None,
-            &shell(),
-            &oid(&base),
-            &oid(&candidate),
-        ))
+        payload(
+            &commit_pair(
+                &repo,
+                &engine(),
+                None,
+                &shell(),
+                &oid(&base),
+                &oid(&candidate),
+            )
+            .unwrap(),
+        )
     };
     let cases = [
         ("# no marker\n", Some("value\n"), 1, "sink-absent"),
@@ -894,14 +908,17 @@ fn a_named_region_attests_across_endings_and_ignores_outside_edits() {
     git(root, &["commit", "-qm", "projected"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let committed = payload(&commit_pair(
-        &repo,
-        &engine(),
-        None,
-        &shell(),
-        &oid(&base),
-        &oid(&candidate),
-    ));
+    let committed = payload(
+        &commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        )
+        .unwrap(),
+    );
     assert!(
         committed["findings"]
             .as_array()
@@ -917,13 +934,8 @@ fn a_named_region_attests_across_endings_and_ignores_outside_edits() {
     )
     .unwrap();
     git(root, &["add", "source.txt"]);
-    let staged = payload(&staged_index(
-        &repo,
-        &engine(),
-        None,
-        &shell(),
-        &oid(&candidate),
-    ));
+    let staged =
+        payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&candidate)).unwrap());
     assert_eq!(staged["result"]["status"], "pass", "{staged}");
     assert!(
         staged["findings"]
@@ -973,7 +985,8 @@ fn a_named_region_mismatch_carries_the_exact_selector() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     crate::support::assert_report(&envelope, "named projection report");
     let payload = payload(&built);
@@ -1050,14 +1063,17 @@ fn named_region_marker_defects_are_typed_projection_drift() {
         git(root, &["commit", "-qm", "defect"]);
         let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
         let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-        let payload = payload(&commit_pair(
-            &repo,
-            &engine(),
-            None,
-            &shell(),
-            &oid(&base),
-            &oid(&candidate),
-        ));
+        let payload = payload(
+            &commit_pair(
+                &repo,
+                &engine(),
+                None,
+                &shell(),
+                &oid(&base),
+                &oid(&candidate),
+            )
+            .unwrap(),
+        );
         assert_eq!(payload["result"]["complete"], true, "{reason}: {payload}");
         let rows: Vec<_> = payload["findings"]
             .as_array()
@@ -1105,14 +1121,17 @@ fn a_tree_inventory_is_root_relative_and_reuses_the_staged_snapshot() {
     git(root, &["commit", "-qm", "inventory"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let committed = payload(&commit_pair(
-        &repo,
-        &engine(),
-        None,
-        &shell(),
-        &oid(&base),
-        &oid(&candidate),
-    ));
+    let committed = payload(
+        &commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        )
+        .unwrap(),
+    );
     assert!(
         committed["findings"]
             .as_array()
@@ -1126,7 +1145,7 @@ fn a_tree_inventory_is_root_relative_and_reuses_the_staged_snapshot() {
         fs::write(root.join(format!("examples/z{index:02}.txt")), "z").unwrap();
     }
     git(root, &["add", "examples"]);
-    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&candidate));
+    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&candidate)).unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     crate::support::assert_report(&envelope, "staged tree inventory");
     let staged = payload(&built);
@@ -1187,14 +1206,17 @@ fn a_tree_inventory_distinguishes_a_pure_ordering_defect() {
     git(root, &["commit", "-qm", "reordered inventory"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let payload = payload(&commit_pair(
-        &repo,
-        &engine(),
-        None,
-        &shell(),
-        &oid(&base),
-        &oid(&candidate),
-    ));
+    let payload = payload(
+        &commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        )
+        .unwrap(),
+    );
     let difference = &payload["findings"]
         .as_array()
         .unwrap()
@@ -1237,14 +1259,17 @@ fn a_tree_inventory_counts_duplicate_visible_rows_as_extras() {
     git(root, &["commit", "-qm", "drifted inventory"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let payload = payload(&commit_pair(
-        &repo,
-        &engine(),
-        None,
-        &shell(),
-        &oid(&base),
-        &oid(&candidate),
-    ));
+    let payload = payload(
+        &commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        )
+        .unwrap(),
+    );
     let difference = &payload["findings"]
         .as_array()
         .unwrap()
@@ -1295,14 +1320,17 @@ fn a_tree_inventory_count_uses_one_canonical_decimal() {
     git(root, &["commit", "-qm", "counted inventory"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let committed = payload(&commit_pair(
-        &repo,
-        &engine(),
-        None,
-        &shell(),
-        &oid(&base),
-        &oid(&candidate),
-    ));
+    let committed = payload(
+        &commit_pair(
+            &repo,
+            &engine(),
+            None,
+            &shell(),
+            &oid(&base),
+            &oid(&candidate),
+        )
+        .unwrap(),
+    );
     assert!(
         committed["findings"]
             .as_array()
@@ -1319,13 +1347,8 @@ fn a_tree_inventory_count_uses_one_canonical_decimal() {
         )
         .unwrap();
         git(root, &["add", "docs.md"]);
-        let noncanonical = payload(&staged_index(
-            &repo,
-            &engine(),
-            None,
-            &shell(),
-            &oid(&candidate),
-        ));
+        let noncanonical =
+            payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&candidate)).unwrap());
         let difference = projection_difference(&noncanonical, "the noncanonical count is reported");
         assert_eq!(difference["kind"], "count", "{noncanonical}");
         assert_eq!(difference["expected_count"], 2, "{noncanonical}");
@@ -1339,13 +1362,7 @@ fn a_tree_inventory_count_uses_one_canonical_decimal() {
     .unwrap();
     fs::write(root.join("inventory/c.txt"), "c").unwrap();
     git(root, &["add", "docs.md", "inventory/c.txt"]);
-    let stale = payload(&staged_index(
-        &repo,
-        &engine(),
-        None,
-        &shell(),
-        &oid(&candidate),
-    ));
+    let stale = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&candidate)).unwrap());
     let difference = projection_difference(&stale, "the stale count is reported");
     assert_eq!(difference["expected_count"], 3, "{stale}");
     assert_eq!(difference["observed_count"], 2, "{stale}");
@@ -1356,13 +1373,8 @@ fn a_tree_inventory_count_uses_one_canonical_decimal() {
         count_document,
         &[b"inventory/non-utf8-\xff.txt".as_slice()],
     );
-    let unrenderable = payload(&staged_index(
-        &repo,
-        &engine(),
-        None,
-        &shell(),
-        &oid(&candidate),
-    ));
+    let unrenderable =
+        payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&candidate)).unwrap());
     assert!(
         unrenderable["findings"]
             .as_array()
@@ -1404,7 +1416,8 @@ fn a_tree_inventory_never_turns_unrepresentable_paths_into_absence() {
         );
         stage_projection_index(root, document, &[source_path]);
         let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-        let row_payload = payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)));
+        let row_payload =
+            payload(&staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap());
         let evidence = &row_payload["findings"]
             .as_array()
             .unwrap()
@@ -1450,14 +1463,17 @@ fn a_tree_inventory_requires_an_existing_tree_root() {
         git(root, &["commit", "-qm", "invalid inventory root"]);
         let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
         let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-        let payload = payload(&commit_pair(
-            &repo,
-            &engine(),
-            None,
-            &shell(),
-            &oid(&base),
-            &oid(&candidate),
-        ));
+        let payload = payload(
+            &commit_pair(
+                &repo,
+                &engine(),
+                None,
+                &shell(),
+                &oid(&base),
+                &oid(&candidate),
+            )
+            .unwrap(),
+        );
         let evidence = &payload["findings"]
             .as_array()
             .unwrap()
@@ -1492,7 +1508,8 @@ fn an_unclaimed_projection_marker_stays_inside_the_governed_boundary() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     assert_eq!(built.exit_code, 2, "{payload}");
     assert!(
@@ -1550,7 +1567,8 @@ fn removing_a_projection_assertion_is_policy_weakening() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     assert_eq!(
         built.exit_code, 1,
@@ -1598,7 +1616,8 @@ fn a_grouped_item_annotates_its_least_location() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     let items = payload["feedback"]["items"].as_array().unwrap();
     let item = items
@@ -1640,7 +1659,8 @@ fn a_fix_is_emitted_only_when_provable() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     assert_eq!(payload["findings"][0]["kind"], "claim-broken", "{payload}");
     assert!(
@@ -1690,7 +1710,8 @@ fn a_case_drifted_anchor_carries_its_fix() {
             &shell(),
             &oid(&base),
             &oid(&candidate),
-        );
+        )
+        .unwrap();
         payload(&built)
     };
 
@@ -1782,7 +1803,8 @@ fn a_separator_drifted_anchor_carries_its_fix() {
         &shell(),
         &oid(&base_commit),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     let row = payload["findings"]
         .as_array()
@@ -1823,7 +1845,8 @@ fn a_case_drifted_path_carries_its_fix() {
             &shell(),
             &oid(&base),
             &oid(&candidate),
-        );
+        )
+        .unwrap();
         payload(&built)
     };
     let missing_row = |payload: &serde_json::Value| -> serde_json::Value {
@@ -1877,7 +1900,8 @@ fn a_case_drifted_path_carries_its_fix() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let at_root = missing_row(&payload(&built));
     assert_eq!(
         at_root["fix"]["replacement"], "sections.md",
@@ -1916,7 +1940,8 @@ fn an_rst_reference_carries_the_anchor_fix_too() {
         &shell(),
         &oid(&base_commit),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let rst_payload = payload(&built);
     let row = rst_payload["findings"]
         .as_array()
@@ -1962,7 +1987,8 @@ fn a_base_side_claim_is_not_evaluated() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     assert_eq!(built.exit_code, 0, "{payload}");
     assert_eq!(payload["summary"]["governed_claims"], 0);
@@ -1999,7 +2025,8 @@ fn claimed_run(claim_line: &str, profile: Profile) -> (i64, serde_json::Value) {
         &setup,
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let code = built.exit_code;
     (code, payload(&built))
 }
@@ -2139,7 +2166,7 @@ fn a_staged_claim_attests_like_a_committed_one() {
     git(root, &["add", "."]);
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base));
+    let built = staged_index(&repo, &engine(), None, &shell(), &oid(&base)).unwrap();
     let payload = payload(&built);
     assert_eq!(built.exit_code, 0, "{payload}");
     assert_eq!(payload["summary"]["governed_claims"], 1);
@@ -2224,7 +2251,8 @@ fn retained_and_fallback_anchor_routes_agree() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     let documents: Vec<(&str, &str)> = payload["documents"]
         .as_array()
@@ -2280,7 +2308,8 @@ fn a_supported_include_expands_without_guessing_an_unscanned_one() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let payload = payload(&built);
     assert_eq!(
         missing_targets(&payload).len(),
@@ -2333,7 +2362,7 @@ fn rst_and_adoc_claims_attest_and_break_like_markdown() {
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
-    let attested = commit_pair(&repo, &engine(), None, &shell(), &oid(&base), &oid(&base));
+    let attested = commit_pair(&repo, &engine(), None, &shell(), &oid(&base), &oid(&base)).unwrap();
     let attested_payload = payload(&attested);
     assert_eq!(
         attested_payload["summary"]["governed_claims"], 2,
@@ -2352,7 +2381,8 @@ fn rst_and_adoc_claims_attest_and_break_like_markdown() {
         &shell(),
         &oid(&base),
         &oid(&candidate),
-    );
+    )
+    .unwrap();
     let broken_payload = payload(&broken);
     let rows: Vec<(&str, &str)> = broken_payload["findings"]
         .as_array()

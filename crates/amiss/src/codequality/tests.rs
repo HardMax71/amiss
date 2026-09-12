@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 
 use super::issues;
 
@@ -40,7 +41,7 @@ fn a_global_finding_yields_a_valid_placeholder_location() {
     let Value::Array(issues) = issues(&envelope) else {
         panic!("the artifact is an array");
     };
-    let [issue] = issues.as_ref() else {
+    let [issue] = issues.as_slice() else {
         panic!("one finding is one issue");
     };
     let Value::Object(members) = issue else {
@@ -48,7 +49,7 @@ fn a_global_finding_yields_a_valid_placeholder_location() {
     };
     let location = members
         .iter()
-        .find(|(key, _)| key == "location")
+        .find(|(key, _)| key.as_str() == "location")
         .map(|(_, value)| value.clone());
     let Some(Value::Object(location)) = location else {
         panic!("the issue carries a location");
@@ -66,7 +67,7 @@ fn a_global_finding_yields_a_valid_placeholder_location() {
                     value,
                     Value::Object(lines)
                         if lines.iter().any(|(name, line)| name == "begin"
-                            && *line == Value::Integer(1))
+                            && line.as_i64() == Some(1))
                 )
         }),
         "a null span reads as line one, got {location:?}",

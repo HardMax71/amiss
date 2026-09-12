@@ -1,6 +1,7 @@
 mod tests;
 
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 
 use crate::view::{View, object, string};
 
@@ -12,7 +13,7 @@ use crate::view::{View, object, string};
 /// ordering, totals, or exit.
 pub(crate) fn issues(envelope: &Value) -> Value {
     let findings = View::of(envelope).view("payload").rows("findings");
-    Value::Array(findings.map(issue).collect())
+    Value::array(findings.map(issue).collect())
 }
 
 fn issue(row: View<'_>) -> Value {
@@ -42,7 +43,7 @@ fn location_value(location: View<'_>) -> Value {
     };
     let begin = location.view("span").number("start_line").max(1);
     object(vec![
-        ("lines", object(vec![("begin", Value::Integer(begin))])),
+        ("lines", object(vec![("begin", Value::from(begin))])),
         ("path", string(path)),
     ])
 }

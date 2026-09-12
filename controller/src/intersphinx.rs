@@ -1,3 +1,4 @@
+use amiss_wire::json::ValueExt as _;
 use std::io::Cursor;
 use std::sync::Arc;
 

@@ -2,6 +2,7 @@ mod tests;
 
 use amiss_wire::external::{bound_plan, evidence_file, forge_evidence_row};
 use amiss_wire::json::Value;
+use serde::Deserialize;
 
 use crate::ProviderError;
 
@@ -109,34 +110,30 @@ pub fn forge_evidence<S>(
     prepare: impl FnOnce() -> Result<S, ProviderError>,
     mut inspect: impl FnMut(&mut S, ForgeTarget<'_>) -> Result<ForgeEvidence, ProviderError>,
 ) -> Result<Value, ProviderError> {
-    let introduced = plan
-        .member("payload")
-        .and_then(|payload| payload.member("introduced"));
-    let (Some(Value::Array(introduced)), true) = (introduced, bound_plan(plan)) else {
+    if !bound_plan(plan) {
         return Err(ProviderError::InvalidResponse);
-    };
+    }
+    let plan_projection: Plan = amiss_wire::codec::from_value("$", plan)
+        .map_err(|_defect| ProviderError::InvalidResponse)?;
     let mut state = prepare()?;
     let mut rows = Vec::new();
-    for row in introduced {
-        let (Some(destination), Some(repository)) =
-            (row.text("destination"), row.member("repository"))
+    for row in plan_projection.payload.introduced {
+        let (Some(destination), Some(repository)) = (row.destination, row.repository) else {
+            continue;
+        };
+        let Ok(shape) = amiss_wire::codec::from_value::<Repository>("$.repository", &repository)
         else {
             continue;
         };
-        if repository.text("dialect") != Some(producer.dialect)
-            || repository.text("host") != Some(producer.host)
-        {
+        if shape.dialect != producer.dialect || shape.host != producer.host {
             continue;
         }
-        let (Some(owner), Some(name)) = (repository.text("owner"), repository.text("name")) else {
-            continue;
-        };
         let evidence = match inspect(
             &mut state,
             ForgeTarget {
-                repository,
-                owner,
-                name,
+                repository: &repository,
+                owner: &shape.owner,
+                name: &shape.name,
             },
         ) {
             Ok(evidence) => evidence,
@@ -149,17 +146,40 @@ pub fn forge_evidence<S>(
             ForgeEvidence::Readable(tail) => ("readable", tail.map(forge_tail_name), false),
             ForgeEvidence::ReadableThenUnavailable => ("readable", None, true),
         };
-        rows.push(forge_evidence_row(
-            destination,
-            repository_fact,
-            tail,
-            producer.checked_at,
-        ));
+        rows.push(
+            forge_evidence_row(&destination, repository_fact, tail, producer.checked_at)
+                .map_err(|_defect| ProviderError::InvalidResponse)?,
+        );
         if stop {
             break;
         }
     }
-    evidence_file(plan, producer.name, producer.version, rows).ok_or(ProviderError::InvalidResponse)
+    evidence_file(plan, producer.name, producer.version, rows)
+        .map_err(|_defect| ProviderError::InvalidResponse)
+}
+
+#[derive(Deserialize)]
+struct Plan {
+    payload: PlanPayload,
+}
+
+#[derive(Deserialize)]
+struct PlanPayload {
+    introduced: Vec<Introduced>,
+}
+
+#[derive(Deserialize)]
+struct Introduced {
+    destination: Option<String>,
+    repository: Option<Value>,
+}
+
+#[derive(Deserialize)]
+struct Repository {
+    dialect: String,
+    host: String,
+    owner: String,
+    name: String,
 }
 
 const fn forge_tail_name(tail: ForgeTail) -> &'static str {

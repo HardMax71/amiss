@@ -53,11 +53,11 @@ fn representative_repository_latency_and_memory() {
     };
 
     let start = Instant::now();
-    let built = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate);
+    let built = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate).unwrap();
     let elapsed = start.elapsed();
 
     let profiler = dhat::Profiler::builder().testing().build();
-    let repeated = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate);
+    let repeated = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate).unwrap();
     let stats = dhat::HeapStats::get();
     drop(profiler);
     assert_eq!(

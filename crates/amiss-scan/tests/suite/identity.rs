@@ -24,8 +24,7 @@ use support::{ReportSchemaFragment, fixture_bytes};
 
 fn fixture_digest(name: &str, definition: &str, domain: &str) -> Digest {
     let bytes = fixture_bytes(name);
-    let schema_value: serde_json::Value =
-        serde_json::from_slice(&bytes).expect("the identity fixture is JSON");
+    let schema_value: Value = serde_json::from_slice(&bytes).expect("the identity fixture is JSON");
     ReportSchemaFragment::new(definition).assert_value(&schema_value, name);
     let value: Value = parse(&bytes).expect("the identity fixture is strict JSON");
     hj(domain, &value)
@@ -98,18 +97,21 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
             fragment: Some("historical".to_owned()),
         },
     ];
-    let node_path = [0, 42, usize::MAX];
+    let node_path = [
+        0,
+        42,
+        usize::try_from(amiss_wire::codec::MAX_SAFE_INTEGER).unwrap_or(usize::MAX),
+    ];
     let projection_digest = hb("amiss/source-projection", b"projection");
     let raw_destination_digest = hb("amiss/raw-destination", b"destination");
-    let historical_intent: serde_json::Value = serde_json::from_slice(&canonical(&intent_value(
-        &intents[2],
-        raw_destination_digest,
-    )))
+    let historical_intent: Value = serde_json::from_slice(&canonical(
+        &intent_value(&intents[2], raw_destination_digest).unwrap(),
+    ))
     .expect("the historical intent is JSON");
     ReportSchemaFragment::new("TargetIntent")
         .assert_value(&historical_intent, "historical target intent");
     for adapter in Adapter::iter() {
-        let contract_digest = adapter_contract(&engine, adapter).1;
+        let contract_digest = adapter_contract(&engine, adapter).unwrap().1;
         for (document, intent) in [
             (&text_path, &intents[0]),
             (&byte_path, &intents[1]),
@@ -125,8 +127,8 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
                 intent,
                 raw_destination_digest,
             };
-            let input = observation_input(&identity);
-            let digest = observation_digest(&identity);
+            let input = observation_input(&identity).unwrap();
+            let digest = observation_digest(&identity).unwrap();
             assert_eq!(
                 digest,
                 hj(OBSERVATION_ID_DOMAIN, &input),
@@ -158,19 +160,19 @@ fn the_commit_candidate_identity_fixture_matches_the_runtime_preimage() {
         "CandidateIdentityInput",
         CANDIDATE_IDENTITY_DOMAIN,
     );
-    let gitlab = candidate_identity_digest(&setup);
+    let gitlab = candidate_identity_digest(&setup).unwrap();
     assert_eq!(gitlab, published);
 
     setup.forge = Some(ForgeDialect::Github);
     assert_ne!(
-        candidate_identity_digest(&setup),
+        candidate_identity_digest(&setup).unwrap(),
         gitlab,
         "a trusted-time statement cannot be replayed under another URL dialect"
     );
 
     setup.forge = None;
     assert_ne!(
-        candidate_identity_digest(&setup),
+        candidate_identity_digest(&setup).unwrap(),
         gitlab,
         "a trusted-time statement cannot be replayed without its selected URL dialect"
     );
@@ -197,7 +199,7 @@ fn the_staged_identity_fixtures_reproduce_the_runtime_digest_chain() {
             true,
         ),
     ];
-    let candidate = synthetic_candidate("sha1", &base_commit, &entries, 1);
+    let candidate = synthetic_candidate("sha1", &base_commit, &entries, 1).unwrap();
 
     assert_eq!(
         candidate.projection_digest,
@@ -220,7 +222,7 @@ fn the_staged_identity_fixtures_reproduce_the_runtime_digest_chain() {
 
     let setup = setup(CandidateBlock::Index(candidate));
     assert_eq!(
-        candidate_identity_digest(&setup),
+        candidate_identity_digest(&setup).unwrap(),
         fixture_digest(
             "candidate-identity-index.json",
             "CandidateIdentityInput",

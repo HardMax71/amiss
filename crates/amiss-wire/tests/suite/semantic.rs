@@ -7,6 +7,7 @@
 
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::{Digest, hj};
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::json::{ErrorKind as JsonErrorKind, Value, canonical};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{
@@ -163,9 +164,9 @@ fn strict_templates_have_no_candidate_or_report_binding_surface() {
         let Value::Object(members) = &valid else {
             panic!("the fixture is an object")
         };
-        let mut members = members.as_ref().to_vec();
-        members.push((field.to_owned(), Value::string(A)));
-        let invalid = Value::object(members);
+        let mut members = members.clone();
+        members.insert(field.to_owned(), Value::string(A));
+        let invalid = Value::Object(members);
         let error = parse_template(&canonical(&invalid)).unwrap_err();
         assert_eq!(error.kind, ErrorKind::UnknownField);
     }
@@ -218,13 +219,9 @@ fn duplicate_observations_are_refused() {
 
 #[test]
 fn construction_refuses_observation_values_outside_strict_json() {
-    let duplicate_member = Value::object(vec![
-        ("kind".to_owned(), Value::string("site-route")),
-        ("kind".to_owned(), Value::string("site-route")),
-    ]);
     let unsafe_integer = observation(vec![
         ("kind", Value::string("site-route")),
-        ("count", Value::Integer(9_007_199_254_740_992)),
+        ("count", Value::from(9_007_199_254_740_992_i64)),
     ]);
     let mut deep = Value::Null;
     for _ in 0..513 {
@@ -232,14 +229,14 @@ fn construction_refuses_observation_values_outside_strict_json() {
     }
     let excessive_depth = observation(vec![("kind", Value::string("site-route")), ("value", deep)]);
 
-    for (invalid, defect) in [
-        (duplicate_member, JsonErrorKind::DuplicateKey),
-        (unsafe_integer, JsonErrorKind::IntegerOutOfRange),
-        (excessive_depth, JsonErrorKind::DepthLimit),
+    for (invalid, detail) in [
+        (unsafe_integer, "integer is outside the safe range"),
+        (excessive_depth, "nesting limit exceeded"),
     ] {
         let error = envelope(evidence(vec![invalid])).unwrap_err();
         assert_eq!(error.path, "$.payload.observations[0]");
-        assert!(matches!(error.kind, ErrorKind::Json(error) if error.kind == defect));
+        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert_eq!(error.message, detail);
     }
 }
 
@@ -274,7 +271,7 @@ fn producer_versions_and_input_bytes_are_bounded_before_parsing() {
 fn unknown_observation_kinds_remain_inert_data() {
     let row = observation(vec![
         ("kind", Value::string("future-producer-fact")),
-        ("answer", Value::Integer(42)),
+        ("answer", Value::from(42)),
     ]);
     let parsed = parse(&canonical(&envelope(evidence(vec![row])).unwrap())).unwrap();
     assert_eq!(
@@ -331,9 +328,20 @@ fn member_mut<'a>(value: &'a mut Value, name: &str) -> &'a mut Value {
     let Value::Object(members) = value else {
         panic!("member parent is an object")
     };
-    members
-        .iter_mut()
-        .find(|(candidate, _)| candidate == name)
-        .map(|(_, value)| value)
-        .expect("member exists")
+    members.get_mut(name).expect("member exists")
+}
+
+#[test]
+fn raw_unknown_observation_members_cannot_hide_duplicate_keys() {
+    let value = envelope(evidence(vec![observation(vec![
+        ("kind", Value::string("future-kind")),
+        ("answer", Value::from(42)),
+    ])]))
+    .unwrap();
+    let bytes = String::from_utf8(canonical(&value))
+        .unwrap()
+        .replace("\"answer\":42", "\"answer\":42,\"answer\":42");
+    assert!(
+        matches!(parse(bytes.as_bytes()).unwrap_err().kind, ErrorKind::Json(error) if error.kind == JsonErrorKind::DuplicateKey)
+    );
 }

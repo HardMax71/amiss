@@ -4,10 +4,12 @@
     reason = "tests replay checked locale contracts and mutate their canonical JSON"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::{fs, path::Path};
 
 use super::evidence::{fallback_page, locale_evidence, page_map, target_page};
 use super::{digest, locale_plan, oid, product_resource};
+use amiss_wire::codec;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json::{self, Value};
@@ -32,8 +34,7 @@ fn assessed(
     plan: &amiss_wire::locale::LocaleCoveragePlanEnvelope,
     evidence: Option<&LocaleCoverageEvidenceEnvelope>,
 ) -> LocaleCoverageAssessmentEnvelope {
-    let value = assess(plan, evidence, "0.26.0", digest('a')).unwrap();
-    parse_assessment(&json::canonical(&value)).unwrap()
+    assess(plan, evidence, "0.26.0", digest('a')).unwrap()
 }
 
 #[test]
@@ -66,12 +67,15 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
     );
     assert!(assessment.payload.coverage.source_missing.is_empty());
     assert_eq!(
-        assessment.payload.report_payload_digest,
+        assessment.payload.subject.report_payload_digest,
         plan.payload.report_payload_digest
     );
-    assert_eq!(assessment.payload.plan_payload_digest, plan.payload_digest);
     assert_eq!(
-        assessment.payload.evidence_payload_digest,
+        assessment.payload.subject.plan_payload_digest,
+        plan.payload_digest
+    );
+    assert_eq!(
+        assessment.payload.subject.evidence_payload_digest,
         Some(evidence.payload_digest)
     );
 }
@@ -79,7 +83,7 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
 #[test]
 fn partial_inventories_only_report_absences_the_other_side_proves() {
     let mut all_source = locale_plan();
-    all_source.policy.required = LocalePageRequirement::AllSource;
+    all_source.policy.required = LocalePageRequirement::AllSource {};
     let value = plan(&all_source).unwrap();
     let all_source = parse_plan(&json::canonical(&value)).unwrap();
 
@@ -246,7 +250,7 @@ fn fallback_source_absence_in_a_partial_inventory_stays_unproven() {
 #[test]
 fn all_source_fallback_rules_authorize_each_observed_source_page() {
     let mut input_plan = locale_plan();
-    input_plan.policy.fallbacks[0].pages = LocalePageRequirement::AllSource;
+    input_plan.policy.fallbacks[0].pages = LocalePageRequirement::AllSource {};
     let value = plan(&input_plan).unwrap();
     let plan = parse_plan(&json::canonical(&value)).unwrap();
     let mut input = locale_evidence();
@@ -498,7 +502,7 @@ fn coverage_only_policy_ignores_unselected_product_receipts() {
 #[test]
 fn all_source_and_named_source_absence_remain_distinct() {
     let mut all_source_plan = locale_plan();
-    all_source_plan.policy.required = LocalePageRequirement::AllSource;
+    all_source_plan.policy.required = LocalePageRequirement::AllSource {};
     let value = plan(&all_source_plan).unwrap();
     let all_source_plan = parse_plan(&json::canonical(&value)).unwrap();
     let mut all_source_evidence = locale_evidence();
@@ -546,7 +550,7 @@ fn absent_unbound_and_foreign_producer_evidence_stays_unproven() {
         absent.payload.reasons,
         vec![LocaleCoverageReason::EvidenceAbsent]
     );
-    assert_eq!(absent.payload.evidence_payload_digest, None);
+    assert_eq!(absent.payload.subject.evidence_payload_digest, None);
 
     let mut unbound = locale_evidence();
     unbound.plan_payload_digest = digest('f');
@@ -607,13 +611,13 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
 
     let evidence = evidence_envelope(&locale_evidence());
     let value = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let inconsistent = String::from_utf8(json::canonical(&value))
+    let recorded = value.payload_digest.to_string();
+    let inconsistent = String::from_utf8(codec::canonical(&value).unwrap())
         .unwrap()
         .replace("\"refuted\"", "\"matched\"");
     let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
-        recorded,
+        &recorded,
         &hj(
             ASSESSMENT_PAYLOAD_SCHEMA,
             inconsistent_value.member("payload").unwrap(),
@@ -624,7 +628,7 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
-    let mut inconsistent_product = value.clone();
+    let mut inconsistent_product = codec::to_value(&value).unwrap();
     *member_mut(member_mut(&mut inconsistent_product, "payload"), "product") = Value::object(vec![
         ("source".to_owned(), Value::string("refuted")),
         ("target".to_owned(), Value::string("matched")),
@@ -633,7 +637,7 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
-    let mut unsorted = value;
+    let mut unsorted = codec::to_value(&value).unwrap();
     let target_missing = member_mut(member_mut(&mut unsorted, "payload"), "coverage");
     *member_mut(target_missing, "target_missing") = Value::array(vec![
         Value::string("reference/z"),
@@ -655,13 +659,13 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
     let replayed = assess(
         &plan,
         Some(&evidence),
-        &published.payload.engine_version,
-        published.payload.engine_digest,
+        &published.payload.engine.engine_version,
+        published.payload.engine.engine_digest,
     )
     .unwrap();
 
     assert_eq!(
-        json::canonical(&replayed),
+        codec::canonical(&replayed).unwrap(),
         json::canonical(&json::parse(&published_bytes).unwrap())
     );
 }
@@ -678,7 +682,7 @@ fn member_mut<'a>(value: &'a mut Value, name: &str) -> &'a mut Value {
     };
     members
         .iter_mut()
-        .find(|(key, _value)| key == name)
+        .find(|(key, _value)| key.as_str() == name)
         .map(|(_key, value)| value)
         .unwrap()
 }

@@ -3,6 +3,7 @@
     reason = "tests build known-valid relation identities and inspect exact refusals"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::{fs, path::Path};
 
 use amiss_wire::codec::{self, Schema};
@@ -47,6 +48,7 @@ fn subject(
     digits: [char; 4],
 ) -> RelationSubject {
     RelationSubject {
+        object_format,
         role: identity(role),
         repository: RepositoryIdentity::github("acme".to_owned(), repository.to_owned()).unwrap(),
         target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
@@ -64,6 +66,7 @@ fn subject(
 
 fn relation_plan() -> RelationPlan {
     RelationPlan {
+        schema: Schema::default(),
         report_payload_digest: digest('1'),
         relation: RelationIdentity {
             identity: identity("relation/public-api"),

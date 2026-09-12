@@ -5,10 +5,10 @@ use amiss_scan::{ScanLimits, ScanResources, scan_document};
 use amiss_wire::json::{Value, parse};
 use amiss_wire::model::Adapter;
 
-fn field<'a>(members: &'a [(String, Value)], name: &str) -> Option<&'a Value> {
+fn field<'a>(members: &'a amiss_wire::json::Map<String, Value>, name: &str) -> Option<&'a Value> {
     members
         .iter()
-        .find(|(key, _)| key == name)
+        .find(|(key, _)| key.as_str() == name)
         .map(|(_, value)| value)
 }
 
@@ -17,15 +17,15 @@ fn text(value: Option<&Value>) -> String {
     let Some(Value::String(text)) = value else {
         panic!("expected a string, found {value:?}")
     };
-    text.to_string()
+    text.clone()
 }
 
 #[expect(clippy::panic, clippy::unwrap_used, reason = "test fixture helper")]
 fn integer(value: Option<&Value>) -> u64 {
-    let Some(Value::Integer(number)) = value else {
+    let Some(Value::Number(number)) = value else {
         panic!("expected an integer, found {value:?}")
     };
-    u64::try_from(*number).unwrap()
+    number.as_u64().unwrap()
 }
 
 #[expect(clippy::panic, reason = "test fixture helper")]

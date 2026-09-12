@@ -1,8 +1,10 @@
 use super::evidence::publication_evidence;
 use super::{digest, oid, publication_plan};
+use amiss_wire::json::ValueExt as _;
 
 use std::{fs, path::Path};
 
+use amiss_wire::codec;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hj;
 use amiss_wire::json;
@@ -28,8 +30,7 @@ fn assessed(
     plan: &amiss_wire::publication::PublicationPlanEnvelope,
     evidence: Option<&amiss_wire::publication::PublicationEvidenceEnvelope>,
 ) -> amiss_wire::publication::PublicationAssessmentEnvelope {
-    let value = assess(plan, evidence, "0.26.0", digest('a')).unwrap();
-    parse_assessment(&json::canonical(&value)).unwrap()
+    assess(plan, evidence, "0.26.0", digest('a')).unwrap()
 }
 
 #[test]
@@ -41,12 +42,15 @@ fn exact_provider_facts_match_the_publication_plan() {
     assert_eq!(assessment.payload.verdict, PublicationVerdict::Matched);
     assert_eq!(assessment.payload.reasons, Vec::new());
     assert_eq!(
-        assessment.payload.report_payload_digest,
+        assessment.payload.subject.report_payload_digest,
         plan.payload.report_payload_digest
     );
-    assert_eq!(assessment.payload.plan_payload_digest, plan.payload_digest);
     assert_eq!(
-        assessment.payload.evidence_payload_digest,
+        assessment.payload.subject.plan_payload_digest,
+        plan.payload_digest
+    );
+    assert_eq!(
+        assessment.payload.subject.evidence_payload_digest,
         Some(evidence.payload_digest)
     );
 }
@@ -60,7 +64,7 @@ fn absent_unbound_and_foreign_producers_stay_unproven() {
         absent.payload.reasons,
         vec![PublicationReason::EvidenceAbsent]
     );
-    assert_eq!(absent.payload.evidence_payload_digest, None);
+    assert_eq!(absent.payload.subject.evidence_payload_digest, None);
 
     let mut unbound = publication_evidence();
     unbound.plan_payload_digest = digest('f');
@@ -115,13 +119,13 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
 
     let valid_plan = plan_envelope();
     let value = assess(&valid_plan, None, "0.26.0", digest('a')).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let inconsistent = String::from_utf8(json::canonical(&value))
+    let recorded = value.payload_digest.to_string();
+    let inconsistent = String::from_utf8(codec::canonical(&value).unwrap())
         .unwrap()
         .replace("\"unproven\"", "\"matched\"");
     let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
-        recorded,
+        &recorded,
         &hj(
             ASSESSMENT_PAYLOAD_SCHEMA,
             inconsistent_value.member("payload").unwrap(),
@@ -137,14 +141,16 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     mismatched.target.canonical_url = "https://preview.example.com/widget/".to_owned();
     let evidence = evidence_envelope(&mismatched);
     let value = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
-    let unsorted = String::from_utf8(json::canonical(&value)).unwrap().replace(
-        "[\"docs-mismatch\",\"target-mismatch\"]",
-        "[\"target-mismatch\",\"docs-mismatch\"]",
-    );
+    let recorded = value.payload_digest.to_string();
+    let unsorted = String::from_utf8(codec::canonical(&value).unwrap())
+        .unwrap()
+        .replace(
+            "[\"docs-mismatch\",\"target-mismatch\"]",
+            "[\"target-mismatch\",\"docs-mismatch\"]",
+        );
     let unsorted_value = json::parse(unsorted.as_bytes()).unwrap();
     let rebound = unsorted.replace(
-        recorded,
+        &recorded,
         &hj(
             ASSESSMENT_PAYLOAD_SCHEMA,
             unsorted_value.member("payload").unwrap(),
@@ -167,13 +173,13 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
     let replayed = assess(
         &plan,
         Some(&evidence),
-        &published.payload.engine_version,
-        published.payload.engine_digest,
+        &published.payload.engine.engine_version,
+        published.payload.engine.engine_digest,
     )
     .unwrap();
 
     assert_eq!(
-        json::canonical(&replayed),
+        codec::canonical(&replayed).unwrap(),
         json::canonical(&json::parse(&published_bytes).unwrap())
     );
 }

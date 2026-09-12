@@ -382,3 +382,74 @@ fn a_tree_suffix_is_one_bounded_exact_selector() {
         "suffix does not mint a second selector identity at one root"
     );
 }
+
+#[test]
+fn optional_policy_members_reject_explicit_null() {
+    let valid = br#"{"kind":"tree-paths","root":"docs","maximum_depth":2}"#;
+    assert!(parse_projection_source(valid, ProjectionKind::SortedRowsV1).is_ok());
+    let null_suffix = br#"{"kind":"tree-paths","root":"docs","maximum_depth":2,"suffix":null}"#;
+    assert_eq!(
+        parse_projection_source(null_suffix, ProjectionKind::SortedRowsV1)
+            .unwrap_err()
+            .kind,
+        ErrorKind::WrongType,
+    );
+    for member in ["suffix", "adapter"] {
+        let input = format!(
+            r#"{{"schema":"amiss/scanner-policy","document_includes":[{{"kind":"tree","path":"docs","{member}":null}}],"protected_inventory":[],"finding_dispositions":[]}}"#
+        );
+        assert_eq!(
+            ScannerPolicy::parse(input.as_bytes()).unwrap_err().kind,
+            ErrorKind::WrongType
+        );
+    }
+    let absent = br#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[]}"#;
+    let empty = policy_with_assertions("");
+    let absent = ScannerPolicy::parse(absent).unwrap();
+    let present = ScannerPolicy::parse(empty.as_bytes()).unwrap();
+    assert!(absent.projection_assertions().is_empty());
+    assert!(present.projection_assertions().is_empty());
+    assert_ne!(absent.digest(), present.digest());
+    let null_assertions = empty.replace(
+        "\"projection_assertions\":[]",
+        "\"projection_assertions\":null",
+    );
+    assert_eq!(
+        ScannerPolicy::parse(null_assertions.as_bytes())
+            .unwrap_err()
+            .kind,
+        ErrorKind::WrongType
+    );
+}
+
+#[test]
+fn tagged_projection_sources_require_objects_and_structured_selections_do_too() {
+    use amiss_wire::controls::{
+        BlobLineSelection, ProjectionKind, ProjectionSource, parse_projection_source,
+    };
+
+    let array = br#"["blob-lines","src/lib.rs",1,2]"#;
+    assert_eq!(
+        parse_projection_source(array, ProjectionKind::CodeTextV1)
+            .unwrap_err()
+            .kind,
+        ErrorKind::WrongType,
+    );
+    assert!(serde_json::from_slice::<ProjectionSource>(array).is_err());
+    assert!(serde_json::from_str::<BlobLineSelection>(r#"["src/lib.rs",1,2]"#).is_err());
+    let object = br#"{"kind":"blob-lines","path":"src/lib.rs","first_line":1,"last_line":2}"#;
+    assert!(parse_projection_source(object, ProjectionKind::CodeTextV1).is_ok());
+}
+
+#[test]
+fn a_programmatic_source_outside_the_json_integer_range_never_becomes_null() {
+    use amiss_wire::controls::{BlobLineSelection, ProjectionSource, projection_source_value};
+    use amiss_wire::model::RepoPathText;
+
+    let source = ProjectionSource::BlobLines(BlobLineSelection {
+        path: RepoPathText::new("src/lib.rs".to_owned()).unwrap(),
+        first_line: 1,
+        last_line: u64::MAX,
+    });
+    assert!(projection_source_value(&source).is_err());
+}

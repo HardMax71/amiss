@@ -5,6 +5,7 @@
 )]
 
 use amiss_md::HeadingSource;
+use amiss_wire::json::ValueExt as _;
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -24,17 +25,17 @@ fn vectors() -> Value {
     parse(&bytes).expect("heading-anchor vectors are strict JSON")
 }
 
-fn members(value: &Value, label: &str) -> Vec<(String, Value)> {
+fn members(value: &Value, label: &str) -> amiss_wire::json::Map<String, Value> {
     let Value::Object(members) = value else {
         panic!("{label} is an object")
     };
-    members.to_vec()
+    members.clone()
 }
 
 fn member(value: &Value, key: &str, label: &str) -> Value {
     members(value, label)
         .into_iter()
-        .find(|(name, _)| name == key)
+        .find(|(name, _)| name.as_str() == key)
         .map_or_else(|| panic!("{label} has no {key}"), |(_, found)| found)
 }
 
@@ -44,7 +45,7 @@ fn optional(value: &Value, key: &str) -> Option<Value> {
     };
     members
         .iter()
-        .find(|(name, _)| name == key)
+        .find(|(name, _)| name.as_str() == key)
         .map(|(_, found)| found.clone())
 }
 
@@ -53,7 +54,7 @@ fn text(value: &Value, key: &str, label: &str) -> String {
     let Value::String(found) = found else {
         panic!("{label}.{key} is a string, found {found:?}")
     };
-    found.into_string()
+    found
 }
 
 fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
@@ -61,7 +62,7 @@ fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
     let Value::Array(found) = found else {
         panic!("{label}.{key} is an array, found {found:?}")
     };
-    found.into_vec()
+    found
 }
 
 fn headings(source: &str) -> (Vec<Heading>, Vec<String>, Vec<String>) {
@@ -110,7 +111,7 @@ fn the_published_vectors_drive_every_rule() {
             let published = identities(rule, &headings);
             let found = member(&expected, rule.name, &format!("case {id}"));
             let want = if let Value::String(identity) = &found {
-                vec![identity.to_string()]
+                vec![identity.clone()]
             } else if found == Value::Null {
                 Vec::new()
             } else {

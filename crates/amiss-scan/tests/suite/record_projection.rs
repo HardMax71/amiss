@@ -117,7 +117,7 @@ fn run(
         time: None,
         constraint: None,
         semantic: semantic::Input::Bound(semantic_inputs(
-            amiss_scan::report::candidate_identity_digest(&setup),
+            amiss_scan::report::candidate_identity_digest(&setup).unwrap(),
             complete,
             set,
             records,
@@ -129,7 +129,7 @@ fn run(
     let repo = Repository::open(pair.root(), ObjectFormat::Sha1).unwrap();
     let base = Oid::new(ObjectFormat::Sha1, pair.base.clone()).unwrap();
     let candidate = Oid::new(ObjectFormat::Sha1, pair.candidate.clone()).unwrap();
-    let built = commit_pair(&repo, &engine(), None, &shell, &base, &candidate);
+    let built = commit_pair(&repo, &engine(), None, &shell, &base, &candidate).unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     crate::support::assert_report(&envelope, "record-value projection report");
     envelope["payload"].clone()

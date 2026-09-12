@@ -1,13 +1,11 @@
-use crate::de::{self, Error, ErrorKind, Obj, fail};
+use super::mapping::wire_fields;
+use super::{check_schema, root};
+use crate::codec;
+use crate::de::{Error, ErrorKind, fail};
 use crate::digest::{Digest, hj};
-use crate::json::{Value, canonical};
-use crate::model::{BranchRef, RepositoryIdentity, UtcInstant};
-
-use super::value::{object, positive_safe_integer, repository, text};
-use super::{
-    decode_branch_ref, decode_instant, decode_provider_id, decode_provider_run_id,
-    decode_repository, root,
-};
+use crate::json::Value;
+use crate::model::{ArtifactId, BranchRef, RepositoryIdentity, UtcInstant};
+use serde::{Deserialize, Serialize};
 
 const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement";
 const TRUSTED_TIME_CONTROLLER: &str = "external-required-check-clock";
@@ -23,14 +21,7 @@ pub const STATEMENT_TTL_MAX_SECONDS: i64 = 600;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TrustedTimeStatement {
     digest: Digest,
-    repository: RepositoryIdentity,
-    ref_name: BranchRef,
-    candidate_identity_digest: Digest,
-    provider: String,
-    provider_run_id: String,
-    provider_run_attempt: u64,
-    evaluation_instant: UtcInstant,
-    valid_until: UtcInstant,
+    input: TrustedTimeInput,
 }
 
 /// The controller-owned fields of a trusted-time statement. The schema,
@@ -55,42 +46,42 @@ impl TrustedTimeStatement {
 
     #[must_use]
     pub fn repository(&self) -> &RepositoryIdentity {
-        &self.repository
+        &self.input.repository
     }
 
     #[must_use]
     pub fn ref_name(&self) -> &BranchRef {
-        &self.ref_name
+        &self.input.ref_name
     }
 
     #[must_use]
     pub const fn candidate_identity_digest(&self) -> Digest {
-        self.candidate_identity_digest
+        self.input.candidate_identity_digest
     }
 
     #[must_use]
     pub fn provider(&self) -> &str {
-        &self.provider
+        &self.input.provider
     }
 
     #[must_use]
     pub fn provider_run_id(&self) -> &str {
-        &self.provider_run_id
+        &self.input.provider_run_id
     }
 
     #[must_use]
     pub const fn provider_run_attempt(&self) -> u64 {
-        self.provider_run_attempt
+        self.input.provider_run_attempt
     }
 
     #[must_use]
     pub fn evaluation_instant(&self) -> &UtcInstant {
-        &self.evaluation_instant
+        &self.input.evaluation_instant
     }
 
     #[must_use]
     pub fn valid_until(&self) -> &UtcInstant {
-        &self.valid_until
+        &self.input.valid_until
     }
 
     /// Builds a statement through the same grammar, lifetime, and digest
@@ -103,7 +94,10 @@ impl TrustedTimeStatement {
     /// A field violates [`Self::parse`], including a non-positive or
     /// unrepresentable run attempt or a lifetime outside the allowed window.
     pub fn new(input: TrustedTimeInput) -> Result<Self, Error> {
-        Self::parse(&canonical(&trusted_time_value(input)?))
+        let payload = Statement::from(input);
+        payload.check()?;
+        let digest = codec::digest(TRUSTED_TIME_STATEMENT_SCHEMA, &payload)?;
+        Ok(Self::from_payload(payload, digest))
     }
 
     #[must_use]
@@ -122,39 +116,71 @@ impl TrustedTimeStatement {
     /// values, and a lifetime outside `0 < valid_until - evaluation_instant
     /// <= 600` seconds.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let value = root(bytes)?;
-        let digest = hj(TRUSTED_TIME_STATEMENT_SCHEMA, &value);
-        let mut obj = Obj::new("$", value)?;
-        obj.required("schema", |path, value| {
-            de::const_str(path, value, TRUSTED_TIME_STATEMENT_SCHEMA)
-        })?;
-        obj.required("controller", |path, value| {
-            de::const_str(path, value, TRUSTED_TIME_CONTROLLER)
-        })?;
-        let repository = obj.required("repository", decode_repository)?;
-        let ref_name = obj.required("ref", decode_branch_ref)?;
-        let candidate_identity_digest = obj.required("candidate_identity_digest", de::digest)?;
-        let provider = obj.required("provider", decode_provider_id)?;
-        let run_id_path = obj.field("provider_run_id");
-        let provider_run_id = decode_provider_run_id(&run_id_path, obj.take("provider_run_id")?)?;
-        let attempt_path = obj.field("provider_run_attempt");
-        let attempt_raw = de::integer(&attempt_path, obj.take("provider_run_attempt")?)?;
-        let provider_run_attempt = u64::try_from(attempt_raw)
-            .ok()
-            .filter(|attempt| *attempt >= 1)
-            .ok_or_else(|| Error::new(&attempt_path, ErrorKind::InvalidValue))?;
-        let evaluation_instant = obj.required("evaluation_instant", decode_instant)?;
-        let until_path = obj.field("valid_until");
-        let valid_until = decode_instant(&until_path, obj.take("valid_until")?)?;
-        obj.finish()?;
-        let lifetime = valid_until
-            .epoch_seconds()
-            .saturating_sub(evaluation_instant.epoch_seconds());
-        if lifetime <= 0 || lifetime > STATEMENT_TTL_MAX_SECONDS {
-            return fail(&until_path, ErrorKind::InvalidValue);
-        }
-        Ok(Self {
+        Self::from_value(&root(bytes)?)
+    }
+
+    /// Checks an already decoded control without serializing it again.
+    ///
+    /// # Errors
+    ///
+    /// A field violates the closed shape or the control's domain laws.
+    pub fn from_value(value: &Value) -> Result<Self, Error> {
+        let payload: Statement = codec::from_value("$", value)?;
+        payload.check()?;
+        Ok(Self::from_payload(
+            payload,
+            hj(TRUSTED_TIME_STATEMENT_SCHEMA, value),
+        ))
+    }
+
+    fn from_payload(payload: Statement, digest: Digest) -> Self {
+        Self {
             digest,
+            input: payload.into(),
+        }
+    }
+
+    /// Serializes one valid statement to its unique canonical JSON bytes.
+    ///
+    /// # Errors
+    ///
+    /// The stored statement violates its domain laws or its derived digest
+    /// does not match the canonical value.
+    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
+        let payload = Statement::from(TrustedTimeInput::from(self));
+        payload.check()?;
+        if codec::digest(TRUSTED_TIME_STATEMENT_SCHEMA, &payload)? != self.digest {
+            return fail("$.digest", ErrorKind::DigestMismatch);
+        }
+        codec::canonical(&payload)
+    }
+}
+
+impl From<&TrustedTimeStatement> for TrustedTimeInput {
+    fn from(value: &TrustedTimeStatement) -> Self {
+        value.input.clone()
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Statement {
+    schema: String,
+    controller: String,
+    repository: RepositoryIdentity,
+    #[serde(rename = "ref")]
+    ref_name: BranchRef,
+    candidate_identity_digest: Digest,
+    provider: String,
+    provider_run_id: String,
+    provider_run_attempt: u64,
+    evaluation_instant: UtcInstant,
+    valid_until: UtcInstant,
+}
+
+wire_fields! {
+    Statement <=> TrustedTimeInput (input) {
+        fields [
             repository,
             ref_name,
             candidate_identity_digest,
@@ -163,66 +189,79 @@ impl TrustedTimeStatement {
             provider_run_attempt,
             evaluation_instant,
             valid_until,
-        })
-    }
-
-    /// Serializes one valid statement to its unique canonical JSON bytes.
-    ///
-    /// # Errors
-    ///
-    /// The stored statement no longer round-trips through [`Self::parse`] or
-    /// its derived digest does not match the canonical value.
-    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        let bytes = canonical(&trusted_time_value(self.into())?);
-        let parsed = Self::parse(&bytes)?;
-        if parsed.digest != self.digest {
-            return fail("$.digest", ErrorKind::DigestMismatch);
-        }
-        Ok(bytes)
+        ],
+        mapped [],
+        wire {
+            schema: TRUSTED_TIME_STATEMENT_SCHEMA.to_owned(),
+            controller: TRUSTED_TIME_CONTROLLER.to_owned(),
+        },
+        domain {}
     }
 }
 
-impl From<&TrustedTimeStatement> for TrustedTimeInput {
-    fn from(statement: &TrustedTimeStatement) -> Self {
-        Self {
-            repository: statement.repository.clone(),
-            ref_name: statement.ref_name.clone(),
-            candidate_identity_digest: statement.candidate_identity_digest,
-            provider: statement.provider.clone(),
-            provider_run_id: statement.provider_run_id.clone(),
-            provider_run_attempt: statement.provider_run_attempt,
-            evaluation_instant: statement.evaluation_instant.clone(),
-            valid_until: statement.valid_until.clone(),
+impl Statement {
+    fn check(&self) -> Result<(), Error> {
+        check_schema("$.schema", &self.schema, TRUSTED_TIME_STATEMENT_SCHEMA)?;
+        check_schema("$.controller", &self.controller, TRUSTED_TIME_CONTROLLER)?;
+        if ArtifactId::new(self.provider.clone()).is_none() {
+            return fail("$.provider", ErrorKind::InvalidValue);
         }
+        if !super::valid_provider_run_id(&self.provider_run_id) {
+            return fail("$.provider_run_id", ErrorKind::InvalidValue);
+        }
+        if !(1..=codec::MAX_SAFE_INTEGER).contains(&self.provider_run_attempt) {
+            return fail("$.provider_run_attempt", ErrorKind::InvalidValue);
+        }
+        let lifetime = self
+            .valid_until
+            .epoch_seconds()
+            .saturating_sub(self.evaluation_instant.epoch_seconds());
+        if !(1..=STATEMENT_TTL_MAX_SECONDS).contains(&lifetime) {
+            return fail("$.valid_until", ErrorKind::InvalidValue);
+        }
+        Ok(())
     }
 }
 
-fn trusted_time_value(input: TrustedTimeInput) -> Result<Value, Error> {
-    let provider_run_attempt =
-        positive_safe_integer("$.provider_run_attempt", input.provider_run_attempt)?;
-    let TrustedTimeInput {
-        repository: repository_identity,
-        ref_name,
-        candidate_identity_digest,
-        provider,
-        provider_run_id,
-        provider_run_attempt: _,
-        evaluation_instant,
-        valid_until,
-    } = input;
-    Ok(object(vec![
-        ("schema", text(TRUSTED_TIME_STATEMENT_SCHEMA)),
-        ("controller", text(TRUSTED_TIME_CONTROLLER)),
-        ("repository", repository(&repository_identity)),
-        ("ref", text(ref_name.as_str())),
-        (
-            "candidate_identity_digest",
-            text(&candidate_identity_digest.to_string()),
-        ),
-        ("provider", Value::String(provider.into())),
-        ("provider_run_id", Value::String(provider_run_id.into())),
-        ("provider_run_attempt", provider_run_attempt),
-        ("evaluation_instant", text(evaluation_instant.as_str())),
-        ("valid_until", text(valid_until.as_str())),
-    ]))
+#[derive(Serialize)]
+struct StatementView<'a> {
+    candidate_identity_digest: Digest,
+    controller: &'static str,
+    evaluation_instant: &'a UtcInstant,
+    provider: &'a str,
+    provider_run_attempt: u64,
+    provider_run_id: &'a str,
+    #[serde(rename = "ref")]
+    ref_name: &'a BranchRef,
+    repository: &'a RepositoryIdentity,
+    schema: &'static str,
+    valid_until: &'a UtcInstant,
+}
+
+impl Serialize for TrustedTimeStatement {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        StatementView {
+            candidate_identity_digest: self.input.candidate_identity_digest,
+            controller: TRUSTED_TIME_CONTROLLER,
+            evaluation_instant: &self.input.evaluation_instant,
+            provider: &self.input.provider,
+            provider_run_attempt: self.input.provider_run_attempt,
+            provider_run_id: &self.input.provider_run_id,
+            ref_name: &self.input.ref_name,
+            repository: &self.input.repository,
+            schema: TRUSTED_TIME_STATEMENT_SCHEMA,
+            valid_until: &self.input.valid_until,
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for TrustedTimeStatement {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let payload = Statement::deserialize(codec::object(deserializer))?;
+        payload.check().map_err(serde::de::Error::custom)?;
+        let digest = codec::digest(TRUSTED_TIME_STATEMENT_SCHEMA, &payload)
+            .map_err(serde::de::Error::custom)?;
+        Ok(Self::from_payload(payload, digest))
+    }
 }

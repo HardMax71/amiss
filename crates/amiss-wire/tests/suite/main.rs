@@ -15,6 +15,7 @@ mod report;
 mod requests;
 mod resolution;
 mod semantic;
+mod serde_documents;
 mod uri;
 mod vocabulary;
 mod wire;

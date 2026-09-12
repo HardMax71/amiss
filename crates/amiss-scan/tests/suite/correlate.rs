@@ -74,6 +74,10 @@ struct Spec {
     resolution: Resolution,
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "fixture observation projections are valid"
+)]
 fn observation(spec: &Spec) -> Observation {
     let scanned = ScannedOccurrence {
         occurrence: Occurrence {
@@ -100,7 +104,7 @@ fn observation(spec: &Spec) -> Observation {
         ),
     };
     let document = rp(&spec.document);
-    let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).1;
+    let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).unwrap().1;
     let id = observation_digest(&ObservationIdentity {
         adapter: Adapter::Markdown,
         contract_digest: adapter_contract_digest,
@@ -110,7 +114,8 @@ fn observation(spec: &Spec) -> Observation {
         projection_digest: scanned.projection_digest,
         intent: &spec.intent,
         raw_destination_digest: scanned.raw_destination_digest,
-    });
+    })
+    .unwrap();
     Observation {
         id,
         adapter_contract_digest,

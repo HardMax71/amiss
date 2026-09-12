@@ -3,6 +3,7 @@
     reason = "integration fixtures construct known-valid wire identities"
 )]
 
+use amiss_wire::json::ValueExt as _;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;

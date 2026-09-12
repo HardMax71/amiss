@@ -3,6 +3,7 @@ use amiss_controller::{
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::digest::{hj, sha256};
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::json::{self, Value};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::relation::{RelationVerdict, assess, parse_assessment, parse_plan, plan};
@@ -167,14 +168,15 @@ fn with_null_report_target(
     fixture.plan =
         json::canonical(&plan(&rebound.payload).map_err(|_defect| ArtifactError::Corrupt)?);
     let rebound = parse_plan(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
-    fixture.assessment = json::canonical(
+    fixture.assessment = amiss_wire::codec::canonical(
         &assess(
             &rebound,
             None,
-            &recorded.payload.engine_version,
-            recorded.payload.engine_digest,
+            &recorded.payload.engine.engine_version,
+            recorded.payload.engine.engine_digest,
         )
         .map_err(|_defect| ArtifactError::Corrupt)?,
-    );
+    )
+    .map_err(|_defect| ArtifactError::Corrupt)?;
     Ok(fixture)
 }

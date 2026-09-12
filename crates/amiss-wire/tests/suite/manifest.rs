@@ -378,16 +378,12 @@ fn runtime_roles_project_distinct_nonempty_spellings() {
     assert_eq!(unique.len(), spellings.len());
 }
 
-#[expect(clippy::expect_used, reason = "test fixture helper")]
-fn version_error_path(version: &str) -> String {
+fn version_result(version: &str) -> Result<ReleaseManifest, amiss_wire::de::Error> {
     let raw =
-        format!(r#"{{"schema":"amiss/scanner-release-manifest","engine_version":"{version}"}}"#);
+        manifest_raw("sha1", &"a".repeat(40), LOCK, &one_artifact()).replace("0.5.1", version);
     ReleaseManifest::parse(raw.as_bytes())
-        .expect_err("a two-field manifest never completes")
-        .path
 }
 
-/// An accepted shape moves the failure past the version field; a rejected one stops on it.
 #[test]
 fn version_strings_hold_the_release_shape() {
     let long_valid = format!("1.2.3-{}", "a".repeat(58));
@@ -400,7 +396,7 @@ fn version_strings_hold_the_release_shape() {
         "0.5.2-a-b.7",
         long_valid.as_str(),
     ] {
-        assert_ne!(version_error_path(good), "$.engine_version", "{good}");
+        assert!(version_result(good).is_ok(), "{good}");
     }
     for bad in [
         "1.2",
@@ -413,6 +409,10 @@ fn version_strings_hold_the_release_shape() {
         "1.2.3-RC",
         long_invalid.as_str(),
     ] {
-        assert_eq!(version_error_path(bad), "$.engine_version", "{bad}");
+        assert_eq!(
+            version_result(bad).unwrap_err().path,
+            "$.engine_version",
+            "{bad}"
+        );
     }
 }

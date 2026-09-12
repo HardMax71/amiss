@@ -131,6 +131,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
             .find(|subject| subject.role == frozen.role)
             .expect("registered role");
         PlannedSubject {
+            object_format: frozen.commits.base.object_format(),
             role: frozen.role,
             repository: configured.scope.repository.clone(),
             target: configured.target.clone(),
@@ -146,6 +147,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
         }
     });
     let value = plan(&amiss_wire::relation::RelationPlan {
+        schema: amiss_wire::codec::Schema::default(),
         report_payload_digest: sha256(b"accepted report payload"),
         relation: RelationIdentity {
             identity: registered.identity.clone(),
@@ -207,12 +209,7 @@ fn four_exact_repository_projections_produce_the_plan_bound_transition() {
         sha256(b"relation evaluator"),
     )
     .expect("transition assessment");
-    assert_eq!(
-        assessment
-            .member("payload")
-            .and_then(|payload| payload.text("verdict")),
-        Some(RelationVerdict::IntroducedDrift.as_ref())
-    );
+    assert_eq!(assessment.payload.verdict, RelationVerdict::IntroducedDrift);
 }
 
 #[test]

@@ -1,5 +1,6 @@
 use amiss_wire::digest::{Digest, hj};
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 

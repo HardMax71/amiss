@@ -183,18 +183,11 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         valid_until: input.valid_until,
     })
     .map_err(|_defect| BootstrapJobError::TrustedTime)?;
-    let statement_bytes = statement
-        .canonical_bytes()
+    let statement_value = amiss_wire::codec::to_value(&statement)
         .map_err(|_defect| BootstrapJobError::TrustedTime)?;
-    let statement_value =
-        json::parse(&statement_bytes).map_err(|_defect| BootstrapJobError::TrustedTime)?;
-
-    let constraint = checked_plan
-        .execution
-        .canonical_bytes()
+    let constraint_value = amiss_wire::codec::to_value(&checked_plan.execution)
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    let constraint_value =
-        json::parse(&constraint).map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    let constraint = json::canonical(&constraint_value);
     let semantic_expectations = plan::semantic_acquisition_expectations(&checked_plan.policy);
     let semantic = bind_semantic_evidence(
         &checked_plan.policy.semantic_evidence,

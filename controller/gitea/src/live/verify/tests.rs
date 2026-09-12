@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use amiss_wire::json::ValueExt as _;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 

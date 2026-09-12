@@ -1,4 +1,5 @@
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 
 /// A minimal complete scanner report whose candidate side introduces the
 /// given external destinations, digest-true, for producer and lane tests.

@@ -120,3 +120,22 @@ fn parses_an_execution_constraint_descriptor() {
         ErrorKind::InvalidValue
     );
 }
+
+#[test]
+fn embedded_serde_preserves_the_control_digest_and_enforces_domain_checks() {
+    let control: ExecutionConstraintDescriptor = serde_json::from_str(CONSTRAINT).unwrap();
+    assert_eq!(
+        control,
+        ExecutionConstraintDescriptor::parse(CONSTRAINT.as_bytes()).unwrap()
+    );
+    let value = amiss_wire::codec::to_value(&control).unwrap();
+    assert_eq!(value, json::parse(CONSTRAINT.as_bytes()).unwrap());
+    assert_eq!(
+        control.digest(),
+        hj("amiss/scanner-execution-constraint", &value)
+    );
+    let invalid = CONSTRAINT.replace("\"sha1\"", "\"sha256\"");
+    assert!(serde_json::from_str::<ExecutionConstraintDescriptor>(&invalid).is_err());
+    let invalid = CONSTRAINT.replace("assurance\"", "assurance \"");
+    assert!(serde_json::from_str::<ExecutionConstraintDescriptor>(&invalid).is_err());
+}

@@ -197,7 +197,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
   "evaluation_instant": "2026-08-08T12:00:00Z",
   "valid_until": "2026-08-08T12:04:00Z"
 }}"#,
-        candidate_identity_digest(&time_setup)
+        candidate_identity_digest(&time_setup).unwrap()
     );
     let shell = amiss_scan::pipeline::SetupShell {
         engine,
@@ -228,7 +228,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         external_defect: None,
         errors_retained: 64,
     };
-    let built = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate);
+    let built = commit_pair(&repo, &shell.engine, None, &shell, &base, &candidate).unwrap();
     let report: serde_json::Value = serde_json::from_slice(&built.wire()).unwrap();
     assert_eq!(
         report["payload"]["summary"]["findings"]["debt_tolerated"], 1,

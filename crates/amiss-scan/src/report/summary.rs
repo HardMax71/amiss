@@ -1,5 +1,6 @@
-use amiss_wire::json::Value;
-use amiss_wire::report::{Disposition, FindingKind, IntentKind};
+use amiss_wire::report::{
+    Disposition, DocumentCounts, FindingCounts, FindingKind, IntentKind, ReferenceCounts, Summary,
+};
 use amiss_wire::resolution::Resolution;
 
 use crate::correlate::Comparison;
@@ -7,29 +8,6 @@ use crate::discovery::{DocumentRecord, DocumentStatus};
 use crate::evaluate::{Attribution, Finding};
 
 use super::documents::PairedDocument;
-use super::{integer, object};
-
-pub(super) struct Counts {
-    pub(super) documents: Value,
-    pub(super) references: Value,
-    pub(super) findings: Value,
-}
-
-#[derive(Default)]
-struct DocumentCountSet {
-    discovered: u64,
-    scanned: u64,
-    unsupported: u64,
-    excluded_builtin: u64,
-    frontmatter_documents: u64,
-    frontmatter_bytes: u64,
-    opaque_mdx_documents: u64,
-    opaque_mdx_regions: u64,
-    opaque_mdx_bytes: u64,
-    opaque_html_documents: u64,
-    opaque_html_regions: u64,
-    opaque_html_bytes: u64,
-}
 
 fn region_bytes(spans: &[(usize, usize)]) -> u64 {
     spans.iter().fold(0, |total, (start, end)| {
@@ -40,8 +18,8 @@ fn region_bytes(spans: &[(usize, usize)]) -> u64 {
 fn document_counts<'a>(
     candidate_records: impl IntoIterator<Item = &'a DocumentRecord>,
     unlinked: u64,
-) -> Value {
-    let mut counts = DocumentCountSet::default();
+) -> DocumentCounts {
+    let mut counts = DocumentCounts::default();
     for record in candidate_records {
         counts.discovered = counts.discovered.saturating_add(1);
         match &record.status {
@@ -82,44 +60,13 @@ fn document_counts<'a>(
             DocumentStatus::Failed(_) => {}
         }
     }
-    object(vec![
-        ("discovered", integer(counts.discovered)),
-        ("outside_document_set", integer(0)),
-        ("scanned", integer(counts.scanned)),
-        ("unsupported", integer(counts.unsupported)),
-        ("excluded_builtin", integer(counts.excluded_builtin)),
-        ("unlinked", integer(unlinked)),
-        (
-            "frontmatter_documents",
-            integer(counts.frontmatter_documents),
-        ),
-        ("opaque_mdx_documents", integer(counts.opaque_mdx_documents)),
-        (
-            "opaque_html_documents",
-            integer(counts.opaque_html_documents),
-        ),
-        ("opaque_mdx_regions", integer(counts.opaque_mdx_regions)),
-        ("opaque_mdx_bytes", integer(counts.opaque_mdx_bytes)),
-        ("opaque_html_regions", integer(counts.opaque_html_regions)),
-        ("opaque_html_bytes", integer(counts.opaque_html_bytes)),
-        ("frontmatter_regions", integer(counts.frontmatter_documents)),
-        ("frontmatter_bytes", integer(counts.frontmatter_bytes)),
-    ])
+    counts.unlinked = unlinked;
+    counts.frontmatter_regions = counts.frontmatter_documents;
+    counts
 }
 
-#[derive(Default)]
-struct ReferenceCountSet {
-    extracted: u64,
-    explicit_local: u64,
-    same_repository: u64,
-    external_out_of_scope: u64,
-    unsupported: u64,
-    resolved: u64,
-    missing: u64,
-}
-
-fn reference_counts(comparisons: &[Comparison]) -> Value {
-    let mut counts = ReferenceCountSet::default();
+fn reference_counts(comparisons: &[Comparison]) -> ReferenceCounts {
+    let mut counts = ReferenceCounts::default();
     for observation in comparisons.iter().flat_map(|comparison| {
         comparison
             .candidate
@@ -174,34 +121,7 @@ fn reference_counts(comparisons: &[Comparison]) -> Value {
             ) => {}
         }
     }
-    object(vec![
-        ("extracted", integer(counts.extracted)),
-        ("explicit_local", integer(counts.explicit_local)),
-        ("same_repository", integer(counts.same_repository)),
-        (
-            "external_out_of_scope",
-            integer(counts.external_out_of_scope),
-        ),
-        ("unsupported", integer(counts.unsupported)),
-        ("resolved", integer(counts.resolved)),
-        ("missing", integer(counts.missing)),
-    ])
-}
-
-#[derive(Default)]
-struct FindingCountSet {
-    record: u64,
-    warn: u64,
-    fail: u64,
-    introduced: u64,
-    pre_existing: u64,
-    resolved: u64,
-    unknown: u64,
-    not_applicable: u64,
-    debt_tolerated: u64,
-    waived: u64,
-    unsupported_capabilities: u64,
-    unlinked_documents: u64,
+    counts
 }
 
 pub(super) fn summary_counts(
@@ -209,8 +129,9 @@ pub(super) fn summary_counts(
     comparisons: &[Comparison],
     findings: &[Finding],
     finding_rows_count: u64,
-) -> Counts {
-    let mut counts = FindingCountSet::default();
+) -> Summary {
+    let mut counts = FindingCounts::default();
+    let mut unlinked_documents = 0_u64;
     for finding in findings {
         match finding.effective_disposition {
             Disposition::Record => counts.record = counts.record.saturating_add(1),
@@ -243,57 +164,29 @@ pub(super) fn summary_counts(
         counts.unsupported_capabilities = counts.unsupported_capabilities.saturating_add(
             u64::from(finding.kind() == FindingKind::UnsupportedCapability),
         );
-        counts.unlinked_documents = counts
-            .unlinked_documents
+        unlinked_documents = unlinked_documents
             .saturating_add(u64::from(finding.kind() == FindingKind::UnlinkedDocument));
     }
     let documents = document_counts(
         paired.iter().filter_map(|pair| pair.candidate),
-        counts.unlinked_documents,
+        unlinked_documents,
     );
-    let findings_value = object(vec![
-        ("total", integer(finding_rows_count)),
-        ("record", integer(counts.record)),
-        ("warn", integer(counts.warn)),
-        ("fail", integer(counts.fail)),
-        ("introduced", integer(counts.introduced)),
-        ("pre_existing", integer(counts.pre_existing)),
-        ("resolved", integer(counts.resolved)),
-        ("unknown", integer(counts.unknown)),
-        ("not_applicable", integer(counts.not_applicable)),
-        ("debt_tolerated", integer(counts.debt_tolerated)),
-        ("waived", integer(counts.waived)),
-        ("analysis_errors", integer(0)),
-        (
-            "unsupported_capabilities",
-            integer(counts.unsupported_capabilities),
-        ),
-    ]);
-    Counts {
+    counts.total = finding_rows_count;
+    Summary {
+        counts_complete: true,
         documents,
         references: reference_counts(comparisons),
-        findings: findings_value,
+        findings: counts,
+        ..Summary::default()
     }
 }
 
-pub(super) fn zero_counts(analysis_errors: u64) -> Counts {
-    Counts {
-        documents: document_counts(std::iter::empty::<&DocumentRecord>(), 0),
-        references: reference_counts(&[]),
-        findings: object(vec![
-            ("total", integer(0)),
-            ("record", integer(0)),
-            ("warn", integer(0)),
-            ("fail", integer(0)),
-            ("introduced", integer(0)),
-            ("pre_existing", integer(0)),
-            ("resolved", integer(0)),
-            ("unknown", integer(0)),
-            ("not_applicable", integer(0)),
-            ("debt_tolerated", integer(0)),
-            ("waived", integer(0)),
-            ("analysis_errors", integer(analysis_errors)),
-            ("unsupported_capabilities", integer(0)),
-        ]),
+pub(super) fn zero_counts(analysis_errors: u64) -> Summary {
+    Summary {
+        findings: FindingCounts {
+            analysis_errors,
+            ..FindingCounts::default()
+        },
+        ..Summary::default()
     }
 }

@@ -536,3 +536,55 @@ fn adapter_whitespace_and_rustdoc_names_have_canonical_records() {
     assert_eq!(key, "fn/example::visible::loop");
     assert_eq!(value, "pub fn example::visible::loop(value: u64) -> u64");
 }
+
+#[test]
+fn rustdoc_requires_one_complete_document_and_keeps_its_upstream_number_grammar() {
+    let bytes = rustdoc(0, 1, None);
+    for suffix in [b" null".as_slice(), b" {}", b" garbage"] {
+        let mut trailing = bytes.clone();
+        trailing.extend_from_slice(suffix);
+        assert!(matches!(
+            function_declarations(
+                &trailing,
+                rustdoc_types::FORMAT_VERSION,
+                "example",
+                "x86_64-unknown-linux-gnu"
+            ),
+            Err(Error::Json(_))
+        ));
+    }
+    let mut extended: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    extended.as_object_mut().unwrap().insert(
+        "future_metadata".to_owned(),
+        serde_json::json!({"fraction": 0.5, "wide": u64::MAX}),
+    );
+    assert!(
+        function_declarations(
+            &serde_json::to_vec(&extended).unwrap(),
+            rustdoc_types::FORMAT_VERSION,
+            "example",
+            "x86_64-unknown-linux-gnu"
+        )
+        .is_ok()
+    );
+}
+
+#[test]
+fn rustdoc_rejects_deep_recursive_types_with_a_json_error() {
+    let mut document: serde_json::Value = serde_json::from_slice(&rustdoc(0, 1, None)).unwrap();
+    let mut output = serde_json::json!({"primitive": "bool"});
+    for _ in 0..80 {
+        output = serde_json::json!({"tuple": [output]});
+    }
+    document["index"]["1"]["inner"]["function"]["sig"]["output"] = output;
+    let bytes = serde_json::to_vec(&document).unwrap();
+    let error = function_declarations(
+        &bytes,
+        rustdoc_types::FORMAT_VERSION,
+        "example",
+        "x86_64-unknown-linux-gnu",
+    );
+    assert!(
+        matches!(error, Err(Error::Json(ref error)) if error.to_string().contains("recursion limit"))
+    );
+}

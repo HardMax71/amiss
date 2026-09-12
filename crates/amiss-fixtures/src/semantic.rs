@@ -1,4 +1,5 @@
 use amiss_wire::json::Value;
+use amiss_wire::json::ValueExt as _;
 
 /// Builds a digest-true passing report over the supplied semantic payloads.
 #[must_use]
@@ -28,7 +29,7 @@ pub fn semantic_report(payload_digests: &[amiss_wire::digest::Digest]) -> Vec<u8
             "result".to_owned(),
             Value::object(vec![
                 ("complete".to_owned(), Value::Bool(true)),
-                ("exit_code".to_owned(), Value::Integer(0)),
+                ("exit_code".to_owned(), Value::from(0)),
                 ("status".to_owned(), Value::string("pass".to_owned())),
             ]),
         ),

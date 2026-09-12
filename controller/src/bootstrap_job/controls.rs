@@ -118,7 +118,6 @@ pub(super) fn validate_request_size(
     policy: &PolicyControls,
     identity: &PolicyIdentity,
     execution: &ExecutionConstraintDescriptor,
-    execution_bytes: &[u8],
 ) -> Result<(), BootstrapJobError> {
     let request = ControlsRequest {
         organization_floor: plan_control(
@@ -138,7 +137,7 @@ pub(super) fn validate_request_size(
         )?,
         trusted_time: Some(maximal_trusted_time(execution.digest())?),
         execution_constraint: Some(SuppliedControl {
-            value: json::parse(execution_bytes)
+            value: amiss_wire::codec::to_value(execution)
                 .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?,
             expected_digest: execution.digest(),
             trust_source: RequestTrust::ExternalRequiredCheck,
@@ -201,12 +200,8 @@ fn maximal_trusted_time(
         valid_until,
     })
     .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
-    let value = statement
-        .canonical_bytes()
-        .map_err(|_defect| BootstrapJobError::RequestEncoding)
-        .and_then(|bytes| {
-            json::parse(&bytes).map_err(|_defect| BootstrapJobError::RequestEncoding)
-        })?;
+    let value = amiss_wire::codec::to_value(&statement)
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
     Ok(SuppliedTime {
         value,
         expected_digest: statement.digest(),
@@ -244,8 +239,8 @@ pub(super) fn request(
                 control,
                 run,
                 None,
-                |bytes| {
-                    OrganizationFloor::parse(bytes).map(|floor| ControlBinding {
+                |value| {
+                    OrganizationFloor::from_value(value).map(|floor| ControlBinding {
                         digest: floor.digest(),
                         repository: floor.repository().clone(),
                         ref_name: floor.ref_name().clone(),
@@ -267,8 +262,8 @@ pub(super) fn request(
                 control,
                 run,
                 floor_digest,
-                |bytes| {
-                    DebtSnapshot::parse(bytes).map(|snapshot| ControlBinding {
+                |value| {
+                    DebtSnapshot::from_value(value).map(|snapshot| ControlBinding {
                         digest: snapshot.digest(),
                         repository: snapshot.repository().clone(),
                         ref_name: snapshot.ref_name().clone(),
@@ -287,8 +282,8 @@ pub(super) fn request(
                 control,
                 run,
                 floor_digest,
-                |bytes| {
-                    WaiverBundle::parse(bytes).map(|bundle| ControlBinding {
+                |value| {
+                    WaiverBundle::from_value(value).map(|bundle| ControlBinding {
                         digest: bundle.digest(),
                         repository: bundle.repository().clone(),
                         ref_name: bundle.ref_name().clone(),
@@ -328,16 +323,16 @@ fn bound_control<E>(
     control: &AcquiredControl,
     run: &RunIdentity,
     organization_floor_digest: Option<Digest>,
-    parse: impl FnOnce(&[u8]) -> Result<ControlBinding, E>,
+    decode: impl FnOnce(&json::Value) -> Result<ControlBinding, E>,
     error: BootstrapJobError,
 ) -> Result<SuppliedControl, BootstrapJobError> {
-    let binding = parse(&control.bytes).map_err(|_defect| error)?;
+    let value = json::parse(&control.bytes).map_err(|_defect| error)?;
+    let binding = decode(&value).map_err(|_defect| error)?;
     (binding.repository == run.change.repository
         && binding.ref_name == run.refs.target
         && binding.organization_floor_digest == organization_floor_digest)
         .then_some(())
         .ok_or(BootstrapJobError::ControlBinding)?;
-    let value = json::parse(&control.bytes).map_err(|_defect| error)?;
     Ok(SuppliedControl {
         value,
         expected_digest: binding.digest,

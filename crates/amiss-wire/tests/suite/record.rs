@@ -1,4 +1,5 @@
 use amiss_wire::de::ErrorKind;
+use amiss_wire::json::ValueExt as _;
 use amiss_wire::json::{Value, canonical};
 use amiss_wire::semantic::record::{decode_observation, parse_input, template};
 
@@ -35,7 +36,7 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
     let [observation] = parsed.observations.as_ref() else {
         panic!("one normalized set becomes one observation")
     };
-    let decoded = decode_observation("$.observations[0]", observation.clone()).unwrap();
+    let decoded = decode_observation("$.observations[0]", observation).unwrap();
     assert_eq!(decoded.name.as_str(), "rust/public-api");
     assert_eq!(decoded.records.len(), 2);
     assert_eq!(decoded.records["amiss::run"], "pub fn run()");
@@ -60,9 +61,9 @@ fn row_order_duplicates_and_closed_metadata_are_refused() {
     let Value::Object(members) = value else {
         panic!("the source is an object")
     };
-    let mut members = members.into_vec();
-    members.push(("producer_version".to_owned(), Value::string("2")));
-    let value = Value::object(members);
+    let mut members = members;
+    members.insert("producer_version".to_owned(), Value::string("2"));
+    let value = Value::Object(members);
     assert_eq!(
         parse_input(&canonical(&value)).unwrap_err().kind,
         ErrorKind::UnknownField
