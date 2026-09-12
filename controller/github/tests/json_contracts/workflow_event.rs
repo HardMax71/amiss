@@ -20,19 +20,17 @@ fn workflow_event_nullability_does_not_hide_missing_required_members() {
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_WORKFLOW_RUN).unwrap();
     event.workflow = None;
     let input = serde_json::to_string(&event).unwrap();
-    assert!(
-        amiss_wire::read_json::<WorkflowRunEvent>(input.as_bytes(), u64::MAX).unwrap() == event
-    );
+    assert!(serde_json::from_str::<WorkflowRunEvent>(&input).unwrap() == event);
     for (old, new) in [
         (r#""workflow":null,"#, ""),
         (r#""action":"completed","#, ""),
         (r#""action":"completed""#, r#""action":null"#),
         (r#""action":"completed""#, r#""action":{"completed":null}"#),
         (r#""action":"completed""#, r#""action":"unknown""#),
-        (r#""sender":{"#, r#""sender":{"login":null,"#),
         ("{", r#"{"installation":null,"#),
-        ("{", r#"{"enterprise":null,"#),
-        ("{", r#"{"unknown":true,"#),
+        ("{", r#"{"repository":null,"#),
+        ("{", r#"{"workflow_run":null,"#),
+        ("{", r#"{"workflow":null,"#),
     ] {
         assert!(input.contains(old), "mutation absent: {old}");
         let candidate = input.replacen(old, new, 1);
@@ -40,7 +38,6 @@ fn workflow_event_nullability_does_not_hide_missing_required_members() {
             serde_json::from_str::<WorkflowRunEvent>(&candidate).is_err(),
             "{new}"
         );
-        assert!(amiss_wire::read_json::<WorkflowRunEvent>(candidate.as_bytes(), u64::MAX).is_err());
     }
 }
 

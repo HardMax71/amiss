@@ -1,4 +1,4 @@
-use amiss_controller::ProviderError;
+use amiss_controller::{ProviderError, VerifiedDelivery};
 use amiss_controller_github::GitHubPullRequestSource;
 use amiss_controller_github::webhook::GitHubPayload;
 use amiss_controller_github::webhook::workflow::{WorkflowRunAction, WorkflowRunEvent};
@@ -10,17 +10,13 @@ use super::{
 };
 
 #[test]
-fn signed_workflow_events_reject_unknown_root_metadata() {
+fn signed_workflow_events_ignore_unrelated_root_metadata() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let input = amiss_fixtures::GITHUB_WEBHOOK_WORKFLOW_RUN;
     assert_eq!(authenticate_target(&source, input, &target), Ok(None));
-    let invalid = replaced_once(input, "{", r#"{"unknown":true,"#);
-    assert!(invalid != input, "mutation must change the body");
-    assert_eq!(
-        authenticate_target(&source, &invalid, &target),
-        Err(ProviderError::Authentication)
-    );
+    let metadata = replaced_once(input, "{", r#"{"unknown":true,"#);
+    assert_eq!(authenticate_target(&source, &metadata, &target), Ok(None));
 }
 
 #[test]
@@ -35,9 +31,7 @@ fn workflow_roots_are_checked_before_a_configured_completion_becomes_work() {
         Ok(Some(_))
     ));
     for (old, new) in [
-        ("{", r#"{"unknown":true,"#),
         ("{", r#"{"number":42,"#),
-        (r#""sender":{"#, r#""sender":{"login":null,"#),
         (r#""workflow":null,"#, ""),
         (r#""action":"completed","#, ""),
         (r#""action":"completed""#, r#""action":null"#),
@@ -55,6 +49,80 @@ fn workflow_roots_are_checked_before_a_configured_completion_becomes_work() {
         authenticate_target(&source, &serde_json::to_vec(&payload).unwrap(), &target),
         Ok(None)
     );
+}
+
+#[test]
+fn workflow_metadata_preserves_delivery_and_no_work_routing() {
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let body = serde_json::to_vec(&workflow_payload()).unwrap();
+    for (source, configured) in [
+        (source(), false),
+        (
+            GitHubPullRequestSource::new(provider(), webhook(), &[workflow_artifact("321")]),
+            true,
+        ),
+    ] {
+        for action in ["completed", "in_progress", "requested"] {
+            let input = replaced_once(
+                &body,
+                r#""action":"completed""#,
+                &format!(r#""action":"{action}""#),
+            );
+            let original = authenticate_target(&source, &input, &target).unwrap();
+            assert_eq!(original.is_some(), configured && action == "completed");
+            for metadata in [
+                r#"{"sender":null,"organization":false,"enterprise":[],"unknown":{},"#,
+                r#"{"sender":{"login":false},"organization":null,"enterprise":0,"unknown":[null],"#,
+            ] {
+                let changed = replaced_once(&input, "{", metadata);
+                let actual = authenticate_target(&source, &changed, &target).unwrap();
+                assert_eq!(
+                    actual.as_ref().map(VerifiedDelivery::delivery),
+                    original.as_ref().map(VerifiedDelivery::delivery),
+                    "{action}: {metadata}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn workflow_roots_reject_conflicting_event_fields_in_every_mode() {
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let body = serde_json::to_vec(&workflow_payload()).unwrap();
+    for source in [
+        GitHubPullRequestSource::new(provider(), webhook(), &[workflow_artifact("321")]),
+        source(),
+    ] {
+        for action in ["completed", "in_progress", "requested"] {
+            let input = replaced_once(
+                &body,
+                r#""action":"completed""#,
+                &format!(r#""action":"{action}""#),
+            );
+            for field in [
+                "number",
+                "pull_request",
+                "issue",
+                "review",
+                "comment",
+                "thread",
+                "check_suite",
+                "check_run",
+                "requested_action",
+                "changes",
+            ] {
+                for value in ["null", "false", "42", "[]", "{}", r#"{"id":1}"#] {
+                    let changed = replaced_once(&input, "{", &format!(r#"{{"{field}":{value},"#));
+                    assert_eq!(
+                        authenticate_target(&source, &changed, &target),
+                        Err(ProviderError::Authentication),
+                        "{action}: {field}={value}"
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[test]

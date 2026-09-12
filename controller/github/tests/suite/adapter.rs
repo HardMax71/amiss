@@ -1436,9 +1436,6 @@ fn workflow_payload() -> WorkflowRunEvent {
     };
     WorkflowRunEvent {
         action: WorkflowRunAction::Completed,
-        sender: repository.owner.clone(),
-        organization: None,
-        enterprise: None,
         installation: Some(Installation { id: 7 }),
         repository,
         workflow: Some(Workflow {
@@ -1446,6 +1443,16 @@ fn workflow_payload() -> WorkflowRunEvent {
             path: ".github/workflows/docs-evidence.yml".to_owned(),
         }),
         workflow_run: run,
+        number: Absent,
+        pull_request: Absent,
+        issue: Absent,
+        review: Absent,
+        comment: Absent,
+        thread: Absent,
+        check_suite: Absent,
+        check_run: Absent,
+        requested_action: Absent,
+        changes: Absent,
     }
 }
 
