@@ -1,4 +1,4 @@
-use amiss_wire::{controls, de::ErrorKind, semantic};
+use amiss_wire::{controls, de::ErrorKind, digest::CanonicalJsonError, semantic};
 
 #[test]
 fn policy_reader_keeps_nested_records_object_shaped() -> Result<(), Box<dyn std::error::Error>> {
@@ -41,7 +41,7 @@ fn policy_reader_keeps_nested_records_object_shaped() -> Result<(), Box<dyn std:
             controls::parse_scanner_policy(changed.as_bytes())
                 .unwrap_err()
                 .kind,
-            ErrorKind::InvalidValue
+            ErrorKind::Canonical(CanonicalJsonError::InputChanged)
         ));
     }
     Ok(())
@@ -85,14 +85,14 @@ fn debt_and_fact_readers_keep_nested_objects_without_changing_identities()
             controls::parse_debt_snapshot(changed.as_bytes())
                 .unwrap_err()
                 .kind,
-            ErrorKind::InvalidValue
+            ErrorKind::Canonical(CanonicalJsonError::InputChanged)
         ));
         let text = serde_json::to_string(fact)?;
         let changed = text.replace(&object, &positional);
         assert_ne!(changed, text);
         assert!(matches!(
             controls::parse_fact(changed.as_bytes()).unwrap_err().kind,
-            ErrorKind::InvalidValue
+            ErrorKind::Canonical(CanonicalJsonError::InputChanged)
         ));
     }
     let (bytes, digest) = controls::canonical_debt_snapshot(&debt)?;
@@ -123,7 +123,7 @@ fn floor_and_waiver_readers_keep_repository_objects() -> Result<(), Box<dyn std:
         matches!(
             result,
             Err(controls::FloorDefect::Schema(amiss_wire::de::Error {
-                kind: ErrorKind::InvalidValue,
+                kind: ErrorKind::Canonical(CanonicalJsonError::InputChanged),
                 ..
             }))
         ),
@@ -177,7 +177,7 @@ fn semantic_templates_reject_positional_records_at_the_shared_boundary()
             semantic::parse_template(changed.as_bytes())
                 .unwrap_err()
                 .kind,
-            ErrorKind::InvalidValue
+            ErrorKind::Canonical(CanonicalJsonError::InputChanged)
         ));
     }
     Ok(())

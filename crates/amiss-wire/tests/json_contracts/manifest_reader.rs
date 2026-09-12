@@ -85,7 +85,7 @@ fn every_manifest_record_requires_object_input() -> Result<(), Box<dyn std::erro
         assert_eq!(serde_json::from_str::<ReleaseManifest>(&changed)?, manifest);
         assert!(matches!(
             parse_release_manifest(changed.as_bytes()),
-            Err(Error { path, kind: ErrorKind::InvalidValue }) if path == "$"
+            Err(Error { path, kind: ErrorKind::Canonical(amiss_wire::digest::CanonicalJsonError::InputChanged) }) if path == "$"
         ));
     }
     Ok(())

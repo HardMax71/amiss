@@ -61,6 +61,29 @@ fn typed_configuration_errors_distinguish_syntax_from_invalid_data() {
             "{input:?}"
         );
     }
+    let positional = FLOOR.replace(
+        r#"{ "host": "github.com", "owner": "acme", "name": "docs" }"#,
+        r#"["github.com","docs","acme"]"#,
+    );
+    assert_ne!(positional, FLOOR);
+    let amiss_wire::controls::FloorDefect::Schema(error) =
+        amiss_wire::controls::parse_organization_floor(positional.as_bytes()).unwrap_err()
+    else {
+        panic!("expected a canonical identity error");
+    };
+    assert!(
+        matches!(
+            error.kind,
+            amiss_wire::de::ErrorKind::Canonical(
+                amiss_wire::digest::CanonicalJsonError::InputChanged
+            )
+        ),
+        "{error:?}"
+    );
+    assert_eq!(
+        amiss_scan::request::configuration_detail(&error).code,
+        AnalysisErrorCode::ConfigurationInvalid
+    );
 }
 
 const FLOOR: &str = r#"{

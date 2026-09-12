@@ -501,6 +501,10 @@ fn a_malformed_policy_names_the_anchor_and_the_specific_defect() {
         ("{}", ["CONFIGURATION_INVALID"].as_slice()),
         (r#"{"future":null}"#, ["CONFIGURATION_INVALID"].as_slice()),
         (r#"{"schema":false}"#, ["CONFIGURATION_INVALID"].as_slice()),
+        (
+            r#"{"schema":"amiss/scanner-policy","document_includes":[{"path":"docs","kind":"tree","suffix":null}],"protected_inventory":[],"finding_dispositions":[]}"#,
+            ["CONFIGURATION_INVALID"].as_slice(),
+        ),
     ] {
         let dir = TempDir::new().unwrap();
         let root = dir.path();

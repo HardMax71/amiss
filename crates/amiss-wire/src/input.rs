@@ -8,6 +8,8 @@ pub enum JsonInputError {
     Json(#[from] crate::json::Error),
     #[error("the JSON input does not match its complete typed contract")]
     Shape(#[from] serde_json::Error),
+    #[error("{0}")]
+    Canonical(#[from] crate::digest::CanonicalJsonError),
 }
 
 /// Reads a bounded, strict JSON document without discarding or normalizing fields.

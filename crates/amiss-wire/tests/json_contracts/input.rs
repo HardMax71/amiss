@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use amiss_wire::{
     JsonInputError,
     de::{Error, ErrorKind},
+    digest::CanonicalJsonError,
     read_json,
 };
 use serde::{Deserialize, Serialize};
@@ -92,7 +93,10 @@ where
     if object == text {
         assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
     } else {
-        assert!(matches!(error.kind, ErrorKind::InvalidValue));
+        assert!(matches!(
+            error.kind,
+            ErrorKind::Canonical(CanonicalJsonError::InputChanged)
+        ));
     }
     Ok(())
 }
@@ -122,16 +126,19 @@ fn typed_input_preserves_the_complete_document_and_byte_ceiling() {
         r#"{"count":1,"label":null,"unknown":true}"#,
         r#"{"count":1}"#,
         "[1,null]",
-        r#"{"count":true,"label":null}"#,
     ] {
         assert!(
             matches!(
                 read_json::<Document>(invalid.as_bytes(), 1024),
-                Err(JsonInputError::Shape(_))
+                Err(JsonInputError::Canonical(CanonicalJsonError::InputChanged))
             ),
             "{invalid}"
         );
     }
+    assert!(matches!(
+        read_json::<Document>(br#"{"count":true,"label":null}"#, 1024),
+        Err(JsonInputError::Shape(_))
+    ));
 }
 
 #[test]

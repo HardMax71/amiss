@@ -174,9 +174,10 @@ pub fn configuration_detail(error: &Error) -> ErrorDetail {
         ErrorKind::Deserialize(_) => AnalysisErrorCode::InvalidJson,
         ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
         ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,
-        ErrorKind::InvalidValue | ErrorKind::LimitExceeded | ErrorKind::Inconsistent => {
-            AnalysisErrorCode::ConfigurationInvalid
-        }
+        ErrorKind::Canonical(_)
+        | ErrorKind::InvalidValue
+        | ErrorKind::LimitExceeded
+        | ErrorKind::Inconsistent => AnalysisErrorCode::ConfigurationInvalid,
     };
     code(analysis)
 }

@@ -3,7 +3,7 @@ use amiss_controller::mdbook::RenderContext;
 use amiss_controller::mdbook::config::{
     Config, HtmlConfig, NoExtensions, PlaygroundConfig, RustEdition, TextDirection,
 };
-use amiss_wire::{JsonInputError, read_json};
+use amiss_wire::{JsonInputError, digest::CanonicalJsonError, read_json};
 
 use super::mdbook::Renderers;
 
@@ -117,7 +117,7 @@ fn captured_config_requires_declared_renderers_and_preserves_their_identity() {
     assert_eq!(context.config.output.additional.capture.command, "jq -c .");
     assert!(matches!(
         read_json::<RenderContext<NoExtensions, NoExtensions>>(input, MDBOOK_RENDER_CONTEXT_BYTES),
-        Err(JsonInputError::Shape(_))
+        Err(JsonInputError::Canonical(CanonicalJsonError::InputChanged))
     ));
     let expected = br#"{"book":{"authors":["Amiss"],"description":null,"language":"en","text-direction":null,"title":"Typed context probe"},"output":{"capture":{"command":"jq -c ."},"html":{"additional-css":[]}}}"#;
     assert_eq!(
@@ -160,15 +160,24 @@ fn captured_config_requires_declared_renderers_and_preserves_their_identity() {
             .unwrap()
             .replace(original, replacement);
         assert_ne!(invalid.as_bytes(), input);
+        let error = read_json::<RenderContext<NoExtensions, Renderers>>(
+            invalid.as_bytes(),
+            MDBOOK_RENDER_CONTEXT_BYTES,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(
+            matches!(error, JsonInputError::Shape(_)),
+            serde_json::from_str::<RenderContext<NoExtensions, Renderers>>(&invalid).is_err(),
+            "{invalid}"
+        );
         assert!(
             matches!(
-                read_json::<RenderContext<NoExtensions, Renderers>>(
-                    invalid.as_bytes(),
-                    MDBOOK_RENDER_CONTEXT_BYTES
-                ),
-                Err(JsonInputError::Shape(_))
+                error,
+                JsonInputError::Shape(_)
+                    | JsonInputError::Canonical(CanonicalJsonError::InputChanged)
             ),
-            "{invalid}"
+            "{invalid}: {error}"
         );
     }
 }
@@ -217,12 +226,20 @@ fn html_settings_keep_presence_aliases_and_typed_numeric_limits() {
             .unwrap()
             .replace(original, replacement);
         assert_ne!(invalid.as_bytes(), input);
+        let error =
+            read_json::<HtmlConfig>(invalid.as_bytes(), MDBOOK_RENDER_CONTEXT_BYTES).unwrap_err();
+        assert_eq!(
+            matches!(error, JsonInputError::Shape(_)),
+            serde_json::from_str::<HtmlConfig>(&invalid).is_err(),
+            "{invalid}"
+        );
         assert!(
             matches!(
-                read_json::<HtmlConfig>(invalid.as_bytes(), MDBOOK_RENDER_CONTEXT_BYTES),
-                Err(JsonInputError::Shape(_))
+                error,
+                JsonInputError::Shape(_)
+                    | JsonInputError::Canonical(CanonicalJsonError::InputChanged)
             ),
-            "{invalid}"
+            "{invalid}: {error}"
         );
     }
 }

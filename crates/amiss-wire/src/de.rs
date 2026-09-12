@@ -16,6 +16,8 @@ pub enum ErrorKind {
     Json(#[source] json::Error),
     #[error("{0}")]
     Deserialize(#[from] serde_json::Error),
+    #[error("{0}")]
+    Canonical(#[from] crate::digest::CanonicalJsonError),
     #[error("value is invalid")]
     InvalidValue,
     #[error("set is not sorted")]
@@ -84,6 +86,6 @@ pub fn deserialize_json<T: serde::de::DeserializeOwned + serde::Serialize>(
         }
     })?;
     let digest = crate::digest::verified_json_digest(domain, bytes, &document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+        .map_err(|source| Error::new("$", ErrorKind::Canonical(source)))?;
     Ok((document, digest))
 }

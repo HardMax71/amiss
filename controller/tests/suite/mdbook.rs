@@ -391,19 +391,28 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
         let mut changed = original.clone();
         *changed.pointer_mut(path).unwrap() = invalid;
         let bytes = serde_json::to_vec(&changed).unwrap();
+        let Err(MdBookEvidenceError::Context(error)) = mdbook_site_evidence::<
+            NoExtensions,
+            NoExtensions,
+        >(
+            candidate, &site, &bytes, &output(&root)
+        ) else {
+            panic!("{path}: context was not rejected: {changed}");
+        };
+        assert_eq!(
+            matches!(error, amiss_wire::JsonInputError::Shape(_)),
+            serde_json::from_slice::<RenderContext<NoExtensions, NoExtensions>>(&bytes).is_err(),
+            "{path}: {changed}"
+        );
         assert!(
             matches!(
-                mdbook_site_evidence::<NoExtensions, NoExtensions>(
-                    candidate,
-                    &site,
-                    &bytes,
-                    &output(&root)
-                ),
-                Err(MdBookEvidenceError::Context(
-                    amiss_wire::JsonInputError::Shape(_)
-                ))
+                error,
+                amiss_wire::JsonInputError::Shape(_)
+                    | amiss_wire::JsonInputError::Canonical(
+                        amiss_wire::digest::CanonicalJsonError::InputChanged
+                    )
             ),
-            "{path}: {changed}"
+            "{path}: {error}"
         );
     }
     let mut defaulted = original;
@@ -520,7 +529,9 @@ fn typed_extensions_keep_canonical_identity_and_the_existing_depth_limit() {
             &output(&root)
         ),
         Err(MdBookEvidenceError::Context(
-            amiss_wire::JsonInputError::Shape(_)
+            amiss_wire::JsonInputError::Canonical(
+                amiss_wire::digest::CanonicalJsonError::InputChanged
+            )
         ))
     ));
     let mut sections = Vec::new();
