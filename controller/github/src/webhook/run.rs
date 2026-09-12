@@ -4,27 +4,35 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use super::app::WebhookApp;
-use super::{Installation, Organization, WorkflowRunConclusion};
-use crate::check::{CheckRunRecord, EnterpriseRecord};
-use crate::owner::OwnerRecord;
+use super::{Absent, Installation, WorkflowRunConclusion};
+use crate::check::CheckRunRecord;
 use crate::repository::WorkflowRepositoryRecord;
 
-#[serde_with::apply(Option<_> => #[serde(
-    default,
-    deserialize_with = "deserialize_some",
-    skip_serializing_if = "Option::is_none"
-)])]
+#[serde_with::apply(
+    Option<_> => #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )],
+    Absent => #[serde(default, skip_serializing)]
+)]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct CheckRunEvent<Action = CheckRunActivity> {
     #[serde(flatten)]
     pub action: Action,
     pub check_run: CheckRunRecord<WebhookApp, WebhookCheckRunConclusion>,
     pub repository: WorkflowRepositoryRecord,
-    pub sender: OwnerRecord,
     pub installation: Option<Installation>,
-    pub organization: Option<Organization>,
-    pub enterprise: Option<EnterpriseRecord>,
+    pub number: Absent,
+    pub pull_request: Absent,
+    pub issue: Absent,
+    pub review: Absent,
+    pub comment: Absent,
+    pub thread: Absent,
+    pub check_suite: Absent,
+    pub workflow: Absent,
+    pub workflow_run: Absent,
+    pub changes: Absent,
 }
 
 #[serde_with::apply(Option<_> => #[serde(
@@ -33,9 +41,10 @@ pub struct CheckRunEvent<Action = CheckRunActivity> {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct CheckRunActivity {
     pub action: Option<CheckRunAction>,
+    #[serde(default, skip_serializing)]
+    pub requested_action: Absent,
 }
 
 #[derive(
@@ -54,7 +63,6 @@ pub enum CheckRunAction {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct RequestedAction {
     pub action: RequestedActionKind,
     pub requested_action: Option<RequestedActionIdentifier>,
@@ -74,7 +82,6 @@ pub enum RequestedActionKind {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct RequestedActionIdentifier {
     pub identifier: Option<String>,
 }

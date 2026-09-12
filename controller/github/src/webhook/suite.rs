@@ -7,27 +7,36 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use super::app::WebhookApp;
-use super::{Committer, Installation, Organization, WorkflowRunConclusion};
-use crate::check::{CheckRunStatus, EnterpriseRecord};
-use crate::owner::OwnerRecord;
+use super::{Absent, Committer, Installation, WorkflowRunConclusion};
+use crate::check::CheckRunStatus;
 use crate::repository::WorkflowRepositoryRecord;
 use crate::workflow::{WorkflowCommit, WorkflowPullRequest};
 
-#[serde_with::apply(Option<_> => #[serde(
-    default,
-    deserialize_with = "deserialize_some",
-    skip_serializing_if = "Option::is_none"
-)])]
+#[serde_with::apply(
+    Option<_> => #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )],
+    Absent => #[serde(default, skip_serializing)]
+)]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct CheckSuiteEvent {
     pub action: CheckSuiteAction,
     pub check_suite: CheckSuiteRecord,
     pub repository: WorkflowRepositoryRecord,
-    pub sender: OwnerRecord,
     pub installation: Option<Installation>,
-    pub organization: Option<Organization>,
-    pub enterprise: Option<EnterpriseRecord>,
+    pub number: Absent,
+    pub pull_request: Absent,
+    pub issue: Absent,
+    pub review: Absent,
+    pub comment: Absent,
+    pub thread: Absent,
+    pub check_run: Absent,
+    pub workflow: Absent,
+    pub workflow_run: Absent,
+    pub requested_action: Absent,
+    pub changes: Absent,
 }
 
 #[derive(

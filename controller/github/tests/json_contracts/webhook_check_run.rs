@@ -76,7 +76,7 @@ fn check_run_requests_require_the_action_but_not_optional_identifier_metadata() 
         (r#""requested_action":{"identifier":"lgtm|26764"},"#, true),
         (r#""requested_action":null,"#, false),
         (r#""requested_action":{"identifier":null},"#, false),
-        (r#""requested_action":{"unknown":true},"#, false),
+        (r#""requested_action":{"unknown":true},"#, true),
         (
             r#""requested_action":{"identifier":"x","\u0069dentifier":"x"},"#,
             false,

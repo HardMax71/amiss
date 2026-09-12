@@ -139,13 +139,11 @@ fn signed_check_run_actions_reject_malformed_envelopes() {
         let input = serde_json::to_vec(&event).unwrap();
         assert_eq!(authenticate_target(&source, &input, &target), Ok(None));
         for (old, new) in [
-            ("{", r#"{"unknown":true,"#),
             ("{", r#"{"installation":null,"#),
             (r#""id":128620228"#, r#""id":128620228,"\u0069d":128620228"#),
             (r#""id":128620228"#, r#""id":9007199254740992"#),
             (r#""output":{"#, r#""missing_output":{"#),
             (r#""status":"completed""#, r#""status":"future""#),
-            (r#""sender":{"#, r#""sender":{"login":null,"#),
         ] {
             let candidate = replaced_once(&input, old, new);
             assert!(candidate != input, "mutation absent: {old}");
@@ -203,7 +201,7 @@ fn check_run_markers_cannot_downgrade_or_become_pr_work() {
 }
 
 #[test]
-fn signed_requested_actions_keep_the_closed_action_metadata() {
+fn signed_requested_actions_keep_typed_identifiers_and_ignore_metadata() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let event: CheckRunEvent =
@@ -218,7 +216,7 @@ fn signed_requested_actions_keep_the_closed_action_metadata() {
         (r#""requested_action":{},"#, true),
         (r#""requested_action":null,"#, false),
         (r#""requested_action":{"identifier":null},"#, false),
-        (r#""requested_action":{"unknown":true},"#, false),
+        (r#""requested_action":{"unknown":true},"#, true),
     ] {
         let candidate = input.replacen('{', &format!("{{{addition}"), 1);
         assert_eq!(
