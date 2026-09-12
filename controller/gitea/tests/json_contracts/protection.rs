@@ -2,7 +2,7 @@ use amiss_controller::{ProviderError, decode_bounded_json};
 use amiss_controller_gitea::protection::BranchProtectionRecord;
 
 #[test]
-fn protection_profiles_preserve_nullable_and_provider_specific_fields()
+fn protection_profiles_preserve_authority_and_ignore_metadata()
 -> Result<(), Box<dyn std::error::Error>> {
     for (input, gitea) in [
         (include_str!("../fixtures/gitea-protection.json"), true),
@@ -10,45 +10,40 @@ fn protection_profiles_preserve_nullable_and_provider_specific_fields()
     ] {
         let (mut record, length): (BranchProtectionRecord, _) =
             decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })?;
         assert_eq!(length, input.len());
-        assert_eq!(record.branch_name, "main");
-        assert_eq!(record.rule_name, record.branch_name);
+        assert_eq!(record.rule_name, "main");
         assert_eq!(record.priority, gitea.then_some(0.into()));
         assert_eq!(record.block_on_codeowner_reviews, gitea.then_some(false));
         assert_eq!(record.block_admin_merge_override, gitea.then_some(true));
         assert_eq!(record.apply_to_admins, (!gitea).then_some(true));
-        assert_eq!(record.created_at, "2026-09-01T00:00:00Z");
-        assert_eq!(record.updated_at, record.created_at);
-        assert!(!record.enable_merge_whitelist);
-        assert!(record.merge_whitelist_usernames.is_empty());
-        assert!(record.merge_whitelist_teams.is_empty());
-        assert!(!record.block_on_official_review_requests);
-        assert!(!record.require_signed_commits);
+        let encoded = serde_json::to_string(&record)?;
+        let metadata = encoded.replacen(
+            '{',
+            r#"{"branch_name":null,"enable_merge_whitelist":{},"status_check_contexts":false,"require_signed_commits":[],"created_at":42,"extra":{},"#,
+            1,
+        );
+        assert_eq!(
+            serde_json::from_str::<BranchProtectionRecord>(&metadata)?,
+            record
+        );
         assert_eq!(
             decode_bounded_json::<BranchProtectionRecord, _>(
                 input.as_bytes(),
                 None,
                 input.len() - 1,
-                |bytes| amiss_wire::read_json(bytes, u64::MAX),
+                |bytes| serde_json::from_slice(bytes),
             ),
             Err(ProviderError::InvalidResponse)
         );
-        for contexts in [
-            None,
-            Some(Vec::new()),
-            Some(vec!["required check".to_owned()]),
-        ] {
-            record.status_check_contexts = contexts;
-            for approvals in [js_int::MIN_SAFE_INT, js_int::MAX_SAFE_INT] {
-                record.required_approvals = approvals;
-                let encoded = serde_json::to_vec(&record)?;
-                assert_eq!(
-                    amiss_wire::read_json::<BranchProtectionRecord>(&encoded, u64::MAX)?,
-                    record
-                );
-            }
+        for approvals in [js_int::MIN_SAFE_INT, js_int::MAX_SAFE_INT] {
+            record.required_approvals = approvals;
+            let encoded = serde_json::to_vec(&record)?;
+            assert_eq!(
+                serde_json::from_slice::<BranchProtectionRecord>(&encoded)?,
+                record
+            );
         }
         record.required_approvals = js_int::MAX_SAFE_INT + 1;
         assert!(serde_json::to_vec(&record).is_err());
@@ -57,54 +52,43 @@ fn protection_profiles_preserve_nullable_and_provider_specific_fields()
 }
 
 #[test]
-fn protection_records_reject_unknown_incomplete_and_wrongly_typed_fields() {
+fn protection_records_reject_incomplete_and_wrongly_typed_authority() {
     for input in [
         include_str!("../fixtures/gitea-protection.json"),
         include_str!("../fixtures/forgejo-protection.json"),
     ] {
-        for (old, new) in [
-            (r#""rule_name":"#, r#""extra":true,"rule_name":"#),
-            (r#""rule_name":"#, r#""ru\u006ce_name":"main","rule_name":"#),
-            (r#""branch_name":"main","#, ""),
-            (r#""enable_merge_whitelist":false,"#, ""),
-            (r#""merge_whitelist_usernames":[],"#, ""),
-            (r#""merge_whitelist_teams":[],"#, ""),
-            (r#""enable_status_check":false,"#, ""),
-            (r#""status_check_contexts":null,"#, ""),
-            (r#""block_on_official_review_requests":false,"#, ""),
-            (r#""require_signed_commits":false,"#, ""),
-            (r#""created_at":"2026-09-01T00:00:00Z","#, ""),
-            (r#""updated_at":"2026-09-01T00:00:00Z","#, ""),
-            (
-                r#""require_signed_commits":false"#,
-                r#""require_signed_commits":null"#,
-            ),
-            (
-                r#""merge_whitelist_usernames":[]"#,
-                r#""merge_whitelist_usernames":null"#,
-            ),
-            (
-                r#""required_approvals":1"#,
-                r#""required_approvals":9007199254740992"#,
-            ),
-            (
-                r#""required_approvals":1"#,
-                r#""required_approvals":-9007199254740992"#,
-            ),
-            (r#""required_approvals":1"#, r#""required_approvals":1.0"#),
-            (
-                r#""status_check_contexts":null"#,
-                r#""status_check_contexts":[1]"#,
-            ),
-        ] {
-            let changed = input.replace(old, new);
-            assert_ne!(changed, input);
-            assert!(serde_json::from_str::<BranchProtectionRecord>(&changed).is_err());
-            assert!(
-                amiss_wire::read_json::<BranchProtectionRecord>(changed.as_bytes(), u64::MAX)
-                    .is_err()
-            );
-        }
+        amiss_fixtures::assert_json_rejections::<BranchProtectionRecord>(
+            input,
+            &[
+                (r#""rule_name":"#, r#""ru\u006ce_name":"main","rule_name":"#),
+                (r#""rule_name":"main","#, ""),
+                (r#""enable_push":false,"#, ""),
+                (r#""push_whitelist_usernames":[],"#, ""),
+                (r#""push_whitelist_teams":[],"#, ""),
+                (r#""enable_approvals_whitelist":true,"#, ""),
+                (r#""block_on_rejected_reviews":true,"#, ""),
+                (r#""block_on_outdated_branch":true,"#, ""),
+                (r#""dismiss_stale_approvals":true,"#, ""),
+                (r#""enable_push":false"#, r#""enable_push":null"#),
+                (
+                    r#""push_whitelist_usernames":[]"#,
+                    r#""push_whitelist_usernames":null"#,
+                ),
+                (
+                    r#""required_approvals":1"#,
+                    r#""required_approvals":9007199254740992"#,
+                ),
+                (
+                    r#""required_approvals":1"#,
+                    r#""required_approvals":-9007199254740992"#,
+                ),
+                (r#""required_approvals":1"#, r#""required_approvals":1.0"#),
+                (
+                    r#""push_whitelist_teams":[]"#,
+                    r#""push_whitelist_teams":[1]"#,
+                ),
+            ],
+        );
     }
 }
 

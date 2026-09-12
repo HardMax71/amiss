@@ -1,6 +1,5 @@
 use amiss_controller_gitea::{repository::RepositoryRecord, user::UserRecord};
-use amiss_wire::assessment::Nullable;
-use js_int::{MAX_SAFE_INT, MAX_SAFE_UINT, UInt};
+use js_int::{MAX_SAFE_INT, MAX_SAFE_UINT};
 
 pub(super) fn assert_integer_contract<T>(
     record: &T,
@@ -12,10 +11,6 @@ where
     assert!(bound == MAX_SAFE_INT || bound == -MAX_SAFE_INT);
     let encoded = serde_json::to_string(record)?;
     assert_eq!(&serde_json::from_str::<T>(&encoded)?, record);
-    assert_eq!(
-        &amiss_wire::read_json::<T>(encoded.as_bytes(), u64::MAX)?,
-        record
-    );
     let marker = bound.to_string();
     let outside = bound
         .checked_add(bound.signum())
@@ -47,7 +42,6 @@ where
                 serde_json::from_str::<T>(&changed).is_err(),
                 "offset {offset}: {invalid}"
             );
-            assert!(amiss_wire::read_json::<T>(changed.as_bytes(), u64::MAX).is_err());
         }
     }
     Ok(())
@@ -74,40 +68,26 @@ fn user_identity_keeps_the_safe_integer_boundary() -> Result<(), Box<dyn std::er
 }
 
 #[test]
-fn nested_repository_counts_and_optional_branches_are_bounded()
--> Result<(), Box<dyn std::error::Error>> {
+fn repository_and_owner_identities_are_bounded() -> Result<(), Box<dyn std::error::Error>> {
     let mut repository: RepositoryRecord =
         serde_json::from_slice(include_bytes!("../fixtures/gitea-fork.json"))?;
-    let mut pending = vec![&mut repository];
-    while let Some(repository) = pending.pop() {
-        for count in [
-            &mut repository.id,
-            &mut repository.size,
-            &mut repository.stars_count,
-            &mut repository.forks_count,
-            &mut repository.watchers_count,
-            &mut repository.open_issues_count,
-            &mut repository.open_pr_counter,
-            &mut repository.release_counter,
-            &mut repository.owner.id,
-        ] {
-            *count = MAX_SAFE_UINT;
-        }
-        repository.branch_count = Some(UInt::MAX);
-        if let Some(Nullable::Value(parent)) = &mut repository.parent {
-            pending.push(parent);
-        }
-    }
+    repository.id = MAX_SAFE_UINT;
+    repository.owner.id = MAX_SAFE_UINT;
     assert_integer_contract(&repository, MAX_SAFE_INT)?;
-    for count in [None, Some(UInt::MIN), Some(UInt::MAX)] {
-        repository.branch_count = count;
-        let encoded = serde_json::to_vec(&repository)?;
-        assert_eq!(
-            amiss_wire::read_json::<RepositoryRecord>(&encoded, u64::MAX)?,
-            repository
-        );
+    for oversized in [
+        RepositoryRecord {
+            id: MAX_SAFE_UINT + 1,
+            ..repository.clone()
+        },
+        RepositoryRecord {
+            owner: UserRecord {
+                id: MAX_SAFE_UINT + 1,
+                ..repository.owner.clone()
+            },
+            ..repository
+        },
+    ] {
+        assert!(serde_json::to_vec(&oversized).is_err());
     }
-    repository.size = MAX_SAFE_UINT + 1;
-    assert!(serde_json::to_vec(&repository).is_err());
     Ok(())
 }

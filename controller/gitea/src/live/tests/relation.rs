@@ -37,7 +37,13 @@ fn relation_trees_come_from_exact_git_objects_not_api_metadata() {
         let subject = subject_fixture(&fixture);
         let mut state = fixture.rest.state.lock().unwrap();
         state.data.current_head.commit.tree.sha = state.data.current_head.sha.clone();
-        state.data.repository.clone_url = "https://attacker.invalid/repository.git".to_owned();
+        let repository = serde_json::to_string(&state.data.repository).unwrap();
+        let metadata = repository.replacen(
+            '{',
+            r#"{"clone_url":"https://attacker.invalid/repository.git","#,
+            1,
+        );
+        state.data.repository = serde_json::from_str(&metadata).unwrap();
         let objects = FakeObjects {
             objects: GiteaObjects {
                 candidate: resolved('b', 'd', &['a']),

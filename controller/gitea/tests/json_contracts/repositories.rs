@@ -1,242 +1,157 @@
-use std::collections::BTreeMap;
-
 use amiss_controller::{ProviderError, decode_bounded_json};
-use amiss_controller_gitea::repository::{
-    ExternalTracker, ExternalWiki, Organization, PermissionLevel, RepositoryRecord,
-    RepositoryTransfer, RepositoryUnit, Team, TrackerStyle,
-};
-use amiss_controller_gitea::user::UserVisibility;
-use amiss_wire::assessment::Nullable;
+use amiss_controller_gitea::repository::RepositoryRecord;
 use amiss_wire::model::ObjectFormat;
 
 #[test]
-fn team_unit_maps_are_required_nullable_and_reject_decoded_duplicate_keys() {
-    let mut team = Team {
-        id: 1,
-        name: "reviewers".to_owned(),
-        description: String::new(),
-        organization: None,
-        includes_all_repositories: false,
-        permission: PermissionLevel::Read,
-        units: None,
-        units_map: None,
-        can_create_org_repo: false,
-        visibility: None,
-    };
-    let null_map = serde_json::to_string(&team).unwrap();
-    let missing = null_map.replace(r#""units_map":null,"#, "");
-    assert_ne!(missing, null_map);
-    assert!(serde_json::from_str::<Team>(&missing).is_err());
-    assert!(amiss_wire::read_json::<Team>(missing.as_bytes(), u64::MAX).is_err());
-    for units_map in [
-        None,
-        Some(BTreeMap::new()),
-        Some(BTreeMap::from([(
-            RepositoryUnit::Code,
-            PermissionLevel::Read,
-        )])),
-    ] {
-        team.units_map = units_map;
-        let input = serde_json::to_vec(&team).unwrap();
-        assert_eq!(serde_json::from_slice::<Team>(&input).unwrap(), team);
-        assert_eq!(
-            amiss_wire::read_json::<Team>(&input, u64::MAX).unwrap(),
-            team
-        );
-    }
-    let input = serde_json::to_string(&team).unwrap();
-    let accepted = ["repo.code", r"repo.\u0063ode"].map(|key| {
-        let invalid = input.replacen(
-            r#""units_map":{"#,
-            &format!(r#""units_map":{{"{key}":"read","#),
-            1,
-        );
-        assert_ne!(invalid, input);
-        assert!(amiss_wire::read_json::<Team>(invalid.as_bytes(), u64::MAX).is_err());
-        serde_json::from_str::<Team>(&invalid).is_ok()
-    });
-    assert_eq!(accepted, [false; 2]);
-}
-
-#[test]
-fn repository_captures_keep_omission_null_and_nested_parents_distinct() {
-    for (input, fork, omitted) in [
+fn repository_captures_retain_identity_and_ignore_unconsumed_metadata()
+-> Result<(), Box<dyn std::error::Error>> {
+    for (input, id, owner, manual_merge) in [
         (
-            include_bytes!("../fixtures/gitea-repository.json").as_slice(),
-            false,
-            true,
+            include_str!("../fixtures/gitea-repository.json"),
+            101,
+            "acme",
+            Some(false),
         ),
         (
-            include_bytes!("../fixtures/forgejo-repository.json").as_slice(),
-            false,
-            false,
+            include_str!("../fixtures/forgejo-repository.json"),
+            101,
+            "acme",
+            None,
         ),
         (
-            include_bytes!("../fixtures/gitea-fork.json").as_slice(),
-            true,
-            false,
+            include_str!("../fixtures/gitea-fork.json"),
+            202,
+            "contributor",
+            Some(false),
         ),
     ] {
         let (repository, length): (RepositoryRecord, _) =
-            decode_bounded_json(input, None, input.len(), |bytes| {
+            decode_bounded_json(input.as_bytes(), None, input.len(), |bytes| {
                 serde_json::from_slice(bytes)
-            })
-            .unwrap();
+            })?;
         assert_eq!(length, input.len());
+        assert_eq!(repository.id, id);
+        assert_eq!(repository.name, "widget");
+        assert_eq!(repository.full_name, format!("{owner}/widget"));
+        assert_eq!(repository.owner.login, owner);
+        assert_eq!(repository.default_branch, "main");
         assert_eq!(repository.object_format_name, ObjectFormat::Sha1);
-        assert_eq!(repository.parent.is_none(), omitted);
-        assert_eq!(matches!(&repository.parent, Some(Nullable::Value(_))), fork);
-        assert_eq!(repository.fork, fork);
-        if let Some(Nullable::Value(parent)) = &repository.parent {
-            assert_eq!(parent.full_name, "acme/widget");
-            assert_eq!(parent.id, 101);
-        }
-        let encoded = serde_json::to_vec(&repository).unwrap();
+        assert_eq!(repository.allow_manual_merge, manual_merge);
         assert_eq!(
-            amiss_wire::read_json::<RepositoryRecord>(&encoded, u64::MAX).unwrap(),
+            decode_bounded_json::<RepositoryRecord, _>(
+                input.as_bytes(),
+                None,
+                input.len() - 1,
+                |bytes| serde_json::from_slice(bytes),
+            ),
+            Err(ProviderError::InvalidResponse)
+        );
+        let encoded = serde_json::to_string(&repository)?;
+        let metadata = encoded.replacen(
+            '{',
+            r#"{"parent":false,"repo_transfer":[],"permissions":null,"topics":{},"size":-1,"default_merge_style":"future","extra":{},"#,
+            1,
+        );
+        assert_eq!(
+            serde_json::from_str::<RepositoryRecord>(&metadata)?,
             repository
         );
     }
+    Ok(())
 }
 
 #[test]
-fn transfers_and_repository_settings_are_closed_typed_data() {
-    let mut repository: RepositoryRecord =
-        serde_json::from_slice(include_bytes!("../fixtures/gitea-repository.json")).unwrap();
-    repository.external_tracker = Some(ExternalTracker {
-        external_tracker_url: "https://tracker.example".to_owned(),
-        external_tracker_format: "https://tracker.example/{user}/{repo}/{index}".to_owned(),
-        external_tracker_style: TrackerStyle::Numeric,
-        external_tracker_regexp_pattern: String::new(),
-    });
-    repository.external_wiki = Some(ExternalWiki {
-        external_wiki_url: "https://wiki.example".to_owned(),
-    });
-    repository.licenses = Some(Nullable::Null);
-    repository.topics = None;
-    repository.repo_transfer = Some(Nullable::Value(RepositoryTransfer {
-        doer: Some(repository.owner.clone()),
-        recipient: None,
-        teams: Some(vec![Team {
-            id: js_int::MAX_SAFE_UINT,
-            name: "reviewers".to_owned(),
-            description: String::new(),
-            organization: Some(Organization {
-                id: js_int::MAX_SAFE_UINT,
-                name: "acme".to_owned(),
-                full_name: "Fixture organization".to_owned(),
-                email: "owner@example.com".to_owned(),
-                avatar_url: "https://forge.example/avatars/acme".to_owned(),
-                description: String::new(),
-                website: "https://example.com".to_owned(),
-                location: String::new(),
-                visibility: UserVisibility::Public,
-                repo_admin_change_team_access: false,
-                username: "acme".to_owned(),
-                created: Some("2026-01-01T00:00:00Z".to_owned()),
-            }),
-            includes_all_repositories: false,
-            permission: PermissionLevel::Read,
-            units: Some(vec![RepositoryUnit::Code]),
-            units_map: Some(BTreeMap::from([(
-                RepositoryUnit::Code,
-                PermissionLevel::Read,
-            )])),
-            can_create_org_repo: false,
-            visibility: Some(UserVisibility::Private),
-        }]),
-    }));
-    super::numbers::assert_integer_contract(&repository, js_int::MAX_SAFE_INT).unwrap();
-    let input = serde_json::to_string(&repository).unwrap();
-    assert_eq!(
-        amiss_wire::read_json::<RepositoryRecord>(input.as_bytes(), u64::MAX).unwrap(),
-        repository
-    );
-    for (original, replacement) in [
+fn repository_identity_fields_remain_required_and_unique() -> Result<(), Box<dyn std::error::Error>>
+{
+    let repository: RepositoryRecord =
+        serde_json::from_str(include_str!("../fixtures/gitea-repository.json"))?;
+    let encoded = serde_json::to_string(&repository)?;
+    for (field, value) in [
+        ("id", repository.id.to_string()),
+        ("name", serde_json::to_string(&repository.name)?),
+        ("full_name", serde_json::to_string(&repository.full_name)?),
+        ("owner", serde_json::to_string(&repository.owner)?),
         (
-            r#""external_tracker":{"#,
-            r#""external_tracker":{"unknown":true,"#,
+            "default_branch",
+            serde_json::to_string(&repository.default_branch)?,
         ),
         (
-            r#""external_wiki":{"#,
-            r#""external_wiki":{"unknown":true,"#,
+            "object_format_name",
+            serde_json::to_string(&repository.object_format_name)?,
         ),
-        (
-            r#""repo_transfer":{"#,
-            r#""repo_transfer":{"unknown":true,"#,
-        ),
-        (r#""teams":[{"#, r#""teams":[{"unknown":true,"#),
-        (r#""organization":{"#, r#""organization":{"unknown":true,"#),
-        (r#""repo.code":"read""#, r#""repo.unknown":"read""#),
-        (r#""repo.code":"read""#, r#""repo.code":"unknown""#),
-        (
-            r#""external_tracker_style":"numeric""#,
-            r#""external_tracker_style":"unknown""#,
-        ),
-        (r#""permission":"read""#, r#""permission":"unknown""#),
-        (r#""recipient":null,"#, ""),
     ] {
-        let invalid = input.replace(original, replacement);
-        assert_ne!(invalid, input);
-        assert!(amiss_wire::read_json::<RepositoryRecord>(invalid.as_bytes(), u64::MAX).is_err());
+        let original = format!(r#""{field}":{value}"#);
+        for replacement in [
+            format!(r#""missing_{field}":{value}"#),
+            format!(r#""{field}":{value},"{field}":{value}"#),
+            format!(r#""{field}":null"#),
+        ] {
+            amiss_fixtures::assert_json_rejections::<RepositoryRecord>(
+                &encoded,
+                &[(&original, &replacement)],
+            );
+        }
     }
-}
-
-#[test]
-fn malformed_repositories_cannot_prove_visibility() {
-    let input = include_str!("../fixtures/gitea-repository.json");
-    for (original, replacement) in [
-        (r#""id":101"#, r#""id":101,"unknown":true"#),
-        (r#""id":101"#, r#""id":-1"#),
-        (r#""id":101"#, r#""id":9007199254740992"#),
-        (r#""id":101"#, r#""id":101,"\u0069d":101"#),
-        (
-            r#""object_format_name":"sha1""#,
-            r#""object_format_name":"unknown""#,
-        ),
-        (
-            r#""default_merge_style":"squash""#,
-            r#""default_merge_style":"unknown""#,
-        ),
-        (
-            r#""default_update_style":"merge""#,
-            r#""default_update_style":"unknown""#,
-        ),
-        (r#""projects_mode":"all""#, r#""projects_mode":"unknown""#),
-        (
-            r#""allow_manual_merge":false"#,
-            r#""allow_manual_merge":null"#,
-        ),
-        (r#""permissions":{"#, r#""permissions":{"unknown":true,"#),
-        (
-            r#""internal_tracker":{"#,
-            r#""internal_tracker":{"unknown":true,"#,
-        ),
-        (r#""owner":{"#, r#""owner":{"id":false,"#),
-        (
-            r#""permissions":{"admin":false,"push":false,"pull":true}"#,
-            r#""permissions":[false,false,true]"#,
-        ),
-        (r#""size":74757"#, r#""size":-1"#),
-        (r#""empty":false,"#, ""),
-    ] {
-        let invalid = input.replace(original, replacement);
-        assert_ne!(invalid, input);
+    amiss_fixtures::assert_json_rejections::<RepositoryRecord>(
+        &encoded,
+        &[
+            (r#""id":101"#, r#""id":-1"#),
+            (r#""id":101"#, r#""id":9007199254740992"#),
+            (r#""id":101"#, r#""id":101,"\u0069d":101"#),
+            (r#""name":"widget""#, r#""name":false"#),
+            (r#""owner":{"#, r#""owner":{"id":false,"#),
+            (
+                r#""object_format_name":"sha1""#,
+                r#""object_format_name":"unknown""#,
+            ),
+        ],
+    );
+    for invalid in ["null", "true", "42", "{}", "[]", "[{}]"] {
         assert_eq!(
             decode_bounded_json::<RepositoryRecord, _>(
                 invalid.as_bytes(),
                 None,
                 invalid.len(),
-                |bytes| amiss_wire::read_json(bytes, u64::MAX)
+                |bytes| serde_json::from_slice(bytes),
             ),
             Err(ProviderError::InvalidResponse)
         );
     }
-    let fork = include_str!("../fixtures/gitea-fork.json");
-    let invalid = fork.replace(r#""parent":{"#, r#""parent":{"unknown":true,"#);
-    assert_ne!(invalid, fork);
-    assert!(amiss_wire::read_json::<RepositoryRecord>(invalid.as_bytes(), u64::MAX).is_err());
-    for invalid in ["null", "true", "42", "{}", "[]", "[{}]"] {
-        assert!(amiss_wire::read_json::<RepositoryRecord>(invalid.as_bytes(), u64::MAX).is_err());
+    Ok(())
+}
+
+#[test]
+fn manual_merge_capability_preserves_omission_without_accepting_null()
+-> Result<(), Box<dyn std::error::Error>> {
+    let mut repository: RepositoryRecord =
+        serde_json::from_str(include_str!("../fixtures/gitea-repository.json"))?;
+    for capability in [None, Some(false), Some(true)] {
+        repository.allow_manual_merge = capability;
+        let encoded = serde_json::to_string(&repository)?;
+        assert_eq!(encoded.contains("allow_manual_merge"), capability.is_some());
+        assert_eq!(
+            serde_json::from_str::<RepositoryRecord>(&encoded)?,
+            repository
+        );
     }
+    let encoded = serde_json::to_string(&repository)?;
+    amiss_fixtures::assert_json_rejections::<RepositoryRecord>(
+        &encoded,
+        &[
+            (
+                r#""allow_manual_merge":true"#,
+                r#""allow_manual_merge":null"#,
+            ),
+            (
+                r#""allow_manual_merge":true"#,
+                r#""allow_manual_merge":"true""#,
+            ),
+            (r#""allow_manual_merge":true"#, r#""allow_manual_merge":1"#),
+            (
+                r#""allow_manual_merge":true"#,
+                r#""allow_manual_merge":false,"allow_manual_merge":true"#,
+            ),
+        ],
+    );
+    Ok(())
 }

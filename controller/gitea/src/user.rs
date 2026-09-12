@@ -8,11 +8,3 @@ pub struct UserRecord {
     pub id: u64,
     pub login: String,
 }
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(rename_all = "lowercase")]
-pub enum UserVisibility {
-    Public,
-    Limited,
-    Private,
-}

@@ -135,11 +135,12 @@ fn repository_metadata_differences_preserve_the_signed_identity() {
     let original = authenticated(&adapter, BODY, provider("gitea")).unwrap();
     let mut payload: PullRequestPayload = serde_json::from_slice(BODY).unwrap();
     let base = payload.pull_request.base.repo.as_mut().unwrap();
-    base.description = "A different metadata view".to_owned();
     base.owner.id = 999;
-    let permissions = base.permissions.as_mut().unwrap();
-    permissions.push = !permissions.push;
-    let body = serde_json::to_vec(&payload).unwrap();
+    let body = replaced_once(
+        &serde_json::to_vec(&payload).unwrap(),
+        r#""repo":{"#,
+        r#""repo":{"description":false,"permissions":{"push":true},"parent":[],"#,
+    );
     let changed = authenticated(&adapter, &body, provider("gitea")).unwrap();
     assert_eq!(changed.delivery().change, original.delivery().change);
     assert_eq!(

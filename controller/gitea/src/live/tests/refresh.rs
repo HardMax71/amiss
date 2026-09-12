@@ -83,6 +83,18 @@ fn exact_live_snapshot_accepts_gitea_and_forgejo() {
                     1,
                 );
             data.target_branch = serde_json::from_str(&wire).unwrap();
+            let repository = serde_json::to_string(&data.repository).unwrap().replacen(
+                '{',
+                r#"{"permissions":false,"parent":{},"repo_transfer":[],"#,
+                1,
+            );
+            data.repository = serde_json::from_str(&repository).unwrap();
+            let protection = serde_json::to_string(&data.protection).unwrap().replacen(
+                '{',
+                r#"{"branch_name":null,"enable_merge_whitelist":[],"created_at":42,"#,
+                1,
+            );
+            data.protection = serde_json::from_str(&protection).unwrap();
         });
         assert_eq!(
             changed.client.refresh(changed.pull_request()).unwrap(),
