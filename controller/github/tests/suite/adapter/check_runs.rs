@@ -7,21 +7,18 @@ use amiss_wire::model::BranchRef;
 use super::{BODY, authenticate_target, replaced_once, source};
 
 #[test]
-fn signed_check_runs_reject_unknown_metadata_before_no_work() {
+fn signed_check_runs_ignore_metadata_without_creating_work() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let input = amiss_fixtures::GITHUB_WEBHOOK_CHECK_RUN;
     assert_eq!(authenticate_target(&source, input, &target), Ok(None));
-    let invalid = replaced_once(
+    let metadata = replaced_once(
         input,
         r#""check_run": {"#,
-        r#""check_run": {"unknown":true,"#,
+        r#""check_run": {"unknown":true,"check_suite":false,"deployment":[],"#,
     );
-    assert!(invalid != input, "mutation must change the input");
-    assert_eq!(
-        authenticate_target(&source, &invalid, &target),
-        Err(ProviderError::Authentication)
-    );
+    assert_ne!(metadata, input);
+    assert_eq!(authenticate_target(&source, &metadata, &target), Ok(None));
 }
 
 #[test]
@@ -41,13 +38,12 @@ fn signed_check_run_actions_reject_malformed_envelopes() {
         for (old, new) in [
             ("{", r#"{"unknown":true,"#),
             ("{", r#"{"installation":null,"#),
-            (r#""check_suite":{"#, r#""check_suite":{"unknown":true,"#),
             (r#""app":{"#, r#""app":{"unknown":true,"#),
             (r#""permissions":{"#, r#""permissions":{"unknown":"read","#),
             (r#""events":[]"#, r#""events":["future"]"#),
             (r#""id":128620228"#, r#""id":128620228,"\u0069d":128620228"#),
             (r#""id":128620228"#, r#""id":9007199254740992"#),
-            (r#""output":{"#, r#""output":{"unknown":true,"#),
+            (r#""output":{"#, r#""missing_output":{"#),
             (r#""status":"completed""#, r#""status":"future""#),
             (r#""sender":{"#, r#""sender":{"unknown":true,"#),
         ] {

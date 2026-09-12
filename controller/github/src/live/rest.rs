@@ -374,7 +374,7 @@ impl GitHubRest for HttpRest {
             let request = self.transport.client.get(self.transport.url(&route)?);
             let response: CheckRunPage =
                 decode_body(self.transport.execute(request, deadline)?, |bytes| {
-                    amiss_wire::read_json(bytes, u64::MAX)
+                    serde_json::from_slice(bytes)
                 })?;
             let count =
                 u64::try_from(runs.len()).map_err(|_defect| ProviderError::InvalidResponse)?;
@@ -406,7 +406,7 @@ impl GitHubRest for HttpRest {
             .post(self.transport.url(&route)?)
             .json(check);
         decode_body(self.transport.execute(request, deadline)?, |bytes| {
-            amiss_wire::read_json(bytes, u64::MAX)
+            serde_json::from_slice(bytes)
         })
     }
 }

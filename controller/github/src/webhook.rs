@@ -49,8 +49,6 @@ pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub check_run: Option<
         crate::check::CheckRunRecord<
-            run::WebhookCheckRunResource,
-            run::WebhookCheckSuite,
             app::WebhookApp<Nullable<crate::check::AppOwner>>,
             run::WebhookCheckRunConclusion,
         >,

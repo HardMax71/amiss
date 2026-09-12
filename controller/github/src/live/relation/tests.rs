@@ -363,11 +363,6 @@ fn audit_bundle(fixture: &RelationAuditFixture) -> RelationAuditBundle<'_> {
 }
 
 fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
-    let captured: CheckRunRecord = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/check-run.json"),
-        u64::MAX,
-    )
-    .unwrap();
     CheckRunRecord {
         id: 42,
         name: expected.name.clone(),
@@ -378,13 +373,8 @@ fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
         output: CheckRunOutputRecord {
             title: Some(expected.output.title.clone()),
             summary: Some(expected.output.summary.clone()),
-            ..captured.output
         },
-        app: Some(CheckRunApp {
-            id: app_id,
-            ..captured.app.unwrap()
-        }),
-        ..captured
+        app: Some(CheckRunApp { id: app_id }),
     }
 }
 

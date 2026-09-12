@@ -319,7 +319,25 @@ fn publication_reuses_only_one_exact_owned_check() {
     let publication = fixture.publication(CheckConclusion::Pass);
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
-    let exact = check_run(APP_ID, &expected);
+    let encoded = serde_json::to_string(&check_run(APP_ID, &expected)).unwrap();
+    let metadata = encoded
+        .replacen(
+            '{',
+            r#"{"check_suite":false,"deployment":[],"extra":{},"#,
+            1,
+        )
+        .replacen(
+            r#""output":{"#,
+            r#""output":{"text":true,"annotations_count":-1,"#,
+            1,
+        )
+        .replacen(
+            r#""app":{"#,
+            r#""app":{"owner":false,"permissions":[],"events":null,"#,
+            1,
+        );
+    let exact = serde_json::from_str::<CheckRunRecord>(&metadata).unwrap();
+    assert_eq!(validate_created(&fixture.config, &expected, &exact), Ok(()));
     assert!(matches!(
         publication_decision(&fixture.config, &publication, std::slice::from_ref(&exact)).unwrap(),
         CheckRunDecision::Reuse
@@ -1126,11 +1144,6 @@ fn required_rule(integration_id: Option<u64>, strict: bool) -> BranchRule {
 }
 
 fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
-    let captured: CheckRunRecord = amiss_wire::read_json(
-        include_bytes!("../../tests/fixtures/check-run.json"),
-        u64::MAX,
-    )
-    .unwrap();
     CheckRunRecord {
         id: 81,
         name: expected.name.clone(),
@@ -1141,13 +1154,8 @@ fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
         output: CheckRunOutputRecord {
             title: Some(expected.output.title.clone()),
             summary: Some(expected.output.summary.clone()),
-            ..captured.output
         },
-        app: Some(CheckRunApp {
-            id: app_id,
-            ..captured.app.unwrap()
-        }),
-        ..captured
+        app: Some(CheckRunApp { id: app_id }),
     }
 }
 
