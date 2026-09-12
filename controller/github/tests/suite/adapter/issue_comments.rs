@@ -39,7 +39,7 @@ fn ordinary_issues_keep_their_nullable_author_contract() {
 }
 
 #[test]
-fn signed_issue_comments_check_the_complete_root_and_issue() {
+fn signed_issue_comments_ignore_unrelated_root_and_issue_metadata() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let input = amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT;
@@ -51,12 +51,9 @@ fn signed_issue_comments_check_the_complete_root_and_issue() {
     );
     assert_ne!(metadata, input);
     assert_eq!(authenticate_target(&source, &metadata, &target), Ok(None));
-    let invalid = replaced_once(input, r#""issue": {"#, r#""issue": {"unknown":true,"#);
-    assert_ne!(invalid, input);
-    assert_eq!(
-        authenticate_target(&source, &invalid, &target),
-        Err(ProviderError::Authentication)
-    );
+    let metadata = replaced_once(input, r#""issue": {"#, r#""issue": {"unknown":true,"#);
+    assert_ne!(metadata, input);
+    assert_eq!(authenticate_target(&source, &metadata, &target), Ok(None));
 }
 
 #[test]
@@ -99,11 +96,7 @@ fn incomplete_comment_events_cannot_fall_back_to_partial_deliveries() {
         if action == "edited" {
             wire = replaced_once(&wire, "{", r#"{"changes":{},"#);
         }
-        for (old, new) in [
-            (r#""issue": {"#, r#""issue": {"unknown":true,"#),
-            (r#""number": 1,"#, ""),
-            (r#""changes":{},"#, ""),
-        ] {
+        for (old, new) in [(r#""number": 1,"#, ""), (r#""changes":{},"#, "")] {
             if old == r#""changes":{},"# && action != "edited" {
                 continue;
             }

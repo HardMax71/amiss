@@ -59,11 +59,11 @@ fn review_events_keep_action_specific_rules() {
             ("{", r#"{"unknown":true,"#, true),
             ("{", r#"{"organization":null,"#, true),
             ("{", r#"{"enterprise":null,"#, true),
-            (r#""review":{"#, r#""review":{"unknown":true,"#, false),
+            (r#""review":{"#, r#""review":{"unknown":true,"#, true),
             (
                 r#""id":279147437"#,
                 r#""id":279147437,"unknown":true"#,
-                false,
+                true,
             ),
             (
                 r#""id":237895671"#,
@@ -74,7 +74,7 @@ fn review_events_keep_action_specific_rules() {
             (r#","draft":false"#, "", false),
             (r#""head":{"#, r#""head":{"label":null,"user":false,"#, true),
             (r#""body":null"#, r#""body":false"#, false),
-            (r#""id":279147437"#, stacked.as_str(), action != "edited"),
+            (r#""id":279147437"#, stacked.as_str(), true),
             (
                 state_member.as_str(),
                 r#""state":"future_state""#,

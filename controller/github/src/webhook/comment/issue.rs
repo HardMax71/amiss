@@ -66,7 +66,6 @@ pub struct IssueCommentPayload<Comment = IssueCommentRecord> {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct IssueCommentRecord<
     User = WorkflowOwner<PullRequestAccountKind>,
     Metadata = IssueCommentMetadata,
@@ -86,7 +85,6 @@ pub struct IssueCommentRecord<
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct IssueCommentMetadata {
     pub author_association: AuthorAssociation,
     pub performed_via_github_app: Nullable<Box<CheckRunApp>>,
@@ -100,7 +98,6 @@ pub struct IssueCommentMetadata {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct PinnedIssueCommentMetadata {
     pub author_association: Option<AuthorAssociation>,
     pub performed_via_github_app: Option<Nullable<Box<CheckRunApp>>>,
@@ -111,13 +108,11 @@ pub struct PinnedIssueCommentMetadata {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct MinimizedComment {
     pub reason: Nullable<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct PinnedComment {
     pub pinned_at: String,
     pub pinned_by: Nullable<OwnerRecord>,

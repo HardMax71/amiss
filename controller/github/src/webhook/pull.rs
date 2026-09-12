@@ -1,6 +1,6 @@
 use amiss_wire::assessment::Nullable;
 use js_int::UInt;
-use json_serde::deserialize_some;
+use json_serde::{Absent, deserialize_some};
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
@@ -46,10 +46,11 @@ pub enum Reviewer<Account = WorkflowOwner<PullRequestAccountKind>, Team = Review
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct Team {
     pub name: String,
     pub id: UInt,
+    #[serde(default, skip_serializing)]
+    pub login: Absent,
     pub node_id: Option<String>,
     pub slug: Option<String>,
     pub description: Option<Nullable<String>>,
@@ -70,10 +71,11 @@ pub struct Team {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ReviewTeam {
     pub name: String,
     pub id: UInt,
+    #[serde(default, skip_serializing)]
+    pub login: Absent,
     pub node_id: String,
     pub slug: String,
     pub description: Nullable<String>,
@@ -94,7 +96,6 @@ pub struct ReviewTeam {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ParentTeam {
     pub name: String,
     pub id: UInt,

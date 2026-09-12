@@ -31,11 +31,20 @@ fn pull_request_accounts_extend_only_their_own_kind_contract() {
     for input in [
         r#"{"login":"reviewer","id":1,"type":"unknown"}"#,
         r#"{"login":"reviewer","id":1,"type":{"Mannequin":null}}"#,
-        r#"{"login":"reviewer","id":1,"unknown":true}"#,
         r#"{"login":"reviewer","id":1,"name":"team","slug":"team"}"#,
+        r#"{"login":"reviewer","id":1,"slug":null}"#,
     ] {
         assert!(serde_json::from_str::<Reviewer>(input).is_err(), "{input}");
+        assert!(
+            serde_json::from_str::<Reviewer<WorkflowOwner, Team>>(input).is_err(),
+            "{input}"
+        );
     }
+    let input = r#"{"login":"reviewer","id":1,"unknown":true}"#;
+    assert!(matches!(
+        serde_json::from_str::<Reviewer>(input).unwrap(),
+        Reviewer::Account(_)
+    ));
 }
 
 #[test]
@@ -71,12 +80,27 @@ fn team_profiles_preserve_complete_metadata_without_relaxing_reviewers() {
     );
     assert_eq!(
         amiss_wire::read_json::<Reviewer>(input.as_bytes(), u64::MAX).unwrap(),
-        Reviewer::Team(Box::new(team)),
+        Reviewer::Team(Box::new(team.clone())),
     );
-    assert!(serde_json::from_str::<ParentTeam>(&input).is_err());
+    assert_eq!(
+        serde_json::from_str::<ParentTeam>(&input).unwrap().id,
+        team.id
+    );
     for (old, new) in [
         ("{", r#"{"unknown":true,"#),
         (r#""parent":{"#, r#""parent":{"unknown":true,"#),
+    ] {
+        assert!(input.contains(old), "{old}");
+        let changed = input.replacen(old, new, 1);
+        assert_eq!(serde_json::from_str::<ReviewTeam>(&changed).unwrap(), team);
+        assert_eq!(
+            serde_json::from_str::<Reviewer>(&changed).unwrap(),
+            Reviewer::Team(Box::new(team.clone()))
+        );
+    }
+    for (old, new) in [
+        ("{", r#"{"login":"account","#),
+        ("{", r#"{"login":null,"#),
         (r#""privacy":"secret""#, r#""privacy":"unknown""#),
         (r#""privacy":"secret","#, ""),
         (r#""deleted":false"#, r#""deleted":null"#),

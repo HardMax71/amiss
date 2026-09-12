@@ -15,7 +15,6 @@ use crate::repository::WorkflowRepositoryRecord;
 use crate::webhook::repository::WorkflowOwner;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ReviewPullRequest {
     #[serde(flatten)]
     pub context: PullRequestContext,
@@ -25,7 +24,6 @@ pub struct ReviewPullRequest {
 
 #[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct PullRequestContext<
     Assignee = WorkflowOwner<PullRequestAccountKind>,
     Requested = Reviewer,
@@ -75,7 +73,6 @@ pub struct PullRequestContext<
 }
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ReviewActivityPullRequest<
     Head = PullRefRecord<Option<WorkflowRepositoryRecord<Option<OwnerRecord>>>>,
 > {
@@ -103,7 +100,7 @@ pub struct ReviewActivityPullRequest<
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "Context: Deserialize<'de>"))]
+#[serde(bound(deserialize = "Context: Deserialize<'de>"))]
 pub struct CommentPullRequest<Context = PullRequestContext> {
     #[serde(flatten)]
     pub context: Context,

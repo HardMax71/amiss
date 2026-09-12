@@ -67,7 +67,6 @@ pub struct ThreadPayload<
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ReviewThread<
     Comment = ReviewCommentRecord<Nullable<UInt>, WorkflowOwner<PullRequestAccountKind>>,
 > {

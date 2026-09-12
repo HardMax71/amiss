@@ -1,6 +1,6 @@
 use amiss_wire::assessment::Nullable;
 use js_int::UInt;
-use json_serde::deserialize_some;
+use json_serde::{Absent, deserialize_some};
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
@@ -11,10 +11,12 @@ use strum::{Display, EnumString};
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "Kind: Deserialize<'de>"))]
+#[serde(bound(deserialize = "Kind: Deserialize<'de>"))]
 pub struct WorkflowOwner<Kind = AccountKind> {
     pub login: String,
     pub id: UInt,
+    #[serde(default, skip_serializing)]
+    pub slug: Absent,
     pub avatar_url: Option<String>,
     pub deleted: Option<bool>,
     pub email: Option<Nullable<String>>,

@@ -64,12 +64,9 @@ pub struct ReviewPayload<Pull = ReviewActivityPullRequest, Review = ReviewRecord
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(
-        deserialize = "State: Deserialize<'de>, SubmittedAt: Deserialize<'de>, User: Deserialize<'de>"
-    )
-)]
+#[serde(bound(
+    deserialize = "State: Deserialize<'de>, SubmittedAt: Deserialize<'de>, User: Deserialize<'de>"
+))]
 pub struct ReviewRecord<State = String, SubmittedAt = Nullable<String>, User = WorkflowOwner> {
     pub id: UInt,
     pub node_id: String,
@@ -93,14 +90,12 @@ pub struct ReviewRecord<State = String, SubmittedAt = Nullable<String>, User = W
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ReviewLinks {
     pub html: Link,
     pub pull_request: Link,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ReviewChanges {
     #[serde(
         default,

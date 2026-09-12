@@ -30,10 +30,6 @@ fn issue_comment_actions_and_required_changes_are_closed() {
         ),
         (r#""action":"edited""#, false),
         (r#""action":"edited","changes":null"#, false),
-        (
-            r#""action":"edited","changes":{"title":{"from":"old"}}"#,
-            false,
-        ),
         (r#""action":"created","changes":{}"#, false),
         (r#""action":"unknown""#, false),
         (r#""action":null"#, false),
@@ -51,10 +47,17 @@ fn issue_comment_actions_and_required_changes_are_closed() {
             valid
         );
     }
+    let metadata = wire.replacen(
+        r#""action":"created""#,
+        r#""action":"edited","changes":{"title":{"from":"old"}}"#,
+        1,
+    );
+    assert!(serde_json::from_str::<IssueCommentEvent>(&metadata).is_ok());
+    assert!(amiss_wire::read_json::<IssueCommentEvent>(metadata.as_bytes(), u64::MAX).is_err());
 }
 
 #[test]
-fn issue_metadata_retains_declared_shapes_without_unknown_or_missing_data() {
+fn issue_metadata_ignores_additions_but_checks_declared_fields() {
     let event: IssueCommentEvent =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap();
     let wire = serde_json::to_string(&event).unwrap();
@@ -80,8 +83,6 @@ fn issue_metadata_retains_declared_shapes_without_unknown_or_missing_data() {
             r#""issue_dependencies_summary":{"blocked_by":0,"blocking":1,"total_blocked_by":2,"total_blocking":3}"#,
             true,
         ),
-        (r#""unknown":true"#, false),
-        (r#""pull_request":{"unknown":true}"#, false),
         (r#""pull_request":{"url":null}"#, false),
         (
             r#""type":{"id":1,"node_id":"type","name":"Bug","description":null,"color":"unknown"}"#,
@@ -112,10 +113,27 @@ fn issue_metadata_retains_declared_shapes_without_unknown_or_missing_data() {
         }
     }
     for (old, new) in [
+        (r#""issue":{"#, r#""issue":{"unknown":true,"#),
+        (
+            r#""issue":{"#,
+            r#""issue":{"pull_request":{"unknown":true},"#,
+        ),
+        (r#""user":{"#, r#""user":{"unknown":true,"#),
+    ] {
+        assert!(wire.contains(old), "{old}");
+        let candidate = wire.replacen(old, new, 1);
+        assert!(
+            serde_json::from_str::<IssueCommentEvent>(&candidate).is_ok(),
+            "{new}"
+        );
+        assert!(
+            amiss_wire::read_json::<IssueCommentEvent>(candidate.as_bytes(), u64::MAX).is_err()
+        );
+    }
+    for (old, new) in [
         (r#""active_lock_reason":null,"#, ""),
         (r#""closed_at":null,"#, ""),
         (r#""id":444500041"#, r#""id":444500041,"\u0069d":444500041"#),
-        (r#""user":{"#, r#""user":{"unknown":true,"#),
         (r#""installation":{"id":1}"#, r#""installation":null"#),
     ] {
         assert!(wire.contains(old), "mutation absent: {old}");

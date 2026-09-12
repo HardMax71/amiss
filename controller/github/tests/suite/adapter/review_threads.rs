@@ -7,7 +7,7 @@ use amiss_wire::model::BranchRef;
 use super::{BODY, authenticate_target, replaced_once, source};
 
 #[test]
-fn signed_review_threads_keep_the_published_payloads_and_reject_invalid_metadata() {
+fn signed_review_threads_ignore_additions_but_check_known_fields() {
     let ReviewEvent::Submitted { event, .. } =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW).unwrap()
     else {
@@ -48,9 +48,6 @@ fn signed_review_threads_keep_the_published_payloads_and_reject_invalid_metadata
         );
         assert_eq!(authenticate_target(&source, &input, &target), Ok(None));
         for (old, new) in [
-            (r#""thread":{"#, r#""thread":{"unknown":true,"#),
-            (r#""comments":[{"#, r#""comments":[{"unknown":true,"#),
-            (r#""id":279147437"#, r#""id":279147437,"unknown":true"#),
             (r#","draft":false"#, ""),
             (r#""auto_merge":null,"#, ""),
             (r#""id":284312630"#, r#""id":284312630,"\u0069d":284312630"#),
@@ -64,6 +61,13 @@ fn signed_review_threads_keep_the_published_payloads_and_reject_invalid_metadata
             );
         }
         for (old, new, valid) in [
+            (r#""thread":{"#, r#""thread":{"unknown":true,"#, true),
+            (r#""comments":[{"#, r#""comments":[{"unknown":true,"#, true),
+            (
+                r#""id":279147437"#,
+                r#""id":279147437,"unknown":true"#,
+                true,
+            ),
             (
                 r#""original_line":265"#,
                 r#""original_line":null"#,

@@ -11,7 +11,6 @@ use crate::webhook::pull::PullRequestAccountKind;
 use crate::webhook::repository::WorkflowOwner;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct CommentIssueContext {
     pub user: WorkflowOwner<PullRequestAccountKind>,
     pub labels: Vec<LabelRecord>,
@@ -26,7 +25,6 @@ pub struct CommentIssueContext {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct IssueActivityContext {
     pub user: Nullable<WorkflowOwner<PullRequestAccountKind>>,
     pub labels: Option<Vec<LabelRecord>>,

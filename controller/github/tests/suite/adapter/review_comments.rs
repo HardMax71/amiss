@@ -61,8 +61,6 @@ fn signed_review_comments_retain_the_published_events_and_remain_no_work() {
             );
         }
         for (old, new) in [
-            (r#""comment":{"#, r#""comment":{"unknown":true,"#),
-            (r#""id":279147437"#, r#""id":279147437,"unknown":true"#),
             (r#""original_line":265,"#, ""),
             (r#""id":284312630"#, r#""id":284312630,"\u0069d":284312630"#),
         ] {
@@ -75,6 +73,12 @@ fn signed_review_comments_retain_the_published_events_and_remain_no_work() {
             );
         }
         for (old, new, valid) in [
+            (r#""comment":{"#, r#""comment":{"unknown":true,"#, true),
+            (
+                r#""id":279147437"#,
+                r#""id":279147437,"unknown":true"#,
+                true,
+            ),
             (
                 r#""original_line":265"#,
                 r#""original_line":null"#,

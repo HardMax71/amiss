@@ -110,7 +110,6 @@ fn workflow_owner_presence_and_account_kinds_follow_the_declared_contract() {
         r#"{"login":"owner","id":1.0}"#,
         r#"{"login":"owner","id":1e0}"#,
         r#"{"login":"owner","id":-0}"#,
-        r#"{"login":"owner","id":1,"unknown":false}"#,
         r#"{"login":"owner","\u006cogin":"duplicate","id":1}"#,
         r#"{"login":"owner","id":1,"name":null}"#,
         r#"{"login":"owner","id":1,"gravatar_id":null}"#,
@@ -129,4 +128,9 @@ fn workflow_owner_presence_and_account_kinds_follow_the_declared_contract() {
             "{input}"
         );
     }
+    let input = r#"{"login":"owner","id":1,"unknown":false}"#;
+    let owner: WorkflowOwner = serde_json::from_str(input).unwrap();
+    assert_eq!(owner.login, "owner");
+    assert_eq!(owner.id, js_int::uint!(1));
+    assert!(amiss_wire::read_json::<WorkflowOwner>(input.as_bytes(), u64::MAX).is_err());
 }

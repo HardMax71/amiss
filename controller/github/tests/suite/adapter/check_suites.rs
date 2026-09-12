@@ -123,17 +123,18 @@ fn signed_check_suites_keep_typed_facts_and_remain_no_work() {
             GitHubEvent::CheckSuite(_)
         ));
         assert_eq!(authenticate_target(&source, &input, &target), Ok(None));
-        let metadata = replaced_once(&input, r#""head":{"#, r#""head":{"unknown":true,"#);
-        assert_eq!(authenticate_target(&source, &metadata, &target), Ok(None));
+        for prefix in [r#""head":{"#, r#""check_suite":{"#, r#""head_commit":{"#] {
+            let metadata = replaced_once(&input, prefix, &format!(r#"{prefix}"unknown":true,"#));
+            assert_ne!(metadata, input);
+            assert_eq!(authenticate_target(&source, &metadata, &target), Ok(None));
+        }
         for (old, new) in [
-            (r#""check_suite":{"#, r#""check_suite":{"unknown":true,"#),
             (r#""status":"completed""#, r#""status":"unknown""#),
             (r#""id":118578147"#, r#""id":118578147,"\u0069d":118578147"#),
             (
                 r#""latest_check_runs_count":1"#,
                 r#""latest_check_runs_count":9007199254740992"#,
             ),
-            (r#""head_commit":{"#, r#""head_commit":{"unknown":true,"#),
         ] {
             let candidate = replaced_once(&input, old, new);
             assert!(candidate != input, "mutation absent: {old}");

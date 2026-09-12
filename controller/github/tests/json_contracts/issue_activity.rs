@@ -38,12 +38,18 @@ fn ordinary_issue_metadata_does_not_inherit_comment_requiredness() {
     );
     assert!(serde_json::from_slice::<IssueRecord>(&wire).is_err());
     let input = std::str::from_utf8(&wire).unwrap();
+    let metadata = input.replacen(
+        r#""pinned_comment":{"#,
+        r#""pinned_comment":{"unknown":true,"#,
+        1,
+    );
+    assert_ne!(metadata, input);
+    assert_eq!(
+        serde_json::from_str::<IssueRecord<IssueActivityContext>>(&metadata).unwrap(),
+        issue
+    );
     for (old, new) in [
         (r#""user":null,"#, ""),
-        (
-            r#""pinned_comment":{"#,
-            r#""pinned_comment":{"unknown":true,"#,
-        ),
         (r#""value":42.5"#, r#""value":true"#),
         (
             r#""issue_field_id":1"#,

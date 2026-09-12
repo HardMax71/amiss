@@ -168,6 +168,49 @@ fn review_roots_keep_typed_events_without_actor_metadata() {
 }
 
 #[test]
+fn nested_review_metadata_cannot_change_typed_events_or_delivery() {
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    for original in review_events() {
+        let input = serde_json::to_string(&original).unwrap();
+        for source in [
+            source(),
+            GitHubPullRequestSource::new(provider(), webhook(), &[workflow_artifact("321")]),
+        ] {
+            for prefix in [
+                r#""review":{"#,
+                r#""comment":{"#,
+                r#""issue":{"#,
+                r#""thread":{"#,
+                r#""pull_request":{"#,
+                r#""user":{"#,
+                r#""comments":[{"#,
+                r#""labels":[{"#,
+                r#""reactions":{"#,
+                r#""_links":{"#,
+                r#""html":{"#,
+                r#""self":{"#,
+            ]
+            .into_iter()
+            .filter(|prefix| input.contains(prefix))
+            {
+                let changed = input.replace(
+                    prefix,
+                    &format!(
+                        r#"{prefix}"future_metadata":{{"action":"opened","nested":[null,1.5]}},"#
+                    ),
+                );
+                assert!(serde_json::from_str::<GitHubEvent>(&changed).unwrap() == original);
+                assert_eq!(
+                    authenticate_target(&source, changed.as_bytes(), &target),
+                    Ok(None),
+                    "{prefix}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn signed_review_edits_are_no_work_without_losing_their_contract() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();

@@ -94,7 +94,7 @@ fn thread_pr_profiles_keep_head_and_merge_title_rules() {
     });
     let input = serde_json::to_string(&pull).unwrap();
     for (old, new, resolved, unresolved) in [
-        ("{", r#"{"unknown":true,"#, false, false),
+        ("{", r#"{"unknown":true,"#, true, true),
         ("{", r#"{"stack":null,"#, false, false),
         (head.as_str(), "null", true, false),
         (

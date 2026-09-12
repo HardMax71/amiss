@@ -159,7 +159,6 @@ pub enum WorkflowRunConclusion {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct Committer {
     pub name: String,
     pub email: Nullable<String>,

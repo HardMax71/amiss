@@ -11,12 +11,9 @@ use crate::repository::WorkflowRepositoryRecord;
 use crate::webhook::repository::WorkflowOwner;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(
-        deserialize = "Account: Deserialize<'de>, Head: Deserialize<'de>, RequestedTeam: Deserialize<'de>, Title: Deserialize<'de>"
-    )
-)]
+#[serde(bound(
+    deserialize = "Account: Deserialize<'de>, Head: Deserialize<'de>, RequestedTeam: Deserialize<'de>, Title: Deserialize<'de>"
+))]
 pub struct ThreadPullRequest<
     Account = WorkflowOwner<PullRequestAccountKind>,
     Head = PullRefRecord<Option<WorkflowRepositoryRecord<Option<OwnerRecord>>>>,

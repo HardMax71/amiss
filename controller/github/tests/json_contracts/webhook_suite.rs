@@ -31,7 +31,7 @@ fn check_suite_actions_share_the_closed_suite_lifecycle() {
             (
                 r#""check_suite":{"#,
                 r#""check_suite":{"unknown":true,"#,
-                false,
+                true,
             ),
             (r#""status":"completed""#, r#""status":"waiting""#, true),
             (r#""status":"completed""#, r#""status":null"#, true),
@@ -70,7 +70,7 @@ fn check_suite_actions_share_the_closed_suite_lifecycle() {
             (
                 r#""head_commit":{"#,
                 r#""head_commit":{"unknown":true,"#,
-                false,
+                true,
             ),
             (
                 r#""check_suite":{"#,

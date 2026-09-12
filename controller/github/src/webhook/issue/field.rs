@@ -11,7 +11,6 @@ use strum::{Display, EnumString};
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct IssueFieldValue {
     pub issue_field_id: UInt,
     pub node_id: String,
@@ -30,7 +29,6 @@ pub enum IssueFieldContent {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct IssueFieldOption {
     pub id: UInt,
     pub name: String,

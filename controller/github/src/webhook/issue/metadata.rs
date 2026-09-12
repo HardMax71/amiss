@@ -11,7 +11,6 @@ use strum::{Display, EnumString};
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct IssuePullRequest {
     pub diff_url: Option<String>,
     pub html_url: Option<String>,
@@ -21,7 +20,6 @@ pub struct IssuePullRequest {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct SubIssuesSummary {
     pub total: UInt,
     pub completed: UInt,
@@ -29,7 +27,6 @@ pub struct SubIssuesSummary {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct IssueDependenciesSummary {
     pub blocked_by: UInt,
     pub blocking: UInt,
@@ -43,7 +40,6 @@ pub struct IssueDependenciesSummary {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct IssueType {
     pub id: UInt,
     pub node_id: String,

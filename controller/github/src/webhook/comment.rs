@@ -81,7 +81,6 @@ pub struct CommentPayload<
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct ReviewCommentRecord<OriginalLine = UInt, User = WorkflowOwner> {
     pub url: String,
     pub pull_request_review_id: Nullable<UInt>,
@@ -114,7 +113,6 @@ pub struct ReviewCommentRecord<OriginalLine = UInt, User = WorkflowOwner> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct CommentLinks {
     #[serde(rename = "self")]
     pub comment: Link,
@@ -123,7 +121,6 @@ pub struct CommentLinks {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct Reactions {
     pub url: String,
     pub total_count: UInt,

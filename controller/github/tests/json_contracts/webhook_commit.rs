@@ -92,6 +92,16 @@ fn workflow_commit_specializations_require_every_shared_field() {
         ("{", "{\"unknown\":true,"),
         ("\"author\":{", "\"author\":{\"unknown\":true,"),
         ("\"committer\":{", "\"committer\":{\"unknown\":true,"),
+    ] {
+        assert!(input.contains(old), "{old}");
+        let changed = input.replacen(old, new, 1);
+        assert!(serde_json::from_str::<WorkflowCommit>(&changed).is_ok());
+        assert_eq!(
+            serde_json::from_str::<WorkflowCommit<Committer>>(&changed).unwrap(),
+            commit
+        );
+    }
+    for (old, new) in [
         ("\"id\":", "\"\\u0069d\":null,\"id\":"),
         ("\"email\":", "\"\\u0065mail\":null,\"email\":"),
         (

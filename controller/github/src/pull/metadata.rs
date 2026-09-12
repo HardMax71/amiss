@@ -11,7 +11,6 @@ use crate::owner::OwnerRecord;
 use super::State;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct LabelRecord {
     pub id: UInt,
     pub node_id: String,
@@ -23,7 +22,6 @@ pub struct LabelRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct MilestoneRecord<User = OwnerRecord> {
     pub url: String,
     pub html_url: String,
@@ -44,12 +42,9 @@ pub struct MilestoneRecord<User = OwnerRecord> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(
-        deserialize = "User: Deserialize<'de>, Message: Deserialize<'de>, Title: Deserialize<'de>"
-    )
-)]
+#[serde(bound(
+    deserialize = "User: Deserialize<'de>, Message: Deserialize<'de>, Title: Deserialize<'de>"
+))]
 pub struct AutoMergeRecord<User = OwnerRecord, Message = String, Title = Message> {
     #[serde(deserialize_with = "User::deserialize")]
     pub enabled_by: User,
@@ -61,7 +56,6 @@ pub struct AutoMergeRecord<User = OwnerRecord, Message = String, Title = Message
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct PullRequestLinks {
     pub comments: Link,
     pub commits: Link,
@@ -75,7 +69,6 @@ pub struct PullRequestLinks {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct Link {
     pub href: String,
 }
@@ -86,7 +79,6 @@ pub struct Link {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct StackRecord {
     pub base: StackBase,
     pub size: Option<UInt>,
@@ -96,7 +88,6 @@ pub struct StackRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct StackBase {
     #[serde(rename = "ref")]
     pub branch: String,

@@ -55,7 +55,6 @@ pub enum CheckSuiteAction {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct CheckSuiteRecord {
     pub id: UInt,
     pub node_id: String,
