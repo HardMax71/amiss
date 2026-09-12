@@ -28,7 +28,7 @@ use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryId
 
 use crate::check::CheckRunStatus;
 use crate::pull::PullRequestRecord;
-use crate::repository::pull::PullRepositoryRecord;
+use crate::repository::WorkflowRepositoryRecord;
 use crate::webhook::event::{GitHubEvent, PullAction};
 use crate::webhook::workflow::{WorkflowRunAction, WorkflowRunEvent};
 use crate::webhook::{GitHubPayload, Installation, WorkflowRunConclusion};
@@ -433,7 +433,7 @@ fn authenticate_pull_request<Pull, Action>(
 
 fn authenticated_repository(
     installation: Option<&Installation>,
-    repository: &PullRepositoryRecord,
+    repository: &WorkflowRepositoryRecord,
     provider: &ProviderIdentity,
 ) -> Result<(u64, u64, RepositoryIdentity), ProviderError> {
     let installation_id = installation

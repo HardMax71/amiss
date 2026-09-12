@@ -7,7 +7,7 @@ pub(super) use crate::commit::GitCommitRecord;
 pub(super) use crate::pull::PullRequestRecord;
 pub(super) use crate::reference::RefRecord;
 pub(super) use crate::repository::RepositoryRecord;
-pub(super) use crate::repository::pull::PullRepositoryRecord;
+pub(super) use crate::repository::WorkflowRepositoryRecord;
 
 use super::rules::BranchRule;
 

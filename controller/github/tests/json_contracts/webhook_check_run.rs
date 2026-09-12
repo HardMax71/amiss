@@ -1,4 +1,3 @@
-use amiss_controller_github::repository::pull::PullRepositoryRecord;
 use amiss_controller_github::webhook::run::{CheckRunEvent, RequestedAction};
 
 #[test]
@@ -97,30 +96,17 @@ fn check_run_requests_require_the_action_but_not_optional_identifier_metadata() 
 }
 
 #[test]
-fn legacy_check_run_repositories_allow_absence_but_not_invalid_availability() {
+fn check_run_repository_availability_is_unconsumed_metadata() {
     let event: CheckRunEvent =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_CHECK_RUN).unwrap();
     let input = serde_json::to_string(&event).unwrap();
-    for (replacement, valid) in [
-        ("", true),
-        (r#""disabled":null,"#, false),
-        (r#""disabled":"false","#, false),
-        (r#""disabled":false,"\u0064isabled":false,"#, false),
-    ] {
-        let candidate = input.replacen(r#""disabled":false,"#, replacement, 1);
-        assert_ne!(candidate, input);
-        assert_eq!(
-            serde_json::from_str::<CheckRunEvent>(&candidate).is_ok(),
-            valid,
-            "{replacement}"
-        );
-        let repository = serde_json::to_string(&event.repository).unwrap().replacen(
-            r#""disabled":false,"#,
-            replacement,
+    for availability in ["null", "false", r#""future""#, "[]"] {
+        let candidate = input.replacen(
+            r#""repository":{"#,
+            &format!(r#""repository":{{"disabled":{availability},"#),
             1,
         );
-        assert!(
-            amiss_wire::read_json::<PullRepositoryRecord>(repository.as_bytes(), u64::MAX).is_err()
-        );
+        assert_ne!(candidate, input);
+        assert!(serde_json::from_str::<CheckRunEvent>(&candidate).unwrap() == event);
     }
 }

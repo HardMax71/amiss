@@ -9,7 +9,6 @@ use strum::{Display, EnumString};
 use crate::check::CheckRunStatus;
 use crate::owner::OwnerRecord;
 use crate::repository::WorkflowRepositoryRecord;
-use crate::repository::pull::PullRepositoryRecord;
 use crate::workflow::{ReferencedWorkflow, WorkflowCommit, WorkflowPullRequest};
 
 pub mod app;
@@ -35,7 +34,7 @@ pub struct GitHubPayload<Pull = PullRequestRecord, Action = String> {
     pub changes: Option<PullRequestChanges>,
     pub installation: Option<Installation>,
     #[serde(default, deserialize_with = "deserialize_some")]
-    pub repository: Option<PullRepositoryRecord>,
+    pub repository: Option<WorkflowRepositoryRecord>,
     pub number: Option<u64>,
     #[serde(default, deserialize_with = "deserialize_some")]
     pub issue: Option<issue::IssueRecord<issue::context::IssueActivityContext>>,

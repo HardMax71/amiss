@@ -7,7 +7,7 @@ use super::Reactions;
 use crate::check::{CheckRunApp, EnterpriseRecord};
 use crate::owner::OwnerRecord;
 use crate::pull::metadata::AuthorAssociation;
-use crate::repository::pull::PullRepositoryRecord;
+use crate::repository::WorkflowRepositoryRecord;
 use crate::webhook::issue::IssueRecord;
 use crate::webhook::pull::PullRequestAccountKind;
 use crate::webhook::repository::WorkflowOwner;
@@ -42,7 +42,7 @@ pub enum IssueCommentEvent {
 pub struct IssueCommentPayload<Comment = IssueCommentRecord> {
     pub issue: IssueRecord,
     pub comment: Comment,
-    pub repository: PullRepositoryRecord,
+    pub repository: WorkflowRepositoryRecord,
     pub sender: OwnerRecord,
     pub installation: Option<Installation>,
     pub organization: Option<Organization>,

@@ -1,114 +1,42 @@
-use amiss_controller_github::repository::metadata::RepositoryOrganization;
-use amiss_controller_github::repository::pull::PullRepositoryRecord;
+use amiss_controller_github::repository::WorkflowRepositoryRecord;
 use amiss_controller_github::repository::template::{TemplateOwner, TemplateRepository};
 use amiss_controller_github::webhook::GitHubPayload;
-use amiss_wire::assessment::Nullable;
 
 #[test]
-fn webhook_root_keeps_repository_identity_without_owner_metadata() {
+fn webhook_root_keeps_repository_identity_without_metadata() {
     let input = amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY;
-    let record: PullRepositoryRecord = serde_json::from_slice(input).unwrap();
+    let record: WorkflowRepositoryRecord = serde_json::from_slice(input).unwrap();
     let encoded = serde_json::to_vec(&record).unwrap();
     assert_eq!(
-        serde_json::from_slice::<PullRepositoryRecord>(&encoded).unwrap(),
+        serde_json::from_slice::<WorkflowRepositoryRecord>(&encoded).unwrap(),
         record
     );
     assert_eq!(record.owner.login, "octo-org");
     assert_eq!(record.full_name, "octo-org/octo-repo");
     assert!(serde_json::from_str::<GitHubPayload>(r#"{"repository":null}"#).is_err());
-    let envelope = serde_json::from_str::<GitHubPayload>("{}").unwrap();
-    assert_eq!(envelope.repository, None);
+    assert_eq!(
+        serde_json::from_str::<GitHubPayload>("{}")
+            .unwrap()
+            .repository,
+        None
+    );
 }
 
 #[test]
-fn webhook_repository_additions_keep_presence_and_known_value_shapes() {
-    let record: PullRepositoryRecord =
+fn webhook_repository_metadata_does_not_expand_the_consumed_contract() {
+    let record: WorkflowRepositoryRecord =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap();
-    let wire = serde_json::to_string(&record).unwrap();
-    for extra in [
-        r#""network_count":0,"subscribers_count":9007199254740991"#,
-        r#""organization":null,"template_repository":null"#,
-        r#""organization":"octo-org""#,
-        r#""template_repository":{}"#,
-        r#""template_repository":{"owner":{},"permissions":{"pull":false}}"#,
+    let encoded = serde_json::to_string(&record).unwrap();
+    for metadata in [
+        r#""network_count":-1,"subscribers_count":false,"organization":null"#,
+        r#""template_repository":{"owner":{},"permissions":[]},"unknown":true"#,
+        r#""custom_properties":{"future":{"nested":[]}},"disabled":"future""#,
     ] {
-        let input = wire.replacen('{', &format!("{{{extra},"), 1);
-        let decoded: PullRepositoryRecord = serde_json::from_str(&input).unwrap();
+        let input = encoded.replacen('{', &format!("{{{metadata},"), 1);
         assert_eq!(
-            amiss_wire::read_json::<PullRepositoryRecord>(input.as_bytes(), u64::MAX).unwrap(),
-            decoded
+            serde_json::from_str::<WorkflowRepositoryRecord>(&input).unwrap(),
+            record
         );
-        assert_eq!(
-            amiss_fixtures::canonical_json(input.as_bytes()).unwrap(),
-            amiss_fixtures::canonical_json(&serde_json::to_vec(&decoded).unwrap()).unwrap()
-        );
-    }
-    for extra in [
-        r#""network_count":null"#,
-        r#""network_count":-1"#,
-        r#""network_count":9007199254740992"#,
-        r#""subscribers_count":1.0"#,
-        r#""subscribers_count":1e0"#,
-        r#""subscribers_count":-0"#,
-        r#""organization":{}"#,
-        r#""organization":false"#,
-        r#""template_repository":false"#,
-        r#""template_repository":{"unknown":true}"#,
-        r#""template_repository":{"owner":{"unknown":true}}"#,
-        r#""template_repository":{"permissions":{"unknown":true}}"#,
-        r#""template_repository":{"owner":null}"#,
-        r#""template_repository":{"owner":{"login":null}}"#,
-        r#""template_repository":{"description":null}"#,
-        r#""template_repository":{"permissions":null}"#,
-        r#""template_repository":null,"\u0074emplate_repository":{}"#,
-    ] {
-        let input = wire.replacen('{', &format!("{{{extra},"), 1);
-        assert!(
-            serde_json::from_str::<PullRepositoryRecord>(&input).is_err(),
-            "{extra}"
-        );
-        assert!(
-            amiss_wire::read_json::<PullRepositoryRecord>(input.as_bytes(), u64::MAX).is_err(),
-            "{extra}"
-        );
-    }
-    for properties in [
-        r#"{"team":"docs","areas":["api","book"],"unset":null}"#,
-        r#"{"empty":[],"name":""}"#,
-    ] {
-        let input = wire.replacen(
-            r#""custom_properties":{}"#,
-            &format!(r#""custom_properties":{properties}"#),
-            1,
-        );
-        assert_ne!(input, wire);
-        let decoded: PullRepositoryRecord = serde_json::from_str(&input).unwrap();
-        assert_eq!(
-            amiss_wire::read_json::<PullRepositoryRecord>(input.as_bytes(), u64::MAX).unwrap(),
-            decoded
-        );
-        assert_eq!(
-            amiss_fixtures::canonical_json(input.as_bytes()).unwrap(),
-            amiss_fixtures::canonical_json(&serde_json::to_vec(&decoded).unwrap()).unwrap()
-        );
-    }
-    for properties in [
-        "null",
-        r#"{"flag":false}"#,
-        r#"{"nested":{}}"#,
-        r#"{"team":"docs","\u0074eam":"api"}"#,
-    ] {
-        let input = wire.replacen(
-            r#""custom_properties":{}"#,
-            &format!(r#""custom_properties":{properties}"#),
-            1,
-        );
-        assert_ne!(input, wire);
-        assert!(
-            serde_json::from_str::<PullRepositoryRecord>(&input).is_err(),
-            "{properties}"
-        );
-        assert!(amiss_wire::read_json::<PullRepositoryRecord>(input.as_bytes(), u64::MAX).is_err());
     }
 }
 
@@ -133,33 +61,6 @@ fn webhook_template_keeps_its_complete_distinct_optional_contract() {
         serde_json::to_string(&TemplateOwner::default()).unwrap(),
         "{}"
     );
-    let mut root: PullRepositoryRecord =
-        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap();
-    root.organization = Some(Nullable::Value(RepositoryOrganization::Account(Box::new(
-        root.owner.clone(),
-    ))));
-    root.template_repository = Some(Nullable::Value(template));
-    let encoded = serde_json::to_vec(&root).unwrap();
-    assert_eq!(
-        serde_json::from_slice::<PullRepositoryRecord>(&encoded).unwrap(),
-        root
-    );
-    assert_eq!(
-        amiss_wire::read_json::<PullRepositoryRecord>(&encoded, u64::MAX).unwrap(),
-        root
-    );
-    let owner = serde_json::to_string(&root.owner).unwrap();
-    for invalid in [
-        owner.replacen(r#""login":"octo-org""#, r#""login":null"#, 1),
-        owner.replacen(r#""login":"octo-org""#, "", 1),
-        owner.replacen('{', r#"{"login":"other","#, 1),
-    ] {
-        assert_ne!(invalid, owner);
-        assert!(serde_json::from_str::<RepositoryOrganization>(&invalid).is_err());
-        assert!(
-            amiss_wire::read_json::<RepositoryOrganization>(invalid.as_bytes(), u64::MAX).is_err()
-        );
-    }
     for input in [
         r#"{"id":9007199254740992}"#,
         r#"{"id":1.0}"#,

@@ -6,7 +6,7 @@ use strum::{Display, EnumString};
 
 pub mod metadata;
 
-use crate::repository::pull::PullRepositoryRecord;
+use crate::repository::WorkflowRepositoryRecord;
 
 #[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -33,7 +33,7 @@ pub enum State {
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(bound(deserialize = "Repository: Deserialize<'de>"))]
-pub struct PullRefRecord<Repository = Option<PullRepositoryRecord>> {
+pub struct PullRefRecord<Repository = Option<WorkflowRepositoryRecord>> {
     #[serde(rename = "ref")]
     pub branch: String,
     pub sha: Oid,

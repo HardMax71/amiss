@@ -14,8 +14,9 @@ use amiss_controller::{
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitea::{DedicatedReviewer, GiteaPullRequestSource};
 use amiss_controller_github::GitHubPullRequestSource;
+use amiss_controller_github::owner::OwnerRecord;
 use amiss_controller_github::pull::PullRequestRecord;
-use amiss_controller_github::repository::pull::PullRepositoryRecord;
+use amiss_controller_github::repository::WorkflowRepositoryRecord;
 use amiss_controller_github::webhook::{GitHubPayload, Installation};
 use amiss_controller_gitlab::claims::{Claims, RequestHint};
 use amiss_controller_gitlab::{GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust};
@@ -357,13 +358,14 @@ fn authenticate_webhook<S>(
 )]
 fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
     type Change = fn(&mut GitHubPayload, &[u8]);
-    let mut root: PullRepositoryRecord =
-        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY)
-            .expect("the published webhook repository is complete");
-    root.id = 11;
-    "widget".clone_into(&mut root.name);
-    "acme/widget".clone_into(&mut root.full_name);
-    "acme".clone_into(&mut root.owner.login);
+    let root = WorkflowRepositoryRecord {
+        id: 11,
+        name: "widget".to_owned(),
+        full_name: "acme/widget".to_owned(),
+        owner: OwnerRecord {
+            login: "acme".to_owned(),
+        },
+    };
     let mut pull: PullRequestRecord = serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_PULL)
         .expect("the published webhook PR is complete");
     pull.id = 33;

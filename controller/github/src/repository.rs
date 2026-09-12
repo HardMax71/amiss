@@ -5,7 +5,6 @@ use serde_with::{As, TryFromInto};
 use crate::owner::OwnerRecord;
 
 pub mod metadata;
-pub mod pull;
 pub mod template;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]

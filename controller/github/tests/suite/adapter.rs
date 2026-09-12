@@ -25,9 +25,9 @@ use amiss_controller::{
     UntrustedDelivery, WebhookKey, WebhookKeyring, WorkflowArtifactExpectation,
 };
 use amiss_controller_github::check::CheckRunStatus;
+use amiss_controller_github::owner::OwnerRecord;
 use amiss_controller_github::pull::PullRequestRecord;
-use amiss_controller_github::repository::metadata::RepositoryOrganization;
-use amiss_controller_github::repository::pull::PullRepositoryRecord;
+use amiss_controller_github::repository::WorkflowRepositoryRecord;
 use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::pull::request::SynchronizePullRequest;
 use amiss_controller_github::webhook::workflow::{WorkflowRunAction, WorkflowRunEvent};
@@ -51,12 +51,14 @@ use sha2::Sha256;
 const NOW: i64 = 1_800_000_000_000;
 const SECRET: &[u8] = b"github-webhook-secret";
 static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
-    let mut repository: PullRepositoryRecord =
-        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap();
-    repository.id = 101;
-    "widget".clone_into(&mut repository.name);
-    "HardMax71/widget".clone_into(&mut repository.full_name);
-    "HardMax71".clone_into(&mut repository.owner.login);
+    let repository = WorkflowRepositoryRecord {
+        id: 101,
+        name: "widget".to_owned(),
+        full_name: "HardMax71/widget".to_owned(),
+        owner: OwnerRecord {
+            login: "HardMax71".to_owned(),
+        },
+    };
     let mut pull: PullRequestRecord =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_PULL).unwrap();
     pull.id = 4_201;
@@ -381,7 +383,7 @@ fn signed_workflow_repositories_keep_owner_binding_without_owner_metadata() {
             r#""fork":[],"description":false,"extra":{},"#,
         ),
     ] {
-        assert_eq!(body.matches(&repository).count(), 1);
+        assert!(body.contains(&repository));
         let metadata = repository
             .replacen(
                 r#""owner":{"#,
@@ -390,7 +392,7 @@ fn signed_workflow_repositories_keep_owner_binding_without_owner_metadata() {
             )
             .replacen('{', &format!("{{{metadata}"), 1);
         assert_ne!(metadata, repository);
-        let changed = body.replacen(&repository, &metadata, 1);
+        let changed = body.replace(&repository, &metadata);
         assert_eq!(
             authenticate_target(&source, changed.as_bytes(), &target)
                 .unwrap()
@@ -403,7 +405,7 @@ fn signed_workflow_repositories_keep_owner_binding_without_owner_metadata() {
             repository.replacen(r#""owner":{"#, r#""owner":{"login":null,"#, 1),
         ] {
             assert_ne!(invalid, repository);
-            let changed = body.replacen(&repository, &invalid, 1);
+            let changed = body.replace(&repository, &invalid);
             assert_eq!(
                 authenticate_target(&source, changed.as_bytes(), &target),
                 Err(ProviderError::Authentication)
@@ -617,24 +619,24 @@ fn pull_request_identity_excludes_root_metadata() {
     let original = authenticate_target(&source, &BODY, &target)
         .unwrap()
         .unwrap();
-    let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
-    let root = payload.repository.as_mut().unwrap();
-    root.node_id = "root-metadata-only".to_owned();
-    root.network_count = Some(1_u32.into());
-    root.organization = Some(amiss_wire::assessment::Nullable::Value(
-        RepositoryOrganization::Name("unrelated-metadata".to_owned()),
-    ));
+    let payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
     let input = serde_json::to_string(&payload).unwrap();
-    let metadata = input.replace(
-        r#""owner":{"#,
-        r#""owner":{"id":null,"name":{},"type":"future","#,
-    );
+    let metadata = input
+        .replacen(
+            r#""repository":{"#,
+            r#""repository":{"node_id":null,"network_count":false,"organization":{},"#,
+            1,
+        )
+        .replace(
+            r#""owner":{"#,
+            r#""owner":{"id":null,"name":{},"type":"future","#,
+        );
     assert_ne!(metadata, input);
     let accepted = authenticate_target(&source, metadata.as_bytes(), &target)
         .unwrap()
         .unwrap();
     assert_eq!(accepted.delivery(), original.delivery());
-    let mutations: [fn(&mut PullRepositoryRecord); 4] = [
+    let mutations: [fn(&mut WorkflowRepositoryRecord); 4] = [
         |base| base.id += 1,
         |base| base.name = "other".to_owned(),
         |base| base.full_name = "other/widget".to_owned(),
@@ -885,9 +887,15 @@ fn signed_pull_metadata_does_not_change_authenticated_identity() {
             r#""user":null,"label":false,"labels":false,"body":{}"#,
             r#""allow_auto_merge":[],"merge_commit_message":{}"#,
         ] {
-            for member in [r#""pull_request":{"#, r#""head":{"#, r#""base":{"#] {
-                assert_eq!(body.matches(member).count(), 1);
-                let input = body.replacen(member, &format!("{member}{metadata},"), 1);
+            for member in [
+                r#""pull_request":{"#,
+                r#""head":{"#,
+                r#""base":{"#,
+                r#""repo":{"#,
+                r#""repository":{"#,
+            ] {
+                assert!(body.contains(member));
+                let input = body.replace(member, &format!("{member}{metadata},"));
                 assert_eq!(
                     authenticate_target(&source, input.as_bytes(), &target)
                         .unwrap()
@@ -1471,12 +1479,14 @@ fn workflow_payload() -> WorkflowRunEvent {
             },
         },
     })];
-    let mut repository: PullRepositoryRecord =
-        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap();
-    repository.id = 101;
-    "widget".clone_into(&mut repository.name);
-    "HardMax71/widget".clone_into(&mut repository.full_name);
-    "HardMax71".clone_into(&mut repository.owner.login);
+    let repository = WorkflowRepositoryRecord {
+        id: 101,
+        name: "widget".to_owned(),
+        full_name: "HardMax71/widget".to_owned(),
+        owner: OwnerRecord {
+            login: "HardMax71".to_owned(),
+        },
+    };
     WorkflowRunEvent {
         action: WorkflowRunAction::Completed,
         sender: repository.owner.clone(),

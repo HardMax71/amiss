@@ -13,7 +13,7 @@ use super::{Installation, Organization, PreviousReference};
 use crate::check::EnterpriseRecord;
 use crate::owner::OwnerRecord;
 use crate::pull::metadata::{AuthorAssociation, Link};
-use crate::repository::pull::PullRepositoryRecord;
+use crate::repository::WorkflowRepositoryRecord;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
@@ -49,7 +49,7 @@ pub enum ReviewEvent {
 pub struct ReviewPayload<Pull = ReviewActivityPullRequest, Review = ReviewRecord> {
     pub review: Review,
     pub pull_request: Pull,
-    pub repository: PullRepositoryRecord,
+    pub repository: WorkflowRepositoryRecord,
     pub sender: OwnerRecord,
     pub installation: Option<Installation>,
     pub organization: Option<Organization>,

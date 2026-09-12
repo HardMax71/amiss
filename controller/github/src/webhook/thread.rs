@@ -12,7 +12,6 @@ use crate::check::EnterpriseRecord;
 use crate::owner::OwnerRecord;
 use crate::pull::PullRefRecord;
 use crate::repository::WorkflowRepositoryRecord;
-use crate::repository::pull::PullRepositoryRecord;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
@@ -54,7 +53,7 @@ pub struct ThreadPayload<
 > {
     pub thread: ReviewThread<ReviewCommentRecord<OriginalLine, Account>>,
     pub pull_request: ThreadPullRequest<Account, Head, RequestedTeam, Title>,
-    pub repository: PullRepositoryRecord,
+    pub repository: WorkflowRepositoryRecord,
     pub sender: Option<OwnerRecord>,
     pub installation: Option<Installation>,
     pub organization: Option<Organization>,

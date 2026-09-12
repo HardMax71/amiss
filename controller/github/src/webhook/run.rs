@@ -8,7 +8,7 @@ use super::app::WebhookApp;
 use super::{Installation, Organization, WorkflowRunConclusion};
 use crate::check::{AppOwner, CheckRunRecord, EnterpriseRecord};
 use crate::owner::OwnerRecord;
-use crate::repository::pull::PullRepositoryRecord;
+use crate::repository::WorkflowRepositoryRecord;
 
 #[serde_with::apply(Option<_> => #[serde(
     default,
@@ -21,7 +21,7 @@ pub struct CheckRunEvent<Action = CheckRunActivity> {
     #[serde(flatten)]
     pub action: Action,
     pub check_run: CheckRunRecord<WebhookApp<Nullable<AppOwner>>, WebhookCheckRunConclusion>,
-    pub repository: PullRepositoryRecord<WebhookRepositoryAvailability>,
+    pub repository: WorkflowRepositoryRecord,
     pub sender: OwnerRecord,
     pub installation: Option<Installation>,
     pub organization: Option<Organization>,
@@ -78,17 +78,6 @@ pub enum RequestedActionKind {
 #[serde(deny_unknown_fields)]
 pub struct RequestedActionIdentifier {
     pub identifier: Option<String>,
-}
-
-#[serde_with::apply(Option<_> => #[serde(
-    default,
-    deserialize_with = "deserialize_some",
-    skip_serializing_if = "Option::is_none"
-)])]
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct WebhookRepositoryAvailability {
-    pub disabled: Option<bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]

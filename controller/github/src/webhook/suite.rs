@@ -10,7 +10,7 @@ use super::app::WebhookApp;
 use super::{Committer, Installation, Organization, WorkflowRunConclusion};
 use crate::check::{CheckRunStatus, EnterpriseRecord};
 use crate::owner::OwnerRecord;
-use crate::repository::pull::PullRepositoryRecord;
+use crate::repository::WorkflowRepositoryRecord;
 use crate::workflow::{WorkflowCommit, WorkflowPullRequest};
 
 #[serde_with::apply(Option<_> => #[serde(
@@ -23,7 +23,7 @@ use crate::workflow::{WorkflowCommit, WorkflowPullRequest};
 pub struct CheckSuiteEvent {
     pub action: CheckSuiteAction,
     pub check_suite: CheckSuiteRecord,
-    pub repository: PullRepositoryRecord,
+    pub repository: WorkflowRepositoryRecord,
     pub sender: OwnerRecord,
     pub installation: Option<Installation>,
     pub organization: Option<Organization>,

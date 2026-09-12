@@ -23,8 +23,8 @@ use crate::owner::OwnerRecord;
 use crate::pull::{PullRefRecord, State};
 
 use super::model::{
-    CheckRunRecord, CommitRecord, CreateCheckRun, PullRepositoryRecord, PullRequestRecord,
-    RefreshData, RepositoryRecord,
+    CheckRunRecord, CommitRecord, CreateCheckRun, PullRequestRecord, RefreshData, RepositoryRecord,
+    WorkflowRepositoryRecord,
 };
 use super::publication::{CheckRunDecision, publication_decision, validate_created};
 use super::rest::{GitHubRest, OperationDeadline};
@@ -1057,17 +1057,13 @@ impl GitHubRest for FakeRest {
 }
 
 fn refresh_data(candidate: &Oid) -> RefreshData {
-    let captured: PullRequestRecord =
-        serde_json::from_slice(include_bytes!("../../tests/fixtures/pull-request.json")).unwrap();
-    let repository = captured.base.repo.clone().unwrap();
-    let base_repository = PullRepositoryRecord {
+    let base_repository = WorkflowRepositoryRecord {
         id: 101,
         name: "widget".to_owned(),
         full_name: "Acme/Widget".to_owned(),
         owner: OwnerRecord {
             login: "Acme".to_owned(),
         },
-        ..repository.clone()
     };
     RefreshData {
         repository: RepositoryRecord {
@@ -1086,14 +1082,13 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             head: PullRefRecord {
                 sha: candidate.clone(),
                 branch: "topic".to_owned(),
-                repo: Some(PullRepositoryRecord {
+                repo: Some(WorkflowRepositoryRecord {
                     id: 202,
                     name: "widget-fork".to_owned(),
                     full_name: "Contributor/widget-fork".to_owned(),
                     owner: OwnerRecord {
                         login: "Contributor".to_owned(),
                     },
-                    ..repository
                 }),
             },
             base: PullRefRecord {

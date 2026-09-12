@@ -14,7 +14,7 @@ use super::{Installation, Organization};
 use crate::check::EnterpriseRecord;
 use crate::owner::OwnerRecord;
 use crate::pull::metadata::{AuthorAssociation, Link};
-use crate::repository::pull::PullRepositoryRecord;
+use crate::repository::WorkflowRepositoryRecord;
 
 pub mod issue;
 
@@ -68,7 +68,7 @@ pub struct CommentPayload<
 > {
     pub comment: ReviewCommentRecord<OriginalLine>,
     pub pull_request: CommentPullRequest<PullRequestContext<Assignee, Requested, Creator>>,
-    pub repository: PullRepositoryRecord,
+    pub repository: WorkflowRepositoryRecord,
     pub sender: OwnerRecord,
     pub installation: Option<Installation>,
     pub organization: Option<Organization>,

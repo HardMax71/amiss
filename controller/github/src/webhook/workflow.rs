@@ -6,7 +6,7 @@ use strum::{Display, EnumString};
 use super::{Installation, Organization, Workflow, WorkflowRun};
 use crate::check::EnterpriseRecord;
 use crate::owner::OwnerRecord;
-use crate::repository::pull::PullRepositoryRecord;
+use crate::repository::WorkflowRepositoryRecord;
 
 #[serde_with::apply(Option<_> => #[serde(
     default,
@@ -17,7 +17,7 @@ use crate::repository::pull::PullRepositoryRecord;
 #[serde(deny_unknown_fields)]
 pub struct WorkflowRunEvent<Run = WorkflowRun, Action = WorkflowRunAction> {
     pub action: Action,
-    pub repository: PullRepositoryRecord,
+    pub repository: WorkflowRepositoryRecord,
     pub sender: OwnerRecord,
     #[serde_with(skip_apply)]
     #[serde(deserialize_with = "Option::deserialize")]

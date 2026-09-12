@@ -6,7 +6,8 @@ use amiss_controller::{
     IngressPolicy, OidPair, ProviderError, Publication, RunIdentity, RunRefs, UntrustedDelivery,
 };
 use amiss_controller_fixtures::clock::TestClock;
-use amiss_controller_github::repository::pull::PullRepositoryRecord;
+use amiss_controller_github::owner::OwnerRecord;
+use amiss_controller_github::repository::WorkflowRepositoryRecord;
 use amiss_controller_github::webhook::pull::request::SynchronizePullRequest;
 use amiss_controller_github::webhook::{GitHubPayload, Installation};
 use amiss_controller_github::{GitHubApi, GitHubPullRequest, GitHubPullRequestSource};
@@ -31,12 +32,14 @@ impl SignedEvent {
     }
 
     pub(super) fn for_target(candidate: &Oid, target: &str, secret: &[u8]) -> Self {
-        let mut root: PullRepositoryRecord =
-            serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY).unwrap();
-        root.id = REPOSITORY_ID;
-        "widget".clone_into(&mut root.name);
-        "acme/widget".clone_into(&mut root.full_name);
-        "acme".clone_into(&mut root.owner.login);
+        let root = WorkflowRepositoryRecord {
+            id: REPOSITORY_ID,
+            name: "widget".to_owned(),
+            full_name: "acme/widget".to_owned(),
+            owner: OwnerRecord {
+                login: "acme".to_owned(),
+            },
+        };
         let mut pull: SynchronizePullRequest =
             serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_PULL).unwrap();
         pull.id = PULL_REQUEST_ID;

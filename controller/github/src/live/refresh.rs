@@ -7,7 +7,7 @@ use crate::GitHubPullRequest;
 use crate::pull::State;
 
 use super::Config;
-use super::model::{PullRepositoryRecord, PullRequestRecord, RefreshData, RepositoryRecord};
+use super::model::{PullRequestRecord, RefreshData, RepositoryRecord, WorkflowRepositoryRecord};
 use super::rules::BranchRule;
 
 pub(super) fn validate_request(
@@ -247,7 +247,7 @@ pub(super) fn repository_identity(
 
 fn pull_repository_identity(
     config: &Config,
-    repository: &PullRepositoryRecord,
+    repository: &WorkflowRepositoryRecord,
 ) -> Result<RepositoryIdentity, ProviderError> {
     (repository.id > 0)
         .then_some(())
