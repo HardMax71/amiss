@@ -7,11 +7,11 @@ use super::comment::ReviewCommentRecord;
 use super::pull::thread::ThreadPullRequest;
 use super::pull::{PullRequestAccountKind, ReviewTeam, Team};
 use super::repository::WorkflowOwner;
-use super::repository::pull::PullRepository;
 use super::{Installation, Organization};
 use crate::check::EnterpriseRecord;
 use crate::owner::OwnerRecord;
 use crate::pull::PullRefRecord;
+use crate::repository::WorkflowRepositoryRecord;
 use crate::repository::pull::PullRepositoryRecord;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -23,7 +23,13 @@ pub enum ReviewThreadEvent {
     },
     Unresolved {
         #[serde(flatten)]
-        event: ThreadPayload<UInt, WorkflowOwner, PullRefRecord<PullRepository>, Team, String>,
+        event: ThreadPayload<
+            UInt,
+            WorkflowOwner,
+            PullRefRecord<WorkflowRepositoryRecord<Option<OwnerRecord>>>,
+            Team,
+            String,
+        >,
     },
 }
 
@@ -42,7 +48,7 @@ pub enum ReviewThreadEvent {
 pub struct ThreadPayload<
     OriginalLine = Nullable<UInt>,
     Account = WorkflowOwner<PullRequestAccountKind>,
-    Head = PullRefRecord<Option<PullRepository>>,
+    Head = PullRefRecord<Option<WorkflowRepositoryRecord<Option<OwnerRecord>>>>,
     RequestedTeam = ReviewTeam,
     Title = Option<String>,
 > {

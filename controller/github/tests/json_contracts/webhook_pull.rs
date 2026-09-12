@@ -36,7 +36,7 @@ fn synchronize_refs_preserve_required_nullable_participants() {
         &input,
         &[
             (r#","repo":null"#, ""),
-            (r#""owner":null,"#, ""),
+            (r#""owner":null"#, r#""missing_owner":null"#),
             (r#""repo":null"#, r#""repo":false"#),
         ],
     );

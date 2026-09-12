@@ -1,9 +1,10 @@
+use amiss_controller_github::owner::OwnerRecord;
 use amiss_controller_github::pull::PullRefRecord;
 use amiss_controller_github::pull::metadata::{AutoMergeRecord, MergeMethod};
+use amiss_controller_github::repository::WorkflowRepositoryRecord;
 use amiss_controller_github::webhook::pull::Team;
 use amiss_controller_github::webhook::pull::thread::ThreadPullRequest;
 use amiss_controller_github::webhook::repository::WorkflowOwner;
-use amiss_controller_github::webhook::repository::pull::PullRepository;
 use amiss_controller_github::webhook::review::ReviewEvent;
 use amiss_controller_github::webhook::thread::{ReviewThread, ReviewThreadEvent, ThreadPayload};
 use amiss_wire::assessment::Nullable;
@@ -119,7 +120,12 @@ fn thread_pr_profiles_keep_head_and_merge_title_rules() {
         );
         assert_eq!(
             serde_json::from_str::<
-                ThreadPullRequest<WorkflowOwner, PullRefRecord<PullRepository>, Team, String>,
+                ThreadPullRequest<
+                    WorkflowOwner,
+                    PullRefRecord<WorkflowRepositoryRecord<Option<OwnerRecord>>>,
+                    Team,
+                    String,
+                >,
             >(&candidate)
             .is_ok(),
             unresolved,

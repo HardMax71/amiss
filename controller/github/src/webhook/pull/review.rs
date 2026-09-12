@@ -6,12 +6,13 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto};
 
 use super::{LockReason, PullRequestAccountKind, Reviewer, Team};
+use crate::owner::OwnerRecord;
 use crate::pull::metadata::{
     AuthorAssociation, AutoMergeRecord, LabelRecord, MilestoneRecord, PullRequestLinks, StackRecord,
 };
 use crate::pull::{PullRefRecord, State};
+use crate::repository::WorkflowRepositoryRecord;
 use crate::webhook::repository::WorkflowOwner;
-use crate::webhook::repository::pull::PullRepository;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -30,7 +31,7 @@ pub struct PullRequestContext<
     Requested = Reviewer,
     Creator = WorkflowOwner<PullRequestAccountKind>,
     User = WorkflowOwner<PullRequestAccountKind>,
-    Head = PullRefRecord<Option<PullRepository>>,
+    Head = PullRefRecord<Option<WorkflowRepositoryRecord<Option<OwnerRecord>>>>,
 > {
     pub id: u64,
     pub number: u64,
@@ -39,7 +40,7 @@ pub struct PullRequestContext<
         deserialize_with = "Head::deserialize"
     )]
     pub head: Head,
-    pub base: PullRefRecord<PullRepository>,
+    pub base: PullRefRecord<WorkflowRepositoryRecord<Option<OwnerRecord>>>,
     pub url: String,
     pub node_id: String,
     pub html_url: String,
@@ -75,7 +76,9 @@ pub struct PullRequestContext<
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ReviewActivityPullRequest<Head = PullRefRecord<Option<PullRepository>>> {
+pub struct ReviewActivityPullRequest<
+    Head = PullRefRecord<Option<WorkflowRepositoryRecord<Option<OwnerRecord>>>>,
+> {
     #[serde(flatten)]
     pub request: PullRequestContext<
         WorkflowOwner<PullRequestAccountKind>,

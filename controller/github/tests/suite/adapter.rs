@@ -983,6 +983,19 @@ fn signed_nullable_refs_preserve_binding_and_missing_actions_stay_no_work() {
     let mut synchronize: GitHubPayload<SynchronizePullRequest> =
         serde_json::from_slice(&BODY).unwrap();
     synchronize.action = Some("synchronize".to_owned());
+    let wire = serde_json::to_string(&synchronize).unwrap();
+    let metadata = wire.replace(
+        r#""repo":{"#,
+        r#""repo":{"private":null,"visibility":"future","topics":{},"license":false,"extra":[],"#,
+    );
+    assert_ne!(metadata, wire);
+    assert_eq!(
+        authenticate_target(&source, metadata.as_bytes(), &target)
+            .unwrap()
+            .unwrap()
+            .delivery(),
+        original.delivery()
+    );
     let pull = synchronize.pull_request.as_mut().unwrap();
     pull.head.repo = None;
     let wire = serde_json::to_vec(&synchronize).unwrap();

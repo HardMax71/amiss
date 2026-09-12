@@ -4,10 +4,11 @@ use serde::{Deserialize, Serialize};
 
 use super::review::PullRequestContext;
 use super::{PullRequestAccountKind, ReviewTeam, Reviewer};
+use crate::owner::OwnerRecord;
 use crate::pull::PullRefRecord;
 use crate::pull::metadata::{AutoMergeRecord, StackRecord};
+use crate::repository::WorkflowRepositoryRecord;
 use crate::webhook::repository::WorkflowOwner;
-use crate::webhook::repository::pull::PullRepository;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(
@@ -18,7 +19,7 @@ use crate::webhook::repository::pull::PullRepository;
 )]
 pub struct ThreadPullRequest<
     Account = WorkflowOwner<PullRequestAccountKind>,
-    Head = PullRefRecord<Option<PullRepository>>,
+    Head = PullRefRecord<Option<WorkflowRepositoryRecord<Option<OwnerRecord>>>>,
     RequestedTeam = ReviewTeam,
     Title = Option<String>,
 > {

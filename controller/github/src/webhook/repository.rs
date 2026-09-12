@@ -5,8 +5,6 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-pub mod pull;
-
 #[serde_with::apply(Option<_> => #[serde(
     default,
     deserialize_with = "deserialize_some",
