@@ -1,6 +1,5 @@
 use amiss_controller::{ProviderError, decode_bounded_json};
 use amiss_controller_github::installation::InstallationToken;
-use amiss_controller_github::installation::permissions::AppPermissions;
 
 #[test]
 fn installation_token_input_requires_only_the_consumed_token() {
@@ -51,67 +50,4 @@ fn installation_token_input_rejects_invalid_consumed_fields() {
     }
     let native: InstallationToken = serde_json::from_str(r#"["synthetic"]"#).unwrap();
     assert_eq!(native.token, "synthetic");
-}
-
-#[test]
-fn installation_permissions_only_accept_their_declared_levels() {
-    for (field, accepted, rejected) in [
-        ("contents", &["read", "write"][..], &["admin"][..]),
-        (
-            "enterprise_custom_properties_for_organizations",
-            &["read", "write", "admin"][..],
-            &[][..],
-        ),
-        (
-            "organization_custom_properties",
-            &["read", "write", "admin"][..],
-            &[][..],
-        ),
-        (
-            "organization_projects",
-            &["read", "write", "admin"][..],
-            &[][..],
-        ),
-        (
-            "repository_projects",
-            &["read", "write", "admin"][..],
-            &[][..],
-        ),
-        (
-            "organization_events",
-            &["read"][..],
-            &["write", "admin"][..],
-        ),
-        ("organization_plan", &["read"][..], &["write", "admin"][..]),
-        ("profile", &["write"][..], &["read", "admin"][..]),
-        ("workflows", &["write"][..], &["read", "admin"][..]),
-    ] {
-        for level in accepted {
-            let input = format!("{{\"{field}\":\"{level}\"}}");
-            let permissions: AppPermissions = serde_json::from_str(&input).unwrap();
-            assert_eq!(serde_json::to_string(&permissions).unwrap(), input);
-            assert_eq!(
-                amiss_wire::read_json::<AppPermissions>(input.as_bytes(), u64::MAX).unwrap(),
-                permissions
-            );
-        }
-        for level in rejected.iter().chain(["unknown", "READ", "WRITE"].iter()) {
-            let input = format!("{{\"{field}\":\"{level}\"}}");
-            assert!(
-                serde_json::from_str::<AppPermissions>(&input).is_err(),
-                "{input}"
-            );
-            assert!(amiss_wire::read_json::<AppPermissions>(input.as_bytes(), u64::MAX).is_err());
-        }
-        for level in ["null", "false", "1", "[]", r#"{"read":null}"#] {
-            let input = format!("{{\"{field}\":{level}}}");
-            assert!(
-                serde_json::from_str::<AppPermissions>(&input).is_err(),
-                "{input}"
-            );
-            assert!(amiss_wire::read_json::<AppPermissions>(input.as_bytes(), u64::MAX).is_err());
-        }
-    }
-    let empty: AppPermissions = AppPermissions::default();
-    assert_eq!(serde_json::to_string(&empty).unwrap(), "{}");
 }

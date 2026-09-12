@@ -6,8 +6,6 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
-use crate::owner::OwnerRecord;
-
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(bound(deserialize = "App: Deserialize<'de>, Conclusion: Deserialize<'de>"))]
 pub struct CheckRunRecord<App = CheckRunApp, Conclusion = CheckRunConclusion> {
@@ -72,13 +70,6 @@ pub enum CheckRunConclusion {
 pub struct CheckRunApp {
     #[serde(with = "As::<TryFromInto<UInt>>")]
     pub id: u64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum AppOwner {
-    Account(Box<OwnerRecord>),
-    Enterprise(Box<EnterpriseRecord>),
 }
 
 #[serde_with::apply(Option<_> => #[serde(

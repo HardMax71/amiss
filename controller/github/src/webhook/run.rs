@@ -1,4 +1,3 @@
-use amiss_wire::assessment::Nullable;
 use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -6,7 +5,7 @@ use strum::{Display, EnumString};
 
 use super::app::WebhookApp;
 use super::{Installation, Organization, WorkflowRunConclusion};
-use crate::check::{AppOwner, CheckRunRecord, EnterpriseRecord};
+use crate::check::{CheckRunRecord, EnterpriseRecord};
 use crate::owner::OwnerRecord;
 use crate::repository::WorkflowRepositoryRecord;
 
@@ -20,7 +19,7 @@ use crate::repository::WorkflowRepositoryRecord;
 pub struct CheckRunEvent<Action = CheckRunActivity> {
     #[serde(flatten)]
     pub action: Action,
-    pub check_run: CheckRunRecord<WebhookApp<Nullable<AppOwner>>, WebhookCheckRunConclusion>,
+    pub check_run: CheckRunRecord<WebhookApp, WebhookCheckRunConclusion>,
     pub repository: WorkflowRepositoryRecord,
     pub sender: OwnerRecord,
     pub installation: Option<Installation>,

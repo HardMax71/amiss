@@ -1,4 +1,3 @@
-use amiss_controller_github::webhook::app::AppEvent;
 use amiss_controller_github::webhook::comment::issue::IssueCommentEvent;
 use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::issue::IssueRecord;
@@ -151,9 +150,7 @@ fn issue_accounts_and_apps_reuse_their_declared_contracts() -> Result<(), Box<dy
 
     let suite: CheckSuiteEvent =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_CHECK_SUITE).unwrap();
-    let mut app = suite.check_suite.app;
-    app.events = Some(vec![AppEvent::Reminder]);
-    issue.performed_via_github_app = Some(Nullable::Value(Box::new(app)));
+    issue.performed_via_github_app = Some(Nullable::Value(Box::new(suite.check_suite.app)));
     issue.context.assignee = Nullable::Null;
     issue.assignees = vec![None];
     let encoded = serde_json::to_vec(&issue).unwrap();

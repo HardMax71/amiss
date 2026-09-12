@@ -1,10 +1,109 @@
 use amiss_controller::ProviderError;
+use amiss_controller_github::GitHubPullRequestSource;
 use amiss_controller_github::webhook::GitHubPayload;
+use amiss_controller_github::webhook::app::WebhookApp;
+use amiss_controller_github::webhook::comment::issue::IssueCommentEvent;
 use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::run::{CheckRunAction, CheckRunEvent};
+use amiss_controller_github::webhook::suite::CheckSuiteEvent;
+use amiss_wire::assessment::Nullable;
 use amiss_wire::model::BranchRef;
 
-use super::{BODY, authenticate_target, replaced_once, source};
+use super::{
+    BODY, authenticate_target, provider, replaced_once, source, webhook, workflow_artifact,
+};
+
+#[test]
+fn signed_webhook_app_fields_preserve_no_work_in_every_consumer() {
+    let mut run: CheckRunEvent =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_CHECK_RUN).unwrap();
+    run.check_run.app = Some(WebhookApp { id: None });
+    let mut suite: CheckSuiteEvent =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_CHECK_SUITE).unwrap();
+    suite.check_suite.app.id = None;
+    let IssueCommentEvent::Created { mut event } =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap()
+    else {
+        panic!("the fixture is a created issue comment")
+    };
+    event.issue.performed_via_github_app = Some(Nullable::Value(Box::new(WebhookApp { id: None })));
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    for source in [
+        source(),
+        GitHubPullRequestSource::new(provider(), webhook(), &[workflow_artifact("321")]),
+    ] {
+        for (wire, member, old_action, actions) in [
+            (
+                serde_json::to_string(&run).unwrap(),
+                "app",
+                r#""action":"completed""#,
+                &[
+                    r#""action":"created""#,
+                    r#""action":"completed""#,
+                    r#""action":"rerequested""#,
+                    r#""action":"requested_action""#,
+                ][..],
+            ),
+            (
+                serde_json::to_string(&suite).unwrap(),
+                "app",
+                r#""action":"completed""#,
+                &[
+                    r#""action":"completed""#,
+                    r#""action":"requested""#,
+                    r#""action":"rerequested""#,
+                ][..],
+            ),
+            (
+                serde_json::to_string(&IssueCommentEvent::Created {
+                    event: event.clone(),
+                })
+                .unwrap(),
+                "performed_via_github_app",
+                r#""action":"created""#,
+                &[
+                    r#""action":"created""#,
+                    r#""action":"edited","changes":{}"#,
+                    r#""action":"deleted""#,
+                ][..],
+            ),
+        ] {
+            assert_eq!(wire.matches(old_action).count(), 1);
+            let marker = format!(r#""{member}":{{"id":null}}"#);
+            assert_eq!(wire.matches(&marker).count(), 1);
+            for action in actions {
+                let input = wire.replacen(old_action, action, 1);
+                assert_eq!(
+                    authenticate_target(&source, input.as_bytes(), &target),
+                    Ok(None)
+                );
+                for (app, valid) in [
+                    (
+                        r#"{"id":null,"owner":false,"permissions":null,"events":["future"],"unknown":1.5}"#,
+                        true,
+                    ),
+                    (
+                        r#"{"id":9007199254740991,"owner":[],"permissions":{"checks":"future"},"events":false}"#,
+                        true,
+                    ),
+                    ("{}", false),
+                    (r#"{"id":9007199254740992}"#, false),
+                    (r#"{"id":-1}"#, false),
+                    (r#"{"id":"1"}"#, false),
+                    (r#"{"id":null,"\u0069d":null}"#, false),
+                ] {
+                    let changed = input.replacen(&marker, &format!(r#""{member}":{app}"#), 1);
+                    assert_ne!(changed, input);
+                    assert_eq!(
+                        authenticate_target(&source, changed.as_bytes(), &target),
+                        valid.then_some(None).ok_or(ProviderError::Authentication),
+                        "{member}, {action}: {app}"
+                    );
+                }
+            }
+        }
+    }
+}
 
 #[test]
 fn signed_check_runs_ignore_metadata_without_creating_work() {
@@ -42,9 +141,6 @@ fn signed_check_run_actions_reject_malformed_envelopes() {
         for (old, new) in [
             ("{", r#"{"unknown":true,"#),
             ("{", r#"{"installation":null,"#),
-            (r#""app":{"#, r#""app":{"unknown":true,"#),
-            (r#""permissions":{"#, r#""permissions":{"unknown":"read","#),
-            (r#""events":[]"#, r#""events":["future"]"#),
             (r#""id":128620228"#, r#""id":128620228,"\u0069d":128620228"#),
             (r#""id":128620228"#, r#""id":9007199254740992"#),
             (r#""output":{"#, r#""missing_output":{"#),

@@ -29,13 +29,6 @@ fn signed_check_suites_keep_metadata_and_remain_no_work() {
         for (old, new) in [
             ("{", r#"{"unknown":true,"#),
             (r#""check_suite":{"#, r#""check_suite":{"unknown":true,"#),
-            (r#""app":{"#, r#""app":{"unknown":true,"#),
-            (r#""permissions":{"#, r#""permissions":{"unknown":"read","#),
-            (
-                r#""team_discussions":"write""#,
-                r#""team_discussions":"admin""#,
-            ),
-            (r#""events":[]"#, r#""events":["unknown_event"]"#),
             (r#""status":"completed""#, r#""status":"unknown""#),
             (r#""id":118578147"#, r#""id":118578147,"\u0069d":118578147"#),
             (
