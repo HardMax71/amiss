@@ -8,6 +8,9 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[lib]
+test = false
+
 [dependencies]
 amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-wire = { path = "../../crates/amiss-wire" }

@@ -3,7 +3,7 @@ use amiss_wire::de::ErrorKind;
 use amiss_wire::model::Digest;
 use amiss_wire::model::UtcInstant;
 
-use crate::support::DEBT;
+use super::support::DEBT;
 
 #[test]
 fn parses_a_valid_debt_snapshot() {

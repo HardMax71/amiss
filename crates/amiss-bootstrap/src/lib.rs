@@ -130,22 +130,23 @@ pub(crate) fn validate_release(
         .cloned()
         .ok_or(tampered("artifact-selection-failed"))?;
 
-    let mut binary: Option<Vec<u8>> = None;
+    let mut binary = None;
     for file in &artifact.runtime_files {
         let (bytes, mode) = blob(action, resources, tree, &file.path)?;
         if mode != file.git_mode {
             return Err(tampered("runtime-closure-mismatch"));
         }
-        if Digest::from(sha2::Sha256::digest(&bytes).0) != file.file_sha256 {
+        let file_sha256 = Digest::from(sha2::Sha256::digest(&bytes).0);
+        if file_sha256 != file.file_sha256 {
             return Err(tampered("runtime-closure-mismatch"));
         }
         if file.role == RuntimeRole::Executable {
-            binary = Some(bytes);
+            binary = Some((bytes, file_sha256));
         }
     }
-    let binary = binary.ok_or(tampered("runtime-closure-mismatch"))?;
+    let (binary, binary_sha256) = binary.ok_or(tampered("runtime-closure-mismatch"))?;
 
-    if Digest::from(sha2::Sha256::digest(&binary).0) != artifact.binary_sha256 {
+    if binary_sha256 != artifact.binary_sha256 {
         return Err(tampered("engine-digest-mismatch"));
     }
     let engine_digest = Digest::from(

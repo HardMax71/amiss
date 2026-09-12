@@ -10,6 +10,7 @@ publish = false
 
 [[bin]]
 name = "amiss-constraint"
+test = false
 path = "src/main.rs"
 
 [dependencies]

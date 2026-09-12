@@ -7,7 +7,7 @@ use sha2::Digest as _;
 
 use amiss_wire::model::RepoPathText;
 
-use crate::support::POLICY;
+use super::support::POLICY;
 
 #[test]
 fn parses_the_policy_fixture() {

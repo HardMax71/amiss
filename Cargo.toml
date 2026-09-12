@@ -173,6 +173,19 @@ opt-level = 2
 [profile.dev.package.sha2]
 opt-level = 2
 
+# The fixtures and the real Git reader hash and inflate the same large objects.
+[profile.dev.package.sha1-checked]
+opt-level = 2
+
+[profile.dev.package.sha1]
+opt-level = 2
+
+[profile.dev.package.miniz_oxide]
+opt-level = 2
+
+[profile.dev.package.adler2]
+opt-level = 2
+
 # Gate-tool pins: exposed by cargo metadata and checked by the tools contract.
 [workspace.metadata.tools.prebuilt]
 prek = "0.4.9"

@@ -10,6 +10,7 @@ publish = false
 
 [[bin]]
 name = "amiss-controller-gitlab"
+test = false
 path = "src/main.rs"
 
 [[bin]]

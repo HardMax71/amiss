@@ -36,7 +36,7 @@ jobs:
 
   json-contract-drift:
     needs: changes
-    if: needs.changes.outputs.code == 'true' || needs.changes.outputs.docs == 'true'
+    if: needs.changes.outputs.code != 'true' && needs.changes.outputs.docs == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -48,12 +48,6 @@ jobs:
         with:
           shared-key: contracts
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - if: needs.changes.outputs.code == 'true'
-        run: >-
-          cargo test --workspace --test json_contracts --locked
-      - name: Check generated scanner reports
-        if: needs.changes.outputs.code == 'true'
-        run: cargo test -p amiss-scan --test suite --test fatal_envelope --locked
       - run: >-
           cargo test -p amiss --test documentation_contracts --locked
 
@@ -439,8 +433,12 @@ jobs:
         with:
           workspaces: .
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - run: cargo nextest run --workspace --locked
-      - run: cargo nextest run -p amiss-scan --test suite -E 'test(/^eligibility::/)' --release --locked
+      - name: Build the workspace tests
+        run: cargo nextest run --workspace --locked --no-run
+      - name: Run the workspace tests
+        run: cargo nextest run --workspace --locked
+      - name: Check release eligibility
+        run: cargo nextest run -p amiss-scan --test eligibility --release --locked
 
   coverage:
     needs: changes

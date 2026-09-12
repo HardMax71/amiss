@@ -80,6 +80,15 @@ fn attempt(release: &Release, bootstrap: &[u8]) -> Result<amiss_bootstrap::Valid
     validate(&repo, &mut resources, &constraint(release), bootstrap)
 }
 
+fn refuses_with(mutate: impl FnOnce(&Path), code: &'static str, context: &str) {
+    let release = release(mutate);
+    assert_eq!(
+        attempt(&release, BOOTSTRAP).err(),
+        Some(Refusal::Tampered(code)),
+        "{context}"
+    );
+}
+
 #[test]
 fn the_pinned_release_validates_end_to_end() {
     let release = release(|_root| {});
@@ -147,17 +156,15 @@ fn a_bootstrap_whose_bytes_differ_refuses_before_anything_else() {
 #[cfg(unix)]
 #[test]
 fn a_symlinked_engine_path_refuses() {
-    let release = release(|root| {
-        let platform = host_platform().unwrap();
-        let staged = root.join(format!("dist/amiss-{}", platform.as_ref()));
-        fs::remove_file(&staged).unwrap();
-        std::os::unix::fs::symlink("../Cargo.lock", &staged).unwrap();
-    });
-    let outcome = attempt(&release, BOOTSTRAP);
-    assert_eq!(
-        outcome.err(),
-        Some(Refusal::Tampered("path-not-regular-blob")),
-        "a symlink at the artifact path is never followed"
+    refuses_with(
+        |root| {
+            let platform = host_platform().unwrap();
+            let staged = root.join(format!("dist/amiss-{}", platform.as_ref()));
+            fs::remove_file(&staged).unwrap();
+            std::os::unix::fs::symlink("../Cargo.lock", &staged).unwrap();
+        },
+        "path-not-regular-blob",
+        "a symlink at the artifact path is never followed",
     );
 }
 
@@ -262,14 +269,22 @@ fn runtime_data_off_the_action_path_is_not_a_pin() {
 
 #[test]
 fn a_tampered_runtime_file_refuses_on_its_checksum() {
-    let release = release(|root| {
-        fs::write(root.join("action.yml"), b"# swapped after staging\n").unwrap();
-    });
-    let outcome = attempt(&release, BOOTSTRAP);
-    assert_eq!(
-        outcome.err(),
-        Some(Refusal::Tampered("runtime-closure-mismatch"))
-    );
+    let platform = host_platform().unwrap();
+    for path in [
+        "action.yml".to_owned(),
+        format!("dist/amiss-{}", platform.as_ref()),
+    ] {
+        refuses_with(
+            |root| {
+                let file = root.join(&path);
+                let mut bytes = fs::read(&file).unwrap();
+                bytes.extend_from_slice(b"swapped after staging\n");
+                fs::write(file, bytes).unwrap();
+            },
+            "runtime-closure-mismatch",
+            &format!("{path} must be checked against its runtime-file digest"),
+        );
+    }
 }
 
 #[test]
@@ -409,17 +424,16 @@ fn a_constraint_whose_commit_or_tree_does_not_match_refuses_on_the_action_tree()
 /// lock bytes drifted from their recorded digest refuses instead of validating.
 #[test]
 fn a_tampered_lockfile_refuses_on_its_recorded_digest() {
-    let release = release(|root| {
-        fs::write(
-            root.join("Cargo.lock"),
-            b"# a different lock\nversion = 4\n",
-        )
-        .unwrap();
-    });
-    assert_eq!(
-        attempt(&release, BOOTSTRAP).err(),
-        Some(Refusal::Tampered("dependency-lock-mismatch")),
-        "the tree's lock bytes do not recompute to the manifest's digest"
+    refuses_with(
+        |root| {
+            fs::write(
+                root.join("Cargo.lock"),
+                b"# a different lock\nversion = 4\n",
+            )
+            .unwrap();
+        },
+        "dependency-lock-mismatch",
+        "the tree's lock bytes do not recompute to the manifest's digest",
     );
 }
 
@@ -429,13 +443,12 @@ fn a_tampered_lockfile_refuses_on_its_recorded_digest() {
 /// names and the tree cannot produce.
 #[test]
 fn a_release_missing_its_lockfile_refuses_on_the_path() {
-    let release = release(|root| {
-        fs::remove_file(root.join("Cargo.lock")).unwrap();
-    });
-    assert_eq!(
-        attempt(&release, BOOTSTRAP).err(),
-        Some(Refusal::Tampered("path-not-regular-blob")),
-        "a lockfile the manifest records and the tree lacks is not a lockfile"
+    refuses_with(
+        |root| {
+            fs::remove_file(root.join("Cargo.lock")).unwrap();
+        },
+        "path-not-regular-blob",
+        "a lockfile the manifest records and the tree lacks is not a lockfile",
     );
 }
 

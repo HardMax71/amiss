@@ -34,8 +34,7 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
     let root = dir.path();
     amiss_fixtures::init_repository(root).expect("initialize repository");
 
-    let binary = engine.to_vec();
-    let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
+    let lock = b"# Cargo.lock fixture\nversion = 4\n";
     let binary_path = format!("dist/amiss-{}", platform.as_ref());
     let artifacts = vec![StagedArtifact {
         platform,
@@ -45,7 +44,7 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
                 path: binary_path.parse().unwrap(),
                 role: RuntimeRole::Executable,
                 executable: true,
-                bytes: &binary,
+                bytes: engine,
             },
             StagedFile {
                 path: "action.yml".parse().unwrap(),
@@ -65,13 +64,13 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
         .unwrap(),
         object_format: amiss_wire::model::ObjectFormat::Sha1,
         commit_oid: "a".repeat(40).parse().unwrap(),
-        locks: vec![("Cargo.lock".parse().unwrap(), &lock)],
+        locks: vec![("Cargo.lock".parse().unwrap(), lock)],
     };
     let (manifest_bytes, manifest_digest) = build_manifest(build, artifacts).unwrap();
     let engine_digest = Digest::from(
         sha2::Sha256::new_with_prefix(amiss_bootstrap::ENGINE_DOMAIN)
             .chain_update([0_u8])
-            .chain_update(&binary)
+            .chain_update(engine)
             .finalize()
             .0,
     );
@@ -84,8 +83,8 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
         format!("{manifest_digest}\n"),
     )
     .unwrap();
-    fs::write(root.join(&binary_path), &binary).unwrap();
-    fs::write(root.join("Cargo.lock"), &lock).unwrap();
+    fs::write(root.join(&binary_path), engine).unwrap();
+    fs::write(root.join("Cargo.lock"), lock).unwrap();
     mutate(root);
 
     let committed =
