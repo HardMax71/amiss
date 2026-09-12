@@ -4,7 +4,6 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use reqwest::Method;
 use secrecy::{SecretSlice, SecretString};
 use serde::Serialize;
-use wary::Validate as _;
 
 pub(super) use amiss_controller::OperationDeadline;
 use amiss_controller::{
@@ -222,12 +221,8 @@ impl HttpRest {
             let request = self.transport.client.get(self.transport.url(&route)?);
             let batch: Vec<BranchRule> =
                 decode_body(self.transport.execute(request, deadline)?, |bytes| {
-                    amiss_wire::read_json(bytes, u64::MAX)
+                    serde_json::from_slice(bytes)
                 })?;
-            for rule in &batch {
-                rule.validate(&())
-                    .map_err(|_defect| ProviderError::InvalidResponse)?;
-            }
             let complete = page_complete(batch.len())?;
             rules.extend(batch);
             if complete {

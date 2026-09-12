@@ -178,6 +178,7 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
     let fixture = Fixture::new();
     let cases = [
         Vec::new(),
+        vec![BranchRule::Other],
         vec![required_rule(None, true)],
         vec![required_rule(Some(APP_ID + 1), true)],
         vec![
@@ -219,12 +220,8 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
     ] {
         let mut data = fixture.data.clone();
         data.rules = vec![BranchRule::RequiredStatusChecks(RequiredStatusRule {
-            ruleset_source_type: None,
-            ruleset_source: None,
-            ruleset_id: None,
             parameters: RequiredStatusParameters {
                 strict_required_status_checks_policy: true,
-                do_not_enforce_on_create: None,
                 required_status_checks: checks
                     .into_iter()
                     .map(|(context, integration_id)| RequiredStatus {
@@ -272,8 +269,15 @@ fn decoded_rule_pages_keep_every_matching_authorization_binding() {
         let mut data = fixture.data.clone();
         data.rules.clear();
         for page in pages {
-            let input = serde_json::to_vec(&page).unwrap();
-            let rules: Vec<BranchRule> = amiss_wire::read_json(&input, u64::MAX).unwrap();
+            let input = serde_json::to_string(&page).unwrap();
+            let metadata = input
+                .replacen('[', r#"[{"type":"future_rule","parameters":false},"#, 1)
+                .replace(
+                    r#""parameters":{"#,
+                    r#""ruleset_id":null,"parameters":{"do_not_enforce_on_create":[],"#,
+                )
+                .replace(r#""context":"#, r#""extra":{},"context":"#);
+            let rules: Vec<BranchRule> = serde_json::from_str(&metadata).unwrap();
             data.rules.extend(rules);
         }
         assert_eq!(
@@ -1135,12 +1139,8 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
 
 fn required_rule(integration_id: Option<u64>, strict: bool) -> BranchRule {
     BranchRule::RequiredStatusChecks(RequiredStatusRule {
-        ruleset_source_type: None,
-        ruleset_source: None,
-        ruleset_id: None,
         parameters: RequiredStatusParameters {
             strict_required_status_checks_policy: strict,
-            do_not_enforce_on_create: None,
             required_status_checks: vec![RequiredStatus {
                 context: "amiss/provider".to_owned(),
                 integration_id: integration_id.map(|id| id.try_into().unwrap()),
