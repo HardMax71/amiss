@@ -1,110 +1,89 @@
-use std::io::Cursor;
-
 use amiss_controller::{ProviderError, decode_bounded_json};
-use amiss_controller_gitlab::tree::{TreeEntry, TreeObject};
-use amiss_wire::controls::GitMode;
+use amiss_controller_gitlab::tree::TreeObject;
 
 #[path = "json_contracts/claims.rs"]
 mod claims;
 
 #[test]
-fn tree_responses_retain_every_field_from_the_live_contract() {
+fn tree_pages_keep_typed_entries_without_unused_metadata() {
     let input = include_bytes!("fixtures/tree.json");
     let (rows, length): (Vec<TreeObject>, _) =
-        decode_bounded_json(Cursor::new(input), None, input.len(), |bytes| {
+        decode_bounded_json(input.as_slice(), None, input.len(), |bytes| {
             serde_json::from_slice(bytes)
         })
         .unwrap();
     assert_eq!(length, input.len());
-    assert_eq!(
-        rows,
-        vec![TreeObject::Tree(TreeEntry {
-            id: "2132d150328bd9334cc4e62a16a5d998a7e399b9".parse().unwrap(),
-            name: "flat".to_owned(),
-            path: "files/flat".to_owned(),
-            mode: GitMode::Tree,
-        })]
-    );
+    assert_eq!(rows, vec![TreeObject::Tree]);
     let encoded = serde_json::to_vec(&rows).unwrap();
-    let (replayed, _): (Vec<TreeObject>, _) =
-        decode_bounded_json(Cursor::new(&encoded), None, encoded.len(), |bytes| {
-            serde_json::from_slice(bytes)
-        })
-        .unwrap();
-    assert_eq!(rows, replayed);
-    for (kind, mode) in [
-        ("blob", GitMode::RegularFile),
-        ("blob", GitMode::ExecutableFile),
-        ("blob", GitMode::Symlink),
-        ("commit", GitMode::Gitlink),
-    ] {
-        let input = std::str::from_utf8(input)
+    assert_eq!(
+        serde_json::from_slice::<Vec<TreeObject>>(&encoded).unwrap(),
+        rows
+    );
+    assert!(
+        serde_json::from_str::<Vec<TreeObject>>("[]")
             .unwrap()
-            .replace("\"tree\"", &format!("\"{kind}\""))
-            .replace("040000", mode.as_ref());
-        let (rows, _): (Vec<TreeObject>, _) =
-            decode_bounded_json(Cursor::new(input.as_bytes()), None, input.len(), |bytes| {
-                serde_json::from_slice(bytes)
-            })
-            .unwrap();
-        assert_eq!(rows.len(), 1);
+            .is_empty()
+    );
+    assert_eq!(
+        serde_json::from_str::<Vec<TreeObject>>(r#"[["tree"]]"#).unwrap(),
+        rows
+    );
+
+    for (kind, expected) in [
+        ("blob", TreeObject::Blob),
+        ("tree", TreeObject::Tree),
+        ("commit", TreeObject::Commit),
+    ] {
+        for metadata in [
+            "",
+            r#","id":null,"name":false,"path":[],"mode":0"#,
+            r#","future":{"nested":[null,true,{"value":3}]}"#,
+        ] {
+            let input = format!(r#"[{{"type":"{kind}"{metadata}}}]"#);
+            assert_eq!(
+                serde_json::from_str::<Vec<TreeObject>>(&input).unwrap(),
+                vec![expected.clone()]
+            );
+        }
     }
+    assert_eq!(
+        decode_bounded_json::<Vec<TreeObject>, _>(
+            input.as_slice(),
+            None,
+            input.len() - 1,
+            |bytes| serde_json::from_slice(bytes)
+        ),
+        Err(ProviderError::InvalidResponse)
+    );
 }
 
 #[test]
-fn tree_responses_refuse_unknown_or_malformed_rows() {
-    let input = std::str::from_utf8(include_bytes!("fixtures/tree.json")).unwrap();
-    for (original, replacement) in [
-        ("[{", "[{\"future\":true,"),
-        (r#""type":"tree""#, r#""type":"unknown""#),
-        (r#""type":"tree""#, r#""type":null"#),
-        (r#""name":"flat""#, r#""name":false"#),
-        (r#""path":"files/flat""#, r#""path":[]"#),
-        ("040000", "040001"),
-        (
-            "2132d150328bd9334cc4e62a16a5d998a7e399b9",
-            "not-an-object-id",
-        ),
-        (r#""name":"flat","#, ""),
-        (r#""path":"files/flat","#, ""),
-        (r#","mode":"040000""#, ""),
-        (r#""type":"tree","#, ""),
-        (r#""id":"2132d150328bd9334cc4e62a16a5d998a7e399b9","#, ""),
-        (r#""name":"flat""#, r#""name":"flat","name":"flat""#),
-        (r#""name":"flat""#, r#""name":"flat","n\u0061me":"flat""#),
-    ] {
-        let invalid = input.replace(original, replacement);
-        assert_ne!(invalid, input);
-        assert!(
-            matches!(
-                decode_bounded_json::<Vec<TreeObject>, _>(
-                    Cursor::new(invalid.as_bytes()),
-                    None,
-                    invalid.len(),
-                    |bytes| serde_json::from_slice(bytes)
-                ),
-                Err(ProviderError::InvalidResponse)
-            ),
-            "{invalid}"
-        );
-    }
+fn tree_pages_require_unambiguous_known_entry_kinds() {
     for invalid in [
+        "null",
+        "{}",
+        r#"{"type":"tree"}"#,
         "[null]",
         "[true]",
         "[1]",
         "[{}]",
-        r#"[["2132d150328bd9334cc4e62a16a5d998a7e399b9","flat","tree","files/flat","040000"]]"#,
+        r#"[["unknown"]]"#,
+        r#"[{"type":"unknown"}]"#,
+        r#"[{"type":null}]"#,
+        r#"[{"type":false}]"#,
+        r#"[{"type":{"tree":null}}]"#,
+        r#"[{"type":"tree","type":"blob"}]"#,
+        r#"[{"type":"tree","\u0074ype":"tree"}]"#,
+        r#"[{"type":"tree"}] {}"#,
     ] {
-        assert!(
-            matches!(
-                decode_bounded_json::<Vec<TreeObject>, _>(
-                    Cursor::new(invalid.as_bytes()),
-                    None,
-                    invalid.len(),
-                    |bytes| serde_json::from_slice(bytes)
-                ),
-                Err(ProviderError::InvalidResponse)
+        assert_eq!(
+            decode_bounded_json::<Vec<TreeObject>, _>(
+                invalid.as_bytes(),
+                None,
+                invalid.len(),
+                |bytes| serde_json::from_slice(bytes)
             ),
+            Err(ProviderError::InvalidResponse),
             "{invalid}"
         );
     }
