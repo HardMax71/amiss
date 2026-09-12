@@ -4,12 +4,13 @@ use amiss_controller_github::webhook::suite::{CheckSuiteAction, CheckSuiteEvent}
 use amiss_wire::assessment::Nullable;
 
 #[test]
-fn complete_check_suites_retain_every_published_field() {
+fn check_suite_captures_keep_their_completed_action() {
     let input = amiss_fixtures::GITHUB_WEBHOOK_CHECK_SUITE;
-    let event: CheckSuiteEvent = amiss_wire::read_json(input, u64::MAX).unwrap();
-    assert_eq!(
-        amiss_fixtures::canonical_json(&serde_json::to_vec(&event).unwrap()).unwrap(),
-        amiss_fixtures::canonical_json(input).unwrap()
+    let event: CheckSuiteEvent = serde_json::from_slice(input).unwrap();
+    assert_eq!(event.action, CheckSuiteAction::Completed);
+    assert!(
+        serde_json::from_slice::<CheckSuiteEvent>(&serde_json::to_vec(&event).unwrap()).unwrap()
+            == event
     );
 }
 

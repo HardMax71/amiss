@@ -5,19 +5,16 @@ use amiss_controller_github::webhook::GitHubPayload;
 use amiss_wire::assessment::Nullable;
 
 #[test]
-fn webhook_root_retains_the_complete_published_repository() {
+fn webhook_root_keeps_repository_identity_without_owner_metadata() {
     let input = amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY;
     let record: PullRepositoryRecord = serde_json::from_slice(input).unwrap();
     let encoded = serde_json::to_vec(&record).unwrap();
     assert_eq!(
-        amiss_fixtures::canonical_json(input).unwrap(),
-        amiss_fixtures::canonical_json(&encoded).unwrap()
-    );
-    assert_eq!(
-        amiss_wire::read_json::<PullRepositoryRecord>(input, u64::MAX).unwrap(),
+        serde_json::from_slice::<PullRepositoryRecord>(&encoded).unwrap(),
         record
     );
-    assert!(amiss_wire::read_json::<PullRepositoryRecord>(input, 0).is_err());
+    assert_eq!(record.owner.login, "octo-org");
+    assert_eq!(record.full_name, "octo-org/octo-repo");
     assert!(serde_json::from_str::<GitHubPayload>(r#"{"repository":null}"#).is_err());
     let envelope = serde_json::from_str::<GitHubPayload>("{}").unwrap();
     assert_eq!(envelope.repository, None);
@@ -153,9 +150,9 @@ fn webhook_template_keeps_its_complete_distinct_optional_contract() {
     );
     let owner = serde_json::to_string(&root.owner).unwrap();
     for invalid in [
-        owner.replacen('{', r#"{"unknown":true,"#, 1),
-        owner.replacen(r#""id":41548062"#, r#""id":9007199254740992"#, 1),
-        owner.replacen(r#""id":41548062"#, r#""id":1,"\u0069d":2"#, 1),
+        owner.replacen(r#""login":"octo-org""#, r#""login":null"#, 1),
+        owner.replacen(r#""login":"octo-org""#, "", 1),
+        owner.replacen('{', r#"{"login":"other","#, 1),
     ] {
         assert_ne!(invalid, owner);
         assert!(serde_json::from_str::<RepositoryOrganization>(&invalid).is_err());

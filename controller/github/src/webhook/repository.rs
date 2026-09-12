@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
+use crate::owner::OwnerRecord;
+
 pub mod pull;
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -16,7 +18,7 @@ pub struct WorkflowRepository {
     pub name: String,
     pub full_name: String,
     #[serde(deserialize_with = "Option::deserialize")]
-    pub owner: Option<WorkflowOwner>,
+    pub owner: Option<OwnerRecord>,
     pub private: bool,
     pub html_url: String,
     pub description: Nullable<String>,

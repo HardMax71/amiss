@@ -5,17 +5,17 @@ use amiss_wire::assessment::Nullable;
 const RUN: &str = include_str!("../fixtures/webhook-workflow-run.json");
 
 #[test]
-fn webhook_run_preserves_the_complete_published_record() {
+fn webhook_run_keeps_repository_owners_across_native_round_trips() {
     let run: WorkflowRun = serde_json::from_str(RUN).unwrap();
     let encoded = serde_json::to_vec(&run).unwrap();
     assert_eq!(
-        amiss_wire::read_json::<WorkflowRun>(RUN.as_bytes(), u64::MAX).unwrap(),
+        serde_json::from_slice::<WorkflowRun>(&encoded).unwrap(),
         run
     );
-    assert!(
-        amiss_fixtures::canonical_json(RUN.as_bytes()).unwrap()
-            == amiss_fixtures::canonical_json(&encoded).unwrap(),
-        "the typed workflow run must retain every published member"
+    assert_eq!(run.repository.owner.as_ref().unwrap().login, "octo-org");
+    assert_eq!(
+        run.head_repository.owner.as_ref().unwrap().login,
+        "octo-org"
     );
 }
 

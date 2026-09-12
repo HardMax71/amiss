@@ -357,7 +357,7 @@ fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
 }
 
 #[test]
-fn signed_workflow_repositories_reject_unknown_metadata() {
+fn signed_workflow_repositories_keep_owner_binding_without_owner_metadata() {
     let source = GitHubPullRequestSource::new(
         provider(),
         webhook(),
@@ -367,15 +367,32 @@ fn signed_workflow_repositories_reject_unknown_metadata() {
     let payload = workflow_payload();
     let run = &payload.workflow_run;
     let body = serde_json::to_string(&payload).unwrap();
+    let original = authenticate_target(&source, body.as_bytes(), &target)
+        .unwrap()
+        .unwrap();
     for repository in [
         serde_json::to_string(&payload.repository).unwrap(),
         serde_json::to_string(&run.repository).unwrap(),
         serde_json::to_string(&run.head_repository).unwrap(),
     ] {
         assert_eq!(body.matches(&repository).count(), 1);
+        let metadata = repository.replacen(
+            r#""owner":{"#,
+            r#""owner":{"unknown":true,"id":null,"type":{},"#,
+            1,
+        );
+        assert_ne!(metadata, repository);
+        let changed = body.replacen(&repository, &metadata, 1);
+        assert_eq!(
+            authenticate_target(&source, changed.as_bytes(), &target)
+                .unwrap()
+                .unwrap()
+                .delivery(),
+            original.delivery()
+        );
         for invalid in [
             repository.replacen('{', r#"{"unknown":true,"#, 1),
-            repository.replacen(r#""owner":{"#, r#""owner":{"unknown":true,"#, 1),
+            repository.replacen(r#""owner":{"#, r#""owner":{"login":null,"#, 1),
         ] {
             assert_ne!(invalid, repository);
             let changed = body.replacen(&repository, &invalid, 1);
@@ -551,10 +568,11 @@ fn workflow_repository_identity_is_independent_of_retained_metadata() {
     let mut metadata = payload.clone();
     let run = &mut metadata.workflow_run;
     run.repository.node_id = "distinct-root-metadata".to_owned();
-    run.repository.owner.as_mut().unwrap().name = Some("Display name".to_owned());
-    run.head_repository.owner.as_mut().unwrap().email =
-        Some(amiss_wire::assessment::Nullable::Null);
-    let accepted = authenticate_target(&source, &serde_json::to_vec(&metadata).unwrap(), &target)
+    let metadata = serde_json::to_string(&metadata).unwrap().replace(
+        r#""owner":{"#,
+        r#""owner":{"name":"Display name","email":null,"#,
+    );
+    let accepted = authenticate_target(&source, metadata.as_bytes(), &target)
         .unwrap()
         .unwrap();
     assert_eq!(accepted.delivery(), original.delivery());
@@ -597,13 +615,17 @@ fn pull_request_identity_excludes_root_metadata() {
     let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
     let root = payload.repository.as_mut().unwrap();
     root.node_id = "root-metadata-only".to_owned();
-    root.owner.name = Some(amiss_wire::assessment::Nullable::Null);
     root.network_count = Some(1_u32.into());
     root.organization = Some(amiss_wire::assessment::Nullable::Value(
         RepositoryOrganization::Name("unrelated-metadata".to_owned()),
     ));
-    let input = serde_json::to_vec(&payload).unwrap();
-    let accepted = authenticate_target(&source, &input, &target)
+    let input = serde_json::to_string(&payload).unwrap();
+    let metadata = input.replace(
+        r#""owner":{"#,
+        r#""owner":{"id":null,"name":{},"type":"future","#,
+    );
+    assert_ne!(metadata, input);
+    let accepted = authenticate_target(&source, metadata.as_bytes(), &target)
         .unwrap()
         .unwrap();
     assert_eq!(accepted.delivery(), original.delivery());

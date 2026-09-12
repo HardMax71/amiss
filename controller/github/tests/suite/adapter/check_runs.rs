@@ -12,13 +12,17 @@ fn signed_check_runs_ignore_metadata_without_creating_work() {
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let input = amiss_fixtures::GITHUB_WEBHOOK_CHECK_RUN;
     assert_eq!(authenticate_target(&source, input, &target), Ok(None));
-    let metadata = replaced_once(
-        input,
-        r#""check_run": {"#,
-        r#""check_run": {"unknown":true,"check_suite":false,"deployment":[],"#,
-    );
-    assert_ne!(metadata, input);
-    assert_eq!(authenticate_target(&source, &metadata, &target), Ok(None));
+    for (member, metadata) in [
+        (
+            r#""check_run": {"#,
+            r#""check_run": {"unknown":true,"check_suite":false,"deployment":[],"#,
+        ),
+        (r#""sender": {"#, r#""sender": {"unknown":true,"name":{},"#),
+    ] {
+        let changed = replaced_once(input, member, metadata);
+        assert_ne!(changed, input);
+        assert_eq!(authenticate_target(&source, &changed, &target), Ok(None));
+    }
 }
 
 #[test]
@@ -45,7 +49,7 @@ fn signed_check_run_actions_reject_malformed_envelopes() {
             (r#""id":128620228"#, r#""id":9007199254740992"#),
             (r#""output":{"#, r#""missing_output":{"#),
             (r#""status":"completed""#, r#""status":"future""#),
-            (r#""sender":{"#, r#""sender":{"unknown":true,"#),
+            (r#""sender":{"#, r#""sender":{"login":null,"#),
         ] {
             let candidate = replaced_once(&input, old, new);
             assert!(candidate != input, "mutation absent: {old}");

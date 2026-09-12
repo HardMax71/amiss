@@ -35,10 +35,17 @@ fn signed_issue_comments_check_the_complete_root_and_issue() {
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let input = amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT;
     assert_eq!(authenticate_target(&source, input, &target), Ok(None));
+    let metadata = replaced_once(
+        input,
+        r#""sender": {"#,
+        r#""sender": {"unknown":true,"type":"future","#,
+    );
+    assert_ne!(metadata, input);
+    assert_eq!(authenticate_target(&source, &metadata, &target), Ok(None));
     for (old, new) in [
         ("{", r#"{"unknown":true,"#),
         (r#""issue": {"#, r#""issue": {"unknown":true,"#),
-        (r#""sender": {"#, r#""sender": {"unknown":true,"#),
+        (r#""sender": {"#, r#""sender": {"login":null,"#),
     ] {
         let invalid = replaced_once(input, old, new);
         assert!(invalid != input, "mutation absent: {old}");
@@ -86,7 +93,7 @@ fn incomplete_comment_events_cannot_fall_back_to_partial_deliveries() {
         for (old, new) in [
             ("{", r#"{"unknown":true,"#),
             (r#""issue": {"#, r#""issue": {"unknown":true,"#),
-            (r#""sender": {"#, r#""sender": {"unknown":true,"#),
+            (r#""sender": {"#, r#""sender": {"login":null,"#),
             (r#""number": 1,"#, ""),
             (r#""changes":{},"#, ""),
         ] {

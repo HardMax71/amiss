@@ -1,32 +1,25 @@
-use amiss_controller_github::webhook::repository::{
-    AccountKind, WorkflowOwner, WorkflowRepository,
-};
+use amiss_controller_github::webhook::repository::{WorkflowOwner, WorkflowRepository};
 use amiss_wire::assessment::Nullable;
 
 const REPOSITORY: &[u8] = include_bytes!("../fixtures/webhook-workflow-repository.json");
 
 #[test]
-fn workflow_webhook_repository_retains_the_complete_published_record() {
+fn workflow_webhook_repository_keeps_the_repository_and_nullable_owner() {
     let record: WorkflowRepository = serde_json::from_slice(REPOSITORY).unwrap();
     let encoded = serde_json::to_vec(&record).unwrap();
     assert_eq!(
-        amiss_fixtures::canonical_json(REPOSITORY).unwrap(),
-        amiss_fixtures::canonical_json(&encoded).unwrap()
+        serde_json::from_slice::<WorkflowRepository>(&encoded).unwrap(),
+        record
     );
     assert_eq!(record.id, 300_029_405);
     assert_eq!(record.full_name, "octo-org/octo-repo");
-    assert_eq!(
-        record.owner.as_ref().unwrap().kind,
-        Some(AccountKind::Organization)
-    );
-    assert_eq!(
-        amiss_wire::read_json::<WorkflowRepository>(REPOSITORY, u64::MAX).unwrap(),
-        record
-    );
+    assert_eq!(record.owner.as_ref().unwrap().login, "octo-org");
     assert!(
-        amiss_wire::read_json::<WorkflowRepository>(
+        amiss_controller::decode_bounded_json::<WorkflowRepository, _>(
             REPOSITORY,
-            u64::try_from(REPOSITORY.len() - 1).unwrap(),
+            None,
+            REPOSITORY.len() - 1,
+            |bytes| serde_json::from_slice(bytes),
         )
         .is_err()
     );
@@ -177,13 +170,9 @@ fn workflow_repository_input_refuses_unknown_ambiguous_and_untyped_data() {
         (r#""private":false"#, r#""private":0"#),
         (r#""fork":false"#, r#""fork":null"#),
         (r#""node_id":"#, r#""unknown":true,"node_id":"#),
-        (r#""owner":{"#, r#""owner":{"unknown":true,"#),
+        (r#""owner":{"#, r#""owner":{"login":null,"#),
         (r#""owner":{"#, r#""\u006fwner":null,"owner":{"#),
-        (r#""id":41548062"#, r#""id":9007199254740992"#),
-        (
-            r#""type":"Organization""#,
-            r#""type":{"Organization":null}"#,
-        ),
+        (r#""login":"octo-org""#, r#""login":{}"#),
     ] {
         assert!(wire.contains(old), "{old}");
         let invalid = wire.replacen(old, new, 1);

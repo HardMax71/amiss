@@ -37,7 +37,7 @@ fn workflow_roots_are_checked_before_a_configured_completion_becomes_work() {
     for (old, new) in [
         ("{", r#"{"unknown":true,"#),
         ("{", r#"{"number":42,"#),
-        (r#""sender":{"#, r#""sender":{"unknown":true,"#),
+        (r#""sender":{"#, r#""sender":{"login":null,"#),
         (r#""workflow":null,"#, ""),
         (r#""action":"completed","#, ""),
         (r#""action":"completed""#, r#""action":null"#),

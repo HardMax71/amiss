@@ -222,15 +222,12 @@ fn fixture() -> (Config, WorkflowArtifactExpectation, Oid) {
 }
 
 fn repository(id: u64, owner: &str, name: &str) -> WorkflowRepositoryRecord {
-    let record: OwnerRecord =
-        serde_json::from_slice(include_bytes!("../../../tests/fixtures/owner-user.json")).unwrap();
     WorkflowRepositoryRecord {
         id,
         name: name.to_owned(),
         full_name: format!("{owner}/{name}"),
         owner: OwnerRecord {
             login: owner.to_owned(),
-            ..record
         },
     }
 }

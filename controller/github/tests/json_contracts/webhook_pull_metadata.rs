@@ -200,7 +200,13 @@ fn shared_milestones_retain_the_webhook_creator_contract() {
         .unwrap(),
         milestone,
     );
-    assert!(serde_json::from_slice::<MilestoneRecord>(&input).is_err());
+    let projected: MilestoneRecord = serde_json::from_slice(&input).unwrap();
+    assert_eq!(
+        projected.creator,
+        Nullable::Value(amiss_controller_github::owner::OwnerRecord {
+            login: "creator".to_owned(),
+        })
+    );
     let nullable = MilestoneRecord {
         creator: Nullable::<WorkflowOwner<PullRequestAccountKind>>::Null,
         ..milestone

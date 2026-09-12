@@ -9,12 +9,12 @@ use amiss_wire::assessment::Nullable;
 const CAPTURE: &str = include_str!("../fixtures/pull-repository.json");
 
 #[test]
-fn pull_repository_capture_preserves_the_complete_record() {
+fn pull_repository_capture_keeps_the_repository_and_owner_identity() {
     let (captured, consumed): (PullRepositoryRecord, _) = decode_bounded_json(
         CAPTURE.as_bytes(),
         Some(u64::try_from(CAPTURE.len()).unwrap()),
         CAPTURE.len(),
-        |bytes| amiss_wire::read_json(bytes, u64::MAX),
+        |bytes| serde_json::from_slice(bytes),
     )
     .unwrap();
     assert_eq!(consumed, CAPTURE.len());
@@ -24,16 +24,21 @@ fn pull_repository_capture_preserves_the_complete_record() {
     assert_eq!(captured.default_branch, "main");
     assert!(captured.contents_url.ends_with("{+path}"));
     assert_eq!(
-        serde_json::from_str::<PullRepositoryRecord>(CAPTURE).unwrap(),
+        serde_json::from_slice::<PullRepositoryRecord>(&serde_json::to_vec(&captured).unwrap())
+            .unwrap(),
         captured
     );
-    assert_eq!(
-        amiss_fixtures::canonical_json(&serde_json::to_vec(&captured).unwrap()).unwrap(),
-        amiss_fixtures::canonical_json(CAPTURE.as_bytes()).unwrap()
+    assert!(
+        decode_bounded_json::<PullRepositoryRecord, _>(
+            CAPTURE.as_bytes(),
+            None,
+            CAPTURE.len() - 1,
+            |bytes| serde_json::from_slice(bytes),
+        )
+        .is_err()
     );
-    assert!(amiss_wire::read_json::<PullRepositoryRecord>(CAPTURE.as_bytes(), 0).is_err());
     let trailing = format!("{CAPTURE} {{}}");
-    assert!(amiss_wire::read_json::<PullRepositoryRecord>(trailing.as_bytes(), u64::MAX).is_err());
+    assert!(serde_json::from_str::<PullRepositoryRecord>(&trailing).is_err());
 }
 
 #[test]
@@ -73,7 +78,7 @@ fn pull_repository_retains_every_optional_policy_and_metadata_field() {
         use_squash_pr_title_as_default: Some(false),
         visibility: Some("public".to_owned()),
         web_commit_signoff_required: Some(true),
-        ..amiss_wire::read_json(CAPTURE.as_bytes(), u64::MAX).unwrap()
+        ..serde_json::from_str(CAPTURE).unwrap()
     };
     let encoded = serde_json::to_vec(&complete).unwrap();
     assert_eq!(
@@ -97,7 +102,7 @@ fn pull_repository_nulls_do_not_make_required_members_optional() {
         pushed_at: Nullable::Null,
         created_at: Nullable::Null,
         updated_at: Nullable::Null,
-        ..amiss_wire::read_json(CAPTURE.as_bytes(), u64::MAX).unwrap()
+        ..serde_json::from_str(CAPTURE).unwrap()
     };
     let encoded = serde_json::to_string(&nullable).unwrap();
     assert_eq!(
@@ -262,8 +267,7 @@ fn repository_models_refuse_unknown_null_and_invalid_members() {
             amiss_wire::read_json::<PullRepositoryRecord>(changed.as_bytes(), u64::MAX).is_err()
         );
     }
-    let captured: PullRepositoryRecord =
-        amiss_wire::read_json(CAPTURE.as_bytes(), u64::MAX).unwrap();
+    let captured: PullRepositoryRecord = serde_json::from_str(CAPTURE).unwrap();
     let member = format!("\"size\":{}", captured.size);
     assert_eq!(CAPTURE.matches(&member).count(), 1);
     for value in ["-1", "1.5", "9007199254740992", "null"] {

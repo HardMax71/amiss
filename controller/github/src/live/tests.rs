@@ -1060,14 +1060,12 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
     let captured: PullRequestRecord =
         serde_json::from_slice(include_bytes!("../../tests/fixtures/pull-request.json")).unwrap();
     let repository = captured.base.repo.clone().unwrap();
-    let owner = repository.owner.clone();
     let base_repository = PullRepositoryRecord {
         id: 101,
         name: "widget".to_owned(),
         full_name: "Acme/Widget".to_owned(),
         owner: OwnerRecord {
             login: "Acme".to_owned(),
-            ..owner.clone()
         },
         ..repository.clone()
     };
@@ -1094,7 +1092,6 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
                     full_name: "Contributor/widget-fork".to_owned(),
                     owner: OwnerRecord {
                         login: "Contributor".to_owned(),
-                        ..owner
                     },
                     ..repository
                 }),

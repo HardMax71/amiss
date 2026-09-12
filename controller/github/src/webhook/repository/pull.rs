@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
-use super::WorkflowOwner;
+use crate::owner::OwnerRecord;
 use crate::repository::metadata::{
     CustomProperties, MergeCommitMessage, MergeCommitTitle, PullRequestCreationPolicy,
     RepositoryAccess, SquashMergeCommitMessage, SquashMergeCommitTitle,
@@ -29,7 +29,7 @@ pub struct PullRepository {
     pub full_name: String,
     #[serde_with(skip_apply)]
     #[serde(deserialize_with = "Option::deserialize")]
-    pub owner: Option<WorkflowOwner>,
+    pub owner: Option<OwnerRecord>,
     pub node_id: String,
     pub private: bool,
     pub html_url: String,
