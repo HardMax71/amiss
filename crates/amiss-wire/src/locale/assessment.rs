@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
@@ -6,9 +7,8 @@ use strum::{Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
-use crate::json;
 use crate::model::ArtifactId;
+use crate::model::Digest;
 use crate::semantic::producer_version_valid;
 
 use super::evidence::{
@@ -84,10 +84,26 @@ pub enum LocaleLineageStatus {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleCoverageAssessmentEnvelope {
     pub schema: AssessmentEnvelopeSchema,
     pub payload: LocaleCoverageAssessment,
     pub payload_digest: Digest,
+}
+
+impl Serialize for LocaleCoverageAssessmentEnvelope {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleCoverageAssessmentEnvelope {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -100,6 +116,7 @@ pub enum AssessmentEnvelopeSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleCoverageAssessment {
     pub schema: AssessmentPayloadSchema,
     pub engine: AssessmentEngine,
@@ -108,6 +125,21 @@ pub struct LocaleCoverageAssessment {
     pub reasons: Vec<LocaleCoverageReason>,
     pub coverage: LocaleCoverageResult,
     pub product: Nullable<LocaleProductResult>,
+}
+
+impl Serialize for LocaleCoverageAssessment {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleCoverageAssessment {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -120,6 +152,7 @@ pub enum AssessmentPayloadSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleCoverageResult {
     pub complete: bool,
     pub source_missing: Vec<String>,
@@ -129,26 +162,89 @@ pub struct LocaleCoverageResult {
     pub lineage: Vec<LocaleLineageResult>,
 }
 
+impl Serialize for LocaleCoverageResult {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleCoverageResult {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleFallbackResult {
     pub key: String,
     pub class: ArtifactId,
     pub status: LocaleFallbackStatus,
 }
 
+impl Serialize for LocaleFallbackResult {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleFallbackResult {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleLineageResult {
     pub key: String,
     pub status: LocaleLineageStatus,
 }
 
+impl Serialize for LocaleLineageResult {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleLineageResult {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleProductResult {
     pub source: AssessmentVerdict,
     pub target: AssessmentVerdict,
+}
+
+impl Serialize for LocaleProductResult {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleProductResult {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 struct AssessmentOutcome {
@@ -168,8 +264,14 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<LocaleCoverageAssessmentEnvelope
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let document: LocaleCoverageAssessmentEnvelope = de::deserialize_json(bytes)?;
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    let document: LocaleCoverageAssessmentEnvelope =
+        serde_path_to_error::deserialize(&mut deserializer)
+            .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if assessment_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -289,7 +391,7 @@ pub fn assess(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    de::JsonProfile::validate(&canonical)?;
     Ok(canonical)
 }
 
@@ -315,11 +417,11 @@ fn compare_coverage(
             .filter(|key| !source_has(key))
             .cloned()
             .collect(),
-        LocalePageRequirement::AllSource | LocalePageRequirement::Named { .. } => Vec::new(),
+        LocalePageRequirement::AllSource {} | LocalePageRequirement::Named { .. } => Vec::new(),
     };
     let target_missing = if evidence.target.complete {
         match &plan.policy.required {
-            LocalePageRequirement::AllSource => source_pages
+            LocalePageRequirement::AllSource {} => source_pages
                 .iter()
                 .filter(|page| !target_has(&page.key))
                 .map(|page| page.key.clone())
@@ -345,7 +447,7 @@ fn compare_coverage(
     let TargetRelations { fallbacks, lineage } = compare_target_relations(plan, evidence);
 
     let requirement_complete = match &plan.policy.required {
-        LocalePageRequirement::AllSource => evidence.source.complete,
+        LocalePageRequirement::AllSource {} => evidence.source.complete,
         LocalePageRequirement::Named { keys } => {
             evidence.source.complete || keys.iter().all(|key| source_has(key))
         }
@@ -514,7 +616,7 @@ fn compare_target_relations(
                 let authorized = plan.policy.fallbacks.iter().any(|rule| {
                     rule.class == *class
                         && match &rule.pages {
-                            LocalePageRequirement::AllSource => true,
+                            LocalePageRequirement::AllSource {} => true,
                             LocalePageRequirement::Named { keys } => {
                                 keys.binary_search(key).is_ok()
                             }
@@ -629,7 +731,15 @@ fn classify_coverage(
 fn assessment_payload_digest(assessment: &LocaleCoverageAssessment) -> Result<Digest, Error> {
     validate_assessment(assessment)?;
     serde_json_canonicalizer::to_vec(assessment)
-        .map(|canonical| hb(ASSESSMENT_PAYLOAD_SCHEMA, &canonical))
+        .map(|canonical| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(&canonical)
+                    .finalize()
+                    .0,
+            )
+        })
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 

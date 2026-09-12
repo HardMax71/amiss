@@ -12,11 +12,7 @@ fn root() -> PathBuf {
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn input(name: &str, pin: &str) -> Vec<u8> {
     let bytes = fs::read(root().join("corpus/third_party").join(name)).unwrap();
-    let mut hex = String::from("sha256:");
-    for byte in Sha256::digest(&bytes) {
-        hex.push(char::from_digit(u32::from(byte >> 4), 16).unwrap());
-        hex.push(char::from_digit(u32::from(byte & 0x0f), 16).unwrap());
-    }
+    let hex = amiss_wire::model::Digest::from(Sha256::digest(&bytes).0).to_string();
     assert_eq!(hex, pin, "{name} drifted from its pinned digest");
     bytes
 }

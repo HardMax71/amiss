@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 
@@ -13,11 +14,10 @@ use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, WaiverInput};
 use amiss_scan::report::{CandidateBlock, candidate_identity_digest};
 use amiss_scan::{Effects, Setup, SetupShell, SnapshotIdentity, commit_pair};
 use amiss_wire::controls::{
-    Profile, canonical_debt_snapshot, canonical_organization_floor, canonical_waiver_bundle,
-    parse_debt_snapshot, parse_organization_floor, parse_trusted_time, parse_waiver_bundle,
+    Profile, parse_debt_snapshot, parse_organization_floor, parse_trusted_time, parse_waiver_bundle,
 };
 use amiss_wire::de::Error;
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::RequestTrust;
@@ -27,7 +27,13 @@ pub(crate) const INSTANT: &str = "2026-07-12T10:00:00Z";
 pub(crate) fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"test engine"),
+        digest: Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"test engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 
@@ -85,7 +91,13 @@ pub(crate) fn floor_input() -> FloorInput {
   "resource_limits": []
 }"#;
     let floor = parse_organization_floor(doc.as_bytes()).unwrap();
-    let digest = canonical_organization_floor(&floor).unwrap().1;
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/organization-floor")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+            .finalize()
+            .0,
+    );
     FloorInput {
         floor,
         digest,
@@ -231,7 +243,7 @@ pub(crate) fn debt_json(
 }
 
 pub(crate) fn debt_input(doc: &str) -> DebtInput {
-    let (snapshot, digest) = parsed_control(doc, parse_debt_snapshot, canonical_debt_snapshot);
+    let (snapshot, digest) = parsed_control(doc, parse_debt_snapshot, "amiss/debt-snapshot");
     DebtInput {
         snapshot,
         digest,
@@ -274,7 +286,7 @@ pub(crate) fn waiver_json(
 }
 
 pub(crate) fn waiver_input(doc: &str) -> WaiverInput {
-    let (bundle, digest) = parsed_control(doc, parse_waiver_bundle, canonical_waiver_bundle);
+    let (bundle, digest) = parsed_control(doc, parse_waiver_bundle, "amiss/waiver-bundle");
     WaiverInput {
         bundle,
         digest,
@@ -282,15 +294,21 @@ pub(crate) fn waiver_input(doc: &str) -> WaiverInput {
     }
 }
 
-fn parsed_control<T>(
+fn parsed_control<T: serde::Serialize>(
     doc: &str,
     parse: impl FnOnce(&[u8]) -> Result<T, Error>,
-    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), Error>,
+    domain: &str,
 ) -> (T, Digest) {
     let value = parse(doc.as_bytes())
         .map_err(|defect| format!("{defect:?}"))
         .unwrap();
-    let digest = canonical(&value).unwrap().1;
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix(domain)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&value).unwrap())
+            .finalize()
+            .0,
+    );
     (value, digest)
 }
 

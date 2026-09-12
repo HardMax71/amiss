@@ -1,8 +1,9 @@
-use amiss_wire::json::Value;
 use amiss_wire::report::{
     PAYLOAD_SCHEMA,
     model::{ObservationComparison, ReportEnvelope},
 };
+use serde_json::Value;
+use sha2::Digest as _;
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.canonical.json");
 
@@ -43,15 +44,25 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
             let candidate = row.candidate.as_mut()?;
             candidate.external_destination = Some((*destination).to_owned());
             candidate.intent.external_scheme = Some(scheme.to_owned());
-            candidate.intent.raw_destination_digest =
-                amiss_wire::digest::hb("amiss/fixture-destination", destination.as_bytes());
+            candidate.intent.raw_destination_digest = amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/fixture-destination")
+                    .chain_update([0_u8])
+                    .chain_update(destination.as_bytes())
+                    .finalize()
+                    .0,
+            );
             candidate.observation_id_input.extracted_intent = candidate.intent.clone();
             candidate
                 .observation_id_input
                 .structural_address
                 .construct_index = u64::try_from(index).ok()?.saturating_add(1);
-            candidate.observation_id =
-                amiss_wire::digest::hb("amiss/fixture-observation", destination.as_bytes());
+            candidate.observation_id = amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/fixture-observation")
+                    .chain_update([0_u8])
+                    .chain_update(destination.as_bytes())
+                    .finalize()
+                    .0,
+            );
             Some(row)
         })
         .collect::<Option<Vec<_>>>()?;
@@ -62,7 +73,13 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
     report.payload.summary.references.extracted = count.saturating_add(1);
     report.payload.summary.references.resolved = 1;
     let payload = serde_json_canonicalizer::to_vec(&report.payload).ok()?;
-    report.payload_digest = amiss_wire::digest::hb(PAYLOAD_SCHEMA, &payload);
+    report.payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize()
+            .0,
+    );
     serde_json_canonicalizer::to_vec(&report).ok()
 }
 
@@ -70,12 +87,12 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
 #[must_use]
 pub fn external_plan(destinations: &[&str]) -> Option<Vec<u8>> {
     let report = external_report(destinations)?;
-    let parsed = amiss_wire::json::parse(&report).ok()?;
-    let engine = parsed.member("payload")?.member("engine")?;
+    let parsed = serde_json::from_slice::<Value>(&report).ok()?;
+    let engine = parsed.get("payload")?.get("engine")?;
     amiss_wire::external::plan(
         &report,
-        engine.text("engine_version")?,
-        amiss_wire::digest::Digest::from_wire(engine.text("engine_digest")?)?,
+        engine.get("engine_version").and_then(Value::as_str)?,
+        amiss_wire::model::Digest::from_wire(engine.get("engine_digest").and_then(Value::as_str)?)?,
     )
     .ok()
 }
@@ -83,15 +100,15 @@ pub fn external_plan(destinations: &[&str]) -> Option<Vec<u8>> {
 /// Flattens forge evidence rows into the facts provider tests compare.
 #[must_use]
 pub fn external_facts(evidence: &[u8]) -> Option<Vec<String>> {
-    let evidence = amiss_wire::json::parse(evidence).ok()?;
-    let Value::Array(rows) = evidence.member("rows")? else {
+    let evidence = serde_json::from_slice::<Value>(evidence).ok()?;
+    let Value::Array(rows) = evidence.get("rows")? else {
         return None;
     };
     rows.iter()
         .map(|row| {
-            let destination = row.text("destination")?;
-            let repository = row.text("repository")?;
-            Some(match row.text("tail") {
+            let destination = row.get("destination").and_then(Value::as_str)?;
+            let repository = row.get("repository").and_then(Value::as_str)?;
+            Some(match row.get("tail").and_then(Value::as_str) {
                 Some(tail) => format!("{destination} {repository} {tail}"),
                 None => format!("{destination} {repository}"),
             })

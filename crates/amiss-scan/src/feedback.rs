@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::{Disposition, FindingKind};
 use amiss_wire::resolution::Resolution;

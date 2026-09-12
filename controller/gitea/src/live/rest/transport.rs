@@ -2,9 +2,9 @@ mod tests;
 
 use std::time::Duration;
 
-use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, decode_bounded_json};
+use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, read_response_body};
 use reqwest::StatusCode;
-use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{ACCEPT, AUTHORIZATION, HeaderValue};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::Serialize;
@@ -85,7 +85,13 @@ impl Transport {
             .map_err(|error| map_error(&error))?;
         let status = response.status();
         match classified(status).ok_or_else(|| map_status(status))? {
-            Ok(()) => decode_body(response).map(Ok),
+            Ok(()) => {
+                let declared = response.content_length();
+                let bytes = read_response_body(response, declared, MAX_RESPONSE_BYTES)?;
+                serde_json::from_slice(&bytes)
+                    .map_err(|_defect| ProviderError::InvalidResponse)
+                    .map(Ok)
+            }
             Err(negative) => Ok(Err(negative)),
         }
     }
@@ -104,7 +110,9 @@ impl Transport {
         if !status.is_success() {
             return Err(map_status(status));
         }
-        decode_body(response)
+        let declared = response.content_length();
+        let bytes = read_response_body(response, declared, MAX_RESPONSE_BYTES)?;
+        serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)
     }
 
     fn authorized(&self, request: RequestBuilder) -> Result<RequestBuilder, ProviderError> {
@@ -123,11 +131,6 @@ impl Transport {
         Url::parse(&format!("{}{route}", self.api_base))
             .map_err(|_defect| ProviderError::InvalidResponse)
     }
-}
-
-fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
-    let declared = response.content_length();
-    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES).map(|(value, _length)| value)
 }
 
 fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GiteaClientError> {

@@ -1,11 +1,12 @@
 use amiss_wire::controls::SourceConstruct;
-use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::Adapter;
+use amiss_wire::model::Digest;
 use amiss_wire::report::IntentKind;
 use amiss_wire::report::model::{
     ObservationIdInput, ObservationIdInputSchema, StructuralAddress, StructuralAddressSchema,
     TargetIntent,
 };
+use sha2::Digest as _;
 
 use crate::resolve::Intent;
 
@@ -14,22 +15,6 @@ pub const OBSERVATION_ID_INPUT_SCHEMA: &str = "amiss/scanner-observation-id-inpu
 pub const STRUCTURAL_ADDRESS_SCHEMA: &str = "amiss/scanner-structural-address";
 pub const LINK_QUERY_DOMAIN: &str = "amiss/scanner-link-query";
 pub const LINK_FRAGMENT_DOMAIN: &str = "amiss/scanner-link-fragment";
-
-#[must_use]
-pub fn query_digest(intent: &Intent) -> Option<Digest> {
-    intent
-        .query
-        .as_deref()
-        .map(|text| hb(LINK_QUERY_DOMAIN, text.as_bytes()))
-}
-
-#[must_use]
-pub fn fragment_digest(intent: &Intent) -> Option<Digest> {
-    intent
-        .fragment
-        .as_deref()
-        .map(|text| hb(LINK_FRAGMENT_DOMAIN, text.as_bytes()))
-}
 
 pub struct ObservationIdentity<'a, P> {
     pub adapter: Adapter,
@@ -55,9 +40,25 @@ pub fn target_intent<P>(
             .external_scheme
             .clone()
             .filter(|_scheme| intent.kind == IntentKind::ExternalUrl),
-        fragment_digest: fragment_digest(intent),
+        fragment_digest: intent.fragment.as_deref().map(|text| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(LINK_FRAGMENT_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(text.as_bytes())
+                    .finalize()
+                    .0,
+            )
+        }),
         kind: intent.kind,
-        query_digest: query_digest(intent),
+        query_digest: intent.query.as_deref().map(|text| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(LINK_QUERY_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(text.as_bytes())
+                    .finalize()
+                    .0,
+            )
+        }),
         raw_destination_digest,
         repository_path,
         target_kind: intent.target_kind,

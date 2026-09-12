@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -7,7 +8,6 @@ use amiss_controller::{
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::semantic::semantic_input_artifact;
-use amiss_wire::digest::sha256;
 
 mod relation_binding;
 mod semantic_binding;
@@ -16,7 +16,7 @@ mod semantic_binding;
 fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
     let fixture = semantic_input_artifact().unwrap();
     assert_eq!(
-        sha256(&fixture.artifact).to_string(),
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(&fixture.artifact).0).to_string(),
         "sha256:6e84784cf279b723c750b0151d38bfa74caf9166995267f037dad6303aa9d595"
     );
     let root = tempfile::tempdir().unwrap();
@@ -45,7 +45,12 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
             },
         )
         .unwrap();
-    assert_eq!(reference.semantic_digest, Some(sha256(&fixture.artifact)));
+    assert_eq!(
+        reference.semantic_digest,
+        Some(amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(&fixture.artifact).0
+        ))
+    );
     assert_eq!(
         store
             .read(&reference.id, ArtifactComponent::Semantic)

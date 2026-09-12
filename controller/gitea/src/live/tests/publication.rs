@@ -1,8 +1,8 @@
 use amiss_controller::{
     ArtifactReference, ChangeId, CheckConclusion, ProviderError, ProviderRunAttempt, RunFailure,
 };
-use amiss_wire::digest::sha256;
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
+use sha2::Digest as _;
 
 use super::super::Config;
 use super::super::model::{CreateReview, ReviewRecord, UserRecord};
@@ -37,8 +37,12 @@ fn review_bodies_carry_the_report_feedback_lines() {
         id: artifact_id.clone(),
         locator: format!("https://amiss.example/artifacts/{artifact_id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
-        report_digest: sha256(publication.report.as_deref().unwrap_or_default()),
-        semantic_digest: Some(sha256(b"semantic input")),
+        report_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(publication.report.as_deref().unwrap_or_default()).0,
+        ),
+        semantic_digest: Some(amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(b"semantic input").0,
+        )),
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,
@@ -63,7 +67,10 @@ fn review_bodies_carry_the_report_feedback_lines() {
         "{body}"
     );
     assert!(
-        body.contains(&format!("semantic-input: {}", sha256(b"semantic input"))),
+        body.contains(&format!(
+            "semantic-input: {}",
+            amiss_wire::model::Digest::from(sha2::Sha256::digest(b"semantic input").0)
+        )),
         "{body}"
     );
     assert!(body.contains("/semantic"), "{body}");

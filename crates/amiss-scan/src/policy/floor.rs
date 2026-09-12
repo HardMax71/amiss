@@ -1,8 +1,9 @@
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
 use amiss_wire::controls::{GitMode, ResourceName};
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{Oid, RepoPath, RepoPathText};
 use amiss_wire::report::{Disposition, FindingKind};
 
@@ -67,15 +68,25 @@ pub fn protected_state(
     if lfs::is_pointer(&object.body) {
         return Ok(ProtectedState::Unsupported);
     }
-    let raw = amiss_wire::digest::hb(crate::resolve::RAW_EVIDENCE_DOMAIN, &object.body);
+    let raw = Digest::from(
+        sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&object.body)
+            .finalize()
+            .0,
+    );
     let descriptor = ProtectedControlEvidence {
         git_mode: *mode,
         path,
         raw_digest: raw,
     };
-    amiss_wire::digest::hj_serde(PROTECTED_CONTROL_EVIDENCE_DOMAIN, |mut writer| {
+    {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(PROTECTED_CONTROL_EVIDENCE_DOMAIN).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&descriptor, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map(ProtectedState::Present)
     .map_err(|_defect| Error::Internal)
 }

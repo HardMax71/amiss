@@ -1,13 +1,11 @@
 use amiss_wire::controls::{
     ActionBootstrapContract, DebtSnapshotSchema, ExecutionConstraintSchema,
     OrganizationFloorSchema, TrustedTimeController, TrustedTimeSchema, WaiverBundleSchema,
-    canonical_debt_snapshot, canonical_execution_constraint, canonical_waiver_bundle,
     parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_trusted_time,
     parse_waiver_bundle,
 };
 use amiss_wire::de::ErrorKind;
-
-use amiss_wire::json;
+use sha2::Digest as _;
 
 use crate::support::{
     FLOOR, TIME_STATEMENT, computed_digests, debt_item, debt_snapshot, waiver_bundle, waiver_item,
@@ -31,15 +29,24 @@ fn controls_accept_open_forge_identities() {
     let debt = debt_snapshot("2026-07-02T00:00:00Z", &[item])
         .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
         .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
-    let debt_value = json::parse(debt.as_bytes()).unwrap();
+    let debt_value = serde_json::from_slice::<serde_json::Value>(debt.as_bytes()).unwrap();
     let debt = parse_debt_snapshot(debt.as_bytes()).unwrap();
     assert_eq!(debt.schema, DebtSnapshotSchema::Current);
     assert_eq!(debt.repository.owner(), "platform/security");
     assert_eq!(
-        canonical_debt_snapshot(&debt).unwrap().1,
-        amiss_wire::digest::hb(
-            "amiss/debt-snapshot",
-            &serde_json_canonicalizer::to_vec(&debt_value).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&debt).unwrap())
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&debt_value).unwrap())
+                .finalize()
+                .0
         )
     );
 
@@ -47,15 +54,24 @@ fn controls_accept_open_forge_identities() {
     let waiver = waiver_bundle(&[item])
         .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
         .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
-    let waiver_value = json::parse(waiver.as_bytes()).unwrap();
+    let waiver_value = serde_json::from_slice::<serde_json::Value>(waiver.as_bytes()).unwrap();
     let waiver = parse_waiver_bundle(waiver.as_bytes()).unwrap();
     assert_eq!(waiver.schema, WaiverBundleSchema::Current);
     assert_eq!(waiver.repository.owner(), "platform/security");
     assert_eq!(
-        canonical_waiver_bundle(&waiver).unwrap().1,
-        amiss_wire::digest::hb(
-            "amiss/waiver-bundle",
-            &serde_json_canonicalizer::to_vec(&waiver_value).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&waiver).unwrap())
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&waiver_value).unwrap())
+                .finalize()
+                .0
         )
     );
 
@@ -98,11 +114,25 @@ fn parses_an_execution_constraint_descriptor() {
         "amiss / documentation assurance"
     );
     assert_eq!(
-        canonical_execution_constraint(&descriptor).unwrap().1,
-        amiss_wire::digest::hb(
-            "amiss/scanner-execution-constraint",
-            &serde_json_canonicalizer::to_vec(&json::parse(CONSTRAINT.as_bytes()).unwrap())
-                .unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&descriptor).unwrap())
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(
+                        &serde_json::from_slice::<serde_json::Value>(CONSTRAINT.as_bytes())
+                            .unwrap()
+                    )
+                    .unwrap()
+                )
+                .finalize()
+                .0
         )
     );
 

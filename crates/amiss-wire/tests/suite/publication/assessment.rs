@@ -1,10 +1,10 @@
 use super::evidence::publication_evidence;
 use super::{digest, oid, publication_plan};
+use sha2::Digest as _;
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 
-use amiss_wire::json;
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::publication::{
     ASSESSMENT_PAYLOAD_SCHEMA, PublicationReason, PublicationVerdict, assess, evidence,
@@ -27,8 +27,8 @@ fn assessed(
     plan: &amiss_wire::publication::PublicationPlanEnvelope,
     evidence: Option<&amiss_wire::publication::PublicationEvidenceEnvelope>,
 ) -> amiss_wire::publication::PublicationAssessmentEnvelope {
-    let value = assess(plan, evidence, "0.26.0", digest('a')).unwrap();
-    parse_assessment(&value).unwrap()
+    amiss_wire::publication::PublicationAssessment::evaluate(plan, evidence, "0.26.0", digest('a'))
+        .unwrap()
 }
 
 #[test]
@@ -124,13 +124,19 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     let inconsistent = String::from_utf8(value)
         .unwrap()
         .replace("\"unproven\"", "\"matched\"");
-    let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
+    let inconsistent_value =
+        serde_json::from_slice::<serde_json::Value>(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
         &recorded,
-        &amiss_wire::digest::hb(
-            ASSESSMENT_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(inconsistent_value.member("payload").unwrap())
-                .unwrap(),
+        &amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(inconsistent_value.get("payload").unwrap())
+                        .unwrap(),
+                )
+                .finalize()
+                .0,
         )
         .to_string(),
     );
@@ -148,12 +154,18 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
         "[\"docs-mismatch\",\"target-mismatch\"]",
         "[\"target-mismatch\",\"docs-mismatch\"]",
     );
-    let unsorted_value = json::parse(unsorted.as_bytes()).unwrap();
+    let unsorted_value = serde_json::from_slice::<serde_json::Value>(unsorted.as_bytes()).unwrap();
     let rebound = unsorted.replace(
         &recorded,
-        &amiss_wire::digest::hb(
-            ASSESSMENT_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(unsorted_value.member("payload").unwrap()).unwrap(),
+        &amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(unsorted_value.get("payload").unwrap())
+                        .unwrap(),
+                )
+                .finalize()
+                .0,
         )
         .to_string(),
     );

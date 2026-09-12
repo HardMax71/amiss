@@ -13,7 +13,7 @@ serde_with::with_prefix!(object "");
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Observation {
-    Site(SiteBuildObservation),
+    Site(#[serde(with = "object")] SiteBuildObservation),
     Sphinx(#[serde(with = "object")] SphinxLabelObservation),
     Record(#[serde(with = "object")] super::record::Observation),
 }

@@ -1,8 +1,8 @@
 use serde::Deserialize;
+use sha2::Digest as _;
 
 use crate::ExitClass;
-use crate::digest::{Digest, hj_serde};
-use crate::json;
+use crate::model::Digest;
 
 use super::model::{ReportEnvelope, ReportPayload, ReportResult, ReportStatus};
 use super::{ENVELOPE_SCHEMA, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect};
@@ -15,34 +15,46 @@ use super::{ENVELOPE_SCHEMA, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect};
 /// typed normalization before checking the payload digest and result tuple.
 pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitClass), ReportDefect> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES
-        || !matches!(json::parse(bytes), Ok(json::Value::Object(_)))
+        || crate::de::JsonProfile::validate(bytes).is_err()
     {
         return Err(ReportDefect::NotAReport);
     }
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     // The strict gate has already enforced the document depth ceiling.
     deserializer.disable_recursion_limit();
-    let envelope: ReportEnvelope = ReportEnvelope::deserialize(&mut deserializer)
+    let envelope: ReportEnvelope = <ReportEnvelope as Deserialize>::deserialize(&mut deserializer)
         .map_err(|_defect| ReportDefect::NotAReport)?;
-    let typed_digest = hj_serde(ENVELOPE_SCHEMA, |mut writer| {
+    let typed_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(ENVELOPE_SCHEMA).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&envelope, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| ReportDefect::NotAReport)?;
     let mut input = serde_json::Deserializer::from_slice(bytes);
     input.disable_recursion_limit();
-    let input_digest = hj_serde(ENVELOPE_SCHEMA, |mut writer| {
+    let input_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(ENVELOPE_SCHEMA).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(
             &serde_transcode::Transcoder::new(&mut input),
             &mut writer,
         )
-    })
+        .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| ReportDefect::NotAReport)?;
     if input_digest != typed_digest {
         return Err(ReportDefect::NotAReport);
     }
-    let digest = hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+    let digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| ReportDefect::NotAReport)?;
     if digest != envelope.payload_digest {
         return Err(ReportDefect::DigestMismatch);

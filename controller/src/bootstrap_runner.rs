@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 mod tests;
 
 use std::fs::{File, OpenOptions};
@@ -8,7 +9,6 @@ use std::time::Duration;
 
 use amiss_bootstrap::result::RESULT_BYTES;
 use amiss_bootstrap::{BOOTSTRAP_DOMAIN, BOOTSTRAP_EXECUTABLE_BYTES};
-use amiss_wire::digest::hb;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::{MACHINE_JSON_BYTES, WATCHDOG_MILLISECONDS};
 use processkit::{
@@ -79,7 +79,14 @@ pub fn run_bootstrap(
     let Ok(executable) = read_bounded(run.executable, BOOTSTRAP_EXECUTABLE_BYTES) else {
         return RunnerOutcome::Unavailable;
     };
-    if hb(BOOTSTRAP_DOMAIN, &executable) != request.plan.execution.bootstrap_digest {
+    if amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(BOOTSTRAP_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&executable)
+            .finalize()
+            .0,
+    ) != request.plan.execution.bootstrap_digest
+    {
         return RunnerOutcome::TamperedRuntime;
     }
     let Ok(job) = bootstrap_job(BootstrapJobInput {

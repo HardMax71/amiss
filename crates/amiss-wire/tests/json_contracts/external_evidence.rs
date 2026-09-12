@@ -1,10 +1,9 @@
 use amiss_wire::{
     de::ErrorKind,
-    digest::hb,
     external::{self, EvidenceDefect},
-    json,
 };
 use serde_json::{Value, json};
+use sha2::Digest as _;
 
 const EVIDENCE: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-evidence.json");
 
@@ -21,9 +20,17 @@ fn assessments_use_the_digest_of_all_evidence_fields() {
         assert_ne!(digest, original_digest);
         assert_eq!(
             digest,
-            hb(
-                external::EVIDENCE_SCHEMA,
-                &serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap()
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(external::EVIDENCE_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(
+                        serde_json_canonicalizer::to_vec(
+                            &serde_json::from_slice::<Value>(&bytes).unwrap()
+                        )
+                        .unwrap()
+                    )
+                    .finalize()
+                    .0
             )
         );
         assert_eq!(
@@ -36,7 +43,13 @@ fn assessments_use_the_digest_of_all_evidence_fields() {
             include_bytes!("../../../../spec/examples/scanner-external-plan.json"),
             &bytes,
             "0.0.0",
-            hb("test", b"engine"),
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("test")
+                    .chain_update([0_u8])
+                    .chain_update(b"engine")
+                    .finalize()
+                    .0,
+            ),
         )
         .unwrap();
         assert_eq!(
@@ -68,16 +81,14 @@ fn evidence_capture_keeps_strict_bounds_and_requires_an_object() {
     external::parse_evidence(&bytes).unwrap();
     let nested = evidence["future"].take();
     evidence["future"] = json!([nested]);
-    assert!(matches!(
-        external::parse_evidence(&serde_json::to_vec(&evidence).unwrap()),
-        Err(EvidenceDefect::Wire(amiss_wire::de::Error {
-            kind: ErrorKind::Json(json::Error {
-                kind: json::ErrorKind::DepthLimit,
-                ..
-            }),
-            ..
-        }))
-    ));
+    let bytes = serde_json::to_vec(&evidence).unwrap();
+    let Err(EvidenceDefect::Wire(defect)) = external::parse_evidence(&bytes) else {
+        panic!("the evidence depth must be bounded");
+    };
+    assert_eq!(
+        defect,
+        amiss_wire::de::JsonProfile::validate(&bytes).unwrap_err()
+    );
     for invalid in [
         br#"{"future":0,"\u0066uture":1}"#.as_slice(),
         br#"{"future":-0}"#,

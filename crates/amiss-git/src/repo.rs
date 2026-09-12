@@ -8,9 +8,7 @@ use amiss_wire::model::{ObjectFormat, Oid};
 
 use crate::Error;
 use crate::handle::{open_dir, open_file, open_root};
-use crate::object::{
-    Object, ObjectKind, decode_loose_reusing, discard_to_unreadable, hex, verify_oid,
-};
+use crate::object::{Object, ObjectKind, decode_loose_reusing, discard_to_unreadable, verify_oid};
 use crate::pack::{
     self, EntryKind, PackSet, apply_delta, inflate_exact, parse_entry_header, parse_ofs_distance,
 };
@@ -195,7 +193,7 @@ impl Repository {
         depth: u64,
         value_cap: Option<&ValueCap>,
     ) -> Result<Object, Error> {
-        let raw = oid_raw(oid).ok_or(Error::ObjectUnreadable)?;
+        let raw = hex::decode(oid.as_str()).map_err(|_defect| Error::ObjectUnreadable)?;
         let Some((set, pack_index, offset)) = self.locate_packed(resources, &raw)? else {
             return Err(Error::ObjectMissing);
         };
@@ -266,8 +264,8 @@ impl Repository {
             EntryKind::ReferenceDelta => {
                 let width = self.oid_width();
                 let base_raw = after_header.get(..width).ok_or(Error::ObjectUnreadable)?;
-                let base_oid =
-                    Oid::new(self.object_format, hex(base_raw)).ok_or(Error::ObjectUnreadable)?;
+                let base_oid = Oid::new(self.object_format, hex::encode(base_raw))
+                    .ok_or(Error::ObjectUnreadable)?;
                 let base = self.read_full(resources, &base_oid, depth.saturating_add(1), None)?;
                 let script_bytes = after_header.get(width..).ok_or(Error::ObjectUnreadable)?;
                 let script = inflate_exact(script_bytes, header.size, inflated_cap)?;
@@ -329,7 +327,7 @@ impl Repository {
         {
             return Ok(true);
         }
-        let Some(raw) = oid_raw(oid) else {
+        let Ok(raw) = hex::decode(oid.as_str()) else {
             return Err(Error::ObjectUnreadable);
         };
         Ok(self.locate_packed(resources, &raw)?.is_some())
@@ -468,22 +466,4 @@ fn absent_to_none(opened: std::io::Result<File>) -> Result<Option<File>, Error> 
         Err(defect) if defect.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(_defect) => Err(Error::ObjectUnreadable),
     }
-}
-
-fn oid_raw(oid: &Oid) -> Option<Vec<u8>> {
-    let text = oid.as_str();
-    if !text.len().is_multiple_of(2) {
-        return None;
-    }
-    let mut out = Vec::with_capacity(text.len().checked_div(2)?);
-    for pair in text.as_bytes().chunks_exact(2) {
-        let [high, low] = pair else { return None };
-        let value = |byte: u8| match byte {
-            b'0'..=b'9' => Some(byte.wrapping_sub(b'0')),
-            b'a'..=b'f' => Some(byte.wrapping_sub(b'a').wrapping_add(10)),
-            _ => None,
-        };
-        out.push(value(*high)?.wrapping_shl(4) | value(*low)?);
-    }
-    Some(out)
 }

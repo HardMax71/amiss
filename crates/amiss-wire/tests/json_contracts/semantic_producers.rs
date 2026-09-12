@@ -1,12 +1,12 @@
 use amiss_wire::{
     de::ErrorKind,
-    digest::hb,
     report::model::SemanticEvidenceProducer,
     semantic::{
         self, SemanticEvidenceEnvelope, SemanticEvidenceTemplate, SemanticProducer,
         SemanticProducerKind,
     },
 };
+use sha2::Digest as _;
 use strum::IntoEnumIterator;
 
 #[test]
@@ -15,8 +15,8 @@ fn semantic_producer_kinds_are_closed_string_tags_through_provenance() {
         kind: SemanticProducerKind::SiteBuild,
         identity: "fixture".parse().unwrap(),
         version: "1".to_owned(),
-        context_digest: hb("test", b"context"),
-        input_digest: hb("test", b"input"),
+        context_digest: amiss_wire::model::Digest::from([20; 32]),
+        input_digest: amiss_wire::model::Digest::from([21; 32]),
     };
     for kind in SemanticProducerKind::iter() {
         producer.kind = kind;
@@ -66,7 +66,13 @@ fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
     let unknown_producer = producer.replace("\"site-build\"", "\"future-producer\"");
     let unknown = payload.replace(&producer, &unknown_producer);
     assert_ne!(payload, unknown);
-    let digest = hb(semantic::PAYLOAD_SCHEMA, unknown.as_bytes());
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(unknown.as_bytes())
+            .finalize()
+            .0,
+    );
     let encoded = String::from_utf8(serde_json_canonicalizer::to_vec(&document).unwrap())
         .unwrap()
         .replace(&payload, &unknown)
@@ -86,10 +92,9 @@ fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
     let unknown_producer = producer.replace("\"record-set\"", "\"future-producer\"");
     let unknown = original.replace(&producer, &unknown_producer);
     assert_ne!(original, unknown);
-    assert_eq!(
-        semantic::parse_template(unknown.as_bytes())
+    assert!(
+        serde_json::from_slice::<SemanticEvidenceTemplate<'static>>(unknown.as_bytes())
             .unwrap_err()
-            .kind,
-        ErrorKind::InvalidValue
+            .is_data()
     );
 }

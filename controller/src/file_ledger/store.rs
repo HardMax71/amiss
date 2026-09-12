@@ -232,28 +232,6 @@ fn recover_capacity(
     Ok(capacity)
 }
 
-fn row_lock_name(key: &str) -> Result<String, FileLedgerError> {
-    let mut bytes = key.bytes();
-    let high = hex_value(bytes.next().ok_or(FileLedgerError::Corrupt)?)?;
-    let low = hex_value(bytes.next().ok_or(FileLedgerError::Corrupt)?)?;
-    let shard = high
-        .checked_mul(16)
-        .and_then(|value| value.checked_add(low))
-        .ok_or(FileLedgerError::Corrupt)?;
-    Ok(format!(".amiss-row-{shard:02x}.lock"))
-}
-
-fn hex_value(byte: u8) -> Result<u8, FileLedgerError> {
-    match byte {
-        b'0'..=b'9' => byte.checked_sub(b'0').ok_or(FileLedgerError::Corrupt),
-        b'a'..=b'f' => byte
-            .checked_sub(b'a')
-            .and_then(|value| value.checked_add(10))
-            .ok_or(FileLedgerError::Corrupt),
-        _ => Err(FileLedgerError::Corrupt),
-    }
-}
-
 fn validate_key(key: &str) -> Result<(), FileLedgerError> {
     if key.len() == 64
         && key
@@ -313,4 +291,14 @@ fn reject_non_file(path: &Path) -> Result<(), FileLedgerError> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(error) => Err(error.into()),
     }
+}
+
+fn row_lock_name(key: &str) -> Result<String, FileLedgerError> {
+    let prefix = key.get(..2).ok_or(FileLedgerError::Corrupt)?;
+    if prefix.bytes().any(|byte| byte.is_ascii_uppercase()) {
+        return Err(FileLedgerError::Corrupt);
+    }
+    let mut shard = [0_u8; 1];
+    hex::decode_to_slice(prefix, &mut shard).map_err(|_defect| FileLedgerError::Corrupt)?;
+    Ok(format!(".amiss-row-{prefix}.lock"))
 }

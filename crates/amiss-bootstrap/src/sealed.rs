@@ -1,12 +1,11 @@
+use sha2::Digest as _;
 use std::fs::File;
 use std::io::Read as _;
 use std::path::Path;
 
 use amiss_bootstrap::supervise::{SealedControlExpectation, SealedExpectations};
 use amiss_git::{GitLimits, GitResources, ObjectKind, Repository};
-use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_trusted_time,
-};
+use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::report::model::{SemanticEvidenceProducer, SemanticEvidenceProvenance};
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, REQUEST_STREAM_BYTES, RequestMode, RequestStreams,
@@ -39,42 +38,45 @@ pub(super) fn capture_requests(
     let streams = request_streams(args)?;
     let evaluation = EvaluationRequest::parse(&streams.evaluation)
         .map_err(|_defect| tampered("evaluation-request-invalid"))?;
-    let snapshot = SnapshotRequest::parse(&streams.snapshot)
+    amiss_wire::de::JsonProfile::validate(&streams.snapshot)
+        .map_err(|_defect| tampered("snapshot-request-invalid"))?;
+    let snapshot: SnapshotRequest = serde_json::from_slice(&streams.snapshot)
+        .map_err(|_defect| tampered("snapshot-request-invalid"))?;
+    snapshot
+        .validate()
         .map_err(|_defect| tampered("snapshot-request-invalid"))?;
     let controls = ControlsRequest::parse(&streams.controls)
         .map_err(|_defect| tampered("controls-request-invalid"))?;
-    let (_, constraint_digest) = canonical_execution_constraint(constraint)
+    constraint
+        .validate()
         .map_err(|_defect| tampered("execution-constraint-invalid"))?;
-    let canonical_requests = evaluation.canonical_bytes().ok().as_deref()
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&constraint, &mut writer)
+        .map_err(|_defect| tampered("execution-constraint-invalid"))?;
+    let constraint_digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
+    let canonical_requests = serde_json_canonicalizer::to_vec(&evaluation)
+        .ok()
+        .as_deref()
         == Some(streams.evaluation.as_slice())
-        && snapshot.canonical_bytes().ok().as_deref() == Some(streams.snapshot.as_slice())
-        && controls.canonical_bytes().ok().as_deref() == Some(streams.controls.as_slice());
+        && serde_json_canonicalizer::to_vec(&snapshot).ok().as_deref()
+            == Some(streams.snapshot.as_slice())
+        && serde_json_canonicalizer::to_vec(&controls).ok().as_deref()
+            == Some(streams.controls.as_slice());
     if !canonical_requests {
         return Err(tampered("request-noncanonical"));
     }
-    let candidate = match (
-        evaluation.mode,
-        evaluation.candidate_commit.as_ref(),
-        snapshot.materialization,
-    ) {
-        (RequestMode::CommitPair, Some(candidate), SnapshotMaterialization::GitObjects) => {
-            candidate.clone()
-        }
-        (
-            RequestMode::CommitPair | RequestMode::Index,
-            None | Some(_),
-            SnapshotMaterialization::GitObjects | SnapshotMaterialization::Index,
-        ) => {
-            return Err(tampered("request-mode-mismatch"));
-        }
-    };
+    validate_sealed_mode(&evaluation, &snapshot)?;
     let repository = sealed_identity(&evaluation).map_err(tampered)?;
     let supplied_constraint = controls
         .execution_constraint
         .as_ref()
         .ok_or_else(|| tampered("execution-constraint-absent"))?;
     let embedded_constraint = &supplied_constraint.value;
-    canonical_execution_constraint(embedded_constraint)
+    embedded_constraint
+        .validate()
         .map_err(|_defect| tampered("execution-constraint-invalid"))?;
     if constraint_digest != supplied_constraint.expected_digest || embedded_constraint != constraint
     {
@@ -85,8 +87,16 @@ pub(super) fn capture_requests(
         .as_ref()
         .ok_or_else(|| tampered("trusted-time-absent"))?;
     let statement = &supplied_time.value;
-    let (_, statement_digest) =
-        canonical_trusted_time(statement).map_err(|_defect| tampered("trusted-time-invalid"))?;
+    statement
+        .validate()
+        .map_err(|_defect| tampered("trusted-time-invalid"))?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&statement, &mut writer)
+        .map_err(|_defect| tampered("trusted-time-invalid"))?;
+    let statement_digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
     if statement_digest != supplied_time.expected_digest
         || statement.provider != supplied_time.provider
         || statement.provider_run_id != supplied_time.provider_run_id
@@ -119,13 +129,29 @@ pub(super) fn capture_requests(
         trusted_time_digest: statement_digest,
         semantic_evidence: semantic_expectations(&controls.semantic_evidence)?,
     };
-    let mut evaluation = evaluation;
-    evaluation.candidate_commit = Some(candidate);
     Ok(SealedRun {
         streams,
         evaluation,
         expected,
     })
+}
+
+fn validate_sealed_mode(
+    evaluation: &EvaluationRequest,
+    snapshot: &SnapshotRequest,
+) -> Execution<()> {
+    match (
+        evaluation.mode,
+        evaluation.candidate_commit.as_ref(),
+        snapshot.materialization,
+    ) {
+        (RequestMode::CommitPair, Some(_), SnapshotMaterialization::GitObjects) => Ok(()),
+        (
+            RequestMode::CommitPair | RequestMode::Index,
+            None | Some(_),
+            SnapshotMaterialization::GitObjects | SnapshotMaterialization::Index,
+        ) => Err(tampered("request-mode-mismatch")),
+    }
 }
 
 fn semantic_expectations(

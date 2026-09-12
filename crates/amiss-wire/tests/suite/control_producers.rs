@@ -9,12 +9,11 @@ use std::path::Path;
 use amiss_wire::controls::{
     ActionBootstrapContract, ConstraintPlatform, ExecutionConstraintDescriptor,
     ExecutionConstraintSchema, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
-    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
-    parse_trusted_time, valid_required_status_name,
+    parse_execution_constraint, parse_trusted_time, valid_required_status_name,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::Digest;
-use amiss_wire::json;
+use amiss_wire::model::Digest;
+
 use amiss_wire::model::{
     BranchRef, ObjectFormat, Oid, RepoPathText, RepositoryIdentity, UtcInstant,
 };
@@ -82,68 +81,33 @@ fn execution_constraint() -> ExecutionConstraintDescriptor {
 }
 
 #[test]
-fn trusted_time_model_and_writer_share_the_parser_contract() {
-    let statement = trusted_time_statement();
-    let (bytes, _) = canonical_trusted_time(&statement).unwrap();
-
-    assert_eq!(parse_trusted_time(&bytes).unwrap(), statement);
-    assert_eq!(
-        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap(),
-        bytes
-    );
-
+fn trusted_time_public_fields_enforce_lifetime_and_attempt() {
     for attempt in [0, 9_007_199_254_740_992, u64::MAX] {
         let mut invalid = trusted_time_statement();
         invalid.provider_run_attempt = attempt;
-        let error = canonical_trusted_time(&invalid).unwrap_err();
+        let error = invalid.validate().unwrap_err();
         assert_eq!(error.path, "$.provider_run_attempt");
         assert_eq!(error.kind, ErrorKind::InvalidValue);
     }
     let mut invalid = trusted_time_statement();
     invalid.valid_until = invalid.evaluation_instant.clone();
-    let error = canonical_trusted_time(&invalid).unwrap_err();
+    let error = invalid.validate().unwrap_err();
     assert_eq!(error.path, "$.valid_until");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
 #[test]
-fn execution_constraint_model_and_writer_share_the_parser_contract() {
-    let descriptor = execution_constraint();
-    let (bytes, _) = canonical_execution_constraint(&descriptor).unwrap();
-
-    assert_eq!(parse_execution_constraint(&bytes).unwrap(), descriptor);
-    assert_eq!(
-        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap(),
-        bytes
-    );
-
+fn execution_constraint_public_fields_enforce_action_identity() {
     let mut invalid = execution_constraint();
     invalid.action_object_format = ObjectFormat::Sha256;
-    let error = canonical_execution_constraint(&invalid).unwrap_err();
+    let error = invalid.validate().unwrap_err();
     assert_eq!(error.path, "$.action_commit_oid");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
     let mut invalid = execution_constraint();
     invalid.required_status_name = " trailing ".to_owned();
-    let error = canonical_execution_constraint(&invalid).unwrap_err();
+    let error = invalid.validate().unwrap_err();
     assert_eq!(error.path, "$.required_status_name");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
-}
-
-#[test]
-fn producer_writers_preserve_the_validated_digests() {
-    let statement = trusted_time_statement();
-    let (statement_bytes, statement_digest) = canonical_trusted_time(&statement).unwrap();
-    let parsed = parse_trusted_time(&statement_bytes).unwrap();
-    assert_eq!(canonical_trusted_time(&parsed).unwrap().1, statement_digest);
-
-    let descriptor = execution_constraint();
-    let (descriptor_bytes, descriptor_digest) =
-        canonical_execution_constraint(&descriptor).unwrap();
-    let parsed = parse_execution_constraint(&descriptor_bytes).unwrap();
-    assert_eq!(
-        canonical_execution_constraint(&parsed).unwrap().1,
-        descriptor_digest
-    );
 }
 
 #[test]
@@ -166,14 +130,20 @@ fn producer_writers_preserve_the_published_contract_examples() {
     let trusted_time = example("scanner-trusted-time-statement.json");
     let statement = parse_trusted_time(&trusted_time).unwrap();
     assert_eq!(
-        canonical_trusted_time(&statement).unwrap().0,
-        serde_json_canonicalizer::to_vec(&json::parse(&trusted_time).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(&statement).unwrap(),
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<serde_json::Value>(&trusted_time).unwrap()
+        )
+        .unwrap()
     );
 
     let execution_constraint = example("scanner-execution-constraint.json");
     let descriptor = parse_execution_constraint(&execution_constraint).unwrap();
     assert_eq!(
-        canonical_execution_constraint(&descriptor).unwrap().0,
-        serde_json_canonicalizer::to_vec(&json::parse(&execution_constraint).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(&descriptor).unwrap(),
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<serde_json::Value>(&execution_constraint).unwrap()
+        )
+        .unwrap()
     );
 }

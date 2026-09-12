@@ -111,10 +111,7 @@ fn a_document_the_grammar_refuses_is_still_refused_rather_than_dropped() {
             .iter()
             .find(|row| row["code"] == "UNREPRESENTABLE_PATH")
             .unwrap_or_else(|| panic!("{where_from}: the defect is disclosed, not swallowed"));
-        let hex: String = name.iter().fold(String::new(), |mut out, byte| {
-            let _infallible = std::fmt::Write::write_fmt(&mut out, format_args!("{byte:02x}"));
-            out
-        });
+        let hex = hex::encode(name);
         assert_eq!(
             row["path"],
             serde_json::Value::Null,

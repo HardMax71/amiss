@@ -1,7 +1,6 @@
+use sha2::Digest as _;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-use amiss_wire::digest::hb;
 
 use crate::corpus_support as corpus;
 use crate::fixtures::harvest;
@@ -40,7 +39,14 @@ fn manifest_reproduces() {
 
     let mut wire = serde_json_canonicalizer::to_vec(&built).unwrap();
     wire.push(b'\n');
-    let digest = hb(corpus::SCHEMA, &wire).to_string();
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(corpus::SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(&wire)
+            .finalize()
+            .0,
+    )
+    .to_string();
     let path = root().join("corpus/parser-profile-corpus.json");
 
     if std::env::var_os("AMISS_CORPUS_BLESS").is_some() {

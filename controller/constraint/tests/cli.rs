@@ -3,6 +3,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use sha2::Digest as _;
 use std::ffi::OsString;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -10,7 +11,7 @@ use std::process::{Command, Output};
 use amiss_bootstrap::BOOTSTRAP_EXECUTABLE_BYTES;
 use amiss_bootstrap::validate;
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::controls::{canonical_execution_constraint, parse_execution_constraint};
+use amiss_wire::controls::parse_execution_constraint;
 use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -64,7 +65,14 @@ fn writes_one_canonical_constraint_without_clobbering() {
 
     let bytes = std::fs::read(&first).unwrap();
     let descriptor = parse_execution_constraint(&bytes).unwrap();
-    let (canonical, digest) = canonical_execution_constraint(&descriptor).unwrap();
+    let canonical = serde_json_canonicalizer::to_vec(&descriptor).unwrap();
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+            .chain_update([0_u8])
+            .chain_update(&canonical)
+            .finalize()
+            .0,
+    );
     assert_eq!(canonical, bytes);
     assert_eq!(
         &descriptor.action_repository,

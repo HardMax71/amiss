@@ -1,7 +1,7 @@
 use crate::{IngressCheck, ReplayIdentity};
 
 use super::headers::Headers;
-use super::{WebhookError, WebhookKeyring, WebhookProof, crypto};
+use super::{WebhookError, WebhookKeyring, WebhookProof};
 
 pub(super) fn verify(
     keys: &WebhookKeyring,
@@ -32,7 +32,11 @@ fn authenticate(
 ) -> Result<WebhookProof, WebhookError> {
     let delivery = check.delivery();
     let encoded = raw.strip_prefix(prefix).ok_or(WebhookError::Headers)?;
-    let signature = crypto::lowercase_hex(encoded)?;
+    if encoded.len() != 64 || encoded.iter().any(u8::is_ascii_uppercase) {
+        return Err(WebhookError::Headers);
+    }
+    let mut signature = [0_u8; 32];
+    hex::decode_to_slice(encoded, &mut signature).map_err(|_defect| WebhookError::Headers)?;
     let anchor = keys.authenticate(
         delivery.received_at_unix_millis,
         &[signature],

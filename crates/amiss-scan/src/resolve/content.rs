@@ -1,8 +1,9 @@
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 
 use amiss_git::{ObjectKind, ValueCap};
 use amiss_wire::controls::{GitMode, ResourceName};
-use amiss_wire::digest::{Digest, hb, hj_serde};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::resolution::BlobContent;
 
@@ -63,7 +64,9 @@ pub(super) fn target_projection(
     mode: GitMode,
     raw_digest: Digest,
 ) -> Result<Digest, Error> {
-    hj_serde(domain, |mut writer| {
+    {
+        let mut writer =
+            digest_io::IoWrapper(sha2::Sha256::new_with_prefix(domain).chain_update([0_u8]));
         serde_json_canonicalizer::to_writer(
             &TargetProjection {
                 git_mode: mode,
@@ -71,7 +74,8 @@ pub(super) fn target_projection(
             },
             &mut writer,
         )
-    })
+        .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| Error::Internal)
 }
 
@@ -112,7 +116,13 @@ pub(super) fn read_target(
         Aggregate::ReferencedTargetBytes,
         u64::try_from(object.body.len()).unwrap_or(u64::MAX),
     )?;
-    let raw = hb(RAW_EVIDENCE_DOMAIN, &object.body);
+    let raw = Digest::from(
+        sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&object.body)
+            .finalize()
+            .0,
+    );
     let content = if lfs::is_pointer(&object.body) {
         Content::LfsPointer { raw_digest: raw }
     } else {

@@ -1,9 +1,10 @@
+use sha2::Digest as _;
 mod acquire;
 mod effects;
 mod floor;
 
 use amiss_wire::controls::ResourceName;
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 use amiss_wire::requests::RequestTrust;
 
@@ -166,9 +167,16 @@ pub fn verify_time(
     if !bound {
         return Err(trusted_time_invalid_row());
     }
-    let digest = amiss_wire::controls::canonical_trusted_time(statement)
-        .map_err(|_defect| trusted_time_invalid_row())?
-        .1;
+    statement
+        .validate()
+        .map_err(|_defect| trusted_time_invalid_row())?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&statement, &mut writer)
+        .map_err(|_defect| trusted_time_invalid_row())?;
+    let digest = Digest::from(writer.0.finalize().0);
     Ok(TimeContext {
         statement: statement.clone(),
         digest,
@@ -182,14 +190,20 @@ pub fn verify_time(
 ///
 /// One `CONFIGURATION_INVALID` detail.
 pub(crate) fn verify_constraint(input: &ConstraintInput) -> Result<ConstraintContext, ErrorDetail> {
-    let digest = amiss_wire::controls::canonical_execution_constraint(&input.descriptor)
-        .map_err(|_defect| ErrorDetail {
-            code: AnalysisErrorCode::ConfigurationInvalid,
-            path: None,
-            path_bytes: None,
-            resource: None,
-        })?
-        .1;
+    let invalid = || ErrorDetail {
+        code: AnalysisErrorCode::ConfigurationInvalid,
+        path: None,
+        path_bytes: None,
+        resource: None,
+    };
+    input.descriptor.validate().map_err(|_defect| invalid())?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&input.descriptor, &mut writer)
+        .map_err(|_defect| invalid())?;
+    let digest = Digest::from(writer.0.finalize().0);
     Ok(ConstraintContext {
         descriptor: input.descriptor.clone(),
         digest,

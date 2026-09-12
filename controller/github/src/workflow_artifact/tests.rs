@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use sha2::Digest as _;
 use std::io::{Cursor, Write as _};
 use std::sync::Arc;
 
@@ -8,7 +9,6 @@ use amiss_controller::{
     ProviderIdentity, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
     WorkflowArtifactExpectation,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -102,7 +102,13 @@ fn the_payload_must_be_the_planned_semantic_template() {
         Err(GitHubArtifactError::Semantic)
     );
 
-    let other = template(hb("amiss/test-workflow-context", b"other"));
+    let other = template(amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-workflow-context")
+            .chain_update([0_u8])
+            .chain_update(b"other")
+            .finalize()
+            .0,
+    ));
     let mismatched = archive(
         &[(PAYLOAD_FILE, other.as_slice())],
         CompressionMethod::Stored,
@@ -154,7 +160,13 @@ fn an_unchecked_non_github_or_unbounded_expectation_is_refused() {
 }
 
 fn expectation() -> WorkflowArtifactExpectation {
-    let context_digest = hb("amiss/test-workflow-context", b"site/current");
+    let context_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-workflow-context")
+            .chain_update([0_u8])
+            .chain_update(b"site/current")
+            .finalize()
+            .0,
+    );
     WorkflowArtifactExpectation {
         provider: provider(),
         repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
@@ -178,7 +190,7 @@ fn provider() -> ProviderIdentity {
     ProviderIdentity::new("github".to_owned(), "github.com".to_owned()).unwrap()
 }
 
-fn template(context_digest: amiss_wire::digest::Digest) -> Vec<u8> {
+fn template(context_digest: amiss_wire::model::Digest) -> Vec<u8> {
     amiss_wire::semantic::template(SemanticEvidenceTemplate {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
@@ -186,7 +198,13 @@ fn template(context_digest: amiss_wire::digest::Digest) -> Vec<u8> {
             identity: ArtifactId::new("test-site-builder".to_owned()).unwrap(),
             version: "0.5.1".to_owned(),
             context_digest,
-            input_digest: hb("amiss/test-workflow-input", b"completed site"),
+            input_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-workflow-input")
+                    .chain_update([0_u8])
+                    .chain_update(b"completed site")
+                    .finalize()
+                    .0,
+            ),
         },
         complete: true,
         observations: Arc::from([]),

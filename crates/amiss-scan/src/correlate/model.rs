@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::{GitMode, SourceConstruct};
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{Adapter, RepoPath};
 pub use amiss_wire::report::model::{
     Correlation as Outcome, CorrelationReason as Reason, Impact, SourceChange, TargetChange,

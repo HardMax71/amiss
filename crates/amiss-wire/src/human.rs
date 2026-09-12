@@ -1,3 +1,5 @@
+use std::fmt::Write as _;
+
 pub const ATOM_SCALAR_BOUND: usize = 200;
 
 /// `human-atom`: every repository-derived scalar is rendered as a
@@ -25,11 +27,7 @@ pub fn atom(text: &str) -> String {
             _ => {
                 let mut units = [0_u16; 2];
                 for unit in scalar.encode_utf16(&mut units) {
-                    out.push_str("\\u");
-                    for shift in [12_u32, 8, 4, 0] {
-                        let nibble = (u32::from(*unit) >> shift) & 0xf;
-                        out.push(char::from_digit(nibble, 16).unwrap_or('0'));
-                    }
+                    let _infallible = write!(&mut out, "\\u{unit:04x}");
                 }
             }
         }
@@ -63,11 +61,7 @@ pub fn atom_bytes(bytes: &[u8]) -> String {
             b'\\' => out.push_str("\\\\"),
             b' '..=b'~' => out.push(char::from(*byte)),
             _ => {
-                out.push_str("\\u00");
-                for shift in [4_u32, 0] {
-                    let nibble = (u32::from(*byte) >> shift) & 0xf;
-                    out.push(char::from_digit(nibble, 16).unwrap_or('0'));
-                }
+                let _infallible = write!(&mut out, "\\u00{byte:02x}");
             }
         }
     }
@@ -76,21 +70,4 @@ pub fn atom_bytes(bytes: &[u8]) -> String {
     }
     out.push('"');
     out
-}
-
-/// The wire's lowercase hex back to raw bytes; a malformed digit or a
-/// truncated trailing pair renders as zero rather than failing a human
-/// projection, which is not the wire.
-#[must_use]
-pub fn decode_hex(hex: &str) -> Vec<u8> {
-    hex.as_bytes()
-        .chunks(2)
-        .map(|pair| {
-            core::str::from_utf8(pair)
-                .ok()
-                .filter(|text| text.len() == 2)
-                .and_then(|text| u8::from_str_radix(text, 16).ok())
-                .unwrap_or(0)
-        })
-        .collect()
 }

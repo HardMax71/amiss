@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+use sha2::Digest as _;
 mod acquisition;
 mod live;
 mod workflow_artifact;
@@ -13,7 +14,7 @@ use amiss_controller::{
     ProviderRunId, ProviderRunIdentity, Publication, SignedTimePolicy, VerifiedDelivery,
     WebhookProof, WorkflowArtifactExpectation,
 };
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use serde::Deserialize;
 
@@ -573,7 +574,16 @@ fn provider_run(
     ])
     .ok()?;
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!("pr:{}", hb(RUN_DOMAIN, &fields)))?,
+        ProviderRunId::new(format!(
+            "pr:{}",
+            Digest::from(
+                sha2::Sha256::new_with_prefix(RUN_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&fields)
+                    .finalize()
+                    .0
+            )
+        ))?,
         ProviderRunAttempt::new(1)?,
         ObjectFormat::Sha1,
         candidate.clone(),

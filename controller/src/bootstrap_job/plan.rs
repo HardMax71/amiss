@@ -1,9 +1,7 @@
-use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, Profile, canonical_debt_snapshot,
-    canonical_execution_constraint, canonical_organization_floor, canonical_waiver_bundle,
-};
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+use amiss_wire::model::Digest;
 use amiss_wire::requests::{REQUEST_STREAM_BYTES, SuppliedControl};
+use sha2::Digest as _;
 
 mod model;
 
@@ -43,21 +41,32 @@ pub fn check_plan(
     }
     let organization_floor = control_identity(
         policy.organization_floor.as_ref(),
-        canonical_organization_floor,
+        amiss_wire::controls::OrganizationFloor::validate,
+        amiss_wire::controls::ORGANIZATION_FLOOR_SCHEMA,
         BootstrapJobError::OrganizationFloor,
     )?;
     let debt_snapshot = control_identity(
         policy.debt_snapshot.as_ref(),
-        canonical_debt_snapshot,
+        amiss_wire::controls::DebtSnapshot::validate,
+        amiss_wire::controls::DEBT_SNAPSHOT_SCHEMA,
         BootstrapJobError::DebtSnapshot,
     )?;
     let waiver_bundle = control_identity(
         policy.waiver_bundle.as_ref(),
-        canonical_waiver_bundle,
+        amiss_wire::controls::WaiverBundle::validate,
+        amiss_wire::controls::WAIVER_BUNDLE_SCHEMA,
         BootstrapJobError::WaiverBundle,
     )?;
-    let (_, execution_digest) = canonical_execution_constraint(&execution)
+    execution
+        .validate()
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&execution, &mut writer)
+        .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    let execution_digest = Digest::from(writer.0.finalize().0);
     controls::validate_request_size(&policy, execution_digest, &execution)?;
     let identity = PlanIdentity {
         debt_snapshot,
@@ -103,7 +112,13 @@ pub fn check_plan(
     };
     let bytes = serde_json_canonicalizer::to_vec(&identity)
         .map_err(|_defect| BootstrapJobError::PlanEncoding)?;
-    let digest = hb(CHECK_PLAN_DOMAIN, &bytes);
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix(CHECK_PLAN_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&bytes)
+            .finalize()
+            .0,
+    );
     Ok(CheckPlan {
         digest,
         profile,
@@ -137,16 +152,24 @@ pub(super) fn validated_plan(plan: &CheckPlan) -> Result<CheckPlan, BootstrapJob
         .ok_or(BootstrapJobError::CheckPlan)
 }
 
-fn control_identity<T, E>(
+fn control_identity<T: serde::Serialize, E>(
     control: Option<&SuppliedControl<T>>,
-    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), E>,
+    validate: impl FnOnce(&T) -> Result<(), E>,
+    domain: &str,
     error: BootstrapJobError,
 ) -> Result<Option<ControlIdentity>, BootstrapJobError> {
     control
         .map(|control| {
-            let (bytes, digest) = canonical(&control.value).map_err(|_defect| error)?;
+            validate(&control.value).map_err(|_defect| error)?;
+            let hash =
+                digest_io::IoWrapper(sha2::Sha256::new_with_prefix(domain).chain_update([0_u8]));
+            let mut writer = countio::Counter::new(hash);
+            serde_json_canonicalizer::to_writer(&control.value, &mut writer)
+                .map_err(|_defect| error)?;
+            let length = writer.writer_bytes();
+            let digest = Digest::from(writer.into_inner().0.finalize().0);
             (digest == control.expected_digest
-                && u64::try_from(bytes.len()).is_ok_and(|length| length <= REQUEST_STREAM_BYTES))
+                && u64::try_from(length).is_ok_and(|length| length <= REQUEST_STREAM_BYTES))
             .then_some(ControlIdentity {
                 digest,
                 trust_source: control.trust_source,

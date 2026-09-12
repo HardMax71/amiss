@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 use std::process::ExitStatus;
@@ -13,16 +14,13 @@ use amiss_bootstrap::supervise::{
     AcceptanceDefect, Defect, Expectations, SealedControlExpectation, SealedExpectations,
     Supervised, accept, settle,
 };
-use amiss_wire::controls::{
-    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
-    parse_trusted_time,
-};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, TrustedTimeStatement};
 
-use amiss_wire::json::{Value, parse};
 use amiss_wire::model::RepositoryIdentity;
-use amiss_wire::report::model::ReportStatus;
+use amiss_wire::report::model::{BaseSnapshot, Evaluation, ReportEnvelope, ReportStatus, Snapshot};
 use amiss_wire::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA};
-use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, RequestTrust};
+use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, CandidateSnapshot, RequestTrust};
+use serde_json::Value;
 
 mod controls;
 mod identity;
@@ -48,49 +46,7 @@ fn example(name: &str) -> Value {
             .join(name),
     )
     .unwrap();
-    parse(&bytes).unwrap()
-}
-
-fn entry<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
-    let Value::Object(members) = value else {
-        panic!("not an object");
-    };
-    members
-        .iter_mut()
-        .find(|(name, _)| name == key)
-        .map(|(_, member)| member)
-        .expect("a present member")
-}
-
-fn set(value: &mut Value, key: &str, member: Value) {
-    let Value::Object(members) = value else {
-        panic!("not an object");
-    };
-    if let Some(slot) = members.iter_mut().find(|(name, _)| name == key) {
-        slot.1 = member;
-        return;
-    }
-    let at = members
-        .iter()
-        .position(|(name, _)| name.as_str() > key)
-        .unwrap_or(members.len());
-    let mut expanded = std::mem::take(members).into_vec();
-    expanded.insert(at, (key.to_owned(), member));
-    *members = expanded.into_boxed_slice();
-}
-
-fn text(value: &Value, key: &str) -> String {
-    let Value::Object(members) = value else {
-        panic!("not an object");
-    };
-    match members.iter().find(|(name, _)| name == key) {
-        Some((_, Value::String(text))) => text.to_string(),
-        _ => panic!("no text member {key}"),
-    }
-}
-
-fn string(raw: &str) -> Value {
-    Value::string(raw)
+    serde_json::from_slice::<Value>(&bytes).unwrap()
 }
 
 type Patch = Box<dyn FnOnce(&mut Value)>;
@@ -139,57 +95,35 @@ fn identity_digest(evaluation: &Value) -> String {
     };
     let mut identity: Vec<(String, Value)> = members
         .iter()
-        .filter(|(name, _)| name != "evaluation_instant" && name != "trusted_time")
-        .cloned()
+        .filter(|(name, _)| {
+            name.as_str() != "evaluation_instant" && name.as_str() != "trusted_time"
+        })
+        .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
-    identity.push((
-        "schema".to_owned(),
-        Value::string(CANDIDATE_IDENTITY_DOMAIN),
-    ));
-    amiss_wire::digest::hb(
-        CANDIDATE_IDENTITY_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&Value::object(identity)).unwrap(),
+    identity.push(("schema".to_owned(), Value::from(CANDIDATE_IDENTITY_DOMAIN)));
+    amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&Value::from_iter(identity)).unwrap())
+            .finalize()
+            .0,
     )
     .to_string()
 }
 
 fn statement_value(repository: &Value, ties: &StatementTies, identity: &str) -> Value {
-    let mut statement = Value::object(Vec::new());
-    set(
-        &mut statement,
-        "schema",
-        string("amiss/scanner-trusted-time-statement"),
-    );
-    set(
-        &mut statement,
-        "controller",
-        string("external-required-check-clock"),
-    );
-    set(&mut statement, "repository", repository.clone());
-    set(
-        &mut statement,
-        "ref",
-        string(ties.ref_name.unwrap_or(TARGET_REF)),
-    );
-    set(
-        &mut statement,
-        "candidate_identity_digest",
-        string(ties.identity.unwrap_or(identity)),
-    );
-    set(&mut statement, "provider", string(PROVIDER));
-    set(&mut statement, "provider_run_id", string(RUN_ID));
-    set(
-        &mut statement,
-        "provider_run_attempt",
-        Value::Integer(i64::try_from(ATTEMPT).unwrap()),
-    );
-    set(
-        &mut statement,
-        "evaluation_instant",
-        string(ties.instant.unwrap_or(INSTANT)),
-    );
-    set(&mut statement, "valid_until", string(VALID_UNTIL));
-    statement
+    serde_json::json!({
+        "schema": "amiss/scanner-trusted-time-statement",
+        "controller": "external-required-check-clock",
+        "repository": repository,
+        "ref": ties.ref_name.unwrap_or(TARGET_REF),
+        "candidate_identity_digest": ties.identity.unwrap_or(identity),
+        "provider": PROVIDER,
+        "provider_run_id": RUN_ID,
+        "provider_run_attempt": ATTEMPT,
+        "evaluation_instant": ties.instant.unwrap_or(INSTANT),
+        "valid_until": VALID_UNTIL,
+    })
 }
 
 struct StatementTies {
@@ -199,11 +133,11 @@ struct StatementTies {
 }
 
 fn verified_control(digest: &str) -> Value {
-    let mut control = Value::object(Vec::new());
-    set(&mut control, "status", string("verified"));
-    set(&mut control, "digest", string(digest));
-    set(&mut control, "trust_source", string(TRUST_SOURCE));
-    control
+    serde_json::json!({
+        "status": "verified",
+        "digest": digest,
+        "trust_source": TRUST_SOURCE,
+    })
 }
 
 /// The sealed golden with one deviation applied, and the expectations the
@@ -223,129 +157,130 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
         instant: statement_instant,
     };
     let mut envelope = example("scanner-report.json");
-    let payload = entry(&mut envelope, "payload");
-    let evaluation = entry(payload, "evaluation");
-    set(evaluation, "candidate_ref", string(CANDIDATE_REF));
-    set(evaluation, "target_ref", string(TARGET_REF));
-    set(evaluation, "trusted_time", Value::Bool(true));
-    set(evaluation, "evaluation_instant", string(INSTANT));
+    let report: ReportEnvelope = serde::Deserialize::deserialize(&envelope).unwrap();
+    let payload = envelope.get_mut("payload").expect("fixture member exists");
+    let evaluation = (payload)
+        .get_mut("evaluation")
+        .expect("fixture member exists");
+    (evaluation)["candidate_ref"] = Value::from(CANDIDATE_REF);
+    (evaluation)["target_ref"] = Value::from(TARGET_REF);
+    (evaluation)["trusted_time"] = Value::Bool(true);
+    (evaluation)["evaluation_instant"] = Value::from(INSTANT);
     if let Some(patch) = pre {
         patch(payload);
     }
 
-    let evaluation = entry(payload, "evaluation");
+    let evaluation = (payload)
+        .get_mut("evaluation")
+        .expect("fixture member exists");
     let identity = identity_digest(evaluation);
-    let repository_value = entry(evaluation, "repository").clone();
+    let repository_value = (evaluation)
+        .get_mut("repository")
+        .expect("fixture member exists")
+        .clone();
     let statement = statement_value(&repository_value, &ties, &identity);
-    let parsed_statement =
-        parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap())
-            .expect("a valid statement fixture");
-    let statement_digest = canonical_trusted_time(&parsed_statement)
-        .unwrap()
-        .1
-        .to_string();
+    let parsed_statement: TrustedTimeStatement =
+        serde::Deserialize::deserialize(&statement).expect("a valid statement fixture");
+    parsed_statement.validate().unwrap();
+    let statement_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&parsed_statement).unwrap())
+            .finalize()
+            .0,
+    )
+    .to_string();
 
     let descriptor = example("scanner-execution-constraint.json");
-    let constraint =
-        parse_execution_constraint(&serde_json_canonicalizer::to_vec(&descriptor).unwrap())
-            .expect("a valid constraint fixture");
-    let constraint_digest = canonical_execution_constraint(&constraint)
-        .unwrap()
-        .1
-        .to_string();
+    let constraint: ExecutionConstraintDescriptor =
+        serde::Deserialize::deserialize(&descriptor).expect("a valid constraint fixture");
+    constraint.validate().unwrap();
+    let constraint_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&constraint).unwrap())
+            .finalize()
+            .0,
+    )
+    .to_string();
 
     seal_controls(
         payload,
-        descriptor,
+        &descriptor,
         &constraint_digest,
-        statement,
+        &statement,
         &statement_digest,
     );
     if let Some(patch) = post {
         patch(payload);
     }
 
-    let engine_digest = text(entry(payload, "engine"), "engine_digest");
-    let evaluation = entry(payload, "evaluation");
-    let base_commit = text(entry(evaluation, "base"), "commit_oid");
-    let candidate_commit = text(entry(evaluation, "candidate"), "commit_oid");
-    let repository = RepositoryIdentity::new(
-        text(&repository_value, "host"),
-        text(&repository_value, "owner"),
-        text(&repository_value, "name"),
-    )
-    .unwrap();
-
-    let digest = amiss_wire::digest::hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(entry(&mut envelope, "payload")).unwrap(),
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(payload).unwrap())
+            .finalize()
+            .0,
     )
     .to_string();
-    set(&mut envelope, "payload_digest", string(&digest));
+    (&mut envelope)["payload_digest"] = Value::from((digest).as_str());
     let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     wire.push(b'\n');
 
-    let mut sealed =
-        sealed_expectations(repository, &identity, &constraint_digest, &statement_digest);
+    let mut expectations =
+        sealed_expectations(report, &identity, &constraint_digest, &statement_digest);
     if let Some(patch) = expect {
-        patch(&mut sealed);
+        patch(expectations.sealed.as_mut().unwrap());
     }
-    let expectations = Expectations {
-        engine_digest: engine_digest.parse().unwrap(),
-        base_commit: base_commit.parse().unwrap(),
-        candidate_commit: Some(candidate_commit.parse().unwrap()),
-        sealed: Some(sealed),
-    };
     (wire, expectations)
 }
 
 fn seal_controls(
     payload: &mut Value,
-    descriptor: Value,
+    descriptor: &Value,
     constraint_digest: &str,
-    statement: Value,
+    statement: &Value,
     statement_digest: &str,
 ) {
-    let controls = entry(payload, "controls");
-    set(controls, "semantic_evidence", Value::array(Vec::new()));
-    set(
-        controls,
-        "organization_floor",
-        verified_control(FLOOR_DIGEST),
-    );
-    let mut constraint = Value::object(Vec::new());
-    set(&mut constraint, "status", string("verified"));
-    set(&mut constraint, "descriptor", descriptor);
-    set(
-        &mut constraint,
-        "descriptor_digest",
-        string(constraint_digest),
-    );
-    set(&mut constraint, "trust_source", string(TRUST_SOURCE));
-    set(controls, "execution_constraint", constraint);
-    let mut trusted = Value::object(Vec::new());
-    set(&mut trusted, "status", string("verified"));
-    set(
-        &mut trusted,
-        "trust_source",
-        string("external-required-check"),
-    );
-    set(&mut trusted, "statement", statement);
-    set(&mut trusted, "statement_digest", string(statement_digest));
-    set(controls, "trusted_time_source", trusted);
+    let controls = (payload)
+        .get_mut("controls")
+        .expect("fixture member exists");
+    (controls)["semantic_evidence"] = Value::Array(Vec::new());
+    (controls)["organization_floor"] = verified_control(FLOOR_DIGEST);
+    controls["execution_constraint"] = serde_json::json!({
+        "status": "verified",
+        "descriptor": descriptor,
+        "descriptor_digest": constraint_digest,
+        "trust_source": TRUST_SOURCE,
+    });
+    controls["trusted_time_source"] = serde_json::json!({
+        "status": "verified",
+        "trust_source": TRUST_SOURCE,
+        "statement": statement,
+        "statement_digest": statement_digest,
+    });
 }
 
 fn sealed_expectations(
-    repository: RepositoryIdentity,
+    report: ReportEnvelope,
     identity: &str,
     constraint_digest: &str,
     statement_digest: &str,
-) -> SealedExpectations {
-    SealedExpectations {
+) -> Expectations {
+    let Evaluation::Resolved(evaluation) = report.payload.evaluation else {
+        panic!("a resolved fixture evaluation");
+    };
+    let BaseSnapshot::Git(base) = evaluation.base else {
+        panic!("a fixture base commit");
+    };
+    let Snapshot::Available(CandidateSnapshot::Git(candidate)) = evaluation.candidate else {
+        panic!("a fixture candidate commit");
+    };
+    let sealed = SealedExpectations {
         profile: amiss_wire::controls::Profile::Observe,
         candidate_ref: CANDIDATE_REF.to_owned(),
         target_ref: TARGET_REF.to_owned(),
-        repository,
+        repository: evaluation.repository.unwrap(),
         provider: PROVIDER.to_owned(),
         provider_run_id: RUN_ID.to_owned(),
         provider_run_attempt: ATTEMPT,
@@ -362,6 +297,12 @@ fn sealed_expectations(
         },
         trusted_time_digest: statement_digest.parse().unwrap(),
         semantic_evidence: Vec::new(),
+    };
+    Expectations {
+        engine_digest: report.payload.engine.engine_digest,
+        base_commit: base.commit_oid,
+        candidate_commit: Some(candidate.commit_oid),
+        sealed: Some(sealed),
     }
 }
 
@@ -393,12 +334,9 @@ fn the_sealed_golden_clears_acceptance_and_settlement() {
 #[test]
 fn a_complete_block_report_is_accepted_at_class_one() {
     let (wire, expectations) = golden(Deviation::pre(|payload| {
-        set(entry(payload, "result"), "exit_code", Value::Integer(1));
-        set(
-            entry(payload, "result"),
-            "status",
-            string(ReportStatus::Fail.as_ref()),
-        );
+        ((payload).get_mut("result").expect("fixture member exists"))["exit_code"] = Value::from(1);
+        ((payload).get_mut("result").expect("fixture member exists"))["status"] =
+            Value::from(ReportStatus::Fail.as_ref());
     }));
     assert_eq!(accept(&wire, &expectations), Ok(1));
 }
@@ -419,18 +357,20 @@ fn the_sealed_identity_binds_refs_time_and_candidate() {
     );
     assert_eq!(
         refused(Deviation::post(|payload| {
-            set(
-                entry(payload, "evaluation"),
-                "trusted_time",
-                Value::Bool(false),
-            );
+            ((payload)
+                .get_mut("evaluation")
+                .expect("fixture member exists"))["trusted_time"] = Value::Bool(false);
         })),
         AcceptanceDefect::SealedIdentity
     );
     assert_eq!(
         refused(Deviation::pre(|payload| {
-            let candidate = entry(entry(payload, "evaluation"), "candidate");
-            set(candidate, "kind", string("git-tag"));
+            let candidate = ((payload)
+                .get_mut("evaluation")
+                .expect("fixture member exists"))
+            .get_mut("candidate")
+            .expect("fixture member exists");
+            (candidate)["kind"] = Value::from("git-tag");
         })),
         AcceptanceDefect::Shape,
         "an unknown kind is rejected before its claimed bindings are evaluated"
@@ -442,40 +382,42 @@ fn the_constraint_echo_binds_status_digest_source_and_descriptor() {
     let cases: [(&str, Patch, AcceptanceDefect); 4] = [
         (
             "status",
-            Box::new(|constraint| set(constraint, "status", string("unverified"))),
+            Box::new(|constraint| (constraint)["status"] = Value::from("unverified")),
             AcceptanceDefect::Shape,
         ),
         (
             "digest text",
-            Box::new(|constraint| set(constraint, "descriptor_digest", string(FOREIGN_DIGEST))),
+            Box::new(|constraint| (constraint)["descriptor_digest"] = Value::from(FOREIGN_DIGEST)),
             AcceptanceDefect::SealedControls,
         ),
         (
             "trust source",
             Box::new(|constraint| {
-                set(
-                    constraint,
-                    "trust_source",
-                    string(RequestTrust::OrganizationPolicy.as_ref()),
-                );
+                (constraint)["trust_source"] =
+                    Value::from(RequestTrust::OrganizationPolicy.as_ref());
             }),
             AcceptanceDefect::SealedControls,
         ),
         (
             "embedded descriptor",
             Box::new(|constraint| {
-                set(
-                    entry(constraint, "descriptor"),
-                    "required_status_name",
-                    string("amiss / other"),
-                );
+                ((constraint)
+                    .get_mut("descriptor")
+                    .expect("fixture member exists"))["required_status_name"] =
+                    Value::from("amiss / other");
             }),
             AcceptanceDefect::SealedControls,
         ),
     ];
     for (reason, patch, expected) in cases {
         let deviation = Deviation::post(move |payload| {
-            patch(entry(entry(payload, "controls"), "execution_constraint"));
+            patch(
+                ((payload)
+                    .get_mut("controls")
+                    .expect("fixture member exists"))
+                .get_mut("execution_constraint")
+                .expect("fixture member exists"),
+            );
         });
         assert_eq!(refused(deviation), expected, "{reason}");
     }
@@ -486,30 +428,36 @@ fn the_time_echo_binds_every_statement_fact() {
     let post_cases: [(&str, Patch, AcceptanceDefect); 3] = [
         (
             "status",
-            Box::new(|trusted| set(trusted, "status", string("unverified"))),
+            Box::new(|trusted| trusted["status"] = Value::from("unverified")),
             AcceptanceDefect::Shape,
         ),
         (
             "trust source",
-            Box::new(|trusted| set(trusted, "trust_source", string("provider"))),
+            Box::new(|trusted| trusted["trust_source"] = Value::from("provider")),
             AcceptanceDefect::Shape,
         ),
         (
             "digest text",
-            Box::new(|trusted| set(trusted, "statement_digest", string(FOREIGN_DIGEST))),
+            Box::new(|trusted| trusted["statement_digest"] = Value::from(FOREIGN_DIGEST)),
             AcceptanceDefect::SealedControls,
         ),
     ];
     for (reason, patch, expected) in post_cases {
         let deviation = Deviation::post(move |payload| {
-            patch(entry(entry(payload, "controls"), "trusted_time_source"));
+            patch(
+                payload
+                    .pointer_mut("/controls/trusted_time_source")
+                    .expect("fixture member exists"),
+            );
         });
         assert_eq!(refused(deviation), expected, "{reason}");
     }
 
     let mut agree_on_wrong = Deviation::post(|payload| {
-        let trusted = entry(entry(payload, "controls"), "trusted_time_source");
-        set(trusted, "statement_digest", string(FOREIGN_DIGEST));
+        let trusted = payload
+            .pointer_mut("/controls/trusted_time_source")
+            .expect("fixture member exists");
+        trusted["statement_digest"] = Value::from(FOREIGN_DIGEST);
     });
     agree_on_wrong.expect = Some(Box::new(|sealed| {
         sealed.trusted_time_digest = FOREIGN_DIGEST.parse().unwrap();
@@ -557,30 +505,22 @@ fn the_time_echo_binds_every_statement_fact() {
         );
     }
 
-    assert_eq!(
-        refused(Deviation {
+    for deviation in [
+        Deviation {
             statement_ref: Some(CANDIDATE_REF),
             ..Deviation::default()
-        }),
-        AcceptanceDefect::SealedControls,
-        "the statement must name the target ref"
-    );
-    assert_eq!(
-        refused(Deviation {
+        },
+        Deviation {
             statement_identity: Some(FOREIGN_DIGEST),
             ..Deviation::default()
-        }),
-        AcceptanceDefect::SealedControls,
-        "the statement must bind the recomputed candidate identity"
-    );
-    assert_eq!(
-        refused(Deviation {
+        },
+        Deviation {
             statement_instant: Some("2026-07-12T10:01:00Z"),
             ..Deviation::default()
-        }),
-        AcceptanceDefect::SealedControls,
-        "the report's instant must be the statement's"
-    );
+        },
+    ] {
+        assert_eq!(refused(deviation), AcceptanceDefect::SealedControls);
+    }
 }
 
 #[test]
@@ -589,10 +529,8 @@ fn the_sandbox_echo_admits_only_the_self_asserted_row() {
         (
             "assurance",
             Box::new(|sandbox| {
-                set(
-                    sandbox,
-                    "assurance",
-                    string(amiss_wire::report::model::SandboxAssurance::ProviderVerified.as_ref()),
+                (sandbox)["assurance"] = Value::from(
+                    amiss_wire::report::model::SandboxAssurance::ProviderVerified.as_ref(),
                 );
             }),
             AcceptanceDefect::SealedControls,
@@ -600,26 +538,28 @@ fn the_sandbox_echo_admits_only_the_self_asserted_row() {
         (
             "enforcement source",
             Box::new(|sandbox| {
-                set(
-                    sandbox,
-                    "enforcement_source",
-                    string(
-                        amiss_wire::report::model::SandboxEnforcementSource::ExternalRequiredCheck
-                            .as_ref(),
-                    ),
+                (sandbox)["enforcement_source"] = Value::from(
+                    amiss_wire::report::model::SandboxEnforcementSource::ExternalRequiredCheck
+                        .as_ref(),
                 );
             }),
             AcceptanceDefect::SealedControls,
         ),
         (
             "verification",
-            Box::new(|sandbox| set(sandbox, "verification", string("attested"))),
+            Box::new(|sandbox| (sandbox)["verification"] = Value::from("attested")),
             AcceptanceDefect::Shape,
         ),
     ];
     for (reason, patch, expected) in cases {
         let deviation = Deviation::post(move |payload| {
-            patch(entry(entry(payload, "controls"), "sandbox"));
+            patch(
+                ((payload)
+                    .get_mut("controls")
+                    .expect("fixture member exists"))
+                .get_mut("sandbox")
+                .expect("fixture member exists"),
+            );
         });
         assert_eq!(refused(deviation), expected, "{reason}");
     }
@@ -630,20 +570,26 @@ fn an_optional_control_matches_its_expectation_on_every_fact() {
     let supplied: [(&str, Patch); 3] = [
         (
             "status",
-            Box::new(|floor| set(floor, "status", string("none"))),
+            Box::new(|floor| (floor)["status"] = Value::from("none")),
         ),
         (
             "digest",
-            Box::new(|floor| set(floor, "digest", string(FOREIGN_DIGEST))),
+            Box::new(|floor| (floor)["digest"] = Value::from(FOREIGN_DIGEST)),
         ),
         (
             "trust source",
-            Box::new(|floor| set(floor, "trust_source", string("none"))),
+            Box::new(|floor| (floor)["trust_source"] = Value::from("none")),
         ),
     ];
     for (reason, patch) in supplied {
         let deviation = Deviation::post(move |payload| {
-            patch(entry(entry(payload, "controls"), "organization_floor"));
+            patch(
+                ((payload)
+                    .get_mut("controls")
+                    .expect("fixture member exists"))
+                .get_mut("organization_floor")
+                .expect("fixture member exists"),
+            );
         });
         assert_eq!(
             refused(deviation),
@@ -655,26 +601,28 @@ fn an_optional_control_matches_its_expectation_on_every_fact() {
     let absent: [(&str, Patch); 3] = [
         (
             "status",
-            Box::new(|debt| set(debt, "status", string("verified"))),
+            Box::new(|debt| (debt)["status"] = Value::from("verified")),
         ),
         (
             "digest",
-            Box::new(|debt| set(debt, "digest", string(FLOOR_DIGEST))),
+            Box::new(|debt| (debt)["digest"] = Value::from(FLOOR_DIGEST)),
         ),
         (
             "trust source",
             Box::new(|debt| {
-                set(
-                    debt,
-                    "trust_source",
-                    string(RequestTrust::ExternalRequiredCheck.as_ref()),
-                );
+                (debt)["trust_source"] = Value::from(RequestTrust::ExternalRequiredCheck.as_ref());
             }),
         ),
     ];
     for (reason, patch) in absent {
         let deviation = Deviation::post(move |payload| {
-            patch(entry(entry(payload, "controls"), "debt_snapshot"));
+            patch(
+                ((payload)
+                    .get_mut("controls")
+                    .expect("fixture member exists"))
+                .get_mut("debt_snapshot")
+                .expect("fixture member exists"),
+            );
         });
         assert_eq!(
             refused(deviation),

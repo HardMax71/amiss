@@ -4,6 +4,7 @@
     reason = "fixed provider fixtures must fail loudly"
 )]
 
+use sha2::Digest as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amiss_controller::{
@@ -12,7 +13,7 @@ use amiss_controller::{
     RelationStatusTarget, RelationStatusTargets, RelationSubject, validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
-use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
@@ -212,7 +213,8 @@ fn relation_status_mutations_are_rejected_before_reconciliation() {
     ));
 
     let mut substituted = status;
-    substituted.audit.artifact.report_digest = sha256(b"other report");
+    substituted.audit.artifact.report_digest =
+        Digest::from(sha2::Sha256::digest(b"other report").0);
     assert!(matches!(
         relation_check_run(&config, &substituted, &target),
         Err(ProviderError::InvalidResponse)

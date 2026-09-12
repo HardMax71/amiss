@@ -1,4 +1,4 @@
-use std::fmt;
+use sha2::Digest as _;
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, ProviderError,
@@ -83,7 +83,13 @@ pub(crate) fn authenticated_facts(
         gate,
     )
     .ok_or(ProviderError::Authentication)?;
-    let digest = amiss_wire::digest::hb("amiss/gitlab-oidc-jti-v1", claims.jti.as_bytes());
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/gitlab-oidc-jti-v1")
+            .chain_update([0_u8])
+            .chain_update(claims.jti.as_bytes())
+            .finalize()
+            .0,
+    );
     let replay = DeliveryId::new(format!("oidc/runner/{}/jti/{digest}", claims.runner_id))
         .ok_or(ProviderError::Authentication)?;
     Ok(AuthenticatedFacts {
@@ -108,6 +114,7 @@ fn change_id(project_id: u64, merge_request_iid: u64) -> Option<ChangeId> {
     ))
 }
 
+#[serde_with::serde_as]
 #[derive(Deserialize)]
 pub(crate) struct Claims {
     #[serde(rename = "iss")]
@@ -118,15 +125,15 @@ pub(crate) struct Claims {
     nbf: u64,
     iat: u64,
     jti: String,
-    #[serde(deserialize_with = "deserialize_u64")]
+    #[serde_as(as = "serde_with::PickFirst<(_, serde_with::DisplayFromStr)>")]
     job_project_id: u64,
     job_project_path: String,
-    #[serde(deserialize_with = "deserialize_u64")]
+    #[serde_as(as = "serde_with::PickFirst<(_, serde_with::DisplayFromStr)>")]
     pipeline_id: u64,
     pipeline_source: String,
-    #[serde(deserialize_with = "deserialize_u64")]
+    #[serde_as(as = "serde_with::PickFirst<(_, serde_with::DisplayFromStr)>")]
     job_id: u64,
-    #[serde(deserialize_with = "deserialize_u64")]
+    #[serde_as(as = "serde_with::PickFirst<(_, serde_with::DisplayFromStr)>")]
     runner_id: u64,
     runner_environment: String,
     sha: String,
@@ -144,32 +151,4 @@ struct JobConfig {
 #[serde(deny_unknown_fields)]
 struct RequestHint {
     merge_request_iid: u64,
-}
-
-fn deserialize_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    struct IdVisitor;
-
-    impl serde::de::Visitor<'_> for IdVisitor {
-        type Value = u64;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str("a positive decimal identifier")
-        }
-
-        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
-            Ok(value)
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where
-            E: serde::de::Error,
-        {
-            value.parse().map_err(E::custom)
-        }
-    }
-
-    deserializer.deserialize_any(IdVisitor)
 }

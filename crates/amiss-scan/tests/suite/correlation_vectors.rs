@@ -4,6 +4,7 @@
     reason = "integration assertions over repository-owned correlation vectors"
 )]
 
+use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_md::extract::BlockKind;
@@ -11,11 +12,10 @@ use amiss_scan::correlate::{Observation, Outcome, Side, correlate};
 use amiss_scan::observe::target_intent;
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::SpanDisplay;
-use amiss_wire::controls::{SourceConstruct, TargetKind};
-use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::{Value, parse};
-use amiss_wire::model::{Adapter, RepoPath};
-use amiss_wire::report::IntentKind;
+use amiss_wire::controls::SourceConstruct;
+use amiss_wire::model::Digest;
+use amiss_wire::model::{Adapter, RepoPath, RepoPathText};
+use amiss_wire::report::model::TargetIntent;
 use amiss_wire::resolution::ExternalReference;
 
 use crate::support;
@@ -50,79 +50,39 @@ const REQUIRED_VECTOR_IDS: [&str; 25] = [
     "CI-025-native-bitbucket-data-center-equivalent",
 ];
 
-fn field<'a>(members: &'a [(String, Value)], name: &str) -> &'a Value {
-    members
-        .iter()
-        .find(|(key, _)| key == name)
-        .map_or_else(|| panic!("missing field {name}"), |(_, value)| value)
+type FixtureIntent = TargetIntent<RepoPathText>;
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Vectors {
+    schema: String,
+    contract: String,
+    query_preimages: Vec<Preimage>,
+    fragment_preimages: Vec<Preimage>,
+    cases: Vec<Vector>,
 }
 
-fn text(value: &Value, label: &str) -> String {
-    let Value::String(text) = value else {
-        panic!("{label} must be a string, found {value:?}")
-    };
-    text.to_string()
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Vector {
+    id: String,
+    left: FixtureIntent,
+    right: FixtureIntent,
+    expected_equal: bool,
 }
 
-fn optional_text(value: &Value, label: &str) -> Option<String> {
-    match value {
-        Value::Null => None,
-        Value::String(text) => Some(text.to_string()),
-        other @ (Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_)) => {
-            panic!("{label} must be a string or null, found {other:?}")
-        }
-    }
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Preimage {
+    value: String,
+    digest: Digest,
 }
 
-fn digest(value: &Value, label: &str) -> Digest {
-    Digest::from_wire(&text(value, label))
-        .unwrap_or_else(|| panic!("{label} must be a canonical digest"))
-}
-
-fn optional_digest(value: &Value, label: &str) -> Option<Digest> {
-    optional_text(value, label).map(|raw| {
-        Digest::from_wire(&raw).unwrap_or_else(|| panic!("{label} must be a canonical digest"))
-    })
-}
-
-fn intent_kind(value: &Value) -> IntentKind {
-    match text(value, "kind").as_str() {
-        "repository-path" => IntentKind::RepositoryPath,
-        "same-repository-github" => IntentKind::SameRepositoryGithub,
-        "same-repository-gitlab" => IntentKind::SameRepositoryGitlab,
-        "same-repository-gitea" => IntentKind::SameRepositoryGitea,
-        "same-repository-bitbucket-cloud" => IntentKind::SameRepositoryBitbucketCloud,
-        "same-repository-bitbucket-data-center" => IntentKind::SameRepositoryBitbucketDataCenter,
-        "external-url" => IntentKind::ExternalUrl,
-        "site-route" => IntentKind::SiteRoute,
-        "unsupported" => IntentKind::Unsupported,
-        other => panic!("the correlation harness does not know intent kind {other}"),
-    }
-}
-
-fn target_kind(value: &Value) -> Option<TargetKind> {
-    optional_text(value, "target_kind").map(|kind| match kind.as_str() {
-        "blob" => TargetKind::Blob,
-        "tree" => TargetKind::Tree,
-        "either" => TargetKind::Either,
-        other => panic!("the correlation harness does not know target kind {other}"),
-    })
-}
-
-fn preimages(value: &Value, label: &str) -> BTreeMap<Digest, String> {
-    let Value::Array(rows) = value else {
-        panic!("{label} must be an array")
-    };
+fn preimages(rows: Vec<Preimage>, label: &str) -> BTreeMap<Digest, String> {
     assert!(rows.len() >= 2, "{label} pins distinct component values");
     let mut out = BTreeMap::new();
-    for row in rows {
-        let Value::Object(members) = row else {
-            panic!("a {label} row must be an object")
-        };
-        assert_eq!(members.len(), 2, "a {label} row shape is closed");
-        let value = text(field(members, "value"), "component value");
+    for Preimage { value, digest } in rows {
         assert!(!value.is_empty(), "{label} values are nonempty");
-        let digest = digest(field(members, "digest"), "component digest");
         assert!(
             out.insert(digest, value).is_none(),
             "{label} repeats a digest"
@@ -131,62 +91,28 @@ fn preimages(value: &Value, label: &str) -> BTreeMap<Digest, String> {
     out
 }
 
-struct FixtureIntent {
-    kind: IntentKind,
-    raw_destination_digest: Digest,
-    repository_path: Option<RepoPath>,
-    target_kind: Option<TargetKind>,
-    query_digest: Option<Digest>,
-    fragment_digest: Option<Digest>,
-    external_scheme: Option<String>,
-}
-
-impl FixtureIntent {
-    fn parse(value: &Value, label: &str) -> Self {
-        let Value::Object(members) = value else {
-            panic!("{label} must be an object")
-        };
-        Self {
-            kind: intent_kind(field(members, "kind")),
-            raw_destination_digest: digest(
-                field(members, "raw_destination_digest"),
-                "raw_destination_digest",
-            ),
-            repository_path: optional_text(field(members, "repository_path"), "repository_path")
-                .map(|path| {
-                    RepoPath::new(path)
-                        .unwrap_or_else(|| panic!("{label} repository_path must be canonical"))
-                }),
-            target_kind: target_kind(field(members, "target_kind")),
-            query_digest: optional_digest(field(members, "query_digest"), "query_digest"),
-            fragment_digest: optional_digest(field(members, "fragment_digest"), "fragment_digest"),
-            external_scheme: optional_text(field(members, "external_scheme"), "external_scheme"),
-        }
-    }
-
-    fn intent(
-        &self,
-        query_preimages: &BTreeMap<Digest, String>,
-        fragment_preimages: &BTreeMap<Digest, String>,
-        label: &str,
-    ) -> Intent {
-        let lookup = |digest: Option<Digest>, values: &BTreeMap<Digest, String>, kind: &str| {
-            digest.map(|value| {
-                values
-                    .get(&value)
-                    .unwrap_or_else(|| panic!("{label} has no {kind} preimage for {value}"))
-                    .clone()
-            })
-        };
-        Intent {
-            kind: self.kind,
-            commit_oid: None,
-            repository_path: self.repository_path.clone(),
-            target_kind: self.target_kind,
-            external_scheme: self.external_scheme.clone(),
-            query: lookup(self.query_digest, query_preimages, "query"),
-            fragment: lookup(self.fragment_digest, fragment_preimages, "fragment"),
-        }
+fn fixture_intent(
+    fixture: &FixtureIntent,
+    query_preimages: &BTreeMap<Digest, String>,
+    fragment_preimages: &BTreeMap<Digest, String>,
+    label: &str,
+) -> Intent {
+    let lookup = |digest: Option<Digest>, values: &BTreeMap<Digest, String>, kind: &str| {
+        digest.map(|value| {
+            values
+                .get(&value)
+                .unwrap_or_else(|| panic!("{label} has no {kind} preimage for {value}"))
+                .clone()
+        })
+    };
+    Intent {
+        kind: fixture.kind,
+        commit_oid: fixture.commit_oid.clone(),
+        repository_path: fixture.repository_path.as_ref().map(RepoPath::from),
+        target_kind: fixture.target_kind,
+        external_scheme: fixture.external_scheme.clone(),
+        query: lookup(fixture.query_digest, query_preimages, "query"),
+        fragment: lookup(fixture.fragment_digest, fragment_preimages, "fragment"),
     }
 }
 
@@ -194,8 +120,20 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
     let identity = format!("{id}:{side}:identity");
     let projection = format!("{id}:{side}:projection");
     Observation {
-        id: hb("amiss/test-correlation-vector-id", identity.as_bytes()),
-        adapter_contract_digest: hb("amiss/test-adapter-contract", b"markdown"),
+        id: Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-correlation-vector-id")
+                .chain_update([0_u8])
+                .chain_update(identity.as_bytes())
+                .finalize()
+                .0,
+        ),
+        adapter_contract_digest: Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-adapter-contract")
+                .chain_update([0_u8])
+                .chain_update(b"markdown")
+                .finalize()
+                .0,
+        ),
         document: RepoPath::new("docs/source.md".to_owned()).expect("the test path is canonical"),
         span: (0, 1),
         display: SpanDisplay {
@@ -212,9 +150,12 @@ fn observation(id: &str, side: &str, fixture: &FixtureIntent, intent: Intent) ->
         intent,
         raw_destination: String::new(),
         raw_destination_digest: fixture.raw_destination_digest,
-        projection_digest: hb(
-            "amiss/test-correlation-vector-projection",
-            projection.as_bytes(),
+        projection_digest: Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-correlation-vector-projection")
+                .chain_update([0_u8])
+                .chain_update(projection.as_bytes())
+                .finalize()
+                .0,
         ),
         resolution: Resolution::External {
             reason: ExternalReference::Url,
@@ -251,44 +192,33 @@ fn validate_target_intents(bytes: &[u8]) {
 fn the_published_vectors_execute_live_correlation() {
     let bytes = fixture_bytes("correlation-intent-vectors.json");
     validate_target_intents(&bytes);
-
-    let Value::Object(root) = parse(&bytes).expect("the correlation vectors are strict JSON")
-    else {
-        panic!("the correlation vectors must be an object")
-    };
-    assert_eq!(root.len(), 5, "the vector root shape is closed");
-    assert_eq!(
-        field(&root, "schema"),
-        &Value::string("amiss/correlation-intent-vectors")
-    );
-    assert_eq!(
-        field(&root, "contract"),
-        &Value::string("correlation-intent")
-    );
-    let query_preimages = preimages(field(&root, "query_preimages"), "query_preimages");
-    let fragment_preimages = preimages(field(&root, "fragment_preimages"), "fragment_preimages");
-    let Value::Array(cases) = field(&root, "cases") else {
-        panic!("the correlation vectors must hold cases")
-    };
+    let vectors: Vectors =
+        serde_json::from_slice(&bytes).expect("the correlation vectors have the published shape");
+    assert_eq!(vectors.schema, "amiss/correlation-intent-vectors");
+    assert_eq!(vectors.contract, "correlation-intent");
+    let query_preimages = preimages(vectors.query_preimages, "query_preimages");
+    let fragment_preimages = preimages(vectors.fragment_preimages, "fragment_preimages");
     assert!(
-        cases.len() >= REQUIRED_VECTOR_IDS.len(),
+        vectors.cases.len() >= REQUIRED_VECTOR_IDS.len(),
         "the pinned corpus only grows"
     );
-
     let mut ids = BTreeSet::new();
-    for case in cases {
-        let Value::Object(members) = case else {
-            panic!("a correlation case must be an object")
-        };
-        assert_eq!(members.len(), 4, "a correlation case shape is closed");
-        let id = text(field(members, "id"), "id");
+    for Vector {
+        id,
+        left,
+        right,
+        expected_equal,
+    } in vectors.cases
+    {
         assert!(ids.insert(id.clone()), "duplicate correlation case {id}");
-        let left_value = field(members, "left");
-        let right_value = field(members, "right");
-        let left = FixtureIntent::parse(left_value, &format!("{id} left"));
-        let right = FixtureIntent::parse(right_value, &format!("{id} right"));
-        let left_intent = left.intent(&query_preimages, &fragment_preimages, &format!("{id} left"));
-        let right_intent = right.intent(
+        let left_intent = fixture_intent(
+            &left,
+            &query_preimages,
+            &fragment_preimages,
+            &format!("{id} left"),
+        );
+        let right_intent = fixture_intent(
+            &right,
             &query_preimages,
             &fragment_preimages,
             &format!("{id} right"),
@@ -297,23 +227,22 @@ fn the_published_vectors_execute_live_correlation() {
             serde_json::to_vec(&target_intent(
                 &left_intent,
                 left.raw_destination_digest,
-                left_intent.repository_path.as_ref()
+                left_intent.repository_path.as_ref(),
             ))
             .unwrap(),
-            serde_json_canonicalizer::to_vec(left_value).unwrap(),
+            serde_json_canonicalizer::to_vec(&left).unwrap(),
             "{id} left target-intent preimage"
         );
         assert_eq!(
             serde_json::to_vec(&target_intent(
                 &right_intent,
                 right.raw_destination_digest,
-                right_intent.repository_path.as_ref()
+                right_intent.repository_path.as_ref(),
             ))
             .unwrap(),
-            serde_json_canonicalizer::to_vec(right_value).unwrap(),
+            serde_json_canonicalizer::to_vec(&right).unwrap(),
             "{id} right target-intent preimage"
         );
-
         let rows = correlate(
             Side {
                 observations: vec![observation(&id, "left", &left, left_intent)],
@@ -325,10 +254,7 @@ fn the_published_vectors_execute_live_correlation() {
             },
         )
         .expect("the vector observations correlate");
-        let Value::Bool(expected) = field(members, "expected_equal") else {
-            panic!("{id} expected_equal must be a boolean")
-        };
-        if *expected {
+        if expected_equal {
             assert_eq!(rows.len(), 1, "{id} forms one candidate component");
             assert_eq!(
                 rows.first().expect("one candidate component").outcome,

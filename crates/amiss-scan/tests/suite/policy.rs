@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_scan::policy::{
@@ -8,7 +9,6 @@ use amiss_wire::controls::{
     BlobLineSelection, Disposition, DocumentInclude, FACT_DOMAIN, FINDING_KEY_DOMAIN,
     FindingDisposition, IncludeKind, ProjectionAssertion, ProjectionKind, ProjectionSink,
     ProjectionSource, PromotableFindingKind, ResourceName, ScannerPolicy, ScannerPolicySchema,
-    canonical_debt_snapshot, canonical_scanner_policy, canonical_waiver_bundle,
     parse_debt_snapshot, parse_waiver_bundle,
 };
 
@@ -23,9 +23,13 @@ fn path(raw: &str) -> RepoPath {
 
 #[expect(clippy::expect_used, reason = "test fixture policy is valid")]
 fn policy_side(policy: ScannerPolicy) -> PolicySide {
-    let digest = canonical_scanner_policy(&policy)
-        .expect("valid policy fixture")
-        .1;
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-policy")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&policy).expect("valid policy fixture"))
+            .finalize()
+            .0,
+    );
     PolicySide {
         digest: Some(digest),
         policy: Some(policy),
@@ -352,9 +356,15 @@ fn debt_input(item_count: usize) -> DebtInput {
         replace_json(
             &mut second,
             "/finding_key",
-            amiss_wire::digest::hb(FINDING_KEY_DOMAIN, &key_input)
-                .to_string()
-                .into(),
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&key_input)
+                    .finalize()
+                    .0,
+            )
+            .to_string()
+            .into(),
         );
         let fact =
             serde_json_canonicalizer::to_vec(second.pointer("/accepted_fact").expect("fact"))
@@ -362,17 +372,29 @@ fn debt_input(item_count: usize) -> DebtInput {
         replace_json(
             &mut second,
             "/accepted_fact_digest",
-            amiss_wire::digest::hb(FACT_DOMAIN, &fact)
-                .to_string()
-                .into(),
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(FACT_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&fact)
+                    .finalize()
+                    .0,
+            )
+            .to_string()
+            .into(),
         );
         push_item(&mut document, second);
     }
     let bytes = serde_json::to_vec(&document).expect("debt document JSON");
     let snapshot = parse_debt_snapshot(&bytes).expect("valid debt fixture");
-    let digest = canonical_debt_snapshot(&snapshot)
-        .expect("canonical debt fixture")
-        .1;
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(&snapshot).expect("canonical debt fixture"),
+            )
+            .finalize()
+            .0,
+    );
     DebtInput {
         snapshot,
         digest,
@@ -397,9 +419,15 @@ fn waiver_input(item_count: usize) -> WaiverInput {
     }
     let bytes = serde_json::to_vec(&document).expect("waiver document JSON");
     let bundle = parse_waiver_bundle(&bytes).expect("valid waiver fixture");
-    let digest = canonical_waiver_bundle(&bundle)
-        .expect("canonical waiver fixture")
-        .1;
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(&bundle).expect("canonical waiver fixture"),
+            )
+            .finalize()
+            .0,
+    );
     WaiverInput {
         bundle,
         digest,

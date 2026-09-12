@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::model::{Adapter, ForgeDialect, OwnerId, RepoPath, RepositoryIdentity, UtcInstant};
@@ -152,9 +153,72 @@ fn the_adapter_tables_are_populated_and_distinct() {
 /// channel, `sha256:` plus sixty-four hex bytes.
 #[test]
 fn a_digest_debugs_as_it_displays() {
-    let digest = amiss_wire::digest::hb("test/domain", b"payload");
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("test/domain")
+            .chain_update([0_u8])
+            .chain_update(b"payload")
+            .finalize()
+            .0,
+    );
     let shown = format!("{digest}");
     assert_eq!(format!("{digest:?}"), shown);
     assert!(shown.starts_with("sha256:") && shown.len() == 71, "{shown}");
-    assert_eq!(amiss_wire::digest::Digest::from_wire(&shown), Some(digest));
+    assert_eq!(amiss_wire::model::Digest::from_wire(&shown), Some(digest));
+}
+
+#[test]
+fn digest_wire_admission_keeps_one_lowercase_spelling() {
+    use amiss_wire::model::Digest;
+
+    let encoded = format!("sha256:{}", "ab".repeat(32));
+    let digest: Digest = serde_json::from_str(&format!("\"{encoded}\"")).unwrap();
+    assert_eq!(digest.as_bytes(), &[0xab; 32]);
+    assert_eq!(
+        serde_json::to_string(&digest).unwrap(),
+        format!("\"{encoded}\"")
+    );
+    for rejected in [
+        encoded.to_ascii_uppercase(),
+        format!("sha256:{}", "AB".repeat(32)),
+        format!("sha256:{}", "ab".repeat(31)),
+        format!("sha256:{}", "ab".repeat(33)),
+        format!("sha256:{}gg", "ab".repeat(31)),
+        format!("sha256:{}é", "a".repeat(62)),
+        format!(" {encoded}"),
+        format!("{encoded}\n"),
+    ] {
+        assert!(Digest::from_wire(&rejected).is_none(), "{rejected:?}");
+        assert!(serde_json::from_value::<Digest>(serde_json::json!(rejected)).is_err());
+    }
+}
+
+#[test]
+fn shared_identity_models_require_objects_without_early_grammar_validation() {
+    let malformed = serde_json::json!(["forge.example", "docs", "team"]);
+    assert!(serde_json::from_value::<RepositoryIdentity>(malformed).is_err());
+    let raw = serde_json::json!({"host": "forge.example/invalid", "name": "..", "owner": "TEAM"});
+    let decoded: RepositoryIdentity = serde_json::from_value(raw.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&decoded).unwrap(), raw);
+    assert!(
+        RepositoryIdentity::new(
+            decoded.host().to_owned(),
+            decoded.owner().to_owned(),
+            decoded.name().to_owned()
+        )
+        .is_none(),
+        "grammar remains a domain validator's responsibility"
+    );
+}
+
+#[test]
+fn shared_tree_identity_keeps_its_object_shape_and_validation_stage() {
+    use amiss_wire::model::{ObjectFormat, TreeIdentity};
+
+    let oid = "a".repeat(40);
+    assert!(serde_json::from_value::<TreeIdentity>(serde_json::json!(["sha1", oid])).is_err());
+    let raw = serde_json::json!({"object_format": "sha256", "tree_oid": oid});
+    let decoded: TreeIdentity = serde_json::from_value(raw.clone()).unwrap();
+    assert_eq!(serde_json::to_value(&decoded).unwrap(), raw);
+    assert_eq!(decoded.object_format, ObjectFormat::Sha256);
+    assert_eq!(decoded.tree_oid.object_format(), ObjectFormat::Sha1);
 }

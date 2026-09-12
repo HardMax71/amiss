@@ -1,10 +1,10 @@
 use amiss_md::lines::scan;
 use amiss_wire::controls::{GitMode, NamedRegionSelection, ProjectionSource};
-use amiss_wire::digest::hb;
 use amiss_wire::model::{ForgeDialect, RepoPath};
 use amiss_wire::report::model::ProjectionObserved;
 use amiss_wire::resolution::{BlobContent, BlobTarget, Missing, Target, UnsupportedSemantics};
 use memchr::memmem::Finder;
+use sha2::Digest as _;
 
 use crate::Error;
 use crate::projection::{Verdict, normalized_line_endings, unavailable};
@@ -72,13 +72,7 @@ impl Resolver<'_> {
                 u64::try_from(body.len()).unwrap_or(u64::MAX),
             )?;
             let projection = selected_line_bytes(body, range)
-                .map(|selected| {
-                    target_projection(
-                        TARGET_LINE_PROJECTION_DOMAIN,
-                        mode,
-                        hb(RAW_EVIDENCE_DOMAIN, selected),
-                    )
-                })
+                .map(|selected| line_projection(mode, selected))
                 .transpose()?;
             slot.insert(projection);
         }
@@ -92,7 +86,13 @@ impl Resolver<'_> {
             Ok(ClaimVerdict::Attested)
         } else {
             Ok(ClaimVerdict::Broken {
-                observed_digest: hb(RAW_EVIDENCE_DOMAIN, observed),
+                observed_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+                        .chain_update([0_u8])
+                        .chain_update(observed)
+                        .finalize()
+                        .0,
+                ),
                 observed: observed.to_vec(),
             })
         }
@@ -155,13 +155,7 @@ impl Resolver<'_> {
                     )?;
                     slot.insert(
                         selected_line_bytes(body, range)
-                            .map(|selected| {
-                                target_projection(
-                                    TARGET_LINE_PROJECTION_DOMAIN,
-                                    mode,
-                                    hb(RAW_EVIDENCE_DOMAIN, selected),
-                                )
-                            })
+                            .map(|selected| line_projection(mode, selected))
                             .transpose()?,
                     );
                 }
@@ -198,7 +192,13 @@ impl Resolver<'_> {
         }
         Ok(Verdict::Drift {
             reason: ProjectionObserved::ContentDiffers,
-            expected_digest: Some(hb(crate::projection::CODE_TEXT_SOURCE_DOMAIN, expected)),
+            expected_digest: Some(amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(crate::projection::CODE_TEXT_SOURCE_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(expected)
+                    .finalize()
+                    .0,
+            )),
             observed_digest: Some(sink.digest),
             expected_bytes: Some(u64::try_from(expected.len()).unwrap_or(u64::MAX)),
             observed_bytes: Some(observed_bytes),
@@ -319,13 +319,7 @@ pub(super) fn line_resolution(
             u64::try_from(body.len()).unwrap_or(u64::MAX),
         )?;
         let projection = selected_line_bytes(body, range)
-            .map(|selected| {
-                target_projection(
-                    TARGET_LINE_PROJECTION_DOMAIN,
-                    mode,
-                    hb(RAW_EVIDENCE_DOMAIN, selected),
-                )
-            })
+            .map(|selected| line_projection(mode, selected))
             .transpose()?;
         line_projections.insert(range, projection);
         projection
@@ -422,4 +416,15 @@ pub(crate) fn selected_line_bytes(source: &[u8], range: LineRange) -> Option<&[u
         }
     }
     None
+}
+
+fn line_projection(mode: GitMode, selected: &[u8]) -> Result<amiss_wire::model::Digest, Error> {
+    let raw_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(selected)
+            .finalize()
+            .0,
+    );
+    target_projection(TARGET_LINE_PROJECTION_DOMAIN, mode, raw_digest)
 }

@@ -2,9 +2,9 @@ use amiss_controller::{
     ArtifactError, RelationAuditBundle, relation_audit_plan, validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
-use amiss_wire::digest::sha256;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::relation::{RelationVerdict, assess, parse_assessment, parse_plan, plan};
+use sha2::Digest as _;
 
 #[test]
 fn one_exact_chain_binds_every_byte_to_the_trigger_and_operator_plan() -> Result<(), ArtifactError>
@@ -16,13 +16,25 @@ fn one_exact_chain_binds_every_byte_to_the_trigger_and_operator_plan() -> Result
     );
     let audit = validate_relation_audit(bundle(&fixture))?;
 
-    assert_eq!(audit.report_digest, sha256(&fixture.report));
-    assert_eq!(audit.plan_digest, sha256(&fixture.plan));
+    assert_eq!(
+        audit.report_digest,
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(&fixture.report).0)
+    );
+    assert_eq!(
+        audit.plan_digest,
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(&fixture.plan).0)
+    );
     assert_eq!(
         audit.evidence_digest,
-        fixture.evidence.as_deref().map(sha256)
+        fixture
+            .evidence
+            .as_deref()
+            .map(|bytes| amiss_wire::model::Digest::from(sha2::Sha256::digest(bytes).0))
     );
-    assert_eq!(audit.assessment_digest, sha256(&fixture.assessment));
+    assert_eq!(
+        audit.assessment_digest,
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(&fixture.assessment).0)
+    );
     assert_eq!(audit.verdict, RelationVerdict::IntroducedDrift);
     Ok(())
 }
@@ -140,10 +152,15 @@ fn with_null_report_target(
         return Err(ArtifactError::Corrupt);
     };
     evaluation.target_ref = None;
-    let report_payload_digest = amiss_wire::digest::hb(
-        amiss_wire::report::PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload)
-            .map_err(|_defect| ArtifactError::Corrupt)?,
+    let report_payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(&report.payload)
+                    .map_err(|_defect| ArtifactError::Corrupt)?,
+            )
+            .finalize()
+            .0,
     );
     report.payload_digest = report_payload_digest;
     fixture.report =

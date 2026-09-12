@@ -7,7 +7,7 @@ use amiss_wire::report::MACHINE_JSON_BYTES;
 
 use super::{Row, atomic_write, read_bounded, reject_non_file};
 use crate::file_ledger::FileLedgerError;
-use crate::file_ledger::format::{self, ReportRef};
+use crate::file_ledger::format::ReportRef;
 
 impl Row {
     pub(in crate::file_ledger) fn save_report(
@@ -18,7 +18,7 @@ impl Row {
         match (report, reference) {
             (None, None) => Ok(()),
             (Some(report), Some(reference)) if reference.matches(report) => {
-                let path = self.report_path(reference)?;
+                let path = self.fixed_report_path();
                 match read_bounded(&path, MACHINE_JSON_BYTES) {
                     Ok(existing) if existing == report => Ok(()),
                     Ok(_) => Err(FileLedgerError::Corrupt),
@@ -39,7 +39,7 @@ impl Row {
         let Some(reference) = reference else {
             return Ok(None);
         };
-        let bytes = match read_bounded(&self.report_path(reference)?, MACHINE_JSON_BYTES) {
+        let bytes = match read_bounded(&self.fixed_report_path(), MACHINE_JSON_BYTES) {
             Err(FileLedgerError::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
                 return Err(FileLedgerError::Corrupt);
             }
@@ -63,11 +63,6 @@ impl Row {
                 }
             })
             .map_err(Into::into)
-    }
-
-    fn report_path(&self, reference: &ReportRef) -> Result<PathBuf, FileLedgerError> {
-        format::digest_hex(reference.digest())?;
-        Ok(self.fixed_report_path())
     }
 
     fn fixed_report_path(&self) -> PathBuf {

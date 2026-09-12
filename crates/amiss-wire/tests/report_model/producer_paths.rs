@@ -1,9 +1,10 @@
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, SourceConstruct, TargetKind};
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model as report;
 use amiss_wire::report::{FindingKind, PAYLOAD_SCHEMA};
+use sha2::Digest as _;
 
 #[test]
 fn report_producers_can_borrow_validated_text_and_byte_paths() {
@@ -27,13 +28,33 @@ fn report_producers_can_borrow_validated_text_and_byte_paths() {
             let payload_bytes = serde_json_canonicalizer::to_vec(&payload).unwrap();
             let envelope = report::ReportEnvelope {
                 payload,
-                payload_digest: hb(PAYLOAD_SCHEMA, &payload_bytes),
+                payload_digest: Digest::from(
+                    sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                        .chain_update([0_u8])
+                        .chain_update(&payload_bytes)
+                        .finalize()
+                        .0,
+                ),
                 schema: report::ReportEnvelopeSchema::Current,
             };
             let wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
             let decoded: report::ReportEnvelope = serde_json::from_slice(&wire).unwrap();
             assert_eq!(serde_json_canonicalizer::to_vec(&decoded).unwrap(), wire);
             let json: serde_json::Value = serde_json::from_slice(&wire).unwrap();
+            let fact = &json["payload"]["findings"][0]["candidate_fact"];
+            let intent = &fact["key_input"]["scope"]["normalized_target_intent"];
+            let resolution = &fact["evidence"]["resolution"];
+            for accepts_path in [
+                serde_json::from_value::<amiss_wire::controls::Fact>(fact.clone()).is_ok(),
+                serde_json::from_value::<amiss_wire::controls::TargetIntent>(intent.clone())
+                    .is_ok(),
+                serde_json::from_value::<amiss_wire::controls::StructuralResolution>(
+                    resolution.clone(),
+                )
+                .is_ok(),
+            ] {
+                assert_eq!(accepts_path, path.as_str().is_some());
+            }
             let expected = path.as_str().map_or_else(
                 || serde_json::json!({"bytes_hex": hex::encode(&raw)}),
                 serde_json::Value::from,
@@ -85,7 +106,7 @@ fn producer_payload<R>(
     let template: report::ReportEnvelope = serde_json::from_slice(super::REPORT)?;
     let mut template = template.payload;
     let finding = template.findings.remove(0);
-    let digest: Digest = hb("amiss/test-producer-paths", b"fixed fixture");
+    let digest: Digest = Digest::from([18; 32]);
     let key_input = report::FindingKeyInput {
         finding_kind: FindingKind::ExplicitTargetMissing,
         schema: FindingKeyInputSchema::Current,

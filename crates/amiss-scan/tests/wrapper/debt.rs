@@ -1,10 +1,9 @@
 use amiss_git::Repository;
 use amiss_scan::policy::ConstraintInput;
-use amiss_wire::controls::{
-    Profile, canonical_organization_floor, parse_execution_constraint, parse_organization_floor,
-};
+use amiss_wire::controls::{Profile, parse_execution_constraint, parse_organization_floor};
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
+use sha2::Digest as _;
 
 use crate::support::{
     Fixture, INSTANT, assert_global_location, debt_input, debt_json, fixture, floor_input, payload,
@@ -379,7 +378,13 @@ fn a_debt_snapshot_over_the_tightened_ceiling_is_not_parsed() {
   "resource_limits": [ { "resource": "debt-items", "maximum": 0 } ]
 }"#;
     let floor = parse_organization_floor(doc.as_bytes()).unwrap();
-    let digest = canonical_organization_floor(&floor).unwrap().1;
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/organization-floor")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+            .finalize()
+            .0,
+    );
     let floor_digest = digest.to_string();
     let mut setup = shell(Profile::Enforce);
     setup.floor = Some(amiss_scan::policy::FloorInput {

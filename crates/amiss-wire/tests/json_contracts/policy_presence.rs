@@ -1,10 +1,10 @@
 use amiss_wire::{
     controls::{
-        ProjectionKind, ProjectionSource, ScannerPolicy, TreePathSelection,
-        canonical_scanner_policy, parse_projection_source, parse_scanner_policy,
+        ProjectionKind, ProjectionSource, ScannerPolicy, TreePathSelection, parse_scanner_policy,
     },
     de::ErrorKind,
 };
+use sha2::Digest as _;
 
 #[test]
 fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
@@ -17,7 +17,14 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
     let direct: ScannerPolicy = serde_json::from_slice(&absent).unwrap();
     assert_eq!(parse_scanner_policy(&absent).unwrap(), direct);
     assert_eq!(direct.projection_assertions, None);
-    let (canonical, absent_digest) = canonical_scanner_policy(&direct).unwrap();
+    let canonical = serde_json_canonicalizer::to_vec(&direct).unwrap();
+    let absent_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-policy")
+            .chain_update([0_u8])
+            .chain_update(&canonical)
+            .finalize()
+            .0,
+    );
     assert_eq!(canonical, absent);
 
     document.projection_assertions = Some(Vec::new());
@@ -25,7 +32,14 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
     let direct: ScannerPolicy = serde_json::from_slice(&present).unwrap();
     assert_eq!(parse_scanner_policy(&present).unwrap(), direct);
     assert_eq!(direct.projection_assertions, Some(Vec::new()));
-    let (canonical, present_digest) = canonical_scanner_policy(&direct).unwrap();
+    let canonical = serde_json_canonicalizer::to_vec(&direct).unwrap();
+    let present_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-policy")
+            .chain_update([0_u8])
+            .chain_update(&canonical)
+            .finalize()
+            .0,
+    );
     assert_eq!(canonical, present);
     assert_ne!(absent_digest, present_digest);
 
@@ -58,13 +72,20 @@ fn projection_suffix_preserves_absence_without_accepting_null() {
         });
         let source_bytes = serde_json_canonicalizer::to_vec(&source).unwrap();
         assert_eq!(
-            parse_projection_source(&source_bytes, ProjectionKind::SortedRowsV1).unwrap(),
+            serde_json::from_slice::<ProjectionSource>(&source_bytes).unwrap(),
             source
         );
         let assertion = &mut policy.projection_assertions.as_mut().unwrap()[0];
         assertion.projection = ProjectionKind::SortedRowsV1;
         assertion.source = source;
-        let (bytes, digest) = canonical_scanner_policy(&policy).unwrap();
+        let bytes = serde_json_canonicalizer::to_vec(&policy).unwrap();
+        let digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-policy")
+                .chain_update([0_u8])
+                .chain_update(&bytes)
+                .finalize()
+                .0,
+        );
         assert_eq!(parse_scanner_policy(&bytes).unwrap(), policy);
         digests.push(digest);
     }
@@ -78,11 +99,9 @@ fn projection_suffix_preserves_absence_without_accepting_null() {
     assert_eq!(
         [
             serde_json::from_str::<ProjectionSource>(&invalid_source).is_err(),
-            parse_projection_source(invalid_source.as_bytes(), ProjectionKind::SortedRowsV1)
-                .is_err(),
             serde_json::from_str::<ScannerPolicy>(&invalid_policy).is_err(),
             parse_scanner_policy(invalid_policy.as_bytes()).is_err(),
         ],
-        [true; 4]
+        [true; 3]
     );
 }

@@ -5,6 +5,7 @@
     reason = "integration assertions over a repository-owned semantic corpus"
 )]
 
+use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -15,8 +16,8 @@ use amiss_scan::{
     scan_document,
 };
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb};
-use amiss_wire::json::parse;
+use amiss_wire::model::{Digest, RAW_EVIDENCE_DOMAIN};
+
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
 use serde_json::{Map, Value};
@@ -48,7 +49,7 @@ fn corpus() -> Value {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../spec/examples/governed-definition-vectors.json");
     let bytes = fs::read(&path).expect("the governed-definition corpus is readable");
-    parse(&bytes).expect("the corpus clears the strict JSON reader");
+    serde_json::from_slice::<Value>(&bytes).expect("the corpus clears the strict JSON reader");
     serde_json::from_slice(&bytes).expect("strict JSON is available to the test harness")
 }
 
@@ -187,7 +188,13 @@ fn discovery(scanned: amiss_scan::Scanned, source: &str, oid_digit: char) -> Sna
             oid,
             mode: GitMode::RegularFile,
             byte_count: u64::try_from(source.len()).expect("the fixture length fits u64"),
-            raw_digest: Some(hb(RAW_EVIDENCE_DOMAIN, source.as_bytes())),
+            raw_digest: Some(Digest::from(
+                sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(source.as_bytes())
+                    .finalize()
+                    .0,
+            )),
         }],
         outside_document_set: 0,
         tree_entries: 1,
@@ -212,7 +219,13 @@ fn setup() -> Setup {
     Setup {
         engine: EngineProvenance {
             version: "0.0.0-test".to_owned(),
-            digest: hb("amiss/scanner-engine", b"governed corpus test"),
+            digest: Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                    .chain_update([0_u8])
+                    .chain_update(b"governed corpus test")
+                    .finalize()
+                    .0,
+            ),
         },
         profile: amiss_wire::controls::Profile::Observe,
         repository: None,

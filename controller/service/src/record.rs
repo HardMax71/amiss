@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::InboxError;
 use crate::delivery::{StoredDelivery, source_key, validate_source};
-use crate::hash::is_digest;
 use crate::limits::StoredLimits;
 
 const RECORD_SCHEMA: &str = "amiss/controller-inbox-record-v1";
@@ -61,7 +60,12 @@ impl Record {
     pub(crate) fn validate(&self, key: &str, limits: StoredLimits) -> Result<(), InboxError> {
         if self.schema != RECORD_SCHEMA
             || source_key(&self.route, &self.source_id)? != key
-            || !is_digest(&self.content_digest)
+            || self.content_digest.len() != 64
+            || self
+                .content_digest
+                .bytes()
+                .any(|byte| byte.is_ascii_uppercase())
+            || hex::decode_to_slice(&self.content_digest, &mut [0_u8; 32]).is_err()
             || self.attempts != self.fence
             || self.generation < self.attempts
         {

@@ -1,7 +1,7 @@
 use amiss_bootstrap::supervise::{AcceptanceDefect, accept};
-use amiss_wire::json::{Value, parse};
+use serde_json::Value;
 
-use super::{Deviation, entry, golden, refused, set};
+use super::{Deviation, golden, refused};
 
 #[test]
 fn sealed_controls_require_objects_not_positional_arrays() {
@@ -22,17 +22,13 @@ fn sealed_controls_require_objects_not_positional_arrays() {
     ];
     for &path in paths {
         let deviation = Deviation::post(move |payload| {
-            let value = path.iter().fold(payload, |value, key| entry(value, key));
+            let value = path.iter().fold(payload, |value, key| {
+                (value).get_mut(key).expect("fixture member exists")
+            });
             let Value::Object(members) = std::mem::replace(value, Value::Null) else {
                 panic!("an object fixture at {path:?}");
             };
-            *value = Value::array(
-                members
-                    .into_vec()
-                    .into_iter()
-                    .map(|(_, value)| value)
-                    .collect(),
-            );
+            *value = Value::Array(members.into_iter().map(|(_, value)| value).collect());
         });
         assert_eq!(refused(deviation), AcceptanceDefect::Shape, "{path:?}");
     }
@@ -55,8 +51,10 @@ fn unknown_control_members_are_refused_with_correct_payload_digests() {
     ];
     for &path in paths {
         let (wire, expectations) = golden(Deviation::post(move |payload| {
-            let value = path.iter().fold(payload, |value, key| entry(value, key));
-            set(value, "future", Value::Bool(true));
+            let value = path.iter().fold(payload, |value, key| {
+                (value).get_mut(key).expect("fixture member exists")
+            });
+            (value)["future"] = Value::Bool(true);
         }));
         assert_eq!(
             accept(&wire, &expectations),
@@ -69,8 +67,8 @@ fn unknown_control_members_are_refused_with_correct_payload_digests() {
 #[test]
 fn sealed_reports_use_the_closed_wire_envelope() {
     let (wire, expectations) = golden(Deviation::default());
-    let mut envelope = parse(&wire).unwrap();
-    set(&mut envelope, "future", Value::Bool(true));
+    let mut envelope = serde_json::from_slice::<Value>(&wire).unwrap();
+    (&mut envelope)["future"] = Value::Bool(true);
     let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     wire.push(b'\n');
     assert_eq!(accept(&wire, &expectations), Err(AcceptanceDefect::Shape));
@@ -83,8 +81,14 @@ fn embedded_closed_controls_do_not_accept_unknown_members() {
         ("trusted_time_source", "statement"),
     ] {
         let deviation = Deviation::post(move |payload| {
-            let body = entry(entry(entry(payload, "controls"), control), body);
-            set(body, "future", Value::Null);
+            let body = (((payload)
+                .get_mut("controls")
+                .expect("fixture member exists"))
+            .get_mut(control)
+            .expect("fixture member exists"))
+            .get_mut(body)
+            .expect("fixture member exists");
+            (body)["future"] = Value::Null;
         });
         assert_eq!(refused(deviation), AcceptanceDefect::Shape, "{control}");
     }
@@ -94,8 +98,10 @@ fn embedded_closed_controls_do_not_accept_unknown_members() {
 fn control_extensions_keep_the_strict_parser_depth_boundary() {
     for depth in [128, 512] {
         let (wire, expectations) = golden(Deviation::post(move |payload| {
-            let extension = (0..depth).fold(Value::Null, |value, _| Value::array(vec![value]));
-            set(entry(payload, "controls"), "future", extension);
+            let extension = (0..depth).fold(Value::Null, |value, _| Value::Array(vec![value]));
+            ((payload)
+                .get_mut("controls")
+                .expect("fixture member exists"))["future"] = extension;
         }));
         assert_eq!(
             accept(&wire, &expectations),
@@ -109,11 +115,14 @@ fn control_extensions_keep_the_strict_parser_depth_boundary() {
 fn missing_nullable_control_members_are_not_null() {
     for (name, key) in [("debt_snapshot", "digest"), ("sandbox", "verification")] {
         let deviation = Deviation::post(move |payload| {
-            let Value::Object(members) = entry(entry(payload, "controls"), name) else {
+            let Value::Object(members) = ((payload)
+                .get_mut("controls")
+                .expect("fixture member exists"))
+            .get_mut(name)
+            .expect("fixture member exists") else {
                 panic!("a control object");
             };
             *members = std::mem::take(members)
-                .into_vec()
                 .into_iter()
                 .filter(|(name, _)| name != key)
                 .collect();

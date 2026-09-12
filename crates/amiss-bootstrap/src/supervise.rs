@@ -2,7 +2,7 @@ use std::process::{Child, ExitStatus};
 use std::time::{Duration, Instant};
 
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{Oid, RepositoryIdentity};
 use amiss_wire::report::model::SemanticEvidenceProvenance;
 use amiss_wire::requests::RequestTrust;

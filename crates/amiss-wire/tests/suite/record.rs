@@ -1,10 +1,10 @@
 use std::borrow::Cow;
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::json::Value;
 use amiss_wire::semantic::SemanticEvidenceTemplate;
 use amiss_wire::semantic::observation::Observation;
 use amiss_wire::semantic::record::{parse_input, template, validate_records};
+use serde_json::Value;
 
 const B: &str = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 const C: &str = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
@@ -32,7 +32,7 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
     .unwrap();
     let bytes = template(source).unwrap();
     let parsed: SemanticEvidenceTemplate<'static> = serde_json::from_slice(&bytes).unwrap();
-    assert!(amiss_wire::semantic::parse_template(&bytes).is_ok());
+    assert!(serde_json::from_slice::<SemanticEvidenceTemplate<'static>>(&bytes).is_ok());
     assert_eq!(
         parsed.producer.kind,
         amiss_wire::semantic::SemanticProducerKind::RecordSet
@@ -65,13 +65,13 @@ fn row_order_duplicates_and_closed_metadata_are_refused() {
         assert_eq!(parse_input(&input(records)).unwrap_err().kind, kind);
     }
 
-    let value = amiss_wire::json::parse(&input("[]")).unwrap();
+    let value = serde_json::from_slice::<Value>(&input("[]")).unwrap();
     let Value::Object(members) = value else {
         panic!("the source is an object")
     };
-    let mut members = members.into_vec();
-    members.push(("producer_version".to_owned(), Value::string("2")));
-    let value = Value::object(members);
+    let mut members = members;
+    members.insert("producer_version".to_owned(), Value::from("2"));
+    let value = Value::from_iter(members);
     assert_eq!(
         parse_input(&serde_json_canonicalizer::to_vec(&value).unwrap())
             .unwrap_err()

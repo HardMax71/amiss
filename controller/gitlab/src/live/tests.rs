@@ -6,7 +6,7 @@
 
 use amiss_controller::ProviderError;
 
-use super::model::{CommitResponse, ProjectResponse};
+use super::model::{CommitResponse, ProjectResponse, TrainResponse};
 use super::refresh::validated_repository_url;
 use super::{MAX_PAGES, PAGE_SIZE, page_complete};
 
@@ -81,6 +81,33 @@ fn object_fetch_uses_only_the_canonical_provider_repository_url() {
 fn a_project_without_the_merge_train_settings_is_below_the_supported_floor() {
     assert!(serde_json::from_str::<ProjectResponse>(BELOW_THE_FLOOR).is_err());
     assert!(serde_json::from_str::<ProjectResponse>(AT_THE_FLOOR).is_ok());
+}
+
+#[test]
+fn a_train_retains_its_nested_pipeline_identity() {
+    let response = serde_json::json!({
+        "id": 7,
+        "status": "merging",
+        "target_branch": "main",
+        "merge_request": {"iid": 42, "project_id": 101, "state": "opened"},
+        "pipeline": {
+            "id": 202,
+            "project_id": 101,
+            "sha": "b".repeat(40),
+            "ref": "refs/merge-requests/42/train",
+            "source": "merge_request_event",
+            "status": "running",
+            "web_url": "https://gitlab.example/acme/widgets/-/pipelines/202"
+        }
+    });
+    let train =
+        super::model::train(serde_json::from_value::<TrainResponse>(response).unwrap()).unwrap();
+    assert_eq!(train.pipeline_id, 202);
+    assert_eq!(train.pipeline_project_id, 101);
+    assert_eq!(train.pipeline_sha, "b".repeat(40));
+    assert_eq!(train.pipeline_ref, "refs/merge-requests/42/train");
+    assert_eq!(train.pipeline_source, "merge_request_event");
+    assert_eq!(train.pipeline_status, "running");
 }
 
 type QueryDeviation = fn(&mut crate::GitLabRefreshQuery);

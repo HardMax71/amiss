@@ -1,8 +1,8 @@
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
 use amiss_wire::controls::{GitMode, ProjectionKind, ProjectionSource, ResourceName};
-use amiss_wire::digest::{sha256, sha256_stream};
 use amiss_wire::model::{Oid, RepoPath};
 use amiss_wire::relation::RelationProjectedValue;
+use sha2::Digest as _;
 
 use crate::discovery::{SnapshotDiscovery, WalkMode, discover_walk};
 use crate::resolve::{LineRange, named_region_bytes, selected_line_bytes};
@@ -153,7 +153,7 @@ fn project_blob(
     )?;
     Ok(RepositoryProjectionOutcome {
         value: Some(RelationProjectedValue {
-            value_digest: sha256(projected),
+            value_digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(projected).0),
             value_bytes: projected_bytes,
         }),
         records: 1,
@@ -207,19 +207,23 @@ fn project_tree(
 
     let (digest, projected_bytes) = if let Some(rows) = rows {
         let projected_bytes = inventory::projected_bytes(&rows);
-        let digest = sha256_stream(|write| {
+        let mut hasher = sha2::Sha256::new();
+        {
             for (index, row) in rows.iter().enumerate() {
                 if index != 0 {
-                    write(b"\n");
+                    hasher.update(b"\n");
                 }
-                write(row.as_bytes());
+                hasher.update(row.as_bytes());
             }
-        });
-        (digest, projected_bytes)
+        }
+        (
+            amiss_wire::model::Digest::from(hasher.finalize().0),
+            projected_bytes,
+        )
     } else {
         let count = records.to_string();
         (
-            sha256(count.as_bytes()),
+            amiss_wire::model::Digest::from(sha2::Sha256::digest(count.as_bytes()).0),
             u64::try_from(count.len()).unwrap_or(u64::MAX),
         )
     };

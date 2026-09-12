@@ -6,7 +6,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use jsonwebtoken::{Algorithm, EncodingKey, Header};
 use reqwest::StatusCode;
-use reqwest::blocking::{Client, RequestBuilder, Response};
+use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::header::{
     ACCEPT, AUTHORIZATION, HeaderMap, HeaderName, HeaderValue, LOCATION, RETRY_AFTER,
 };
@@ -15,7 +15,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
-use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, decode_bounded_json};
+use amiss_controller::{ForgeFact, ForgeNegative, ProviderError, read_response_body};
 
 use super::super::{GitHubClientError, GitHubTimeouts};
 use super::OperationDeadline;
@@ -178,7 +178,13 @@ impl Transport {
             .send()
             .map_err(|error| map_error(&error))?;
         match classified(response.status().as_u16(), response.headers())? {
-            Ok(()) => decode_body(response).map(Ok),
+            Ok(()) => {
+                let declared = response.content_length();
+                let bytes = read_response_body(response, declared, MAX_RESPONSE_BYTES)?;
+                serde_json::from_slice(&bytes)
+                    .map_err(|_defect| ProviderError::InvalidResponse)
+                    .map(Ok)
+            }
             Err(negative) => Ok(Err(negative)),
         }
     }
@@ -198,7 +204,9 @@ impl Transport {
             response.headers(),
             ProviderError::AuthorizationRevoked,
         )?;
-        decode_body(response)
+        let declared = response.content_length();
+        let bytes = read_response_body(response, declared, MAX_RESPONSE_BYTES)?;
+        serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)
     }
 
     fn token(&self, deadline: OperationDeadline) -> Result<SecretString, ProviderError> {
@@ -232,7 +240,10 @@ impl Transport {
             response.headers(),
             ProviderError::Authentication,
         )?;
-        let minted: InstallationToken = decode_body(response)?;
+        let declared = response.content_length();
+        let bytes = read_response_body(response, declared, MAX_RESPONSE_BYTES)?;
+        let minted: InstallationToken =
+            serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)?;
         Ok(SecretString::from(minted.token))
     }
 
@@ -289,11 +300,6 @@ fn github_headers(
             GITHUB_API_VERSION,
         )
         .header(AUTHORIZATION, authorization))
-}
-
-fn decode_body<T: DeserializeOwned>(response: Response) -> Result<T, ProviderError> {
-    let declared = response.content_length();
-    decode_bounded_json(response, declared, MAX_RESPONSE_BYTES).map(|(value, _length)| value)
 }
 
 fn artifact_location(headers: &HeaderMap) -> Result<Url, ProviderError> {

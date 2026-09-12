@@ -95,7 +95,8 @@ pub(super) fn classify_report_command(
                 (None, Some(hex)) if hex.len() <= 8192 && hex.len() % 2 == 0 => hex
                     .bytes()
                     .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-                    .then(|| amiss_wire::human::decode_hex(hex))
+                    .then(|| hex::decode(hex).ok())
+                    .flatten()
                     .and_then(RepoPath::from_bytes),
                 (Some(_) | None, Some(_)) | (None, None) => None,
             }

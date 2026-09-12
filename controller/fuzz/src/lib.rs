@@ -1,4 +1,5 @@
 use amiss_controller_fixtures::clock::TestClock;
+use sha2::Digest as _;
 use std::collections::BTreeSet;
 use std::sync::LazyLock;
 use std::time::{Duration, SystemTime};
@@ -12,7 +13,6 @@ use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitea::{DedicatedReviewer, GiteaPullRequestSource};
 use amiss_controller_github::GitHubPullRequestSource;
 use amiss_controller_gitlab::{GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust};
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
@@ -309,7 +309,13 @@ fn assert_gitlab_replay(claims: &Value, accepted: &AcceptedDelivery) {
         .map(|(jti, runner)| {
             format!(
                 "oidc/runner/{runner}/jti/{}",
-                hb("amiss/gitlab-oidc-jti-v1", jti.as_bytes())
+                amiss_wire::model::Digest::from(
+                    Sha256::new_with_prefix("amiss/gitlab-oidc-jti-v1")
+                        .chain_update([0_u8])
+                        .chain_update(jti.as_bytes())
+                        .finalize()
+                        .0
+                )
             )
         });
     assert_eq!(

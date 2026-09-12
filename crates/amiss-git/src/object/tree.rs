@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use amiss_wire::controls::GitMode;
 use amiss_wire::model::{ObjectFormat, Oid};
 
-use super::{TreeEntry, hex};
+use super::TreeEntry;
 use crate::Error;
 
 /// Parses a tree body under `git-object-grammar`.
@@ -42,7 +42,7 @@ pub fn parse_tree(object_format: ObjectFormat, body: &[u8]) -> Result<Vec<TreeEn
         let raw_oid = after_mode
             .get(oid_start..oid_end)
             .ok_or(Error::ObjectUnreadable)?;
-        let oid = Oid::new(object_format, hex(raw_oid)).ok_or(Error::ObjectUnreadable)?;
+        let oid = Oid::new(object_format, hex::encode(raw_oid)).ok_or(Error::ObjectUnreadable)?;
 
         let is_tree = mode == GitMode::Tree;
         if let Some(previous) = entries.last()

@@ -1,6 +1,7 @@
+use sha2::Digest as _;
 use std::time::Duration;
 
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::publication::{PUBLICATION_DOCUMENT_BYTES, PublicationVerdict};
 use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, RelationVerdict};
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -40,7 +41,7 @@ pub(super) struct Blob {
 
 impl Blob {
     pub(super) fn new(bytes: &[u8]) -> Result<Self, ArtifactError> {
-        Self::from_digest(bytes, amiss_wire::digest::sha256(bytes))
+        Self::from_digest(bytes, Digest::from(sha2::Sha256::digest(bytes).0))
     }
 
     pub(super) fn from_digest(bytes: &[u8], digest: Digest) -> Result<Self, ArtifactError> {
@@ -297,7 +298,16 @@ impl Record {
             relation_audit: &self.relation_audit,
         };
         let bytes = serde_json::to_vec(&identity).map_err(|_defect| ArtifactError::Corrupt)?;
-        Ok(hex::encode(hb(ID_DOMAIN, &bytes).as_bytes()))
+        Ok(hex::encode(
+            Digest::from(
+                sha2::Sha256::new_with_prefix(ID_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&bytes)
+                    .finalize()
+                    .0,
+            )
+            .as_bytes(),
+        ))
     }
 }
 
@@ -346,7 +356,14 @@ fn encode<T: Serialize>(value: &T, domain: &str, maximum: u64) -> Result<Vec<u8>
     let payload = serde_json::to_vec(value).map_err(|_defect| ArtifactError::Corrupt)?;
     let envelope = Envelope {
         payload: value,
-        payload_digest: hb(domain, &payload).to_string(),
+        payload_digest: Digest::from(
+            sha2::Sha256::new_with_prefix(domain)
+                .chain_update([0_u8])
+                .chain_update(&payload)
+                .finalize()
+                .0,
+        )
+        .to_string(),
     };
     let bytes = serde_json::to_vec(&envelope).map_err(|_defect| ArtifactError::Corrupt)?;
     (u64::try_from(bytes.len())
@@ -371,7 +388,15 @@ where
     }
     let payload =
         serde_json::to_vec(&envelope.payload).map_err(|_defect| ArtifactError::Corrupt)?;
-    (hb(domain, &payload).to_string() == envelope.payload_digest)
+    (Digest::from(
+        sha2::Sha256::new_with_prefix(domain)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize()
+            .0,
+    )
+    .to_string()
+        == envelope.payload_digest)
         .then_some(envelope.payload)
         .ok_or(ArtifactError::Corrupt)
 }

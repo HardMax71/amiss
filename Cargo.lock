@@ -71,8 +71,11 @@ dependencies = [
  "amiss-scan",
  "amiss-wire",
  "dhat",
+ "digest-io",
  "hex",
+ "js_int",
  "jsonschema",
+ "percent-encoding",
  "quick-xml",
  "rustix 1.1.4",
  "serde",
@@ -101,6 +104,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_json_canonicalizer",
+ "sha2",
  "tempfile",
  "thiserror 2.0.20",
  "trustfall",
@@ -115,9 +119,11 @@ dependencies = [
  "amiss-fixtures",
  "amiss-git",
  "amiss-wire",
+ "digest-io",
  "serde",
  "serde_json",
  "serde_json_canonicalizer",
+ "sha2",
  "tempfile",
  "thiserror 2.0.20",
 ]
@@ -137,6 +143,7 @@ dependencies = [
  "base64 0.23.1",
  "cap-std",
  "countio",
+ "digest-io",
  "flate2",
  "getrandom 0.4.3",
  "hex",
@@ -179,6 +186,8 @@ dependencies = [
  "amiss-wire",
  "cap-fs-ext",
  "cap-std",
+ "serde_json_canonicalizer",
+ "sha2",
  "tempfile",
 ]
 
@@ -203,6 +212,7 @@ dependencies = [
  "pem 4.0.0",
  "serde_json",
  "serde_json_canonicalizer",
+ "sha2",
  "tempfile",
  "thiserror 2.0.20",
 ]
@@ -239,6 +249,7 @@ dependencies = [
  "gix-pack",
  "reqwest",
  "secrecy",
+ "sha2",
  "tempfile",
  "thiserror 2.0.20",
 ]
@@ -268,7 +279,6 @@ dependencies = [
 name = "amiss-controller-gitea-service"
 version = "0.27.0"
 dependencies = [
- "amiss-bootstrap",
  "amiss-controller",
  "amiss-controller-bootstrap-fixture",
  "amiss-controller-fixtures",
@@ -317,7 +327,6 @@ dependencies = [
 name = "amiss-controller-github-service"
 version = "0.27.0"
 dependencies = [
- "amiss-bootstrap",
  "amiss-controller",
  "amiss-controller-bootstrap-fixture",
  "amiss-controller-fixtures",
@@ -347,6 +356,8 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_json_canonicalizer",
+ "serde_with",
+ "sha2",
  "thiserror 2.0.20",
  "url",
 ]
@@ -355,7 +366,6 @@ dependencies = [
 name = "amiss-controller-gitlab-service"
 version = "0.27.0"
 dependencies = [
- "amiss-bootstrap",
  "amiss-controller",
  "amiss-controller-bootstrap-fixture",
  "amiss-controller-fixtures",
@@ -369,6 +379,7 @@ dependencies = [
  "secrecy",
  "serde",
  "serde_json",
+ "sha2",
  "tempfile",
  "thiserror 2.0.20",
  "tokio",
@@ -393,6 +404,7 @@ dependencies = [
  "cap-fs-ext",
  "cap-std",
  "ctrlc",
+ "digest-io",
  "flate2",
  "getrandom 0.4.3",
  "hex",
@@ -417,9 +429,11 @@ version = "0.27.0"
 dependencies = [
  "amiss-wire",
  "flate2",
+ "hex",
  "serde_json",
  "serde_json_canonicalizer",
  "sha1-checked",
+ "sha2",
  "tempfile",
 ]
 
@@ -433,6 +447,7 @@ dependencies = [
  "divan",
  "flate2",
  "fs_at",
+ "hex",
  "libc",
  "sha1-checked",
  "sha2",
@@ -447,6 +462,8 @@ version = "0.27.0"
 dependencies = [
  "amiss-wire",
  "markdown",
+ "serde",
+ "serde_json",
  "serde_json_canonicalizer",
  "sha2",
 ]
@@ -458,6 +475,7 @@ dependencies = [
  "amiss-fixtures",
  "amiss-wire",
  "reqwest",
+ "serde_json",
  "url",
 ]
 
@@ -481,7 +499,10 @@ dependencies = [
  "amiss-wire",
  "countio",
  "dhat",
+ "digest-io",
  "divan",
+ "hex",
+ "js_int",
  "jsonschema",
  "memchr",
  "percent-encoding",
@@ -489,6 +510,7 @@ dependencies = [
  "serde_json",
  "serde_json_canonicalizer",
  "serde_with",
+ "sha2",
  "stats_alloc",
  "strum",
  "tempfile",
@@ -507,6 +529,7 @@ dependencies = [
  "hex_fmt",
  "js_int",
  "json-serde",
+ "percent-encoding",
  "serde",
  "serde-transcode",
  "serde_json",
@@ -2552,9 +2575,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "hex_fmt"

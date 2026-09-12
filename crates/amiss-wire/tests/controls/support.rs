@@ -1,6 +1,5 @@
 use amiss_wire::controls::{FACT_DOMAIN, FINDING_KEY_DOMAIN};
-
-use amiss_wire::json;
+use sha2::Digest as _;
 
 pub(crate) const POLICY: &[u8] = include_bytes!("../fixtures/scanner-policy.json");
 
@@ -70,14 +69,30 @@ pub(crate) fn fact_json() -> String {
 #[expect(clippy::unwrap_used, reason = "test helper on known-valid templates")]
 pub(crate) fn computed_digests() -> (String, String) {
     let key_input = key_input_json("explicit-target-missing");
-    let key = amiss_wire::digest::hb(
-        FINDING_KEY_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
+    let key = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<serde_json::Value>(key_input.as_bytes()).unwrap(),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
-    let fact = amiss_wire::digest::hb(
-        FACT_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(fact_json().as_bytes()).unwrap()).unwrap(),
+    let fact = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(FACT_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<serde_json::Value>(fact_json().as_bytes()).unwrap(),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
     (key, fact)

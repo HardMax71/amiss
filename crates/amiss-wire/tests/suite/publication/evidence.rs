@@ -1,14 +1,14 @@
 use super::{digest, publication_plan};
+use sha2::Digest as _;
 
 use std::{fs, path::Path};
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hb;
-use amiss_wire::json::{self, MAX_SAFE_INTEGER};
 use amiss_wire::publication::{
     EVIDENCE_PAYLOAD_SCHEMA, EvidencePayloadSchema, PublicationDeployment, PublicationEvidence,
     PublicationOutcome, PublicationResource, evidence, parse_evidence, parse_plan, plan,
 };
+use js_int::MAX_SAFE_INT;
 
 pub(super) fn publication_evidence() -> PublicationEvidence {
     let planned = publication_plan();
@@ -47,9 +47,12 @@ fn publication_evidence_round_trips_with_its_plan_and_payload_digests() {
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        hb(
-            EVIDENCE_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(&expected).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(EVIDENCE_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&expected).unwrap())
+                .finalize()
+                .0
         )
     );
 
@@ -61,13 +64,16 @@ fn publication_evidence_round_trips_with_its_plan_and_payload_digests() {
     let written = evidence(&example.payload).unwrap();
     assert_eq!(
         written,
-        serde_json_canonicalizer::to_vec(&json::parse(&example_bytes).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<serde_json::Value>(&example_bytes).unwrap()
+        )
+        .unwrap()
     );
 }
 
 #[test]
 fn publication_evidence_refuses_non_success_and_unsafe_attempts() {
-    let maximum = u64::try_from(MAX_SAFE_INTEGER).unwrap();
+    let maximum = u64::try_from(MAX_SAFE_INT).unwrap();
     let mut boundary = publication_evidence();
     boundary.deployment.provider_run_attempt = maximum;
     assert!(evidence(&boundary).is_ok());
@@ -85,12 +91,17 @@ fn publication_evidence_refuses_non_success_and_unsafe_attempts() {
     let failed = String::from_utf8(value)
         .unwrap()
         .replace("\"succeeded\"", "\"failed\"");
-    let failed_value = json::parse(failed.as_bytes()).unwrap();
+    let failed_value = serde_json::from_slice::<serde_json::Value>(failed.as_bytes()).unwrap();
     let rebound = failed.replace(
         &recorded,
-        &hb(
-            EVIDENCE_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(failed_value.member("payload").unwrap()).unwrap(),
+        &amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(EVIDENCE_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(failed_value.get("payload").unwrap()).unwrap(),
+                )
+                .finalize()
+                .0,
         )
         .to_string(),
     );

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 
 use crate::{
     ArtifactAuditReference, FileArtifactStore, PendingRelation, RelationAuditBundle,

@@ -3,8 +3,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::ConstraintPlatform;
-use crate::digest::Digest;
 use crate::model::ArtifactId;
+use crate::model::Digest;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,

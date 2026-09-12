@@ -1,11 +1,5 @@
 use amiss_wire::ExitClass;
-use amiss_wire::digest::{hb, hb_stream, sha256, sha256_stream};
-use amiss_wire::json::{Error, ErrorKind, MAX_SAFE_INTEGER, Value, parse};
-
-#[expect(clippy::unwrap_used, reason = "test helper on inputs that must fail")]
-fn kind(input: &[u8]) -> ErrorKind {
-    parse(input).unwrap_err().kind
-}
+use sha2::Digest as _;
 
 #[test]
 fn exit_codes_are_contract() {
@@ -15,196 +9,108 @@ fn exit_codes_are_contract() {
 }
 
 #[test]
-fn accepts_the_restricted_grammar() {
-    assert_eq!(parse(b"null").unwrap(), Value::Null);
-    assert_eq!(parse(b" true ").unwrap(), Value::Bool(true));
-    assert_eq!(parse(b"-1").unwrap(), Value::Integer(-1));
-    assert_eq!(
-        parse(b"9007199254740991").unwrap(),
-        Value::Integer(MAX_SAFE_INTEGER)
-    );
-    assert_eq!(
-        parse(b"-9007199254740991").unwrap(),
-        Value::Integer(-9_007_199_254_740_991)
-    );
-    assert_eq!(
-        parse(br#""A\/\n""#).unwrap(),
-        Value::string("A/\n".to_owned())
-    );
-    assert_eq!(
-        parse("\"\u{1f600}\"".as_bytes()).unwrap(),
-        Value::string("\u{1f600}".to_owned())
-    );
-    assert_eq!(
-        parse(b"[0, {\"a\": []}]").unwrap(),
-        Value::array(vec![
-            Value::Integer(0),
-            Value::object(vec![("a".to_owned(), Value::array(Vec::new()))]),
-        ])
-    );
-}
-
-#[test]
-fn rejects_everything_the_contract_names() {
-    let cases: &[(&[u8], ErrorKind)] = &[
-        (b"", ErrorKind::UnexpectedEnd),
-        (b"\xEF\xBB\xBF{}", ErrorKind::ByteOrderMark),
-        (b"\xff", ErrorKind::InvalidUtf8),
-        (br#"{"a":1,"a":2}"#, ErrorKind::DuplicateKey),
-        (br#"{"a":1,"a":2}"#, ErrorKind::DuplicateKey),
-        (b"-0", ErrorKind::NegativeZero),
-        (b"1.5", ErrorKind::FractionOrExponent),
-        (b"1e3", ErrorKind::FractionOrExponent),
-        (b"0E0", ErrorKind::FractionOrExponent),
-        (b"9007199254740992", ErrorKind::IntegerOutOfRange),
-        (b"-9007199254740992", ErrorKind::IntegerOutOfRange),
-        (b"99999999999999999999", ErrorKind::IntegerOutOfRange),
-        (b"01", ErrorKind::UnexpectedByte),
-        (br#""\ud800""#, ErrorKind::LoneSurrogate),
-        (br#""\udc00""#, ErrorKind::LoneSurrogate),
-        (br#""\ud83dx""#, ErrorKind::LoneSurrogate),
-        (br#""\x""#, ErrorKind::InvalidEscape),
-        (br#""\u00g0""#, ErrorKind::InvalidEscape),
-        (b"\"\x01\"", ErrorKind::ControlCharacter),
-        (b"1 2", ErrorKind::TrailingContent),
-        (b"{} {}", ErrorKind::TrailingContent),
-        (b"{", ErrorKind::UnexpectedEnd),
-        (br#"{"a":1"#, ErrorKind::UnexpectedEnd),
-        (b"[1,]", ErrorKind::UnexpectedByte),
-        (b"{\"a\":1,}", ErrorKind::UnexpectedByte),
-        (b"nul", ErrorKind::UnexpectedEnd),
-        (b"nulL", ErrorKind::UnexpectedByte),
-        (b"'a'", ErrorKind::UnexpectedByte),
-    ];
-    for (input, expected) in cases {
-        assert_eq!(
-            kind(input),
-            *expected,
-            "input {:?}",
-            String::from_utf8_lossy(input)
-        );
-    }
-}
-
-#[test]
-fn rejects_past_the_depth_limit() {
-    let mut deep = vec![b'['; 600];
-    deep.extend(vec![b']'; 600]);
-    assert_eq!(kind(&deep), ErrorKind::DepthLimit);
-}
-
-#[test]
-fn error_offsets_point_at_the_defect() {
-    let cases: &[(&[u8], ErrorKind, usize)] = &[
-        (b"1 2", ErrorKind::TrailingContent, 2),
-        (br#"{"a":1,"a":2}"#, ErrorKind::DuplicateKey, 7),
-        (br#""\u00g0""#, ErrorKind::InvalidEscape, 5),
-        (b"\"\\u0g", ErrorKind::InvalidEscape, 4),
-        (b"\"\\u00g", ErrorKind::InvalidEscape, 5),
-        (b"\"\\u00", ErrorKind::UnexpectedEnd, 5),
-    ];
-    for &(input, kind, offset) in cases {
-        assert_eq!(parse(input).unwrap_err(), Error { kind, offset });
-    }
-}
-
-#[test]
-fn canonical_matches_the_gv003_bytes() {
-    let value = parse("{ \"z\" : \"\u{e9}\", \"a\" : 1 }".as_bytes()).unwrap();
-    assert_eq!(
-        serde_json_canonicalizer::to_vec(&value).unwrap(),
-        "{\"a\":1,\"z\":\"\u{e9}\"}".as_bytes()
-    );
-}
-
-#[test]
-fn canonical_sorts_keys_by_utf16_code_units() {
-    let astral = "\u{10000}";
-    let bmp = "\u{fffd}";
-    let input = format!("{{\"{bmp}\":2,\"{astral}\":1}}");
-    let value = parse(input.as_bytes()).unwrap();
-    let expected = format!("{{\"{astral}\":1,\"{bmp}\":2}}");
-    assert_eq!(
-        serde_json_canonicalizer::to_vec(&value).unwrap(),
-        expected.into_bytes()
-    );
-}
-
-#[test]
-fn canonical_escapes_match_jcs() {
-    let value = parse(br#"["\u0007\b\/<\">"]"#).unwrap();
-    assert_eq!(
-        serde_json_canonicalizer::to_vec(&value).unwrap(),
-        b"[\"\\u0007\\b/<\\\">\"]"
-    );
-}
-
-#[test]
 fn reproduces_the_normative_seed_vectors() {
-    let gv001 = parse(br#"{"claim_id":"docs.expr-precedence"}"#).unwrap();
+    let gv001 =
+        serde_json::from_slice::<serde_json::Value>(br#"{"claim_id":"docs.expr-precedence"}"#)
+            .unwrap();
     assert_eq!(
-        hb(
-            "assure/claim-key",
-            &serde_json_canonicalizer::to_vec(&gv001).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("assure/claim-key")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&gv001).unwrap())
+                .finalize()
+                .0
         )
         .to_string(),
         "sha256:a283ff8a204bef21e06e1932774f08bfe1dc72546aded00e67a18c15cfa98e8a"
     );
 
-    let gv002 = parse(br#"{"members":[]}"#).unwrap();
+    let gv002 = serde_json::from_slice::<serde_json::Value>(br#"{"members":[]}"#).unwrap();
     assert_eq!(
-        hb(
-            "assure/path-set-projection",
-            &serde_json_canonicalizer::to_vec(&gv002).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("assure/path-set-projection")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&gv002).unwrap())
+                .finalize()
+                .0
         )
         .to_string(),
         "sha256:434d3282c0603bde1304e3003f386c21c5ab6320ba1adc3e1e4db94ee14a39e2"
     );
 
-    let gv003 = parse("{\"z\":\"\u{e9}\",\"a\":1}".as_bytes()).unwrap();
+    let gv003 =
+        serde_json::from_slice::<serde_json::Value>("{\"z\":\"\u{e9}\",\"a\":1}".as_bytes())
+            .unwrap();
     assert_eq!(
-        hb(
-            "assure/test-json",
-            &serde_json_canonicalizer::to_vec(&gv003).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("assure/test-json")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&gv003).unwrap())
+                .finalize()
+                .0
         )
         .to_string(),
         "sha256:1bf2a7df49e484b1539f9eb54bc3719ffd8a3383c594e7008d7d844fed89c4bb"
     );
 
     assert_eq!(
-        hb("assure/text-projection", b"a\nb\n").to_string(),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("assure/text-projection")
+                .chain_update([0_u8])
+                .chain_update(b"a\nb\n")
+                .finalize()
+                .0
+        )
+        .to_string(),
         "sha256:9094314bad0be6ebcf36a94c249de35e8c0cded01502f6d1d685ee5b1ee6190e"
     );
 
     assert_eq!(
-        hb("assure/raw-bytes", b"").to_string(),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("assure/raw-bytes")
+                .chain_update([0_u8])
+                .chain_update(b"")
+                .finalize()
+                .0
+        )
+        .to_string(),
         "sha256:c214a4103772cd3a23acd41acd40eef154232d1f02848cdcbb67236da126c67e"
     );
 }
 
 #[test]
 fn domain_separation_changes_the_digest() {
-    assert_ne!(hb("amiss/a", b"x"), hb("amiss/b", b"x"));
-    assert_ne!(hb("amiss/a", b"x"), hb("amiss/a", b"y"));
-}
-
-#[test]
-fn streamed_byte_digests_are_the_digest_of_the_concatenated_bytes() {
-    assert_eq!(
-        hb_stream("amiss/a", |write| {
-            write(b"one");
-            write(b"\n");
-            write(b"two");
-        }),
-        hb("amiss/a", b"one\ntwo")
+    assert_ne!(
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/a")
+                .chain_update([0_u8])
+                .chain_update(b"x")
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/b")
+                .chain_update([0_u8])
+                .chain_update(b"x")
+                .finalize()
+                .0
+        )
     );
-    assert_eq!(
-        sha256_stream(|write| {
-            write(b"one");
-            write(b"\n");
-            write(b"two");
-        }),
-        sha256(b"one\ntwo")
+    assert_ne!(
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/a")
+                .chain_update([0_u8])
+                .chain_update(b"x")
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/a")
+                .chain_update([0_u8])
+                .chain_update(b"y")
+                .finalize()
+                .0
+        )
     );
 }
 

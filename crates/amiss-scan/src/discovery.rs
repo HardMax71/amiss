@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -38,7 +39,7 @@ pub struct DocumentRecord {
     pub oid: Oid,
     pub mode: GitMode,
     pub byte_count: u64,
-    pub raw_digest: Option<amiss_wire::digest::Digest>,
+    pub raw_digest: Option<amiss_wire::model::Digest>,
 }
 
 /// The snapshot's label table: every `.. _name:` a scanned reStructuredText
@@ -498,7 +499,7 @@ fn side_status(
     adapter: Option<Adapter>,
     path: &RepoPath,
     entry: &TreeEntry,
-) -> Result<(DocumentStatus, u64, Option<amiss_wire::digest::Digest>), Error> {
+) -> Result<(DocumentStatus, u64, Option<amiss_wire::model::Digest>), Error> {
     if excluded_by_built_in(path.as_bytes()) && !includes.matches(path) {
         return Ok((DocumentStatus::ExcludedBuiltIn, 0, None));
     }
@@ -538,7 +539,13 @@ fn side_status(
     };
     let byte_count = u64::try_from(object.body.len()).unwrap_or(u64::MAX);
     scan.charge_document_bytes(byte_count)?;
-    let raw = amiss_wire::digest::hb(crate::resolve::RAW_EVIDENCE_DOMAIN, &object.body);
+    let raw = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&object.body)
+            .finalize()
+            .0,
+    );
     if lfs::is_pointer(&object.body) {
         return Ok((
             DocumentStatus::Unsupported(UnsupportedKind::LfsPointer),

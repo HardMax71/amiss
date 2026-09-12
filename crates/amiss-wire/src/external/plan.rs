@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -6,8 +7,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb, hj_serde};
-use crate::json;
+use crate::model::Digest;
 use crate::model::ForgeDialect;
 use crate::report::model::{
     Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath, Resolution,
@@ -18,10 +18,26 @@ use crate::resolution::VersionScope;
 use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(remote = "Self", bound(deserialize = "P: Deserialize<'de>"))]
 pub struct ExternalPlanEnvelope<P = ExternalPlan> {
     pub schema: ExternalPlanEnvelopeSchema,
     pub payload: P,
     pub payload_digest: Digest,
+}
+
+impl<P: Serialize> Serialize for ExternalPlanEnvelope<P> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, P: Deserialize<'de>> Deserialize<'de> for ExternalPlanEnvelope<P> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -33,6 +49,10 @@ pub enum ExternalPlanEnvelopeSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    remote = "Self",
+    bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>")
+)]
 pub struct ExternalPlan<B = BTreeMap<String, serde_json::Value>, C = B> {
     pub schema: ExternalPlanPayloadSchema,
     pub engine: ExternalEngine,
@@ -40,6 +60,21 @@ pub struct ExternalPlan<B = BTreeMap<String, serde_json::Value>, C = B> {
     pub introduced: Vec<ExternalDestination>,
     pub removed: Vec<ExternalDestination>,
     pub retained_count: u64,
+}
+
+impl<B: Serialize, C: Serialize> Serialize for ExternalPlan<B, C> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, B: Deserialize<'de>, C: Deserialize<'de>> Deserialize<'de> for ExternalPlan<B, C> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -51,21 +86,59 @@ pub enum ExternalPlanPayloadSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, wary::Wary)]
+#[serde(remote = "Self")]
 pub struct ExternalEngine {
     #[validate(length(chars, 1..))]
     pub engine_version: String,
     pub engine_digest: Digest,
 }
 
+impl Serialize for ExternalEngine {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExternalEngine {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    remote = "Self",
+    bound(deserialize = "B: Deserialize<'de>, C: Deserialize<'de>")
+)]
 pub struct ExternalPlanReport<B = BTreeMap<String, serde_json::Value>, C = B> {
     pub payload_digest: Digest,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub base: B,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub candidate: C,
     pub mode: String,
 }
 
+impl<B: Serialize, C: Serialize> Serialize for ExternalPlanReport<B, C> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, B: Deserialize<'de>, C: Deserialize<'de>> Deserialize<'de> for ExternalPlanReport<B, C> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(remote = "Self")]
 pub struct ExternalDestination {
     pub destination: String,
     pub scheme: String,
@@ -78,7 +151,23 @@ pub struct ExternalDestination {
     pub repository: Option<ExternalRepository>,
 }
 
+impl Serialize for ExternalDestination {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExternalDestination {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(remote = "Self")]
 pub struct ExternalRepository {
     pub host: String,
     pub dialect: ForgeDialect,
@@ -96,6 +185,21 @@ pub struct ExternalRepository {
         skip_serializing_if = "Option::is_none"
     )]
     pub tail: Option<String>,
+}
+
+impl Serialize for ExternalRepository {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExternalRepository {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 /// One side's view of a destination: its scheme and every document naming it.
@@ -170,7 +274,7 @@ pub fn plan(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
         return Err(PlanDefect::MalformedExternal);
     }
-    json::parse(&canonical).map_err(|_defect| PlanDefect::MalformedExternal)?;
+    de::JsonProfile::validate(&canonical).map_err(|_defect| PlanDefect::MalformedExternal)?;
     Ok(canonical)
 }
 
@@ -181,14 +285,37 @@ pub fn plan(
 /// Fails on oversized or malformed strict JSON, a malformed known field, a
 /// violated plan law, or a payload digest mismatch.
 pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
-    let envelope: ExternalPlanEnvelope<serde_json::Value> = super::read(bytes)?;
-    let payload_digest = hj_serde(PLAN_PAYLOAD_SCHEMA, |mut writer| {
-        serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
-    })
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    deserializer.disable_recursion_limit();
+    let envelope: ExternalPlanEnvelope<&serde_json::value::RawValue> =
+        serde_path_to_error::deserialize(&mut deserializer)
+            .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let payload_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA).chain_update([0_u8]),
+        );
+        let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
+        payload.disable_recursion_limit();
+        serde_json_canonicalizer::to_writer(
+            &serde_transcode::Transcoder::new(&mut payload),
+            &mut writer,
+        )
+        .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
+    payload.disable_recursion_limit();
     let document = ExternalPlanEnvelope {
         schema: envelope.schema,
-        payload: de::deserialize_value("$.payload", envelope.payload)?,
+        payload: serde_path_to_error::deserialize(&mut payload)
+            .map_err(|defect| de::deserialize_error("$.payload", &defect))?,
         payload_digest: envelope.payload_digest,
     };
     if payload_digest != document.payload_digest {
@@ -203,7 +330,15 @@ fn plan_payload_digest<B: Serialize, C: Serialize>(
 ) -> Result<Digest, Error> {
     validate_plan(plan)?;
     serde_json_canonicalizer::to_vec(plan)
-        .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
+        .map(|canonical| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(&canonical)
+                    .finalize()
+                    .0,
+            )
+        })
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
@@ -214,7 +349,7 @@ fn validate_plan<B, C>(plan: &ExternalPlan<B, C>) -> Result<(), Error> {
     if plan.report.mode.is_empty() {
         return fail("$.payload.report.mode", ErrorKind::InvalidValue);
     }
-    if plan.retained_count > json::MAX_SAFE_INTEGER.unsigned_abs() {
+    if plan.retained_count > js_int::MAX_SAFE_UINT {
         return fail("$.payload.retained_count", ErrorKind::LimitExceeded);
     }
     validate_rows("$.payload.introduced", &plan.introduced)?;

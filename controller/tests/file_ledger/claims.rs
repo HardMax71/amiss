@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::fs;
 use std::sync::Arc;
 
@@ -7,7 +8,6 @@ use amiss_controller::{
     ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, StageOutcome,
     StagedPublication,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use tempfile::TempDir;
 
@@ -227,7 +227,13 @@ fn the_check_binding_is_frozen_for_every_delivery_transition() {
     let delivery = delivery("42");
     let check = check_binding();
     let mut changed = check.clone();
-    changed.plan_digest = hb("amiss/test-check-plan", b"changed");
+    changed.plan_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-check-plan")
+            .chain_update([0_u8])
+            .chain_update(b"changed")
+            .finalize()
+            .0,
+    );
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check).unwrap()).unwrap();
 

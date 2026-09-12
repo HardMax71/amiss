@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::borrow::Cow;
 
 use amiss_fixtures::{SiteObservation, site_observation};
@@ -6,7 +7,6 @@ use amiss_scan::{SetupShell, pipeline::commit_pair, report::RequestDigests, sema
 use amiss_wire::{
     assessment::Nullable,
     controls::Profile,
-    digest::hb,
     model::{ObjectFormat, Oid},
     report::{AnalysisErrorCode, EngineProvenance, FindingKind},
     requests::{
@@ -55,8 +55,8 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
             kind: SemanticProducerKind::SiteBuild,
             identity: "fixture".parse().unwrap(),
             version: semantic::observation::SITE_BUILD_VERSION.to_owned(),
-            context_digest: hb("test", b"context"),
-            input_digest: hb("test", b"input"),
+            context_digest: amiss_wire::model::Digest::from([20; 32]),
+            input_digest: amiss_wire::model::Digest::from([21; 32]),
         },
         complete: true,
         observations: vec![
@@ -85,7 +85,7 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
     let expected_digest = envelope.payload_digest;
     let engine = EngineProvenance {
         version: "test".to_owned(),
-        digest: hb("test", b"engine"),
+        digest: amiss_wire::model::Digest::from([22; 32]),
     };
     let mut reports = Vec::new();
     for semantic in [Input::Template(template), Input::Bound(inputs.semantic)] {
@@ -172,8 +172,7 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
         payload.subject.source_report_payload_digest = Nullable::Null;
         payload.observations = vec![Cow::Owned(observation.clone())];
         let document = semantic::envelope(payload).unwrap();
-        let mut bytes = Vec::new();
-        semantic::write(&document, &mut bytes).unwrap();
+        let envelope = serde_json_canonicalizer::to_string(&document).unwrap();
         let request = ControlsRequest {
             semantic_evidence: vec![SuppliedSemanticEvidence {
                 value: document.clone(),
@@ -181,18 +180,15 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
             }],
             ..ControlsRequest::default()
         };
-        let request_bytes = String::from_utf8(request.canonical_bytes().unwrap()).unwrap();
+        let request_bytes =
+            String::from_utf8(serde_json_canonicalizer::to_vec(&request).unwrap()).unwrap();
         assert!(amiss_scan::request::controls(request).is_ok(), "{kind}");
         let extended = ExtendedObservation {
             observation,
             unexpected: true,
         };
-        let observation =
-            String::from_utf8(serde_json_canonicalizer::to_vec(observation).unwrap()).unwrap();
-        let payload =
-            String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
-                .unwrap();
-        let envelope = String::from_utf8(bytes).unwrap();
+        let observation = serde_json_canonicalizer::to_string(observation).unwrap();
+        let payload = serde_json_canonicalizer::to_string(&document.payload).unwrap();
         let mut invalids = vec![
             (br#"{"kind":"future-fact"}"#.to_vec(), false),
             (serde_json_canonicalizer::to_vec(&extended).unwrap(), false),
@@ -207,7 +203,13 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
             let invalid = String::from_utf8(invalid).unwrap();
             let changed = payload.replace(&observation, &invalid);
             assert_ne!(payload, changed);
-            let digest = hb(semantic::PAYLOAD_SCHEMA, changed.as_bytes());
+            let digest = amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(changed.as_bytes())
+                    .finalize()
+                    .0,
+            );
             let encoded = envelope
                 .replace(&payload, &changed)
                 .replace(&document.payload_digest.to_string(), &digest.to_string());

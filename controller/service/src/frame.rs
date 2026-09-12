@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::InboxError;
-use crate::hash::digest;
+use sha2::{Digest as _, Sha256};
 
 const VERSION: u8 = 1;
 const DIGEST_BYTES: usize = 32;
@@ -24,7 +24,12 @@ pub(crate) fn encode<T: Serialize>(
     frame.extend_from_slice(magic);
     frame.push(VERSION);
     frame.extend_from_slice(&payload_length.to_be_bytes());
-    frame.extend_from_slice(&digest(domain, &payload));
+    frame.extend_from_slice(
+        &Sha256::new_with_prefix(domain)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize(),
+    );
     frame.extend_from_slice(&payload);
     Ok(frame)
 }
@@ -57,7 +62,12 @@ pub(crate) fn decode<T: DeserializeOwned + Serialize>(
         .ok_or(InboxError::Corrupt)?;
     let payload = frame.get(digest_end..).ok_or(InboxError::Corrupt)?;
     if u64::try_from(payload.len()).ok() != Some(payload_length)
-        || digest(domain, payload).as_slice() != expected_digest
+        || Sha256::new_with_prefix(domain)
+            .chain_update([0_u8])
+            .chain_update(payload)
+            .finalize()
+            .as_slice()
+            != expected_digest
     {
         return Err(InboxError::Corrupt);
     }

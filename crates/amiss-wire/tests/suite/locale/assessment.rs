@@ -1,9 +1,9 @@
 #![expect(
-    clippy::panic,
     clippy::unwrap_used,
     reason = "tests replay checked locale contracts and mutate their canonical JSON"
 )]
 
+use sha2::Digest as _;
 use std::{fs, path::Path};
 
 use super::evidence::{fallback_page, locale_evidence, page_map, set_target_page, target_page};
@@ -11,13 +11,13 @@ use super::{digest, locale_plan, oid, product_resource};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 
-use amiss_wire::json::{self, Value};
 use amiss_wire::locale::{
     ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessmentEnvelope, LocaleCoverageEvidence,
     LocaleCoverageEvidenceEnvelope, LocaleCoverageReason, LocaleCoverageVerdict,
     LocaleFallbackStatus, LocaleLineageStatus, LocalePageRequirement, LocaleSourcePage, assess,
     evidence, parse_assessment, parse_evidence, parse_plan, plan,
 };
+use serde_json::Value;
 
 fn plan_envelope() -> amiss_wire::locale::LocaleCoveragePlanEnvelope {
     let value = plan(&locale_plan()).unwrap();
@@ -83,7 +83,7 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
 #[test]
 fn partial_inventories_only_report_absences_the_other_side_proves() {
     let mut all_source = locale_plan();
-    all_source.policy.required = LocalePageRequirement::AllSource;
+    all_source.policy.required = LocalePageRequirement::AllSource {};
     let value = plan(&all_source).unwrap();
     let all_source = parse_plan(&value).unwrap();
 
@@ -256,7 +256,7 @@ fn fallback_source_absence_in_a_partial_inventory_stays_unproven() {
 #[test]
 fn all_source_fallback_rules_authorize_each_observed_source_page() {
     let mut input_plan = locale_plan();
-    input_plan.policy.fallbacks[0].pages = LocalePageRequirement::AllSource;
+    input_plan.policy.fallbacks[0].pages = LocalePageRequirement::AllSource {};
     let value = plan(&input_plan).unwrap();
     let plan = parse_plan(&value).unwrap();
     let mut input = locale_evidence();
@@ -518,7 +518,7 @@ fn coverage_only_policy_ignores_unselected_product_receipts() {
 #[test]
 fn all_source_and_named_source_absence_remain_distinct() {
     let mut all_source_plan = locale_plan();
-    all_source_plan.policy.required = LocalePageRequirement::AllSource;
+    all_source_plan.policy.required = LocalePageRequirement::AllSource {};
     let value = plan(&all_source_plan).unwrap();
     let all_source_plan = parse_plan(&value).unwrap();
     let mut all_source_evidence = locale_evidence();
@@ -633,18 +633,23 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
 
     let evidence = evidence_envelope(&locale_evidence());
     let bytes = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let value = json::parse(&bytes).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
+    let value = serde_json::from_slice::<Value>(&bytes).unwrap();
+    let recorded = value.get("payload_digest").and_then(Value::as_str).unwrap();
     let inconsistent = String::from_utf8(bytes)
         .unwrap()
         .replace("\"refuted\"", "\"matched\"");
-    let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
+    let inconsistent_value = serde_json::from_slice::<Value>(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
         recorded,
-        &amiss_wire::digest::hb(
-            ASSESSMENT_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(inconsistent_value.member("payload").unwrap())
-                .unwrap(),
+        &amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(inconsistent_value.get("payload").unwrap())
+                        .unwrap(),
+                )
+                .finalize()
+                .0,
         )
         .to_string(),
     );
@@ -653,20 +658,22 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
     let mut inconsistent_product = value.clone();
-    *member_mut(member_mut(&mut inconsistent_product, "payload"), "product") = Value::object(vec![
-        ("source".to_owned(), Value::string("refuted")),
-        ("target".to_owned(), Value::string("matched")),
+    *((inconsistent_product).get_mut("payload").unwrap())
+        .get_mut("product")
+        .unwrap() = Value::from_iter(vec![
+        ("source".to_owned(), Value::from("refuted")),
+        ("target".to_owned(), Value::from("matched")),
     ]);
     let error = parse_assessment(&sealed(inconsistent_product)).unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
     let mut unsorted = value;
-    let target_missing = member_mut(member_mut(&mut unsorted, "payload"), "coverage");
-    *member_mut(target_missing, "target_missing") = Value::array(vec![
-        Value::string("reference/z"),
-        Value::string("reference/a"),
-    ]);
+    let target_missing = ((unsorted).get_mut("payload").unwrap())
+        .get_mut("coverage")
+        .unwrap();
+    *(target_missing).get_mut("target_missing").unwrap() =
+        Value::Array(vec![Value::from("reference/z"), Value::from("reference/a")]);
     let error = parse_assessment(&sealed(unsorted)).unwrap_err();
     assert_eq!(error.path, "$.payload.coverage.target_missing");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
@@ -676,7 +683,7 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
 fn nullable_assessment_fields_are_required() {
     let bytes = assess(&plan_envelope(), None, "0.26.0", digest('a')).unwrap();
 
-    let mut missing_product: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut missing_product: Value = serde_json::from_slice(&bytes).unwrap();
     assert!(
         missing_product["payload"]
             .as_object_mut()
@@ -689,7 +696,7 @@ fn nullable_assessment_fields_are_required() {
     assert_eq!(error.path, "$.payload.product");
     assert_eq!(error.kind, ErrorKind::MissingField);
 
-    let mut missing_evidence_digest: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let mut missing_evidence_digest: Value = serde_json::from_slice(&bytes).unwrap();
     assert!(
         missing_evidence_digest["payload"]["subject"]
             .as_object_mut()
@@ -722,26 +729,21 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
 
     assert_eq!(
         replayed,
-        serde_json_canonicalizer::to_vec(&json::parse(&published_bytes).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<Value>(&published_bytes).unwrap()
+        )
+        .unwrap()
     );
 }
 
 fn sealed(mut value: Value) -> Vec<u8> {
-    let digest = amiss_wire::digest::hb(
-        ASSESSMENT_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap(),
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(value.get("payload").unwrap()).unwrap())
+            .finalize()
+            .0,
     );
-    *member_mut(&mut value, "payload_digest") = Value::string(digest.to_string());
+    *(value).get_mut("payload_digest").unwrap() = Value::from(digest.to_string());
     serde_json_canonicalizer::to_vec(&value).unwrap()
-}
-
-fn member_mut<'a>(value: &'a mut Value, name: &str) -> &'a mut Value {
-    let Value::Object(members) = value else {
-        panic!("the checked writer produced a non-object value");
-    };
-    members
-        .iter_mut()
-        .find(|(key, _value)| key == name)
-        .map(|(_key, value)| value)
-        .unwrap()
 }

@@ -11,7 +11,6 @@ use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{Profile, SourceConstruct, TargetKind};
-use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::ControlStateSource;
 use amiss_wire::report::{
@@ -21,6 +20,7 @@ use amiss_wire::resolution::{
     BlobContent, BlobMode, BlobTarget, InvalidReference, Missing, TaggedBlobTarget, Target,
     UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
+use sha2::Digest as _;
 
 mod applications;
 mod fact_contract;
@@ -29,7 +29,13 @@ mod key_contract;
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"test engine"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"test engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 
@@ -55,8 +61,20 @@ fn available_blob(path: &str, body: &[u8]) -> BlobTarget<RepoPath> {
         path: repo_path(path),
         mode: BlobMode::Regular,
         content: BlobContent::Available {
-            raw_digest: hb("amiss/raw-evidence", body),
-            projection_digest: hb("amiss/scanner-target-projection", body),
+            raw_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                    .chain_update([0_u8])
+                    .chain_update(body)
+                    .finalize()
+                    .0,
+            ),
+            projection_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/scanner-target-projection")
+                    .chain_update([0_u8])
+                    .chain_update(body)
+                    .finalize()
+                    .0,
+            ),
         },
     }
 }
@@ -73,7 +91,13 @@ fn lfs_pointer(path: &str) -> Resolution {
             path: repo_path(path),
             mode: BlobMode::Regular,
             content: BlobContent::LfsPointer {
-                raw_digest: hb("amiss/raw-evidence", b"lfs pointer"),
+                raw_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                        .chain_update([0_u8])
+                        .chain_update(b"lfs pointer")
+                        .finalize()
+                        .0,
+                ),
             },
         }),
     }
@@ -133,8 +157,20 @@ fn observation(from: &Spec) -> Observation {
             end_line: 1,
             end_column: 11,
         },
-        projection_digest: hb("amiss/scanner-source-projection", from.block.as_bytes()),
-        raw_destination_digest: hb("amiss/scanner-raw-destination", b"x"),
+        projection_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-source-projection")
+                .chain_update([0_u8])
+                .chain_update(from.block.as_bytes())
+                .finalize()
+                .0,
+        ),
+        raw_destination_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-raw-destination")
+                .chain_update([0_u8])
+                .chain_update(b"x")
+                .finalize()
+                .0,
+        ),
     };
     let adapter_contract_digest = adapter_contract(&engine(), Adapter::Markdown).unwrap().1;
     let input = observation_input(ObservationIdentity {
@@ -150,9 +186,14 @@ fn observation(from: &Spec) -> Observation {
         repository_path: from.intent.repository_path.as_ref(),
     })
     .unwrap();
-    let id = amiss_wire::digest::hj_serde(amiss_scan::observe::OBSERVATION_ID_DOMAIN, |writer| {
-        serde_json::to_writer(writer, &input)
-    })
+    let id = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(amiss_scan::observe::OBSERVATION_ID_DOMAIN)
+                .chain_update([0_u8]),
+        );
+        serde_json::to_writer(&mut writer, &input)
+            .map(|()| amiss_wire::model::Digest::from(writer.0.finalize().0))
+    }
     .unwrap();
     Observation {
         id,
@@ -542,7 +583,13 @@ fn an_invalid_attribution_needs_the_same_destination() {
     assert_eq!(finding.attribution, Attribution::PreExisting);
 
     let mut base = observation(&same);
-    base.raw_destination_digest = hb("amiss/scanner-raw-destination", b"elsewhere");
+    base.raw_destination_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-raw-destination")
+            .chain_update([0_u8])
+            .chain_update(b"elsewhere")
+            .finalize()
+            .0,
+    );
     let moved = comparisons(vec![base], vec![observation(&same)]);
     let finding = only(
         evaluate(&[], &moved, Profile::Observe).expect("finding evaluation"),
@@ -570,7 +617,13 @@ fn introduced_only_demotes_pre_existing_failures_alone() {
         document: repo_path("governed.md"),
         member_count: 1,
         sources: vec![ControlStateSource {
-            digest: hb("amiss/scanner-source-projection", b"governed"),
+            digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/scanner-source-projection")
+                    .chain_update([0_u8])
+                    .chain_update(b"governed")
+                    .finalize()
+                    .0,
+            ),
             multiplicity: 1,
         }],
         representative_span: None,
@@ -701,7 +754,13 @@ fn waived_fact() -> amiss_wire::controls::Fact {
                 },
                 occurrence: amiss_wire::controls::FindingOccurrence {
                     kind: amiss_wire::controls::OccurrenceKind::SourceProjection,
-                    source_projection_digest: hb("amiss/scanner-source-projection", b"block"),
+                    source_projection_digest: amiss_wire::model::Digest::from(
+                        sha2::Sha256::new_with_prefix("amiss/scanner-source-projection")
+                            .chain_update([0_u8])
+                            .chain_update(b"block")
+                            .finalize()
+                            .0,
+                    ),
                 },
             },
         },
@@ -726,9 +785,21 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
     let instant = moment("2026-07-02T00:00:00Z");
     let item = amiss_wire::controls::WaiverItem {
         waiver_id: amiss_wire::model::ArtifactId::new("waiver/one".to_owned()).expect("id"),
-        finding_key: hb("amiss/scanner-finding-key", b"key"),
+        finding_key: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-finding-key")
+                .chain_update([0_u8])
+                .chain_update(b"key")
+                .finalize()
+                .0,
+        ),
         authorized_fact: waived_fact(),
-        authorized_fact_digest: hb("amiss/scanner-fact", b"fact"),
+        authorized_fact_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-fact")
+                .chain_update([0_u8])
+                .chain_update(b"fact")
+                .finalize()
+                .0,
+        ),
         candidate_tree: tree(),
         owner: owner("team:docs"),
         issuer: owner("team:release"),
@@ -747,18 +818,35 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         )
         .expect("identity"),
         ref_name: amiss_wire::model::BranchRef::new("refs/heads/main".to_owned()).expect("ref"),
-        candidate_identity_digest: hb("amiss/raw-evidence", b"candidate"),
+        candidate_identity_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                .chain_update([0_u8])
+                .chain_update(b"candidate")
+                .finalize()
+                .0,
+        ),
         provider: "github-actions".to_owned(),
         provider_run_id: "run/1".to_owned(),
         provider_run_attempt: 1,
         evaluation_instant: instant,
         valid_until: moment("2026-07-02T00:10:00Z"),
     };
-    let (_, time_digest) =
-        amiss_wire::controls::canonical_trusted_time(&statement).expect("trusted time");
+    let time_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&statement).expect("trusted time"))
+            .finalize()
+            .0,
+    );
     let policy = Effects {
         waiver: Some(WaiverContext {
-            digest: hb("amiss/raw-evidence", b"bundle"),
+            digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                    .chain_update([0_u8])
+                    .chain_update(b"bundle")
+                    .finalize()
+                    .0,
+            ),
             trust_source: amiss_wire::requests::RequestTrust::OrganizationPolicy,
             candidate_tree: tree(),
             items: vec![item],

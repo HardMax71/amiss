@@ -1,152 +1,108 @@
-use std::collections::BTreeSet;
-
-use amiss_wire::digest::hb;
-use amiss_wire::json::{Value, parse};
 use amiss_wire::report::{
     AnalysisErrorCode, Disposition, ENGINE_DOMAIN, ENVELOPE_SCHEMA, EngineProvenance, FindingKind,
     FixKind, PAYLOAD_SCHEMA, invocation_failure_wire,
 };
-
-#[expect(clippy::panic, reason = "test navigation helper")]
-fn member<'a>(value: &'a Value, key: &str) -> &'a Value {
-    let Value::Object(members) = value else {
-        panic!("not an object");
-    };
-    members
-        .iter()
-        .find(|(name, _)| name == key)
-        .map_or_else(|| panic!("missing member {key}"), |(_, value)| value)
-}
-
-#[expect(clippy::panic, reason = "test navigation helper")]
-fn strings(value: &Value) -> Vec<String> {
-    let Value::Array(items) = value else {
-        panic!("not an array");
-    };
-    items
-        .iter()
-        .map(|item| {
-            let Value::String(s) = item else {
-                panic!("not a string");
-            };
-            s.to_string()
-        })
-        .collect()
-}
+use serde_json::Value;
+use sha2::Digest as _;
+use std::collections::BTreeSet;
 
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0".to_owned(),
-        digest: hb(ENGINE_DOMAIN, b"fake-binary-bytes"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(ENGINE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(b"fake-binary-bytes")
+                .finalize()
+                .0,
+        ),
     }
 }
 
 #[test]
 fn builds_the_fatal_incomplete_envelope() {
-    let (descriptor, descriptor_digest) = amiss_wire::report::sandbox_descriptor().unwrap();
-    let descriptor_bytes = serde_json_canonicalizer::to_vec(&descriptor).unwrap();
-    assert_eq!(serde_json::to_vec(&descriptor).unwrap(), descriptor_bytes);
-    assert_eq!(
-        descriptor_digest,
-        hb(amiss_wire::report::SANDBOX_SCHEMA, &descriptor_bytes)
-    );
-    let codes: BTreeSet<AnalysisErrorCode> = BTreeSet::from([
+    let codes = BTreeSet::from([
         AnalysisErrorCode::InvalidProfile,
         AnalysisErrorCode::InvalidEvent,
     ]);
     let wire = invocation_failure_wire(&engine(), &codes).unwrap().unwrap();
     assert_eq!(wire.last(), Some(&b'\n'));
-    assert_eq!(
-        invocation_failure_wire(&engine(), &codes).unwrap().unwrap(),
-        wire
-    );
-
-    let envelope = parse(&wire).unwrap();
-    let Value::String(schema) = member(&envelope, "schema") else {
-        panic!("schema is not a string");
-    };
-    assert_eq!(schema.as_ref(), ENVELOPE_SCHEMA);
-
-    let payload = member(&envelope, "payload");
-    let Value::String(payload_digest) = member(&envelope, "payload_digest") else {
-        panic!("payload_digest is not a string");
-    };
+    let envelope: Value = serde_json::from_slice(&wire).unwrap();
+    for (path, expected) in [
+        ("/schema", serde_json::json!(ENVELOPE_SCHEMA)),
+        ("/payload/evaluation/request_digest", Value::Null),
+        (
+            "/payload/evaluation/reasons",
+            serde_json::json!(["invalid-event", "invalid-profile"]),
+        ),
+        (
+            "/payload/controls/reasons",
+            serde_json::json!(["not-parsed"]),
+        ),
+        (
+            "/payload/feedback",
+            serde_json::json!({"status": "unavailable"}),
+        ),
+        ("/payload/result/complete", Value::Bool(false)),
+        ("/payload/result/status", serde_json::json!("incomplete")),
+        ("/payload/result/exit_code", serde_json::json!(2)),
+        ("/payload/result/finding_count", serde_json::json!(0)),
+        ("/payload/result/error_count", serde_json::json!(2)),
+        ("/payload/summary/counts_complete", Value::Bool(false)),
+        (
+            "/payload/summary/documents/discovered",
+            serde_json::json!(0),
+        ),
+        (
+            "/payload/engine/engine_contract",
+            serde_json::json!("amiss/scanner"),
+        ),
+    ] {
+        assert_eq!(envelope.pointer(path), Some(&expected), "{path}");
+    }
+    let payload = &envelope["payload"];
     let payload_bytes = serde_json_canonicalizer::to_vec(payload).unwrap();
     assert_eq!(
-        payload_digest.as_ref(),
-        hb(PAYLOAD_SCHEMA, &payload_bytes).to_string()
+        envelope["payload_digest"],
+        serde_json::json!(amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(payload_bytes)
+                .finalize()
+                .0
+        ))
     );
-
-    let evaluation = member(payload, "evaluation");
-    assert_eq!(member(evaluation, "request_digest"), &Value::Null);
+    let errors = payload["errors"].as_array().unwrap();
     assert_eq!(
-        strings(member(evaluation, "reasons")),
-        vec!["invalid-event", "invalid-profile"],
-        "reasons use enum declaration order"
-    );
-    assert_eq!(
-        strings(member(member(payload, "controls"), "reasons")),
-        vec!["not-parsed"]
-    );
-    let feedback = member(payload, "feedback");
-    assert_eq!(member(feedback, "status"), &Value::string("unavailable"));
-    let Value::Object(feedback_members) = feedback else {
-        panic!("feedback is not an object");
-    };
-    assert_eq!(feedback_members.len(), 1);
-
-    let Value::Array(errors) = member(payload, "errors") else {
-        panic!("errors is not an array");
-    };
-    let codes: Vec<String> = errors
-        .iter()
-        .map(|row| strings(&Value::array(vec![member(row, "code").clone()])).remove(0))
-        .collect();
-    assert_eq!(
-        codes,
-        vec!["INVALID_EVENT", "INVALID_PROFILE"],
-        "error rows sort by code bytes"
+        errors
+            .iter()
+            .map(|row| row["code"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["INVALID_EVENT", "INVALID_PROFILE"]
     );
     for row in errors {
-        assert_eq!(member(row, "phase"), &Value::string("invocation"));
-        assert_eq!(member(row, "path"), &Value::Null);
-        assert_eq!(member(row, "resource"), &Value::Null);
-        assert_eq!(member(row, "configured_limit"), &Value::Null);
-        assert_eq!(member(row, "observed_lower_bound"), &Value::Null);
+        assert_eq!(row["phase"], "invocation");
+        for field in [
+            "path",
+            "resource",
+            "configured_limit",
+            "observed_lower_bound",
+        ] {
+            assert_eq!(row.get(field), Some(&Value::Null), "{field}");
+        }
     }
-
-    let result = member(payload, "result");
-    assert_eq!(member(result, "complete"), &Value::Bool(false));
-    assert_eq!(member(result, "status"), &Value::string("incomplete"));
-    assert_eq!(member(result, "exit_code"), &Value::Integer(2));
-    assert_eq!(member(result, "finding_count"), &Value::Integer(0));
-    assert_eq!(member(result, "error_count"), &Value::Integer(2));
-
-    let summary = member(payload, "summary");
-    assert_eq!(member(summary, "counts_complete"), &Value::Bool(false));
-    assert_eq!(
-        member(member(summary, "documents"), "discovered"),
-        &Value::Integer(0)
-    );
     for detail in ["documents", "observations", "findings"] {
-        assert_eq!(member(payload, detail), &Value::array(Vec::new()));
+        assert_eq!(payload[detail], serde_json::json!([]));
     }
-
-    let engine_block = member(payload, "engine");
-    assert_eq!(
-        member(engine_block, "engine_contract"),
-        &Value::string("amiss/scanner")
-    );
-    let Value::Array(adapters) = member(engine_block, "adapters") else {
-        panic!("adapters is not an array");
-    };
-    let ids: Vec<String> = adapters
+    let ids = payload["engine"]["adapters"]
+        .as_array()
+        .unwrap()
         .iter()
-        .map(|row| strings(&Value::array(vec![member(row, "adapter_id").clone()])).remove(0))
-        .collect();
+        .map(|row| row["adapter_id"].as_str().unwrap())
+        .collect::<Vec<_>>();
     assert_eq!(
         ids,
-        vec!["asciidoc", "markdown", "mdx", "plain-advisory", "rst"]
+        ["asciidoc", "markdown", "mdx", "plain-advisory", "rst"]
     );
 }
 
@@ -159,10 +115,15 @@ fn orders_reasons_and_errors_independently() {
         AnalysisErrorCode::RequestUnreadable,
     ]);
     let wire = invocation_failure_wire(&engine(), &codes).unwrap().unwrap();
-    let envelope = parse(&wire).unwrap();
-    let payload = member(&envelope, "payload");
+    let envelope = serde_json::from_slice::<Value>(&wire).unwrap();
+    let payload = envelope.get("payload").expect("fixture member exists");
     assert_eq!(
-        strings(member(member(payload, "evaluation"), "reasons")),
+        <Vec<String> as serde::Deserialize>::deserialize(
+            ((payload).get("evaluation").expect("fixture member exists"))
+                .get("reasons")
+                .expect("fixture member exists")
+        )
+        .unwrap(),
         vec![
             "invalid-invocation",
             "invalid-event",
@@ -170,12 +131,18 @@ fn orders_reasons_and_errors_independently() {
             "request-unreadable"
         ]
     );
-    let Value::Array(errors) = member(payload, "errors") else {
+    let Value::Array(errors) = (payload).get("errors").expect("fixture member exists") else {
         panic!("errors is not an array");
     };
     let codes: Vec<String> = errors
         .iter()
-        .map(|row| strings(&Value::array(vec![member(row, "code").clone()])).remove(0))
+        .map(|row| {
+            <Vec<String> as serde::Deserialize>::deserialize(&Value::Array(vec![
+                (row).get("code").expect("fixture member exists").clone(),
+            ]))
+            .unwrap()
+            .remove(0)
+        })
         .collect();
     assert_eq!(
         codes,
@@ -226,9 +193,12 @@ fn error_routes_preserve_the_canonical_wire() {
         })
         .collect();
     assert_eq!(
-        hb(
-            "amiss/test-error-routes",
-            &serde_json_canonicalizer::to_vec(&rows).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-error-routes")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&rows).unwrap())
+                .finalize()
+                .0
         )
         .to_string(),
         "sha256:25a99d8043b027e8da184a3a0458e984e2180da5399bc96957e9a9d86c590274",

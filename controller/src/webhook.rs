@@ -1,5 +1,4 @@
 mod body_signature;
-mod crypto;
 mod error;
 mod gitea;
 mod github;

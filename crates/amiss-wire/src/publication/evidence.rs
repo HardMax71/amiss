@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
+use sha2::Digest as _;
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
-use crate::json;
+use crate::model::Digest;
 
 use super::{
     CompletedSite, DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationProducer,
@@ -17,10 +17,27 @@ pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/publication-evidence-payload";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self", bound(deserialize = "T: Deserialize<'de>"))]
 pub struct PublicationEvidenceEnvelope<T = PublicationEvidence> {
     pub schema: EvidenceEnvelopeSchema,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: T,
     pub payload_digest: Digest,
+}
+
+impl<T: Serialize> Serialize for PublicationEvidenceEnvelope<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for PublicationEvidenceEnvelope<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -33,6 +50,7 @@ pub enum EvidenceEnvelopeSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct PublicationEvidence {
     pub schema: EvidencePayloadSchema,
     pub plan_payload_digest: Digest,
@@ -42,6 +60,21 @@ pub struct PublicationEvidence {
     pub target: PublicationTarget,
     pub site: CompletedSite,
     pub product: PublicationResource,
+}
+
+impl Serialize for PublicationEvidence {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicationEvidence {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -54,11 +87,27 @@ pub enum EvidencePayloadSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct PublicationDeployment {
     pub outcome: PublicationOutcome,
     pub record: PublicationResource,
     pub workflow: PublicationResource,
     pub provider_run_attempt: u64,
+}
+
+impl Serialize for PublicationDeployment {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for PublicationDeployment {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -80,8 +129,13 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let document: PublicationEvidenceEnvelope = de::deserialize_json(bytes)?;
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    let document: PublicationEvidenceEnvelope = serde_path_to_error::deserialize(&mut deserializer)
+        .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if evidence_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -106,14 +160,22 @@ pub fn evidence(input: &PublicationEvidence) -> Result<Vec<u8>, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    de::JsonProfile::validate(&canonical)?;
     Ok(canonical)
 }
 
 pub(super) fn evidence_payload_digest(input: &PublicationEvidence) -> Result<Digest, Error> {
     validate_evidence(input)?;
     serde_json_canonicalizer::to_vec(input)
-        .map(|canonical| hb(EVIDENCE_PAYLOAD_SCHEMA, &canonical))
+        .map(|canonical| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(EVIDENCE_PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(&canonical)
+                    .finalize()
+                    .0,
+            )
+        })
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
@@ -136,9 +198,7 @@ fn validate_evidence(evidence: &PublicationEvidence) -> Result<(), Error> {
             PublicationUriKind::Resource,
         )?;
     }
-    if !(1..=json::MAX_SAFE_INTEGER.unsigned_abs())
-        .contains(&evidence.deployment.provider_run_attempt)
-    {
+    if !(1..=js_int::MAX_SAFE_UINT).contains(&evidence.deployment.provider_run_attempt) {
         return fail(
             "$.payload.deployment.provider_run_attempt",
             ErrorKind::InvalidValue,

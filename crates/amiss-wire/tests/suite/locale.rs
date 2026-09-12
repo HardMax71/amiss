@@ -3,17 +3,17 @@
     reason = "tests build known-valid locale plan identities and inspect exact refusals"
 )]
 
+use sha2::Digest as _;
 use std::{fs, path::Path};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::Digest;
-use amiss_wire::json;
 use amiss_wire::locale::{
     LOCALE_DOCUMENT_BYTES, LocaleCoveragePlan, LocaleCoveragePolicy, LocaleCoverageScope,
     LocaleFallbackRule, LocalePageRequirement, PAGE_KEY_BYTES, PLAN_PAYLOAD_SCHEMA,
     PlanPayloadSchema, parse_plan, plan,
 };
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{DocsCandidate, PublicationProducer, PublicationResource};
 
@@ -87,19 +87,27 @@ fn locale_plan() -> LocaleCoveragePlan {
 fn locale_plan_round_trips_with_its_payload_digest_and_example() {
     let expected = locale_plan();
     let bytes = plan(&expected).unwrap();
-    let value = json::parse(&bytes).unwrap();
+    let value = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
     let parsed = parse_plan(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        amiss_wire::digest::hb(
-            PLAN_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap()
+        Digest::from(
+            sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(value.get("payload").unwrap()).unwrap()
+                )
+                .finalize()
+                .0
         )
     );
     assert_eq!(
-        serde_json_canonicalizer::to_vec(&json::parse(&bytes).unwrap()).unwrap(),
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<serde_json::Value>(&bytes).unwrap()
+        )
+        .unwrap(),
         bytes
     );
 
@@ -107,20 +115,30 @@ fn locale_plan_round_trips_with_its_payload_digest_and_example() {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/locale-coverage-plan.json"),
     )
     .unwrap();
-    let example_value = json::parse(&example_bytes).unwrap();
-    let expected_digest = amiss_wire::digest::hb(
-        PLAN_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(example_value.member("payload").unwrap()).unwrap(),
+    let example_value = serde_json::from_slice::<serde_json::Value>(&example_bytes).unwrap();
+    let expected_digest = Digest::from(
+        sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(example_value.get("payload").unwrap()).unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
     assert_eq!(
-        example_value.text("payload_digest"),
+        example_value
+            .get("payload_digest")
+            .and_then(serde_json::Value::as_str),
         Some(expected_digest.as_str())
     );
     let example = parse_plan(&example_bytes).unwrap();
     assert_eq!(
         plan(&example.payload).unwrap(),
-        serde_json_canonicalizer::to_vec(&json::parse(&example_bytes).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<serde_json::Value>(&example_bytes).unwrap()
+        )
+        .unwrap()
     );
 }
 
@@ -128,7 +146,7 @@ fn locale_plan_round_trips_with_its_payload_digest_and_example() {
 fn locale_plan_keeps_all_source_and_named_policies_distinct() {
     let mut all_source = locale_plan();
     all_source.scope.version = Nullable::Null;
-    all_source.policy.required = LocalePageRequirement::AllSource;
+    all_source.policy.required = LocalePageRequirement::AllSource {};
     all_source.policy.require_target_lineage = true;
 
     let parsed = parse_plan(&plan(&all_source).unwrap()).unwrap();
@@ -149,7 +167,7 @@ fn fallback_authorizations_are_class_sorted_and_page_scoped() {
     let mut valid = locale_plan();
     valid.policy.fallbacks.push(LocaleFallbackRule {
         class: identity("vendor-copy"),
-        pages: LocalePageRequirement::AllSource,
+        pages: LocalePageRequirement::AllSource {},
     });
     let parsed = parse_plan(&plan(&valid).unwrap()).unwrap();
     assert_eq!(parsed.payload, valid);
@@ -163,7 +181,7 @@ fn fallback_authorizations_are_class_sorted_and_page_scoped() {
     let mut duplicate = locale_plan();
     duplicate.policy.fallbacks.push(LocaleFallbackRule {
         class: identity("source-copy"),
-        pages: LocalePageRequirement::AllSource,
+        pages: LocalePageRequirement::AllSource {},
     });
     let error = plan(&duplicate).unwrap_err();
     assert_eq!(error.path, "$.payload.policy.fallbacks");
@@ -267,12 +285,17 @@ fn locale_plan_refuses_tampering_open_shapes_and_oversized_documents() {
         "\"unknown\":true,\"report_payload_digest\":",
         1,
     );
-    let open_value = json::parse(open.as_bytes()).unwrap();
+    let open_value = serde_json::from_slice::<serde_json::Value>(open.as_bytes()).unwrap();
     let rebound = open.replace(
         &recorded,
-        &amiss_wire::digest::hb(
-            PLAN_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(open_value.member("payload").unwrap()).unwrap(),
+        &Digest::from(
+            sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(open_value.get("payload").unwrap()).unwrap(),
+                )
+                .finalize()
+                .0,
         )
         .to_string(),
     );
@@ -301,4 +324,23 @@ fn locale_plan_refuses_tampering_open_shapes_and_oversized_documents() {
     let error = parse_plan(&oversized).unwrap_err();
     assert_eq!(error.path, "$");
     assert_eq!(error.kind, ErrorKind::LimitExceeded);
+}
+
+#[test]
+fn all_source_policies_reject_unknown_members_with_a_matching_received_digest() {
+    let mut input = locale_plan();
+    input.policy.required = LocalePageRequirement::AllSource {};
+    let mut document = serde_json::to_value(parse_plan(&plan(&input).unwrap()).unwrap()).unwrap();
+    document["payload"]["policy"]["required"]["keys"] = serde_json::json!(["extra"]);
+    let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
+    document["payload_digest"] = serde_json::json!(Digest::from(
+        sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize()
+            .0
+    ));
+    let error = parse_plan(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::UnknownField);
+    assert_eq!(error.path, "$.payload.policy.required.keys");
 }

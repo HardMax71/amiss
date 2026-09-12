@@ -3,6 +3,7 @@
     reason = "integration assertions over repository-owned documentation and fixtures"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -85,10 +86,19 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
             parse_defect(amiss_wire::semantic::record::parse_input(bytes))
         }
         "scanner-semantic-evidence" => parse_defect(amiss_wire::semantic::parse(bytes)),
-        "scanner-semantic-template" => parse_defect(amiss_wire::semantic::parse_template(bytes)),
+        "scanner-semantic-template" => match serde_json::from_slice::<
+            amiss_wire::semantic::SemanticEvidenceTemplate<'static>,
+        >(bytes)
+        {
+            Ok(template) => parse_defect(template.validate()),
+            Err(error) => Some(error.to_string()),
+        },
         "scanner-policy" => parse_defect(amiss_wire::controls::parse_scanner_policy(bytes)),
         "scanner-release-manifest" => parse_defect(parse_release_manifest(bytes)),
-        "scanner-snapshot-request" => parse_defect(SnapshotRequest::parse(bytes)),
+        "scanner-snapshot-request" => match serde_json::from_slice::<SnapshotRequest>(bytes) {
+            Ok(request) => parse_defect(request.validate()),
+            Err(error) => Some(error.to_string()),
+        },
         "scanner-trusted-time-statement" => parse_defect(parse_trusted_time(bytes)),
         "waiver-bundle" => parse_defect(parse_waiver_bundle(bytes)),
         _ => Some("no authoritative example reader is registered".to_owned()),
@@ -129,7 +139,7 @@ fn check_schema_bounds(
             if let Some(attempt) = members.get("provider_run_attempt")
                 && attempt.get("type").and_then(serde_json::Value::as_str) == Some("integer")
             {
-                let safe_max = u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER)
+                let safe_max = u64::try_from(js_int::MAX_SAFE_INT)
                     .expect("the JSON safe-integer maximum is positive");
                 assert_eq!(
                     attempt.get("maximum").and_then(serde_json::Value::as_u64),
@@ -463,7 +473,14 @@ fn public_readers_reject_object_shaped_string_tags() {
                         let payload =
                             serde_json_canonicalizer::to_vec(&mutation["payload"]).unwrap();
                         mutation["payload_digest"] =
-                            serde_json::to_value(amiss_wire::digest::hb(domain, &payload)).unwrap();
+                            serde_json::to_value(amiss_wire::model::Digest::from(
+                                sha2::Sha256::new_with_prefix(domain)
+                                    .chain_update([0_u8])
+                                    .chain_update(&payload)
+                                    .finalize()
+                                    .0,
+                            ))
+                            .unwrap();
                         assert!(
                             !validator.is_valid(&mutation),
                             "{contract_name} at {location}"
@@ -549,11 +566,7 @@ fn the_first_frozen_example_binds_the_major() {
     let root = repository_root();
     let bytes = fs::read(root.join("spec/examples/scanner-report.frozen-1.json"))
         .expect("the frozen example is readable");
-    let mut retained = String::with_capacity(64);
-    for byte in <sha2::Sha256 as sha2::Digest>::digest(&bytes) {
-        use std::fmt::Write as _;
-        write!(&mut retained, "{byte:02x}").expect("writing to a string is infallible");
-    }
+    let retained = hex::encode(sha2::Sha256::digest(&bytes));
     assert_eq!(
         retained, "3fff8892cabc5bf6a9aae730ed11ac37f6c96ecd1efbc3d04786367d36f39d7a",
         "the frozen fixture is permanent; a new major mints a new fixture instead",
@@ -584,7 +597,7 @@ fn the_first_frozen_example_binds_the_major() {
     );
 }
 
-fn external_engine(example: &serde_json::Value) -> (&str, amiss_wire::digest::Digest) {
+fn external_engine(example: &serde_json::Value) -> (&str, amiss_wire::model::Digest) {
     let version = example
         .pointer("/payload/engine/engine_version")
         .and_then(serde_json::Value::as_str)
@@ -592,7 +605,7 @@ fn external_engine(example: &serde_json::Value) -> (&str, amiss_wire::digest::Di
     let digest = example
         .pointer("/payload/engine/engine_digest")
         .and_then(serde_json::Value::as_str)
-        .and_then(amiss_wire::digest::Digest::from_wire)
+        .and_then(amiss_wire::model::Digest::from_wire)
         .expect("the external example names an engine digest");
     (version, digest)
 }
@@ -604,8 +617,8 @@ fn external_examples_replay_from_the_report_and_evidence() {
         .expect("the report example is readable");
     let plan_bytes = fs::read(root.join("spec/examples/scanner-external-plan.json"))
         .expect("the plan example is readable");
-    let plan_example =
-        amiss_wire::json::parse(&plan_bytes).expect("the plan example is strict JSON");
+    let plan_example = serde_json::from_slice::<serde_json::Value>(&plan_bytes)
+        .expect("the plan example is strict JSON");
     let example: serde_json::Value =
         serde_json::from_slice(&plan_bytes).expect("the plan example is JSON");
     let (version, digest) = external_engine(&example);
@@ -621,8 +634,8 @@ fn external_examples_replay_from_the_report_and_evidence() {
         .expect("the evidence example is readable");
     let assessment_bytes = fs::read(root.join("spec/examples/scanner-external-assessment.json"))
         .expect("the assessment example is readable");
-    let assessment_example =
-        amiss_wire::json::parse(&assessment_bytes).expect("the assessment example is strict JSON");
+    let assessment_example = serde_json::from_slice::<serde_json::Value>(&assessment_bytes)
+        .expect("the assessment example is strict JSON");
     let example: serde_json::Value =
         serde_json::from_slice(&assessment_bytes).expect("the assessment example is JSON");
     let (version, digest) = external_engine(&example);
@@ -647,8 +660,8 @@ fn the_semantic_evidence_example_matches_its_checked_writer() {
     let mut written = Vec::new();
     amiss_wire::semantic::write(&document, &mut written)
         .expect("the semantic evidence example clears the checked writer");
-    let example =
-        amiss_wire::json::parse(&bytes).expect("the semantic evidence example is strict JSON");
+    let example = serde_json::from_slice::<serde_json::Value>(&bytes)
+        .expect("the semantic evidence example is strict JSON");
     assert_eq!(
         written,
         serde_json_canonicalizer::to_vec(&example).unwrap(),
@@ -667,8 +680,8 @@ fn the_record_set_input_example_produces_the_semantic_template_example() {
         .expect("the record-set input example clears the checked writer");
     let template = fs::read(root.join("spec/examples/scanner-semantic-template.json"))
         .expect("the semantic template example is readable");
-    let template =
-        amiss_wire::json::parse(&template).expect("the semantic template example is strict JSON");
+    let template = serde_json::from_slice::<serde_json::Value>(&template)
+        .expect("the semantic template example is strict JSON");
     assert_eq!(
         written,
         serde_json_canonicalizer::to_vec(&template).unwrap(),
@@ -684,7 +697,8 @@ fn report_example_is_schema_clean_and_matches_its_canonical_form() {
     let canonical_fixture = fs::read(root.join("spec/examples/scanner-report.canonical.json"))
         .expect("canonical report example is readable");
 
-    let parsed = amiss_wire::json::parse(&pretty).expect("pretty example is strict JSON");
+    let parsed = serde_json::from_slice::<serde_json::Value>(&pretty)
+        .expect("pretty example is strict JSON");
     let mut canonical = serde_json_canonicalizer::to_vec(&parsed).unwrap();
     canonical.push(b'\n');
     assert_eq!(

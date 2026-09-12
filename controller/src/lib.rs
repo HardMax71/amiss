@@ -9,7 +9,6 @@ mod audit_report;
 mod bootstrap_job;
 mod bootstrap_result;
 mod bootstrap_runner;
-mod bounded_json;
 mod clock;
 mod external;
 pub mod feedback;
@@ -24,6 +23,7 @@ mod provider;
 mod publication_audit;
 mod relation_audit;
 mod relations;
+mod response_body;
 mod semantic_artifact;
 mod spelling;
 mod webhook;
@@ -46,7 +46,6 @@ pub use bootstrap_job::{
 };
 pub use bootstrap_result::{BootstrapTermination, classify_bootstrap_result};
 pub use bootstrap_runner::{BootstrapRun, run_bootstrap};
-pub use bounded_json::decode_bounded_json;
 pub use clock::{ControllerClock, SystemClock};
 pub use external::{
     ForgeEvidence, ForgePresence, ForgeProducer, ForgeRefFamily, ForgeTail, ForgeVisibility,
@@ -104,6 +103,7 @@ pub use relations::{
     relations_for_delivery, schedule_relation, stage_relation_status, verify_relation_acquired,
     verify_relation_plan,
 };
+pub use response_body::read_response_body;
 pub use spelling::{ref_span, spelled_segments};
 pub use webhook::{
     GitHubWebhook, GitLabWebhook, GiteaWebhook, SignedRequestProof, WebhookError, WebhookKey,

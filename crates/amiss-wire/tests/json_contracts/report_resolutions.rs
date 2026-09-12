@@ -7,7 +7,7 @@ fn blob_fragments_reuse_the_producer_type_and_require_its_tag() {
     };
     use strum::IntoDiscriminant;
 
-    let digest = amiss_wire::digest::hb("amiss/test", b"fragment");
+    let digest = amiss_wire::model::Digest::from([19; 32]);
     for content in [
         BlobContent::Available {
             raw_digest: digest,

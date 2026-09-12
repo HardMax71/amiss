@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::collections::BTreeSet;
 
 use amiss_scan::evaluate::structural_facts;
@@ -85,11 +86,29 @@ fn structural_resolutions(path: &RepoPath) -> Vec<Resolution> {
     for mode in [BlobMode::Regular, BlobMode::Executable] {
         for content in [
             BlobContent::Available {
-                raw_digest: hb("amiss/raw-evidence", b"raw"),
-                projection_digest: hb("amiss/scanner-target-projection", b"projection"),
+                raw_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                        .chain_update([0_u8])
+                        .chain_update(b"raw")
+                        .finalize()
+                        .0,
+                ),
+                projection_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/scanner-target-projection")
+                        .chain_update([0_u8])
+                        .chain_update(b"projection")
+                        .finalize()
+                        .0,
+                ),
             },
             BlobContent::LfsPointer {
-                raw_digest: hb("amiss/raw-evidence", b"pointer"),
+                raw_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                        .chain_update([0_u8])
+                        .chain_update(b"pointer")
+                        .finalize()
+                        .0,
+                ),
             },
         ] {
             cases.push(Resolution::TypeMismatch {

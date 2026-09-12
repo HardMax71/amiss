@@ -1,4 +1,6 @@
-use crate::json;
+mod profile;
+
+pub use profile::JsonProfile;
 
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{kind} at {path}")]
@@ -7,10 +9,10 @@ pub struct Error {
     pub kind: ErrorKind,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ErrorKind {
     #[error("{0}")]
-    Json(json::Error),
+    Json(String),
     #[error("required field is missing")]
     MissingField,
     #[error("field is unknown")]
@@ -46,24 +48,6 @@ impl Error {
 /// Always fails with the given kind at the given path.
 pub fn fail<T>(path: &str, kind: ErrorKind) -> Result<T, Error> {
     Err(Error::new(path, kind))
-}
-
-pub(crate) fn deserialize_json<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| deserialize_error("$", &defect))
-}
-
-/// Deserializes one already strict JSON value while retaining the caller's document path.
-///
-/// # Errors
-///
-/// Fails with the structural error and its exact nested path.
-pub fn deserialize_value<T: serde::de::DeserializeOwned>(
-    path: &str,
-    value: serde_json::Value,
-) -> Result<T, Error> {
-    serde_path_to_error::deserialize(value).map_err(|defect| deserialize_error(path, &defect))
 }
 
 pub(crate) fn deserialize_error<E: std::fmt::Display>(

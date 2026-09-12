@@ -4,6 +4,7 @@
 )]
 
 use amiss_controller_fixtures::clock::TestClock;
+use sha2::Digest as _;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -19,7 +20,6 @@ use amiss_controller::{
 use amiss_controller_github::{
     GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
 };
@@ -727,7 +727,13 @@ fn workflow_artifact(workflow_identity: &str) -> WorkflowArtifactExpectation {
             producer_kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
             producer_identity: ArtifactId::new("docs-site".to_owned()).unwrap(),
             producer_version: "0.5.1".to_owned(),
-            context_digest: hb("amiss/test-workflow-completion", b"context"),
+            context_digest: amiss_wire::model::Digest::from(
+                Sha256::new_with_prefix("amiss/test-workflow-completion")
+                    .chain_update([0_u8])
+                    .chain_update(b"context")
+                    .finalize()
+                    .0,
+            ),
         },
     }
 }
@@ -985,7 +991,13 @@ fn dummy_snapshot() -> ChangeSnapshot {
 }
 
 fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publication {
-    let digest = hb("amiss/controller-github-test", b"fixture");
+    let digest = amiss_wire::model::Digest::from(
+        Sha256::new_with_prefix("amiss/controller-github-test")
+            .chain_update([0_u8])
+            .chain_update(b"fixture")
+            .finalize()
+            .0,
+    );
     Publication {
         provider_run: delivery.provider_run.clone(),
         evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),

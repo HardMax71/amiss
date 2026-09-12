@@ -3,10 +3,11 @@
     reason = "a fixture that cannot build its own inputs has no useful failure to return"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_wire::controls::{ExecutionConstraintDescriptor, canonical_execution_constraint};
+use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::model::Oid;
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestTrust, SnapshotRequest, SuppliedControl,
@@ -52,8 +53,16 @@ impl SealedRequests {
         );
         let mut controls = ControlsRequest::parse(&example("scanner-controls-request.json"))
             .expect("the published controls request parses");
-        let (_, constraint_digest) =
-            canonical_execution_constraint(&constraint).expect("the constraint serializes");
+        let constraint_digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(&constraint)
+                        .expect("the constraint serializes"),
+                )
+                .finalize()
+                .0,
+        );
         controls.execution_constraint = Some(SuppliedControl {
             value: constraint.clone(),
             expected_digest: constraint_digest,
@@ -61,8 +70,10 @@ impl SealedRequests {
         });
         Self {
             evaluation,
-            snapshot: SnapshotRequest::parse(&example("scanner-snapshot-request.json"))
-                .expect("the published snapshot request parses"),
+            snapshot: serde_json::from_slice::<SnapshotRequest>(&example(
+                "scanner-snapshot-request.json",
+            ))
+            .expect("the published snapshot request parses"),
             controls,
             constraint,
         }
@@ -74,6 +85,9 @@ impl SealedRequests {
     ///
     /// A varied document no longer serializes, or `root` is not writable.
     pub fn write(&self, root: &Path) -> RequestPaths {
+        self.evaluation.validate().expect("evaluation is valid");
+        self.snapshot.validate().expect("snapshot is valid");
+        self.controls.validate().expect("controls are valid");
         let paths = RequestPaths {
             evaluation: root.join("evaluation.json"),
             snapshot: root.join("snapshot.json"),
@@ -82,30 +96,19 @@ impl SealedRequests {
         };
         put(
             &paths.evaluation,
-            &self
-                .evaluation
-                .canonical_bytes()
-                .expect("evaluation serializes"),
+            &serde_json_canonicalizer::to_vec(&self.evaluation).expect("evaluation serializes"),
         );
         put(
             &paths.snapshot,
-            &self
-                .snapshot
-                .canonical_bytes()
-                .expect("snapshot serializes"),
+            &serde_json_canonicalizer::to_vec(&self.snapshot).expect("snapshot serializes"),
         );
         put(
             &paths.controls,
-            &self
-                .controls
-                .canonical_bytes()
-                .expect("controls serializes"),
+            &serde_json_canonicalizer::to_vec(&self.controls).expect("controls serializes"),
         );
         put(
             &paths.constraint,
-            &canonical_execution_constraint(&self.constraint)
-                .expect("constraint serializes")
-                .0,
+            &serde_json_canonicalizer::to_vec(&self.constraint).expect("constraint serializes"),
         );
         paths
     }

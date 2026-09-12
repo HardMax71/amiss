@@ -11,7 +11,7 @@ mod site;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPath};
 pub use amiss_wire::report::model::SemanticEvidenceProvenance as Provenance;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};

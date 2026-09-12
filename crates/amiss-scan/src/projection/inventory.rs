@@ -1,8 +1,9 @@
+use sha2::Digest as _;
 use std::cmp::Ordering;
 use std::ops::Bound;
 
 use amiss_wire::controls::{GitMode, ProjectionKind, TreePathSelection};
-use amiss_wire::digest::{Digest, hb, hb_stream};
+use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
     ProjectionDifference, ProjectionObserved, RowsProjectionDifference,
@@ -101,14 +102,16 @@ pub(super) fn projected_bytes(rows: &[&str]) -> u64 {
 }
 
 fn projected_digest(rows: &[&str]) -> Digest {
-    hb_stream(SOURCE_DOMAIN, |write| {
+    let mut hasher = sha2::Sha256::new_with_prefix(SOURCE_DOMAIN).chain_update([0_u8]);
+    {
         for (index, row) in rows.iter().enumerate() {
             if index != 0 {
-                write(b"\n");
+                hasher.update(b"\n");
             }
-            write(row.as_bytes());
+            hasher.update(row.as_bytes());
         }
-    })
+    }
+    Digest::from(hasher.finalize().0)
 }
 
 fn rows_match(rows: &[&str], observed: &str) -> bool {
@@ -201,9 +204,10 @@ fn canonical_count(value: &str) -> Option<u64> {
     {
         return None;
     }
-    value.parse().ok().filter(|count| {
-        u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER).is_ok_and(|maximum| *count <= maximum)
-    })
+    value
+        .parse()
+        .ok()
+        .filter(|count| u64::try_from(js_int::MAX_SAFE_INT).is_ok_and(|maximum| *count <= maximum))
 }
 
 fn mismatch(
@@ -310,7 +314,13 @@ pub(super) fn compare_count(
     }
     Ok(mismatch(
         sink,
-        hb(COUNT_SOURCE_DOMAIN, expected.as_bytes()),
+        Digest::from(
+            sha2::Sha256::new_with_prefix(COUNT_SOURCE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(expected.as_bytes())
+                .finalize()
+                .0,
+        ),
         u64::try_from(expected.len()).unwrap_or(u64::MAX),
         ProjectionDifference::Count {
             expected_count,

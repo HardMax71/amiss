@@ -13,6 +13,7 @@ name = "amiss-rust-public-api"
 path = "src/main.rs"
 
 [dependencies]
+sha2.workspace = true
 amiss-controller-files = { path = "../controller/files" }
 amiss-wire = { path = "../crates/amiss-wire" }
 rustdoc-types = "=0.61.0"

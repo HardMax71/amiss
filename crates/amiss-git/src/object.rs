@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 mod commit;
 mod loose;
 mod tree;
@@ -5,7 +6,6 @@ mod tree;
 use amiss_wire::controls::GitMode;
 use amiss_wire::model::{ObjectFormat, Oid};
 use sha1_checked::Digest as _;
-use sha2::Digest as _;
 
 use crate::Error;
 
@@ -82,13 +82,13 @@ pub(crate) fn verify_oid(
             if result.has_collision() {
                 return Err(Error::ObjectUnreadable);
             }
-            hex(result.hash().as_slice())
+            hex::encode(result.hash().as_slice())
         }
         ObjectFormat::Sha256 => {
             let mut hasher = sha2::Sha256::new();
             hasher.update(raw_header);
             hasher.update(body);
-            hex(&hasher.finalize())
+            hex::encode(hasher.finalize())
         }
     };
     if actual == oid.as_str() {
@@ -96,13 +96,4 @@ pub(crate) fn verify_oid(
     } else {
         Err(Error::ObjectUnreadable)
     }
-}
-
-pub(crate) fn hex(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
-    for byte in bytes {
-        out.push(char::from_digit(u32::from(byte.wrapping_shr(4)), 16).unwrap_or('0'));
-        out.push(char::from_digit(u32::from(byte & 0xF), 16).unwrap_or('0'));
-    }
-    out
 }

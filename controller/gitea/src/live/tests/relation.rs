@@ -10,9 +10,10 @@ use amiss_controller::{
     RelationStatusTargets, RelationSubject, RelationSubjectHead, validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
-use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
+use sha2::Digest as _;
 
 use super::super::model::{CommitRecord, CommitStatusRecord, CreateCommitStatus, UserRecord};
 use super::super::relation::{
@@ -170,7 +171,10 @@ fn commit_status_requests_and_responses_use_the_native_wire_shape() {
     let request = CreateCommitStatus {
         state: "failure".to_owned(),
         target_url: String::new(),
-        description: format!("{MARKER}{}", sha256(b"projection")),
+        description: format!(
+            "{MARKER}{}",
+            Digest::from(sha2::Sha256::digest(b"projection").0)
+        ),
         context: "Amiss cross-repository".to_owned(),
     };
     assert_eq!(
@@ -178,7 +182,7 @@ fn commit_status_requests_and_responses_use_the_native_wire_shape() {
         serde_json::json!({
             "state": "failure",
             "target_url": "",
-            "description": format!("{MARKER}{}", sha256(b"projection")),
+            "description": format!("{MARKER}{}", Digest::from(sha2::Sha256::digest(b"projection").0)),
             "context": "Amiss cross-repository"
         })
     );
@@ -259,7 +263,8 @@ fn relation_status_shape_and_created_response_are_checked_exactly() {
     let mut duplicated = status.clone();
     duplicated.targets.destinations.push(target.clone());
     let mut substituted = status;
-    substituted.audit.artifact.report_digest = sha256(b"other report");
+    substituted.audit.artifact.report_digest =
+        Digest::from(sha2::Sha256::digest(b"other report").0);
     for malformed in [completed, duplicated, substituted] {
         assert_eq!(
             fixture.client.publish_relation_status(&malformed, &target),

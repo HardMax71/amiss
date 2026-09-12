@@ -1,7 +1,8 @@
+use sha2::Digest as _;
 mod tests;
 
 use amiss_wire::human::{atom, atom_bytes};
-use amiss_wire::json;
+
 use amiss_wire::report::model::{AvailableFeedback, FeedbackAction, FeedbackItem, RepoPath};
 use serde::Deserialize;
 
@@ -36,7 +37,8 @@ pub fn with_feedback(
     report: Option<&[u8]>,
     artifact: Option<&ArtifactReference>,
 ) -> Option<String> {
-    let report_digest = amiss_wire::digest::sha256(report.unwrap_or_default());
+    let report_digest =
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(report.unwrap_or_default()).0);
     let mut lines = vec![format!("report: {report_digest}")];
     if let Some(artifact) = artifact {
         if report.is_none() || artifact.report_digest != report_digest {
@@ -92,7 +94,7 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     let Some(bytes) = report else {
         return Vec::new();
     };
-    if json::parse(bytes).is_err() {
+    if amiss_wire::de::JsonProfile::validate(bytes).is_err() {
         return Vec::new();
     }
     let Ok(report) = serde_json::from_slice::<ReportFeedback>(bytes) else {

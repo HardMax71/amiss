@@ -1,11 +1,12 @@
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::{Digest, hj_serde};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::DocumentEntryKind;
 use amiss_wire::requests::{
     IndexIdentityScope, IndexSnapshotIdentity, IndexSnapshotKind, IndexSnapshotSchema,
 };
 use serde::Serialize;
+use sha2::Digest as _;
 
 use super::IndexCandidate;
 
@@ -69,9 +70,13 @@ pub fn synthetic_candidate(
             .collect(),
         schema: INDEX_PROJECTION_SCHEMA,
     };
-    let index_projection_digest = hj_serde(INDEX_PROJECTION_SCHEMA, |writer| {
-        serde_json::to_writer(writer, &projection)
-    })
+    let index_projection_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(INDEX_PROJECTION_SCHEMA).chain_update([0_u8]),
+        );
+        serde_json::to_writer(&mut writer, &projection)
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| crate::Error::Internal)?;
     let input = SnapshotInput {
         base_commit_oid,
@@ -81,9 +86,12 @@ pub fn synthetic_candidate(
         kind: IndexSnapshotKind::Index,
         schema: IndexSnapshotSchema::Current,
     };
-    let snapshot_digest = hj_serde(SNAPSHOT_SCHEMA, |writer| {
-        serde_json::to_writer(writer, &input)
-    })
+    let snapshot_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(SNAPSHOT_SCHEMA).chain_update([0_u8]),
+        );
+        serde_json::to_writer(&mut writer, &input).map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| crate::Error::Internal)?;
     Ok(IndexCandidate {
         snapshot: IndexSnapshotIdentity {

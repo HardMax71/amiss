@@ -5,7 +5,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 
 use super::format::{Blob, Record, RecordInput, Root, SidecarAudit};
 use super::{

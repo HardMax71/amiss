@@ -2,7 +2,7 @@
 name = "amiss-wire"
 version.workspace = true
 edition.workspace = true
-description = "Canonical JSON, digest domains, and the machine contracts of Amiss"
+description = "Shared typed machine contracts of Amiss"
 license.workspace = true
 repository.workspace = true
 exclude.workspace = true
@@ -11,15 +11,16 @@ exclude.workspace = true
 bench = false
 
 [dependencies]
+percent-encoding.workspace = true
 countio.workspace = true
 digest-io.workspace = true
-hex = { workspace = true, features = ["serde"] }
+hex.workspace = true
 hex_fmt.workspace = true
 json-serde.workspace = true
 js_int.workspace = true
 serde.workspace = true
 serde-transcode.workspace = true
-serde_json = { workspace = true, features = ["unbounded_depth"] }
+serde_json = { workspace = true, features = ["unbounded_depth", "raw_value"] }
 serde_json_canonicalizer.workspace = true
 serde_path_to_error.workspace = true
 serde_with = { workspace = true, features = ["std"] }

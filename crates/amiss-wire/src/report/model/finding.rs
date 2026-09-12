@@ -3,11 +3,10 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::{
-    FactSchema, FindingKeyInputSchema, ProjectionKind, ProjectionSink, ProjectionSource,
-    SourceConstruct, TargetKind, WaiverResidualDisposition,
+    ProjectionKind, ProjectionSink, ProjectionSource, SourceConstruct, WaiverResidualDisposition,
 };
-use crate::digest::Digest;
-use crate::model::{ArtifactId, Oid, OwnerId, RepoPathText, TreeIdentity, UtcInstant};
+use crate::model::Digest;
+use crate::model::{ArtifactId, OwnerId, RepoPathText, TreeIdentity, UtcInstant};
 
 use super::super::{Disposition, FindingKind};
 use super::{
@@ -15,28 +14,10 @@ use super::{
     SourceSpan,
 };
 
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum ReferenceOccurrenceKind {
-    #[strum(serialize = "source-projection")]
-    SourceProjection,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ReferenceOccurrence {
-    pub kind: ReferenceOccurrenceKind,
-    pub source_projection_digest: Digest,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-pub enum RepositoryIntentKind {
-    #[strum(serialize = "repository-path")]
-    RepositoryPath,
-}
+pub use crate::controls::{
+    FindingOccurrence as ReferenceOccurrence, OccurrenceKind as ReferenceOccurrenceKind,
+    TargetIntentKind as RepositoryIntentKind,
+};
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -53,23 +34,8 @@ pub enum RepositoryIntentPath<P = RepoPath> {
     Path(P),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RepositoryTargetIntent<P = RepoPath> {
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub commit_oid: Option<Oid>,
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub fragment_digest: Option<Digest>,
-    pub kind: RepositoryIntentKind,
-    pub path: RepositoryIntentPath<P>,
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub query_digest: Option<Digest>,
-    pub target_kind: TargetKind,
-}
+pub type RepositoryTargetIntent<P = RepoPath> =
+    crate::controls::TargetIntent<RepositoryIntentPath<P>>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
@@ -100,13 +66,8 @@ pub enum FindingKeyScope<P = RepoPath> {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
-pub struct FindingKeyInput<P = RepoPath> {
-    pub finding_kind: FindingKind,
-    pub schema: FindingKeyInputSchema,
-    pub scope: FindingKeyScope<P>,
-}
+pub type FindingKeyInput<P = RepoPath> =
+    crate::controls::FindingKeyInput<FindingKind, FindingKeyScope<P>>;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -367,18 +328,8 @@ pub enum FindingFactEvidence<
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(deserialize = "K: Deserialize<'de>, E: Deserialize<'de>")
-)]
-pub struct FindingFactInput<K = FindingKeyInput, E = FindingFactEvidence> {
-    pub evidence: E,
-    pub finding_kind: FindingKind,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
-    pub key_input: K,
-    pub schema: FactSchema,
-}
+pub type FindingFactInput<K = FindingKeyInput, E = FindingFactEvidence> =
+    crate::controls::Fact<K, E, FindingKind>;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,

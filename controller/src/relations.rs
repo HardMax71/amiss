@@ -10,7 +10,7 @@ use std::sync::Arc;
 use amiss_wire::controls::{
     ProjectionKind, ProjectionSource, check_projection_source, valid_required_status_name,
 };
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat};
 use amiss_wire::relation::RelationPlanEnvelope;
 
@@ -37,7 +37,7 @@ pub use store::{
 
 pub const RELATION_REGISTRY_LIMIT: usize = 1_024;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationLimits {
     pub acquisition_objects: u64,
@@ -57,7 +57,7 @@ pub struct RelationSubject {
     pub limits: RelationLimits,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RelationStatusDestination {
     pub subject_role: ArtifactId,
@@ -85,13 +85,10 @@ pub fn verify_relation_plan(
     plan: &RelationPlanEnvelope,
     transition: &RelationTransition,
 ) -> Result<(), RelationAcquisitionError> {
-    let rebuilt = amiss_wire::relation::plan(&plan.payload)
-        .map_err(|_defect| RelationAcquisitionError::InvalidTransition)?;
-    let rebuilt = amiss_wire::relation::parse_plan(&rebuilt)
+    plan.validate()
         .map_err(|_defect| RelationAcquisitionError::InvalidTransition)?;
     let registered = transition.relation.plan.as_ref();
-    (rebuilt.payload_digest == plan.payload_digest
-        && plan.payload.relation.identity == registered.identity
+    (plan.payload.relation.identity == registered.identity
         && plan.payload.relation.context_digest == registered.context_digest
         && plan.payload.coordination == transition.coordination
         && plan.payload.trigger_role == transition.relation.trigger_role

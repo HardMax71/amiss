@@ -1,12 +1,12 @@
 use amiss_wire::controls::{ConstraintPlatform, GitMode};
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::Digest;
-use amiss_wire::json;
+use amiss_wire::model::Digest;
+use sha2::Digest as _;
+
 use amiss_wire::manifest::{
     BuildSource, DEPENDENCY_LOCK_DOMAIN, DependencyLockFile, DependencyLockInput,
     DependencyLockSchema, EnvironmentContract, ReleaseArtifact, ReleaseManifest,
-    ReleaseManifestSchema, RuntimeContract, RuntimeFile, RuntimeRole, canonical_dependency_lock,
-    canonical_release_manifest, parse_release_manifest,
+    ReleaseManifestSchema, RuntimeContract, RuntimeFile, RuntimeRole, parse_release_manifest,
 };
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
@@ -53,9 +53,16 @@ fn manifest(artifact: ReleaseArtifact) -> ReleaseManifest {
             raw_digest: digest('4'),
         }],
     };
-    let dependency_lock_digest = canonical_dependency_lock(&dependency_lock)
-        .expect("a valid dependency lock")
-        .1;
+    let dependency_lock_digest = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-dependency-lock")
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(&dependency_lock)
+                    .expect("a valid dependency lock"),
+            )
+            .finalize()
+            .0,
+    );
     ReleaseManifest {
         schema: ReleaseManifestSchema::Current,
         engine_version: "0.5.1".to_owned(),
@@ -91,7 +98,7 @@ fn the_executable_row_holds_every_clause_of_the_closure_law() {
         "amiss-linux-x86_64",
         closed(),
     );
-    assert!(canonical_release_manifest(&manifest(sound)).is_ok());
+    assert!(manifest(sound).validate().is_ok());
 
     let mut doubled = closed();
     doubled.push(row(
@@ -141,20 +148,22 @@ fn the_executable_row_holds_every_clause_of_the_closure_law() {
     ];
     for (files, reason) in cases {
         let broken = artifact(ConstraintPlatform::LinuxX8664, "amiss-linux-x86_64", files);
-        let defect = canonical_release_manifest(&manifest(broken)).expect_err(reason);
+        let defect = manifest(broken).validate().expect_err(reason);
         assert_eq!(defect.kind, ErrorKind::Inconsistent, "{reason}");
     }
 }
 
 #[test]
-fn canonical_generation_revalidates_directly_constructed_models() {
+fn public_manifest_fields_retain_their_domain_constraints() {
     let mut wrong_oid_format = manifest(artifact(
         ConstraintPlatform::LinuxX8664,
         "amiss-linux-x86_64",
         closed(),
     ));
     wrong_oid_format.build_source.object_format = ObjectFormat::Sha256;
-    let defect = canonical_release_manifest(&wrong_oid_format).expect_err("mismatched OID format");
+    let defect = wrong_oid_format
+        .validate()
+        .expect_err("mismatched OID format");
     assert_eq!(defect.path, "$.build_source.commit_oid");
 
     let mut wrong_lock_digest = manifest(artifact(
@@ -163,8 +172,9 @@ fn canonical_generation_revalidates_directly_constructed_models() {
         closed(),
     ));
     wrong_lock_digest.dependency_lock_digest = digest('9');
-    let defect =
-        canonical_release_manifest(&wrong_lock_digest).expect_err("mismatched lock digest");
+    let defect = wrong_lock_digest
+        .validate()
+        .expect_err("mismatched lock digest");
     assert_eq!(defect.kind, ErrorKind::DigestMismatch);
 
     let mut invalid_mode = manifest(artifact(
@@ -173,8 +183,9 @@ fn canonical_generation_revalidates_directly_constructed_models() {
         closed(),
     ));
     invalid_mode.artifacts[0].runtime_files[0].git_mode = GitMode::Tree;
-    let defect =
-        canonical_release_manifest(&invalid_mode).expect_err("a tree is not a runtime file");
+    let defect = invalid_mode
+        .validate()
+        .expect_err("a tree is not a runtime file");
     assert_eq!(defect.path, "$.artifacts[0].runtime_files[0].git_mode");
 }
 
@@ -211,12 +222,18 @@ const LOCK: &str = r#"{"schema":"amiss/scanner-dependency-lock-input","files":[{
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn manifest_raw(object_format: &str, commit_oid: &str, lock: &str, artifacts: &str) -> String {
-    let lock_digest = amiss_wire::digest::hb(
-        DEPENDENCY_LOCK_DOMAIN,
-        &serde_json_canonicalizer::to_vec(
-            &json::parse(lock.as_bytes()).expect("the lock template parses"),
-        )
-        .expect("fixture JSON"),
+    let lock_digest = Digest::from(
+        sha2::Sha256::new_with_prefix(DEPENDENCY_LOCK_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<serde_json::Value>(lock.as_bytes())
+                        .expect("the lock template parses"),
+                )
+                .expect("fixture JSON"),
+            )
+            .finalize()
+            .0,
     );
     format!(
         concat!(

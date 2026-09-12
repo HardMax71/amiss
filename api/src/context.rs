@@ -1,6 +1,7 @@
-use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 use serde::{Deserialize, Serialize};
+use sha2::Digest as _;
 use wary::Validate as _;
 
 pub(crate) const BYTES: u64 = 65_536;
@@ -56,7 +57,7 @@ pub(crate) enum Error {
     #[error("the producer context exceeds its byte ceiling")]
     Bytes,
     #[error("the producer context is not strict JSON")]
-    Json(#[source] amiss_wire::json::Error),
+    Json(#[source] amiss_wire::de::Error),
     #[error("the producer context is invalid")]
     Shape(#[source] serde_json::Error),
     #[error("the producer context is invalid")]
@@ -67,11 +68,19 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<(Context, Digest), Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > BYTES {
         return Err(Error::Bytes);
     }
-    amiss_wire::json::parse(bytes).map_err(Error::Json)?;
+    amiss_wire::de::JsonProfile::validate(bytes).map_err(Error::Json)?;
     let context: Context = serde_json::from_slice(bytes).map_err(Error::Shape)?;
     context.validate(&()).map_err(Error::Contract)?;
     let digest = serde_json::to_vec(&context)
-        .map(|canonical| hb(DIGEST_DOMAIN, &canonical))
+        .map(|canonical| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(DIGEST_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&canonical)
+                    .finalize()
+                    .0,
+            )
+        })
         .map_err(Error::Shape)?;
     Ok((context, digest))
 }

@@ -4,17 +4,18 @@
     reason = "tests mutate values produced by the checked locale evidence writer"
 )]
 
+use sha2::Digest as _;
 use std::{fs, path::Path};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 
-use amiss_wire::json::{self, Value};
 use amiss_wire::locale::{
     EVIDENCE_PAYLOAD_SCHEMA, EvidencePayloadSchema, LocaleCoverageEvidence, LocalePageInventory,
     LocaleSourcePage, LocaleTargetInventory, LocaleTargetOrigin, LocaleTargetPage, evidence,
     parse_evidence, parse_plan, plan,
 };
+use serde_json::Value;
 
 use super::{digest, locale_plan, product_resource};
 
@@ -104,28 +105,38 @@ pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
 fn locale_evidence_round_trips_with_independent_inventories_and_example() {
     let expected = locale_evidence();
     let bytes = evidence(&expected).unwrap();
-    let value = json::parse(&bytes).unwrap();
+    let value = serde_json::from_slice::<Value>(&bytes).unwrap();
     let parsed = parse_evidence(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
     assert_eq!(
         parsed.payload_digest,
-        amiss_wire::digest::hb(
-            EVIDENCE_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(EVIDENCE_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(value.get("payload").unwrap()).unwrap()
+                )
+                .finalize()
+                .0
         )
     );
 
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let example_bytes = fs::read(examples.join("locale-coverage-evidence.json")).unwrap();
-    let example_value = json::parse(&example_bytes).unwrap();
-    let expected_digest = amiss_wire::digest::hb(
-        EVIDENCE_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(example_value.member("payload").unwrap()).unwrap(),
+    let example_value = serde_json::from_slice::<Value>(&example_bytes).unwrap();
+    let expected_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(EVIDENCE_PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(example_value.get("payload").unwrap()).unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
     assert_eq!(
-        example_value.text("payload_digest"),
+        example_value.get("payload_digest").and_then(Value::as_str),
         Some(expected_digest.as_str())
     );
     let example = parse_evidence(&example_bytes).unwrap();
@@ -180,55 +191,59 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
     let parsed = parse_evidence(&evidence(&input).unwrap()).unwrap();
     assert_eq!(parsed.payload, input);
 
-    let value = json::parse(&evidence(&input).unwrap()).unwrap();
+    let value = serde_json::from_slice::<Value>(&evidence(&input).unwrap()).unwrap();
     let mut unknown = value.clone();
-    let target = member_mut(member_mut(&mut unknown, "payload"), "target");
-    let Value::Array(pages) = member_mut(target, "pages") else {
+    let target = ((unknown).get_mut("payload").unwrap())
+        .get_mut("target")
+        .unwrap();
+    let Value::Array(pages) = (target).get_mut("pages").unwrap() else {
         panic!("the checked writer produced a non-array target page set");
     };
     let fallback = pages.last_mut().unwrap();
-    let origin = member_mut(fallback, "origin");
-    *member_mut(origin, "kind") = Value::string("generated");
+    let origin = (fallback).get_mut("origin").unwrap();
+    *(origin).get_mut("kind").unwrap() = Value::from("generated");
     let error = parse_evidence(&sealed(unknown)).unwrap_err();
     assert_eq!(error.path, "$.payload.target.pages[1].origin.kind");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
-    let mut missing_origin = json::parse(&evidence(&locale_evidence()).unwrap()).unwrap();
-    let target = member_mut(member_mut(&mut missing_origin, "payload"), "target");
-    let Value::Array(pages) = member_mut(target, "pages") else {
+    let mut missing_origin =
+        serde_json::from_slice::<Value>(&evidence(&locale_evidence()).unwrap()).unwrap();
+    let target = ((missing_origin).get_mut("payload").unwrap())
+        .get_mut("target")
+        .unwrap();
+    let Value::Array(pages) = (target).get_mut("pages").unwrap() else {
         panic!("the checked writer produced a non-array target page set");
     };
-    *member_mut(pages.first_mut().unwrap(), "origin") = Value::Null;
+    *(pages.first_mut().unwrap()).get_mut("origin").unwrap() = Value::Null;
     let error = parse_evidence(&sealed(missing_origin)).unwrap_err();
     assert_eq!(error.path, "$.payload.target.pages[0].origin");
     assert_eq!(error.kind, ErrorKind::WrongType);
 
     let mut invalid_lineage = value.clone();
-    let target = member_mut(member_mut(&mut invalid_lineage, "payload"), "target");
-    let Value::Array(pages) = member_mut(target, "pages") else {
+    let target = ((invalid_lineage).get_mut("payload").unwrap())
+        .get_mut("target")
+        .unwrap();
+    let Value::Array(pages) = (target).get_mut("pages").unwrap() else {
         panic!("the checked writer produced a non-array target page set");
     };
-    let origin = member_mut(pages.first_mut().unwrap(), "origin");
-    *member_mut(origin, "based_on_source_digest") = Value::string("source-v1");
+    let origin = (pages.first_mut().unwrap()).get_mut("origin").unwrap();
+    *(origin).get_mut("based_on_source_digest").unwrap() = Value::from("source-v1");
     let error = parse_evidence(&sealed(invalid_lineage)).unwrap_err();
     assert_eq!(error.path, "$.payload.target.pages[0].origin");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let mut missing_lineage = value;
-    let target = member_mut(member_mut(&mut missing_lineage, "payload"), "target");
-    let Value::Array(pages) = member_mut(target, "pages") else {
+    let target = ((missing_lineage).get_mut("payload").unwrap())
+        .get_mut("target")
+        .unwrap();
+    let Value::Array(pages) = (target).get_mut("pages").unwrap() else {
         panic!("the checked writer produced a non-array target page set");
     };
-    let origin = member_mut(pages.first_mut().unwrap(), "origin");
+    let origin = (pages.first_mut().unwrap()).get_mut("origin").unwrap();
     let Value::Object(members) = origin else {
         panic!("the checked writer produced a non-object origin");
     };
-    let members = members
-        .iter()
-        .filter(|(name, _value)| name != "based_on_source_digest")
-        .cloned()
-        .collect();
-    *origin = Value::object(members);
+    members.remove("based_on_source_digest");
     let error = parse_evidence(&sealed(missing_lineage)).unwrap_err();
     assert_eq!(
         error.path,
@@ -264,7 +279,7 @@ fn locale_evidence_refuses_invalid_page_keys_and_tampering() {
 #[test]
 fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
     let bytes = evidence(&locale_evidence()).unwrap();
-    let value = json::parse(&bytes).unwrap();
+    let value = serde_json::from_slice::<Value>(&bytes).unwrap();
     let mut unsorted = value.clone();
     pages_mut(&mut unsorted).reverse();
     let error = parse_evidence(&sealed(unsorted)).unwrap_err();
@@ -280,26 +295,21 @@ fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
     assert_eq!(error.kind, ErrorKind::DuplicateMember);
 
     let mut mistyped = value.clone();
-    let payload = member_mut(&mut mistyped, "payload");
-    let source = member_mut(payload, "source");
-    *member_mut(source, "complete") = Value::string("true");
+    let payload = (mistyped).get_mut("payload").unwrap();
+    let source = (payload).get_mut("source").unwrap();
+    *(source).get_mut("complete").unwrap() = Value::from("true");
     let error = parse_evidence(&sealed(mistyped)).unwrap_err();
     assert_eq!(error.path, "$.payload.source.complete");
     assert_eq!(error.kind, ErrorKind::WrongType);
 
     for inventory in ["source", "target"] {
         let mut missing_product = value.clone();
-        let payload = member_mut(&mut missing_product, "payload");
-        let inventory_value = member_mut(payload, inventory);
+        let payload = (missing_product).get_mut("payload").unwrap();
+        let inventory_value = (payload).get_mut(inventory).unwrap();
         let Value::Object(members) = inventory_value else {
             panic!("the checked writer produced a non-object inventory");
         };
-        let members = members
-            .iter()
-            .filter(|(name, _value)| name != "product")
-            .cloned()
-            .collect();
-        *inventory_value = Value::object(members);
+        members.remove("product");
         let error = parse_evidence(&sealed(missing_product)).unwrap_err();
         assert_eq!(error.path, format!("$.payload.{inventory}.product"));
         assert_eq!(error.kind, ErrorKind::MissingField);
@@ -307,30 +317,22 @@ fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
 }
 
 fn pages_mut(value: &mut Value) -> &mut [Value] {
-    let payload = member_mut(value, "payload");
-    let source = member_mut(payload, "source");
-    let Value::Array(pages) = member_mut(source, "pages") else {
+    let payload = (value).get_mut("payload").unwrap();
+    let source = (payload).get_mut("source").unwrap();
+    let Value::Array(pages) = (source).get_mut("pages").unwrap() else {
         panic!("the checked writer produced a non-array page set");
     };
     pages
 }
 
 fn sealed(mut value: Value) -> Vec<u8> {
-    let digest = amiss_wire::digest::hb(
-        EVIDENCE_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(value.member("payload").unwrap()).unwrap(),
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(EVIDENCE_PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(value.get("payload").unwrap()).unwrap())
+            .finalize()
+            .0,
     );
-    *member_mut(&mut value, "payload_digest") = Value::string(digest.to_string());
+    *(value).get_mut("payload_digest").unwrap() = Value::from(digest.to_string());
     serde_json_canonicalizer::to_vec(&value).unwrap()
-}
-
-fn member_mut<'a>(value: &'a mut Value, name: &str) -> &'a mut Value {
-    let Value::Object(members) = value else {
-        panic!("the checked writer produced a non-object value");
-    };
-    members
-        .iter_mut()
-        .find(|(key, _value)| key == name)
-        .map(|(_key, value)| value)
-        .unwrap()
 }

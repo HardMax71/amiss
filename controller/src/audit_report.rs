@@ -1,6 +1,7 @@
+use sha2::Digest as _;
 mod tests;
 
-use amiss_wire::digest::{Digest, hj_serde, sha256};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
 use amiss_wire::report::model::{
     BaseSnapshot, Evaluation, IdentityPreimage, ReportPayload, Snapshot,
@@ -52,9 +53,13 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
         evaluation: &evaluation,
         schema: CandidateIdentitySchema::Current,
     };
-    let candidate_identity_digest = hj_serde(CANDIDATE_IDENTITY_DOMAIN, |mut writer| {
+    let candidate_identity_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&preimage, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| ArtifactError::Corrupt)?;
     let (BaseSnapshot::Git(base), Snapshot::Available(CandidateSnapshot::Git(candidate))) =
         (evaluation.base, evaluation.candidate)
@@ -79,7 +84,7 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
     let target_ref = evaluation.target_ref;
 
     Ok(AcceptedReport {
-        report_digest: sha256(bytes),
+        report_digest: Digest::from(sha2::Sha256::digest(bytes).0),
         payload_digest,
         repository,
         target_ref,

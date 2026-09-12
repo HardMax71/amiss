@@ -1,4 +1,5 @@
-use amiss_wire::{controls::canonical_trusted_time, requests::ControlsRequest};
+use amiss_wire::requests::ControlsRequest;
+use sha2::Digest as _;
 
 #[test]
 fn supplied_time_is_a_closed_object_and_keeps_its_canonical_identity() {
@@ -6,10 +7,16 @@ fn supplied_time_is_a_closed_object_and_keeps_its_canonical_identity() {
     let request = ControlsRequest::parse(example.as_bytes()).unwrap();
     let supplied = request.trusted_time.as_ref().unwrap();
     assert_eq!(
-        canonical_trusted_time(&supplied.value).unwrap().1,
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&supplied.value).unwrap())
+                .finalize()
+                .0
+        ),
         supplied.expected_digest
     );
-    let canonical = request.canonical_bytes().unwrap();
+    let canonical = serde_json_canonicalizer::to_vec(&request).unwrap();
     assert_eq!(ControlsRequest::parse(&canonical).unwrap(), request);
 
     for (original, replacement) in [

@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use amiss_wire::de::{Error, ErrorKind, fail};
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::report::model::SemanticEvidenceProducer;
 use amiss_wire::requests::SuppliedSemanticEvidence;
 use amiss_wire::semantic::observation::{

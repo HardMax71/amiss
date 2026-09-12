@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+sha2.workspace = true
 amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller = { path = ".." }
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }

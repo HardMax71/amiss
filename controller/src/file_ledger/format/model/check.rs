@@ -1,5 +1,5 @@
 use amiss_wire::controls::valid_required_status_name;
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use serde::{Deserialize, Serialize};
 
 use crate::{CheckBinding, file_ledger::FileLedgerError};

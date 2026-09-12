@@ -1,7 +1,7 @@
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
-use amiss_wire::digest::hj_serde;
 use amiss_wire::model::{Adapter, ArtifactId, BranchRef, Oid, RepoPath};
 use amiss_wire::report::model::ControlsUnavailableReason;
 use amiss_wire::report::{AnalysisErrorCode, EngineProvenance, ErrorDetail, adapter_contract};
@@ -163,7 +163,7 @@ fn resolved_observation(
     resolver: &mut Resolver<'_>,
     context: ObservationContext<'_>,
     adapter: Adapter,
-    adapter_contract_digest: amiss_wire::digest::Digest,
+    adapter_contract_digest: amiss_wire::model::Digest,
     path: &RepoPath,
     occurrence: &crate::scan::ScannedOccurrence,
 ) -> Result<Observation, Error> {
@@ -180,9 +180,13 @@ fn resolved_observation(
         intent: &intent,
         raw_destination_digest: occurrence.raw_destination_digest,
     })?;
-    let id = hj_serde(OBSERVATION_ID_DOMAIN, |writer| {
-        serde_json::to_writer(writer, &identity)
-    })
+    let id = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(OBSERVATION_ID_DOMAIN).chain_update([0_u8]),
+        );
+        serde_json::to_writer(&mut writer, &identity)
+            .map(|()| amiss_wire::model::Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| Error::Internal)?;
     Ok(Observation {
         id,
@@ -292,9 +296,12 @@ fn document_claims(
             source_digest: governed.digest,
             path: claim.path.clone(),
             line: claim.line,
-            expected_digest: amiss_wire::digest::hb(
-                crate::resolve::RAW_EVIDENCE_DOMAIN,
-                claim.expected.as_bytes(),
+            expected_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(claim.expected.as_bytes())
+                    .finalize()
+                    .0,
             ),
             verdict,
         });

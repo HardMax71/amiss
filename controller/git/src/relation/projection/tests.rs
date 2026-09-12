@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use sha2::Digest as _;
 use std::sync::Arc;
 
 use amiss_controller::{
@@ -9,7 +10,6 @@ use amiss_controller::{
     TriggeredRelation, relation_transition,
 };
 use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
-use amiss_wire::digest::sha256;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
 };
@@ -94,7 +94,9 @@ fn fixture(aggregate_records: u64) -> Fixture {
         .expect("documentation repository");
     let registered = Arc::new(RelationPlan {
         identity: artifact("relation/api"),
-        context_digest: sha256(b"operator relation context"),
+        context_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(b"operator relation context").0,
+        ),
         projection: ProjectionKind::CodeTextV1,
         subjects: [
             subject("documentation", "handbook", "mirror.txt"),
@@ -146,7 +148,10 @@ fn fixture(aggregate_records: u64) -> Fixture {
         }
     });
     let value = plan(&amiss_wire::relation::RelationPlan {
-        report_payload_digest: sha256(b"accepted report payload"),
+        schema: amiss_wire::relation::PlanPayloadSchema::Current,
+        report_payload_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(b"accepted report payload").0,
+        ),
         relation: RelationIdentity {
             identity: registered.identity.clone(),
             context_digest: registered.context_digest,
@@ -205,7 +210,7 @@ fn four_exact_repository_projections_produce_the_plan_bound_transition() {
         &fixture.plan,
         Some(&evidence),
         "0.26.0-test",
-        sha256(b"relation evaluator"),
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(b"relation evaluator").0),
     )
     .expect("transition assessment");
     assert_eq!(
@@ -239,7 +244,9 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
     );
 
     let mut changed = fixture.plan.payload.clone();
-    changed.relation.context_digest = sha256(b"substituted operator relation context");
+    changed.relation.context_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::digest(b"substituted operator relation context").0,
+    );
     let changed = plan(&changed).expect("rewritten plan");
     let changed = parse_plan(&changed).expect("parsed rewritten plan");
     assert_eq!(

@@ -94,7 +94,17 @@ pub fn decode_workflow_artifact(
         return Err(GitHubArtifactError::Archive);
     }
 
-    let template = amiss_wire::semantic::parse_template(&payload)
+    if u64::try_from(payload.len()).unwrap_or(u64::MAX)
+        > amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES
+    {
+        return Err(GitHubArtifactError::Semantic);
+    }
+    amiss_wire::de::JsonProfile::validate(&payload)
+        .map_err(|_defect| GitHubArtifactError::Semantic)?;
+    let template: amiss_wire::semantic::SemanticEvidenceTemplate<'static> =
+        serde_json::from_slice(&payload).map_err(|_defect| GitHubArtifactError::Semantic)?;
+    template
+        .validate()
         .map_err(|_defect| GitHubArtifactError::Semantic)?;
     let actual = SemanticEvidenceExpectation {
         acquisition_identity: expectation.semantic.acquisition_identity.clone(),

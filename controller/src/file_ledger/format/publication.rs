@@ -1,6 +1,7 @@
+use sha2::Digest as _;
 mod tests;
 
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::Oid;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 use serde::{Deserialize, Serialize};
@@ -244,30 +245,30 @@ impl StoredReport {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger) struct ReportRef {
-    digest: String,
+    digest: Digest,
     length: u64,
 }
 
 impl ReportRef {
     pub(in crate::file_ledger) fn new(report: &[u8]) -> Result<Self, FileLedgerError> {
-        let length = report_length(report.len())?;
-        Ok(Self {
-            digest: hb(REPORT_DOMAIN, report).to_string(),
+        report_length(report.len()).map(|length| Self {
+            digest: sha2::Sha256::new_with_prefix(REPORT_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(report)
+                .finalize()
+                .0
+                .into(),
             length,
         })
     }
 
-    pub(in crate::file_ledger) fn digest(&self) -> &str {
-        &self.digest
-    }
-
     pub(in crate::file_ledger) fn matches(&self, report: &[u8]) -> bool {
         u64::try_from(report.len()).ok() == Some(self.length)
-            && hb(REPORT_DOMAIN, report).to_string() == self.digest
+            && Self::new(report).is_ok_and(|actual| actual == *self)
     }
 
     fn validate(&self) -> Result<(), FileLedgerError> {
-        if self.length > MACHINE_JSON_BYTES || Digest::from_wire(&self.digest).is_none() {
+        if self.length > MACHINE_JSON_BYTES {
             return Err(FileLedgerError::Corrupt);
         }
         Ok(())

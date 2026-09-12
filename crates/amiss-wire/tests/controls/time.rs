@@ -1,10 +1,9 @@
 use amiss_wire::controls::{
-    STATEMENT_TTL_MAX_SECONDS, TrustedTimeController, TrustedTimeSchema, canonical_trusted_time,
-    parse_trusted_time,
+    STATEMENT_TTL_MAX_SECONDS, TrustedTimeController, TrustedTimeSchema, parse_trusted_time,
 };
 use amiss_wire::de::ErrorKind;
+use sha2::Digest as _;
 
-use amiss_wire::json;
 use amiss_wire::model::UtcInstant;
 
 use crate::support::TIME_STATEMENT;
@@ -78,11 +77,25 @@ fn parses_a_trusted_time_statement_and_enforces_the_ttl() {
     );
     assert_eq!(statement.provider, "gitlab-ci");
     assert_eq!(
-        canonical_trusted_time(&statement).unwrap().1,
-        amiss_wire::digest::hb(
-            "amiss/scanner-trusted-time-statement",
-            &serde_json_canonicalizer::to_vec(&json::parse(TIME_STATEMENT.as_bytes()).unwrap())
-                .unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&statement).unwrap())
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(
+                        &serde_json::from_slice::<serde_json::Value>(TIME_STATEMENT.as_bytes())
+                            .unwrap()
+                    )
+                    .unwrap()
+                )
+                .finalize()
+                .0
         )
     );
     assert_eq!(statement.provider_run_id, "pipeline/01J2Z9-7");

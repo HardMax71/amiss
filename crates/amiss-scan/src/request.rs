@@ -1,12 +1,8 @@
-use amiss_wire::controls::{
-    FloorDefect, ResourceName, canonical_debt_snapshot, canonical_execution_constraint,
-    canonical_organization_floor, canonical_trusted_time, canonical_waiver_bundle,
-};
+use amiss_wire::controls::{FloorDefect, ResourceName};
 use amiss_wire::de::{Error, ErrorKind};
-use amiss_wire::digest::Digest;
-use amiss_wire::json::ErrorKind as JsonErrorKind;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
-use amiss_wire::requests::{ControlsRequest, RequestTrust, SuppliedControl};
+use amiss_wire::requests::ControlsRequest;
+use sha2::Digest as _;
 
 use crate::policy::{ConstraintInput, DebtInput, FloorInput, TimeInput, WaiverInput};
 
@@ -32,65 +28,71 @@ pub struct ControlInputs {
 pub fn controls(request: ControlsRequest) -> Result<ControlInputs, ErrorDetail> {
     let floor = request
         .organization_floor
-        .map(|supplied| {
-            let digest = canonical_organization_floor(&supplied.value)
-                .map_err(floor_detail)?
-                .1;
-            if digest != supplied.expected_digest {
-                return Err(code(AnalysisErrorCode::DigestMismatch));
-            }
-            Ok(FloorInput {
-                floor: supplied.value,
-                digest,
-                trust_source: supplied.trust_source,
-            })
-        })
+        .map(organization_floor)
         .transpose()?;
     let debt = request
         .debt_snapshot
         .map(|supplied| {
-            typed(supplied, canonical_debt_snapshot).map(|(snapshot, digest, trust_source)| {
-                DebtInput {
-                    snapshot,
-                    digest,
-                    trust_source,
-                }
+            supplied
+                .value
+                .validate()
+                .map_err(|error| configuration_detail(&error))?;
+            let mut writer = digest_io::IoWrapper(
+                sha2::Sha256::new_with_prefix(amiss_wire::controls::DEBT_SNAPSHOT_SCHEMA)
+                    .chain_update([0_u8]),
+            );
+            serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
+                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
+            let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
+            if digest != supplied.expected_digest {
+                return Err(code(AnalysisErrorCode::DigestMismatch));
+            }
+            Ok(DebtInput {
+                snapshot: supplied.value,
+                digest,
+                trust_source: supplied.trust_source,
             })
         })
         .transpose()?;
     let waiver = request
         .waiver_bundle
         .map(|supplied| {
-            typed(supplied, canonical_waiver_bundle).map(|(bundle, digest, trust_source)| {
-                WaiverInput {
-                    bundle,
-                    digest,
-                    trust_source,
-                }
-            })
-        })
-        .transpose()?;
-    let time = request
-        .trusted_time
-        .map(|supplied| {
-            let (_, digest) = canonical_trusted_time(&supplied.value)
+            supplied
+                .value
+                .validate()
                 .map_err(|error| configuration_detail(&error))?;
+            let mut writer = digest_io::IoWrapper(
+                sha2::Sha256::new_with_prefix(amiss_wire::controls::WAIVER_BUNDLE_SCHEMA)
+                    .chain_update([0_u8]),
+            );
+            serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
+                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
+            let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
             if digest != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
-            Ok(TimeInput {
-                statement: supplied.value,
-                provider: supplied.provider,
-                provider_run_id: supplied.provider_run_id,
-                provider_run_attempt: supplied.provider_run_attempt,
+            Ok(WaiverInput {
+                bundle: supplied.value,
+                digest,
+                trust_source: supplied.trust_source,
             })
         })
         .transpose()?;
+    let time = request.trusted_time.map(trusted_time).transpose()?;
     let constraint = request
         .execution_constraint
         .map(|supplied| {
-            let (_, digest) = canonical_execution_constraint(&supplied.value)
+            supplied
+                .value
+                .validate()
                 .map_err(|error| configuration_detail(&error))?;
+            let mut writer = digest_io::IoWrapper(
+                sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
+                    .chain_update([0_u8]),
+            );
+            serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
+                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
+            let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
             if digest != supplied.expected_digest {
                 return Err(code(AnalysisErrorCode::DigestMismatch));
             }
@@ -116,6 +118,50 @@ pub fn controls(request: ControlsRequest) -> Result<ControlInputs, ErrorDetail> 
     })
 }
 
+fn organization_floor(
+    supplied: amiss_wire::requests::SuppliedControl<amiss_wire::controls::OrganizationFloor>,
+) -> Result<FloorInput, ErrorDetail> {
+    supplied.value.validate().map_err(floor_detail)?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::ORGANIZATION_FLOOR_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
+        .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
+    let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
+    if digest != supplied.expected_digest {
+        return Err(code(AnalysisErrorCode::DigestMismatch));
+    }
+    Ok(FloorInput {
+        floor: supplied.value,
+        digest,
+        trust_source: supplied.trust_source,
+    })
+}
+
+fn trusted_time(supplied: amiss_wire::requests::SuppliedTime) -> Result<TimeInput, ErrorDetail> {
+    supplied
+        .value
+        .validate()
+        .map_err(|error| configuration_detail(&error))?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
+        .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
+    let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
+    if digest != supplied.expected_digest {
+        return Err(code(AnalysisErrorCode::DigestMismatch));
+    }
+    Ok(TimeInput {
+        statement: supplied.value,
+        provider: supplied.provider,
+        provider_run_id: supplied.provider_run_id,
+        provider_run_attempt: supplied.provider_run_attempt,
+    })
+}
+
 fn floor_detail(error: FloorDefect) -> ErrorDetail {
     match error {
         FloorDefect::Schema(error) => configuration_detail(&error),
@@ -123,50 +169,29 @@ fn floor_detail(error: FloorDefect) -> ErrorDetail {
             configured_limit,
             observed_lower_bound,
         } => ErrorDetail {
-            code: AnalysisErrorCode::ResourceLimitExceeded,
-            path: None,
-            path_bytes: None,
             resource: Some((
                 ResourceName::OrganizationPolicyEntries,
                 configured_limit,
                 observed_lower_bound,
             )),
+            ..code(AnalysisErrorCode::ResourceLimitExceeded)
         },
     }
-}
-
-fn typed<T>(
-    supplied: SuppliedControl<T>,
-    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), Error>,
-) -> Result<(T, Digest, RequestTrust), ErrorDetail> {
-    let digest = canonical(&supplied.value)
-        .map_err(|error| configuration_detail(&error))?
-        .1;
-    if digest != supplied.expected_digest {
-        return Err(code(AnalysisErrorCode::DigestMismatch));
-    }
-    Ok((supplied.value, digest, supplied.trust_source))
 }
 
 /// Maps one strict external-input defect into the scanner's public analysis taxonomy.
 #[must_use]
 pub fn configuration_detail(error: &Error) -> ErrorDetail {
-    let analysis = match error.kind {
-        ErrorKind::Json(json) => match json.kind {
-            JsonErrorKind::InvalidUtf8 => AnalysisErrorCode::InvalidUtf8,
-            JsonErrorKind::DuplicateKey => AnalysisErrorCode::DuplicateJsonKey,
-            JsonErrorKind::ByteOrderMark
-            | JsonErrorKind::UnexpectedEnd
-            | JsonErrorKind::UnexpectedByte
-            | JsonErrorKind::TrailingContent
-            | JsonErrorKind::DepthLimit
-            | JsonErrorKind::ControlCharacter
-            | JsonErrorKind::InvalidEscape
-            | JsonErrorKind::LoneSurrogate
-            | JsonErrorKind::NegativeZero
-            | JsonErrorKind::FractionOrExponent
-            | JsonErrorKind::IntegerOutOfRange => AnalysisErrorCode::InvalidJson,
-        },
+    let analysis = match &error.kind {
+        ErrorKind::Json(message)
+            if message.starts_with("invalid utf-8") || message.starts_with("incomplete utf-8") =>
+        {
+            AnalysisErrorCode::InvalidUtf8
+        }
+        ErrorKind::Json(message) if message.starts_with("duplicate JSON key") => {
+            AnalysisErrorCode::DuplicateJsonKey
+        }
+        ErrorKind::Json(_) => AnalysisErrorCode::InvalidJson,
         ErrorKind::UnknownField => AnalysisErrorCode::UnknownField,
         ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
         ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,

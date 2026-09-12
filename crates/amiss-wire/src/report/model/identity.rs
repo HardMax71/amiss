@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 use crate::model::{BranchRef, ForgeDialect, RepositoryIdentity, UtcInstant};
 use crate::requests::{
@@ -7,13 +7,6 @@ use crate::requests::{
 };
 
 use super::{BaseSnapshot, ResolvedEvaluation, Snapshot};
-
-#[derive(Deserialize)]
-#[serde(bound(deserialize = "E: Deserialize<'de>"))]
-pub struct IdentityPayload<E = ResolvedEvaluation> {
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
-    pub evaluation: E,
-}
 
 #[derive(Serialize)]
 #[serde(remote = "ResolvedEvaluation")]

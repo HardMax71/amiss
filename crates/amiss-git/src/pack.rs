@@ -197,7 +197,10 @@ fn load_pack(
     if trailer_bytes != parsed.stored_pack_checksum {
         return Err(Error::ObjectUnreadable);
     }
-    let name_raw = decode_hex(name_hex).ok_or(Error::ObjectUnreadable)?;
+    if name_hex.bytes().any(|byte| byte.is_ascii_uppercase()) {
+        return Err(Error::ObjectUnreadable);
+    }
+    let name_raw = hex::decode(name_hex).map_err(|_defect| Error::ObjectUnreadable)?;
     if name_raw != trailer_bytes {
         return Err(Error::ObjectUnreadable);
     }
@@ -300,25 +303,5 @@ impl Pack {
             }
         }
         Ok(bytes)
-    }
-}
-
-fn decode_hex(text: &str) -> Option<Vec<u8>> {
-    if !text.len().is_multiple_of(2) {
-        return None;
-    }
-    let mut out = Vec::with_capacity(text.len().checked_div(2)?);
-    for pair in text.as_bytes().chunks_exact(2) {
-        let [high, low] = pair else { return None };
-        out.push(hex_value(*high)?.wrapping_shl(4) | hex_value(*low)?);
-    }
-    Some(out)
-}
-
-fn hex_value(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte.wrapping_sub(b'0')),
-        b'a'..=b'f' => Some(byte.wrapping_sub(b'a').wrapping_add(10)),
-        _ => None,
     }
 }

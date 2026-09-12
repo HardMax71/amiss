@@ -2,13 +2,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{
     AcquiringRunner, ArtifactStoreConfig, CheckConclusion, CheckPlan, ControllerClock,
     DeliveryRoute, FileArtifactStore, FileLedger, FileLedgerConfig, GiteaWebhook, IngressLimits,
-    IngressPolicy, OpaqueId, PlanRegistry, PlanScope, PolicyControls, ProviderAdapter,
-    ProviderError, ReplayWindow, SignedTimePolicy, WebhookKey, WebhookKeyring, check_plan,
-    register_plan,
+    IngressPolicy, OpaqueId, PlanRegistry, PlanScope, ProviderAdapter, ProviderError, ReplayWindow,
+    SignedTimePolicy, WebhookKey, WebhookKeyring, register_plan,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_gitea::{GiteaPullRequestAdapter, GiteaPullRequestSource};
@@ -17,15 +15,13 @@ use amiss_controller_service::{
     DeliveryAdmission, DeliveryHeader, DeliveryWorker, Inbox, InboxLimits, IncomingDelivery,
     IncomingHeader, Operations, WorkOutcome, acquiring_worker, repository_admission,
 };
-use amiss_wire::controls::Profile;
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use tempfile::TempDir;
 
 use super::provider::{
     FakeGitea, REPOSITORY_ID, SignedEvent, last_conclusion, provider, reviewer, snapshot,
 };
-use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories, execution_constraint};
+use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
 
 const SECRET: &[u8] = b"gitea-family-provider-lane-secret-2026";
 const ROUTE_ID: &str = "gitea-family-provider-lane";
@@ -88,21 +84,18 @@ impl Harness {
         let artifact_root = directory(&state, "artifacts");
         let repositories = Repositories::new().unwrap();
         let executable = PathBuf::from(env!("CARGO_BIN_EXE_amiss-gitea-service-bootstrap-fixture"));
-        let bootstrap_digest = hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap());
-        let execution = execution_constraint(
-            &repositories,
-            RepositoryIdentity::new(
-                "forge.example".to_owned(),
-                "hardmax71".to_owned(),
-                "amiss".to_owned(),
+        let plan = repositories
+            .execution_plan(
+                &executable,
+                RepositoryIdentity::new(
+                    "forge.example".to_owned(),
+                    "hardmax71".to_owned(),
+                    "amiss".to_owned(),
+                )
+                .unwrap(),
+                "runner-pass",
             )
-            .unwrap(),
-            "runner-pass",
-            bootstrap_digest,
-        )
-        .unwrap();
-        let plan =
-            Arc::new(check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap());
+            .unwrap();
         let replay = ReplayWindow::new(Duration::from_mins(5), queue_age).unwrap();
         let ingress = IngressPolicy::new(
             IngressLimits::new(1_000_000, 32, 8_192).unwrap(),

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::digest::Digest;
+use crate::model::Digest;
 use crate::model::{BranchRef, ForgeDialect, RepositoryIdentity, UtcInstant};
 use crate::requests::{
     CandidateEventKind, CandidateFinality, CandidateSnapshot, RequestMode, SnapshotMaterialization,

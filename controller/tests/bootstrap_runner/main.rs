@@ -3,6 +3,7 @@
     reason = "integration fixtures construct known-valid controller inputs"
 )]
 
+use sha2::Digest as _;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -18,7 +19,7 @@ use amiss_controller::{
 };
 use amiss_fixtures::{CommitPair, commit_pair, git};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, parse_execution_constraint};
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{
     BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
 };
@@ -110,8 +111,15 @@ impl Harness {
         .unwrap();
         let scratch = tempfile::tempdir().unwrap();
         let executable = PathBuf::from(env!("CARGO_BIN_EXE_amiss-bootstrap-fixture"));
-        let digest = bootstrap_digest
-            .unwrap_or_else(|| hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap()));
+        let digest = bootstrap_digest.unwrap_or_else(|| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(BOOTSTRAP_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(std::fs::read(&executable).unwrap())
+                    .finalize()
+                    .0,
+            )
+        });
         let request = request(&repository, &action, mode, digest);
         Self {
             repository,
@@ -337,7 +345,16 @@ fn an_oversized_report_is_bounded_and_never_accepted() {
 
 #[test]
 fn a_changed_bootstrap_is_rejected_before_launch() {
-    let harness = Harness::new("runner-pass", Some(hb("wrong-bootstrap", b"wrong")));
+    let harness = Harness::new(
+        "runner-pass",
+        Some(Digest::from(
+            sha2::Sha256::new_with_prefix("wrong-bootstrap")
+                .chain_update([0_u8])
+                .chain_update(b"wrong")
+                .finalize()
+                .0,
+        )),
+    );
     let mut heartbeat = Heartbeat::renewing();
 
     assert_eq!(

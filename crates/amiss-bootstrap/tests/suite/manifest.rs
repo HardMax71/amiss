@@ -1,9 +1,10 @@
+use sha2::Digest as _;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::process::Command;
 
 use amiss_bootstrap::build::{RELEASE_MANIFEST_DIGEST_PATH, RELEASE_MANIFEST_PATH};
-use amiss_wire::manifest::{canonical_release_manifest, parse_release_manifest};
+use amiss_wire::manifest::parse_release_manifest;
 use tempfile::TempDir;
 
 #[test]
@@ -47,7 +48,13 @@ fn the_manifest_builder_publishes_its_digest_marker() {
         parse_release_manifest(&std::fs::read(tree.path().join(RELEASE_MANIFEST_PATH)).unwrap())
             .unwrap();
     let marker = std::fs::read_to_string(tree.path().join(RELEASE_MANIFEST_DIGEST_PATH)).unwrap();
-    let digest = canonical_release_manifest(&manifest).unwrap().1;
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-release-manifest")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&manifest).unwrap())
+            .finalize()
+            .0,
+    );
     assert_eq!(marker, format!("{digest}\n"));
     assert_eq!(String::from_utf8(output.stdout).unwrap(), marker);
 }

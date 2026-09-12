@@ -8,10 +8,7 @@ use crate::GitHubPullRequest;
 use super::Config;
 use super::model::{
     BranchRule, PullRepositoryRecord, PullRequestRecord, RefreshData, RepositoryRecord,
-    RequiredStatusParameters,
 };
-
-const REQUIRED_STATUS_RULE: &str = "required_status_checks";
 
 pub(super) fn validate_request(
     config: &Config,
@@ -63,7 +60,7 @@ pub(super) fn snapshot(
     validate_request(config, pull_request)?;
     validate_repository(config, pull_request, &data.repository)?;
     validate_pull_request(config, pull_request, &data.pull_request)?;
-    let authorized = rules_authorize(config, &data.rules)?;
+    let authorized = rules_authorize(config, &data.rules);
 
     let candidate = exact_oid(&data.candidate.sha)?;
     let current_head = exact_oid(&data.pull_request.head.sha)?;
@@ -221,20 +218,13 @@ fn validate_pull_request(
     }
 }
 
-fn rules_authorize(config: &Config, rules: &[BranchRule]) -> Result<bool, ProviderError> {
+fn rules_authorize(config: &Config, rules: &[BranchRule]) -> bool {
     let mut found = false;
     let mut bound = true;
-    for rule in rules
-        .iter()
-        .filter(|rule| rule.kind == REQUIRED_STATUS_RULE)
-    {
-        let parameters: RequiredStatusParameters = rule
-            .parameters
-            .clone()
-            .ok_or(ProviderError::InvalidResponse)
-            .and_then(|value| {
-                serde_json::from_value(value).map_err(|_defect| ProviderError::InvalidResponse)
-            })?;
+    for rule in rules {
+        let BranchRule::RequiredStatusChecks { parameters } = rule else {
+            continue;
+        };
         for required in parameters
             .required_status_checks
             .iter()
@@ -248,7 +238,7 @@ fn rules_authorize(config: &Config, rules: &[BranchRule]) -> Result<bool, Provid
             found = true;
         }
     }
-    Ok(found && bound)
+    found && bound
 }
 
 pub(super) fn repository_identity(

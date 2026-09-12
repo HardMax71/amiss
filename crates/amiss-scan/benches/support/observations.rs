@@ -3,10 +3,10 @@ use amiss_scan::correlate::{Observation, Side};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::SpanDisplay;
 use amiss_wire::controls::{SourceConstruct, TargetKind};
-use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::Missing;
+use sha2::Digest as _;
 
 pub(super) fn side(label: &str, offset: usize, count: usize, shared_target: Option<&str>) -> Side {
     let observations = (offset..offset.saturating_add(count))
@@ -32,8 +32,20 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
     let token = format!("{side}/{index}");
     let target = repo_path(target.to_owned());
     Observation {
-        id: hb("amiss/bench-correlation-id", token.as_bytes()),
-        adapter_contract_digest: hb("amiss/bench-adapter-contract", b"markdown"),
+        id: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/bench-correlation-id")
+                .chain_update([0_u8])
+                .chain_update(token.as_bytes())
+                .finalize()
+                .0,
+        ),
+        adapter_contract_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/bench-adapter-contract")
+                .chain_update([0_u8])
+                .chain_update(b"markdown")
+                .finalize()
+                .0,
+        ),
         document: repo_path("docs/references.md".to_owned()),
         span: (0, 0),
         display: SpanDisplay {
@@ -57,8 +69,20 @@ fn observation_with_target(side: &str, index: usize, target: &str) -> Observatio
             fragment: None,
         },
         raw_destination: String::new(),
-        raw_destination_digest: hb("amiss/scanner-raw-destination", target.as_bytes()),
-        projection_digest: hb("amiss/scanner-source-projection", b"reference"),
+        raw_destination_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-raw-destination")
+                .chain_update([0_u8])
+                .chain_update(target.as_bytes())
+                .finalize()
+                .0,
+        ),
+        projection_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-source-projection")
+                .chain_update([0_u8])
+                .chain_update(b"reference")
+                .finalize()
+                .0,
+        ),
         resolution: Resolution::Missing(Missing::PathNotFound {
             path: target,
             near: None,

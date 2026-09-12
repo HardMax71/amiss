@@ -1,11 +1,12 @@
 use amiss_wire::controls::{ConstraintPlatform, GitMode};
-use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, sha256};
 use amiss_wire::manifest::{
     BuildSource, DependencyLockFile, DependencyLockInput, DependencyLockSchema,
     EnvironmentContract, ReleaseArtifact, ReleaseManifest, ReleaseManifestSchema, RuntimeContract,
-    RuntimeFile, RuntimeRole, canonical_dependency_lock, canonical_release_manifest,
+    RuntimeFile, RuntimeRole,
 };
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
+use amiss_wire::model::{Digest, RAW_EVIDENCE_DOMAIN};
+use sha2::Digest as _;
 
 use crate::ENGINE_DOMAIN;
 
@@ -58,7 +59,13 @@ pub fn build_manifest(
         .map(|(path, bytes)| {
             Ok(DependencyLockFile {
                 path: RepoPathText::new(path.clone()).ok_or("invalid dependency lock path")?,
-                raw_digest: hb(RAW_EVIDENCE_DOMAIN, bytes),
+                raw_digest: Digest::from(
+                    sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+                        .chain_update([0_u8])
+                        .chain_update(bytes)
+                        .finalize()
+                        .0,
+                ),
             })
         })
         .collect::<Result<Vec<_>, &'static str>>()?;
@@ -67,9 +74,16 @@ pub fn build_manifest(
         schema: DependencyLockSchema::Current,
         files,
     };
-    let dependency_lock_digest = canonical_dependency_lock(&dependency_lock)
-        .map_err(|_defect| "invalid dependency lock")?
-        .1;
+    dependency_lock
+        .validate()
+        .map_err(|_defect| "invalid dependency lock")?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::manifest::DEPENDENCY_LOCK_DOMAIN)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&dependency_lock, &mut writer)
+        .map_err(|_defect| "invalid dependency lock")?;
+    let dependency_lock_digest = Digest::from(writer.0.finalize().0);
 
     artifacts.sort_by(|left, right| left.platform.as_ref().cmp(right.platform.as_ref()));
     let artifacts = artifacts
@@ -98,8 +112,18 @@ pub fn build_manifest(
         dependency_lock_digest,
         artifacts,
     };
-    let (mut bytes, digest) =
-        canonical_release_manifest(&manifest).map_err(|_defect| "invalid release manifest")?;
+    manifest
+        .validate()
+        .map_err(|_defect| "invalid release manifest")?;
+    let mut bytes = serde_json_canonicalizer::to_vec(&manifest)
+        .map_err(|_defect| "invalid release manifest")?;
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix(amiss_wire::manifest::MANIFEST_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&bytes)
+            .finalize()
+            .0,
+    );
     bytes.push(b'\n');
     Ok((bytes, digest))
 }
@@ -119,7 +143,7 @@ fn build_artifact(artifact: &mut StagedArtifact<'_>) -> Result<ReleaseArtifact, 
     if !engine.executable {
         return Err("the executable row is not mode 100755");
     }
-    let binary_sha256 = sha256(engine.bytes);
+    let binary_sha256 = Digest::from(sha2::Sha256::digest(engine.bytes).0);
     let runtime_files = artifact
         .files
         .iter()
@@ -132,7 +156,7 @@ fn build_artifact(artifact: &mut StagedArtifact<'_>) -> Result<ReleaseArtifact, 
                 } else {
                     GitMode::RegularFile
                 },
-                file_sha256: sha256(file.bytes),
+                file_sha256: Digest::from(sha2::Sha256::digest(file.bytes).0),
             })
         })
         .collect::<Result<Vec<_>, &'static str>>()?;
@@ -142,7 +166,13 @@ fn build_artifact(artifact: &mut StagedArtifact<'_>) -> Result<ReleaseArtifact, 
             .ok_or("invalid artifact name")?,
         tree_path: RepoPathText::new(engine.path.clone()).ok_or("invalid executable path")?,
         binary_sha256,
-        engine_digest: hb(ENGINE_DOMAIN, engine.bytes),
+        engine_digest: Digest::from(
+            sha2::Sha256::new_with_prefix(ENGINE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(engine.bytes)
+                .finalize()
+                .0,
+        ),
         runtime_contract: RuntimeContract::Current,
         environment_contract: EnvironmentContract::Current,
         runtime_files,

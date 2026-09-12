@@ -4,22 +4,21 @@
     reason = "integration assertions over repository-owned identity goldens"
 )]
 
-use amiss_scan::observe::{
-    OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input, target_intent,
-};
+use amiss_scan::observe::{ObservationIdentity, observation_input, target_intent};
 use amiss_scan::report::{
     CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, Setup,
     SnapshotIdentity, candidate_identity_digest, synthetic_candidate,
 };
 use amiss_scan::resolve::Intent;
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
-use amiss_wire::digest::{Digest, hb, hj_serde};
-use amiss_wire::json::{Value, parse};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{
     Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
 };
 use amiss_wire::report::model::ObservationIdInput;
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
+use serde_json::Value;
+use sha2::Digest as _;
 use strum::IntoEnumIterator;
 
 use crate::support;
@@ -35,7 +34,16 @@ fn unavailable_report_blocks_match_the_shared_models() {
 
     let snapshot_schema = ReportSchemaFragment::new("UnavailableSnapshot");
     let controls_schema = ReportSchemaFragment::new("UnavailableControls");
-    for request in [None, Some(hb("amiss/test-request", b"unavailable"))] {
+    for request in [
+        None,
+        Some(Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-request")
+                .chain_update([0_u8])
+                .chain_update(b"unavailable")
+                .finalize()
+                .0,
+        )),
+    ] {
         for snapshot_reason in SnapshotUnavailableReason::iter() {
             for controls_reason in ControlsUnavailableReason::iter() {
                 let mut setup = setup(CandidateBlock::Unavailable(vec![snapshot_reason]));
@@ -83,11 +91,17 @@ fn unavailable_report_blocks_match_the_shared_models() {
 
 fn fixture_digest(name: &str, definition: &str, domain: &str) -> Digest {
     let bytes = fixture_bytes(name);
-    let schema_value: serde_json::Value =
-        serde_json::from_slice(&bytes).expect("the identity fixture is JSON");
+    let schema_value: Value = serde_json::from_slice(&bytes).expect("the identity fixture is JSON");
     ReportSchemaFragment::new(definition).assert_value(&schema_value, name);
-    let value: Value = parse(&bytes).expect("the identity fixture is strict JSON");
-    hb(domain, &serde_json_canonicalizer::to_vec(&value).unwrap())
+    let value: Value =
+        serde_json::from_slice::<Value>(&bytes).expect("the identity fixture is strict JSON");
+    Digest::from(
+        sha2::Sha256::new_with_prefix(domain)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&value).unwrap())
+            .finalize()
+            .0,
+    )
 }
 
 fn snapshot(commit: char, tree: char) -> SnapshotIdentity {
@@ -103,7 +117,13 @@ fn setup(candidate: CandidateBlock) -> Setup {
     Setup {
         engine: EngineProvenance {
             version: "0.0.0-test".to_owned(),
-            digest: hb("amiss/scanner-engine", b"identity fixture"),
+            digest: Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                    .chain_update([0_u8])
+                    .chain_update(b"identity fixture")
+                    .finalize()
+                    .0,
+            ),
         },
         profile: amiss_wire::controls::Profile::Observe,
         repository: None,
@@ -133,10 +153,10 @@ fn an_unavailable_snapshot_cannot_mint_a_candidate_identity() {
 }
 
 #[test]
-fn streamed_observation_digests_match_text_and_byte_path_values() {
+fn observation_inputs_preserve_text_and_byte_paths_across_owned_decode() {
     let engine = EngineProvenance {
         version: "quoted \"version\"\nβ".to_owned(),
-        digest: hb("amiss/scanner-engine", b"observation differential"),
+        digest: Digest::from([33; 32]),
     };
     let text_path =
         RepoPath::new("docs/quoted-\"β.md".to_owned()).expect("the text fixture path is canonical");
@@ -180,9 +200,9 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
         },
     ];
     let node_path = [0, 42, usize::MAX];
-    let projection_digest = hb("amiss/source-projection", b"projection");
-    let raw_destination_digest = hb("amiss/raw-destination", b"destination");
-    let historical_intent: serde_json::Value = serde_json::to_value(target_intent(
+    let projection_digest = Digest::from([34; 32]);
+    let raw_destination_digest = Digest::from([35; 32]);
+    let historical_intent: Value = serde_json::to_value(target_intent(
         &intents[2],
         raw_destination_digest,
         intents[2].repository_path.as_ref(),
@@ -220,11 +240,8 @@ fn streamed_observation_digests_match_text_and_byte_path_values() {
                 let bytes = serde_json::to_vec(&input).unwrap();
                 let typed: ObservationIdInput = serde_json::from_slice(&bytes).unwrap();
                 assert_eq!(
-                    hj_serde(OBSERVATION_ID_DOMAIN, |writer| serde_json::to_writer(
-                        writer, &typed
-                    ))
-                    .unwrap(),
-                    hb(OBSERVATION_ID_DOMAIN, &bytes),
+                    serde_json::to_vec(&typed).unwrap(),
+                    bytes,
                     "{} {document:?} {kind:?}",
                     adapter.as_ref()
                 );

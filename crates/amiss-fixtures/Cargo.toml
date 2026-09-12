@@ -8,6 +8,8 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+hex.workspace = true
+sha2.workspace = true
 amiss-wire = { path = "../amiss-wire", version = "0.27.0" }
 flate2.workspace = true
 serde_json.workspace = true

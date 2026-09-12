@@ -3,8 +3,8 @@ use base64::engine::general_purpose::STANDARD;
 use serde::{Deserialize, Serialize};
 
 use crate::InboxError;
-use crate::hash::digest_hex;
 use crate::limits::StoredLimits;
+use sha2::{Digest as _, Sha256};
 
 const CONTENT_DOMAIN: &str = "amiss/controller-inbox-content-v1";
 const KEY_DOMAIN: &str = "amiss/controller-inbox-source-v1";
@@ -117,8 +117,10 @@ impl StoredDelivery {
             headers: &self.headers,
             body_base64: &self.body_base64,
         };
-        let bytes = serde_json::to_vec(&content).map_err(|_defect| InboxError::Corrupt)?;
-        Ok(digest_hex(CONTENT_DOMAIN, &bytes))
+        let mut writer =
+            digest_io::IoWrapper(Sha256::new_with_prefix(CONTENT_DOMAIN).chain_update([0_u8]));
+        serde_json::to_writer(&mut writer, &content).map_err(|_defect| InboxError::Corrupt)?;
+        Ok(hex::encode(writer.0.finalize()))
     }
 
     pub(crate) fn key(&self) -> Result<String, InboxError> {
@@ -153,9 +155,10 @@ impl StoredDelivery {
 }
 
 pub(crate) fn source_key(route: &str, source_id: &str) -> Result<String, InboxError> {
-    let bytes =
-        serde_json::to_vec(&Source { route, source_id }).map_err(|_defect| InboxError::Corrupt)?;
-    Ok(digest_hex(KEY_DOMAIN, &bytes))
+    let mut writer = digest_io::IoWrapper(Sha256::new_with_prefix(KEY_DOMAIN).chain_update([0_u8]));
+    serde_json::to_writer(&mut writer, &Source { route, source_id })
+        .map_err(|_defect| InboxError::Corrupt)?;
+    Ok(hex::encode(writer.0.finalize()))
 }
 
 pub(crate) fn validate_source(

@@ -11,6 +11,9 @@ fn snapshot_request_tags_require_their_published_string_shape() {
         let tag = value[field].as_str().unwrap().to_owned();
         value[field] = serde_json::json!({tag: null});
         let bytes = serde_json::to_vec(&value).unwrap();
-        assert!(SnapshotRequest::parse(&bytes).is_err(), "{field}: {value}");
+        assert!(
+            serde_json::from_slice::<SnapshotRequest>(&bytes).is_err(),
+            "{field}: {value}"
+        );
     }
 }

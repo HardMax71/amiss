@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 use std::fs::{self, File, OpenOptions, TryLockError};
 use std::io::{self, Read as _, Write as _};
@@ -265,7 +266,8 @@ fn remove_written(paths: &[PathBuf]) -> Result<(), ArtifactError> {
 pub(super) fn read_blob(path: &Path, blob: &Blob) -> Result<Vec<u8>, ArtifactError> {
     let bytes = read_bounded(path, blob.length)?;
     if u64::try_from(bytes.len()).ok() != Some(blob.length)
-        || amiss_wire::digest::sha256(&bytes).to_string() != blob.digest
+        || amiss_wire::model::Digest::from(sha2::Sha256::digest(&bytes).0).to_string()
+            != blob.digest
     {
         return Err(ArtifactError::Corrupt);
     }

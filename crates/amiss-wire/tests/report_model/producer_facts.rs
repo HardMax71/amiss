@@ -1,5 +1,4 @@
 use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, SourceConstruct, TargetKind};
-use amiss_wire::digest::hb;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::FindingKind;
 use amiss_wire::report::model as report;
@@ -7,7 +6,7 @@ use amiss_wire::resolution::{Missing, Resolution};
 
 #[test]
 fn fact_producers_borrow_the_key_and_actual_resolution() -> Result<(), serde_json::Error> {
-    let digest = hb("amiss/test-fact", b"source");
+    let digest = amiss_wire::model::Digest::from([17; 32]);
     for raw in [
         b"docs/guide.md".to_vec(),
         "docs/quoted-\"β\n.md".as_bytes().to_vec(),

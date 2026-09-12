@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 
@@ -6,7 +7,6 @@ use amiss_scan::pipeline::{SetupShell, commit_pair, staged_index};
 use amiss_scan::report::{Built, RequestDigests};
 use amiss_scan::resolve::ForgeContext;
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::{EngineProvenance, FixKind};
 use tempfile::TempDir;
@@ -19,7 +19,13 @@ fn git(dir: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"test engine"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"test engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 
@@ -414,17 +420,9 @@ fn an_unrepresentable_tree_path_is_disclosed_by_its_bytes() {
     assert!(row["path"].is_null(), "there is no spelling to print");
     assert_eq!(
         row["path_bytes_hex"].as_str(),
-        Some(hex(raw).as_str()),
+        Some(hex::encode(raw).as_str()),
         "the bytes are the disclosure: {row}"
     );
-}
-
-fn hex(bytes: &[u8]) -> String {
-    let mut text = String::new();
-    for byte in bytes {
-        let _infallible = std::fmt::Write::write_fmt(&mut text, format_args!("{byte:02x}"));
-    }
-    text
 }
 
 /// The index discloses an unnameable entry up to the raw-path ceiling and not
@@ -460,7 +458,7 @@ fn an_index_path_is_disclosed_up_to_the_ceiling() {
         .collect();
     assert_eq!(disclosed.len(), 2, "both entries are refused");
     assert!(
-        disclosed.contains(&Some(hex(&at_ceiling).as_str())),
+        disclosed.contains(&Some(hex::encode(&at_ceiling).as_str())),
         "the entry at the ceiling is disclosed whole"
     );
     assert!(

@@ -1,11 +1,10 @@
+use sha2::Digest as _;
 use std::fs;
 
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{RAW_EVIDENCE_DOMAIN, Resolver, TARGET_PROJECTION_DOMAIN, TargetCache};
 use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, discover, discover_index};
 use amiss_wire::controls::ResourceName;
-use amiss_wire::digest::hb;
-use amiss_wire::json::Value;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::resolution::{BlobContent, BlobMode, Target, UnsupportedSemantics};
 
@@ -34,7 +33,16 @@ fn lfs_pointer_targets_resolve_with_pointer_availability() {
     let BlobContent::LfsPointer { raw_digest } = blob.content else {
         panic!("unexpected blob content: {:?}", blob.content);
     };
-    assert_eq!(raw_digest, hb(RAW_EVIDENCE_DOMAIN, POINTER.as_bytes()));
+    assert_eq!(
+        raw_digest,
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(POINTER.as_bytes())
+                .finalize()
+                .0
+        )
+    );
 
     let selected = bed
         .run_as(
@@ -78,15 +86,25 @@ fn target_digests_recompute_exactly() {
     else {
         panic!("unexpected blob content: {:?}", blob.content);
     };
-    let raw = hb(RAW_EVIDENCE_DOMAIN, b"{}\n");
+    let raw = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(b"{}\n")
+            .finalize()
+            .0,
+    );
     assert_eq!(raw_digest, raw);
-    let projection = hb(
-        TARGET_PROJECTION_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&Value::object(vec![
-            ("git_mode".to_owned(), Value::string("100644".to_owned())),
-            ("raw_digest".to_owned(), Value::string(raw.to_string())),
-        ]))
-        .unwrap(),
+    let projection = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(TARGET_PROJECTION_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::json!({ "git_mode": "100644", "raw_digest": raw }),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     );
     assert_eq!(projection_digest, projection);
 }

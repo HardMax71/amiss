@@ -1,12 +1,13 @@
+use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap, parse_tree};
 use amiss_wire::controls::{
     DOCUMENT_SUFFIX_BYTES, GitMode, IncludeKind, ResourceName, SCANNER_POLICY_PATH, ScannerPolicy,
-    canonical_scanner_policy, parse_scanner_policy,
+    parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 
@@ -293,9 +294,15 @@ pub fn acquire_entry(
     if lfs::is_pointer(&object.body) {
         return Err(invalid(Vec::new()));
     }
-    match parse_scanner_policy(&object.body)
-        .and_then(|policy| canonical_scanner_policy(&policy).map(|(_, digest)| (policy, digest)))
-    {
+    match parse_scanner_policy(&object.body).and_then(|policy| {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(amiss_wire::controls::SCANNER_POLICY_SCHEMA)
+                .chain_update([0_u8]),
+        );
+        serde_json_canonicalizer::to_writer(&policy, &mut writer)
+            .map_err(|_defect| amiss_wire::de::Error::new("$", ErrorKind::InvalidValue))?;
+        Ok((policy, Digest::from(writer.0.finalize().0)))
+    }) {
         Ok((policy, digest)) => {
             let entries = [
                 policy.document_includes.len(),

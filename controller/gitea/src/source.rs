@@ -3,9 +3,9 @@ use amiss_controller::{
     IntegrationId, ProviderError, ProviderIdentity, SignedTimePolicy, VerifiedDelivery,
     WebhookProof,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use serde::Deserialize;
+use sha2::Digest as _;
 
 use crate::DedicatedReviewer;
 use crate::identity::{
@@ -136,7 +136,16 @@ impl PullRequestFacts {
                 identity: DeliveryIdentity {
                     provider: provider.clone(),
                     integration,
-                    delivery: DeliveryId::new(format!("body:{}", hb(DELIVERY_DOMAIN, body)))?,
+                    delivery: DeliveryId::new(format!(
+                        "body:{}",
+                        amiss_wire::model::Digest::from(
+                            sha2::Sha256::new_with_prefix(DELIVERY_DOMAIN)
+                                .chain_update([0_u8])
+                                .chain_update(body)
+                                .finalize()
+                                .0
+                        )
+                    ))?,
                 },
                 change,
                 provider_run,

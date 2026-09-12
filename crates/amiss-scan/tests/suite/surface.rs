@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 
@@ -12,7 +13,6 @@ use amiss_fixtures::stage_symlink;
 use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::{Built, RequestDigests};
-use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use tempfile::TempDir;
@@ -24,7 +24,13 @@ fn git(dir: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"test engine"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"test engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 

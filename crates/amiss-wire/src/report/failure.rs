@@ -1,6 +1,7 @@
+use sha2::Digest as _;
 use std::collections::BTreeSet;
 
-use crate::digest::{Digest, hj_serde};
+use crate::model::Digest;
 use crate::model::{Adapter, RepoPath};
 use strum::IntoEnumIterator;
 
@@ -129,9 +130,12 @@ pub fn unavailable_evaluation_envelope(
         findings: Vec::new(),
         errors,
     };
-    let payload_digest = hj_serde(PAYLOAD_SCHEMA, |writer| {
-        serde_json::to_writer(writer, &payload)
-    })?;
+    let payload_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
+        );
+        serde_json::to_writer(&mut writer, &payload).map(|()| Digest::from(writer.0.finalize().0))
+    }?;
     Ok(Some(model::ReportEnvelope {
         schema: model::ReportEnvelopeSchema::Current,
         payload,
@@ -170,9 +174,13 @@ pub fn adapter_contract(
             None => model::StructuralAddressKind::None,
         },
     };
-    let digest = hj_serde(ADAPTER_CONTRACT_SCHEMA, |writer| {
-        serde_json::to_writer(writer, &descriptor)
-    })?;
+    let digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(ADAPTER_CONTRACT_SCHEMA).chain_update([0_u8]),
+        );
+        serde_json::to_writer(&mut writer, &descriptor)
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }?;
     Ok((descriptor, digest))
 }
 

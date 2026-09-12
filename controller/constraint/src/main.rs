@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::env;
 use std::ffi::OsString;
 use std::io::Write as _;
@@ -8,7 +9,7 @@ use amiss_bootstrap::BOOTSTRAP_EXECUTABLE_BYTES;
 use amiss_bootstrap::constraint::derive_execution_constraint;
 use amiss_controller_files::read_bounded;
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::controls::{canonical_execution_constraint, valid_required_status_name};
+use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 const GRAMMAR: &str = concat!(
@@ -83,8 +84,15 @@ fn run(args: &Args) -> Result<String, &'static str> {
         &bootstrap,
     )
     .map_err(|defect| defect.reason)?;
-    let (bytes, digest) = canonical_execution_constraint(&constraint)
+    let bytes = serde_json_canonicalizer::to_vec(&constraint)
         .map_err(|_defect| "execution-constraint-invalid")?;
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(&bytes)
+            .finalize()
+            .0,
+    );
     write_new(&paths.output, &bytes).map_err(|_defect| "output-unavailable")?;
     Ok(digest.to_string())
 }

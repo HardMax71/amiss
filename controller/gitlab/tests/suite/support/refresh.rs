@@ -7,7 +7,7 @@ use amiss_controller_gitlab::{
     GitLabPipeline, GitLabProject, GitLabProtection, GitLabRefresh, GitLabTrainCar,
     GitLabTrainSettings,
 };
-use amiss_wire::digest::hb;
+use sha2::Digest as _;
 
 use super::identity::{HOST, PROJECT_PATH, oid};
 
@@ -110,7 +110,13 @@ pub fn publication(
     snapshot: &ChangeSnapshot,
     conclusion: CheckConclusion,
 ) -> Publication {
-    let digest = hb("amiss/controller-gitlab-test", b"fixture");
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/controller-gitlab-test")
+            .chain_update([0_u8])
+            .chain_update(b"fixture")
+            .finalize()
+            .0,
+    );
     Publication {
         provider_run: delivery.provider_run.clone(),
         evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),

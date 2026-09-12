@@ -1,10 +1,11 @@
+use sha2::Digest as _;
 use std::borrow::Cow;
 
 use amiss_md::lines::scan;
 use amiss_md::{Analysis, AnalyzeError, Occurrence, Opaque, Work, analyze};
-use amiss_wire::digest::{Digest, hb};
 use amiss_wire::extraction::GovernedDefinition;
 use amiss_wire::model::Adapter;
+use amiss_wire::model::Digest;
 
 use crate::resources::ScanResources;
 use crate::{Error, RAW_DESTINATION_DOMAIN, SOURCE_PROJECTION_DOMAIN};
@@ -175,9 +176,12 @@ pub fn scan_bytes(
         };
         occurrences.push(ScannedOccurrence {
             projection_digest,
-            raw_destination_digest: hb(
-                RAW_DESTINATION_DOMAIN,
-                occurrence.raw_destination.as_bytes(),
+            raw_destination_digest: Digest::from(
+                sha2::Sha256::new_with_prefix(RAW_DESTINATION_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(occurrence.raw_destination.as_bytes())
+                    .finalize()
+                    .0,
             ),
             display,
             occurrence,
@@ -246,7 +250,13 @@ fn governed_sources(
                         end_line,
                         end_column,
                     },
-                    digest: hb(PROJECTION_SINK_DOMAIN, value.as_bytes()),
+                    digest: Digest::from(
+                        sha2::Sha256::new_with_prefix(PROJECTION_SINK_DOMAIN)
+                            .chain_update([0_u8])
+                            .chain_update(value.as_bytes())
+                            .finalize()
+                            .0,
+                    ),
                     value,
                 })
             })
@@ -259,7 +269,13 @@ fn governed_sources(
                 end_line,
                 end_column,
             },
-            digest: hb(GOVERNED_SOURCE_DOMAIN, bytes),
+            digest: Digest::from(
+                sha2::Sha256::new_with_prefix(GOVERNED_SOURCE_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(bytes)
+                    .finalize()
+                    .0,
+            ),
             form: crate::claim::classify(definition),
             previous_code,
         });
@@ -315,7 +331,13 @@ fn source_projection_digest(
                 } else {
                     Cow::Borrowed(block)
                 };
-                Ok(hb(SOURCE_PROJECTION_DOMAIN, projected.as_ref()))
+                Ok(Digest::from(
+                    sha2::Sha256::new_with_prefix(SOURCE_PROJECTION_DOMAIN)
+                        .chain_update([0_u8])
+                        .chain_update(projected.as_ref())
+                        .finalize()
+                        .0,
+                ))
             },
             Ok,
         )

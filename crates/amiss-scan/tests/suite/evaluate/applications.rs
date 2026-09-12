@@ -1,11 +1,9 @@
 use amiss_scan::policy::DebtContext;
 use amiss_wire::{
-    controls::{
-        canonical_debt_snapshot, canonical_fact, canonical_trusted_time, canonical_waiver_bundle,
-    },
     report::model::{DebtApplication, PolicySource, WaiverApplication},
     requests::RequestTrust,
 };
+use sha2::Digest as _;
 
 use super::*;
 
@@ -22,9 +20,20 @@ fn policy() -> (Vec<Comparison>, Effects) {
         FindingKind::ExplicitTargetMissing,
     );
     let mut fact = waived_fact();
-    fact.key_input.scope.occurrence.source_projection_digest =
-        hb("amiss/scanner-source-projection", fixture.block.as_bytes());
-    let (_, fact_digest) = canonical_fact(&fact).unwrap();
+    fact.key_input.scope.occurrence.source_projection_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-source-projection")
+            .chain_update([0_u8])
+            .chain_update(fixture.block.as_bytes())
+            .finalize()
+            .0,
+    );
+    let fact_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-fact")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&fact).unwrap())
+            .finalize()
+            .0,
+    );
     assert_eq!(fact_digest, finding.candidate_fact.unwrap().digest);
     let mut snapshot: amiss_wire::controls::DebtSnapshot = serde_json::from_slice(include_bytes!(
         "../../../../../spec/examples/debt-snapshot.json"
@@ -44,15 +53,33 @@ fn policy() -> (Vec<Comparison>, Effects) {
     waiver.authorized_fact = fact;
     let issuer = waiver.issuer.clone();
     let candidate_tree = waiver.candidate_tree.clone();
-    let (_, debt_digest) = canonical_debt_snapshot(&snapshot).unwrap();
-    let (_, waiver_digest) = canonical_waiver_bundle(&bundle).unwrap();
+    let debt_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&snapshot).unwrap())
+            .finalize()
+            .0,
+    );
+    let waiver_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&bundle).unwrap())
+            .finalize()
+            .0,
+    );
     let mut statement: amiss_wire::controls::TrustedTimeStatement = serde_json::from_slice(
         include_bytes!("../../../../../spec/examples/scanner-trusted-time-statement.json"),
     )
     .unwrap();
     statement.evaluation_instant = moment("2026-07-11T00:00:00Z");
     statement.valid_until = moment("2026-07-11T00:10:00Z");
-    let (_, digest) = canonical_trusted_time(&statement).unwrap();
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&statement).unwrap())
+            .finalize()
+            .0,
+    );
     (
         comparisons,
         Effects {

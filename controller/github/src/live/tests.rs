@@ -4,6 +4,7 @@
     reason = "fixed provider fixtures must fail loudly"
 )]
 
+use sha2::Digest as _;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -12,7 +13,6 @@ use amiss_controller::{
     ControllerEvaluationId, IntegrationId, OpaqueId, ProviderError, ProviderIdentity,
     ProviderInstance, ProviderNamespace, Publication, RunFailure,
 };
-use amiss_wire::digest::{hb, sha256};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::GitHubPullRequest;
@@ -173,15 +173,10 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
         assert_eq!(snapshot.run.commits.candidate, fixture.candidate);
     }
 
-    let mut malformed = fixture.data.clone();
-    malformed.rules = vec![BranchRule {
-        kind: "required_status_checks".to_owned(),
-        parameters: Some(serde_json::json!({"unexpected": []})),
-    }];
-    assert_eq!(
-        super::refresh::snapshot(&fixture.config, fixture.request(), &malformed),
-        Err(ProviderError::InvalidResponse)
-    );
+    for parameters in [r#"{"unexpected":[]}"#, "null", "[]"] {
+        let malformed = format!(r#"{{"type":"required_status_checks","parameters":{parameters}}}"#);
+        assert!(serde_json::from_str::<BranchRule>(&malformed).is_err());
+    }
 
     let mut unknown_state = fixture.data.clone();
     unknown_state.pull_request.state = "unknown".to_owned();
@@ -283,7 +278,9 @@ fn previous_artifact_metadata_projections_are_compatible_summaries() {
         .strip_suffix("/report")
         .unwrap()
         .to_owned();
-    completed.assessment_digest = Some(sha256(b"assessment"));
+    completed.assessment_digest = Some(amiss_wire::model::Digest::from(
+        sha2::Sha256::digest(b"assessment").0,
+    ));
     completed.external_tally = Some(amiss_controller::ExternalTally {
         refuted: 1,
         unproven: 2,
@@ -292,22 +289,32 @@ fn previous_artifact_metadata_projections_are_compatible_summaries() {
     let mut incomplete = artifact_reference(publication.report.as_deref().unwrap_or_default());
     incomplete.external_incomplete = true;
     let mut semantic = artifact_reference(publication.report.as_deref().unwrap_or_default());
-    semantic.semantic_digest = Some(sha256(b"semantic input"));
+    semantic.semantic_digest = Some(amiss_wire::model::Digest::from(
+        sha2::Sha256::digest(b"semantic input").0,
+    ));
     let mut retained_assessment = completed.clone();
-    retained_assessment.semantic_digest = Some(sha256(b"semantic input"));
+    retained_assessment.semantic_digest = Some(amiss_wire::model::Digest::from(
+        sha2::Sha256::digest(b"semantic input").0,
+    ));
 
     for (artifact, omitted) in [
         (
             retained_assessment,
             vec![
-                format!("semantic-input: {}", sha256(b"semantic input")),
+                format!(
+                    "semantic-input: {}",
+                    amiss_wire::model::Digest::from(sha2::Sha256::digest(b"semantic input").0)
+                ),
                 format!("semantic-input-artifact: {artifact_root}/semantic"),
             ],
         ),
         (
             semantic,
             vec![
-                format!("semantic-input: {}", sha256(b"semantic input")),
+                format!(
+                    "semantic-input: {}",
+                    amiss_wire::model::Digest::from(sha2::Sha256::digest(b"semantic input").0)
+                ),
                 format!("semantic-input-artifact: {artifact_root}/semantic"),
             ],
         ),
@@ -493,7 +500,9 @@ fn publication_summary_carries_the_report_feedback_lines() {
     publication.artifact = Some(artifact_reference(
         publication.report.as_deref().unwrap_or_default(),
     ));
-    publication.artifact.as_mut().unwrap().semantic_digest = Some(sha256(b"semantic input"));
+    publication.artifact.as_mut().unwrap().semantic_digest = Some(amiss_wire::model::Digest::from(
+        sha2::Sha256::digest(b"semantic input").0,
+    ));
     let expected =
         created_from_decision(publication_decision(&fixture.config, &publication, &[]).unwrap());
     let summary = &expected.output.summary;
@@ -507,7 +516,9 @@ fn publication_summary_carries_the_report_feedback_lines() {
     );
     let digest_line = format!(
         "report: {}",
-        sha256(publication.report.as_deref().unwrap_or_default())
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(publication.report.as_deref().unwrap_or_default()).0
+        )
     );
     assert!(
         summary.contains(&digest_line),
@@ -523,7 +534,10 @@ fn publication_summary_carries_the_report_feedback_lines() {
         "{summary}"
     );
     assert!(
-        summary.contains(&format!("semantic-input: {}", sha256(b"semantic input"))),
+        summary.contains(&format!(
+            "semantic-input: {}",
+            amiss_wire::model::Digest::from(sha2::Sha256::digest(b"semantic input").0)
+        )),
         "{summary}"
     );
     assert!(summary.contains("/semantic"), "{summary}");
@@ -585,7 +599,9 @@ fn publication_conclusions_and_create_response_are_exact() {
             ),
             format!(
                 "report: {}",
-                sha256(publication.report.as_deref().unwrap_or_default())
+                amiss_wire::model::Digest::from(
+                    sha2::Sha256::digest(publication.report.as_deref().unwrap_or_default()).0
+                )
             ),
         ];
         for binding in bindings {
@@ -753,7 +769,13 @@ impl Fixture {
 
     fn publication(&self, conclusion: CheckConclusion) -> Publication {
         let snapshot = super::refresh::snapshot(&self.config, self.request(), &self.data).unwrap();
-        let digest = hb("amiss/controller-github-live-test", b"fixture");
+        let digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/controller-github-live-test")
+                .chain_update([0_u8])
+                .chain_update(b"fixture")
+                .finalize()
+                .0,
+        );
         let integration = IntegrationId::new(INSTALLATION_ID.to_string()).unwrap();
         let provider_run = crate::provider_run(
             &integration,
@@ -955,15 +977,14 @@ fn required_rule(integration_id: Option<u64>) -> BranchRule {
 }
 
 fn required_rule_with_policy(integration_id: Option<u64>, strict: bool) -> BranchRule {
-    BranchRule {
-        kind: "required_status_checks".to_owned(),
-        parameters: Some(serde_json::json!({
-            "strict_required_status_checks_policy": strict,
-            "required_status_checks": [{
-                "context": "amiss/provider",
-                "integration_id": integration_id
-            }]
-        })),
+    BranchRule::RequiredStatusChecks {
+        parameters: super::model::RequiredStatusParameters {
+            strict_required_status_checks_policy: strict,
+            required_status_checks: vec![super::model::RequiredStatus {
+                context: "amiss/provider".to_owned(),
+                integration_id,
+            }],
+        },
     }
 }
 
@@ -989,7 +1010,7 @@ fn artifact_reference(report: &[u8]) -> ArtifactReference {
         id: id.clone(),
         locator: format!("https://amiss.example/artifacts/{id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
-        report_digest: sha256(report),
+        report_digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(report).0),
         semantic_digest: None,
         assessment_digest: None,
         external_tally: None,

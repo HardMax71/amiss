@@ -40,3 +40,37 @@ fn site_routes_are_exact_absolute_uri_paths() {
         assert!(!site_route_valid(invalid), "invalid: {invalid}");
     }
 }
+
+#[test]
+fn component_refusals_keep_escape_precedence_and_the_accepted_prefix() {
+    use amiss_wire::resolution::InvalidReference;
+    use amiss_wire::uri::decode_component;
+
+    for malformed in ["%", "%0", "%GG", "%é", "%%32"] {
+        let mut bytes = b"kept:".to_vec();
+        assert_eq!(
+            decode_component(&format!("a%00b{malformed}tail"), &mut bytes, |byte| {
+                (byte == 0).then_some(InvalidReference::DecodedPathControl)
+            }),
+            Err(InvalidReference::PercentEncoding),
+            "{malformed}"
+        );
+        assert_eq!(bytes, b"kept:a\0b", "{malformed}");
+    }
+    let mut bytes = Vec::new();
+    assert_eq!(
+        decode_component("a%00b%2Fc", &mut bytes, |byte| match byte {
+            0 => Some(InvalidReference::DecodedPathControl),
+            b'/' => Some(InvalidReference::EncodedSlash),
+            _ => None,
+        }),
+        Err(InvalidReference::DecodedPathControl)
+    );
+    assert_eq!(bytes, b"a\0b/c");
+    bytes.clear();
+    assert_eq!(
+        decode_component("a%252Fb+é", &mut bytes, |_byte| None),
+        Ok(())
+    );
+    assert_eq!(bytes, "a%2Fb+é".as_bytes());
+}

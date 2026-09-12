@@ -2,10 +2,10 @@ use amiss_git::{GitResources, Repository};
 use amiss_wire::action::executable_platform;
 use amiss_wire::controls::{
     ActionBootstrapContract, ExecutionConstraintDescriptor, ExecutionConstraintSchema, GitMode,
-    canonical_execution_constraint,
 };
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{Oid, RepoPathText, RepositoryIdentity};
+use sha2::Digest as _;
 
 use crate::build::{RELEASE_MANIFEST_DIGEST_PATH, RELEASE_MANIFEST_PATH};
 use crate::{
@@ -78,9 +78,15 @@ pub fn derive_execution_constraint(
         selected_platform: platform,
         required_status_name: required_status_name.to_owned(),
         bootstrap_contract: ActionBootstrapContract::Current,
-        bootstrap_digest: hb(BOOTSTRAP_DOMAIN, bootstrap_bytes),
+        bootstrap_digest: Digest::from(
+            sha2::Sha256::new_with_prefix(BOOTSTRAP_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(bootstrap_bytes)
+                .finalize()
+                .0,
+        ),
     };
-    canonical_execution_constraint(&descriptor).map_err(|_defect| ConstraintError {
+    descriptor.validate().map_err(|_defect| ConstraintError {
         reason: "execution-constraint-invalid",
     })?;
     validate_release(action, resources, &tree, manifest, platform).map_err(constraint_error)?;

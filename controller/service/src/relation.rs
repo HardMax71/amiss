@@ -10,8 +10,8 @@ use amiss_controller::{
 use amiss_controller_git::{
     RelationProjectionError, RelationProjectionRequest, project_relation_evidence,
 };
-use amiss_wire::digest::Digest;
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 use amiss_wire::relation::{assess, parse_evidence, parse_plan};
 
 #[derive(Clone, Debug, PartialEq, Eq)]

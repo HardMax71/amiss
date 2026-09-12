@@ -7,11 +7,9 @@
 use amiss_bootstrap::constraint::{ConstraintError, derive_execution_constraint};
 use amiss_bootstrap::{BOOTSTRAP_DOMAIN, validate};
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_execution_constraint, parse_execution_constraint,
-};
-use amiss_wire::digest::hb;
+use amiss_wire::controls::{ExecutionConstraintDescriptor, parse_execution_constraint};
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
+use sha2::Digest as _;
 
 mod support;
 
@@ -60,15 +58,19 @@ fn derivation_pins_and_validates_the_exact_release() {
     assert_eq!(descriptor.required_status_name, "amiss / assure");
     assert_eq!(
         descriptor.bootstrap_digest,
-        hb(BOOTSTRAP_DOMAIN, &bootstrap)
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(BOOTSTRAP_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&bootstrap)
+                .finalize()
+                .0
+        )
     );
 
-    let canonical = canonical_execution_constraint(&descriptor).unwrap().0;
+    let canonical = serde_json_canonicalizer::to_vec(&descriptor).unwrap();
     assert_eq!(parse_execution_constraint(&canonical).unwrap(), descriptor);
     assert_eq!(
-        canonical_execution_constraint(&derive(&release, &bootstrap).unwrap())
-            .unwrap()
-            .0,
+        serde_json_canonicalizer::to_vec(&derive(&release, &bootstrap).unwrap()).unwrap(),
         canonical
     );
 
@@ -82,9 +84,8 @@ fn derivation_pins_and_validates_the_exact_release() {
 fn derivation_reads_the_commit_not_the_worktree() {
     let release = release(|_root| {});
     let bootstrap = engine_bytes(release.platform);
-    let expected = canonical_execution_constraint(&derive(&release, &bootstrap).unwrap())
-        .unwrap()
-        .0;
+    let expected =
+        serde_json_canonicalizer::to_vec(&derive(&release, &bootstrap).unwrap()).unwrap();
     std::fs::write(
         release.dir.path().join("release-manifest.json"),
         b"changed worktree",
@@ -95,9 +96,7 @@ fn derivation_reads_the_commit_not_the_worktree() {
         b"changed worktree",
     )
     .unwrap();
-    let actual = canonical_execution_constraint(&derive(&release, &bootstrap).unwrap())
-        .unwrap()
-        .0;
+    let actual = serde_json_canonicalizer::to_vec(&derive(&release, &bootstrap).unwrap()).unwrap();
     assert_eq!(actual, expected);
 }
 

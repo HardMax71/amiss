@@ -1,7 +1,6 @@
 use amiss_bootstrap::result::BootstrapResult;
 use amiss_wire::{
     assessment::Nullable,
-    digest::hb,
     report::{
         PAYLOAD_SCHEMA,
         model::{Controls, ReportEnvelope, SemanticEvidenceProducer, SemanticEvidenceProvenance},
@@ -12,6 +11,7 @@ use amiss_wire::{
         observation::{Observation, SiteBuildObservation},
     },
 };
+use sha2::Digest as _;
 
 use super::{Release, invoke, plant, sealed_run, settled, stderr_names};
 
@@ -35,9 +35,12 @@ pub(super) fn capture(staged: &Release) {
             version: producer.version.clone(),
         },
     }]);
-    report.payload_digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+    report.payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&report.payload).unwrap())
+            .finalize()
+            .0,
     );
     run.wire = serde_json_canonicalizer::to_vec(&report).unwrap();
     run.wire.push(b'\n');
@@ -66,7 +69,7 @@ pub(super) fn capture(staged: &Release) {
         controls.semantic_evidence.first_mut().unwrap().value = invalid;
         cases.push((
             "semantic-evidence-invalid",
-            controls.canonical_bytes().unwrap(),
+            serde_json_canonicalizer::to_vec(&controls).unwrap(),
         ));
     }
     for (diagnostic, bytes) in cases {
@@ -91,7 +94,7 @@ fn malformed_controls(request: &ControlsRequest) -> Vec<Vec<u8>> {
     let envelope = String::from_utf8(serde_json_canonicalizer::to_vec(document).unwrap()).unwrap();
     let payload =
         String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap()).unwrap();
-    let controls = String::from_utf8(request.canonical_bytes().unwrap()).unwrap();
+    let controls = String::from_utf8(serde_json_canonicalizer::to_vec(&request).unwrap()).unwrap();
     let unknown_envelope = serde_json_canonicalizer::to_vec(&Extended {
         original: document,
         future: true,
@@ -139,7 +142,13 @@ fn malformed_controls(request: &ControlsRequest) -> Vec<Vec<u8>> {
             let original = String::from_utf8(original).unwrap();
             let changed = String::from_utf8(changed).unwrap();
             let changed_payload = payload.replace(&original, &changed);
-            let digest = hb(semantic::PAYLOAD_SCHEMA, changed_payload.as_bytes());
+            let digest = amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(changed_payload.as_bytes())
+                    .finalize()
+                    .0,
+            );
             let changed_envelope = envelope
                 .replace(&original, &changed)
                 .replace(&original_digest, &digest.to_string());
@@ -171,7 +180,13 @@ fn semantic_defects(
         .map(std::borrow::Cow::Owned)
         .to_vec();
     let mut wrong_context = document.clone();
-    wrong_context.payload.producer.context_digest = hb("test", b"wrong context");
+    wrong_context.payload.producer.context_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("test")
+            .chain_update([0_u8])
+            .chain_update(b"wrong context")
+            .finalize()
+            .0,
+    );
     let mut stale_digest = document.clone();
     stale_digest.payload.complete = !stale_digest.payload.complete;
 
@@ -185,9 +200,12 @@ fn semantic_defects(
     .into_iter()
     .map(|(mut invalid, rebind)| {
         if rebind {
-            invalid.payload_digest = hb(
-                semantic::PAYLOAD_SCHEMA,
-                &serde_json_canonicalizer::to_vec(&invalid.payload).unwrap(),
+            invalid.payload_digest = amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(serde_json_canonicalizer::to_vec(&invalid.payload).unwrap())
+                    .finalize()
+                    .0,
             );
         }
         invalid

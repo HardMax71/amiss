@@ -3,13 +3,14 @@
     reason = "integration assertions over the external-control request gate"
 )]
 
+use sha2::Digest as _;
 use std::borrow::Cow;
 
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_scan::request::controls;
 use amiss_wire::assessment::Nullable;
-use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 use amiss_wire::report::AnalysisErrorCode;
 use amiss_wire::requests::{
     ControlsRequest, ControlsRequestSchema, RequestTrust, SuppliedControl,
@@ -93,7 +94,13 @@ fn semantic_evidence(
     SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
-            candidate_identity_digest: hb("test/candidate", b"candidate"),
+            candidate_identity_digest: Digest::from(
+                sha2::Sha256::new_with_prefix("test/candidate")
+                    .chain_update([0_u8])
+                    .chain_update(b"candidate")
+                    .finalize()
+                    .0,
+            ),
             source_report_payload_digest: source_report_payload_digest
                 .map_or(Nullable::Null, Nullable::Value),
         },
@@ -124,9 +131,13 @@ fn supplied_semantic(evidence: SemanticEvidence<'static>) -> SuppliedSemanticEvi
 fn a_verified_floor_lands_typed() {
     let floor =
         amiss_wire::controls::parse_organization_floor(FLOOR.as_bytes()).expect("fixture parses");
-    let digest = amiss_wire::controls::canonical_organization_floor(&floor)
-        .unwrap()
-        .1;
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/organization-floor")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+            .finalize()
+            .0,
+    );
     let mut request = empty();
     request.organization_floor = Some(supplied(FLOOR, digest));
     let original_allocation = request
@@ -146,18 +157,16 @@ fn a_verified_floor_lands_typed() {
 }
 
 #[test]
-fn a_wrong_floor_digest_is_refused() {
-    let mut request = empty();
-    request.organization_floor = Some(supplied(FLOOR, hb("test/other", b"not the floor")));
-    let error = controls(request).expect_err("a foreign digest never passes");
-    assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
-}
-
-#[test]
 fn a_verified_time_statement_lands_with_its_run_context() {
     let statement =
         amiss_wire::controls::parse_trusted_time(TIME.as_bytes()).expect("fixture parses");
-    let (_, digest) = amiss_wire::controls::canonical_trusted_time(&statement).unwrap();
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&statement).unwrap())
+            .finalize()
+            .0,
+    );
     let mut request = empty();
     request.trusted_time = Some(SuppliedTime {
         value: statement.clone(),
@@ -177,23 +186,15 @@ fn a_verified_time_statement_lands_with_its_run_context() {
 }
 
 #[test]
-fn a_wrong_time_digest_is_refused() {
-    let mut request = empty();
-    request.trusted_time = Some(SuppliedTime {
-        value: serde_json::from_str(TIME).expect("the fixture is JSON"),
-        expected_digest: hb("test/other", b"not the statement"),
-        provider: "gitlab-ci".to_owned(),
-        provider_run_id: "pipeline/01J2Z9-7".to_owned(),
-        provider_run_attempt: 2,
-    });
-    let error = controls(request).expect_err("a foreign digest never passes");
-    assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
-}
-
-#[test]
 fn typed_time_still_requires_semantic_validation() {
     let valid = amiss_wire::controls::parse_trusted_time(TIME.as_bytes()).unwrap();
-    let (_, expected_digest) = amiss_wire::controls::canonical_trusted_time(&valid).unwrap();
+    let expected_digest = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&valid).unwrap())
+            .finalize()
+            .0,
+    );
     for value in [
         amiss_wire::controls::TrustedTimeStatement {
             provider: "bad provider!".to_owned(),
@@ -223,7 +224,13 @@ fn typed_time_still_requires_semantic_validation() {
 fn a_verified_constraint_lands_through_the_shared_gate() {
     let descriptor = amiss_wire::controls::parse_execution_constraint(CONSTRAINT.as_bytes())
         .expect("fixture parses");
-    let (_, digest) = amiss_wire::controls::canonical_execution_constraint(&descriptor).unwrap();
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&descriptor).unwrap())
+            .finalize()
+            .0,
+    );
     let mut request = empty();
     request.execution_constraint = Some(supplied(CONSTRAINT, digest));
     let inputs = controls(request).expect("a matching digest passes the gate");
@@ -232,19 +239,17 @@ fn a_verified_constraint_lands_through_the_shared_gate() {
 }
 
 #[test]
-fn a_wrong_constraint_digest_is_refused() {
-    let mut request = empty();
-    request.execution_constraint = Some(supplied(CONSTRAINT, hb("test/other", b"not the plan")));
-    let error = controls(request).expect_err("a foreign digest never passes");
-    assert_eq!(error.code, AnalysisErrorCode::DigestMismatch);
-}
-
-#[test]
 fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
     let valid = semantic_evidence(
         SemanticProducerKind::SphinxInventorySet,
         "1",
-        hb("test/inventory", b"inventory"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix("test/inventory")
+                .chain_update([0_u8])
+                .chain_update(b"inventory")
+                .finalize()
+                .0,
+        ),
         None,
         vec![Observation::Sphinx(SphinxLabelObservation {
             kind: SphinxLabelKind::Current,
@@ -283,7 +288,13 @@ fn record_sets_accept_complete_empty_and_partial_typed_rows() {
         let mut evidence = semantic_evidence(
             SemanticProducerKind::RecordSet,
             "1",
-            hb("test/records", b"rust public api"),
+            Digest::from(
+                sha2::Sha256::new_with_prefix("test/records")
+                    .chain_update([0_u8])
+                    .chain_update(b"rust public api")
+                    .finalize()
+                    .0,
+            ),
             None,
             vec![Observation::Record(record::Observation {
                 kind: record::ObservationKind::Current,
@@ -309,7 +320,13 @@ fn malformed_record_sets_fail_closed() {
     let valid = semantic_evidence(
         SemanticProducerKind::RecordSet,
         "1",
-        hb("test/records", b"rust public api"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix("test/records")
+                .chain_update([0_u8])
+                .chain_update(b"rust public api")
+                .finalize()
+                .0,
+        ),
         None,
         vec![Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
@@ -323,8 +340,13 @@ fn malformed_record_sets_fail_closed() {
     let mut wrong_version = valid.clone();
     wrong_version.producer.version = "2".to_owned();
     let mut report_derived = valid.clone();
-    report_derived.subject.source_report_payload_digest =
-        Nullable::Value(hb("test/report", b"report"));
+    report_derived.subject.source_report_payload_digest = Nullable::Value(Digest::from(
+        sha2::Sha256::new_with_prefix("test/report")
+            .chain_update([0_u8])
+            .chain_update(b"report")
+            .finalize()
+            .0,
+    ));
     let mut multiple_sets = valid.clone();
     multiple_sets
         .observations
@@ -374,7 +396,13 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
             let mut evidence = semantic_evidence(
                 SemanticProducerKind::RecordSet,
                 "1",
-                hb("test/records", lane.as_bytes()),
+                Digest::from(
+                    sha2::Sha256::new_with_prefix("test/records")
+                        .chain_update([0_u8])
+                        .chain_update(lane.as_bytes())
+                        .finalize()
+                        .0,
+                ),
                 None,
                 vec![Observation::Record(record::Observation {
                     kind: record::ObservationKind::Current,
@@ -385,7 +413,13 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
                     }],
                 })],
             );
-            evidence.producer.context_digest = hb("test/record-context", lane.as_bytes());
+            evidence.producer.context_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("test/record-context")
+                    .chain_update([0_u8])
+                    .chain_update(lane.as_bytes())
+                    .finalize()
+                    .0,
+            );
             supplied_semantic(evidence)
         })
         .collect::<Vec<_>>();
@@ -401,14 +435,26 @@ fn semantic_evidence_must_match_the_independently_supplied_context() {
     let evidence = semantic_evidence(
         SemanticProducerKind::SphinxInventorySet,
         "1",
-        hb("test/inventory", b"inventory"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix("test/inventory")
+                .chain_update([0_u8])
+                .chain_update(b"inventory")
+                .finalize()
+                .0,
+        ),
         None,
         Vec::new(),
     );
     let mut request = empty();
     request.semantic_evidence = vec![SuppliedSemanticEvidence {
         value: amiss_wire::semantic::envelope(evidence).expect("the envelope is valid"),
-        expected_context_digest: hb("test/inventory", b"another inventory"),
+        expected_context_digest: Digest::from(
+            sha2::Sha256::new_with_prefix("test/inventory")
+                .chain_update([0_u8])
+                .chain_update(b"another inventory")
+                .finalize()
+                .0,
+        ),
     }];
 
     let error = controls(request).expect_err("a foreign context never reaches a consumer");
@@ -420,8 +466,8 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let valid = semantic_evidence(
         SemanticProducerKind::SiteBuild,
         "0.5.1",
-        hb("test/site-output", b"site output"),
-        Some(hb("test/report", b"source report")),
+        Digest::from([37; 32]),
+        Some(Digest::from([38; 32])),
         vec![
             site_observation(
                 "/guide/",
@@ -467,8 +513,8 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
     let malformed_fragment_redirect = semantic_evidence(
         SemanticProducerKind::SiteBuild,
         "0.5.1",
-        hb("test/site-output", b"site output"),
-        Some(hb("test/report", b"source report")),
+        Digest::from([37; 32]),
+        Some(Digest::from([38; 32])),
         vec![
             site_observation(
                 "/legacy/",
@@ -527,8 +573,8 @@ fn site_claims_require_valid_explicit_source_attribution() {
         let evidence = semantic_evidence(
             SemanticProducerKind::SiteBuild,
             "0.5.1",
-            hb("test/site-output", b"site output"),
-            Some(hb("test/report", b"source report")),
+            Digest::from([37; 32]),
+            Some(Digest::from([38; 32])),
             Vec::new(),
         );
         let mut request = empty();
@@ -541,7 +587,13 @@ fn site_claims_require_valid_explicit_source_attribution() {
                 r#""observations":[]"#,
                 &format!(r#""observations":[{observation}]"#),
             );
-        let digest = hb(amiss_wire::semantic::PAYLOAD_SCHEMA, payload.as_bytes());
+        let digest = Digest::from(
+            sha2::Sha256::new_with_prefix(amiss_wire::semantic::PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(payload.as_bytes())
+                .finalize()
+                .0,
+        );
         let envelope = format!(
             r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{payload},"payload_digest":"{digest}"}}"#
         );
@@ -559,8 +611,8 @@ fn generated_site_claims_admit_absent_repository_attribution() {
     let evidence = semantic_evidence(
         SemanticProducerKind::SiteBuild,
         "0.5.1",
-        hb("test/site-output", b"site output"),
-        Some(hb("test/report", b"source report")),
+        Digest::from([37; 32]),
+        Some(Digest::from([38; 32])),
         vec![
             site_observation("/generated/", SiteObservation::Generated(None, &["intro"])).unwrap(),
             Observation::Site(SiteBuildObservation::Navigation {
@@ -608,7 +660,7 @@ fn inconsistent_site_navigation_never_becomes_input() {
         let evidence = semantic_evidence(
             SemanticProducerKind::SiteBuild,
             "0.5.1",
-            hb("test/site-output", b"site output"),
+            Digest::from([37; 32]),
             None,
             vec![page.clone(), navigation],
         );
@@ -616,5 +668,37 @@ fn inconsistent_site_navigation_never_becomes_input() {
         request.semantic_evidence = vec![supplied_semantic(evidence)];
         let error = controls(request).expect_err("inconsistent navigation fails closed");
         assert_eq!(error.code, AnalysisErrorCode::ConfigurationInvalid);
+    }
+}
+
+#[test]
+fn mismatched_control_digests_are_refused() {
+    let expected_digest = Digest::from([0; 32]);
+    for request in [
+        ControlsRequest {
+            organization_floor: Some(supplied(FLOOR, expected_digest)),
+            ..empty()
+        },
+        ControlsRequest {
+            execution_constraint: Some(supplied(CONSTRAINT, expected_digest)),
+            ..empty()
+        },
+        ControlsRequest {
+            trusted_time: Some(SuppliedTime {
+                value: serde_json::from_str(TIME).expect("the fixture is JSON"),
+                expected_digest,
+                provider: "gitlab-ci".to_owned(),
+                provider_run_id: "pipeline/01J2Z9-7".to_owned(),
+                provider_run_attempt: 2,
+            }),
+            ..empty()
+        },
+    ] {
+        assert_eq!(
+            controls(request)
+                .expect_err("a foreign digest never passes")
+                .code,
+            AnalysisErrorCode::DigestMismatch
+        );
     }
 }

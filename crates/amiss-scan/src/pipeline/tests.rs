@@ -1,9 +1,9 @@
 #![cfg(test)]
 
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::digest::{hb, hj_serde};
 use amiss_wire::model::{Adapter, ObjectFormat, RepoPath};
 use amiss_wire::report::{EngineProvenance, adapter_contract};
+use sha2::Digest as _;
 
 use super::{ObservationContext, resolved_observation};
 use crate::observe::{OBSERVATION_ID_DOMAIN, ObservationIdentity, observation_input};
@@ -19,7 +19,13 @@ fn resolved_observations_bind_the_fields_retained_for_reporting() {
     let labels = std::collections::BTreeMap::new();
     let engine = EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/test-engine", b"typed observations"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-engine")
+                .chain_update([0_u8])
+                .chain_update(b"typed observations")
+                .finalize()
+                .0,
+        ),
     };
     let context = ObservationContext {
         engine: &engine,
@@ -81,12 +87,13 @@ fn resolved_observations_bind_the_fields_retained_for_reporting() {
                     raw_destination_digest: observation.raw_destination_digest,
                 })
                 .unwrap();
+                let mut writer = digest_io::IoWrapper(
+                    sha2::Sha256::new_with_prefix(OBSERVATION_ID_DOMAIN).chain_update([0_u8]),
+                );
+                serde_json::to_writer(&mut writer, &retained).unwrap();
                 assert_eq!(
                     observation.id,
-                    hj_serde(OBSERVATION_ID_DOMAIN, |writer| serde_json::to_writer(
-                        writer, &retained
-                    ))
-                    .unwrap()
+                    amiss_wire::model::Digest::from(writer.0.finalize().0)
                 );
                 assert!(matches!(
                     resolved_observation(

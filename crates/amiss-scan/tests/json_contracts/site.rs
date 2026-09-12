@@ -3,7 +3,6 @@ use amiss_git::Repository;
 use amiss_scan::{SetupShell, pipeline::commit_pair, report::RequestDigests};
 use amiss_wire::{
     controls::Profile,
-    digest::hb,
     model::{ObjectFormat, Oid},
     report::{EngineProvenance, FindingKind, model::FindingKeyScope},
     semantic::{
@@ -11,6 +10,7 @@ use amiss_wire::{
         observation::SITE_BUILD_VERSION,
     },
 };
+use sha2::Digest as _;
 
 #[test]
 fn site_defect_identities_bind_the_exact_kind_and_route() {
@@ -27,7 +27,7 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
     let candidate = Oid::new(ObjectFormat::Sha1, fixture.candidate.clone()).unwrap();
     let engine = EngineProvenance {
         version: "test".to_owned(),
-        digest: hb("test", b"engine"),
+        digest: amiss_wire::model::Digest::from([22; 32]),
     };
     let observations = vec![
         site_observation("/collision/", SiteObservation::Page("README.md", &[])).unwrap(),
@@ -57,8 +57,8 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
                 kind: SemanticProducerKind::SiteBuild,
                 identity: "fixture".parse().unwrap(),
                 version: SITE_BUILD_VERSION.to_owned(),
-                context_digest: hb("test", b"context"),
-                input_digest: hb("test", b"input"),
+                context_digest: amiss_wire::model::Digest::from([20; 32]),
+                input_digest: amiss_wire::model::Digest::from([21; 32]),
             },
             complete: true,
             observations: observations
@@ -88,13 +88,19 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
         .collect::<Vec<_>>();
     ids.sort();
     let mut expected = [
-        hb(
-            "amiss/scanner-site-defect",
-            br#"{"kind":"broken-redirect","route":"/broken/"}"#,
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-site-defect")
+                .chain_update([0_u8])
+                .chain_update(br#"{"kind":"broken-redirect","route":"/broken/"}"#)
+                .finalize()
+                .0,
         ),
-        hb(
-            "amiss/scanner-site-defect",
-            br#"{"kind":"duplicate-route","route":"/collision/"}"#,
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-site-defect")
+                .chain_update([0_u8])
+                .chain_update(br#"{"kind":"duplicate-route","route":"/collision/"}"#)
+                .finalize()
+                .0,
         ),
     ];
     expected.sort();

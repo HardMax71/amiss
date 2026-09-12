@@ -181,7 +181,7 @@ fn positional_snapshot_variants_are_not_objects() {
     }
     let array = serde_json::to_string(&(
         Vec::<amiss_wire::report::model::EvaluationUnavailableReason>::new(),
-        None::<amiss_wire::digest::Digest>,
+        None::<amiss_wire::model::Digest>,
         UnavailableStatus::Unavailable,
     ))
     .unwrap();

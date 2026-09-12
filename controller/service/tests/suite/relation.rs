@@ -3,6 +3,7 @@
     reason = "the fixture constructs known-valid relation and provider identities"
 )]
 
+use sha2::Digest as _;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -21,7 +22,6 @@ use amiss_controller_service::{
     RelationOutboxError, drain_relation_outbox, execute_relation_audit, freeze_relation_transition,
 };
 use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
-use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict, parse_assessment};
 
@@ -431,9 +431,12 @@ fn report_for(
     let payload = report
         .pointer("/payload")
         .ok_or_else(|| std::io::Error::other("fixture report has no payload"))?;
-    let payload_digest = amiss_wire::digest::hb(
-        amiss_wire::report::PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(payload)?,
+    let payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(payload)?)
+            .finalize()
+            .0,
     );
     *report
         .pointer_mut("/payload_digest")
@@ -507,6 +510,8 @@ fn audit_request<'a>(
             }
         }),
         engine_version: env!("CARGO_PKG_VERSION"),
-        engine_digest: sha256(b"relation service evaluator fixture"),
+        engine_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(b"relation service evaluator fixture").0,
+        ),
     }
 }

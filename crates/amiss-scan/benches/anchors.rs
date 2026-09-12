@@ -1,5 +1,6 @@
 #![expect(clippy::panic, reason = "bench fixture setup fails loudly")]
 
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::Path;
@@ -170,7 +171,13 @@ fn revision(dir: &Path, name: &str) -> Oid {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-bench".to_owned(),
-        digest: amiss_wire::digest::hb("amiss/scanner-engine", b"bench engine"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"bench engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 

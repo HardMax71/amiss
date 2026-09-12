@@ -2,9 +2,10 @@ use amiss_controller::{
     IntegrationId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
     RelationSubject, RelationSubjectHead, relation_status_publication,
 };
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::relation::RelationSnapshot;
+use sha2::Digest as _;
 
 use super::model::{CommitStatusRecord, CreateCommitStatus};
 use super::refresh::validate_reviewer;
@@ -89,7 +90,13 @@ pub(super) fn relation_commit_status(
         target_url: String::new(),
         description: format!(
             "{MARKER}{}",
-            hb(STATUS_DOMAIN, publication.summary.as_bytes())
+            Digest::from(
+                sha2::Sha256::new_with_prefix(STATUS_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(publication.summary.as_bytes())
+                    .finalize()
+                    .0
+            )
         ),
         context: target.required_status_name.clone(),
     })

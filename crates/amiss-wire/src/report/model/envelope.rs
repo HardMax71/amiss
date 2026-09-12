@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto, apply};
 
 use crate::controls::ProjectionSource;
-use crate::digest::Digest;
+use crate::model::Digest;
 
 use super::{
     AnalysisError, Controls, DocumentGitMode, DocumentResult, DocumentSide, Engine, Evaluation,
@@ -60,12 +60,31 @@ pub enum ReportCompatibility {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(
+    remote = "Self",
+    deny_unknown_fields,
+    bound(deserialize = "P: Deserialize<'de>")
+)]
 pub struct ReportEnvelope<P = ReportPayload> {
     #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: P,
     pub payload_digest: Digest,
     pub schema: ReportEnvelopeSchema,
+}
+
+impl<P: Serialize> Serialize for ReportEnvelope<P> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, P: Deserialize<'de>> Deserialize<'de> for ReportEnvelope<P> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

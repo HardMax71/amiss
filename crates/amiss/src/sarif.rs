@@ -100,7 +100,8 @@ fn fix(fix: &FindingFix) -> Fix<'_> {
     Fix {
         artifact_changes: [ArtifactChange {
             artifact_location: ArtifactLocation {
-                uri: uri(fix.path.as_str()),
+                uri: percent_encoding::utf8_percent_encode(fix.path.as_str(), URI_PATH_ENCODE_SET)
+                    .to_string(),
             },
             replacements: [Replacement {
                 deleted_region: ByteRegion {
@@ -127,7 +128,9 @@ fn location<P>(
     let path = location.path.as_ref().and_then(path_text)?;
     Some(Location {
         physical_location: PhysicalLocation {
-            artifact_location: ArtifactLocation { uri: uri(path) },
+            artifact_location: ArtifactLocation {
+                uri: percent_encoding::utf8_percent_encode(path, URI_PATH_ENCODE_SET).to_string(),
+            },
             region: location.span.map(|span| Region {
                 end_column: span.end_column,
                 end_line: span.end_line,
@@ -138,20 +141,9 @@ fn location<P>(
     })
 }
 
-/// RFC 3986 path form: unreserved bytes and the separator stay, every other
-/// byte is percent-encoded so a hostile path cannot break the URI.
-fn uri(path: &str) -> String {
-    let mut encoded = String::with_capacity(path.len());
-    for byte in path.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~' | b'/') {
-            encoded.push(char::from(byte));
-        } else {
-            encoded.push('%');
-            let high = char::from_digit(u32::from(byte >> 4), 16).unwrap_or('0');
-            let low = char::from_digit(u32::from(byte & 0x0f), 16).unwrap_or('0');
-            encoded.push(high.to_ascii_uppercase());
-            encoded.push(low.to_ascii_uppercase());
-        }
-    }
-    encoded
-}
+const URI_PATH_ENCODE_SET: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'.')
+    .remove(b'_')
+    .remove(b'~')
+    .remove(b'/');

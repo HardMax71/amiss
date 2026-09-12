@@ -1,38 +1,82 @@
 use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
+use sha2::Digest as _;
+use strum::{Display, EnumString};
 
 use crate::controls::{ProjectionKind, ProjectionSource, check_projection_source};
-use crate::de::{Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
-use crate::json;
+use crate::de::{self, Error, ErrorKind, fail};
+use crate::model::Digest;
 use crate::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 mod assessment;
 mod evidence;
 
 pub use assessment::{
-    ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, RelationAssessment,
-    RelationAssessmentEnvelope, RelationReason, RelationVerdict, assess, parse_assessment,
+    ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, AssessmentEnvelopeSchema,
+    AssessmentPayloadSchema, RelationAssessment, RelationAssessmentEnvelope, RelationReason,
+    RelationVerdict, assess, parse_assessment,
 };
 
 pub use evidence::{
-    EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, RelationEvidence, RelationEvidenceEnvelope,
-    RelationEvidenceSubject, RelationProjectedValue, RelationProjectionSlot, evidence,
-    parse_evidence,
+    EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, EvidenceEnvelopeSchema,
+    EvidencePayloadSchema, RelationEvidence, RelationEvidenceEnvelope, RelationEvidenceSubject,
+    RelationProjectedValue, RelationProjectionSlot, evidence, parse_evidence,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/relation-plan-envelope";
 pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/relation-plan-payload";
 pub const RELATION_DOCUMENT_BYTES: u64 = 65_536;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RelationPlanEnvelope {
-    pub payload: RelationPlan,
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", bound(deserialize = "T: Deserialize<'de>"))]
+pub struct RelationPlanEnvelope<T = RelationPlan> {
+    pub schema: PlanEnvelopeSchema,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
+    pub payload: T,
     pub payload_digest: Digest,
+}
+
+impl<T: Serialize> Serialize for RelationPlanEnvelope<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for RelationPlanEnvelope<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
+impl RelationPlanEnvelope {
+    /// Checks the plan's domain laws, payload binding, and encoded document ceiling.
+    ///
+    /// # Errors
+    /// Refuses invalid subjects or projections, oversized output, and a mismatched payload digest.
+    pub fn validate(&self) -> Result<(), Error> {
+        let digest = plan_payload_digest(&self.payload)?;
+        let mut measured = countio::Counter::new(std::io::sink());
+        serde_json_canonicalizer::to_writer(self, &mut measured)
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+        if u64::try_from(measured.writer_bytes()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
+            return fail("$", ErrorKind::LimitExceeded);
+        }
+        if digest != self.payload_digest {
+            return fail("$.payload_digest", ErrorKind::DigestMismatch);
+        }
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct RelationPlan {
+    pub schema: PlanPayloadSchema,
     pub report_payload_digest: Digest,
     pub relation: RelationIdentity,
     pub coordination: ArtifactId,
@@ -41,15 +85,47 @@ pub struct RelationPlan {
     pub subjects: [RelationSubject; 2],
 }
 
+impl Serialize for RelationPlan {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RelationPlan {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct RelationIdentity {
     pub identity: ArtifactId,
     pub context_digest: Digest,
 }
 
+impl Serialize for RelationIdentity {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RelationIdentity {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct RelationSubject {
     pub role: ArtifactId,
     pub repository: RepositoryIdentity,
@@ -60,8 +136,24 @@ pub struct RelationSubject {
     pub candidate: RelationSnapshot,
 }
 
+impl Serialize for RelationSubject {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RelationSubject {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct RelationSnapshot {
     #[serde(rename = "commit_oid")]
     pub commit: Oid,
@@ -69,18 +161,35 @@ pub struct RelationSnapshot {
     pub tree: Oid,
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum PlanEnvelope<T> {
-    #[serde(rename = "amiss/relation-plan-envelope")]
-    Current { payload: T, payload_digest: Digest },
+impl Serialize for RelationSnapshot {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
 }
 
-#[derive(Serialize, Deserialize)]
-#[serde(tag = "schema", deny_unknown_fields)]
-enum PlanPayload<T> {
-    #[serde(rename = "amiss/relation-plan-payload")]
-    Current(T),
+impl<'de> Deserialize<'de> for RelationSnapshot {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+pub enum PlanEnvelopeSchema {
+    #[strum(serialize = "amiss/relation-plan-envelope")]
+    Current,
+}
+
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+)]
+pub enum PlanPayloadSchema {
+    #[strum(serialize = "amiss/relation-plan-payload")]
+    Current,
 }
 
 /// Parses one closed, digest-bound cross-repository relation plan.
@@ -94,21 +203,17 @@ pub fn parse_plan(bytes: &[u8]) -> Result<RelationPlanEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let document: PlanEnvelope<PlanPayload<RelationPlan>> = serde_json::from_slice(bytes)
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    let document: RelationPlanEnvelope = serde_path_to_error::deserialize(&mut deserializer)
+        .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let PlanEnvelope::Current {
-        payload,
-        payload_digest,
-    } = document;
-    let PlanPayload::Current(payload) = payload;
-    if plan_payload_digest(&payload)? != payload_digest {
+    if plan_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
-    Ok(RelationPlanEnvelope {
-        payload,
-        payload_digest,
-    })
+    Ok(document)
 }
 
 /// Builds the unique digest-bound value for one cross-repository relation plan.
@@ -119,8 +224,9 @@ pub fn parse_plan(bytes: &[u8]) -> Result<RelationPlanEnvelope, Error> {
 /// enforces or the encoded document exceeds its byte ceiling.
 pub fn plan(input: &RelationPlan) -> Result<Vec<u8>, Error> {
     let payload_digest = plan_payload_digest(input)?;
-    let document = PlanEnvelope::Current {
-        payload: PlanPayload::Current(input),
+    let document = RelationPlanEnvelope {
+        schema: PlanEnvelopeSchema::Current,
+        payload: input,
         payload_digest,
     };
     let canonical = serde_json_canonicalizer::to_vec(&document)
@@ -128,14 +234,22 @@ pub fn plan(input: &RelationPlan) -> Result<Vec<u8>, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    de::JsonProfile::validate(&canonical)?;
     Ok(canonical)
 }
 
 pub(super) fn plan_payload_digest(input: &RelationPlan) -> Result<Digest, Error> {
     validate_plan(input)?;
-    serde_json_canonicalizer::to_vec(&PlanPayload::Current(input))
-        .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
+    serde_json_canonicalizer::to_vec(input)
+        .map(|canonical| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(&canonical)
+                    .finalize()
+                    .0,
+            )
+        })
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 

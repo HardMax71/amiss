@@ -4,7 +4,7 @@
 )]
 
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
     RelationEvidence, RelationEvidenceSubject, RelationIdentity, RelationPlan,
@@ -59,6 +59,7 @@ pub(crate) struct RelationContract {
 
 pub(crate) fn relation_contract() -> RelationContract {
     let plan = RelationPlan {
+        schema: amiss_wire::relation::PlanPayloadSchema::Current,
         report_payload_digest: digest('1'),
         relation: RelationIdentity {
             identity: identity("relation/public-api"),
@@ -86,6 +87,7 @@ pub(crate) fn relation_contract() -> RelationContract {
     };
     let plan_bytes = build_plan(&plan).unwrap();
     let evidence = RelationEvidence {
+        schema: amiss_wire::relation::EvidencePayloadSchema::Current,
         plan_payload_digest: parse_plan(&plan_bytes).unwrap().payload_digest,
         subjects: [
             RelationEvidenceSubject {

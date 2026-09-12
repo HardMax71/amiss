@@ -3,8 +3,8 @@ use amiss_wire::controls::{
     SourceConstruct, TargetKind, WaiverBundleSchema, parse_waiver_bundle,
 };
 use amiss_wire::de::ErrorKind;
+use sha2::Digest as _;
 
-use amiss_wire::json;
 use strum::IntoEnumIterator;
 
 use crate::support::{
@@ -18,15 +18,31 @@ use crate::support::{
 )]
 fn roundtrip_scope(context: &str, edit: &dyn Fn(String) -> String) -> FindingScope {
     let key_input = edit(key_input_json("explicit-target-missing"));
-    let key = amiss_wire::digest::hb(
-        FINDING_KEY_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
+    let key = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<serde_json::Value>(key_input.as_bytes()).unwrap(),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
     let fact_doc = edit(fact_json());
-    let fact = amiss_wire::digest::hb(
-        FACT_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(fact_doc.as_bytes()).unwrap()).unwrap(),
+    let fact = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(FACT_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<serde_json::Value>(fact_doc.as_bytes()).unwrap(),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
     let item = edit(waiver_item(
@@ -120,15 +136,31 @@ fn wire_spellings_are_the_ones_the_contract_publishes() {
 fn a_waiver_answers_for_every_spelling_its_scope_may_carry() {
     let bundle_for = |edit: &dyn Fn(String) -> String| {
         let key_input = edit(key_input_json("explicit-target-missing"));
-        let key = amiss_wire::digest::hb(
-            FINDING_KEY_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
+        let key = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(
+                        &serde_json::from_slice::<serde_json::Value>(key_input.as_bytes()).unwrap(),
+                    )
+                    .unwrap(),
+                )
+                .finalize()
+                .0,
         )
         .to_string();
         let fact_doc = edit(fact_json());
-        let fact = amiss_wire::digest::hb(
-            FACT_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&json::parse(fact_doc.as_bytes()).unwrap()).unwrap(),
+        let fact = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(FACT_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(
+                        &serde_json::from_slice::<serde_json::Value>(fact_doc.as_bytes()).unwrap(),
+                    )
+                    .unwrap(),
+                )
+                .finalize()
+                .0,
         )
         .to_string();
         let item = edit(waiver_item(

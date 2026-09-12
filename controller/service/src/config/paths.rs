@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 mod tests;
 
 use std::fs::FileType;
@@ -6,7 +7,6 @@ use std::path::{Path, PathBuf};
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{BOOTSTRAP_EXECUTABLE_BYTES, CheckPlan};
 use amiss_wire::action::host_platform;
-use amiss_wire::digest::hb;
 use serde::Deserialize;
 
 use super::{ConfigError, read_regular};
@@ -145,7 +145,13 @@ fn resolve_execution_paths(
         },
     )?;
     let bootstrap_bytes = read_regular(&bootstrap, BOOTSTRAP_EXECUTABLE_BYTES)?;
-    (hb(BOOTSTRAP_DOMAIN, &bootstrap_bytes) == plan.execution.bootstrap_digest)
+    (amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(BOOTSTRAP_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&bootstrap_bytes)
+            .finalize()
+            .0,
+    ) == plan.execution.bootstrap_digest)
         .then_some(())
         .ok_or(ConfigError::invalid(
             "bootstrap does not match the execution constraint",

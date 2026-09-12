@@ -1,61 +1,20 @@
-#![expect(
-    clippy::panic,
-    reason = "integration harness over asserted fixture shapes"
-)]
-
-use std::alloc::System;
-use std::collections::BTreeSet;
-use std::fs;
-use std::path::Path;
-
-use amiss_wire::digest::hb;
-use amiss_wire::json::Value;
 use amiss_wire::report::model::{ReportEnvelope, ReportPayload};
 use amiss_wire::report::{
     AnalysisErrorCode, EngineProvenance, FATAL_SCRATCH_BYTES, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA,
     emit_report, unavailable_evaluation_wire,
 };
+use serde_json::Value;
+use sha2::Digest as _;
 use stats_alloc::{INSTRUMENTED_SYSTEM, Region, StatsAlloc};
+use std::alloc::System;
+use std::collections::BTreeSet;
+use std::fs;
+use std::path::Path;
 
 #[global_allocator]
 static GLOBAL: &StatsAlloc<System> = &INSTRUMENTED_SYSTEM;
 
 const WIRE_CAP: u64 = MACHINE_JSON_BYTES;
-
-fn string(text: &str) -> Value {
-    Value::string(text)
-}
-
-fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::object(
-        members
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-    )
-}
-
-fn set_member(value: &mut Value, key: &str, replacement: Value) {
-    let Value::Object(members) = value else {
-        panic!("expected an object at {key}");
-    };
-    let slot = members
-        .iter_mut()
-        .find(|(name, _)| name == key)
-        .unwrap_or_else(|| panic!("missing member {key}"));
-    slot.1 = replacement;
-}
-
-fn member_mut<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
-    let Value::Object(members) = value else {
-        panic!("expected an object at {key}");
-    };
-    &mut members
-        .iter_mut()
-        .find(|(name, _)| name == key)
-        .unwrap_or_else(|| panic!("missing member {key}"))
-        .1
-}
 
 /// A maximal schema-valid `RepoPath`: 4,096 characters dominated by quotes,
 /// the densest escaping the path grammar can reach on the wire, prefixed for
@@ -67,31 +26,34 @@ fn maximal_path(index: usize) -> String {
 const DIGEST: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 fn runtime_file(index: usize) -> Value {
-    object(vec![
-        ("path", string(&maximal_path(index))),
-        ("role", string("dynamic-library")),
-        ("git_mode", string("100755")),
-        ("file_sha256", string(DIGEST)),
+    Value::from_iter(vec![
+        ("path", Value::from((maximal_path(index)).as_str())),
+        ("role", Value::from("dynamic-library")),
+        ("git_mode", Value::from("100755")),
+        ("file_sha256", Value::from(DIGEST)),
     ])
 }
 
 fn artifact(platform: &str) -> Value {
     let files: Vec<Value> = (0..256).map(runtime_file).collect();
-    object(vec![
-        ("platform", string(platform)),
+    Value::from_iter(vec![
+        ("platform", Value::from(platform)),
         (
             "artifact_name",
-            string(&format!(
-                "amiss-{platform}{}",
-                "x".repeat(122_usize.saturating_sub(platform.len()))
-            )),
+            Value::from(
+                (format!(
+                    "amiss-{platform}{}",
+                    "x".repeat(122_usize.saturating_sub(platform.len()))
+                ))
+                .as_str(),
+            ),
         ),
-        ("tree_path", string(&maximal_path(9_000))),
-        ("binary_sha256", string(DIGEST)),
-        ("engine_digest", string(DIGEST)),
-        ("runtime_contract", string("manifest-closed")),
-        ("environment_contract", string("scanner-process-env")),
-        ("runtime_files", Value::array(files)),
+        ("tree_path", Value::from((maximal_path(9_000)).as_str())),
+        ("binary_sha256", Value::from(DIGEST)),
+        ("engine_digest", Value::from(DIGEST)),
+        ("runtime_contract", Value::from("manifest-closed")),
+        ("environment_contract", Value::from("scanner-process-env")),
+        ("runtime_files", Value::Array(files)),
     ])
 }
 
@@ -110,70 +72,72 @@ fn maximal_provenance() -> Value {
     let artifacts: Vec<Value> = platforms.iter().map(|name| artifact(name)).collect();
     let locks: Vec<Value> = (0..32)
         .map(|index| {
-            object(vec![
-                ("path", string(&maximal_path(index))),
-                ("raw_digest", string(DIGEST)),
+            Value::from_iter(vec![
+                ("path", Value::from((maximal_path(index)).as_str())),
+                ("raw_digest", Value::from(DIGEST)),
             ])
         })
         .collect();
-    let manifest = object(vec![
-        ("schema", string("amiss/scanner-release-manifest")),
+    let manifest = Value::from_iter(vec![
+        ("schema", Value::from("amiss/scanner-release-manifest")),
         (
             "engine_version",
-            string(&format!("100.200.300-{}", "a".repeat(52))),
+            Value::from((format!("100.200.300-{}", "a".repeat(52))).as_str()),
         ),
         (
             "build_source",
-            object(vec![
+            Value::from_iter(vec![
                 (
                     "repository",
-                    object(vec![
-                        ("host", string("git.example.internal")),
+                    Value::from_iter(vec![
+                        ("host", Value::from("git.example.internal")),
                         (
                             "owner",
-                            string(&format!("{}/{}", "o".repeat(100), "g".repeat(100))),
+                            Value::from(
+                                (format!("{}/{}", "o".repeat(100), "g".repeat(100))).as_str(),
+                            ),
                         ),
-                        ("name", string(&"n".repeat(100))),
+                        ("name", Value::from(("n".repeat(100)).as_str())),
                     ]),
                 ),
-                ("object_format", string("sha256")),
-                ("commit_oid", string(&"a".repeat(64))),
+                ("object_format", Value::from("sha256")),
+                ("commit_oid", Value::from(("a".repeat(64)).as_str())),
             ]),
         ),
         (
             "dependency_lock",
-            object(vec![
-                ("schema", string("amiss/scanner-dependency-lock-input")),
-                ("files", Value::array(locks)),
+            Value::from_iter(vec![
+                ("schema", Value::from("amiss/scanner-dependency-lock-input")),
+                ("files", Value::Array(locks)),
             ]),
         ),
-        ("dependency_lock_digest", string(DIGEST)),
-        ("artifacts", Value::array(artifacts)),
+        ("dependency_lock_digest", Value::from(DIGEST)),
+        ("artifacts", Value::Array(artifacts)),
     ]);
-    object(vec![
-        ("kind", string("forge-action")),
+    Value::from_iter(vec![
+        ("kind", Value::from("forge-action")),
         (
             "action_repository",
-            object(vec![
-                ("host", string("git.example.internal")),
+            Value::from_iter(vec![
+                ("host", Value::from("git.example.internal")),
                 (
                     "owner",
-                    string(&format!("{}/{}", "o".repeat(100), "g".repeat(100))),
+                    Value::from((format!("{}/{}", "o".repeat(100), "g".repeat(100))).as_str()),
                 ),
-                ("name", string(&"n".repeat(100))),
+                ("name", Value::from(("n".repeat(100)).as_str())),
             ]),
         ),
-        ("action_object_format", string("sha256")),
-        ("action_commit_oid", string(&"a".repeat(64))),
-        ("action_tree_oid", string(&"b".repeat(64))),
-        ("dependency_lock_digest", string(DIGEST)),
+        ("action_object_format", Value::from("sha256")),
+        ("action_commit_oid", Value::from(("a".repeat(64)).as_str())),
+        ("action_tree_oid", Value::from(("b".repeat(64)).as_str())),
+        ("dependency_lock_digest", Value::from(DIGEST)),
         ("release_manifest", manifest),
-        ("release_manifest_digest", string(DIGEST)),
-        ("manifest_path", string(&maximal_path(9_001))),
-        ("selected_platform", string("linux-x86_64")),
+        ("release_manifest_digest", Value::from(DIGEST)),
+        ("manifest_path", Value::from((maximal_path(9_001)).as_str())),
+        ("selected_platform", Value::from("linux-x86_64")),
         (
             "selected_artifact_name",
-            string(&format!("amiss-linux-x86_64{}", "x".repeat(110))),
+            Value::from((format!("amiss-linux-x86_64{}", "x".repeat(110))).as_str()),
         ),
     ])
 }
@@ -182,20 +146,20 @@ fn maximal_provenance() -> Value {
 /// 4,096-character quote-dense path, the full 8,192-character byte hex, the
 /// longest resource name, and safe-integer limits.
 fn maximal_error(index: usize) -> Value {
-    object(vec![
-        ("phase", string("configuration")),
-        ("code", string("RESOURCE_LIMIT_EXCEEDED")),
-        ("description", string(&"d".repeat(400))),
-        ("path", string(&maximal_path(index))),
-        ("path_bytes_hex", string(&"ab".repeat(4_096))),
+    Value::from_iter(vec![
+        ("phase", Value::from("configuration")),
+        ("code", Value::from("RESOURCE_LIMIT_EXCEEDED")),
+        ("description", Value::from(("d".repeat(400)).as_str())),
+        ("path", Value::from((maximal_path(index)).as_str())),
+        ("path_bytes_hex", Value::from(("ab".repeat(4_096)).as_str())),
         (
             "resource",
-            string("aggregate-git-compressed-object-bytes-per-evaluation"),
+            Value::from("aggregate-git-compressed-object-bytes-per-evaluation"),
         ),
-        ("configured_limit", Value::Integer(9_007_199_254_740_991)),
+        ("configured_limit", Value::from(9_007_199_254_740_991_u64)),
         (
             "observed_lower_bound",
-            Value::Integer(9_007_199_254_740_991),
+            Value::from(9_007_199_254_740_991_u64),
         ),
     ])
 }
@@ -206,9 +170,9 @@ fn assert_schema_valid(wire: &[u8]) {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/scanner-report.schema.json"),
     )
     .unwrap();
-    let schema_json: serde_json::Value = serde_json::from_str(&schema_text).unwrap();
+    let schema_json: Value = serde_json::from_str(&schema_text).unwrap();
     let validator = jsonschema::validator_for(&schema_json).unwrap();
-    let envelope_json: serde_json::Value = serde_json::from_slice(wire).unwrap();
+    let envelope_json: Value = serde_json::from_slice(wire).unwrap();
     let defects: Vec<String> = validator
         .iter_errors(&envelope_json)
         .map(|error| format!("{}: {error}", error.instance_path()))
@@ -224,7 +188,13 @@ fn assert_schema_valid(wire: &[u8]) {
 fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     let engine = EngineProvenance {
         version: format!("100.200.300-{}", "a".repeat(52)),
-        digest: hb("amiss/scanner-engine", b"maximal golden"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"maximal golden")
+                .finalize()
+                .0,
+        ),
     };
     let codes: BTreeSet<AnalysisErrorCode> = [
         AnalysisErrorCode::InvalidInvocation,
@@ -234,61 +204,60 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     ]
     .into_iter()
     .collect();
-    let request_digest = hb("amiss/scanner-evaluation-request", b"maximal");
+    let request_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-evaluation-request")
+            .chain_update([0_u8])
+            .chain_update(b"maximal")
+            .finalize()
+            .0,
+    );
     let base_wire =
         unavailable_evaluation_wire(&engine, &codes, Some(request_digest), Some(request_digest))
             .unwrap()
             .unwrap();
     let trimmed = base_wire.strip_suffix(b"\n").unwrap();
-    let envelope = amiss_wire::json::parse(trimmed).unwrap();
+    let envelope = serde_json::from_slice::<Value>(trimmed).unwrap();
 
     let Value::Object(mut envelope_members) = envelope else {
         panic!("envelope is an object");
     };
-    let payload = &mut envelope_members
-        .iter_mut()
-        .find(|(name, _)| name == "payload")
-        .unwrap()
-        .1;
-    set_member(
-        member_mut(payload, "engine"),
-        "action_provenance",
-        maximal_provenance(),
-    );
-    set_member(
-        member_mut(payload, "controls"),
-        "reasons",
-        Value::array(
-            [
-                "not-parsed",
-                "invalid-profile",
-                "invalid-repository-policy",
-                "invalid-external-control",
-                "control-binding-mismatch",
-            ]
-            .iter()
-            .map(|reason| string(reason))
-            .collect(),
-        ),
+    let payload = envelope_members.get_mut("payload").unwrap();
+    *((payload).get_mut("engine").expect("fixture member exists"))
+        .get_mut("action_provenance")
+        .expect("fixture member exists") = maximal_provenance();
+    *((payload)
+        .get_mut("controls")
+        .expect("fixture member exists"))
+    .get_mut("reasons")
+    .expect("fixture member exists") = Value::Array(
+        [
+            "not-parsed",
+            "invalid-profile",
+            "invalid-repository-policy",
+            "invalid-external-control",
+            "control-binding-mismatch",
+        ]
+        .iter()
+        .map(|reason| Value::from(*reason))
+        .collect(),
     );
     let errors: Vec<Value> = (0..64).map(maximal_error).collect();
-    set_member(payload, "errors", Value::array(errors));
-    set_member(
-        member_mut(payload, "result"),
-        "error_count",
-        Value::Integer(64),
-    );
-    let payload_digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(payload).unwrap(),
+    *(payload).get_mut("errors").expect("fixture member exists") = Value::Array(errors);
+    *((payload).get_mut("result").expect("fixture member exists"))
+        .get_mut("error_count")
+        .expect("fixture member exists") = Value::from(64);
+    let payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(payload).unwrap())
+            .finalize()
+            .0,
     );
 
     let mut maximal = Value::Object(envelope_members);
-    set_member(
-        &mut maximal,
-        "payload_digest",
-        string(&payload_digest.to_string()),
-    );
+    *maximal
+        .get_mut("payload_digest")
+        .expect("fixture member exists") = Value::from((payload_digest.to_string()).as_str());
     let mut wire = serde_json_canonicalizer::to_vec(&maximal).unwrap();
     wire.push(b'\n');
 
@@ -345,9 +314,13 @@ fn prove_binary_error_paths(engine: &EngineProvenance) {
         })
         .collect();
     binary.payload.result.error_count = 64;
-    binary.payload_digest = amiss_wire::digest::hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+    binary.payload_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&binary.payload, &mut writer)
-    })
+            .map(|()| amiss_wire::model::Digest::from(writer.0.finalize().0))
+    }
     .unwrap();
     let mut wire = serde_json_canonicalizer::to_vec(&binary).unwrap();
     wire.push(b'\n');

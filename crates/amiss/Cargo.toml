@@ -12,6 +12,10 @@ repository.workspace = true
 exclude.workspace = true
 
 [dependencies]
+digest-io.workspace = true
+js_int.workspace = true
+percent-encoding.workspace = true
+sha2.workspace = true
 hex.workspace = true
 amiss-git = { path = "../amiss-git", version = "0.27.0" }
 amiss-md = { path = "../amiss-md", version = "0.27.0" }
@@ -30,7 +34,6 @@ rustix = { version = "1", features = ["process"] }
 amiss-fixtures = { path = "../amiss-fixtures" }
 dhat = "0.3"
 jsonschema.workspace = true
-sha2.workspace = true
 tempfile.workspace = true
 toml.workspace = true
 

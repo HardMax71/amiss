@@ -2,7 +2,19 @@ use std::fs;
 use std::path::Path;
 
 use amiss_scan::lfs::is_pointer;
-use amiss_wire::json::{Value, parse};
+#[derive(serde::Deserialize)]
+struct Vectors {
+    schema: String,
+    contract: String,
+    cases: Vec<Case>,
+}
+
+#[derive(serde::Deserialize)]
+struct Case {
+    id: String,
+    input: String,
+    recognized: bool,
+}
 
 /// The finite positive and negative corpus the spec pins for the conservative
 /// LFS-pointer recognizer.
@@ -12,46 +24,17 @@ fn the_pinned_vectors_decide_recognition() {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/lfs-pointer-vectors.json"),
     )
     .unwrap();
-    let Value::Object(root) = parse(&bytes).unwrap() else {
-        panic!("vectors are an object")
-    };
-    let field = |name: &str| {
-        root.iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value)
-    };
-    assert_eq!(
-        field("schema"),
-        Some(&Value::string("amiss/lfs-pointer-vectors"))
-    );
-    assert_eq!(
-        field("contract"),
-        Some(&Value::string("lfs-pointer-conservative"))
-    );
-    let Some((_, Value::Array(cases))) = root.iter().find(|(key, _)| key == "cases") else {
-        panic!("vectors hold cases")
-    };
-    assert!(!cases.is_empty());
-    for case in cases {
-        let Value::Object(members) = case else {
-            panic!("a case is an object")
-        };
-        let get = |name: &str| {
-            members
-                .iter()
-                .find(|(key, _)| key == name)
-                .map(|(_, value)| value)
-        };
-        let Some(Value::String(id)) = get("id") else {
-            panic!("a case has an id")
-        };
-        let Some(Value::String(input)) = get("input") else {
-            panic!("{id} has an input")
-        };
-        let Some(Value::Bool(expected)) = get("recognized") else {
-            panic!("{id} has a verdict")
-        };
-        assert_eq!(is_pointer(input.as_bytes()), *expected, "{id}");
+    let vectors: Vectors = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(vectors.schema, "amiss/lfs-pointer-vectors");
+    assert_eq!(vectors.contract, "lfs-pointer-conservative");
+    assert!(!vectors.cases.is_empty());
+    for case in vectors.cases {
+        assert_eq!(
+            is_pointer(case.input.as_bytes()),
+            case.recognized,
+            "{}",
+            case.id
+        );
     }
 }
 

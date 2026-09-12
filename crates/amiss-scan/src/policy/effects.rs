@@ -4,7 +4,7 @@ use amiss_wire::controls::{
     Disposition as PolicyDisposition, DocumentInclude, FindingDisposition, IncludeKind,
     ProjectionAssertion, SCANNER_POLICY_PATH, ScannerPolicy,
 };
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::{Disposition, FindingKind};
 use amiss_wire::requests::RequestTrust;

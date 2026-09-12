@@ -31,26 +31,18 @@ pub fn decode_component(
     out: &mut Vec<u8>,
     invalid: impl Fn(u8) -> Option<InvalidReference>,
 ) -> Result<(), InvalidReference> {
-    let bytes = text.as_bytes();
-    let mut at = 0_usize;
+    let malformed = first_malformed_escape(text);
+    let prefix = match malformed {
+        Some(at) => text.get(..at).ok_or(InvalidReference::PercentEncoding)?,
+        None => text,
+    };
     let mut invalid_byte = None;
-    while let Some(&byte) = bytes.get(at) {
-        let (decoded, consumed) = if byte == b'%' {
-            let high = bytes.get(at.saturating_add(1)).copied();
-            let low = bytes.get(at.saturating_add(2)).copied();
-            let (Some(high), Some(low)) = (high, low) else {
-                return Err(InvalidReference::PercentEncoding);
-            };
-            let (Some(high), Some(low)) = (hex_value(high), hex_value(low)) else {
-                return Err(InvalidReference::PercentEncoding);
-            };
-            (high.wrapping_shl(4) | low, 3)
-        } else {
-            (byte, 1)
-        };
+    for decoded in percent_encoding::percent_decode_str(prefix) {
         invalid_byte = invalid_byte.or_else(|| invalid(decoded));
         out.push(decoded);
-        at = at.saturating_add(consumed);
+    }
+    if malformed.is_some() {
+        return Err(InvalidReference::PercentEncoding);
     }
     invalid_byte.map_or(Ok(()), Err)
 }
@@ -114,60 +106,45 @@ pub fn site_route_valid(route: &str) -> bool {
         && bytes_valid(route)
 }
 
-const fn hex_value(byte: u8) -> Option<u8> {
-    match byte {
-        b'0'..=b'9' => Some(byte.wrapping_sub(b'0')),
-        b'a'..=b'f' => Some(byte.wrapping_sub(b'a').wrapping_add(10)),
-        b'A'..=b'F' => Some(byte.wrapping_sub(b'A').wrapping_add(10)),
-        _ => None,
-    }
+fn first_malformed_escape(text: &str) -> Option<usize> {
+    text.match_indices('%').find_map(|(at, _)| {
+        let valid = text
+            .as_bytes()
+            .get(at.saturating_add(1)..at.saturating_add(3))
+            .is_some_and(|pair| pair.iter().all(u8::is_ascii_hexdigit));
+        (!valid).then_some(at)
+    })
 }
 
 fn bytes_valid(text: &str) -> bool {
-    let bytes = text.as_bytes();
-    let mut at = 0_usize;
-    while let Some(&byte) = bytes.get(at) {
-        if byte == b'%' {
-            let pair = (
-                bytes.get(at.saturating_add(1)).copied().and_then(hex_value),
-                bytes.get(at.saturating_add(2)).copied().and_then(hex_value),
-            );
-            if !matches!(pair, (Some(_), Some(_))) {
-                return false;
-            }
-            at = at.saturating_add(3);
-            continue;
-        }
-        let allowed = byte.is_ascii_alphanumeric()
-            || matches!(
-                byte,
-                b'-' | b'.'
-                    | b'_'
-                    | b'~'
-                    | b':'
-                    | b'/'
-                    | b'?'
-                    | b'['
-                    | b']'
-                    | b'@'
-                    | b'!'
-                    | b'$'
-                    | b'&'
-                    | b'\''
-                    | b'('
-                    | b')'
-                    | b'*'
-                    | b'+'
-                    | b','
-                    | b';'
-                    | b'='
-            );
-        if !allowed {
-            return false;
-        }
-        at = at.saturating_add(1);
-    }
-    true
+    first_malformed_escape(text).is_none()
+        && text.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'-' | b'.'
+                        | b'_'
+                        | b'~'
+                        | b':'
+                        | b'/'
+                        | b'?'
+                        | b'['
+                        | b']'
+                        | b'@'
+                        | b'!'
+                        | b'$'
+                        | b'&'
+                        | b'\''
+                        | b'('
+                        | b')'
+                        | b'*'
+                        | b'+'
+                        | b','
+                        | b';'
+                        | b'='
+                        | b'%'
+                )
+        })
 }
 
 fn authority_valid(authority: &str) -> bool {

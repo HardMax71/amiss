@@ -2,13 +2,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{
     AcquiringRunner, ArtifactStoreConfig, ChangeState, CheckConclusion, CheckPlan, ControllerClock,
     DeliveryRoute, FileArtifactStore, FileLedger, FileLedgerConfig, IngressLimits, IngressPolicy,
-    OpaqueId, PlanRegistry, PlanScope, PolicyControls, ProviderAdapter, ProviderIdentity,
-    ProviderInstance, ProviderNamespace, ReplayWindow, SignedTimePolicy, WebhookKey,
-    WebhookKeyring, check_plan, register_plan,
+    OpaqueId, PlanRegistry, PlanScope, ProviderAdapter, ProviderIdentity, ProviderInstance,
+    ProviderNamespace, ReplayWindow, SignedTimePolicy, WebhookKey, WebhookKeyring, register_plan,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_github::{GitHubPullRequestAdapter, GitHubPullRequestSource};
@@ -18,13 +16,11 @@ use amiss_controller_service::{
     IncomingDelivery, IncomingHeader, Operations, WorkOutcome, acquiring_worker,
     repository_admission,
 };
-use amiss_wire::controls::Profile;
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use tempfile::TempDir;
 
 use super::provider::{CHECK_RUN_BODY, FakeGitHub, REPOSITORY_ID, SignedEvent, snapshot};
-use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories, execution_constraint};
+use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
 
 const SECRET: &[u8] = b"provider-lane-webhook-secret-2026";
 const ROUTE_ID: &str = "github-provider-lane";
@@ -70,16 +66,13 @@ impl Harness {
         let repositories = Repositories::new().unwrap();
         let executable =
             PathBuf::from(env!("CARGO_BIN_EXE_amiss-github-service-bootstrap-fixture"));
-        let bootstrap_digest = hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap());
-        let execution = execution_constraint(
-            &repositories,
-            RepositoryIdentity::github("hardmax71".to_owned(), "amiss".to_owned()).unwrap(),
-            case.status(),
-            bootstrap_digest,
-        )
-        .unwrap();
-        let plan =
-            Arc::new(check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap());
+        let plan = repositories
+            .execution_plan(
+                &executable,
+                RepositoryIdentity::github("hardmax71".to_owned(), "amiss".to_owned()).unwrap(),
+                case.status(),
+            )
+            .unwrap();
         let replay = ReplayWindow::new(Duration::from_mins(5), queue_age).unwrap();
         let ingress = IngressPolicy::new(
             IngressLimits::new(1_000_000, 32, 8_192).unwrap(),

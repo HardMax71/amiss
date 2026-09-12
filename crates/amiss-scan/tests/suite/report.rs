@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 
@@ -13,8 +14,7 @@ use amiss_scan::{
     discover,
 };
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::hb;
-use amiss_wire::json::parse;
+
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::{DocumentCounts, FindingCounts, ReferenceCounts, Summary};
 use amiss_wire::report::{
@@ -30,7 +30,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"test engine"),
+        digest: amiss_wire::model::Digest::from([36; 32]),
     }
 }
 
@@ -99,12 +99,12 @@ fn snapshot(
                 repository_path: intent.repository_path.as_ref(),
             })
             .unwrap();
-            let id = amiss_wire::digest::hj_serde(OBSERVATION_ID_DOMAIN, |writer| {
-                serde_json::to_writer(writer, &input)
-            })
-            .unwrap();
+            let mut writer = digest_io::IoWrapper(
+                sha2::Sha256::new_with_prefix(OBSERVATION_ID_DOMAIN).chain_update([0_u8]),
+            );
+            serde_json::to_writer(&mut writer, &input).unwrap();
             observations.push(Observation {
-                id,
+                id: amiss_wire::model::Digest::from(writer.0.finalize().0),
                 adapter_contract_digest,
                 document: record.path.clone(),
                 span: occurrence.occurrence.span,
@@ -562,7 +562,13 @@ fn an_observation_row_hashes_the_identity_input_it_renders() {
     let (identity, discovery, base) = snapshot(&repo, &mut resources, &commit);
     let (_, _, candidate) = snapshot(&repo, &mut resources, &commit);
     let mut comparisons = correlate(base, candidate).unwrap();
-    let wrong = hb("amiss/test-wrong-observation-id", b"wrong");
+    let wrong = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-wrong-observation-id")
+            .chain_update([0_u8])
+            .chain_update(b"wrong")
+            .finalize()
+            .0,
+    );
     let comparison = comparisons.first_mut().unwrap();
     comparison.base.as_mut().unwrap().id = wrong;
     comparison.candidate.as_mut().unwrap().id = wrong;
@@ -575,10 +581,13 @@ fn an_observation_row_hashes_the_identity_input_it_renders() {
         crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let row = &envelope["payload"]["observations"][0]["candidate"];
     let input_bytes = serde_json::to_vec(&row["observation_id_input"]).unwrap();
-    let input = parse(&input_bytes).unwrap();
-    let expected = hb(
-        OBSERVATION_ID_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&input).unwrap(),
+    let input = serde_json::from_slice::<serde_json::Value>(&input_bytes).unwrap();
+    let expected = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(OBSERVATION_ID_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&input).unwrap())
+            .finalize()
+            .0,
     )
     .to_string();
 

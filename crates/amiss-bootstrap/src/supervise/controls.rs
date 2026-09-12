@@ -1,5 +1,6 @@
-use amiss_wire::controls::{canonical_execution_constraint, canonical_trusted_time};
-use amiss_wire::digest::Digest;
+use sha2::Digest as _;
+
+use amiss_wire::model::Digest;
 use amiss_wire::report::model::{
     ControlStatus, ControlTrustSource, Controls, ExecutionConstraintProvenance, SandboxAssurance,
     SandboxEnforcementSource, TrustedTimeProvenance,
@@ -55,8 +56,17 @@ pub(super) fn accept(
     if semantic_evidence != &expected.semantic_evidence {
         return Err(AcceptanceDefect::SealedControls);
     }
-    let (_, descriptor_digest) = canonical_execution_constraint(&constraint.descriptor)
+    constraint
+        .descriptor
+        .validate()
         .map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&constraint.descriptor, &mut writer)
+        .map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    let descriptor_digest = Digest::from(writer.0.finalize().0);
     if constraint.descriptor_digest != expected.execution_constraint.digest
         || constraint.trust_source != expected.execution_constraint.trust_source
         || descriptor_digest != expected.execution_constraint.digest
@@ -64,8 +74,16 @@ pub(super) fn accept(
         return Err(AcceptanceDefect::SealedControls);
     }
     let statement = &trusted.statement;
-    let (_, statement_digest) =
-        canonical_trusted_time(statement).map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    statement
+        .validate()
+        .map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&statement, &mut writer)
+        .map_err(|_defect| AcceptanceDefect::SealedControls)?;
+    let statement_digest = Digest::from(writer.0.finalize().0);
     if trusted.statement_digest != expected.trusted_time_digest
         || statement_digest != expected.trusted_time_digest
         || statement.provider != expected.provider

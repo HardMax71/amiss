@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
+use sha2::Digest as _;
 use strum::{Display, EnumString};
 
-use crate::controls::{ConstraintPlatform, GitMode, root, sorted_set, validate_repository};
+use crate::controls::{ConstraintPlatform, GitMode, sorted_set, validate_repository};
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::model::Digest;
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
 pub const MANIFEST_DOMAIN: &str = "amiss/scanner-release-manifest";
@@ -45,12 +46,27 @@ pub enum EnvironmentContract {
 /// One runtime file of the reviewed action closure: a regular blob in the
 /// pinned action tree with its exact mode and plain SHA-256.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct RuntimeFile {
     pub file_sha256: Digest,
     pub git_mode: GitMode,
     pub path: RepoPathText,
     pub role: RuntimeRole,
+}
+
+impl Serialize for RuntimeFile {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RuntimeFile {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -75,7 +91,7 @@ pub enum RuntimeRole {
 
 /// One published platform artifact and its complete runtime closure.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct ReleaseArtifact {
     pub artifact_name: ArtifactId,
     pub binary_sha256: Digest,
@@ -87,36 +103,96 @@ pub struct ReleaseArtifact {
     pub tree_path: RepoPathText,
 }
 
+impl Serialize for ReleaseArtifact {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ReleaseArtifact {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 /// The build namespace: the repository and exact commit the release was
 /// built from.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct BuildSource {
     pub commit_oid: Oid,
     pub object_format: ObjectFormat,
     pub repository: RepositoryIdentity,
 }
 
+impl Serialize for BuildSource {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for BuildSource {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct DependencyLockFile {
     pub path: RepoPathText,
     pub raw_digest: Digest,
 }
 
+impl Serialize for DependencyLockFile {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for DependencyLockFile {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 /// Every build lockfile by canonical path and raw-evidence digest.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct DependencyLockInput {
     pub files: Vec<DependencyLockFile>,
     pub schema: DependencyLockSchema,
+}
+
+impl Serialize for DependencyLockInput {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for DependencyLockInput {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 /// The strict release manifest: the reviewed release label, its build
 /// namespace, the complete dependency-lock set, and one to six artifacts
 /// sorted by platform.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct ReleaseManifest {
     pub artifacts: Vec<ReleaseArtifact>,
     pub build_source: BuildSource,
@@ -124,6 +200,21 @@ pub struct ReleaseManifest {
     pub dependency_lock_digest: Digest,
     pub engine_version: String,
     pub schema: ReleaseManifestSchema,
+}
+
+impl Serialize for ReleaseManifest {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ReleaseManifest {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 /// Parses and validates one release manifest.
@@ -134,68 +225,62 @@ pub struct ReleaseManifest {
 /// values, inconsistent digests or closure rows, and unsorted or duplicate
 /// set members.
 pub fn parse_release_manifest(bytes: &[u8]) -> Result<ReleaseManifest, Error> {
-    root(bytes)?;
-    let manifest = de::deserialize_json(bytes)?;
-    validate_release_manifest(&manifest)?;
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    deserializer.disable_recursion_limit();
+    let manifest: ReleaseManifest = serde_path_to_error::deserialize(&mut deserializer)
+        .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
+        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+    manifest.validate()?;
     Ok(manifest)
 }
 
-/// Produces one valid release manifest's canonical bytes and digest.
-///
-/// # Errors
-///
-/// A public field violates the same laws [`parse_release_manifest`] enforces,
-/// or the typed value cannot be serialized.
-pub fn canonical_release_manifest(manifest: &ReleaseManifest) -> Result<(Vec<u8>, Digest), Error> {
-    validate_release_manifest(manifest)?;
-    let bytes = serde_json_canonicalizer::to_vec(manifest)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let digest = hb(MANIFEST_DOMAIN, &bytes);
-    Ok((bytes, digest))
+impl ReleaseManifest {
+    /// Checks the build identity, dependency lock binding and runtime closure.
+    ///
+    /// # Errors
+    ///
+    /// A public field violates the contract enforced by [`parse_release_manifest`].
+    pub fn validate(&self) -> Result<(), Error> {
+        if !valid_version(&self.engine_version) {
+            return fail("$.engine_version", ErrorKind::InvalidValue);
+        }
+        validate_repository("$.build_source.repository", &self.build_source.repository)?;
+        if self.build_source.commit_oid.object_format() != self.build_source.object_format {
+            return fail("$.build_source.commit_oid", ErrorKind::InvalidValue);
+        }
+        validate_dependency_lock("$.dependency_lock", &self.dependency_lock)?;
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(DEPENDENCY_LOCK_DOMAIN).chain_update([0_u8]),
+        );
+        serde_json_canonicalizer::to_writer(&self.dependency_lock, &mut writer)
+            .map_err(|_defect| Error::new("$.dependency_lock", ErrorKind::InvalidValue))?;
+        if Digest::from(writer.0.finalize().0) != self.dependency_lock_digest {
+            return fail("$.dependency_lock_digest", ErrorKind::DigestMismatch);
+        }
+        if self.artifacts.is_empty() || self.artifacts.len() > 6 {
+            return fail("$.artifacts", ErrorKind::LimitExceeded);
+        }
+        for (index, artifact) in self.artifacts.iter().enumerate() {
+            validate_release_artifact(&format!("$.artifacts[{index}]"), artifact)?;
+        }
+        sorted_set("$.artifacts", &self.artifacts, |left, right| {
+            left.platform.as_ref().cmp(right.platform.as_ref())
+        })
+    }
 }
 
-/// Produces one valid dependency-lock input's canonical bytes and digest.
-///
-/// # Errors
-///
-/// The lock set is empty, oversized, unsorted, duplicated, or cannot be
-/// serialized.
-pub fn canonical_dependency_lock(
-    dependency_lock: &DependencyLockInput,
-) -> Result<(Vec<u8>, Digest), Error> {
-    validate_dependency_lock("$", dependency_lock)?;
-    let bytes = serde_json_canonicalizer::to_vec(dependency_lock)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let digest = hb(DEPENDENCY_LOCK_DOMAIN, &bytes);
-    Ok((bytes, digest))
-}
-
-fn validate_release_manifest(manifest: &ReleaseManifest) -> Result<(), Error> {
-    if !valid_version(&manifest.engine_version) {
-        return fail("$.engine_version", ErrorKind::InvalidValue);
+impl DependencyLockInput {
+    /// Checks that the lock set is nonempty, bounded, sorted and unique.
+    ///
+    /// # Errors
+    ///
+    /// The lockfiles violate a set or resource limit.
+    pub fn validate(&self) -> Result<(), Error> {
+        validate_dependency_lock("$", self)
     }
-    validate_repository(
-        "$.build_source.repository",
-        &manifest.build_source.repository,
-    )?;
-    if manifest.build_source.commit_oid.object_format() != manifest.build_source.object_format {
-        return fail("$.build_source.commit_oid", ErrorKind::InvalidValue);
-    }
-    validate_dependency_lock("$.dependency_lock", &manifest.dependency_lock)?;
-    let lock_bytes = serde_json_canonicalizer::to_vec(&manifest.dependency_lock)
-        .map_err(|_defect| Error::new("$.dependency_lock", ErrorKind::InvalidValue))?;
-    if hb(DEPENDENCY_LOCK_DOMAIN, &lock_bytes) != manifest.dependency_lock_digest {
-        return fail("$.dependency_lock_digest", ErrorKind::DigestMismatch);
-    }
-    if manifest.artifacts.is_empty() || manifest.artifacts.len() > 6 {
-        return fail("$.artifacts", ErrorKind::LimitExceeded);
-    }
-    for (index, artifact) in manifest.artifacts.iter().enumerate() {
-        validate_release_artifact(&format!("$.artifacts[{index}]"), artifact)?;
-    }
-    sorted_set("$.artifacts", &manifest.artifacts, |left, right| {
-        left.platform.as_ref().cmp(right.platform.as_ref())
-    })
 }
 
 fn validate_dependency_lock(

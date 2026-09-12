@@ -65,11 +65,12 @@ pub struct GitLabJob {
     pub runner_id: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 pub struct GitLabPipeline {
     pub id: u64,
     pub project_id: u64,
     pub sha: String,
+    #[serde(rename = "ref")]
     pub reference: String,
     pub source: String,
     pub status: String,

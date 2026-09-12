@@ -1,10 +1,11 @@
+use sha2::Digest as _;
 use std::ffi::{OsStr, OsString};
 use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 use amiss_wire::semantic::record::{Input, InputSchema, Record};
 
 mod context;
@@ -116,9 +117,23 @@ fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Vec<u8>, Failur
     )?;
     let input_digest = serde_json::to_vec(&InputIdentity {
         context_digest,
-        rustdoc_digest: hb(RUSTDOC_DOMAIN, rustdoc_bytes),
+        rustdoc_digest: Digest::from(
+            sha2::Sha256::new_with_prefix(RUSTDOC_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(rustdoc_bytes)
+                .finalize()
+                .0,
+        ),
     })
-    .map(|canonical| hb(INPUT_DOMAIN, &canonical))
+    .map(|canonical| {
+        Digest::from(
+            sha2::Sha256::new_with_prefix(INPUT_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&canonical)
+                .finalize()
+                .0,
+        )
+    })
     .map_err(Failure::InputIdentity)?;
     let producer_identity =
         ArtifactId::new(PRODUCER_IDENTITY.to_owned()).ok_or(Failure::ProducerIdentity)?;

@@ -4,6 +4,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 use std::process::Command;
@@ -17,11 +18,11 @@ use amiss_wire::action::host_platform;
 use amiss_wire::controls::{
     ConstraintPlatform, ExecutionConstraintDescriptor, parse_execution_constraint,
 };
-use amiss_wire::digest::{Digest, hb, sha256};
-use amiss_wire::json::{Value, parse as parse_json};
-use amiss_wire::manifest::{RuntimeRole, canonical_release_manifest, parse_release_manifest};
+use amiss_wire::manifest::{RuntimeRole, parse_release_manifest};
+use amiss_wire::model::Digest;
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::requests::SnapshotMaterialization;
+use serde_json::Value;
 use tempfile::TempDir;
 
 mod support;
@@ -33,30 +34,40 @@ use support::release::{ACTION, Release, release};
 const BOOTSTRAP: &[u8] = b"the exact protected bootstrap bytes";
 
 fn constraint(release: &Release) -> ExecutionConstraintDescriptor {
-    let value = object(vec![
-        ("schema", string("amiss/scanner-execution-constraint")),
+    let value = Value::from_iter(vec![
+        ("schema", Value::from("amiss/scanner-execution-constraint")),
         (
             "action_repository",
-            object(vec![
-                ("host", string("git.example.internal")),
-                ("owner", string("platform/security")),
-                ("name", string("amiss")),
+            Value::from_iter(vec![
+                ("host", Value::from("git.example.internal")),
+                ("owner", Value::from("platform/security")),
+                ("name", Value::from("amiss")),
             ]),
         ),
-        ("action_object_format", string("sha1")),
-        ("action_commit_oid", string(&release.commit)),
-        ("action_tree_oid", string(&release.tree)),
-        ("manifest_path", string("release-manifest.json")),
+        ("action_object_format", Value::from("sha1")),
+        ("action_commit_oid", Value::from((release.commit).as_str())),
+        ("action_tree_oid", Value::from((release.tree).as_str())),
+        ("manifest_path", Value::from("release-manifest.json")),
         (
             "release_manifest_digest",
-            string(&release.manifest_digest.to_string()),
+            Value::from((release.manifest_digest.to_string()).as_str()),
         ),
-        ("selected_platform", string(release.platform.as_ref())),
-        ("required_status_name", string("amiss / assure")),
-        ("bootstrap_contract", string("amiss-action-bootstrap")),
+        ("selected_platform", Value::from(release.platform.as_ref())),
+        ("required_status_name", Value::from("amiss / assure")),
+        ("bootstrap_contract", Value::from("amiss-action-bootstrap")),
         (
             "bootstrap_digest",
-            string(&hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, BOOTSTRAP).to_string()),
+            Value::from(
+                (Digest::from(
+                    sha2::Sha256::new_with_prefix(amiss_bootstrap::BOOTSTRAP_DOMAIN)
+                        .chain_update([0_u8])
+                        .chain_update(BOOTSTRAP)
+                        .finalize()
+                        .0,
+                )
+                .to_string())
+                .as_str(),
+            ),
         ),
     ]);
     parse_execution_constraint(&serde_json_canonicalizer::to_vec(&value).unwrap())
@@ -67,19 +78,6 @@ fn attempt(release: &Release, bootstrap: &[u8]) -> Result<amiss_bootstrap::Valid
     let repo = Repository::open(release.dir.path(), ObjectFormat::Sha1).expect("open action tree");
     let mut resources = GitResources::new(GitLimits::CONTRACT);
     validate(&repo, &mut resources, &constraint(release), bootstrap)
-}
-
-fn string(text: &str) -> Value {
-    Value::string(text)
-}
-
-fn object(members: Vec<(&str, Value)>) -> Value {
-    Value::object(
-        members
-            .into_iter()
-            .map(|(key, value)| (key.to_owned(), value))
-            .collect(),
-    )
 }
 
 #[test]
@@ -114,12 +112,18 @@ fn the_generated_manifest_reparses_to_its_pinned_digest() {
     assert_eq!(bytes.last(), Some(&b'\n'), "the manifest blob ends in LF");
     let parsed = parse_release_manifest(&bytes).expect("the generated manifest parses");
     assert_eq!(
-        canonical_release_manifest(&parsed).unwrap().1,
+        Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-release-manifest")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&parsed).unwrap())
+                .finalize()
+                .0
+        ),
         release.manifest_digest
     );
     assert_eq!(
         serde_json_canonicalizer::to_vec(
-            &amiss_wire::json::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap()
+            &serde_json::from_slice::<Value>(bytes.strip_suffix(b"\n").unwrap()).unwrap()
         )
         .unwrap(),
         bytes.strip_suffix(b"\n").unwrap(),
@@ -160,19 +164,19 @@ fn a_symlinked_engine_path_refuses() {
 fn edit_action_rows(value: &mut Value, edit: &impl Fn(&mut Value) -> bool) {
     match value {
         Value::Array(items) => {
-            let mut retained = std::mem::take(items).into_vec();
+            let mut retained = std::mem::take(items);
             retained.retain_mut(|item| !is_action_row(item) || edit(item));
             for item in &mut retained {
                 edit_action_rows(item, edit);
             }
-            *items = retained.into_boxed_slice();
+            *items = retained;
         }
         Value::Object(members) => {
             for (_key, member) in members.iter_mut() {
                 edit_action_rows(member, edit);
             }
         }
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) => {}
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
     }
 }
 
@@ -181,12 +185,17 @@ fn with_rewritten_manifest(transform: impl Fn(&mut Value), also: impl FnOnce(&Pa
     let mut release = release(|root| {
         let path = root.join("release-manifest.json");
         let bytes = fs::read(&path).unwrap();
-        let mut value = parse_json(bytes.strip_suffix(b"\n").expect("the manifest ends in LF"))
-            .expect("the manifest parses");
+        let mut value = serde_json::from_slice::<Value>(
+            bytes.strip_suffix(b"\n").expect("the manifest ends in LF"),
+        )
+        .expect("the manifest parses");
         transform(&mut value);
-        digested = Some(hb(
-            amiss_wire::manifest::MANIFEST_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&value).unwrap(),
+        digested = Some(Digest::from(
+            sha2::Sha256::new_with_prefix(amiss_wire::manifest::MANIFEST_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&value).unwrap())
+                .finalize()
+                .0,
         ));
         let mut out = serde_json_canonicalizer::to_vec(&value).unwrap();
         out.push(b'\n');
@@ -202,7 +211,7 @@ fn is_action_row(value: &Value) -> bool {
         return false;
     };
     members.iter().any(|(key, member)| {
-        key == "role" && matches!(member, Value::String(role) if role.as_ref() == "runtime-data")
+        key == "role" && matches!(member, Value::String(role) if role.as_str() == "runtime-data")
     })
 }
 
@@ -233,7 +242,7 @@ fn runtime_data_off_the_action_path_is_not_a_pin() {
         };
         for (key, member) in members.iter_mut() {
             if key == "path" {
-                *member = Value::string("assets.yml");
+                *member = Value::from("assets.yml");
             }
         }
         true
@@ -266,7 +275,13 @@ fn a_tampered_runtime_file_refuses_on_its_checksum() {
 #[test]
 fn a_manifest_from_another_tree_refuses_on_its_digest() {
     let mut release = release(|_root| {});
-    release.manifest_digest = hb("amiss/scanner-release-manifest", b"another tree");
+    release.manifest_digest = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-release-manifest")
+            .chain_update([0_u8])
+            .chain_update(b"another tree")
+            .finalize()
+            .0,
+    );
     let outcome = attempt(&release, BOOTSTRAP);
     assert_eq!(
         outcome.err(),
@@ -333,7 +348,13 @@ fn an_engine_whose_header_names_another_platform_refuses() {
         tree: committed.tree,
         dir,
         manifest_digest,
-        engine_digest: hb(amiss_bootstrap::ENGINE_DOMAIN, &binary),
+        engine_digest: Digest::from(
+            sha2::Sha256::new_with_prefix(amiss_bootstrap::ENGINE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&binary)
+                .finalize()
+                .0,
+        ),
         platform,
     };
     let outcome = attempt(&release, BOOTSTRAP);
@@ -423,7 +444,7 @@ fn binary_constraint(staged: &Release) -> ExecutionConstraintDescriptor {
 
 fn named_constraint(staged: &Release, status: &str) -> ExecutionConstraintDescriptor {
     let own = fs::read(env!("CARGO_BIN_EXE_amiss-bootstrap")).unwrap();
-    let value = parse_json(
+    let value = serde_json::from_slice::<Value>(
         format!(
             r#"{{"schema":"amiss/scanner-execution-constraint","action_repository":{{"host":"git.example.internal","owner":"platform/security","name":"amiss"}},"action_object_format":"sha1","action_commit_oid":"{}","action_tree_oid":"{}","manifest_path":"release-manifest.json","release_manifest_digest":"{}","selected_platform":"{}","required_status_name":"{}","bootstrap_contract":"amiss-action-bootstrap","bootstrap_digest":"{}"}}"#,
             staged.commit,
@@ -431,7 +452,7 @@ fn named_constraint(staged: &Release, status: &str) -> ExecutionConstraintDescri
             staged.manifest_digest,
             staged.platform.as_ref(),
             status,
-            hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
+            Digest::from(sha2::Sha256::new_with_prefix(amiss_bootstrap::BOOTSTRAP_DOMAIN).chain_update([0_u8]).chain_update(&own).finalize().0),
         )
         .as_bytes(),
     )
@@ -529,7 +550,7 @@ fn an_execution_constraint_that_disagrees_with_its_digest_or_the_host_is_refused
         .execution_constraint
         .as_mut()
         .unwrap()
-        .expected_digest = sha256(b"not the constraint");
+        .expected_digest = Digest::from(sha2::Sha256::digest(b"not the constraint").0);
     assert!(refused(&staged, &wrong_digest));
 
     let mut wrong_host = SealedRequests::new(binary_constraint(&staged));
@@ -550,7 +571,7 @@ fn a_trusted_time_statement_that_disagrees_on_any_bound_fact_is_refused() {
                 .trusted_time
                 .as_mut()
                 .unwrap()
-                .expected_digest = sha256(b"not the statement");
+                .expected_digest = Digest::from(sha2::Sha256::digest(b"not the statement").0);
         },
         |requests| {
             requests.controls.trusted_time.as_mut().unwrap().provider = "github".to_owned();

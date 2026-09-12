@@ -1,5 +1,6 @@
 use amiss_scan::evaluate::{FINDING_KEY_DOMAIN, structural_facts};
 use amiss_scan::policy::ControlSeed;
+use sha2::Digest as _;
 
 use super::*;
 
@@ -38,8 +39,20 @@ fn reference_keys_preserve_normalization_and_optional_identity_fields() {
                 candidate.intent.fragment = Some("heading".to_owned());
                 let expected = format!(
                     r#"{{"finding_kind":"explicit-target-missing","schema":"amiss/scanner-finding-key-input","scope":{{"document":"d.md","kind":"reference","normalized_target_intent":{{{commit_json}"fragment_digest":"{}","kind":"repository-path","path":{path_json},"query_digest":"{}","target_kind":"{expected_kind}"}},"occurrence":{{"kind":"source-projection","source_projection_digest":"{}"}},"source_construct":"markdown-inline-link"}}}}"#,
-                    hb("amiss/scanner-link-fragment", b"heading"),
-                    hb("amiss/scanner-link-query", b"mode=raw"),
+                    amiss_wire::model::Digest::from(
+                        sha2::Sha256::new_with_prefix("amiss/scanner-link-fragment")
+                            .chain_update([0_u8])
+                            .chain_update(b"heading")
+                            .finalize()
+                            .0
+                    ),
+                    amiss_wire::model::Digest::from(
+                        sha2::Sha256::new_with_prefix("amiss/scanner-link-query")
+                            .chain_update([0_u8])
+                            .chain_update(b"mode=raw")
+                            .finalize()
+                            .0
+                    ),
                     candidate.projection_digest,
                 );
                 let reproduced =
@@ -64,7 +77,13 @@ fn reference_keys_preserve_normalization_and_optional_identity_fields() {
                 );
                 assert_eq!(
                     finding.finding_key,
-                    hb(FINDING_KEY_DOMAIN, expected.as_bytes())
+                    amiss_wire::model::Digest::from(
+                        sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
+                            .chain_update([0_u8])
+                            .chain_update(expected.as_bytes())
+                            .finalize()
+                            .0
+                    )
                 );
                 assert_eq!(
                     serde_json_canonicalizer::to_vec(&finding.key_input).expect("typed key"),
@@ -126,7 +145,7 @@ fn nonreference_keys_preserve_document_observation_and_control_scopes() {
         ("policy-weakened", r#"{"control_path":"config.json","kind":"control","rule_id":"rule"}"#.to_owned()),
     ].map(|(kind, scope)| {
         let input = format!(r#"{{"finding_kind":"{kind}","schema":"amiss/scanner-finding-key-input","scope":{scope}}}"#);
-        (hb(FINDING_KEY_DOMAIN, input.as_bytes()), input.into_bytes())
+        (amiss_wire::model::Digest::from(sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN).chain_update([0_u8]).chain_update(input.as_bytes()).finalize().0), input.into_bytes())
     });
     expected.sort_unstable();
     assert_eq!(

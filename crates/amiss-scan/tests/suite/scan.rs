@@ -4,8 +4,8 @@ use amiss_scan::{
     scan::normalize_newlines, scan_document,
 };
 use amiss_wire::controls::ResourceName;
-use amiss_wire::digest::hb;
 use amiss_wire::model::Adapter;
+use sha2::Digest as _;
 
 fn contract() -> ScanResources {
     ScanResources::new(ScanLimits::CONTRACT)
@@ -34,12 +34,24 @@ fn a_scanned_occurrence_carries_digests_and_display() {
     assert_eq!(entry.display.end_column, 10);
     assert_eq!(
         entry.raw_destination_digest,
-        hb(RAW_DESTINATION_DOMAIN, b"b")
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(RAW_DESTINATION_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(b"b")
+                .finalize()
+                .0
+        )
     );
     let block = "s\u{1f600}\t[a](b) end\nnext line";
     assert_eq!(
         entry.projection_digest,
-        hb(SOURCE_PROJECTION_DOMAIN, block.as_bytes()),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(SOURCE_PROJECTION_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(block.as_bytes())
+                .finalize()
+                .0
+        ),
         "the block is the whole lazily continued paragraph, endings normalized"
     );
 }
@@ -116,7 +128,13 @@ fn an_empty_destination_hashes_zero_bytes() {
         got.occurrences
             .first()
             .map(|entry| entry.raw_destination_digest),
-        Some(hb(RAW_DESTINATION_DOMAIN, b""))
+        Some(amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(RAW_DESTINATION_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(b"")
+                .finalize()
+                .0
+        ))
     );
 }
 

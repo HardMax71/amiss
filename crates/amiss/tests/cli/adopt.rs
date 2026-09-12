@@ -1,5 +1,6 @@
 #![expect(clippy::unwrap_used, reason = "test fixture plumbing")]
 
+use sha2::Digest as _;
 use std::fs;
 
 use amiss_fixtures::commit_chain;
@@ -7,10 +8,7 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{DebtInput, FloorInput, TimeInput};
 use amiss_scan::report::{CandidateBlock, Setup, SnapshotIdentity, candidate_identity_digest};
-use amiss_wire::controls::{
-    canonical_debt_snapshot, canonical_organization_floor, parse_debt_snapshot,
-    parse_organization_floor, parse_trusted_time,
-};
+use amiss_wire::controls::{parse_debt_snapshot, parse_organization_floor, parse_trusted_time};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
@@ -42,7 +40,14 @@ struct Minted {
 
 fn floor_digest() -> String {
     let floor = parse_organization_floor(FLOOR.as_bytes()).unwrap();
-    canonical_organization_floor(&floor).unwrap().1.to_string()
+    amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/organization-floor")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+            .finalize()
+            .0,
+    )
+    .to_string()
 }
 
 fn adopt_args(minted: &Minted, output: &str) -> Vec<String> {
@@ -157,7 +162,13 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
     let candidate = Oid::new(ObjectFormat::Sha1, minted.candidate.clone()).unwrap();
     let engine = amiss_wire::report::EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: amiss_wire::digest::hb("amiss/scanner-engine", b"test engine"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"test engine")
+                .finalize()
+                .0,
+        ),
     };
     let identity =
         amiss_wire::model::RepositoryIdentity::github("acme".to_owned(), "docs".to_owned())
@@ -212,7 +223,13 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         candidate_identity_digest(&time_setup).unwrap()
     );
     let statement = parse_trusted_time(statement.as_bytes()).unwrap();
-    let debt_digest = canonical_debt_snapshot(&snapshot).unwrap().1;
+    let debt_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&snapshot).unwrap())
+            .finalize()
+            .0,
+    );
     let shell = amiss_scan::pipeline::SetupShell {
         engine,
         profile: amiss_wire::controls::Profile::Enforce,
@@ -223,7 +240,13 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         default_branch_ref: None,
         floor: Some({
             let floor = parse_organization_floor(FLOOR.as_bytes()).unwrap();
-            let digest = canonical_organization_floor(&floor).unwrap().1;
+            let digest = amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                    .chain_update([0_u8])
+                    .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+                    .finalize()
+                    .0,
+            );
             FloorInput {
                 floor,
                 digest,

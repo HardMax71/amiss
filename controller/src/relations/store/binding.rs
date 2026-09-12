@@ -1,10 +1,11 @@
-use amiss_wire::digest::{Digest, hb, hj_serde};
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 use serde::Serialize;
+use sha2::Digest as _;
 
 use super::super::{
-    PendingRelation, RelationLimits, RelationPlan, RelationScheduleError, RelationTransition,
-    TriggeredRelation, relation_transition,
+    PendingRelation, RelationLimits, RelationPlan, RelationScheduleError,
+    RelationStatusDestination, RelationTransition, TriggeredRelation, relation_transition,
 };
 use super::{RelationScheduleStoreError, StoredBinding};
 use crate::LeaseFence;
@@ -21,14 +22,6 @@ pub(super) struct CheckedWork {
 }
 
 #[derive(Serialize)]
-struct BoundLimits {
-    acquisition_objects: u64,
-    acquisition_bytes: u64,
-    projection_records: u64,
-    projection_bytes: u64,
-}
-
-#[derive(Serialize)]
 struct BoundPlanSubject<'a> {
     role: &'a str,
     provider_namespace: &'a str,
@@ -41,13 +34,7 @@ struct BoundPlanSubject<'a> {
     object_format: &'a str,
     credential: &'a str,
     source: Digest,
-    limits: BoundLimits,
-}
-
-#[derive(Serialize)]
-struct BoundStatus<'a> {
-    subject_role: &'a str,
-    required_status_name: &'a str,
+    limits: RelationLimits,
 }
 
 #[derive(Serialize)]
@@ -56,8 +43,8 @@ struct BoundPlan<'a> {
     context_digest: String,
     projection: &'a str,
     subjects: [BoundPlanSubject<'a>; 2],
-    aggregate_limits: BoundLimits,
-    status_destinations: Vec<BoundStatus<'a>>,
+    aggregate_limits: RelationLimits,
+    status_destinations: &'a [RelationStatusDestination],
 }
 
 #[derive(Serialize)]
@@ -111,7 +98,14 @@ pub(super) fn checked_work(
     .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
     let binding = StoredBinding {
         coordination: transition.coordination.as_str().to_owned(),
-        work_binding: hb(WORK_BINDING_DOMAIN, &bytes).to_string(),
+        work_binding: Digest::from(
+            sha2::Sha256::new_with_prefix(WORK_BINDING_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&bytes)
+                .finalize()
+                .0,
+        )
+        .to_string(),
         trigger_role: transition.relation.trigger_role.as_str().to_owned(),
         fence: 0,
     };
@@ -145,16 +139,14 @@ pub(super) fn pending_from_binding(
 }
 
 pub(super) fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationScheduleStoreError> {
-    let limits = |limits: RelationLimits| BoundLimits {
-        acquisition_objects: limits.acquisition_objects,
-        acquisition_bytes: limits.acquisition_bytes,
-        projection_records: limits.projection_records,
-        projection_bytes: limits.projection_bytes,
-    };
     let [left, right] = plan.subjects.each_ref().map(|subject| {
-        let source = hj_serde(SOURCE_BINDING_SCHEMA, |mut writer| {
+        let source = {
+            let mut writer = digest_io::IoWrapper(
+                sha2::Sha256::new_with_prefix(SOURCE_BINDING_SCHEMA).chain_update([0_u8]),
+            );
             serde_json_canonicalizer::to_writer(&subject.source, &mut writer)
-        })
+                .map(|()| Digest::from(writer.0.finalize().0))
+        }
         .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
         Ok::<_, RelationScheduleStoreError>(BoundPlanSubject {
             role: subject.role.as_str(),
@@ -168,25 +160,23 @@ pub(super) fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationSchedu
             object_format: subject.object_format.as_ref(),
             credential: subject.credential.as_str(),
             source,
-            limits: limits(subject.limits),
+            limits: subject.limits,
         })
     });
-    let status_destinations = plan
-        .status_destinations
-        .iter()
-        .map(|destination| BoundStatus {
-            subject_role: destination.subject_role.as_str(),
-            required_status_name: &destination.required_status_name,
-        })
-        .collect();
     let bytes = serde_json::to_vec(&BoundPlan {
         identity: plan.identity.as_str(),
         context_digest: plan.context_digest.to_string(),
         projection: plan.projection.as_ref(),
         subjects: [left?, right?],
-        aggregate_limits: limits(plan.aggregate_limits),
-        status_destinations,
+        aggregate_limits: plan.aggregate_limits,
+        status_destinations: &plan.status_destinations,
     })
     .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
-    Ok(hb(PLAN_BINDING_DOMAIN, &bytes))
+    Ok(Digest::from(
+        sha2::Sha256::new_with_prefix(PLAN_BINDING_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&bytes)
+            .finalize()
+            .0,
+    ))
 }

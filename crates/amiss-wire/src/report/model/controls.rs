@@ -3,8 +3,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::{ExecutionConstraintDescriptor, Profile, TrustedTimeStatement};
-use crate::digest::Digest;
 use crate::model::ArtifactId;
+use crate::model::Digest;
 use crate::requests::RequestTrust;
 
 use super::{SandboxProvenance, UnavailableStatus};

@@ -296,7 +296,7 @@ pub fn loose_object(root: &Path, kind: &str, body: &[u8]) -> std::io::Result<Str
     framed.extend_from_slice(body.len().to_string().as_bytes());
     framed.push(0);
     framed.extend_from_slice(body);
-    let oid = hex(&sha1(&framed));
+    let oid = hex::encode(sha1(&framed));
     let (fan, rest) = oid.split_at(2);
     let bucket = root.join(".git").join("objects").join(fan);
     std::fs::create_dir_all(&bucket)?;
@@ -333,7 +333,9 @@ pub fn tree_object(root: &Path, entries: &[(&str, &[u8], &str)]) -> std::io::Res
         body.push(b' ');
         body.extend_from_slice(name);
         body.push(0);
-        body.extend_from_slice(&oid_bytes(oid)?);
+        let mut raw_oid = [0_u8; 20];
+        hex::decode_to_slice(oid, &mut raw_oid).map_err(std::io::Error::other)?;
+        body.extend_from_slice(&raw_oid);
     }
     loose_object(root, "tree", &body)
 }
@@ -381,7 +383,9 @@ pub fn index_file(root: &Path, entries: &[(&[u8], &str)]) -> std::io::Result<()>
         content.extend_from_slice(&[0_u8; 24]);
         content.extend_from_slice(&0o100_644_u32.to_be_bytes());
         content.extend_from_slice(&[0_u8; 12]);
-        content.extend_from_slice(&oid_bytes(oid)?);
+        let mut raw_oid = [0_u8; 20];
+        hex::decode_to_slice(oid, &mut raw_oid).map_err(std::io::Error::other)?;
+        content.extend_from_slice(&raw_oid);
         let name_bits = u16::try_from(path.len().min(0xFFF)).unwrap_or(0xFFF);
         content.extend_from_slice(&name_bits.to_be_bytes());
         content.extend_from_slice(path);
@@ -400,29 +404,6 @@ fn sha1(data: &[u8]) -> Vec<u8> {
         .build();
     hasher.update(data);
     hasher.try_finalize().hash().to_vec()
-}
-
-fn hex(bytes: &[u8]) -> String {
-    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
-    for byte in bytes {
-        let _infallible = std::fmt::Write::write_fmt(&mut out, format_args!("{byte:02x}"));
-    }
-    out
-}
-
-fn oid_bytes(oid: &str) -> std::io::Result<Vec<u8>> {
-    if oid.len() != 40 {
-        return Err(std::io::Error::other("object IDs here are full sha1 hex"));
-    }
-    oid.as_bytes()
-        .chunks(2)
-        .map(|pair| {
-            std::str::from_utf8(pair)
-                .ok()
-                .and_then(|text| u8::from_str_radix(text, 16).ok())
-                .ok_or_else(|| std::io::Error::other("object IDs here are full sha1 hex"))
-        })
-        .collect()
 }
 
 /// A two-commit repository under a temporary root, addressed the way the
@@ -589,7 +570,7 @@ pub fn staged_repository(entries: &[(&str, Staged<'_>)]) -> std::io::Result<Comm
             Staged::Absent(body) => ("100644", loose_object(root, "blob", body)?),
             Staged::Symlink(target) => ("120000", loose_object(root, "blob", target.as_bytes())?),
             Staged::Submodule(commit) => {
-                let _checked = oid_bytes(commit)?;
+                hex::decode_to_slice(commit, &mut [0_u8; 20]).map_err(std::io::Error::other)?;
                 ("160000", (*commit).to_owned())
             }
         };

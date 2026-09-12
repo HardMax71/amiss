@@ -1,7 +1,8 @@
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
-use amiss_wire::digest::{Digest, hb, hj_serde};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText};
 use amiss_wire::semantic::SemanticProducerKind;
 use amiss_wire::semantic::observation::SITE_BUILD_VERSION;
@@ -50,7 +51,15 @@ pub(super) fn site_build_context(
     }
     let base = route_base(&site.route_prefix)?;
     let context_digest = serde_json_canonicalizer::to_vec(site)
-        .map(|canonical| hb(CONTEXT_DOMAIN, &canonical))
+        .map(|canonical| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(CONTEXT_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&canonical)
+                    .finalize()
+                    .0,
+            )
+        })
         .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
     let producer_identity = ArtifactId::new("amiss-controller-mdbook-html".to_owned())
         .ok_or(MdBookEvidenceError::Evidence)?;
@@ -84,9 +93,12 @@ pub(super) fn render_context(
         .unwrap_or_else(|| PathBuf::from("src"));
     let HtmlOutput { html: _html } = HtmlOutput::deserialize(&config.output)
         .map_err(|_defect| MdBookEvidenceError::UnsupportedBuild)?;
-    let config_digest = hj_serde(CONFIG_DOMAIN, |mut writer| {
+    let config_digest = {
+        let mut writer =
+            digest_io::IoWrapper(sha2::Sha256::new_with_prefix(CONFIG_DOMAIN).chain_update([0_u8]));
         serde_json_canonicalizer::to_writer(&context.config, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
     Ok((source_directory, &context.book.items, config_digest))
 }

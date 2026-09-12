@@ -6,12 +6,12 @@ use amiss_scan::observe::{ObservationIdentity, observation_input};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
-use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 use amiss_wire::resolution::{
     BlobContent, BlobMode, BlobTarget, DeclaredUntracked, ExternalReference, Missing, Target,
 };
+use sha2::Digest as _;
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn rp(path: &str) -> RepoPath {
@@ -21,7 +21,13 @@ fn rp(path: &str) -> RepoPath {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"test engine"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"test engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 
@@ -38,14 +44,26 @@ fn repo_intent(path: &str) -> Intent {
 }
 
 fn resolved(path: &str, body: &[u8]) -> Resolution {
-    let raw = hb("amiss/raw-evidence", body);
+    let raw = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+            .chain_update([0_u8])
+            .chain_update(body)
+            .finalize()
+            .0,
+    );
     Resolution::Resolved {
         target: Target::Blob(BlobTarget {
             path: rp(path),
             mode: BlobMode::Regular,
             content: BlobContent::Available {
                 raw_digest: raw,
-                projection_digest: hb("amiss/scanner-target-projection", body),
+                projection_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/scanner-target-projection")
+                        .chain_update([0_u8])
+                        .chain_update(body)
+                        .finalize()
+                        .0,
+                ),
             },
         }),
     }
@@ -96,10 +114,19 @@ fn observation(spec: &Spec) -> Observation {
             end_line: 1,
             end_column: 2,
         },
-        projection_digest: hb("amiss/scanner-source-projection", spec.block.as_bytes()),
-        raw_destination_digest: hb(
-            "amiss/scanner-raw-destination",
-            spec.raw_destination.as_bytes(),
+        projection_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-source-projection")
+                .chain_update([0_u8])
+                .chain_update(spec.block.as_bytes())
+                .finalize()
+                .0,
+        ),
+        raw_destination_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-raw-destination")
+                .chain_update([0_u8])
+                .chain_update(spec.raw_destination.as_bytes())
+                .finalize()
+                .0,
         ),
     };
     let document = rp(&spec.document);
@@ -117,9 +144,14 @@ fn observation(spec: &Spec) -> Observation {
         repository_path: spec.intent.repository_path.as_ref(),
     })
     .unwrap();
-    let id = amiss_wire::digest::hj_serde(amiss_scan::observe::OBSERVATION_ID_DOMAIN, |writer| {
-        serde_json::to_writer(writer, &input)
-    })
+    let id = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(amiss_scan::observe::OBSERVATION_ID_DOMAIN)
+                .chain_update([0_u8]),
+        );
+        serde_json::to_writer(&mut writer, &input)
+            .map(|()| amiss_wire::model::Digest::from(writer.0.finalize().0))
+    }
     .unwrap();
     Observation {
         id,
@@ -149,7 +181,13 @@ fn side(observations: Vec<Observation>) -> Side {
             entry.document.clone(),
             (
                 GitMode::RegularFile,
-                hb("amiss/raw-evidence", entry.document.as_bytes()),
+                amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                        .chain_update([0_u8])
+                        .chain_update(entry.document.as_bytes())
+                        .finalize()
+                        .0,
+                ),
             ),
         );
     }
@@ -367,7 +405,13 @@ fn a_type_mismatch_is_comparable_only_against_the_same_target() {
                 path: rp(path),
                 mode: BlobMode::Regular,
                 content: BlobContent::LfsPointer {
-                    raw_digest: hb("amiss/raw-evidence", path.as_bytes()),
+                    raw_digest: amiss_wire::model::Digest::from(
+                        sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                            .chain_update([0_u8])
+                            .chain_update(path.as_bytes())
+                            .finalize()
+                            .0,
+                    ),
                 },
             }),
         };
@@ -548,7 +592,13 @@ fn an_exact_rename_pairs_only_unique_content() {
     let base_spec = moved("old/name.md");
     let candidate_spec = moved("new/name.md");
 
-    let digest = hb("amiss/raw-evidence", b"the very same document bytes");
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+            .chain_update([0_u8])
+            .chain_update(b"the very same document bytes")
+            .finalize()
+            .0,
+    );
     let mut base_side = side(vec![observation(&base_spec)]);
     base_side
         .documents
@@ -593,7 +643,13 @@ fn a_rename_requires_the_same_source_projection() {
     let mut candidate_spec = basic("new/name.md", "shared/t.md", "rewritten [x](x)");
     candidate_spec.node_path = vec![3, 0];
 
-    let digest = hb("amiss/raw-evidence", b"the very same document bytes");
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+            .chain_update([0_u8])
+            .chain_update(b"the very same document bytes")
+            .finalize()
+            .0,
+    );
     let mut base_side = side(vec![observation(&base_spec)]);
     base_side
         .documents

@@ -9,7 +9,7 @@ digraph amiss {
   rankdir = BT;
   node [shape = box, fontname = "Latin Modern, Georgia, serif", fontsize = 11];
   edge [arrowsize = 0.7];
-  wire  [label = "amiss-wire\ncanonical JSON, digests,\nschemas, machine contracts"];
+  wire  [label = "amiss-wire\nshared typed models,\nvalidation, machine contracts"];
   git   [label = "amiss-git\nobject store, packs, index,\nno-follow handles"];
   md    [label = "amiss-md\npinned document parsers"];
   scan  [label = "amiss-scan\ndiscovery, resolution,\ncorrelation, evaluation, policy"];
@@ -28,9 +28,12 @@ digraph amiss {
 }
 ```
 
-The graph above is the root workspace. `amiss-wire` is its foundation: strict JSON with
-canonical output, the digest rules, the report format, and every machine contract. Nothing in
-it knows what a repository is.
+The graph above is the root workspace. `amiss-wire` owns the shared report, control, request,
+and evidence models and their validation rules. Serde reads and writes those types directly;
+`serde_json_canonicalizer` supplies RFC 8785 output, and RustCrypto supplies hashing and HMAC.
+The wire profile uses a Serde visitor to reject duplicate keys, numbers outside the safe integer
+range, and more than 512 nested containers. It builds no separate JSON tree and does not parse
+JSON syntax or implement cryptographic algorithms.
 
 `amiss-git` reads Git storage behind the never-follow-links boundary: loose objects, packs,
 deltas, and the index, each under a parser that rejects malformed input and a published

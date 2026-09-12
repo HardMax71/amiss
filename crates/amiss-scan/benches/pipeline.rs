@@ -1,5 +1,6 @@
 #![expect(clippy::panic, reason = "bench fixture setup fails loudly")]
 
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
@@ -14,7 +15,6 @@ use amiss_scan::{
     SnapshotDiscovery,
 };
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::hb;
 use amiss_wire::extraction::{Opaque, Work};
 use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
@@ -270,7 +270,13 @@ fn evaluate_matching_debt(bencher: Bencher<'_, '_>, count: usize) {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-bench".to_owned(),
-        digest: hb("amiss/scanner-engine", b"bench engine"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"bench engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 

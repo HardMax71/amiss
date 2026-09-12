@@ -4,6 +4,7 @@
 )]
 
 use amiss_controller_fixtures::clock::TestClock;
+use sha2::Digest as _;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -17,7 +18,6 @@ use amiss_controller::{
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestAdapter, GiteaPullRequestSource,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha256;
@@ -423,7 +423,13 @@ fn dummy_snapshot(namespace: &str) -> ChangeSnapshot {
 }
 
 fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publication {
-    let digest = hb("amiss/controller-gitea-test", b"fixture");
+    let digest = amiss_wire::model::Digest::from(
+        Sha256::new_with_prefix("amiss/controller-gitea-test")
+            .chain_update([0_u8])
+            .chain_update(b"fixture")
+            .finalize()
+            .0,
+    );
     Publication {
         provider_run: delivery.provider_run.clone(),
         evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),

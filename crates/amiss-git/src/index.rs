@@ -2,7 +2,7 @@ use amiss_wire::controls::GitMode;
 use amiss_wire::model::{ObjectFormat, Oid};
 
 use crate::Error;
-use crate::object::{hex, ordinary_digest};
+use crate::object::ordinary_digest;
 
 /// One supported stage-zero row of the logical index: the raw path bytes as
 /// stored, the exact paired mode, the object in the declared namespace, and
@@ -118,7 +118,7 @@ pub fn parse_index_file(object_format: ObjectFormat, bytes: &[u8]) -> Result<Log
         let raw_oid = content
             .get(oid_start..oid_start.saturating_add(oid_width))
             .ok_or(Error::IndexInvalid)?;
-        let oid = Oid::new(object_format, hex(raw_oid)).ok_or(Error::IndexInvalid)?;
+        let oid = Oid::new(object_format, hex::encode(raw_oid)).ok_or(Error::IndexInvalid)?;
         let flags_at = oid_start.saturating_add(oid_width);
         let flags = be16(content, flags_at)?;
         if flags & STAGE_MASK != 0 {

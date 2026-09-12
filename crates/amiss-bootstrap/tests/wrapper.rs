@@ -5,6 +5,7 @@
     reason = "end-to-end harness over asserted fixture shapes"
 )]
 
+use sha2::Digest as _;
 #[path = "wrapper/semantic.rs"]
 mod semantic;
 mod support;
@@ -19,17 +20,15 @@ use amiss_bootstrap::result::{BootstrapResult, parse_result};
 use amiss_fixtures::CommitChain;
 use amiss_fixtures::requests::SealedRequests;
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_execution_constraint, canonical_organization_floor,
-    canonical_trusted_time, parse_execution_constraint, parse_trusted_time,
+    ExecutionConstraintDescriptor, parse_execution_constraint, parse_trusted_time,
 };
-use amiss_wire::digest::hb;
-use amiss_wire::json::{Value, parse};
 use amiss_wire::model::{Oid, RepoPathText};
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::report::model::ReportStatus;
 use amiss_wire::requests::{
     REQUEST_STREAM_BYTES, SEALED_ENGINE_ARGUMENT, commit_candidate_identity_digest,
 };
+use serde_json::Value;
 
 use support::release::{Release, release, release_with_engine};
 
@@ -112,41 +111,15 @@ fn wrapper_constraint(staged: &Release) -> ExecutionConstraintDescriptor {
         tree = staged.tree,
         manifest = staged.manifest_digest,
         platform = staged.platform.as_ref(),
-        bootstrap = hb(amiss_bootstrap::BOOTSTRAP_DOMAIN, &own),
+        bootstrap = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(amiss_bootstrap::BOOTSTRAP_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&own)
+                .finalize()
+                .0
+        ),
     );
     parse_execution_constraint(raw.as_bytes()).unwrap()
-}
-
-fn entry<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
-    let Value::Object(members) = value else {
-        panic!("not an object");
-    };
-    members
-        .iter_mut()
-        .find(|(name, _)| name == key)
-        .map(|(_, member)| member)
-        .expect("a present member")
-}
-
-fn set(value: &mut Value, key: &str, member: Value) {
-    let Value::Object(members) = value else {
-        panic!("not an object");
-    };
-    if let Some(slot) = members.iter_mut().find(|(name, _)| name == key) {
-        slot.1 = member;
-        return;
-    }
-    let at = members
-        .iter()
-        .position(|(name, _)| name.as_str() > key)
-        .unwrap_or(members.len());
-    let mut expanded = std::mem::take(members).into_vec();
-    expanded.insert(at, (key.to_owned(), member));
-    *members = expanded.into_boxed_slice();
-}
-
-fn string(raw: &str) -> Value {
-    Value::string(raw)
 }
 
 /// One run the wrapper can settle end to end: a pre-acquired repository, a
@@ -206,40 +179,27 @@ fn bind_statement(
         .trusted_time
         .as_mut()
         .expect("supplied time");
-    let mut statement = Value::object(Vec::new());
-    set(
-        &mut statement,
-        "schema",
-        string("amiss/scanner-trusted-time-statement"),
-    );
-    set(
-        &mut statement,
-        "controller",
-        string("external-required-check-clock"),
-    );
-    set(&mut statement, "repository", repository_value.clone());
-    set(&mut statement, "ref", string(&target));
-    set(
-        &mut statement,
-        "candidate_identity_digest",
-        string(identity),
-    );
-    set(&mut statement, "provider", string(&time.provider));
-    set(
-        &mut statement,
-        "provider_run_id",
-        string(&time.provider_run_id),
-    );
-    set(
-        &mut statement,
-        "provider_run_attempt",
-        Value::Integer(i64::try_from(time.provider_run_attempt).unwrap()),
-    );
-    set(&mut statement, "evaluation_instant", string(INSTANT));
-    set(&mut statement, "valid_until", string(VALID_UNTIL));
+    let mut statement = serde_json::json!({});
+    (&mut statement)["schema"] = Value::from("amiss/scanner-trusted-time-statement");
+    (&mut statement)["controller"] = Value::from("external-required-check-clock");
+    (&mut statement)["repository"] = repository_value.clone();
+    (&mut statement)["ref"] = Value::from((target).as_str());
+    (&mut statement)["candidate_identity_digest"] = Value::from(identity);
+    (&mut statement)["provider"] = Value::from((time.provider).as_str());
+    (&mut statement)["provider_run_id"] = Value::from((time.provider_run_id).as_str());
+    (&mut statement)["provider_run_attempt"] =
+        Value::from(i64::try_from(time.provider_run_attempt).unwrap());
+    (&mut statement)["evaluation_instant"] = Value::from(INSTANT);
+    (&mut statement)["valid_until"] = Value::from(VALID_UNTIL);
     let parsed = parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap())
         .expect("a valid statement fixture");
-    let (_, digest) = canonical_trusted_time(&parsed).unwrap();
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&parsed).unwrap())
+            .finalize()
+            .0,
+    );
     time.expected_digest = digest;
     time.value = parsed;
     (statement, digest.to_string())
@@ -268,52 +228,39 @@ fn bind_envelope(
         .repository
         .as_ref()
         .expect("an identity");
-    let mut repository_value = Value::object(Vec::new());
-    set(
-        &mut repository_value,
-        "host",
-        string(identity_repository.host()),
-    );
-    set(
-        &mut repository_value,
-        "owner",
-        string(identity_repository.owner()),
-    );
-    set(
-        &mut repository_value,
-        "name",
-        string(identity_repository.name()),
-    );
+    let mut repository_value = serde_json::json!({});
+    (&mut repository_value)["host"] = Value::from(identity_repository.host());
+    (&mut repository_value)["owner"] = Value::from(identity_repository.owner());
+    (&mut repository_value)["name"] = Value::from(identity_repository.name());
 
     let (statement, statement_digest) = bind_statement(requests, &repository_value, &identity);
 
     let mut envelope = example_envelope();
-    let payload = entry(&mut envelope, "payload");
-    set(
-        entry(payload, "engine"),
-        "engine_digest",
-        string(&staged.engine_digest.to_string()),
-    );
+    let payload = envelope.get_mut("payload").expect("fixture member exists");
+    ((payload).get_mut("engine").expect("fixture member exists"))["engine_digest"] =
+        Value::from((staged.engine_digest.to_string()).as_str());
     patch_evaluation(payload, requests, &repository_value, trees);
     patch_controls(payload, requests, statement, &statement_digest);
-    set(
-        entry(payload, "result"),
-        "exit_code",
-        Value::Integer(exit_class),
-    );
+    ((payload).get_mut("result").expect("fixture member exists"))["exit_code"] =
+        Value::from(exit_class);
     if exit_class == 1 {
-        set(
-            entry(payload, "result"),
-            "status",
-            string(ReportStatus::Fail.as_ref()),
-        );
+        ((payload).get_mut("result").expect("fixture member exists"))["status"] =
+            Value::from(ReportStatus::Fail.as_ref());
     }
-    let digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(entry(&mut envelope, "payload")).unwrap(),
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    envelope.get_mut("payload").expect("fixture member exists"),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
-    set(&mut envelope, "payload_digest", string(&digest));
+    (&mut envelope)["payload_digest"] = Value::from((digest).as_str());
     let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     wire.push(b'\n');
     wire
@@ -326,31 +273,29 @@ fn patch_evaluation(
     trees: &(String, String),
 ) {
     let request = &requests.evaluation;
-    let evaluation = entry(payload, "evaluation");
-    set(evaluation, "repository", repository_value.clone());
-    set(evaluation, "forge", string("gitlab"));
+    let evaluation = (payload)
+        .get_mut("evaluation")
+        .expect("fixture member exists");
+    (evaluation)["repository"] = repository_value.clone();
+    (evaluation)["forge"] = Value::from("gitlab");
     for (member, reference) in [
         ("candidate_ref", &request.candidate_ref),
         ("target_ref", &request.target_ref),
         ("default_branch_ref", &request.default_branch_ref),
     ] {
-        set(
-            evaluation,
-            member,
-            string(reference.as_ref().expect("an identity ref").as_str()),
-        );
+        (evaluation)[member] = Value::from(reference.as_ref().expect("an identity ref").as_str());
     }
     let candidate = request.candidate_commit.as_ref().expect("a candidate");
     for (member, commit, tree) in [
         ("base", &request.base_commit, &trees.0),
         ("candidate", candidate, &trees.1),
     ] {
-        let snapshot = entry(evaluation, member);
-        set(snapshot, "commit_oid", string(commit.as_str()));
-        set(snapshot, "tree_oid", string(tree));
+        let snapshot = (evaluation).get_mut(member).expect("fixture member exists");
+        (snapshot)["commit_oid"] = Value::from(commit.as_str());
+        (snapshot)["tree_oid"] = Value::from(tree.as_str());
     }
-    set(evaluation, "evaluation_instant", string(INSTANT));
-    set(evaluation, "trusted_time", Value::Bool(true));
+    (evaluation)["evaluation_instant"] = Value::from(INSTANT);
+    (evaluation)["trusted_time"] = Value::Bool(true);
 }
 
 fn patch_controls(
@@ -372,44 +317,40 @@ fn patch_controls(
         .as_ref()
         .expect("a constraint");
     let constraint_source = supplied.trust_source.as_ref().to_owned();
-    let constraint_value = parse(&serde_json::to_vec(&supplied.value).expect("constraint JSON"))
-        .expect("a constraint value");
-    let constraint_digest = canonical_execution_constraint(&requests.constraint)
-        .unwrap()
-        .1
-        .to_string();
+    let constraint_value = serde_json::from_slice::<Value>(
+        &serde_json::to_vec(&supplied.value).expect("constraint JSON"),
+    )
+    .expect("a constraint value");
+    let constraint_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&requests.constraint).unwrap())
+            .finalize()
+            .0,
+    )
+    .to_string();
 
-    let controls = entry(payload, "controls");
-    set(controls, "profile", string("enforce"));
-    let mut floor_echo = Value::object(Vec::new());
-    set(&mut floor_echo, "status", string("verified"));
-    set(&mut floor_echo, "digest", string(&floor_digest));
-    set(&mut floor_echo, "trust_source", string(&floor_source));
-    set(controls, "organization_floor", floor_echo);
-    let mut constraint_echo = Value::object(Vec::new());
-    set(&mut constraint_echo, "status", string("verified"));
-    set(&mut constraint_echo, "descriptor", constraint_value);
-    set(
-        &mut constraint_echo,
-        "descriptor_digest",
-        string(&constraint_digest),
-    );
-    set(
-        &mut constraint_echo,
-        "trust_source",
-        string(&constraint_source),
-    );
-    set(controls, "execution_constraint", constraint_echo);
-    let mut time_echo = Value::object(Vec::new());
-    set(&mut time_echo, "status", string("verified"));
-    set(
-        &mut time_echo,
-        "trust_source",
-        string("external-required-check"),
-    );
-    set(&mut time_echo, "statement", statement);
-    set(&mut time_echo, "statement_digest", string(statement_digest));
-    set(controls, "trusted_time_source", time_echo);
+    let controls = (payload)
+        .get_mut("controls")
+        .expect("fixture member exists");
+    (controls)["profile"] = Value::from("enforce");
+    let mut floor_echo = serde_json::json!({});
+    (&mut floor_echo)["status"] = Value::from("verified");
+    (&mut floor_echo)["digest"] = Value::from((floor_digest).as_str());
+    (&mut floor_echo)["trust_source"] = Value::from((floor_source).as_str());
+    (controls)["organization_floor"] = floor_echo;
+    let mut constraint_echo = serde_json::json!({});
+    (&mut constraint_echo)["status"] = Value::from("verified");
+    (&mut constraint_echo)["descriptor"] = constraint_value;
+    (&mut constraint_echo)["descriptor_digest"] = Value::from((constraint_digest).as_str());
+    (&mut constraint_echo)["trust_source"] = Value::from((constraint_source).as_str());
+    (controls)["execution_constraint"] = constraint_echo;
+    let mut time_echo = serde_json::json!({});
+    (&mut time_echo)["status"] = Value::from("verified");
+    (&mut time_echo)["trust_source"] = Value::from("external-required-check");
+    (&mut time_echo)["statement"] = statement;
+    (&mut time_echo)["statement_digest"] = Value::from(statement_digest);
+    (controls)["trusted_time_source"] = time_echo;
 }
 
 fn example_envelope() -> Value {
@@ -419,7 +360,7 @@ fn example_envelope() -> Value {
             .join("scanner-report.json"),
     )
     .unwrap();
-    parse(&bytes).unwrap()
+    serde_json::from_slice::<Value>(&bytes).unwrap()
 }
 
 struct Invocation {
@@ -654,10 +595,7 @@ fn inflate_controls(staged: &Release, run: &mut Run, target: u64) {
         .as_mut()
         .expect("a floor");
     floor.value.protected_inventory.clear();
-    let measured = run
-        .requests
-        .controls
-        .canonical_bytes()
+    let measured = serde_json_canonicalizer::to_vec(&run.requests.controls)
         .expect("controls serialize")
         .len();
     let grow = usize::try_from(target)
@@ -690,13 +628,16 @@ fn inflate_controls(staged: &Release, run: &mut Run, target: u64) {
             .unwrap()
         })
         .collect();
-    floor.expected_digest = canonical_organization_floor(&floor.value).unwrap().1;
+    floor.expected_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/organization-floor")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&floor.value).unwrap())
+            .finalize()
+            .0,
+    );
     run.wire = bind_envelope(staged, &mut run.requests, &chain_trees(&run.repository), 0);
-    let sized = run
-        .requests
-        .controls
-        .canonical_bytes()
-        .expect("controls serialize");
+    let sized =
+        serde_json_canonicalizer::to_vec(&run.requests.controls).expect("controls serialize");
     assert_eq!(u64::try_from(sized.len()).unwrap(), target);
 }
 

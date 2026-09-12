@@ -110,9 +110,11 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
         return Err(ProviderError::InvalidResponse);
     }
     let (label, conclusion) = conclusion(publication.conclusion);
-    let failure = provider_failure(publication.conclusion)?
-        .map(|failure| format!("\nfailure: {failure}"))
-        .unwrap_or_default();
+    let failure = if let CheckConclusion::Unavailable(failure) = publication.conclusion {
+        format!("\nfailure: {}", failure.as_ref())
+    } else {
+        String::new()
+    };
     let run = &publication.run;
     let repository = &run.change.repository;
     let summary = format!(
@@ -154,18 +156,6 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
             summary,
         },
     })
-}
-
-fn provider_failure(conclusion: CheckConclusion) -> Result<Option<String>, ProviderError> {
-    let CheckConclusion::Unavailable(failure) = conclusion else {
-        return Ok(None);
-    };
-    serde_json::to_value(failure)
-        .map_err(|_defect| ProviderError::InvalidResponse)?
-        .as_str()
-        .map(str::to_owned)
-        .map(Some)
-        .ok_or(ProviderError::InvalidResponse)
 }
 
 fn conclusion(conclusion: CheckConclusion) -> (&'static str, &'static str) {

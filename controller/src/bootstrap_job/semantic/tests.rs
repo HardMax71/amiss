@@ -1,9 +1,8 @@
 #![cfg(test)]
 
+use sha2::Digest as _;
 use std::sync::Arc;
 
-use amiss_wire::digest::hb;
-use amiss_wire::json;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
@@ -20,8 +19,20 @@ fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
             identity: ArtifactId::new("test-records".to_owned())
                 .ok_or(BootstrapJobError::SemanticEvidence)?,
             version: "1".to_owned(),
-            context_digest: hb("amiss/test-context", b"context"),
-            input_digest: hb("amiss/test-input", b"input"),
+            context_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-context")
+                    .chain_update([0_u8])
+                    .chain_update(b"context")
+                    .finalize()
+                    .0,
+            ),
+            input_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-input")
+                    .chain_update([0_u8])
+                    .chain_update(b"input")
+                    .finalize()
+                    .0,
+            ),
         },
         complete: true,
         observations: Arc::from([]),
@@ -32,12 +43,19 @@ fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
         &template,
         None,
         template_bytes.into(),
-        hb("amiss/test-candidate", b"candidate"),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-candidate")
+                .chain_update([0_u8])
+                .chain_update(b"candidate")
+                .finalize()
+                .0,
+        ),
     )?;
     let artifact = input_artifact(std::slice::from_ref(&input), u64::MAX)?;
     let exact =
         u64::try_from(artifact.len()).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-    let parsed = json::parse(&artifact).map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+    let parsed = serde_json::from_slice::<serde_json::Value>(&artifact)
+        .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
 
     assert_eq!(serde_json_canonicalizer::to_vec(&parsed).unwrap(), artifact);
     assert_eq!(
