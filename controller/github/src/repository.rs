@@ -18,11 +18,13 @@ pub struct RepositoryRecord {
     pub default_branch: String,
 }
 
-#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-pub struct WorkflowRepositoryRecord {
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(bound(deserialize = "Owner: Deserialize<'de>"))]
+pub struct WorkflowRepositoryRecord<Owner = OwnerRecord> {
     #[serde(with = "As::<TryFromInto<UInt>>")]
     pub id: u64,
     pub name: String,
     pub full_name: String,
-    pub owner: OwnerRecord,
+    #[serde(deserialize_with = "Owner::deserialize")]
+    pub owner: Owner,
 }

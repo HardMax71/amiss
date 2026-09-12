@@ -17,7 +17,10 @@ fn workflow_repository_keeps_artifact_identity_and_ignores_metadata() {
         r#"{"permissions":false,"license":[],"code_of_conduct":null,"security_and_analysis":{"future":[]},"size":-1,"custom_properties":true,"extra":{},"#,
         1,
     );
-    assert!(serde_json::from_str::<WorkflowRepositoryRecord>(&metadata).unwrap() == record);
+    assert_eq!(
+        serde_json::from_str::<WorkflowRepositoryRecord>(&metadata).unwrap(),
+        record
+    );
 }
 
 #[test]

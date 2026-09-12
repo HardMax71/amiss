@@ -370,17 +370,25 @@ fn signed_workflow_repositories_keep_owner_binding_without_owner_metadata() {
     let original = authenticate_target(&source, body.as_bytes(), &target)
         .unwrap()
         .unwrap();
-    for repository in [
-        serde_json::to_string(&payload.repository).unwrap(),
-        serde_json::to_string(&run.repository).unwrap(),
-        serde_json::to_string(&run.head_repository).unwrap(),
+    for (repository, metadata) in [
+        (serde_json::to_string(&payload.repository).unwrap(), ""),
+        (
+            serde_json::to_string(&run.repository).unwrap(),
+            r#""node_id":null,"private":{},"extra":[],"#,
+        ),
+        (
+            serde_json::to_string(&run.head_repository).unwrap(),
+            r#""fork":[],"description":false,"extra":{},"#,
+        ),
     ] {
         assert_eq!(body.matches(&repository).count(), 1);
-        let metadata = repository.replacen(
-            r#""owner":{"#,
-            r#""owner":{"unknown":true,"id":null,"type":{},"#,
-            1,
-        );
+        let metadata = repository
+            .replacen(
+                r#""owner":{"#,
+                r#""owner":{"unknown":true,"id":null,"type":{},"#,
+                1,
+            )
+            .replacen('{', &format!("{{{metadata}"), 1);
         assert_ne!(metadata, repository);
         let changed = body.replacen(&repository, &metadata, 1);
         assert_eq!(
@@ -391,7 +399,7 @@ fn signed_workflow_repositories_keep_owner_binding_without_owner_metadata() {
             original.delivery()
         );
         for invalid in [
-            repository.replacen('{', r#"{"unknown":true,"#, 1),
+            repository.replacen(r#""id":"#, r#""missing_id":"#, 1),
             repository.replacen(r#""owner":{"#, r#""owner":{"login":null,"#, 1),
         ] {
             assert_ne!(invalid, repository);
@@ -565,10 +573,7 @@ fn workflow_repository_identity_is_independent_of_retained_metadata() {
     let original = authenticate_target(&source, &serde_json::to_vec(&payload).unwrap(), &target)
         .unwrap()
         .unwrap();
-    let mut metadata = payload.clone();
-    let run = &mut metadata.workflow_run;
-    run.repository.node_id = "distinct-root-metadata".to_owned();
-    let metadata = serde_json::to_string(&metadata).unwrap().replace(
+    let metadata = serde_json::to_string(&payload).unwrap().replace(
         r#""owner":{"#,
         r#""owner":{"name":"Display name","email":null,"#,
     );

@@ -2,65 +2,10 @@ use amiss_wire::assessment::Nullable;
 use js_int::UInt;
 use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
-use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::owner::OwnerRecord;
-
 pub mod pull;
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkflowRepository {
-    #[serde(with = "As::<TryFromInto<UInt>>")]
-    pub id: u64,
-    pub node_id: String,
-    pub name: String,
-    pub full_name: String,
-    #[serde(deserialize_with = "Option::deserialize")]
-    pub owner: Option<OwnerRecord>,
-    pub private: bool,
-    pub html_url: String,
-    pub description: Nullable<String>,
-    pub fork: bool,
-    pub url: String,
-    pub archive_url: String,
-    pub assignees_url: String,
-    pub blobs_url: String,
-    pub branches_url: String,
-    pub collaborators_url: String,
-    pub comments_url: String,
-    pub commits_url: String,
-    pub compare_url: String,
-    pub contents_url: String,
-    pub contributors_url: String,
-    pub deployments_url: String,
-    pub downloads_url: String,
-    pub events_url: String,
-    pub forks_url: String,
-    pub git_commits_url: String,
-    pub git_refs_url: String,
-    pub git_tags_url: String,
-    pub hooks_url: String,
-    pub issue_comment_url: String,
-    pub issue_events_url: String,
-    pub issues_url: String,
-    pub keys_url: String,
-    pub labels_url: String,
-    pub languages_url: String,
-    pub merges_url: String,
-    pub milestones_url: String,
-    pub notifications_url: String,
-    pub pulls_url: String,
-    pub releases_url: String,
-    pub stargazers_url: String,
-    pub statuses_url: String,
-    pub subscribers_url: String,
-    pub subscription_url: String,
-    pub tags_url: String,
-    pub teams_url: String,
-    pub trees_url: String,
-}
 
 #[serde_with::apply(Option<_> => #[serde(
     default,

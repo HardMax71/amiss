@@ -7,6 +7,8 @@ use serde_with::{As, DeserializeFromStr, SerializeDisplay, TryFromInto};
 use strum::{Display, EnumString};
 
 use crate::check::CheckRunStatus;
+use crate::owner::OwnerRecord;
+use crate::repository::WorkflowRepositoryRecord;
 use crate::repository::pull::PullRepositoryRecord;
 use crate::workflow::{ReferencedWorkflow, WorkflowCommit, WorkflowPullRequest};
 
@@ -23,7 +25,7 @@ pub mod thread;
 pub mod workflow;
 
 use crate::pull::PullRequestRecord;
-use repository::{WorkflowOwner, WorkflowRepository};
+use repository::WorkflowOwner;
 
 #[serde_with::apply(Option<_> => #[serde(skip_serializing_if = "Option::is_none")])]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -179,8 +181,8 @@ pub struct WorkflowRun<Title = workflow::WorkflowRunTitle> {
     pub run_attempt: u64,
     pub head_sha: Oid,
     pub head_commit: WorkflowCommit<Committer>,
-    pub repository: WorkflowRepository,
-    pub head_repository: WorkflowRepository,
+    pub repository: WorkflowRepositoryRecord<Option<OwnerRecord>>,
+    pub head_repository: WorkflowRepositoryRecord<Option<OwnerRecord>>,
     pub pull_requests: Vec<Option<WorkflowPullRequest>>,
     pub actor: Nullable<WorkflowOwner>,
     pub artifacts_url: String,
