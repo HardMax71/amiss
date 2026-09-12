@@ -155,9 +155,7 @@ fn specific_code(kind: &ErrorKind) -> AnalysisErrorCode {
         ErrorKind::Deserialize(source) if source.is_data() => {
             AnalysisErrorCode::ConfigurationInvalid
         }
-        ErrorKind::Utf8(_) | ErrorKind::Json(_) | ErrorKind::Deserialize(_) => {
-            AnalysisErrorCode::InvalidJson
-        }
+        ErrorKind::Utf8(_) | ErrorKind::Deserialize(_) => AnalysisErrorCode::InvalidJson,
         ErrorKind::DigestMismatch => AnalysisErrorCode::DigestMismatch,
         ErrorKind::UnsortedSet | ErrorKind::DuplicateMember => AnalysisErrorCode::NoncanonicalArray,
         ErrorKind::Canonical(_)

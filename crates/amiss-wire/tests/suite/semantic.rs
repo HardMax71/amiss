@@ -8,13 +8,13 @@ use std::borrow::Cow;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::digest::hb;
-use amiss_wire::json::ErrorKind as JsonErrorKind;
 use amiss_wire::semantic::{
     PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
     SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind, SemanticSubject,
     TemplateSchema, bind_template, envelope, observation::Observation, parse, parse_template,
     record, template,
 };
+use serde_json::error::Category;
 
 const A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const B: &str = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -206,23 +206,22 @@ fn semantic_readers_refuse_unknown_shapes_even_with_correct_payload_digests() {
 }
 
 #[test]
-fn semantic_readers_enforce_strict_json_before_decoding_observations() {
+fn semantic_readers_retain_native_errors_for_invalid_observations() {
     let row = observation("a");
     let document = envelope(evidence(vec![row.clone()])).unwrap();
     let mut bytes = Vec::new();
     amiss_wire::write_json(&document, &mut bytes, SEMANTIC_EVIDENCE_BYTES).unwrap();
     let original = String::from_utf8(serde_json_canonicalizer::to_vec(&row).unwrap()).unwrap();
     let nested = format!("{}null{}", "[".repeat(511), "]".repeat(511));
-    assert!(amiss_wire::json::parse(nested.as_bytes()).is_ok());
     for (invalid, expected) in [
+        ("9007199254740992".to_owned(), Category::Data),
+        ("-0".to_owned(), Category::Data),
+        ("1.0".to_owned(), Category::Data),
+        ("1e0".to_owned(), Category::Data),
+        (nested, Category::Syntax),
         (
-            "9007199254740992".to_owned(),
-            JsonErrorKind::IntegerOutOfRange,
-        ),
-        (nested, JsonErrorKind::DepthLimit),
-        (
-            r#"{"kind":"record-set","kind":"record-set"}"#.to_owned(),
-            JsonErrorKind::DuplicateKey,
+            r#"{"kind":"record-set","kind":"record-set","name":"a","records":[]}"#.to_owned(),
+            Category::Data,
         ),
     ] {
         for bytes in [
@@ -237,8 +236,9 @@ fn semantic_readers_enforce_strict_json_before_decoding_observations() {
             } else {
                 parse(malformed.as_bytes()).unwrap_err()
             };
-            assert_eq!(error.path, "$");
-            assert!(matches!(error.kind, ErrorKind::Json(error) if error.kind == expected));
+            assert!(
+                matches!(error.kind, ErrorKind::Deserialize(source) if source.classify() == expected)
+            );
         }
     }
 }

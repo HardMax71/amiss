@@ -6,7 +6,6 @@ use strum::{Display, EnumString};
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hb};
 use crate::extraction::governed_name_valid;
-use crate::json;
 use crate::model::{Adapter, ArtifactId, RepoPathText};
 
 use super::{Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA, sorted_set};
@@ -163,7 +162,6 @@ pub struct ScannerPolicy {
 /// Fails on strict-JSON defects, schema-shape violations, unknown fields,
 /// invalid grammar values, and unsorted or duplicate set members.
 pub fn parse_scanner_policy(bytes: &[u8]) -> Result<ScannerPolicy, Error> {
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     let (policy, _digest) = de::deserialize_json(bytes, SCANNER_POLICY_SCHEMA)?;
     validate_scanner_policy(&policy)?;
     Ok(policy)
@@ -286,9 +284,13 @@ fn validate_projection_source(
     projection: ProjectionKind,
     source: &ProjectionSource,
 ) -> Result<(), Error> {
+    let positive_safe_integer = 1..=u64::from(UInt::MAX);
     match source {
         ProjectionSource::BlobLines(selection) => {
-            if !safe_line_valid(selection.first_line) || !safe_line_valid(selection.last_line) {
+            if ![selection.first_line, selection.last_line]
+                .iter()
+                .all(|line| positive_safe_integer.contains(line))
+            {
                 return fail(path, ErrorKind::InvalidValue);
             }
             if selection.first_line > selection.last_line {
@@ -306,7 +308,7 @@ fn validate_projection_source(
             }
         }
         ProjectionSource::TreePaths(selection) => {
-            if !safe_line_valid(selection.maximum_depth)
+            if !positive_safe_integer.contains(&selection.maximum_depth)
                 || !selection.suffix.as_deref().is_none_or(exact_suffix_valid)
             {
                 return fail(path, ErrorKind::InvalidValue);
@@ -330,10 +332,6 @@ fn exact_suffix_valid(suffix: &str) -> bool {
             && suffix.len() <= DOCUMENT_SUFFIX_BYTES
             && !tail.bytes().any(|byte| matches!(byte, b'/' | b'\\' | 0))
     })
-}
-
-fn safe_line_valid(line: u64) -> bool {
-    (1..=json::MAX_SAFE_INTEGER.unsigned_abs()).contains(&line)
 }
 
 fn source_marker_valid(marker: &str) -> bool {

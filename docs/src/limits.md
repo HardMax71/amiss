@@ -185,3 +185,8 @@ including missing and unknown fields. Wire-reader errors retain Serde's original
 source position, and tracked path; a missing field can point to its containing object.
 The `UNKNOWN_FIELD` code remains in the wire vocabulary, but these readers no longer
 derive it by parsing error messages. Malformed JSON and invalid UTF-8 keep their separate codes.
+
+Policies, semantic evidence and templates, and normalized record inputs decode directly
+into their closed types. Duplicate fields and invalid numeric field values use native
+Serde data errors too; byte ceilings, digest checks, and domain validation remain in place.
+The generic JSON reader retains its 512-container ceiling.

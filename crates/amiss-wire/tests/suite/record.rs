@@ -51,6 +51,16 @@ fn normalized_records_become_one_checked_candidate_free_observation() {
 
 #[test]
 fn row_order_duplicates_and_closed_metadata_are_refused() {
+    let escaped = parse_input(&input(r#"[{"\u006bey":"a","value":"A"}]"#)).unwrap();
+    assert_eq!(escaped.records[0].key, "a");
+    for records in [
+        r#"[{"key":"a","key":"a","value":"A"}]"#,
+        r#"[{"key":"a","\u006bey":"a","value":"A"}]"#,
+        r#"[{"key":"a","value":"A","value":"A"}]"#,
+    ] {
+        assert!(matches!(parse_input(&input(records)).unwrap_err().kind,
+            ErrorKind::Deserialize(source) if source.is_data()));
+    }
     for (records, kind) in [
         (
             r#"[{"key":"z","value":"Z"},{"key":"a","value":"A"}]"#,

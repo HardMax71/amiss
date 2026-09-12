@@ -237,14 +237,37 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
             "{invalid}"
         );
     }
-    let unsafe_integer =
-        policy_with_assertions(&valid.replace("\"last_line\":1", "\"last_line\":9007199254740992"));
-    assert!(matches!(
-        parse_scanner_policy(unsafe_integer.as_bytes())
-            .unwrap_err()
-            .kind,
-        ErrorKind::Json(_)
-    ));
+    for bounded in [
+        valid
+            .replace("\"first_line\":1", "\"first_line\":9007199254740991")
+            .replace("\"last_line\":1", "\"last_line\":9007199254740991"),
+        tree.replace("\"maximum_depth\":2", "\"maximum_depth\":9007199254740991"),
+    ] {
+        assert!(parse_scanner_policy(policy_with_assertions(&bounded).as_bytes()).is_ok());
+    }
+    for (source, field, original) in [
+        (valid, "first_line", "1"),
+        (valid, "last_line", "1"),
+        (tree, "maximum_depth", "2"),
+    ] {
+        for number in [
+            "-0",
+            "-1",
+            "1.0",
+            "1e0",
+            "9007199254740992",
+            "18446744073709551616",
+        ] {
+            let invalid = source.replace(
+                &format!("\"{field}\":{original}"),
+                &format!("\"{field}\":{number}"),
+            );
+            assert_ne!(invalid, source);
+            let error =
+                parse_scanner_policy(policy_with_assertions(&invalid).as_bytes()).unwrap_err();
+            assert!(matches!(error.kind, ErrorKind::Deserialize(source) if source.is_data()));
+        }
+    }
 
     let named = |start: &str, end: &str| {
         policy_with_assertions(&format!(

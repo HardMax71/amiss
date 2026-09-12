@@ -2,6 +2,14 @@ use amiss_wire::{controls, de::ErrorKind, digest::CanonicalJsonError, semantic};
 
 #[test]
 fn policy_reader_keeps_nested_records_object_shaped() -> Result<(), Box<dyn std::error::Error>> {
+    #[derive(serde::Serialize)]
+    struct RepeatedPolicy<'a> {
+        #[serde(flatten)]
+        first: &'a controls::ScannerPolicy,
+        #[serde(flatten)]
+        second: &'a controls::ScannerPolicy,
+    }
+
     let mut policy = controls::parse_scanner_policy(include_bytes!(
         "../../../../spec/examples/scanner-policy.json"
     ))?;
@@ -25,6 +33,14 @@ fn policy_reader_keeps_nested_records_object_shaped() -> Result<(), Box<dyn std:
     )?;
 
     let text = serde_json::to_string(&policy)?;
+    let repeated = serde_json::to_vec(&RepeatedPolicy {
+        first: &policy,
+        second: &policy,
+    })?;
+    assert!(
+        matches!(controls::parse_scanner_policy(&repeated).unwrap_err().kind,
+        ErrorKind::Deserialize(source) if source.is_data())
+    );
     for (valid, invalid) in [
         (
             serde_json::to_string(include)?,

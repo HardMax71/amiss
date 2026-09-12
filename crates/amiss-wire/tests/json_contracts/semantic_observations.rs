@@ -73,6 +73,14 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
         unexpected: bool,
     }
 
+    #[derive(serde::Serialize)]
+    struct RepeatedObservation<'a> {
+        #[serde(flatten)]
+        first: &'a Observation,
+        #[serde(flatten)]
+        second: &'a Observation,
+    }
+
     let original: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
@@ -96,7 +104,11 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
             .unwrap(),
         )
         .unwrap();
-        assert!(serde_json::from_str::<Observation>(&unknown_member).is_err());
+        let repeated_members = serde_json::to_string(&RepeatedObservation {
+            first: &observation,
+            second: &observation,
+        })
+        .unwrap();
         let template = SemanticEvidenceTemplate {
             schema: TemplateSchema::Current,
             producer: original.payload.producer.clone(),
@@ -124,24 +136,32 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
                 .observations,
             template.observations.as_ref()
         );
-        let malformed_template = String::from_utf8(template_bytes)
-            .unwrap()
-            .replace(&text, &unknown_member);
-        assert!(semantic::parse_template(malformed_template.as_bytes()).is_err());
-        let malformed_payload =
-            String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
-                .unwrap()
-                .replace(&text, &unknown_member);
-        let malformed_digest = hb(semantic::PAYLOAD_SCHEMA, malformed_payload.as_bytes());
-        let malformed_envelope = format!(
-            r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{malformed_payload},"payload_digest":"{malformed_digest}"}}"#
-        );
-        assert!(matches!(
-            semantic::parse(malformed_envelope.as_bytes())
-                .unwrap_err()
-                .kind,
-            amiss_wire::de::ErrorKind::Deserialize(source) if source.is_data()
-        ));
+        let template_text = String::from_utf8(template_bytes).unwrap();
+        for invalid in [unknown_member, repeated_members] {
+            assert!(
+                serde_json::from_str::<Observation>(&invalid)
+                    .unwrap_err()
+                    .is_data()
+            );
+            let malformed_template = template_text.replace(&text, &invalid);
+            let error = semantic::parse_template(malformed_template.as_bytes()).unwrap_err();
+            assert!(matches!(error.kind,
+                amiss_wire::de::ErrorKind::Deserialize(source) if source.is_data()));
+            let malformed_payload =
+                String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
+                    .unwrap()
+                    .replace(&text, &invalid);
+            let malformed_digest = hb(semantic::PAYLOAD_SCHEMA, malformed_payload.as_bytes());
+            let malformed_envelope = format!(
+                r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{malformed_payload},"payload_digest":"{malformed_digest}"}}"#
+            );
+            assert!(matches!(
+                semantic::parse(malformed_envelope.as_bytes())
+                    .unwrap_err()
+                    .kind,
+                amiss_wire::de::ErrorKind::Deserialize(source) if source.is_data()
+            ));
+        }
     }
 }
 

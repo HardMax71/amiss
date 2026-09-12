@@ -7,7 +7,6 @@ use strum::{Display, EnumString};
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::digest::{Digest, hj_serde};
-use crate::json;
 use crate::model::ArtifactId;
 
 pub mod observation;
@@ -160,7 +159,6 @@ fn parse_document<T: serde::de::DeserializeOwned + Serialize>(
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
     de::deserialize_json(bytes, domain)
 }
 

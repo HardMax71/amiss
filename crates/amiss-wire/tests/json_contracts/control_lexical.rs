@@ -1,4 +1,4 @@
-use amiss_wire::controls;
+use amiss_wire::{controls, semantic};
 
 const DEBT: &[u8] = include_bytes!("../../../../spec/examples/debt-snapshot.json");
 const FLOOR: &[u8] = include_bytes!("../../../../spec/examples/organization-floor.json");
@@ -7,24 +7,54 @@ const WAIVER: &[u8] = include_bytes!("../../../../spec/examples/waiver-bundle.js
 #[test]
 fn typed_control_readers_keep_the_closed_input_contract() -> Result<(), Box<dyn std::error::Error>>
 {
-    super::input::assert_closed_input(
-        DEBT,
-        &controls::DebtSnapshotSchema::Current.to_string(),
-        None,
-        |bytes| controls::parse_debt_snapshot(bytes).is_ok(),
-    )?;
-    super::input::assert_closed_input(
-        FLOOR,
-        &controls::OrganizationFloorSchema::Current.to_string(),
-        None,
-        |bytes| controls::parse_organization_floor(bytes).is_ok(),
-    )?;
-    super::input::assert_closed_input(
-        WAIVER,
-        &controls::WaiverBundleSchema::Current.to_string(),
-        None,
-        |bytes| controls::parse_waiver_bundle(bytes).is_ok(),
-    )?;
+    let read_debt: fn(&[u8]) -> bool = |bytes| controls::parse_debt_snapshot(bytes).is_ok();
+    let readers = [
+        (
+            DEBT,
+            controls::DebtSnapshotSchema::Current.to_string(),
+            None,
+            read_debt,
+        ),
+        (
+            FLOOR,
+            controls::OrganizationFloorSchema::Current.to_string(),
+            None,
+            |bytes| controls::parse_organization_floor(bytes).is_ok(),
+        ),
+        (
+            WAIVER,
+            controls::WaiverBundleSchema::Current.to_string(),
+            None,
+            |bytes| controls::parse_waiver_bundle(bytes).is_ok(),
+        ),
+        (
+            include_bytes!("../../../../spec/examples/scanner-policy.json"),
+            controls::ScannerPolicySchema::Current.to_string(),
+            None,
+            |bytes| controls::parse_scanner_policy(bytes).is_ok(),
+        ),
+        (
+            include_bytes!("../../../../spec/examples/scanner-semantic-evidence.json"),
+            semantic::EnvelopeSchema::Current.to_string(),
+            Some(semantic::SEMANTIC_EVIDENCE_BYTES),
+            |bytes| semantic::parse(bytes).is_ok(),
+        ),
+        (
+            include_bytes!("../../../../spec/examples/scanner-semantic-template.json"),
+            semantic::TemplateSchema::Current.to_string(),
+            Some(semantic::SEMANTIC_EVIDENCE_BYTES),
+            |bytes| semantic::parse_template(bytes).is_ok(),
+        ),
+        (
+            include_bytes!("../../../../spec/examples/scanner-record-set-input.json"),
+            semantic::record::InputSchema::Current.to_string(),
+            Some(semantic::SEMANTIC_EVIDENCE_BYTES),
+            |bytes| semantic::record::parse_input(bytes).is_ok(),
+        ),
+    ];
+    for (bytes, schema, limit, read) in readers {
+        super::input::assert_closed_input(bytes, &schema, limit, read)?;
+    }
     let debt = controls::parse_debt_snapshot(DEBT)?;
     let fact = &debt.items[0].accepted_fact;
     let (bytes, _digest) = controls::canonical_fact(fact)?;

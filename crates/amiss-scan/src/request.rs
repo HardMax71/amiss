@@ -4,7 +4,6 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::digest::Digest;
-use amiss_wire::json::ErrorKind as JsonErrorKind;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 use amiss_wire::requests::{ControlsRequest, RequestTrust, SuppliedControl};
 
@@ -153,21 +152,6 @@ fn typed<T>(
 pub fn configuration_detail(error: &Error) -> ErrorDetail {
     let analysis = match &error.kind {
         ErrorKind::Utf8(_) => AnalysisErrorCode::InvalidUtf8,
-        ErrorKind::Json(json) => match json.kind {
-            JsonErrorKind::InvalidUtf8 => AnalysisErrorCode::InvalidUtf8,
-            JsonErrorKind::DuplicateKey => AnalysisErrorCode::DuplicateJsonKey,
-            JsonErrorKind::ByteOrderMark
-            | JsonErrorKind::UnexpectedEnd
-            | JsonErrorKind::UnexpectedByte
-            | JsonErrorKind::TrailingContent
-            | JsonErrorKind::DepthLimit
-            | JsonErrorKind::ControlCharacter
-            | JsonErrorKind::InvalidEscape
-            | JsonErrorKind::LoneSurrogate
-            | JsonErrorKind::NegativeZero
-            | JsonErrorKind::FractionOrExponent
-            | JsonErrorKind::IntegerOutOfRange => AnalysisErrorCode::InvalidJson,
-        },
         ErrorKind::Deserialize(source) if source.is_data() => {
             AnalysisErrorCode::ConfigurationInvalid
         }

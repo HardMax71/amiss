@@ -1,4 +1,4 @@
-use crate::{digest::Digest, json};
+use crate::digest::Digest;
 
 #[derive(Debug, thiserror::Error)]
 #[error("{kind} at {path}")]
@@ -12,8 +12,6 @@ pub struct Error {
 pub enum ErrorKind {
     #[error("{0}")]
     Utf8(#[source] std::str::Utf8Error),
-    #[error("{0}")]
-    Json(#[source] json::Error),
     #[error("{0}")]
     Deserialize(#[from] serde_json::Error),
     #[error("{0}")]
