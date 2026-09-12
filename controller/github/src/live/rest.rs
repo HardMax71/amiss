@@ -281,7 +281,7 @@ impl GitHubRest for HttpRest {
         decode_body(
             self.transport
                 .execute(self.transport.client.get(url), deadline)?,
-            |bytes| amiss_wire::read_json(bytes, u64::MAX),
+            |bytes| serde_json::from_slice(bytes),
         )
     }
 

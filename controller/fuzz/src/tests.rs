@@ -14,13 +14,13 @@ fn github_mutations_keep_unselected_metadata_and_target_each_bound_fact() {
         (1, |p| p.action = Some("synchronize".to_owned())),
         (2, |p| p.action = Some("b".to_owned())),
         (3, |p| p.number = Some(1)),
-        (4, |p| p.pull_request.as_mut().unwrap().request.number = 1),
-        (5, |p| p.pull_request.as_mut().unwrap().request.id = 1),
+        (4, |p| p.pull_request.as_mut().unwrap().number = 1),
+        (5, |p| p.pull_request.as_mut().unwrap().id = 1),
         (7, |p| {
-            p.pull_request.as_mut().unwrap().request.head.branch = "b".to_owned();
+            p.pull_request.as_mut().unwrap().head.branch = "b".to_owned();
         }),
         (8, |p| {
-            p.pull_request.as_mut().unwrap().request.base.branch = "b".to_owned();
+            p.pull_request.as_mut().unwrap().base.branch = "b".to_owned();
         }),
         (9, |p| p.repository.as_mut().unwrap().name = "b".to_owned()),
     ];

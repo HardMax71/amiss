@@ -22,13 +22,13 @@ pub mod suite;
 pub mod thread;
 pub mod workflow;
 
-use pull::request::PullRequestWebhook;
+use crate::pull::PullRequestRecord;
 use repository::{WorkflowOwner, WorkflowRepository};
 
 #[serde_with::apply(Option<_> => #[serde(skip_serializing_if = "Option::is_none")])]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(bound(deserialize = "Pull: Deserialize<'de>, Action: Deserialize<'de>"))]
-pub struct GitHubPayload<Pull = PullRequestWebhook, Action = String> {
+pub struct GitHubPayload<Pull = PullRequestRecord, Action = String> {
     pub action: Option<Action>,
     pub changes: Option<PullRequestChanges>,
     pub installation: Option<Installation>,

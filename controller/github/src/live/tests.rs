@@ -1057,11 +1057,8 @@ impl GitHubRest for FakeRest {
 }
 
 fn refresh_data(candidate: &Oid) -> RefreshData {
-    let captured: PullRequestRecord = amiss_wire::read_json(
-        include_bytes!("../../tests/fixtures/pull-request.json"),
-        u64::MAX,
-    )
-    .unwrap();
+    let captured: PullRequestRecord =
+        serde_json::from_slice(include_bytes!("../../tests/fixtures/pull-request.json")).unwrap();
     let repository = captured.base.repo.clone().unwrap();
     let owner = repository.owner.clone();
     let base_repository = PullRepositoryRecord {
@@ -1114,7 +1111,6 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
                 user: base_repository.owner.clone(),
                 repo: Some(base_repository),
             },
-            ..captured
         },
         target: CommitRecord {
             sha: oid('a'),

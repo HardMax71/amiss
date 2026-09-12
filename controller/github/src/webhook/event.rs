@@ -5,13 +5,14 @@ use strum::{Display, EnumString};
 use super::comment::ReviewCommentEvent;
 use super::comment::issue::IssueCommentEvent;
 
-use super::pull::request::{PullRequestWebhook, SynchronizePullRequest};
+use super::pull::request::SynchronizePullRequest;
 use super::review::ReviewEvent;
 use super::run::{CheckRunEvent, RequestedAction};
 use super::suite::CheckSuiteEvent;
 use super::thread::ReviewThreadEvent;
 use super::workflow::{RequestedWorkflowRunAction, RequestedWorkflowRunTitle, WorkflowRunEvent};
 use super::{GitHubPayload, PullRequest, WorkflowRun};
+use crate::pull::PullRequestRecord;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
@@ -27,7 +28,7 @@ pub enum GitHubEvent {
     ReviewThread(Box<ReviewThreadEvent>),
     ReviewComment(Box<ReviewCommentEvent>),
     Review(Box<ReviewEvent>),
-    PullRequest(Box<GitHubPayload<PullRequestWebhook, PullAction>>),
+    PullRequest(Box<GitHubPayload<PullRequestRecord, PullAction>>),
     Synchronize(Box<GitHubPayload<SynchronizePullRequest, SynchronizeAction>>),
     Activity(Box<GitHubPayload<PullRequest, ActivityAction>>),
 }

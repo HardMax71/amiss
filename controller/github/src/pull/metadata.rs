@@ -87,33 +87,6 @@ pub struct Link {
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct TeamRecord {
-    pub id: UInt,
-    pub node_id: String,
-    pub url: String,
-    pub members_url: String,
-    pub name: String,
-    pub description: Nullable<String>,
-    pub permission: String,
-    pub html_url: String,
-    pub repositories_url: String,
-    pub slug: String,
-    #[serde(rename = "type")]
-    pub kind: TeamKind,
-    pub privacy: Option<String>,
-    pub notification_setting: Option<String>,
-    pub ldap_dn: Option<String>,
-    pub organization_id: Option<UInt>,
-    pub enterprise_id: Option<UInt>,
-}
-
-#[serde_with::apply(Option<_> => #[serde(
-    default,
-    deserialize_with = "deserialize_some",
-    skip_serializing_if = "Option::is_none"
-)])]
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct StackRecord {
     pub base: StackBase,
     pub size: Option<UInt>,
@@ -138,15 +111,6 @@ pub enum MergeMethod {
     Merge,
     Squash,
     Rebase,
-}
-
-#[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
-)]
-#[strum(serialize_all = "snake_case")]
-pub enum TeamKind {
-    Enterprise,
-    Organization,
 }
 
 #[derive(

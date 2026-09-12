@@ -27,9 +27,9 @@ use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::check::CheckRunStatus;
+use crate::pull::PullRequestRecord;
 use crate::repository::pull::PullRepositoryRecord;
 use crate::webhook::event::{GitHubEvent, PullAction};
-use crate::webhook::pull::request::PullRequestWebhook;
 use crate::webhook::workflow::{WorkflowRunAction, WorkflowRunEvent};
 use crate::webhook::{GitHubPayload, Installation, WorkflowRunConclusion};
 
@@ -285,10 +285,9 @@ impl PullRequestFacts {
             GitHubEvent::PullRequest(payload) => {
                 reject_mixed_events(&payload)?;
                 let eligible = workflow_completion.is_none() && supported_action(&payload);
-                let Some(pull_request) = payload.pull_request.as_ref().filter(|_| eligible) else {
+                let Some(pull) = payload.pull_request.as_ref().filter(|_| eligible) else {
                     return Ok(None);
                 };
-                let pull = &pull_request.request;
                 let base = pull.base.repo.as_ref().ok_or(Authentication)?;
                 return authenticate_pull_request(
                     &payload,
@@ -589,7 +588,7 @@ fn workflow_pull_request<'a>(
     }))
 }
 
-fn supported_action(payload: &GitHubPayload<PullRequestWebhook, PullAction>) -> bool {
+fn supported_action(payload: &GitHubPayload<PullRequestRecord, PullAction>) -> bool {
     payload.action.is_some_and(|action| {
         matches!(action, PullAction::Opened | PullAction::Reopened)
             || action == PullAction::Edited

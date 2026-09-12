@@ -25,10 +25,11 @@ use amiss_controller::{
     UntrustedDelivery, WebhookKey, WebhookKeyring, WorkflowArtifactExpectation,
 };
 use amiss_controller_github::check::CheckRunStatus;
+use amiss_controller_github::pull::PullRequestRecord;
 use amiss_controller_github::repository::metadata::RepositoryOrganization;
 use amiss_controller_github::repository::pull::PullRepositoryRecord;
 use amiss_controller_github::webhook::event::GitHubEvent;
-use amiss_controller_github::webhook::pull::request::{PullRequestWebhook, SynchronizePullRequest};
+use amiss_controller_github::webhook::pull::request::SynchronizePullRequest;
 use amiss_controller_github::webhook::workflow::{WorkflowRunAction, WorkflowRunEvent};
 use amiss_controller_github::webhook::{
     BaseChange, GitHubPayload, Installation, PreviousReference, PullRequestChanges, Workflow,
@@ -56,14 +57,14 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
     "widget".clone_into(&mut repository.name);
     "HardMax71/widget".clone_into(&mut repository.full_name);
     "HardMax71".clone_into(&mut repository.owner.login);
-    let mut pull: PullRequestWebhook =
+    let mut pull: PullRequestRecord =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_PULL).unwrap();
-    pull.request.id = 4_201;
-    pull.request.number = 42;
-    pull.request.head.sha = oid('b');
-    "topic".clone_into(&mut pull.request.head.branch);
-    "main".clone_into(&mut pull.request.base.branch);
-    pull.request.base.repo = Some(repository.clone());
+    pull.id = 4_201;
+    pull.number = 42;
+    pull.head.sha = oid('b');
+    "topic".clone_into(&mut pull.head.branch);
+    "main".clone_into(&mut pull.base.branch);
+    pull.base.repo = Some(repository.clone());
     serde_json::to_vec(&GitHubPayload {
         action: Some("opened".to_owned()),
         changes: None,
@@ -619,7 +620,6 @@ fn pull_request_identity_excludes_root_metadata() {
                 .pull_request
                 .as_mut()
                 .unwrap()
-                .request
                 .base
                 .repo
                 .as_mut()
@@ -807,8 +807,14 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
         Ok(None)
     );
 
-    let closed = replaced_once(&BODY, r#""action":"opened""#, r#""action":"closed""#);
-    assert_eq!(authenticate_target(&source, &closed, &main), Ok(None));
+    let closed = format!(
+        r#"{{"action":"closed","pull_request":{}}}"#,
+        std::str::from_utf8(amiss_fixtures::GITHUB_WEBHOOK_PULL).unwrap()
+    );
+    assert_eq!(
+        authenticate_target(&source, closed.as_bytes(), &main),
+        Ok(None)
+    );
 
     let title_change = replaced_once(
         &BODY,
@@ -834,30 +840,43 @@ fn malformed_supported_delivery_is_not_no_work() {
 }
 
 #[test]
-fn signed_active_pull_requests_reject_unknown_metadata() {
+fn signed_pull_metadata_does_not_change_authenticated_identity() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let original = authenticate_target(&source, &BODY, &target)
+        .unwrap()
+        .unwrap();
     let body = std::str::from_utf8(&BODY).unwrap();
-    for action in ["opened", "reopened", "edited", "synchronize"] {
+    for action in ["opened", "reopened", "synchronize"] {
         let body = body.replacen(
             r#""action":"opened""#,
             &format!(r#""action":"{action}""#),
             1,
         );
-        for member in [r#""pull_request":{"#, r#""head":{"#, r#""base":{"#] {
-            assert_eq!(body.matches(member).count(), 1);
-            let invalid = body.replacen(member, &format!(r#"{member}"unknown":true,"#), 1);
+        for metadata in [
+            r#""future":{"anything":[null,false]}"#,
+            r#""user":null,"labels":false,"body":{}"#,
+            r#""allow_auto_merge":[],"merge_commit_message":{}"#,
+        ] {
+            let input = body.replacen(
+                r#""pull_request":{"#,
+                &format!(r#""pull_request":{{{metadata},"#),
+                1,
+            );
             assert_eq!(
-                authenticate_target(&source, invalid.as_bytes(), &target),
-                Err(ProviderError::Authentication),
-                "{action}: unknown metadata in {member}",
+                authenticate_target(&source, input.as_bytes(), &target)
+                    .unwrap()
+                    .unwrap()
+                    .delivery(),
+                original.delivery(),
+                "{action}: {metadata}",
             );
         }
     }
 }
 
 #[test]
-fn signed_actions_select_complete_pull_contracts_without_fallback() {
+fn signed_actions_select_consumed_pull_facts_without_fallback() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let original = authenticate_target(&source, &BODY, &target)
@@ -872,8 +891,8 @@ fn signed_actions_select_complete_pull_contracts_without_fallback() {
         );
         let decoded: GitHubEvent = serde_json::from_str(&body).unwrap();
         assert_eq!(
-            amiss_fixtures::canonical_json(body.as_bytes()).unwrap(),
-            amiss_fixtures::canonical_json(&serde_json::to_vec(&decoded).unwrap()).unwrap(),
+            matches!(decoded, GitHubEvent::Synchronize(_)),
+            action == "synchronize",
         );
         let accepted = authenticate_target(&source, body.as_bytes(), &target)
             .unwrap()
@@ -881,7 +900,7 @@ fn signed_actions_select_complete_pull_contracts_without_fallback() {
         assert_eq!(accepted.delivery(), original.delivery());
         for (member, accepted) in [
             (r#""mergeable":null,"#, action == "synchronize"),
-            (r#""draft":false,"#, action != "synchronize"),
+            (r#""merge_commit_sha":null,"#, action == "synchronize"),
         ] {
             assert_eq!(body.matches(member).count(), 1);
             let changed = body.replacen(member, "", 1);
@@ -915,7 +934,7 @@ fn signed_nullable_refs_preserve_binding_and_missing_actions_stay_no_work() {
         .unwrap()
         .unwrap();
     let mut ordinary: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
-    ordinary.pull_request.as_mut().unwrap().request.head.repo = None;
+    ordinary.pull_request.as_mut().unwrap().head.repo = None;
     let wire = serde_json::to_vec(&ordinary).unwrap();
     assert_eq!(
         authenticate_target(&source, &wire, &target)
@@ -928,7 +947,7 @@ fn signed_nullable_refs_preserve_binding_and_missing_actions_stay_no_work() {
     let wire = serde_json::to_vec(&ordinary).unwrap();
     assert_eq!(authenticate_target(&source, &wire, &target), Ok(None));
     ordinary.action = Some("opened".to_owned());
-    ordinary.pull_request.as_mut().unwrap().request.base.repo = None;
+    ordinary.pull_request.as_mut().unwrap().base.repo = None;
     let wire = serde_json::to_vec(&ordinary).unwrap();
     assert_eq!(
         authenticate_target(&source, &wire, &target),
@@ -941,8 +960,6 @@ fn signed_nullable_refs_preserve_binding_and_missing_actions_stay_no_work() {
     let pull = synchronize.pull_request.as_mut().unwrap();
     pull.head.repo = None;
     pull.head.user = None;
-    pull.user = amiss_wire::assessment::Nullable::Null;
-    pull.mergeable = None;
     let wire = serde_json::to_vec(&synchronize).unwrap();
     assert_eq!(
         authenticate_target(&source, &wire, &target)
