@@ -56,7 +56,6 @@ pub enum SnapshotUnavailableReason {
 pub struct UnavailableSnapshot {
     pub kind: UnavailableSnapshotKind,
     pub reasons: Vec<SnapshotUnavailableReason>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub request_digest: Option<Digest>,
 }
 
@@ -79,23 +78,17 @@ pub enum Snapshot {
 pub struct ResolvedEvaluation {
     pub base: BaseSnapshot,
     pub candidate: Snapshot,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_ref: Option<BranchRef>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub default_branch_ref: Option<BranchRef>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub evaluation_instant: Option<UtcInstant>,
     pub event_kind: CandidateEventKind,
     pub finality: CandidateFinality,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub forge: Option<ForgeDialect>,
     pub index_only_materialized_paths: u64,
     pub materialization: SnapshotMaterialization,
     pub mode: RequestMode,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub repository: Option<RepositoryIdentity>,
     pub skip_worktree_paths: u64,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub target_ref: Option<BranchRef>,
     pub trusted_time: bool,
 }
@@ -132,7 +125,6 @@ pub enum EvaluationUnavailableReason {
 #[serde(deny_unknown_fields)]
 pub struct UnavailableEvaluation {
     pub reasons: Vec<EvaluationUnavailableReason>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub request_digest: Option<Digest>,
     pub status: UnavailableStatus,
 }

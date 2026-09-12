@@ -49,7 +49,6 @@ pub enum ControlTrustSource {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ControlProvenance {
-    #[serde(deserialize_with = "Option::deserialize")]
     pub digest: Option<Digest>,
     pub status: ControlStatus,
     pub trust_source: ControlTrustSource,
@@ -169,20 +168,14 @@ pub struct SemanticEvidenceProvenance {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ResolvedControls {
-    #[serde(deserialize_with = "Option::deserialize")]
     pub base_repository_policy_digest: Option<Digest>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_repository_policy_digest: Option<Digest>,
     pub debt_snapshot: ControlProvenance,
     pub execution_constraint: ExecutionConstraintProvenance,
     pub organization_floor: ControlProvenance,
     pub profile: Profile,
     pub sandbox: SandboxProvenance,
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_evidence: Option<Vec<SemanticEvidenceProvenance>>,
     pub trusted_time_source: TrustedTimeProvenance,
     pub waiver_bundle: ControlProvenance,
@@ -214,7 +207,6 @@ pub enum ControlsUnavailableReason {
 #[serde(deny_unknown_fields)]
 pub struct UnavailableControls {
     pub reasons: Vec<ControlsUnavailableReason>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub request_digest: Option<Digest>,
     pub status: UnavailableStatus,
 }

@@ -19,6 +19,9 @@ RULES = {
         r'\bremote\s*=\s*"Self"|\b(?:with_prefix|serde_conv|forward_to_deserialize_any)!'
         r"|\bdisable_recursion_limit\s*\("
     ),
+    "handwritten Serde trait bound": re.compile(
+        r"#\s*\[\s*serde\s*\([^\]]*\bbound\s*(?:\(|=)"
+    ),
 }
 
 failed = False

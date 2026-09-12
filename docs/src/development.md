@@ -49,8 +49,9 @@ and Actions analysis. Rust, fixtures, schemas, build configuration, and unknown 
 full code lane. The required workflow always starts, and `gates` fails if classification fails;
 there are no workflow-level path filters. Weekly and manual CI runs force full code validation.
 
-The commit hooks also reject handwritten Serde implementations, callbacks, and custom JSON
-representation guards. Models use derives and library adapters; domain checks remain separate.
+The commit hooks also reject handwritten Serde implementations, callbacks, trait-bound
+overrides, and custom JSON representation guards. Models use derives and library adapters;
+domain checks remain separate.
 See [Architecture](architecture.md) for the standard Serde input behavior and the canonical
 representation required by authenticated boundaries.
 

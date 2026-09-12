@@ -44,6 +44,16 @@ Typed integer fields still reject fractional values, and domain-specific numeric
 The default `serde_json` recursion checks replace the former 512-container profile. Complete
 input readers still reject trailing data.
 
+Generic models rely on Serde's inferred trait bounds, without handwritten `serde(bound)`
+overrides. Ordinary `Option<T>` fields accept either omission or `null` as `None`.
+Their output still follows the model's existing `skip_serializing_if` attributes.
+The relocation hint `same_object_at` retains three states (absent, explicit null, and a
+path) because they enter fact digests; its existing library adapter preserves those states.
+
+GitHub, GitLab, and Gitea response models select only the fields Amiss uses and let Serde
+ignore the rest, including extra nested fields. Amiss-owned reports, requests, configuration,
+and stored records retain `deny_unknown_fields` where their contracts are closed.
+
 This broadens accepted input without changing emitted object shapes or canonical examples.
 The published JSON Schemas describe the object representation. Canonical-byte comparisons and
 digest checks can still reject alternate representations at authenticated report and request

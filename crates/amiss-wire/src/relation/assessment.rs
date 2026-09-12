@@ -57,7 +57,6 @@ pub enum RelationReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct RelationAssessmentEnvelope<T = RelationAssessment> {
     pub schema: AssessmentEnvelopeSchema,
     pub payload: T,

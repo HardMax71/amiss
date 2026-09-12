@@ -33,19 +33,14 @@ pub enum AnalysisPhase {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(deny_unknown_fields)]
 pub struct AnalysisError<P = RepoPath> {
     pub code: AnalysisErrorCode,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub configured_limit: Option<u64>,
     pub description: String,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub observed_lower_bound: Option<u64>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub path: Option<P>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub path_bytes_hex: Option<String>,
     pub phase: AnalysisPhase,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub resource: Option<ResourceName>,
 }

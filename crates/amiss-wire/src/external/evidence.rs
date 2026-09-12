@@ -70,31 +70,15 @@ pub enum ExternalEvidenceRow {
         #[validate(length(chars, 1..=16_384))]
         destination: String,
         method: ProbeMethod,
-        #[serde(
-            default,
-            deserialize_with = "json_serde::deserialize_some",
-            skip_serializing_if = "Option::is_none"
-        )]
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[validate(range(100..=999))]
         status: Option<u16>,
-        #[serde(
-            default,
-            deserialize_with = "json_serde::deserialize_some",
-            skip_serializing_if = "Option::is_none"
-        )]
+        #[serde(skip_serializing_if = "Option::is_none")]
         failure: Option<ProbeFailure>,
-        #[serde(
-            default,
-            deserialize_with = "json_serde::deserialize_some",
-            skip_serializing_if = "Option::is_none"
-        )]
+        #[serde(skip_serializing_if = "Option::is_none")]
         #[validate(length(chars, 1..=16_384))]
         final_destination: Option<String>,
-        #[serde(
-            default,
-            deserialize_with = "json_serde::deserialize_some",
-            skip_serializing_if = "Option::is_none"
-        )]
+        #[serde(skip_serializing_if = "Option::is_none")]
         redirect_chain_permanent: Option<bool>,
         #[validate(length(chars, 1..))]
         checked_at: String,
@@ -104,11 +88,7 @@ pub enum ExternalEvidenceRow {
         #[validate(length(chars, 1..=16_384))]
         destination: String,
         repository: ForgeRepository,
-        #[serde(
-            default,
-            deserialize_with = "json_serde::deserialize_some",
-            skip_serializing_if = "Option::is_none"
-        )]
+        #[serde(skip_serializing_if = "Option::is_none")]
         tail: Option<ForgeTail>,
         #[validate(length(chars, 1..))]
         checked_at: String,

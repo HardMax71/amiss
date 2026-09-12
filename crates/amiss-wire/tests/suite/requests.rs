@@ -354,26 +354,6 @@ fn the_evaluation_request_binds_the_candidate_to_the_mode() {
     );
 }
 
-#[test]
-fn nullable_evaluation_members_are_required() {
-    let example: serde_json::Value =
-        serde_json::from_slice(&request_example("scanner-evaluation-request.json")).unwrap();
-    for field in [
-        "repository",
-        "forge",
-        "candidate_ref",
-        "target_ref",
-        "default_branch_ref",
-        "candidate_commit_oid",
-    ] {
-        let mut missing = example.clone();
-        missing.as_object_mut().unwrap().remove(field);
-        let error = EvaluationRequest::parse(&serde_json::to_vec(&missing).unwrap()).unwrap_err();
-        assert_eq!(error.path, format!("$.{field}"));
-        assert_eq!(error.kind, ErrorKind::MissingField);
-    }
-}
-
 /// The snapshot request carries no discretion. The repository arrives as a fixed
 /// handle ordinal the launcher passes, and it is already acquired: a request that
 /// asks the engine to open a path, or to go and fetch the repository itself,
@@ -467,19 +447,6 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
         ControlsRequest::default(),
         "supplying no controls is lawful"
     );
-    for field in [
-        "organization_floor",
-        "debt_snapshot",
-        "waiver_bundle",
-        "trusted_time",
-        "execution_constraint",
-    ] {
-        let mut value: serde_json::Value = serde_json::from_slice(empty).unwrap();
-        value.as_object_mut().unwrap().remove(field);
-        let error = ControlsRequest::parse(&serde_json::to_vec(&value).unwrap()).unwrap_err();
-        assert_eq!(error.path, format!("$.{field}"));
-        assert_eq!(error.kind, ErrorKind::MissingField);
-    }
 }
 
 #[test]

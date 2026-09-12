@@ -34,6 +34,10 @@ relevant checks without unrelated Rust builds. Unknown paths take the full code 
   helpers are forbidden, including macro-generated substitutes. Use library calls
   directly and keep domain validation separate. Accept standard Serde JSON behavior;
   do not restore object-only guards or a custom JSON profile.
+  Let derives infer generic bounds; handwritten `serde(bound)` overrides are forbidden.
+  Ordinary optional wire fields use `Option<T>` without presence callbacks. Provider response
+  models select the fields we need and ignore extensions; Amiss-owned closed formats
+  retain `deny_unknown_fields`.
 - The wire is one rolling contract. A report change moves the schema in `spec/`, both
   examples (with a recomputed payload digest), the writer, and the docs together.
 - Blocks between `amiss-doc-contract` markers in `docs/` copy a value a Rust source owns,

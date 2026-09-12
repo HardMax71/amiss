@@ -26,22 +26,14 @@ pub struct EvaluationRequest {
     pub profile: Profile,
     pub mode: RequestMode,
     pub object_format: ObjectFormat,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub repository: Option<RepositoryIdentity>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub forge: Option<ForgeDialect>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_ref: Option<BranchRef>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub target_ref: Option<BranchRef>,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub default_branch_ref: Option<BranchRef>,
     #[serde(rename = "base_commit_oid")]
     pub base_commit: Oid,
-    #[serde(
-        rename = "candidate_commit_oid",
-        deserialize_with = "Option::deserialize"
-    )]
+    #[serde(rename = "candidate_commit_oid")]
     pub candidate_commit: Option<Oid>,
 }
 

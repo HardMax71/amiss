@@ -29,7 +29,6 @@ pub const RELATION_DOCUMENT_BYTES: u64 = 65_536;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct RelationPlanEnvelope<T = RelationPlan> {
     pub schema: PlanEnvelopeSchema,
     pub payload: T,

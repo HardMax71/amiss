@@ -322,7 +322,7 @@ fn rejects_policy_shape_defects() {
 }
 
 #[test]
-fn optional_projection_assertions_preserve_presence_and_reject_null() {
+fn optional_projection_assertions_distinguish_absence_from_empty() {
     let absent = br#"{"schema":"amiss/scanner-policy","document_includes":[],"protected_inventory":[],"finding_dispositions":[]}"#;
     let present = br#"{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":[],"protected_inventory":[],"finding_dispositions":[]}"#;
     let null = br#"{"schema":"amiss/scanner-policy","document_includes":[],"projection_assertions":null,"protected_inventory":[],"finding_dispositions":[]}"#;
@@ -361,10 +361,7 @@ fn optional_projection_assertions_preserve_presence_and_reject_null() {
                 .0
         )
     );
-    assert_eq!(
-        parse_scanner_policy(null).unwrap_err().kind,
-        ErrorKind::WrongType
-    );
+    assert_eq!(parse_scanner_policy(null).unwrap(), absent_policy);
 }
 
 #[test]

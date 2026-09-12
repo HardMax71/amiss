@@ -38,15 +38,13 @@ pub struct FeedbackAnnotation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(deny_unknown_fields)]
 pub struct FeedbackItem<P = RepoPath> {
     pub action: FeedbackAction,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub annotation: Option<FeedbackAnnotation>,
     pub effective_disposition: Disposition,
     pub finding_kinds: Vec<FindingKind>,
     pub location_count: NonZeroU64,
-    #[serde(deserialize_with = "Option::deserialize")]
     pub target: Option<P>,
 }
 
@@ -73,7 +71,7 @@ pub struct UnavailableFeedback {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged, bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(untagged)]
 pub enum Feedback<P = RepoPath> {
     Available(AvailableFeedback<P>),
     Unavailable(UnavailableFeedback),

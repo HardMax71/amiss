@@ -47,58 +47,6 @@ pub(super) fn reports() -> serde_json::Result<[ReportEnvelope; 2]> {
 }
 
 #[test]
-fn nullable_row_fields_remain_required() {
-    let [mut report, _incomplete] = reports().unwrap();
-    report.payload.documents[0].base = None;
-    report.payload.documents[0].candidate = None;
-    report.payload.observations[0].base = None;
-    report.payload.observations[0].candidate = None;
-    let Feedback::Available(feedback) = &mut report.payload.feedback else {
-        panic!("the row fixture has available feedback");
-    };
-    feedback.items[0].annotation = None;
-    feedback.items[0].target = None;
-    let fragments = [
-        (
-            serde_json::to_string(&report.payload.documents[0]).unwrap(),
-            ["base", "candidate"],
-        ),
-        (
-            serde_json::to_string(&report.payload.observations[0]).unwrap(),
-            ["base", "candidate"],
-        ),
-        (
-            serde_json::to_string(&feedback.items[0]).unwrap(),
-            ["annotation", "target"],
-        ),
-    ];
-    let encoded = serde_json::to_string(&report).unwrap();
-    assert_eq!(
-        serde_json::from_str::<ReportEnvelope>(&encoded).unwrap(),
-        report
-    );
-    for (fragment, fields) in fragments {
-        for field in fields {
-            let member = format!("\"{field}\":null");
-            for invalid in [
-                fragment.replace(&member, &format!("\"{field}\":{{}}")),
-                fragment
-                    .replace(&format!("{member},"), "")
-                    .replace(&format!(",{member}"), ""),
-            ] {
-                assert_ne!(invalid, fragment, "{field}");
-                let altered = encoded.replace(&fragment, &invalid);
-                assert_ne!(altered, encoded, "{field}");
-                assert!(
-                    serde_json::from_str::<ReportEnvelope>(&altered).is_err(),
-                    "{field}: {invalid}"
-                );
-            }
-        }
-    }
-}
-
-#[test]
 fn unavailable_feedback_cannot_hide_available_items() {
     let [report, _incomplete] = reports().unwrap();
     let feedback = serde_json::to_string(&report.payload.feedback).unwrap();

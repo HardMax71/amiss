@@ -95,11 +95,7 @@ pub struct NamedRegionSelection {
 #[serde(deny_unknown_fields)]
 pub struct TreePathSelection {
     pub root: RepoPathText,
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub suffix: Option<String>,
     pub maximum_depth: u64,
 }
@@ -142,11 +138,7 @@ pub struct ProjectionAssertion {
 pub struct ScannerPolicy {
     pub schema: ScannerPolicySchema,
     pub document_includes: Vec<DocumentInclude>,
-    #[serde(
-        default,
-        deserialize_with = "json_serde::deserialize_some",
-        skip_serializing_if = "Option::is_none"
-    )]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub projection_assertions: Option<Vec<ProjectionAssertion>>,
     pub protected_inventory: Vec<RepoPathText>,
     pub finding_dispositions: Vec<FindingDisposition>,

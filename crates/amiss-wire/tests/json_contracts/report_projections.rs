@@ -73,19 +73,15 @@ pub(super) fn reports() -> Vec<ReportEnvelope> {
 }
 
 #[test]
-fn report_projection_sources_reject_hidden_selection_fields_and_null_suffixes() {
+fn report_projection_sources_reject_hidden_selection_fields() {
     let mut rejected = 0;
     for report in reports() {
         let encoded = serde_json::to_string(&report).unwrap();
-        for invalid in [
-            encoded.replace("\"kind\":\"record-value\"", "\"kind\":\"record-set\""),
-            encoded.replace("\"suffix\":\".md\"", "\"suffix\":null"),
-        ] {
-            if invalid != encoded {
-                assert!(serde_json::from_str::<ReportEnvelope>(&invalid).is_err());
-                rejected += 1;
-            }
+        let invalid = encoded.replace("\"kind\":\"record-value\"", "\"kind\":\"record-set\"");
+        if invalid != encoded {
+            assert!(serde_json::from_str::<ReportEnvelope>(&invalid).is_err());
+            rejected += 1;
         }
     }
-    assert_eq!(rejected, 2);
+    assert_eq!(rejected, 1);
 }

@@ -40,7 +40,6 @@ pub const PAGE_KEY_BYTES: usize = crate::semantic::RECORD_KEY_BYTES;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct LocaleCoveragePlanEnvelope<T = LocaleCoveragePlan> {
     pub schema: PlanEnvelopeSchema,
     pub payload: T,

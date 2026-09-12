@@ -128,22 +128,16 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
     )
     .unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::WrongType);
-    assert!(
-        defect
-            .path
-            .ends_with(".normalized_target_intent.commit_oid")
-    );
+    assert_eq!(defect.kind, ErrorKind::DigestMismatch);
     let fact = fact_json_for(
         "explicit-target-missing",
         &null,
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
     );
-    let defect = parse_fact(fact.as_bytes()).unwrap_err();
-    assert_eq!(defect.kind, ErrorKind::WrongType);
+    let parsed = parse_fact(fact.as_bytes()).unwrap();
     assert_eq!(
-        defect.path,
-        "$.key_input.scope.normalized_target_intent.commit_oid"
+        parsed.key_input.scope.normalized_target_intent.commit_oid,
+        None
     );
 }
 

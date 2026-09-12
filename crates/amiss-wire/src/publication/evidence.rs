@@ -17,7 +17,6 @@ pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/publication-evidence-payload";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct PublicationEvidenceEnvelope<T = PublicationEvidence> {
     pub schema: EvidenceEnvelopeSchema,
     pub payload: T,
