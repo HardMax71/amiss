@@ -7,7 +7,7 @@ use amiss_wire::controls::{
 use amiss_wire::de::ErrorKind;
 use sha2::Digest as _;
 
-use crate::support::{DEBT, FLOOR, TIME_STATEMENT, WAIVER};
+use super::support::{DEBT, FLOOR, TIME_STATEMENT, WAIVER};
 
 #[test]
 fn controls_accept_open_forge_identities() {

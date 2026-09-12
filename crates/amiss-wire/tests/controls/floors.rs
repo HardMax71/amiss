@@ -7,7 +7,7 @@ use sha2::Digest as _;
 
 use amiss_wire::model::BranchRef;
 
-use crate::support::{FLOOR, POLICY};
+use super::support::{FLOOR, POLICY};
 
 #[test]
 fn a_floor_may_require_warn_where_the_fixture_requires_fail() {

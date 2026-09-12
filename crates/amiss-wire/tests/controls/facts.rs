@@ -10,7 +10,7 @@ use amiss_wire::report::model::{FindingFactEvidence, RepoPath};
 use amiss_wire::resolution::{BlobContent, BlobMode, Target};
 use serde_json::Value;
 
-use crate::support::{DEBT, PROJECTION_DIGEST, RAW_DIGEST};
+use super::support::{DEBT, PROJECTION_DIGEST, RAW_DIGEST};
 
 #[expect(
     clippy::unwrap_used,

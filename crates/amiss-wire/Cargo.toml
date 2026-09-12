@@ -1,4 +1,5 @@
 [package]
+autotests = false
 name = "amiss-wire"
 version.workspace = true
 edition.workspace = true
@@ -8,6 +9,7 @@ repository.workspace = true
 exclude.workspace = true
 
 [lib]
+test = false
 bench = false
 
 [dependencies]
@@ -32,6 +34,10 @@ wary.workspace = true
 [dev-dependencies]
 divan.workspace = true
 strum.workspace = true
+
+[[test]]
+name = "suite"
+path = "tests/suite/main.rs"
 
 [[bench]]
 name = "wire"

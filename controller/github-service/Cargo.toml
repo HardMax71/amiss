@@ -8,8 +8,12 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[lib]
+test = false
+
 [[bin]]
 name = "amiss-controller-github"
+test = false
 path = "src/main.rs"
 
 [[bin]]

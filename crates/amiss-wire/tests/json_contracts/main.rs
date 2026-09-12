@@ -3,8 +3,7 @@ use std::{collections::BTreeSet, fs, path::Path};
 use amiss_wire::{controls, locale, publication, relation, report, requests, semantic};
 use strum::IntoEnumIterator;
 
-#[path = "../support/relation.rs"]
-mod relation_fixture;
+use super::relation_fixture;
 
 mod control_inputs;
 mod control_tags;

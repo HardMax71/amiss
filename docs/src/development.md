@@ -48,6 +48,8 @@ coverage, fuzz, packaging, and mutation builds. Reviewer-only changes retain the
 and Actions analysis. Rust, fixtures, schemas, build configuration, and unknown paths take the
 full code lane. The required workflow always starts, and `gates` fails if classification fails;
 there are no workflow-level path filters. Weekly and manual CI runs force full code validation.
+The platform and coverage suites include the JSON, generated-report, and documentation
+contracts. The separate contract job runs documentation contracts on documentation-only changes.
 
 The commit hooks also reject handwritten Serde implementations, callbacks, trait-bound
 overrides, and custom JSON representation guards. Models use derives and library adapters;
@@ -68,7 +70,23 @@ toolchain before restoring them so runner image updates cannot invalidate the pi
 
 The test profile strips debug information from executable fixtures, which are repeatedly copied
 and verified. Symbols and assertions remain; source-line backtraces can be restored locally with
-`CARGO_PROFILE_TEST_STRIP=none`. Development and release profiles are unchanged.
+`CARGO_PROFILE_TEST_STRIP=none`. Git collision detection and decompression are optimized in
+development and test builds too, so the fixtures and the real Git reader run the same fast code.
+Debug assertions and overflow checks stay on, and release settings are unchanged.
+
+Compiling the tests costs far more than running them, so platform CI builds the binaries in one
+step and runs them in another: a slow run says which half it was. A restored dependency cache
+still leaves every workspace crate to compile. To see where that time goes, add `--timings` to
+`cargo nextest run --workspace --locked` locally and read Cargo's report next to nextest's summary.
+
+The wire integration tests share one executable, so the Serde code they instantiate compiles once
+instead of four times. That crate sets `autotests = false` and names its own target, so a new file
+under `crates/amiss-wire/tests` runs nothing until a module declares it; add cases to the modules
+that are already there. Targets with no unit tests set `test = false`, which skips an empty
+executable per target; turn it back on when you add one, since integration tests reach those
+libraries and binaries either way. Two targets stay on their own. The fatal-envelope test counts
+allocations process wide, and the two release eligibility checks live in `eligibility` so the
+extra release build stays small.
 
 Two similarly named files point in opposite directions. `.pre-commit-config.yaml` is the hook
 table this repository runs on itself through prek. `.pre-commit-hooks.yaml` is the hook this

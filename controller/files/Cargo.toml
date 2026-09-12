@@ -8,6 +8,9 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[lib]
+test = false
+
 [dependencies]
 cap-fs-ext.workspace = true
 cap-std.workspace = true

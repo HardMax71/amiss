@@ -9,7 +9,6 @@ mod declared;
 mod determinism;
 mod discovery;
 mod document_contract;
-mod eligibility;
 mod evaluate;
 mod floor;
 mod governed;

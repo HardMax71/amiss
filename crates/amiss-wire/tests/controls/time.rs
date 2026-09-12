@@ -6,7 +6,7 @@ use sha2::Digest as _;
 
 use amiss_wire::model::UtcInstant;
 
-use crate::support::TIME_STATEMENT;
+use super::support::TIME_STATEMENT;
 
 #[test]
 fn a_run_id_answers_to_every_clause_that_bounds_it() {

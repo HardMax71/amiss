@@ -8,6 +8,9 @@ repository.workspace = true
 description = "reStructuredText reference extraction for the amiss documentation scanner"
 exclude.workspace = true
 
+[lib]
+test = false
+
 [dependencies]
 amiss-wire = { path = "../amiss-wire", version = "0.27.0" }
 

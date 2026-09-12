@@ -122,7 +122,7 @@ and suffix roots are indexed separately; lookup probes path ancestors and suffix
 never every policy row. The
 [`policy` tests](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/policy.rs)
 pin the semantic boundaries, and the release
-[`eligibility` test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/suite/eligibility.rs)
+[`eligibility` test](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/tests/eligibility.rs)
 checks the maximum union without scanning every policy row for every discovered path. The
 `amiss-scan` `controls` benchmark tracks tree matching, suffix matching, and policy-set comparison
 as the entry count grows.

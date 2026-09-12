@@ -2,7 +2,7 @@ use amiss_wire::controls::{WaiverBundle, parse_waiver_bundle};
 use amiss_wire::de::ErrorKind;
 use amiss_wire::model::UtcInstant;
 
-use crate::support::WAIVER;
+use super::support::WAIVER;
 
 #[test]
 fn waiver_instants_bind_at_their_exact_boundaries() {

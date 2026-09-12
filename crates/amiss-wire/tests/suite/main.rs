@@ -18,3 +18,12 @@ mod resolution;
 mod semantic;
 mod uri;
 mod wire;
+
+#[path = "../controls/main.rs"]
+mod controls;
+
+#[path = "../json_contracts/main.rs"]
+mod json_contracts;
+
+#[path = "../report_model/main.rs"]
+mod report_model;

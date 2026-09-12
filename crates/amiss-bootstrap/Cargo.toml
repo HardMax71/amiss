@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 exclude.workspace = true
 
+[lib]
+test = false
+
 [dependencies]
 digest-io.workspace = true
 sha2.workspace = true
@@ -30,3 +33,13 @@ harness = false
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "amiss-bootstrap"
+path = "src/main.rs"
+test = false
+
+[[bin]]
+name = "amiss-manifest"
+path = "src/bin/amiss-manifest.rs"
+test = false
