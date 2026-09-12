@@ -198,8 +198,14 @@ struct Section {
 }
 
 #[test]
-fn typed_input_retains_the_strict_depth_limit_not_serdes_default() {
-    for (levels, valid) in [(128, true), (255, true), (256, false)] {
+fn typed_input_uses_serdes_native_depth_limit() {
+    for (levels, valid) in [
+        (0, true),
+        (62, true),
+        (63, false),
+        (128, false),
+        (255, false),
+    ] {
         let input = format!(
             "{}{{\"children\":[]}}{}",
             "{\"children\":[".repeat(levels),
@@ -210,13 +216,11 @@ fn typed_input_retains_the_strict_depth_limit_not_serdes_default() {
             let section = result.unwrap();
             assert_eq!(serde_json::to_string(&section).unwrap(), input);
         } else {
-            assert!(matches!(
-                result,
-                Err(JsonInputError::Json(amiss_wire::json::Error {
-                    kind: amiss_wire::json::ErrorKind::DepthLimit,
-                    ..
-                }))
-            ));
+            let Err(JsonInputError::Shape(error)) = result else {
+                panic!("native recursion limit was not reported at {levels} levels");
+            };
+            assert!(error.is_syntax());
+            assert!(error.to_string().starts_with("recursion limit exceeded"));
         }
     }
 }

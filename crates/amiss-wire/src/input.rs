@@ -26,11 +26,8 @@ pub fn read_json<T: DeserializeOwned + Serialize>(
         return Err(JsonInputError::LimitExceeded);
     }
     crate::json::parse(bytes)?;
-    let mut input = serde_json::Deserializer::from_slice(bytes);
-    // The strict gate has already enforced the document depth ceiling.
-    input.disable_recursion_limit();
-    let document = T::deserialize(&mut input)?;
-    input.end()?;
+    // Keep Serde's native recursion limit instead of the former 512-container allowance.
+    let document = serde_json::from_slice::<T>(bytes)?;
     crate::digest::verified_json_digest("amiss/typed-json-input", bytes, &document)?;
     Ok(document)
 }

@@ -189,4 +189,7 @@ derive it by parsing error messages. Malformed JSON and invalid UTF-8 keep their
 Policies, semantic evidence and templates, and normalized record inputs decode directly
 into their closed types. Duplicate fields and invalid numeric field values use native
 Serde data errors too; byte ceilings, digest checks, and domain validation remain in place.
-The generic JSON reader retains its 512-container ceiling.
+The generic JSON reader now keeps Serde's native recursion limit instead of the former
+512-container allowance. Recursive extension objects and arrays count toward that budget;
+exceeding it returns Serde's native recursion error. Its separate strict JSON guard still
+rejects duplicate keys and forbidden numeric forms before typed decoding.

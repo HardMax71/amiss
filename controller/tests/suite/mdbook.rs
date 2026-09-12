@@ -461,7 +461,7 @@ struct Section {
 }
 
 #[test]
-fn typed_extensions_keep_canonical_identity_and_the_existing_depth_limit() {
+fn typed_extensions_keep_canonical_identity_with_native_depth_limits() {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join("chapter.html"), "<h1 id=\"chapter\"></h1>").unwrap();
     fs::write(root.path().join("index.html"), "<p>index</p>").unwrap();
@@ -483,7 +483,7 @@ fn typed_extensions_keep_canonical_identity_and_the_existing_depth_limit() {
     .unwrap();
     let baseline = amiss_wire::semantic::parse(&baseline).unwrap();
     let mut sections = Vec::new();
-    for _ in 0..128 {
+    for _ in 0..61 {
         sections = vec![Section { children: sections }];
     }
     changed.config.preprocessor = Some(Preprocessors {
@@ -535,7 +535,7 @@ fn typed_extensions_keep_canonical_identity_and_the_existing_depth_limit() {
         ))
     ));
     let mut sections = Vec::new();
-    for _ in 0..256 {
+    for _ in 0..62 {
         sections = vec![Section { children: sections }];
     }
     changed
@@ -554,8 +554,8 @@ fn typed_extensions_keep_canonical_identity_and_the_existing_depth_limit() {
             &output(&root)
         ),
         Err(MdBookEvidenceError::Context(
-            amiss_wire::JsonInputError::Json(_)
-        ))
+            amiss_wire::JsonInputError::Shape(error)
+        )) if error.is_syntax() && error.to_string().starts_with("recursion limit exceeded")
     ));
 }
 
