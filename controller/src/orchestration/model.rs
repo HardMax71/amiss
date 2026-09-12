@@ -35,7 +35,7 @@ pub struct OidPair {
 }
 
 impl OidPair {
-    fn well_formed(&self, object_format: ObjectFormat) -> bool {
+    pub(crate) fn well_formed(&self, object_format: ObjectFormat) -> bool {
         [&self.base, &self.candidate]
             .into_iter()
             .all(|oid| oid.object_format() == object_format)

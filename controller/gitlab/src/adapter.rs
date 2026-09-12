@@ -165,7 +165,7 @@ fn policy_job_snapshot(
 ) -> Result<ChangeSnapshot, ProviderError> {
     let query = refresh_query(delivery, &source.provider, &source.policy)?;
     let refresh = api.refresh(&query)?;
-    snapshot(delivery, &source.policy, &query, &refresh)
+    snapshot(delivery, &source.policy, &query, refresh)
 }
 
 fn validate_relation_scope(

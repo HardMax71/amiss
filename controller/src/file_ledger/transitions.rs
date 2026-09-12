@@ -27,24 +27,23 @@ impl DeliveryLedger for FileLedger {
             return Ok(DeliveryClaim::BindingConflict);
         }
         let evaluation_id = record.evaluation_id();
-        match record.state.clone() {
+        match record.state {
             State::Running { .. } => self.claim_running(&row, record, evaluation_id, check),
-            State::Staged { fence, publication } => {
-                if publication.has_gate_commit() {
-                    Ok(DeliveryClaim::Publish(staged(
-                        &row,
-                        evaluation_id,
-                        fence,
-                        &publication,
-                    )?))
-                } else {
-                    let now = self.now(&row, Some(&record))?;
-                    let claim =
-                        self.start_running(&row, record, evaluation_id, check, fence, now)?;
-                    row.remove_report()?;
-                    Ok(claim)
-                }
+            State::Staged {
+                fence,
+                ref publication,
+            } if !publication.has_gate_commit() => {
+                let now = self.now(&row, Some(&record))?;
+                let claim = self.start_running(&row, record, evaluation_id, check, fence, now)?;
+                row.remove_report()?;
+                Ok(claim)
             }
+            State::Staged { fence, publication } => Ok(DeliveryClaim::Publish(staged(
+                &row,
+                evaluation_id,
+                fence,
+                *publication,
+            )?)),
             State::Done { .. } => {
                 row.remove_report()?;
                 Ok(DeliveryClaim::Duplicate { evaluation_id })
@@ -117,11 +116,11 @@ impl DeliveryLedger for FileLedger {
         {
             return Ok(StageOutcome::Lost);
         }
-        match record.state.clone() {
+        match record.state {
             State::Staged {
                 fence,
                 publication: stored,
-            } => restage(&row, lease, publication, evaluation_id, fence, &stored),
+            } => restage(&row, lease, publication, evaluation_id, fence, *stored),
             State::Done { .. } => Ok(StageOutcome::Lost),
             State::Running { .. } => {
                 self.stage_running(&row, lease, publication, record, evaluation_id)
@@ -162,22 +161,24 @@ fn complete_record(
     };
     let requested_digest =
         format::staged_digest(&evaluation_id, staged_publication.fence.get(), &requested)?;
-    match record.state.clone() {
+    match &record.state {
         State::Done {
             fence,
             staged_digest,
-        } if fence == staged_publication.fence.get() && staged_digest == requested_digest => {
+        } if *fence == staged_publication.fence.get() && *staged_digest == requested_digest => {
             row.remove_report()?;
             Ok(LeaseCompletion::Completed)
         }
         State::Done { .. } | State::Running { .. } => Ok(LeaseCompletion::Lost),
         State::Staged { fence, publication } => {
-            if fence != staged_publication.fence.get()
-                || format::staged_digest(&evaluation_id, fence, &publication)? != requested_digest
-                || staged(row, evaluation_id, fence, &publication)? != *staged_publication
+            if *fence != staged_publication.fence.get()
+                || format::staged_digest(&evaluation_id, *fence, publication)? != requested_digest
+                || publication.as_ref() != &requested
+                || row.load_report(publication.report())? != staged_publication.publication.report
             {
                 return Ok(LeaseCompletion::Lost);
             }
+            let fence = *fence;
             record.advance(record.last_seen_unix_millis)?;
             record.state = State::Done {
                 fence,
@@ -196,15 +197,13 @@ fn restage(
     publication: &Publication,
     evaluation_id: ControllerEvaluationId,
     fence: u64,
-    stored: &StoredPublication,
+    stored: StoredPublication,
 ) -> Result<StageOutcome, FileLedgerError> {
     let existing = staged(row, evaluation_id, fence, stored)?;
-    let requested = StagedPublication {
-        evaluation_id: lease.evaluation_id.clone(),
-        fence: lease.fence,
-        publication: Box::new(publication.clone()),
-    };
-    if existing == requested {
+    if existing.evaluation_id == lease.evaluation_id
+        && existing.fence == lease.fence
+        && existing.publication.as_ref() == publication
+    {
         Ok(StageOutcome::Staged(existing))
     } else {
         Ok(StageOutcome::Lost)
@@ -229,7 +228,7 @@ fn staged(
     row: &Row,
     evaluation_id: ControllerEvaluationId,
     fence: u64,
-    stored: &StoredPublication,
+    stored: StoredPublication,
 ) -> Result<StagedPublication, FileLedgerError> {
     let report = row.load_report(stored.report())?;
     Ok(StagedPublication {

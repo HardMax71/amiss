@@ -37,7 +37,7 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
     let binary = engine.to_vec();
     let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
     let binary_path = format!("dist/amiss-{}", platform.as_ref());
-    let mut artifacts = vec![StagedArtifact {
+    let artifacts = vec![StagedArtifact {
         platform,
         artifact_name: format!("amiss-{}", platform.as_ref()).parse().unwrap(),
         files: vec![
@@ -67,7 +67,7 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
         commit_oid: "a".repeat(40).parse().unwrap(),
         locks: vec![("Cargo.lock".parse().unwrap(), &lock)],
     };
-    let (manifest_bytes, manifest_digest) = build_manifest(&build, &mut artifacts).unwrap();
+    let (manifest_bytes, manifest_digest) = build_manifest(build, artifacts).unwrap();
     let engine_digest = Digest::from(
         sha2::Sha256::new_with_prefix(amiss_bootstrap::ENGINE_DOMAIN)
             .chain_update([0_u8])

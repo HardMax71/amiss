@@ -72,7 +72,7 @@ struct SemanticEvidenceFile {
 ///
 /// A profile, trust file, workflow artifact, execution constraint, or resulting plan is invalid.
 pub fn load_plan(
-    raw: &CheckPlanFiles,
+    raw: CheckPlanFiles,
     workflow_scope: Option<(&ProviderIdentity, &RepositoryIdentity)>,
 ) -> Result<CheckPlan, ConfigError> {
     let profile = match raw.profile {
@@ -85,11 +85,11 @@ pub fn load_plan(
     let execution_bytes = read_regular(&raw.execution_constraint_file, REQUEST_STREAM_BYTES)?;
     let execution = parse_execution_constraint(&execution_bytes)
         .map_err(|defect| ConfigError::caused_by("execution constraint is invalid", defect))?;
-    let semantic_evidence = intersphinx_evidence(load_intersphinx(&raw.intersphinx_inventories)?)
+    let semantic_evidence = intersphinx_evidence(load_intersphinx(raw.intersphinx_inventories)?)
         .map_err(|defect| {
-        ConfigError::caused_by("Intersphinx inventory configuration is invalid", defect)
-    })?;
-    let workflow_artifacts = load_workflow_artifacts(&raw.workflow_artifacts, workflow_scope)?;
+            ConfigError::caused_by("Intersphinx inventory configuration is invalid", defect)
+        })?;
+    let workflow_artifacts = load_workflow_artifacts(raw.workflow_artifacts, workflow_scope)?;
     let policy = PolicyControls {
         external_policy: raw.external_policy,
         organization_floor: load_control(
@@ -119,7 +119,7 @@ pub fn load_plan(
 }
 
 fn load_workflow_artifacts(
-    files: &[WorkflowArtifactFile],
+    files: Vec<WorkflowArtifactFile>,
     scope: Option<(&ProviderIdentity, &RepositoryIdentity)>,
 ) -> Result<Vec<WorkflowArtifactExpectation>, ConfigError> {
     if files.is_empty() {
@@ -129,22 +129,22 @@ fn load_workflow_artifacts(
         "workflow artifacts are unsupported by this provider lane",
     ))?;
     files
-        .iter()
+        .into_iter()
         .map(|file| {
             Ok(WorkflowArtifactExpectation {
                 provider: provider.clone(),
                 repository: repository.clone(),
-                workflow_identity: file.workflow_identity.clone(),
-                event: file.event.clone(),
-                artifact_name: file.artifact_name.clone(),
-                payload_file: file.payload_file.clone(),
+                workflow_identity: file.workflow_identity,
+                event: file.event,
+                artifact_name: file.artifact_name,
+                payload_file: file.payload_file,
                 archive_byte_limit: file.archive_byte_limit,
                 file_byte_limit: file.file_byte_limit,
                 semantic: SemanticEvidenceExpectation {
-                    acquisition_identity: file.semantic.acquisition_identity.clone(),
+                    acquisition_identity: file.semantic.acquisition_identity,
                     producer_kind: file.semantic.producer_kind,
-                    producer_identity: file.semantic.producer_identity.clone(),
-                    producer_version: file.semantic.producer_version.clone(),
+                    producer_identity: file.semantic.producer_identity,
+                    producer_version: file.semantic.producer_version,
                     context_digest: file.semantic.context_digest,
                 },
             })
@@ -153,15 +153,13 @@ fn load_workflow_artifacts(
 }
 
 fn load_intersphinx(
-    inventories: &[IntersphinxInventoryFile],
+    inventories: Vec<IntersphinxInventoryFile>,
 ) -> Result<Vec<IntersphinxInventory>, ConfigError> {
+    let loaded = Vec::with_capacity(inventories.len());
     inventories
-        .iter()
+        .into_iter()
         .try_fold(
-            (
-                Vec::with_capacity(inventories.len()),
-                INTERSPHINX_INVENTORY_BYTES,
-            ),
+            (loaded, INTERSPHINX_INVENTORY_BYTES),
             |(mut loaded, remaining), inventory| {
                 let bytes = read_regular(&inventory.file, remaining)?;
                 let length = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
@@ -169,8 +167,8 @@ fn load_intersphinx(
                     "Intersphinx inventory files exceed their byte ceiling",
                 ))?;
                 loaded.push(IntersphinxInventory {
-                    identity: inventory.identity.clone(),
-                    base_url: inventory.base_url.clone(),
+                    identity: inventory.identity,
+                    base_url: inventory.base_url,
                     bytes,
                 });
                 Ok((loaded, remaining))

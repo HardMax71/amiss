@@ -84,7 +84,7 @@ impl RawConfig {
         let listen = self.listen;
         let scope = checked_scope(&self.github, self.repository)?;
         let plan = Arc::new(load_plan(
-            &self.plan,
+            self.plan,
             Some((&scope.provider, &scope.repository)),
         )?);
         validate_github_plan(&scope.provider, &plan)?;

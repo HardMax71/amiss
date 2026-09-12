@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::limits::StoredLimits;
 use crate::record::{LeaseData, Record, State};
-use crate::store::{RootEntries, Store};
+use crate::store::Store;
 use crate::{Delivery, InboxError, InboxLimits, IncomingDelivery};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -81,7 +81,7 @@ pub struct Inbox {
 }
 
 struct LeasedRow {
-    entries: RootEntries,
+    stored_bytes: u64,
     record: Record,
     bytes: u64,
 }
@@ -144,12 +144,13 @@ impl Inbox {
     pub fn claim(&mut self, now: i64) -> Result<ClaimOutcome, InboxError> {
         valid_now(now)?;
         let entries = self.store.scan()?;
+        let stored_bytes = entries.bytes();
         let mut next_ready = None;
         let mut selected = None;
-        for (key, row) in &entries.rows {
+        for (key, row) in entries.rows {
             let ready_at = row.record.ready_at();
             if ready_at <= now && selected.is_none() {
-                selected = Some((key.clone(), row.bytes, row.record.clone()));
+                selected = Some((key, row.bytes, row.record));
             } else {
                 next_ready = Some(next_ready.map_or(ready_at, |next: i64| next.min(ready_at)));
             }
@@ -163,14 +164,12 @@ impl Inbox {
                 }),
             );
         };
-        let delivery = record.delivery.as_ref().ok_or(InboxError::Corrupt)?;
-        delivery.validate(self.limits)?;
-        let delivery = delivery.clone();
-        let (record, lease) =
+        let (mut record, lease) =
             record
                 .begin_attempt()?
                 .lease(&self.owner, now, self.limits.lease_millis())?;
-        self.store.save(&entries, &key, &record, old_bytes)?;
+        self.store.save(stored_bytes, &key, &record, old_bytes)?;
+        let delivery = record.delivery.take().ok_or(InboxError::Corrupt)?;
         Ok(ClaimOutcome::Claimed(ClaimedDelivery {
             delivery,
             lease: make_lease(key, lease),
@@ -191,7 +190,7 @@ impl Inbox {
             .record
             .lease(&lease.owner, now, self.limits.lease_millis())?;
         self.store
-            .save(&row.entries, &lease.key, &record, row.bytes)?;
+            .save(row.stored_bytes, &lease.key, &record, row.bytes)?;
         Ok(RenewOutcome::Renewed(make_lease(
             lease.key.clone(),
             renewed,
@@ -218,7 +217,7 @@ impl Inbox {
         };
         let record = row.record.retry(available_at_unix_millis)?;
         self.store
-            .save(&row.entries, &lease.key, &record, row.bytes)?;
+            .save(row.stored_bytes, &lease.key, &record, row.bytes)?;
         Ok(RetryOutcome::Scheduled)
     }
 
@@ -281,9 +280,10 @@ impl Inbox {
 
     fn leased_row(&self, lease: &DeliveryLease, now: i64) -> Result<Option<LeasedRow>, InboxError> {
         valid_now(now)?;
-        let entries = self.store.scan()?;
-        let row = entries.rows.get(&lease.key).ok_or(InboxError::Corrupt)?;
-        let record = row.record.clone();
+        let mut entries = self.store.scan()?;
+        let stored_bytes = entries.bytes();
+        let row = entries.rows.remove(&lease.key).ok_or(InboxError::Corrupt)?;
+        let record = row.record;
         let bytes = row.bytes;
         let live = record.lease_is_live(
             &lease.owner,
@@ -293,7 +293,7 @@ impl Inbox {
             now,
         );
         Ok(live.then_some(LeasedRow {
-            entries,
+            stored_bytes,
             record,
             bytes,
         }))

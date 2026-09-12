@@ -1,3 +1,5 @@
+mod tests;
+
 use serde::{Deserialize, Serialize};
 use serde_with::{base64::Base64, serde_as};
 
@@ -121,37 +123,22 @@ fn normalize(
     incoming: &IncomingDelivery<'_>,
     limits: StoredLimits,
 ) -> Result<Delivery, InboxError> {
-    if incoming.received_at_unix_millis < 0 {
-        return Err(InboxError::InvalidDelivery);
-    }
-    validate_source(incoming.route, incoming.source_id, limits)?;
-    length(incoming.body)?
-        .le(&limits.max_body_bytes())
-        .then_some(())
-        .ok_or(InboxError::InvalidDelivery)?;
-    length(incoming.headers)?
-        .le(&limits.max_headers())
-        .then_some(())
-        .ok_or(InboxError::InvalidDelivery)?;
-
-    let mut header_bytes = 0_u64;
-    let mut headers = Vec::with_capacity(incoming.headers.len());
-    for header in incoming.headers {
-        if !valid_header_name(header.name) || !valid_header_value(header.value) {
-            return Err(InboxError::InvalidDelivery);
-        }
-        header_bytes = header_bytes
-            .checked_add(length(header.name.as_bytes())?)
-            .and_then(|bytes| bytes.checked_add(length(header.value).ok()?))
-            .ok_or(InboxError::InvalidDelivery)?;
-        if header_bytes > limits.max_header_bytes() {
-            return Err(InboxError::InvalidDelivery);
-        }
-        headers.push(DeliveryHeader {
+    validate_envelope(
+        incoming.route,
+        incoming.source_id,
+        incoming.received_at_unix_millis,
+        incoming.body,
+        limits,
+    )?;
+    validate_headers(incoming.headers.iter().copied(), limits)?;
+    let mut headers = incoming
+        .headers
+        .iter()
+        .map(|header| DeliveryHeader {
             name: header.name.to_ascii_lowercase(),
             value: header.value.to_vec(),
-        });
-    }
+        })
+        .collect::<Vec<_>>();
     headers.sort_unstable_by(|left, right| {
         left.name
             .cmp(&right.name)
@@ -166,28 +153,72 @@ fn normalize(
     })
 }
 
-fn validate_delivery(delivery: &Delivery, limits: StoredLimits) -> Result<(), InboxError> {
-    let incoming_headers = delivery
-        .headers
-        .iter()
-        .map(|header| IncomingHeader {
-            name: &header.name,
-            value: &header.value,
-        })
-        .collect::<Vec<_>>();
-    let normalized = normalize(
-        &IncomingDelivery {
-            route: &delivery.route,
-            source_id: &delivery.source_id,
-            received_at_unix_millis: delivery.received_at_unix_millis,
-            headers: &incoming_headers,
-            body: &delivery.body,
-        },
-        limits,
-    )?;
-    (normalized == *delivery)
+fn validate_envelope(
+    route: &str,
+    source_id: &str,
+    received_at_unix_millis: i64,
+    body: &[u8],
+    limits: StoredLimits,
+) -> Result<(), InboxError> {
+    if received_at_unix_millis < 0 {
+        return Err(InboxError::InvalidDelivery);
+    }
+    validate_source(route, source_id, limits)?;
+    length(body)?
+        .le(&limits.max_body_bytes())
         .then_some(())
         .ok_or(InboxError::InvalidDelivery)
+}
+
+fn validate_headers<'a>(
+    headers: impl ExactSizeIterator<Item = IncomingHeader<'a>>,
+    limits: StoredLimits,
+) -> Result<(), InboxError> {
+    u64::try_from(headers.len())
+        .map_err(|_defect| InboxError::InvalidDelivery)?
+        .le(&limits.max_headers())
+        .then_some(())
+        .ok_or(InboxError::InvalidDelivery)?;
+    let mut header_bytes = 0_u64;
+    for header in headers {
+        if !valid_header_name(header.name) || !valid_header_value(header.value) {
+            return Err(InboxError::InvalidDelivery);
+        }
+        header_bytes = header_bytes
+            .checked_add(length(header.name.as_bytes())?)
+            .and_then(|bytes| bytes.checked_add(length(header.value).ok()?))
+            .ok_or(InboxError::InvalidDelivery)?;
+        if header_bytes > limits.max_header_bytes() {
+            return Err(InboxError::InvalidDelivery);
+        }
+    }
+    Ok(())
+}
+
+fn validate_delivery(delivery: &Delivery, limits: StoredLimits) -> Result<(), InboxError> {
+    validate_envelope(
+        &delivery.route,
+        &delivery.source_id,
+        delivery.received_at_unix_millis,
+        &delivery.body,
+        limits,
+    )?;
+    validate_headers(
+        delivery.headers.iter().map(|header| IncomingHeader {
+            name: &header.name,
+            value: &header.value,
+        }),
+        limits,
+    )?;
+    (delivery
+        .headers
+        .iter()
+        .all(|header| !header.name.bytes().any(|byte| byte.is_ascii_uppercase()))
+        && delivery
+            .headers
+            .is_sorted_by(|left, right| (&left.name, &left.value) <= (&right.name, &right.value)))
+    .then_some(())
+    .ok_or(InboxError::InvalidDelivery)
 }
 
 fn validate_label(value: &str, maximum: u64) -> Result<(), InboxError> {

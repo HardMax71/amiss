@@ -47,15 +47,15 @@ pub struct StagedBuild<'bytes> {
 /// # Errors
 ///
 /// The staged release cannot form a valid release-manifest contract.
-pub fn build_manifest(
-    build: &StagedBuild<'_>,
-    artifacts: &mut [StagedArtifact<'_>],
+pub fn build_manifest<'bytes>(
+    build: StagedBuild<'_>,
+    artifacts: impl IntoIterator<Item = StagedArtifact<'bytes>>,
 ) -> Result<(Vec<u8>, Digest), &'static str> {
     let mut files = build
         .locks
-        .iter()
+        .into_iter()
         .map(|(path, bytes)| DependencyLockFile {
-            path: path.clone(),
+            path,
             raw_digest: Digest::from(
                 sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
                     .chain_update([0_u8])
@@ -81,18 +81,18 @@ pub fn build_manifest(
         .map_err(|_defect| "invalid dependency lock")?;
     let dependency_lock_digest = Digest::from(writer.0.finalize().0);
 
-    artifacts.sort_by(|left, right| left.platform.as_ref().cmp(right.platform.as_ref()));
-    let artifacts = artifacts
-        .iter_mut()
+    let mut artifacts = artifacts
+        .into_iter()
         .map(build_artifact)
         .collect::<Result<Vec<_>, _>>()?;
+    artifacts.sort_by(|left, right| left.platform.as_ref().cmp(right.platform.as_ref()));
     let manifest = ReleaseManifest {
         schema: ReleaseManifestSchema::Current,
-        engine_version: build.engine_version.clone(),
+        engine_version: build.engine_version,
         build_source: BuildSource {
-            repository: build.repository.clone(),
+            repository: build.repository,
             object_format: build.object_format,
-            commit_oid: build.commit_oid.clone(),
+            commit_oid: build.commit_oid,
         },
         dependency_lock,
         dependency_lock_digest,
@@ -114,7 +114,7 @@ pub fn build_manifest(
     Ok((bytes, digest))
 }
 
-fn build_artifact(artifact: &mut StagedArtifact<'_>) -> Result<ReleaseArtifact, &'static str> {
+fn build_artifact(mut artifact: StagedArtifact<'_>) -> Result<ReleaseArtifact, &'static str> {
     artifact
         .files
         .sort_by(|left, right| left.path.cmp(&right.path));
@@ -130,11 +130,19 @@ fn build_artifact(artifact: &mut StagedArtifact<'_>) -> Result<ReleaseArtifact, 
         return Err("the executable row is not mode 100755");
     }
     let binary_sha256 = Digest::from(sha2::Sha256::digest(engine.bytes).0);
+    let tree_path = engine.path.clone();
+    let engine_digest = Digest::from(
+        sha2::Sha256::new_with_prefix(ENGINE_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(engine.bytes)
+            .finalize()
+            .0,
+    );
     let runtime_files = artifact
         .files
-        .iter()
+        .into_iter()
         .map(|file| RuntimeFile {
-            path: file.path.clone(),
+            path: file.path,
             role: file.role,
             git_mode: if file.executable {
                 GitMode::ExecutableFile
@@ -146,16 +154,10 @@ fn build_artifact(artifact: &mut StagedArtifact<'_>) -> Result<ReleaseArtifact, 
         .collect::<Vec<_>>();
     Ok(ReleaseArtifact {
         platform: artifact.platform,
-        artifact_name: artifact.artifact_name.clone(),
-        tree_path: engine.path.clone(),
+        artifact_name: artifact.artifact_name,
+        tree_path,
         binary_sha256,
-        engine_digest: Digest::from(
-            sha2::Sha256::new_with_prefix(ENGINE_DOMAIN)
-                .chain_update([0_u8])
-                .chain_update(engine.bytes)
-                .finalize()
-                .0,
-        ),
+        engine_digest,
         runtime_contract: RuntimeContract::Current,
         environment_contract: EnvironmentContract::Current,
         runtime_files,

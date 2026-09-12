@@ -14,7 +14,7 @@ use crate::limits::StoredLimits;
 const RECORD_SCHEMA: RecordSchema = RecordSchema::Current;
 
 #[serde_as]
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Record {
     schema: RecordSchema,
@@ -29,7 +29,7 @@ pub(crate) struct Record {
     pub(crate) state: State,
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(tag = "state", rename_all = "snake_case")]
 pub(crate) enum State {
     Pending {

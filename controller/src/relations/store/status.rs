@@ -152,10 +152,10 @@ pub(super) fn reopen_status(
     artifacts: &FileArtifactStore,
 ) -> Result<RelationStatusRecord, RelationScheduleStoreError> {
     validate_stored_status(stored)?;
-    let relation = stored.relation.clone();
+    let relation = &stored.relation;
     let plan = registry
         .plans
-        .get(&relation)
+        .get(relation)
         .ok_or(RelationScheduleStoreError::Configuration)?;
     if plan_binding(plan.as_ref())? != *committed_plan_binding {
         return Err(RelationScheduleStoreError::Schedule(
@@ -167,32 +167,30 @@ pub(super) fn reopen_status(
         .map_err(RelationScheduleStoreError::Artifact)?;
     let parsed =
         parse_plan(&retained.plan).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
-    let trigger_role = stored.trigger_role.clone();
-    if parsed.payload.relation.identity != relation
+    if parsed.payload.relation.identity != *relation
         || parsed.payload.coordination != stored.coordination
-        || parsed.payload.trigger_role != trigger_role
+        || parsed.payload.trigger_role != stored.trigger_role
     {
         return Err(RelationScheduleStoreError::Corrupt);
     }
     let subjects = parsed
         .payload
         .subjects
-        .each_ref()
         .map(|subject| RelationSubjectTransition {
-            role: subject.role.clone(),
+            role: subject.role,
             commits: OidPair {
-                base: subject.base.commit.clone(),
-                candidate: subject.candidate.commit.clone(),
+                base: subject.base.commit,
+                candidate: subject.candidate.commit,
             },
             trees: OidPair {
-                base: subject.base.tree.clone(),
-                candidate: subject.candidate.tree.clone(),
+                base: subject.base.tree,
+                candidate: subject.candidate.tree,
             },
         });
     let transition = relation_transition(
         TriggeredRelation {
             plan: std::sync::Arc::clone(plan),
-            trigger_role,
+            trigger_role: parsed.payload.trigger_role,
         },
         parsed.payload.coordination,
         subjects,

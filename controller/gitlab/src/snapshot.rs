@@ -17,23 +17,17 @@ pub(crate) fn snapshot(
     delivery: &AuthenticatedDelivery,
     policy: &PolicyBinding,
     query: &GitLabRefreshQuery,
-    refresh: &GitLabRefresh,
+    refresh: GitLabRefresh,
 ) -> Result<ChangeSnapshot, ProviderError> {
-    let gate = refresh.gate.id.clone();
-    let gate_tree = refresh.gate.tree.clone();
-    let base = refresh.base.id.clone();
-    let base_tree = refresh.base.tree.clone();
     let target = exact_oid(&refresh.target.commit)?;
     let source = exact_oid(&refresh.merge_request.sha)?;
     let [first_parent, second_parent] = refresh.gate.parents.as_slice() else {
         return Err(ProviderError::InvalidResponse);
     };
-    let first_parent = first_parent.clone();
-    let second_parent = second_parent.clone();
     let parents_valid = [&refresh.base, &refresh.gate]
         .into_iter()
         .all(|commit| commit.has_format(ObjectFormat::Sha1));
-    let records_valid = validate_project(delivery, policy, query, refresh)?
+    let records_valid = validate_project(delivery, policy, query, &refresh)?
         && refresh.job.id == query.job_id
         && refresh.job.name == policy.job_name
         && refresh
@@ -54,10 +48,10 @@ pub(crate) fn snapshot(
         && refresh.merge_request.target_project_id == query.project_id
         && refresh.merge_request.target_branch == policy.target_branch
         && refresh.target.name == policy.target_branch
-        && gate == query.gate_commit
-        && first_parent == base
-        && second_parent == source
-        && target != gate
+        && refresh.gate.id == query.gate_commit
+        && *first_parent == refresh.base.id
+        && *second_parent == source
+        && target != refresh.gate.id
         && parents_valid;
     if !records_valid {
         return Err(ProviderError::InvalidResponse);
@@ -83,17 +77,18 @@ pub(crate) fn snapshot(
         default_branch: branch_ref(&refresh.project.default_branch)
             .ok_or(ProviderError::InvalidResponse)?,
     };
+    let authorized = policy_authorized(policy, &refresh);
     let run = RunIdentity::new(
         delivery.change.clone(),
         refs,
         ObjectFormat::Sha1,
         OidPair {
-            base,
-            candidate: gate.clone(),
+            base: refresh.base.id,
+            candidate: refresh.gate.id.clone(),
         },
         OidPair {
-            base: base_tree,
-            candidate: gate_tree,
+            base: refresh.base.tree,
+            candidate: refresh.gate.tree,
         },
     )
     .ok_or(ProviderError::InvalidResponse)?;
@@ -102,7 +97,7 @@ pub(crate) fn snapshot(
         && train_live
         && open
         && !refresh.merge_request.draft;
-    let state = if !policy_authorized(policy, refresh) {
+    let state = if !authorized {
         ChangeState::AuthorizationRevoked
     } else if !open {
         ChangeState::Closed
@@ -114,7 +109,7 @@ pub(crate) fn snapshot(
     Ok(ChangeSnapshot {
         state,
         run,
-        gate_commit: gate,
+        gate_commit: refresh.gate.id,
     })
 }
 

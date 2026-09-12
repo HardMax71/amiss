@@ -58,7 +58,7 @@ pub(super) fn snapshot(
     config: &Config,
     pull_request: GiteaPullRequest<'_>,
     data: &RefreshData,
-    objects: &GiteaObjects,
+    objects: GiteaObjects,
 ) -> Result<ChangeSnapshot, ProviderError> {
     validate_request(config, pull_request)?;
     validate_reviewer(config, &data.reviewer)?;
@@ -82,8 +82,6 @@ pub(super) fn snapshot(
         .as_ref()
         .ok_or(ProviderError::InvalidResponse)
         .and_then(|commit| exact_oid(&commit.id))?;
-    let candidate_tree = objects.candidate.tree.clone();
-    let base_tree = objects.base.tree.clone();
     let merge_base = exact_oid(&data.pull_request.merge_base)?;
     if !objects.candidate.has_format(ObjectFormat::Sha1)
         || !objects.base.has_format(ObjectFormat::Sha1)
@@ -110,22 +108,22 @@ pub(super) fn snapshot(
         target: branch_ref(&data.pull_request.base.branch)?,
         default_branch: branch_ref(&data.repository.default_branch)?,
     };
+    let up_to_date = merge_base == base;
     let run = RunIdentity::new(
         pull_request.change.clone(),
         refs,
         ObjectFormat::Sha1,
         OidPair {
-            base: base.clone(),
+            base,
             candidate: candidate.clone(),
         },
         OidPair {
-            base: base_tree,
-            candidate: candidate_tree,
+            base: objects.base.tree,
+            candidate: objects.candidate.tree,
         },
     )
     .ok_or(ProviderError::InvalidResponse)?;
     let exact_head = current_head == *pull_request.candidate_commit;
-    let up_to_date = merge_base == base;
     let state = if !exact_head {
         ChangeState::Superseded
     } else if !authorized {
@@ -151,7 +149,7 @@ pub(super) fn publication_target_is_current(
     pull_request: GiteaPullRequest<'_>,
     publication: &Publication,
     data: &RefreshData,
-    objects: &GiteaObjects,
+    objects: GiteaObjects,
 ) -> Result<ChangeState, ProviderError> {
     let fresh = snapshot(config, pull_request, data, objects)?;
     let exact = fresh.run == publication.run

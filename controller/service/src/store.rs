@@ -86,7 +86,7 @@ impl Store {
         }
         let rows_after = entries.count().checked_add(1).ok_or(InboxError::Full)?;
         self.reserve_transition(rows_after)?;
-        self.save(entries, key, record, 0)
+        self.save(entries.bytes(), key, record, 0)
     }
 
     pub(crate) fn remove(&self, key: &str) -> Result<(), InboxError> {
@@ -102,7 +102,7 @@ impl Store {
 
     pub(crate) fn save(
         &self,
-        entries: &RootEntries,
+        stored_bytes: u64,
         key: &str,
         record: &Record,
         old_bytes: u64,
@@ -117,13 +117,11 @@ impl Store {
         if encoded_bytes > record_reservation || encoded_bytes > self.limits.max_record_bytes() {
             return Err(InboxError::Full);
         }
-        let _durable_after = entries
-            .bytes()
+        let _durable_after = stored_bytes
             .checked_sub(old_bytes)
             .and_then(|bytes| bytes.checked_add(encoded_bytes))
             .ok_or(InboxError::Corrupt)?;
-        let actual_with_atomic_copy = entries
-            .bytes()
+        let actual_with_atomic_copy = stored_bytes
             .checked_add(encoded_bytes)
             .ok_or(InboxError::Full)?;
         if actual_with_atomic_copy > self.limits.max_bytes() {

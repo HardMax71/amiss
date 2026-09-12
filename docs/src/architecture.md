@@ -80,6 +80,9 @@ base64 bytes and its bare hexadecimal content digest. Artifact and ledger digest
 `sha256:` spelling. Record field order, omission rules, and hash domains remain part of stored
 identity: the ledger's repository projection deliberately retains its historical host/owner/name
 order. Generic sidecar audits carry the publication or relation verdict enum directly.
+Consumers take ownership when inputs are no longer needed, and validation inspects borrowed
+values. Inbox claims move decoded deliveries after persisting the lease; ledger replay moves
+metadata into publications without rebuilding objects for validation or comparison.
 
 A type name alone does not establish validity. `UtcInstant`, `OwnerId`, and structured repository
 identities still require their existing domain validators after ordinary derived deserialization.

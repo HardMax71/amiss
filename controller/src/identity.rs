@@ -125,13 +125,17 @@ impl ProviderRunIdentity {
         object_format: ObjectFormat,
         candidate_commit: Oid,
     ) -> Option<Self> {
-        (candidate_commit.object_format() == object_format).then_some(())?;
-        Some(Self {
+        let identity = Self {
             run_id,
             attempt,
             object_format,
             candidate_commit,
-        })
+        };
+        identity.is_valid().then_some(identity)
+    }
+
+    pub fn is_valid(&self) -> bool {
+        self.candidate_commit.object_format() == self.object_format
     }
 }
 

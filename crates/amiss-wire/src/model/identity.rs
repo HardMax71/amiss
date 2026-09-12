@@ -139,12 +139,18 @@ impl RepositoryIdentity {
     /// and a name.
     #[must_use]
     pub fn new(host: String, owner: String, name: String) -> Option<Self> {
+        Self::valid_components(&host, &owner, &name).then_some(Self { host, name, owner })
+    }
+
+    /// Checks repository components without allocating an owned identity.
+    #[must_use]
+    pub fn valid_components(host: &str, owner: &str, name: &str) -> bool {
         let owner_ok = (1..=255).contains(&owner.len())
             && owner
                 .as_bytes()
                 .split(|&byte| byte == b'/')
                 .all(identity_segment);
-        (host_valid(&host) && owner_ok && name_valid(&name)).then_some(Self { host, name, owner })
+        host_valid(host) && owner_ok && name_valid(name)
     }
 
     /// Convenience constructor for GitHub's fixed host and single-segment
