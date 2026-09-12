@@ -1,149 +1,96 @@
-use amiss_controller_gitlab::claims::{Claims, Protection, UserIdentity};
+use amiss_controller_gitlab::claims::Claims;
 
 #[test]
-fn policy_claims_retain_the_complete_provider_payload() {
+fn policy_claims_retain_verified_facts_and_ignore_metadata() {
     let claims: Claims = serde_json::from_slice(amiss_fixtures::GITLAB_POLICY_CLAIMS).unwrap();
-    assert_eq!(claims.project_id, 101);
-    assert_eq!(claims.project_path, "acme/widget");
-    assert_eq!(claims.namespace_id, 72);
-    assert_eq!(claims.namespace_path, "acme");
-    assert_eq!(claims.job_namespace_id, 72);
-    assert_eq!(claims.job_namespace_path, "acme");
-    assert_eq!(claims.user_id, "1");
-    assert_eq!(claims.user_login.as_deref(), Some("reviewer"));
-    assert_eq!(claims.user_email.as_deref(), Some("reviewer@example.com"));
-    assert_eq!(claims.user_access_level.as_deref(), Some("maintainer"));
-    assert_eq!(claims.branch, "topic");
-    assert_eq!(claims.ref_type, "branch");
-    assert_eq!(claims.ref_path, "refs/heads/topic");
-    assert_eq!(claims.ref_protected, Protection::Unprotected);
-    assert_eq!(claims.ci_config_ref_uri, None);
-    assert_eq!(claims.ci_config_sha, None);
-    assert_eq!(claims.project_visibility, "private");
+    assert_eq!(claims.job_project_id, 101);
+    assert_eq!(claims.job_project_path, "acme/widget");
     assert_eq!(
-        claims.target_audience.as_deref(),
-        Some("https://service.example")
+        (claims.pipeline_id, claims.job_id, claims.runner_id),
+        (202, 303, 77)
     );
-    assert_eq!(
-        claims.user_identities,
-        Some(vec![UserIdentity {
-            provider: "github".to_owned(),
-            extern_uid: "42".to_owned(),
-        }])
-    );
-    assert_eq!(claims.groups_direct, Some(vec!["acme".to_owned()]));
-    assert_eq!(claims.environment.as_deref(), Some("production"));
-    assert_eq!(claims.environment_protected, Some(Protection::Protected));
-    assert_eq!(claims.deployment_tier.as_deref(), Some("production"));
-    assert_eq!(claims.environment_action.as_deref(), Some("start"));
-
-    let encoded = serde_json::to_vec(&claims).unwrap();
-    assert_eq!(serde_json::from_slice::<Claims>(&encoded).unwrap(), claims);
-    let encoded = std::str::from_utf8(&encoded).unwrap();
-    for field in [
-        r#""ref_protected":"false""#,
-        r#""environment_protected":"true""#,
-        r#""ci_config_ref_uri":null"#,
-        r#""ci_config_sha":null"#,
-    ] {
-        assert!(encoded.contains(field), "{field}");
-    }
-}
-
-#[test]
-fn policy_claims_distinguish_nullable_fields_from_optional_fields() {
-    let mut claims: Claims = serde_json::from_slice(amiss_fixtures::GITLAB_POLICY_CLAIMS).unwrap();
-    claims.user_id.clear();
-    claims.user_login = None;
-    claims.user_email = None;
-    claims.user_access_level = None;
-    claims.target_audience = None;
-    claims.user_identities = None;
-    claims.groups_direct = None;
-    claims.environment = None;
-    claims.environment_protected = None;
-    claims.deployment_tier = None;
-    claims.environment_action = None;
+    assert_eq!(claims.aud, ["amiss-controller"]);
+    assert_eq!(claims.job_source, "pipeline_execution_policy");
     let encoded = serde_json::to_string(&claims).unwrap();
-    assert_eq!(serde_json::from_str::<Claims>(&encoded).unwrap(), claims);
+    let metadata = encoded
+        .replacen('{', r#"{"project_id":false,"namespace_path":42,"user_login":[],"environment_protected":{},"user_identities":null,"extra":{},"#, 1)
+        .replacen(r#""job_config":{"#, r#""job_config":{"future":[null,true],"#, 1);
+    assert_eq!(serde_json::from_str::<Claims>(&metadata).unwrap(), claims);
+}
 
-    for field in [
-        "user_login",
-        "user_email",
-        "user_access_level",
-        "ci_config_ref_uri",
-        "ci_config_sha",
+#[test]
+fn policy_identity_time_and_configuration_fields_remain_required() {
+    let claims: Claims = serde_json::from_slice(amiss_fixtures::GITLAB_POLICY_CLAIMS).unwrap();
+    let encoded = serde_json::to_string(&claims).unwrap();
+    for (field, value) in [
+        ("iss", serde_json::to_string(&claims.iss).unwrap()),
+        ("sub", serde_json::to_string(&claims.sub).unwrap()),
+        ("aud", serde_json::to_string(&claims.aud[0]).unwrap()),
+        ("exp", claims.exp.to_string()),
+        ("nbf", claims.nbf.to_string()),
+        ("iat", claims.iat.to_string()),
+        ("jti", serde_json::to_string(&claims.jti).unwrap()),
+        ("job_project_id", claims.job_project_id.to_string()),
+        (
+            "job_project_path",
+            serde_json::to_string(&claims.job_project_path).unwrap(),
+        ),
+        ("pipeline_id", claims.pipeline_id.to_string()),
+        (
+            "pipeline_source",
+            serde_json::to_string(&claims.pipeline_source).unwrap(),
+        ),
+        ("job_id", claims.job_id.to_string()),
+        ("runner_id", claims.runner_id.to_string()),
+        (
+            "runner_environment",
+            serde_json::to_string(&claims.runner_environment).unwrap(),
+        ),
+        ("sha", serde_json::to_string(&claims.sha).unwrap()),
+        (
+            "job_source",
+            serde_json::to_string(&claims.job_source).unwrap(),
+        ),
+        (
+            "job_config",
+            serde_json::to_string(&claims.job_config).unwrap(),
+        ),
+        (
+            "url",
+            serde_json::to_string(&claims.job_config.url).unwrap(),
+        ),
+        (
+            "sha",
+            serde_json::to_string(&claims.job_config.sha).unwrap(),
+        ),
     ] {
-        let present = format!("\"{field}\":null,");
-        let missing = encoded.replace(&present, "");
-        assert_ne!(missing, encoded, "{field}");
-        assert!(serde_json::from_str::<Claims>(&missing).is_err(), "{field}");
-    }
-    for field in [
-        "target_audience",
-        "user_identities",
-        "groups_direct",
-        "environment",
-        "environment_protected",
-        "deployment_tier",
-        "environment_action",
-    ] {
-        assert!(!encoded.contains(&format!("\"{field}\":")), "{field}");
-        let invalid = encoded.replacen('{', &format!("{{\"{field}\":null,"), 1);
-        assert!(serde_json::from_str::<Claims>(&invalid).is_err(), "{field}");
+        let original = format!(r#""{field}":{value}"#);
+        for replacement in [
+            format!(r#""missing_{field}":{value}"#),
+            format!(r#""{field}":null"#),
+            format!(r#""{field}":false"#),
+            format!(r#""{field}":-1"#),
+            format!(r#""{field}":{value},"{field}":{value}"#),
+        ] {
+            amiss_fixtures::assert_json_rejections::<Claims>(
+                &encoded,
+                &[(&original, &replacement)],
+            );
+        }
     }
 }
 
 #[test]
-fn policy_claims_refuse_unknown_duplicate_and_malformed_fields() {
+fn policy_claims_refuse_duplicates_and_malformed_consumed_fields() {
     let input = std::str::from_utf8(amiss_fixtures::GITLAB_POLICY_CLAIMS).unwrap();
-    for (original, replacement) in [
-        ("{\n", "{\n\"future\":true,"),
-        ("\"job_config\": {", "\"job_config\": {\"future\":true,"),
-        (
-            "\"provider\": \"github\"",
-            "\"future\":true,\"provider\":\"github\"",
-        ),
-        ("\"iss\":", "\"iss\":\"duplicate\",\"iss\":"),
-        ("\"iss\":", "\"i\\u0073s\":\"duplicate\",\"iss\":"),
-        ("\"url\":", "\"url\":\"duplicate\",\"url\":"),
-        (
-            "\"extern_uid\":",
-            "\"extern_uid\":\"duplicate\",\"extern_uid\":",
-        ),
-        ("\"ref_protected\": \"false\"", "\"ref_protected\": false"),
-        (
-            "\"ref_protected\": \"false\"",
-            "\"ref_protected\": {\"false\":null}",
-        ),
-        (
-            "\"ref_protected\": \"false\"",
-            "\"ref_protected\": \"unknown\"",
-        ),
-        (
-            "\"environment_protected\": \"true\"",
-            "\"environment_protected\": true",
-        ),
-        (
-            "\"environment_protected\": \"true\"",
-            "\"environment_protected\": {\"true\":null}",
-        ),
-        (
-            "\"environment_protected\": \"true\"",
-            "\"environment_protected\": \"unknown\"",
-        ),
-        ("\"user_id\": \"1\",", ""),
-        ("\"project_id\": \"101\",", ""),
-        ("\"namespace_id\": \"72\",", ""),
-        ("\"job_namespace_id\": \"72\",", ""),
-    ] {
-        let invalid = input.replacen(original, replacement, 1);
-        assert_ne!(invalid, input, "{original}");
-        assert!(
-            serde_json::from_str::<Claims>(&invalid).is_err(),
-            "{invalid}"
-        );
-    }
+    amiss_fixtures::assert_json_rejections::<Claims>(
+        input,
+        &[
+            (r#""iss":"#, r#""i\u0073s":"duplicate","iss":"#),
+            (r#""url":"#, r#""url":"duplicate","url":"#),
+            (r#""aud": "amiss-controller""#, r#""aud": [42]"#),
+        ],
+    );
 }
 
 #[test]
@@ -156,9 +103,6 @@ fn policy_identifiers_and_audiences_use_the_library_representations() {
         ("pipeline_id", 202),
         ("job_id", 303),
         ("runner_id", 77),
-        ("project_id", 101),
-        ("namespace_id", 72),
-        ("job_namespace_id", 72),
     ] {
         assert!(numeric.contains(&format!("\"{field}\":{value}")));
         let original = format!("\"{field}\": \"{value}\"");

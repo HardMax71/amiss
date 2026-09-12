@@ -56,28 +56,34 @@ fn pinned_policy_job_claims_define_the_delivery() {
 }
 
 #[test]
-fn signed_claims_are_closed_and_support_multiple_audiences() {
+fn signed_claims_ignore_metadata_and_support_multiple_audiences() {
     #[derive(serde::Serialize)]
     struct Extended<'a> {
         #[serde(flatten)]
         claims: &'a Claims,
         future: bool,
+        user_login: u64,
+        project_id: &'a str,
     }
     let now = now_seconds();
     let source = oidc();
     let mut claims = claims(now);
     let baseline = accept(&source, &claims, BODY, now).unwrap();
     assert_eq!(
-        verify(
+        accept(
             &source,
             &Extended {
                 claims: &claims,
-                future: true
+                future: true,
+                user_login: 42,
+                project_id: "unrelated metadata",
             },
             BODY,
             now
-        ),
-        Err(ProviderError::Authentication)
+        )
+        .unwrap()
+        .delivery(),
+        baseline.delivery()
     );
     claims.aud.push("another-service".to_owned());
     assert_eq!(
