@@ -38,6 +38,9 @@ relevant checks without unrelated Rust builds. Unknown paths take the full code 
   Ordinary optional wire fields use `Option<T>` without presence callbacks. Provider response
   models select the fields we need and ignore extensions; Amiss-owned closed formats
   retain `deny_unknown_fields`.
+  Tests reuse production wire models instead of mirrored structs or JSON codec helpers.
+  Raw JSON belongs in representation and malformed-input tests; domain tests mutate typed
+  fixtures and call the production validators.
 - The wire is one rolling contract. A report change moves the schema in `spec/`, both
   examples (with a recomputed payload digest), the writer, and the docs together.
 - Blocks between `amiss-doc-contract` markers in `docs/` copy a value a Rust source owns,

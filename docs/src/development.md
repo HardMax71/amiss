@@ -55,6 +55,11 @@ domain checks remain separate.
 See [Architecture](architecture.md) for the standard Serde input behavior and the canonical
 representation required by authenticated boundaries.
 
+Tests use the production wire models too. Load published examples into those types, mutate
+typed fields for domain cases, and call the production validators. Raw JSON mutations and
+independent byte fixtures cover representation and malformed-input cases; they do not need
+parallel wire structs or test-only encode/decode helpers.
+
 Coverage executes the whole workspace with instrumentation and keeps the 85% line floor, but
 excludes the three fixture-only packages from the report. It does not replace uninstrumented
 platform tests or the release-mode eligibility checks. Rust caches remain separate across

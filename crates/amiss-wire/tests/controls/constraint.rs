@@ -1,15 +1,13 @@
 use amiss_wire::controls::{
-    ActionBootstrapContract, DebtSnapshotSchema, ExecutionConstraintSchema,
-    OrganizationFloorSchema, TrustedTimeController, TrustedTimeSchema, WaiverBundleSchema,
-    parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_trusted_time,
-    parse_waiver_bundle,
+    ActionBootstrapContract, DebtSnapshot, DebtSnapshotSchema, ExecutionConstraintSchema,
+    OrganizationFloorSchema, TrustedTimeController, TrustedTimeSchema, WaiverBundle,
+    WaiverBundleSchema, parse_debt_snapshot, parse_execution_constraint, parse_organization_floor,
+    parse_trusted_time, parse_waiver_bundle,
 };
 use amiss_wire::de::ErrorKind;
 use sha2::Digest as _;
 
-use crate::support::{
-    FLOOR, TIME_STATEMENT, computed_digests, debt_item, debt_snapshot, waiver_bundle, waiver_item,
-};
+use crate::support::{DEBT, FLOOR, TIME_STATEMENT, WAIVER};
 
 #[test]
 fn controls_accept_open_forge_identities() {
@@ -18,62 +16,23 @@ fn controls_accept_open_forge_identities() {
     assert_eq!(floor.repository.host(), "gitlab.com");
     assert_eq!(floor.repository.owner(), "platform/security");
 
-    let (key, fact) = computed_digests();
-    let item = debt_item(
-        "debt/readme",
-        &key,
-        &fact,
-        "2026-07-01T00:00:00Z",
-        "2026-08-01T00:00:00Z",
+    let mut debt: DebtSnapshot = serde_json::from_slice(DEBT).unwrap();
+    debt.repository = floor.repository.clone();
+    assert_eq!(
+        parse_debt_snapshot(&serde_json::to_vec(&debt).unwrap()).unwrap(),
+        debt
     );
-    let debt = debt_snapshot("2026-07-02T00:00:00Z", &[item])
-        .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
-        .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
-    let debt_value = serde_json::from_slice::<serde_json::Value>(debt.as_bytes()).unwrap();
-    let debt = parse_debt_snapshot(debt.as_bytes()).unwrap();
     assert_eq!(debt.schema, DebtSnapshotSchema::Current);
     assert_eq!(debt.repository.owner(), "platform/security");
-    assert_eq!(
-        amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&debt).unwrap())
-                .finalize()
-                .0
-        ),
-        amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&debt_value).unwrap())
-                .finalize()
-                .0
-        )
-    );
 
-    let item = waiver_item("waiver/one", &key, &fact, "team:release-engineering");
-    let waiver = waiver_bundle(&[item])
-        .replace("\"host\": \"github.com\"", "\"host\": \"gitlab.com\"")
-        .replace("\"owner\": \"acme\"", "\"owner\": \"platform/security\"");
-    let waiver_value = serde_json::from_slice::<serde_json::Value>(waiver.as_bytes()).unwrap();
-    let waiver = parse_waiver_bundle(waiver.as_bytes()).unwrap();
+    let mut waiver: WaiverBundle = serde_json::from_slice(WAIVER).unwrap();
+    waiver.repository = floor.repository;
+    assert_eq!(
+        parse_waiver_bundle(&serde_json::to_vec(&waiver).unwrap()).unwrap(),
+        waiver
+    );
     assert_eq!(waiver.schema, WaiverBundleSchema::Current);
     assert_eq!(waiver.repository.owner(), "platform/security");
-    assert_eq!(
-        amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&waiver).unwrap())
-                .finalize()
-                .0
-        ),
-        amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&waiver_value).unwrap())
-                .finalize()
-                .0
-        )
-    );
 
     let time = parse_trusted_time(TIME_STATEMENT.as_bytes()).unwrap();
     assert_eq!(time.schema, TrustedTimeSchema::Current);

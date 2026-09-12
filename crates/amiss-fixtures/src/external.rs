@@ -1,8 +1,8 @@
+use amiss_wire::external::{ExternalEvidence, ExternalEvidenceRow};
 use amiss_wire::report::{
     PAYLOAD_SCHEMA,
     model::{ObservationComparison, ReportEnvelope},
 };
-use serde_json::Value;
 use sha2::Digest as _;
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.canonical.json");
@@ -87,28 +87,29 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
 #[must_use]
 pub fn external_plan(destinations: &[&str]) -> Option<Vec<u8>> {
     let report = external_report(destinations)?;
-    let parsed = serde_json::from_slice::<Value>(&report).ok()?;
-    let engine = parsed.get("payload")?.get("engine")?;
-    amiss_wire::external::plan(
-        &report,
-        engine.get("engine_version").and_then(Value::as_str)?,
-        amiss_wire::model::Digest::from_wire(engine.get("engine_digest").and_then(Value::as_str)?)?,
-    )
-    .ok()
+    let parsed: ReportEnvelope = serde_json::from_slice(&report).ok()?;
+    let engine = parsed.payload.engine;
+    amiss_wire::external::plan(&report, &engine.engine_version, engine.engine_digest).ok()
 }
 
 /// Flattens forge evidence rows into the facts provider tests compare.
 #[must_use]
 pub fn external_facts(evidence: &[u8]) -> Option<Vec<String>> {
-    let evidence = serde_json::from_slice::<Value>(evidence).ok()?;
-    let Value::Array(rows) = evidence.get("rows")? else {
-        return None;
-    };
-    rows.iter()
+    let evidence: ExternalEvidence = serde_json::from_slice(evidence).ok()?;
+    evidence
+        .rows
+        .iter()
         .map(|row| {
-            let destination = row.get("destination").and_then(Value::as_str)?;
-            let repository = row.get("repository").and_then(Value::as_str)?;
-            Some(match row.get("tail").and_then(Value::as_str) {
+            let ExternalEvidenceRow::ForgeApi {
+                destination,
+                repository,
+                tail,
+                ..
+            } = row
+            else {
+                return None;
+            };
+            Some(match tail {
                 Some(tail) => format!("{destination} {repository} {tail}"),
                 None => format!("{destination} {repository}"),
             })

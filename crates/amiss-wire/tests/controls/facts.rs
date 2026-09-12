@@ -1,83 +1,116 @@
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{
-    DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, MissingResolution, StructuralResolution,
-    parse_debt_snapshot, parse_fact,
+    DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, Fact, FactSchema, FindingKeyInput,
+    MissingResolution, StructuralResolution, parse_debt_snapshot, parse_fact,
 };
 use amiss_wire::de::{Error, ErrorKind};
 use sha2::Digest as _;
 
+use amiss_wire::report::model::{FindingFactEvidence, RepoPath};
 use amiss_wire::resolution::{BlobContent, BlobMode, Target};
+use serde_json::Value;
 
-use crate::support::{
-    PROJECTION_DIGEST, RAW_DIGEST, debt_item_json, debt_snapshot, fact_json_for, key_input_json,
-};
+use crate::support::{DEBT, PROJECTION_DIGEST, RAW_DIGEST};
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "the published fixture supplies the production key model"
+)]
+fn key_input(finding_kind: &str) -> FindingKeyInput<String> {
+    let snapshot: DebtSnapshot = serde_json::from_slice(DEBT).unwrap();
+    let key = snapshot
+        .items
+        .into_iter()
+        .next()
+        .unwrap()
+        .accepted_fact
+        .key_input;
+    FindingKeyInput {
+        schema: key.schema,
+        finding_kind: finding_kind.to_owned(),
+        scope: key.scope,
+    }
+}
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "negative fixtures replace only the fields under test"
+)]
+fn fact<'a>(
+    finding_kind: &'a str,
+    key_input: &str,
+    resolution: &str,
+) -> Fact<Value, FindingFactEvidence<RepoPath, Value>, &'a str> {
+    Fact {
+        schema: FactSchema::Current,
+        finding_kind,
+        key_input: serde_json::from_str(key_input).unwrap(),
+        evidence: FindingFactEvidence::Reference {
+            resolution: serde_json::from_str(resolution).unwrap(),
+            occurrence_multiplicity: 1,
+        },
+    }
+}
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "the fixture key serializes through Serde"
+)]
 fn parse_debt_fact_case(
     fact_finding_kind: &str,
     key_finding_kind: &str,
     resolution: &str,
 ) -> Result<DebtSnapshot, Error> {
-    let key_input = key_input_json(key_finding_kind);
-    parse_debt_fact(fact_finding_kind, &key_input, resolution)
+    let key = serde_json::to_string(&key_input(key_finding_kind)).unwrap();
+    parse_debt_fact(fact_finding_kind, &key, resolution)
 }
 
 #[expect(
     clippy::unwrap_used,
-    reason = "test helper on syntactically valid JSON templates"
+    clippy::indexing_slicing,
+    reason = "negative fixtures keep the published outer control and rebind the edited fact"
 )]
 fn parse_debt_fact(
     fact_finding_kind: &str,
     key_input: &str,
     resolution: &str,
 ) -> Result<DebtSnapshot, Error> {
-    let fact = fact_json_for(fact_finding_kind, key_input, resolution);
+    let fact = fact(fact_finding_kind, key_input, resolution);
     let finding_key = amiss_wire::model::Digest::from(
         sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
             .chain_update([0_u8])
-            .chain_update(
-                serde_json_canonicalizer::to_vec(
-                    &serde_json::from_slice::<serde_json::Value>(key_input.as_bytes()).unwrap(),
-                )
-                .unwrap(),
-            )
+            .chain_update(serde_json_canonicalizer::to_vec(&fact.key_input).unwrap())
             .finalize()
             .0,
-    )
-    .to_string();
+    );
     let fact_digest = amiss_wire::model::Digest::from(
         sha2::Sha256::new_with_prefix(FACT_DOMAIN)
             .chain_update([0_u8])
-            .chain_update(
-                serde_json_canonicalizer::to_vec(
-                    &serde_json::from_slice::<serde_json::Value>(fact.as_bytes()).unwrap(),
-                )
-                .unwrap(),
-            )
+            .chain_update(serde_json_canonicalizer::to_vec(&fact).unwrap())
             .finalize()
             .0,
-    )
-    .to_string();
-    let item = debt_item_json(
-        "debt/resolution-case",
-        &finding_key,
-        &fact,
-        &fact_digest,
-        ("2026-07-01T00:00:00Z", "2026-08-01T00:00:00Z"),
     );
-    let document = debt_snapshot("2026-07-02T00:00:00Z", &[item]);
-    parse_debt_snapshot(document.as_bytes())
+    let template: DebtSnapshot = serde_json::from_slice(DEBT).unwrap();
+    let mut document = serde_json::to_value(template).unwrap();
+    let item = &mut document["items"][0];
+    item["accepted_fact"] = serde_json::to_value(fact).unwrap();
+    item["finding_key"] = serde_json::json!(finding_key);
+    item["accepted_fact_digest"] = serde_json::json!(fact_digest);
+    parse_debt_snapshot(&serde_json::to_vec(&document).unwrap())
 }
 
 #[test]
 fn structural_facts_accept_an_optional_full_commit_identity() {
-    let key_input = |commit_oid: &str| {
-        key_input_json("explicit-target-missing").replace(
-            "\"kind\": \"repository-path\",",
-            &format!("\"kind\": \"repository-path\",\n      \"commit_oid\": \"{commit_oid}\","),
-        )
+    let with_commit = |commit_oid: &str| {
+        serde_json::to_string_pretty(&key_input("explicit-target-missing"))
+            .unwrap()
+            .replace(
+                "\"kind\": \"repository-path\",",
+                &format!("\"kind\": \"repository-path\",\n      \"commit_oid\": \"{commit_oid}\","),
+            )
     };
     for commit_oid in ["a".repeat(40), "b".repeat(64)] {
-        let key_input = key_input(&commit_oid);
+        let key_input = with_commit(&commit_oid);
         let parsed = parse_debt_fact(
             "explicit-target-missing",
             &key_input,
@@ -87,7 +120,7 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         assert_eq!(
             serde_json::to_vec(&parsed.items[0].accepted_fact.key_input).unwrap(),
             serde_json_canonicalizer::to_vec(
-                &serde_json::from_slice::<serde_json::Value>(key_input.as_bytes()).unwrap()
+                &serde_json::from_slice::<Value>(key_input.as_bytes()).unwrap()
             )
             .unwrap(),
         );
@@ -104,7 +137,7 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         );
     }
 
-    let invalid = key_input("deadbeef");
+    let invalid = with_commit("deadbeef");
     let defect = parse_debt_fact(
         "explicit-target-missing",
         &invalid,
@@ -118,10 +151,12 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
             .ends_with(".normalized_target_intent.commit_oid")
     );
 
-    let null = key_input_json("explicit-target-missing").replace(
-        "\"kind\": \"repository-path\",",
-        "\"kind\": \"repository-path\",\n      \"commit_oid\": null,",
-    );
+    let null = serde_json::to_string_pretty(&key_input("explicit-target-missing"))
+        .unwrap()
+        .replace(
+            "\"kind\": \"repository-path\",",
+            "\"kind\": \"repository-path\",\n      \"commit_oid\": null,",
+        );
     let defect = parse_debt_fact(
         "explicit-target-missing",
         &null,
@@ -129,12 +164,12 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
     )
     .unwrap_err();
     assert_eq!(defect.kind, ErrorKind::DigestMismatch);
-    let fact = fact_json_for(
+    let fact = fact(
         "explicit-target-missing",
         &null,
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
     );
-    let parsed = parse_fact(fact.as_bytes()).unwrap();
+    let parsed = parse_fact(&serde_json::to_vec(&fact).unwrap()).unwrap();
     assert_eq!(
         parsed.key_input.scope.normalized_target_intent.commit_oid,
         None
@@ -212,8 +247,10 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
         assert_eq!(
             serde_json::to_vec(&item.accepted_fact.key_input).unwrap(),
             serde_json_canonicalizer::to_vec(
-                &serde_json::from_slice::<serde_json::Value>(
-                    key_input_json("explicit-target-missing").as_bytes()
+                &serde_json::from_slice::<Value>(
+                    serde_json::to_string_pretty(&key_input("explicit-target-missing"))
+                        .unwrap()
+                        .as_bytes()
                 )
                 .unwrap()
             )

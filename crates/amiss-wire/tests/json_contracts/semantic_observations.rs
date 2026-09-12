@@ -66,13 +66,6 @@ fn observations() -> Vec<(Observation, Vec<u8>)> {
 
 #[test]
 fn semantic_observations_reuse_closed_models_without_changing_their_json() {
-    #[derive(serde::Serialize)]
-    struct ExtendedObservation<'a> {
-        #[serde(flatten)]
-        observation: &'a Observation,
-        unexpected: bool,
-    }
-
     let original: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
@@ -88,14 +81,7 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
             observation
         );
         let text = String::from_utf8(expected).unwrap();
-        let unknown_member = String::from_utf8(
-            serde_json_canonicalizer::to_vec(&ExtendedObservation {
-                observation: &observation,
-                unexpected: true,
-            })
-            .unwrap(),
-        )
-        .unwrap();
+        let unknown_member = text.replacen('{', "{\"unexpected\":true,", 1);
         assert!(serde_json::from_str::<Observation>(&unknown_member).is_err());
         let template = SemanticEvidenceTemplate {
             schema: TemplateSchema::Current,

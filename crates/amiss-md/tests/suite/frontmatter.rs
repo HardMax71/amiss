@@ -43,15 +43,11 @@ struct Vector {
     id: String,
     bom_count: usize,
     opener: String,
-    #[serde(deserialize_with = "Option::deserialize")]
     closer: Option<String>,
     payload_bytes: usize,
     closer_at_eof: bool,
     expected: bool,
-    #[serde(
-        rename = "expected_frontmatter_bytes",
-        deserialize_with = "Option::deserialize"
-    )]
+    #[serde(rename = "expected_frontmatter_bytes")]
     expected_bytes: Option<usize>,
     #[serde(default)]
     newline: Newline,

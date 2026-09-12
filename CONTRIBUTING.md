@@ -37,6 +37,8 @@ calls. Let derives infer generic bounds instead of adding `serde(bound)`, and us
 `Option<T>` for ordinary optional fields. Provider responses ignore unused fields;
 Amiss-owned closed formats remain strict. The accepted JSON behavior is described in
 [Architecture](docs/src/architecture.md).
+Tests reuse production wire models and validators. Do not add test-only wire replicas or
+JSON codec helpers; reserve raw JSON for representation and malformed-input checks.
 Important tests are exercised against deliberately broken behavior before they
 are trusted. Documentation passes through the same gate as everything else:
 the scanner runs on its own repository, so a link that stops resolving fails
