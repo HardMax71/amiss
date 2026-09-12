@@ -69,7 +69,7 @@ fn parses_an_execution_constraint_descriptor() {
     );
     assert_eq!(descriptor.selected_platform.as_ref(), "linux-x86_64");
     assert_eq!(
-        descriptor.required_status_name,
+        descriptor.required_status_name.as_str(),
         "amiss / documentation assurance"
     );
     assert_eq!(

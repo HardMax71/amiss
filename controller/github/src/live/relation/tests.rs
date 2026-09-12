@@ -150,8 +150,8 @@ fn relation_check_run_binds_the_exact_audit_without_exposing_the_credential() {
         let expected = relation_check_run(&config, &status, &target).unwrap();
         assert_eq!(expected.name, target.required_status_name);
         assert_eq!(expected.head_sha, target.candidate_commit.as_str());
-        assert_eq!(expected.conclusion, conclusion);
-        assert_eq!(expected.status, "completed");
+        assert_eq!(expected.conclusion, conclusion.parse().unwrap());
+        assert_eq!(expected.status, "completed".parse().unwrap());
         assert!(Digest::from_wire(&expected.external_id).is_some());
         assert!(identities.insert(expected.external_id));
         for binding in [
@@ -264,7 +264,7 @@ fn fixture() -> (Config, RelationSubject) {
             provider: subject.scope.provider.clone(),
             app_id: APP_ID,
             installation_id: INSTALLATION_ID,
-            required_status_name: "amiss/provider".to_owned(),
+            required_status_name: "amiss/provider".parse().unwrap(),
         },
         subject,
     )
@@ -293,7 +293,7 @@ fn status_fixture() -> (Config, RelationStatusRecord, RelationStatusTarget) {
         scope: subject.scope,
         credential: subject.credential,
         candidate_commit: frozen.commits.candidate.clone(),
-        required_status_name: "Amiss cross-repository".to_owned(),
+        required_status_name: "Amiss cross-repository".parse().unwrap(),
     };
     let audit = validate_relation_audit(audit_bundle(&fixture)).unwrap();
     let status = RelationStatusRecord {
@@ -324,7 +324,7 @@ fn status_fixture() -> (Config, RelationStatusRecord, RelationStatusTarget) {
             provider: target.scope.provider.clone(),
             app_id: APP_ID,
             installation_id: INSTALLATION_ID,
-            required_status_name: "amiss/provider".to_owned(),
+            required_status_name: "amiss/provider".parse().unwrap(),
         },
         status,
         target,
@@ -344,10 +344,10 @@ fn audit_bundle(fixture: &RelationAuditFixture) -> RelationAuditBundle<'_> {
 fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
     CheckRunRecord {
         id: 42,
-        name: expected.name.clone(),
+        name: expected.name.to_string(),
         head_sha: expected.head_sha.clone(),
         external_id: Some(expected.external_id.clone()),
-        status: expected.status.to_owned(),
+        status: expected.status.clone(),
         conclusion: Some(expected.conclusion.clone()),
         output: CheckRunOutputRecord {
             title: Some(expected.output.title.clone()),

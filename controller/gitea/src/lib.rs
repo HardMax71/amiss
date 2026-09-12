@@ -1,5 +1,9 @@
 #![forbid(unsafe_code)]
 
+pub use amiss_controller::AcquiredCommit;
+
+pub mod states;
+
 mod adapter;
 mod fetch_plan;
 mod identity;
@@ -17,16 +21,9 @@ pub use live::{GiteaClient, GiteaClientError, GiteaObjectResolver, GiteaTimeouts
 pub use source::GiteaPullRequestSource;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GiteaCommit {
-    pub id: String,
-    pub tree: String,
-    pub parents: Vec<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GiteaObjects {
-    pub candidate: GiteaCommit,
-    pub base: GiteaCommit,
+    pub candidate: AcquiredCommit,
+    pub base: AcquiredCommit,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

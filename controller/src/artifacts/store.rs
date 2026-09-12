@@ -6,6 +6,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use amiss_wire::model::Digest;
+use amiss_wire::publication::PublicationVerdict;
+use amiss_wire::relation::RelationVerdict;
 
 use super::format::{Blob, Record, RecordInput, Root, SidecarAudit};
 use super::{
@@ -26,7 +28,7 @@ pub struct FileArtifactStore {
 struct State {
     root: Root,
     records: BTreeMap<String, StoredRecord>,
-    evaluations: BTreeMap<String, String>,
+    evaluations: BTreeMap<ControllerEvaluationId, String>,
     bytes: u64,
     trusted: bool,
 }
@@ -54,8 +56,8 @@ struct AuditDigests {
 
 #[derive(Clone, Copy)]
 enum AuditKind {
-    Publication,
-    Relation,
+    Publication(PublicationVerdict),
+    Relation(RelationVerdict),
 }
 
 impl FileArtifactStore {
@@ -93,7 +95,7 @@ impl FileArtifactStore {
         evaluation_id: &ControllerEvaluationId,
         bundle: ArtifactAuditBundle<'_>,
     ) -> Result<ArtifactAuditReference, ArtifactError> {
-        let (payload, digests, verdict, kind, audit) = match bundle {
+        let (payload, digests, kind, audit) = match bundle {
             ArtifactAuditBundle::Publication(bundle) => {
                 let digests = crate::validate_publication_audit(bundle)?;
                 (
@@ -109,8 +111,7 @@ impl FileArtifactStore {
                         evidence: digests.evidence_digest,
                         assessment: digests.assessment_digest,
                     },
-                    digests.verdict.as_ref().to_owned(),
-                    AuditKind::Publication,
+                    AuditKind::Publication(digests.verdict),
                     ArtifactAuditDigests::Publication(digests),
                 )
             }
@@ -129,14 +130,12 @@ impl FileArtifactStore {
                         evidence: digests.evidence_digest,
                         assessment: digests.assessment_digest,
                     },
-                    digests.verdict.as_ref().to_owned(),
-                    AuditKind::Relation,
+                    AuditKind::Relation(digests.verdict),
                     ArtifactAuditDigests::Relation(digests),
                 )
             }
         };
-        let artifact =
-            self.retain_validated_audit(evaluation_id, payload, digests, verdict, kind)?;
+        let artifact = self.retain_validated_audit(evaluation_id, payload, digests, kind)?;
         Ok(ArtifactAuditReference { artifact, audit })
     }
 
@@ -145,30 +144,36 @@ impl FileArtifactStore {
         evaluation_id: &ControllerEvaluationId,
         payload: AuditPayload<'_>,
         digests: AuditDigests,
-        verdict: String,
         kind: AuditKind,
     ) -> Result<ArtifactReference, ArtifactError> {
-        let audit = SidecarAudit {
-            plan: Blob::from_digest(payload.plan, digests.plan)?,
-            evidence: payload
-                .evidence
-                .zip(digests.evidence)
-                .map(|(bytes, digest)| Blob::from_digest(bytes, digest))
-                .transpose()?,
-            assessment: Blob::from_digest(payload.assessment, digests.assessment)?,
-            verdict,
-        };
+        let plan = Blob::from_digest(payload.plan, digests.plan)?;
+        let evidence = payload
+            .evidence
+            .zip(digests.evidence)
+            .map(|(bytes, digest)| Blob::from_digest(bytes, digest))
+            .transpose()?;
+        let assessment = Blob::from_digest(payload.assessment, digests.assessment)?;
         let (publication_audit, relation_audit, plan, evidence, assessment) = match kind {
-            AuditKind::Publication => (
-                Some(audit),
+            AuditKind::Publication(verdict) => (
+                Some(SidecarAudit {
+                    plan,
+                    evidence,
+                    assessment,
+                    verdict,
+                }),
                 None,
                 ArtifactComponent::PublicationPlan,
                 ArtifactComponent::PublicationEvidence,
                 ArtifactComponent::PublicationAssessment,
             ),
-            AuditKind::Relation => (
+            AuditKind::Relation(verdict) => (
                 None,
-                Some(audit),
+                Some(SidecarAudit {
+                    plan,
+                    evidence,
+                    assessment,
+                    verdict,
+                }),
                 ArtifactComponent::RelationPlan,
                 ArtifactComponent::RelationEvidence,
                 ArtifactComponent::RelationAssessment,
@@ -208,7 +213,7 @@ impl FileArtifactStore {
         let now = self.effective_now(&state)?;
         self.remove_expired(&mut state, now)?;
         let record = Record::new(evaluation_id, now, self.config.retention, input)?;
-        if let Some(id) = state.evaluations.get(evaluation_id.as_str()) {
+        if let Some(id) = state.evaluations.get(evaluation_id) {
             let existing = state.records.get(id).ok_or(ArtifactError::Corrupt)?;
             return if existing.metadata.id == record.id {
                 existing.metadata.reference(&self.config)
@@ -252,7 +257,7 @@ impl FileArtifactStore {
             .ok_or(ArtifactError::Corrupt)?;
         state
             .evaluations
-            .insert(evaluation_id.as_str().to_owned(), record.id.clone());
+            .insert(evaluation_id.clone(), record.id.clone());
         let reference = record.reference(&self.config)?;
         state.records.insert(
             record.id.clone(),
@@ -341,7 +346,7 @@ impl FileArtifactStore {
         self.remove_expired(&mut state, now)?;
         state
             .evaluations
-            .get(evaluation_id.as_str())
+            .get(evaluation_id)
             .and_then(|id| state.records.get(id))
             .map(|stored| stored.metadata.reference(&self.config))
             .transpose()

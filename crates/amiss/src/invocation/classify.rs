@@ -233,27 +233,22 @@ fn classify_adoption(gathered: &Gathered) -> Validation<Option<Adoption>> {
     let floor_digest = gathered
         .floor_digest
         .unique_value()
-        .filter(|value| {
-            value.strip_prefix("sha256:").is_some_and(|hex| {
-                hex.len() == 64
-                    && hex
-                        .bytes()
-                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-            })
-        })
-        .map(str::to_owned)
+        .and_then(|value| value.parse().ok())
         .ok_or(Code::InvalidInvocation)?;
     let instant = |slot: &Slot| {
         slot.unique_value()
-            .filter(|value| amiss_wire::model::UtcInstant::new((*value).to_owned()).is_some())
-            .map(str::to_owned)
+            .and_then(|value| amiss_wire::model::UtcInstant::new(value.to_owned()))
     };
     let nonempty = |slot: &Slot| {
         slot.unique_value()
             .filter(|value| !value.is_empty())
             .map(str::to_owned)
     };
-    let owner = nonempty(&gathered.debt_owner).ok_or(Code::InvalidInvocation)?;
+    let owner = gathered
+        .debt_owner
+        .unique_value()
+        .and_then(|value| amiss_wire::model::OwnerId::new(value.to_owned()))
+        .ok_or(Code::InvalidInvocation)?;
     let reason = nonempty(&gathered.debt_reason).ok_or(Code::InvalidInvocation)?;
     let created_at = instant(&gathered.created_at).ok_or(Code::InvalidInvocation)?;
     let expires_at = instant(&gathered.expires_at).ok_or(Code::InvalidInvocation)?;

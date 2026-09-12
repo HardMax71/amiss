@@ -105,7 +105,7 @@ fn reviews_are_exact_commit_bound_and_idempotent() {
     );
     let state = fixture.rest.state.lock().unwrap();
     assert_eq!(state.created.len(), 1);
-    assert_eq!(state.created[0].event, "APPROVED");
+    assert_eq!(state.created[0].event, "APPROVED".parse().unwrap());
     assert_eq!(state.created[0].commit_id, oid('b').as_str());
     assert!(state.created[0].body.contains("candidate-tree: dddddddd"));
     drop(state);
@@ -121,7 +121,7 @@ fn reviews_are_exact_commit_bound_and_idempotent() {
     );
     let state = fixture.rest.state.lock().unwrap();
     assert_eq!(state.created.len(), 2);
-    assert_eq!(state.created[1].event, "REQUEST_CHANGES");
+    assert_eq!(state.created[1].event, "REQUEST_CHANGES".parse().unwrap());
     drop(state);
 
     assert_eq!(
@@ -130,7 +130,7 @@ fn reviews_are_exact_commit_bound_and_idempotent() {
     );
     let state = fixture.rest.state.lock().unwrap();
     assert_eq!(state.created.len(), 2);
-    assert_eq!(state.created[1].event, "REQUEST_CHANGES");
+    assert_eq!(state.created[1].event, "REQUEST_CHANGES".parse().unwrap());
 }
 
 #[test]
@@ -207,7 +207,7 @@ fn a_revoked_control_publishes_the_verdict_that_reports_it() {
     );
     let state = revoked.rest.state.lock().unwrap();
     assert_eq!(state.created.len(), 1);
-    assert_eq!(state.created[0].event, "REQUEST_CHANGES");
+    assert_eq!(state.created[0].event, "REQUEST_CHANGES".parse().unwrap());
     assert!(
         state.created[0]
             .body
@@ -233,7 +233,7 @@ fn config() -> Config {
     Config {
         provider: provider("gitea"),
         reviewer: reviewer(),
-        review_name: "amiss".to_owned(),
+        review_name: "amiss".parse().unwrap(),
     }
 }
 
@@ -263,7 +263,7 @@ fn a_publication_is_validated_in_every_field() {
     let mut wrong_candidate = fresh();
     wrong_candidate.run.commits.candidate = oid('9');
     let mut wrong_name = fresh();
-    wrong_name.check.required_status_name = "other".to_owned();
+    wrong_name.check.required_status_name = "other".parse().unwrap();
     for (reason, wrong) in [
         ("gate", wrong_gate),
         ("attempt", wrong_attempt),
@@ -284,7 +284,7 @@ fn a_publication_is_validated_in_every_field() {
 #[test]
 fn a_created_review_is_exact_fresh_and_owned() {
     let expected = CreateReview {
-        event: "APPROVED".to_owned(),
+        event: "APPROVED".parse().unwrap(),
         body: "body".to_owned(),
         commit_id: oid('b').as_str().to_owned(),
         comments: Vec::new(),
@@ -295,7 +295,7 @@ fn a_created_review_is_exact_fresh_and_owned() {
             id: user,
             login: login.to_owned(),
         }),
-        state: "APPROVED".to_owned(),
+        state: "APPROVED".parse().unwrap(),
         body: "body".to_owned(),
         commit_id: oid('b').as_str().to_owned(),
         stale,

@@ -179,7 +179,7 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
     }
 
     let mut unknown_state = fixture.data.clone();
-    unknown_state.pull_request.state = "unknown".to_owned();
+    unknown_state.pull_request.state = serde_json::from_str(r#""unknown""#).unwrap();
     unknown_state.rules.clear();
     assert_eq!(
         super::refresh::snapshot(&fixture.config, fixture.request(), &unknown_state),
@@ -190,7 +190,7 @@ fn missing_or_conflicting_effective_rule_revokes_authorization() {
 #[test]
 fn closed_and_provider_revocation_are_distinct() {
     let mut fixture = Fixture::new();
-    fixture.data.pull_request.state = "closed".to_owned();
+    fixture.data.pull_request.state = "closed".parse().unwrap();
     let closed =
         super::refresh::snapshot(&fixture.config, fixture.request(), &fixture.data).unwrap();
     assert_eq!(closed.state, ChangeState::Closed);
@@ -235,7 +235,7 @@ fn publication_reuses_only_one_exact_owned_check() {
     ));
 
     let mut changed = exact.clone();
-    changed.conclusion = Some("failure".to_owned());
+    changed.conclusion = Some("failure".parse().unwrap());
     assert_eq!(
         decision_error(&fixture, &publication, &[changed]),
         ProviderError::InvalidResponse
@@ -372,7 +372,7 @@ fn a_token_answers_only_for_its_own_installation() {
         INSTALLATION_ID,
         rsa_keys().unwrap().private_pem,
         "https://ghes.invalid",
-        "amiss / documentation assurance".to_owned(),
+        "amiss / documentation assurance".parse().unwrap(),
         GitHubTimeouts::new(Duration::from_millis(1), Duration::from_millis(2)).unwrap(),
     )
     .unwrap();
@@ -561,7 +561,7 @@ fn publication_conclusions_and_create_response_are_exact() {
         let expected = created_from_decision(
             publication_decision(&fixture.config, &publication, &[]).unwrap(),
         );
-        assert_eq!(expected.conclusion, expected_conclusion);
+        assert_eq!(expected.conclusion, expected_conclusion.parse().unwrap());
         assert_eq!(expected.head_sha, publication.gate_commit.as_str());
         let run = &publication.run;
         let repository = &run.change.repository;
@@ -746,7 +746,7 @@ impl Fixture {
                 provider,
                 app_id: APP_ID,
                 installation_id: INSTALLATION_ID,
-                required_status_name: "amiss/provider".to_owned(),
+                required_status_name: "amiss/provider".parse().unwrap(),
             },
             change,
             candidate: candidate.clone(),
@@ -890,7 +890,7 @@ impl GitHubRest for FakeRest {
         _repository: &RepositoryIdentity,
         _head_sha: &Oid,
         _app_id: u64,
-        _name: &str,
+        _name: &amiss_wire::controls::RequiredStatusName,
         _deadline: OperationDeadline,
     ) -> Result<Vec<CheckRunRecord>, ProviderError> {
         self.checks.fetch_add(1, Ordering::Relaxed);
@@ -930,7 +930,7 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
         pull_request: PullRequestRecord {
             id: 4_201,
             number: 42,
-            state: "open".to_owned(),
+            state: "open".parse().unwrap(),
             mergeable: Some(true),
             merge_commit_sha: Some(oid('e').as_str().to_owned()),
             head: PullRefRecord {
@@ -991,10 +991,10 @@ fn required_rule_with_policy(integration_id: Option<u64>, strict: bool) -> Branc
 fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
     CheckRunRecord {
         id: 81,
-        name: expected.name.clone(),
+        name: expected.name.to_string(),
         head_sha: expected.head_sha.clone(),
         external_id: Some(expected.external_id.clone()),
-        status: expected.status.to_owned(),
+        status: expected.status.clone(),
         conclusion: Some(expected.conclusion.clone()),
         output: CheckRunOutputRecord {
             title: Some(expected.output.title.clone()),
@@ -1165,7 +1165,7 @@ fn a_publication_target_is_current_only_in_every_field() {
     );
 
     let mut closed_absent = authoritative.clone();
-    closed_absent.state = "closed".to_owned();
+    closed_absent.state = "closed".parse().unwrap();
     closed_absent.head.repo = None;
     assert_eq!(
         current(&closed_absent),

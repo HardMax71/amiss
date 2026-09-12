@@ -189,7 +189,7 @@ fn gitlab(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     }
     let name_at = separator.saturating_sub(1);
     let owner_segments = segments.get(..name_at).unwrap_or_default();
-    let identity_segments = identity.owner.split('/');
+    let identity_segments = identity.repository.owner().split('/');
     let owner_matches = owner_segments.len() == identity_segments.clone().count()
         && owner_segments
             .iter()
@@ -198,7 +198,7 @@ fn gitlab(identity: &ForgeContext, suffix: &str) -> ForgeRoute {
     let project = segments.get(name_at).copied().unwrap_or_default();
     if !owner_matches
         || !literal_ascii(project)
-        || !project.eq_ignore_ascii_case(&identity.repository)
+        || !project.eq_ignore_ascii_case(identity.repository.name())
     {
         return ForgeRoute::Foreign;
     }
@@ -308,13 +308,15 @@ fn bitbucket_cloud_split(
     })?;
     let candidate = identity
         .candidate_ref
-        .strip_prefix("refs/heads/")
-        .unwrap_or(identity.candidate_ref.as_str())
+        .as_ref()
+        .map(amiss_wire::model::BranchRef::name)
+        .unwrap_or_default()
         .as_bytes();
     let default = identity
         .default_ref
-        .strip_prefix("refs/heads/")
-        .unwrap_or(identity.default_ref.as_str())
+        .as_ref()
+        .map(amiss_wire::model::BranchRef::name)
+        .unwrap_or_default()
         .as_bytes();
     let candidate_matches = version.as_slice() == candidate;
     let default_matches = version.as_slice() == default;
@@ -433,7 +435,11 @@ fn bitbucket_data_center_version(
         if let Some(oid) = oid.filter(|_value| raw_revision.as_bytes() == revision.as_slice()) {
             return Ok(ForgeVersion::Commit(oid));
         }
-        if revision == identity.candidate_ref.as_bytes() {
+        if identity
+            .candidate_ref
+            .as_ref()
+            .is_some_and(|reference| revision == reference.as_str().as_bytes())
+        {
             return Ok(ForgeVersion::Candidate);
         }
         if revision
@@ -476,8 +482,8 @@ fn repository_pair_matches(identity: &ForgeContext, owner: &str, repository: &st
     [owner, repository]
         .iter()
         .all(|text| !text.is_empty() && text.is_ascii() && !text.contains('%'))
-        && owner.eq_ignore_ascii_case(&identity.owner)
-        && repository.eq_ignore_ascii_case(&identity.repository)
+        && owner.eq_ignore_ascii_case(identity.repository.owner())
+        && repository.eq_ignore_ascii_case(identity.repository.name())
 }
 
 fn source_segments<'a>(identity: &ForgeContext, suffix: &'a str) -> Option<Vec<&'a str>> {
@@ -516,12 +522,14 @@ fn versioned_split(
     let decoded = decoded_tail(tolerate_terminal_slash, raw_tail)?;
     let candidate = identity
         .candidate_ref
-        .strip_prefix("refs/heads/")
-        .unwrap_or(identity.candidate_ref.as_str());
+        .as_ref()
+        .map(amiss_wire::model::BranchRef::name)
+        .unwrap_or_default();
     let default = identity
         .default_ref
-        .strip_prefix("refs/heads/")
-        .unwrap_or(identity.default_ref.as_str());
+        .as_ref()
+        .map(amiss_wire::model::BranchRef::name)
+        .unwrap_or_default();
     let candidate_split = split_after(&decoded, candidate);
     let default_split = split_after(&decoded, default);
     let oid_length = match identity.object_format {

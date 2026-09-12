@@ -37,7 +37,7 @@ fn an_unmergeable_pull_request_is_unsettled_state_not_a_verdict() {
 #[test]
 fn a_closed_pull_request_is_closed_even_though_it_cannot_merge() {
     let fixture = Fixture::mutated("gitea", |data| {
-        data.pull_request.state = "closed".to_owned();
+        data.pull_request.state = "closed".parse().unwrap();
         data.pull_request.mergeable = false;
     });
 
@@ -227,7 +227,7 @@ fn unrelated_historical_reviews_cannot_brick_the_lane() {
         data.reviews.push(ReviewRecord {
             id: 0,
             user: None,
-            state: "REMOVED_PROVIDER_STATE".to_owned(),
+            state: "REMOVED_PROVIDER_STATE".parse().unwrap(),
             body: String::new(),
             commit_id: "not-an-object-id".to_owned(),
             stale: false,
@@ -239,7 +239,7 @@ fn unrelated_historical_reviews_cannot_brick_the_lane() {
                 id: 99,
                 login: "former-reviewer".to_owned(),
             }),
-            state: "REMOVED_PROVIDER_STATE".to_owned(),
+            state: "REMOVED_PROVIDER_STATE".parse().unwrap(),
             body: String::new(),
             commit_id: "not-an-object-id".to_owned(),
             stale: false,
@@ -261,7 +261,7 @@ fn dedicated_reviewer_rows_are_strict() {
     let cases: [fn(&mut ReviewRecord); 5] = [
         |review| review.id = 0,
         |review| review.commit_id = "not-an-object-id".to_owned(),
-        |review| review.state = "REMOVED_PROVIDER_STATE".to_owned(),
+        |review| review.state = serde_json::from_str(r#""REMOVED_PROVIDER_STATE""#).unwrap(),
         |review| review.user.as_mut().unwrap().id = 99,
         |review| review.user.as_mut().unwrap().login = "other".to_owned(),
     ];
@@ -273,7 +273,7 @@ fn dedicated_reviewer_rows_are_strict() {
                     id: 77,
                     login: "amiss-controller".to_owned(),
                 }),
-                state: "APPROVED".to_owned(),
+                state: "APPROVED".parse().unwrap(),
                 body: "prior".to_owned(),
                 commit_id: oid('b').as_str().to_owned(),
                 stale: false,
@@ -342,7 +342,7 @@ fn the_request_binding_is_exact_in_every_field() {
     let config = |namespace: &str| super::super::Config {
         provider: provider(namespace),
         reviewer: reviewer(),
-        review_name: "amiss".to_owned(),
+        review_name: "amiss".parse().unwrap(),
     };
     assert!(validate_request(&config("gitea"), fixture.pull_request()).is_ok());
     assert_eq!(
@@ -403,7 +403,7 @@ fn each_consistency_fact_refuses_alone() {
         );
     }
     let resolver = Fixture::resolving("gitea", |objects| {
-        objects.candidate.id = oid('e').as_str().to_owned();
+        objects.candidate.id = oid('e');
     });
     assert_eq!(
         resolver
@@ -420,7 +420,7 @@ fn each_consistency_fact_refuses_alone() {
 #[test]
 fn the_head_repository_gates_open_and_spares_closed() {
     let closed = Fixture::mutated("gitea", |data| {
-        data.pull_request.state = "closed".to_owned();
+        data.pull_request.state = "closed".parse().unwrap();
         data.pull_request.merged = false;
         data.pull_request.mergeable = false;
         data.pull_request.head.repo = None;

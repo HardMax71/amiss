@@ -16,7 +16,6 @@ use amiss_controller::{
     RelationStatusRecord, RelationStatusTarget, RelationSubject, RelationSubjectHead,
     WorkflowArtifactExpectation,
 };
-use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::Oid;
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 
@@ -80,7 +79,7 @@ impl GitHubApp {
         installation_id: u64,
         private_key_pem: Vec<u8>,
         api_base: &str,
-        required_status_name: String,
+        required_status_name: amiss_wire::controls::RequiredStatusName,
         timeouts: GitHubTimeouts,
     ) -> Result<Self, GitHubClientError> {
         let private_key = SecretSlice::from(private_key_pem);
@@ -100,9 +99,6 @@ impl GitHubApp {
             .contains(&private_key.expose_secret().len())
         {
             return Err(configuration("the App private key size is out of bounds"));
-        }
-        if !valid_required_status_name(&required_status_name) {
-            return Err(configuration("the required status name is invalid"));
         }
         let rest = HttpRest::new(
             app_id,
@@ -271,5 +267,5 @@ struct Config {
     provider: ProviderIdentity,
     app_id: u64,
     installation_id: u64,
-    required_status_name: String,
+    required_status_name: amiss_wire::controls::RequiredStatusName,
 }

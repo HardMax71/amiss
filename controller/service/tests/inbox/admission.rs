@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::fs;
 use std::time::Duration;
 
@@ -28,6 +29,12 @@ fn delivery_survives_restart_and_is_enumerable() {
                 available_at_unix_millis: 0,
             },
         }]
+    );
+    assert_eq!(
+        hex::encode(sha2::Sha256::digest(
+            fs::read(row_file(directory.path())).unwrap()
+        )),
+        "a8da05b93e3a857f56778825837a9e2e50ccd02692a9b4dcdca5d6a9de23f407"
     );
     drop(inbox);
 

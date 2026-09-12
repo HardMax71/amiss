@@ -114,6 +114,7 @@ pub(crate) fn bed() -> Bed {
     bed_with(ScanLimits::CONTRACT)
 }
 
+#[expect(clippy::unwrap_used, reason = "fixed forge fixture identities")]
 pub(crate) fn forge_context(dialect: ForgeDialect) -> ForgeContext {
     let (host, candidate_ref) = match dialect {
         ForgeDialect::Github => ("github.com", "refs/heads/feature/x"),
@@ -123,13 +124,17 @@ pub(crate) fn forge_context(dialect: ForgeDialect) -> ForgeContext {
         ForgeDialect::BitbucketDataCenter => ("bitbucket.example", "refs/heads/feature/x"),
     };
     ForgeContext {
-        host: host.to_owned(),
         dialect,
         object_format: ObjectFormat::Sha1,
-        owner: "acme".to_owned(),
-        repository: "widgets".to_owned(),
-        candidate_ref: candidate_ref.to_owned(),
-        default_ref: "refs/heads/main".to_owned(),
+
+        repository: amiss_wire::model::RepositoryIdentity::new(
+            host.to_owned(),
+            "acme".to_owned(),
+            "widgets".to_owned(),
+        )
+        .unwrap(),
+        candidate_ref: Some(candidate_ref.parse().unwrap()),
+        default_ref: Some("refs/heads/main".parse().unwrap()),
     }
 }
 
@@ -376,13 +381,17 @@ fn github_candidate_urls_resolve_targets_and_fragments() {
 fn ambiguous_trusted_splits_have_unknown_version_scope() {
     let mut bed = bed();
     let context = ForgeContext {
-        host: "github.com".to_owned(),
         dialect: ForgeDialect::Github,
         object_format: ObjectFormat::Sha1,
-        owner: "acme".to_owned(),
-        repository: "widgets".to_owned(),
-        candidate_ref: "refs/heads/a".to_owned(),
-        default_ref: "refs/heads/a/b".to_owned(),
+
+        repository: amiss_wire::model::RepositoryIdentity::new(
+            "github.com".to_owned(),
+            "acme".to_owned(),
+            "widgets".to_owned(),
+        )
+        .unwrap(),
+        candidate_ref: Some("refs/heads/a".parse().unwrap()),
+        default_ref: Some("refs/heads/a/b".parse().unwrap()),
     };
     let (intent, row) = bed
         .run_as(

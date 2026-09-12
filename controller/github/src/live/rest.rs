@@ -57,7 +57,7 @@ pub(super) trait GitHubRest: Send + Sync {
         repository: &RepositoryIdentity,
         head_sha: &Oid,
         app_id: u64,
-        name: &str,
+        name: &amiss_wire::controls::RequiredStatusName,
         deadline: OperationDeadline,
     ) -> Result<Vec<CheckRunRecord>, ProviderError>;
 
@@ -157,7 +157,7 @@ impl HttpRest {
         let run_query = WorkflowRunQuery {
             event: expectation.event.as_str(),
             head_sha: candidate.as_str(),
-            status: "success",
+            status: crate::states::CheckConclusion::Success,
             exclude_pull_requests: true,
             per_page: EXACT_PAGE_SIZE,
             page: 1,
@@ -334,7 +334,7 @@ impl GitHubRest for HttpRest {
         repository: &RepositoryIdentity,
         head_sha: &Oid,
         app_id: u64,
-        name: &str,
+        name: &amiss_wire::controls::RequiredStatusName,
         deadline: OperationDeadline,
     ) -> Result<Vec<CheckRunRecord>, ProviderError> {
         let owner = path_segment(repository.owner());
@@ -538,7 +538,7 @@ struct PageQuery {
 
 #[derive(Serialize)]
 struct CheckRunQuery {
-    check_name: String,
+    check_name: amiss_wire::controls::RequiredStatusName,
     filter: &'static str,
     per_page: u8,
     page: u32,

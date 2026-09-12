@@ -40,15 +40,23 @@ fn a_route_is_one_absolute_unrepeated_path() {
     )
     .unwrap();
     assert_eq!(
-        transport.url("/repos/acme/widget").unwrap().as_str(),
+        amiss_controller::provider_api_url(&transport.api_base, "/repos/acme/widget")
+            .unwrap()
+            .as_str(),
         "https://forge.example/api/v1/repos/acme/widget"
     );
+    assert_eq!(
+        amiss_controller::provider_api_url(&transport.api_base, "/https://attacker.invalid/path")
+            .unwrap()
+            .as_str(),
+        "https://forge.example/api/v1/https://attacker.invalid/path"
+    );
     assert!(
-        transport.url("repos").is_err(),
+        amiss_controller::provider_api_url(&transport.api_base, "repos").is_err(),
         "a relative route is refused"
     );
     assert!(
-        transport.url("//evil.example").is_err(),
+        amiss_controller::provider_api_url(&transport.api_base, "//evil.example").is_err(),
         "a protocol-relative route is refused"
     );
 }

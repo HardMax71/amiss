@@ -1,24 +1,30 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum RecordSchema {
+    #[serde(rename = "amiss/controller-file-record-v3")]
+    Current,
+}
+
 use amiss_wire::model::Digest;
 use serde::{Deserialize, Serialize};
 
 use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId};
 
-use super::model::{StoredCheck, StoredDelivery, StoredReplayKeep, materialize_check, store_check};
+use super::model::{StoredDelivery, StoredReplayKeep};
 use super::publication::StoredPublication;
 use crate::file_ledger::FileLedgerError;
 
-const RECORD_SCHEMA: &str = "amiss/controller-file-record-v3";
+const RECORD_SCHEMA: RecordSchema = RecordSchema::Current;
 
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger) struct Record {
-    schema: String,
+    schema: RecordSchema,
     pub(in crate::file_ledger) generation: u64,
     pub(in crate::file_ledger) last_seen_unix_millis: i64,
     binding: StoredDelivery,
     replay_keep: StoredReplayKeep,
-    check: StoredCheck,
-    evaluation_id: String,
+    check: CheckBinding,
+    evaluation_id: ControllerEvaluationId,
     pub(in crate::file_ledger) state: State,
 }
 
@@ -32,13 +38,13 @@ impl Record {
         expires_at_unix_millis: i64,
     ) -> Self {
         Self {
-            schema: RECORD_SCHEMA.to_owned(),
+            schema: RECORD_SCHEMA,
             generation: 1,
             last_seen_unix_millis: now,
             binding: StoredDelivery::new(delivery.delivery()),
             replay_keep: StoredReplayKeep::new(delivery.replay_keep()),
-            check: store_check(check),
-            evaluation_id: evaluation_id.as_str().to_owned(),
+            check: check.clone(),
+            evaluation_id: evaluation_id.clone(),
             state: State::Running {
                 owner,
                 fence: 1,
@@ -54,17 +60,15 @@ impl Record {
     ) -> bool {
         self.binding == StoredDelivery::new(delivery.delivery())
             && self.replay_keep == StoredReplayKeep::new(delivery.replay_keep())
-            && self.check == store_check(check)
+            && self.check == check.clone()
     }
 
     pub(in crate::file_ledger) fn matches_key(&self, key: &str) -> Result<bool, FileLedgerError> {
         Ok(super::delivery_key(&self.binding.materialize()?.identity)? == key)
     }
 
-    pub(in crate::file_ledger) fn evaluation_id(
-        &self,
-    ) -> Result<ControllerEvaluationId, FileLedgerError> {
-        ControllerEvaluationId::new(self.evaluation_id.clone()).ok_or(FileLedgerError::Corrupt)
+    pub(in crate::file_ledger) fn evaluation_id(&self) -> ControllerEvaluationId {
+        self.evaluation_id.clone()
     }
 
     pub(in crate::file_ledger) fn advance(&mut self, now: i64) -> Result<(), FileLedgerError> {
@@ -82,7 +86,7 @@ impl Record {
         }
         let delivery = self.binding.materialize()?;
         self.replay_keep.validate()?;
-        let check = materialize_check(&self.check)?;
+        let check = self.check.clone();
         if delivery.identity.provider != delivery.change.provider {
             return Err(FileLedgerError::Corrupt);
         }
@@ -107,12 +111,9 @@ impl Record {
             }
             State::Done {
                 fence,
-                staged_digest,
+                staged_digest: _,
             } => {
-                if *fence == 0
-                    || *fence > self.generation
-                    || Digest::from_wire(staged_digest).is_none()
-                {
+                if *fence == 0 || *fence > self.generation {
                     return Err(FileLedgerError::Corrupt);
                 }
             }
@@ -139,6 +140,6 @@ pub(in crate::file_ledger) enum State {
     },
     Done {
         fence: u64,
-        staged_digest: String,
+        staged_digest: Digest,
     },
 }

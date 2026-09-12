@@ -26,7 +26,7 @@ impl DeliveryLedger for FileLedger {
         if !record.matches(delivery, check) {
             return Ok(DeliveryClaim::BindingConflict);
         }
-        let evaluation_id = record.evaluation_id()?;
+        let evaluation_id = record.evaluation_id();
         match record.state.clone() {
             State::Running { .. } => self.claim_running(&row, record, evaluation_id, check),
             State::Staged { fence, publication } => {
@@ -72,7 +72,7 @@ impl DeliveryLedger for FileLedger {
         else {
             return Ok(LeaseRenewal::Lost);
         };
-        let evaluation_id = record.evaluation_id()?;
+        let evaluation_id = record.evaluation_id();
         if owner != self.owner
             || lease.evaluation_id != evaluation_id
             || lease.fence.get() != fence
@@ -110,7 +110,7 @@ impl DeliveryLedger for FileLedger {
         let Some(record) = row.load()? else {
             return Ok(StageOutcome::Lost);
         };
-        let evaluation_id = record.evaluation_id()?;
+        let evaluation_id = record.evaluation_id();
         if !record.matches(delivery, &lease.check)
             || publication.check != lease.check
             || !publication_matches(delivery.delivery(), &evaluation_id, publication)
@@ -149,7 +149,7 @@ fn complete_record(
     staged_publication: &StagedPublication,
     record: &mut format::Record,
 ) -> Result<LeaseCompletion, FileLedgerError> {
-    let evaluation_id = record.evaluation_id()?;
+    let evaluation_id = record.evaluation_id();
     if !record.matches(delivery, &staged_publication.publication.check)
         || staged_publication.evaluation_id != evaluation_id
     {

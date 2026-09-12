@@ -36,7 +36,7 @@ struct SubjectFile {
     scope: ScopeFile,
     target: BranchRef,
     object_format: ObjectFormat,
-    credential: String,
+    credential: OpaqueId,
     source: ProjectionSource,
     limits: RelationLimits,
 }
@@ -44,16 +44,9 @@ struct SubjectFile {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ScopeFile {
-    provider: ProviderFile,
-    integration: String,
+    provider: ProviderIdentity,
+    integration: IntegrationId,
     repository: RepositoryFile,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct ProviderFile {
-    namespace: String,
-    instance: String,
 }
 
 #[derive(Deserialize)]
@@ -100,8 +93,7 @@ fn load_relation(raw: RelationFile) -> Result<RelationPlan, ConfigError> {
 
 fn load_subject(raw: SubjectFile) -> Result<RelationSubject, ConfigError> {
     let invalid = || ConfigError::invalid("relation subject identity is invalid");
-    let provider = ProviderIdentity::new(raw.scope.provider.namespace, raw.scope.provider.instance)
-        .ok_or_else(invalid)?;
+    let provider = raw.scope.provider;
     let repository = RepositoryIdentity::new(
         provider.instance.as_str().to_owned(),
         raw.scope.repository.owner,
@@ -112,12 +104,12 @@ fn load_subject(raw: SubjectFile) -> Result<RelationSubject, ConfigError> {
         role: raw.role,
         scope: PlanScope {
             provider,
-            integration: IntegrationId::new(raw.scope.integration).ok_or_else(invalid)?,
+            integration: raw.scope.integration,
             repository,
         },
         target: raw.target,
         object_format: raw.object_format,
-        credential: OpaqueId::new(raw.credential).ok_or_else(invalid)?,
+        credential: raw.credential,
         source: raw.source,
         limits: raw.limits,
     })

@@ -1,9 +1,15 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum CapacitySchema {
+    #[serde(rename = "amiss/controller-file-capacity-v1")]
+    Current,
+}
+
 use serde::{Deserialize, Serialize};
 
 use super::validate_key;
 use crate::file_ledger::{FileLedgerError, frame};
 
-const CAPACITY_SCHEMA: &str = "amiss/controller-file-capacity-v1";
+const CAPACITY_SCHEMA: CapacitySchema = CapacitySchema::Current;
 
 pub(super) const MAX_CAPACITY_BYTES: u64 = 4_096;
 
@@ -16,7 +22,7 @@ const CAPACITY_FRAME: frame::FrameFormat = frame::define(
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Capacity {
-    schema: String,
+    schema: CapacitySchema,
     pub(super) max_records: u64,
     pub(super) records: u64,
     pub(super) pending_key: Option<String>,
@@ -25,7 +31,7 @@ pub(super) struct Capacity {
 
 pub(super) fn ready(max_records: u64, records: u64) -> Result<Capacity, FileLedgerError> {
     let capacity = Capacity {
-        schema: CAPACITY_SCHEMA.to_owned(),
+        schema: CAPACITY_SCHEMA,
         max_records,
         records,
         pending_key: None,

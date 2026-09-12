@@ -55,6 +55,36 @@ pub enum ConstraintPlatform {
     WindowsAarch64,
 }
 
+/// The admitted name of one required provider check.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
+pub struct RequiredStatusName(String);
+
+impl RequiredStatusName {
+    #[must_use]
+    pub fn new(raw: String) -> Option<Self> {
+        valid_required_status_name(&raw).then_some(Self(raw))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::str::FromStr for RequiredStatusName {
+    type Err = &'static str;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        Self::new(raw.to_owned()).ok_or("invalid required status name")
+    }
+}
+
+impl std::fmt::Display for RequiredStatusName {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 /// The externally protected allow-list entry for one scanner action tree,
 /// release manifest, bootstrap contract, and required provider status name.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,7 +98,7 @@ pub struct ExecutionConstraintDescriptor {
     pub bootstrap_digest: Digest,
     pub manifest_path: RepoPathText,
     pub release_manifest_digest: Digest,
-    pub required_status_name: String,
+    pub required_status_name: RequiredStatusName,
     pub schema: ExecutionConstraintSchema,
     pub selected_platform: ConstraintPlatform,
 }
@@ -128,8 +158,6 @@ impl ExecutionConstraintDescriptor {
                 return fail(path, ErrorKind::InvalidValue);
             }
         }
-        valid_required_status_name(&self.required_status_name)
-            .then_some(())
-            .ok_or_else(|| Error::new("$.required_status_name", ErrorKind::InvalidValue))
+        Ok(())
     }
 }

@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs::File;
 
-use amiss_wire::model::Digest;
+use amiss_wire::model::{ArtifactId, Digest};
 
 use crate::{
     ArtifactAuditReference, FileArtifactStore, PendingRelation, RelationAuditBundle,
@@ -20,20 +20,20 @@ use super::{
 pub struct RelationStatusDeliveryClaim {
     pub status: RelationStatusRecord,
     pub target: RelationStatusTarget,
-    status_binding: String,
-    destination_binding: String,
+    status_binding: Digest,
+    destination_binding: Digest,
     _delivery_lock: File,
 }
 
 struct PendingDelivery {
     status: StoredStatus,
-    destination: String,
+    destination: Digest,
     shard: u8,
 }
 
 struct PendingDeliveryRef<'a> {
     status: &'a StoredStatus,
-    destination: &'a str,
+    destination: &'a Digest,
     shard: u8,
 }
 
@@ -50,8 +50,8 @@ impl FileRelationScheduleStore {
         &self,
         registry: &RelationRegistry,
         artifacts: &FileArtifactStore,
-        relation: &amiss_wire::model::ArtifactId,
-        coordination: &amiss_wire::model::ArtifactId,
+        relation: &ArtifactId,
+        coordination: &ArtifactId,
     ) -> Result<Option<RelationStatusRecord>, RelationScheduleStoreError> {
         let stored = self.load_staged_status(relation, coordination)?;
         stored
@@ -62,23 +62,23 @@ impl FileRelationScheduleStore {
 
     fn load_staged_status(
         &self,
-        relation: &amiss_wire::model::ArtifactId,
-        coordination: &amiss_wire::model::ArtifactId,
-    ) -> Result<Option<(StoredStatus, String)>, RelationScheduleStoreError> {
+        relation: &ArtifactId,
+        coordination: &ArtifactId,
+    ) -> Result<Option<(StoredStatus, Digest)>, RelationScheduleStoreError> {
         let _lock = self.lock()?;
         let metadata = self.load_metadata()?;
         let mut journal = self.open_committed_journal(&metadata)?;
         let mut state = self.state()?;
         synchronize(&mut state, &mut journal, &metadata, self.max_bindings)?;
-        match state.statuses.get(&(
-            relation.as_str().to_owned(),
-            coordination.as_str().to_owned(),
-        )) {
+        match state
+            .statuses
+            .get(&(relation.clone(), coordination.clone()))
+        {
             Some(StoredStatusState::Staged { status, .. }) => {
                 let plan_binding = state
                     .relations
                     .get(&status.relation)
-                    .map(|relation| relation.plan_binding.clone())
+                    .map(|relation| relation.plan_binding)
                     .ok_or(RelationScheduleStoreError::Corrupt)?;
                 Ok(Some((status.as_ref().clone(), plan_binding)))
             }
@@ -122,7 +122,7 @@ impl FileRelationScheduleStore {
         .map_err(RelationScheduleStoreError::Status)?
         .ok_or(RelationScheduleStoreError::Corrupt)?;
         let stored = store_status(&record)?;
-        let binding = stored.status_binding.clone();
+        let binding = stored.status_binding;
         let key = (stored.relation.clone(), stored.coordination.clone());
         match state.statuses.get(&key) {
             Some(StoredStatusState::Staged {
@@ -204,11 +204,8 @@ impl FileRelationScheduleStore {
             let Some(selected) = selected else {
                 continue;
             };
-            let relation = amiss_wire::model::ArtifactId::new(selected.status.relation.clone())
-                .ok_or(RelationScheduleStoreError::Corrupt)?;
-            let coordination =
-                amiss_wire::model::ArtifactId::new(selected.status.coordination.clone())
-                    .ok_or(RelationScheduleStoreError::Corrupt)?;
+            let relation = selected.status.relation.clone();
+            let coordination = selected.status.coordination.clone();
             let (stored, plan_binding) = self
                 .load_staged_status(&relation, &coordination)?
                 .ok_or(RelationScheduleStoreError::Corrupt)?;
@@ -299,7 +296,7 @@ impl FileRelationScheduleStore {
             JournalAction::Acknowledge {
                 relation: key.0.clone(),
                 coordination: key.1.clone(),
-                status_binding: binding.clone(),
+                status_binding: binding,
                 destination_binding: destination,
             },
         )?;
@@ -344,7 +341,7 @@ impl FileRelationScheduleStore {
         staged: &RelationStatusRecord,
     ) -> Result<RelationStatusRecord, RelationScheduleStoreError> {
         let stored = store_status(staged)?;
-        let binding = stored.status_binding.clone();
+        let binding = stored.status_binding;
         let key = (stored.relation.clone(), stored.coordination.clone());
         let _lock = self.lock()?;
         let mut metadata = self.load_metadata()?;
@@ -408,7 +405,7 @@ fn settle_acknowledged(
                 Some(JournalAction::Complete {
                     relation: relation.clone(),
                     coordination: coordination.clone(),
-                    status_binding: binding.clone(),
+                    status_binding: *binding,
                 })
             }
             StoredStatusState::Staged { .. } | StoredStatusState::Completed { .. } => None,
@@ -420,7 +417,7 @@ fn settle_acknowledged(
     Ok(())
 }
 
-fn all_destinations_acknowledged(status: &StoredStatus, acknowledged: &BTreeSet<String>) -> bool {
+fn all_destinations_acknowledged(status: &StoredStatus, acknowledged: &BTreeSet<Digest>) -> bool {
     status.destinations.len() == acknowledged.len()
         && status
             .destinations
@@ -429,7 +426,7 @@ fn all_destinations_acknowledged(status: &StoredStatus, acknowledged: &BTreeSet<
 }
 
 fn pending_deliveries(state: &State) -> Result<Vec<PendingDelivery>, RelationScheduleStoreError> {
-    let mut destinations = BTreeMap::<&str, PendingDeliveryRef<'_>>::new();
+    let mut destinations = BTreeMap::<&Digest, PendingDeliveryRef<'_>>::new();
     for status in state.statuses.values() {
         let StoredStatusState::Staged {
             status,
@@ -446,14 +443,13 @@ fn pending_deliveries(state: &State) -> Result<Vec<PendingDelivery>, RelationSch
             if acknowledged.contains(destination) {
                 continue;
             }
-            let digest =
-                Digest::from_wire(destination).ok_or(RelationScheduleStoreError::Corrupt)?;
+            let digest = destination;
             let pending = PendingDeliveryRef {
                 status,
                 destination,
                 shard: digest.as_bytes()[0],
             };
-            match destinations.get(destination.as_str()) {
+            match destinations.get(destination) {
                 Some(existing) if existing.status.relation != status.relation => {
                     return Err(RelationScheduleStoreError::Corrupt);
                 }

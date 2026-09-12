@@ -1,3 +1,4 @@
+use amiss_controller::provider_api_url as api_url;
 mod tests;
 
 use std::io::Read as _;
@@ -47,7 +48,7 @@ fn classified(status: u16, headers: &HeaderMap) -> Result<ForgeFact<()>, Provide
 
 pub(super) struct Transport {
     client: Client,
-    api_base: String,
+    api_base: Url,
     app: AppCredential,
     minted: Mutex<Option<MintedToken>>,
     operation_timeout: Duration,
@@ -112,7 +113,7 @@ impl Transport {
         route: &str,
         deadline: OperationDeadline,
     ) -> Result<T, ProviderError> {
-        self.execute(self.client.get(self.url(route)?), deadline)
+        self.execute(self.client.get(api_url(&self.api_base, route)?), deadline)
     }
 
     pub(super) fn download_artifact(
@@ -122,7 +123,7 @@ impl Transport {
         deadline: OperationDeadline,
     ) -> Result<Vec<u8>, ProviderError> {
         let token = self.token(deadline)?;
-        let request = self.client.get(self.url(route)?);
+        let request = self.client.get(api_url(&self.api_base, route)?);
         let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
             .timeout(deadline.remaining()?)
             .send()
@@ -160,7 +161,8 @@ impl Transport {
         body: &impl Serialize,
         deadline: OperationDeadline,
     ) -> Result<T, ProviderError> {
-        self.execute(self.client.post(self.url(route)?).json(body), deadline)
+        let request = self.client.post(api_url(&self.api_base, route)?).json(body);
+        self.execute(request, deadline)
     }
 
     /// A verification GET whose negative answers are facts: the absence or
@@ -172,7 +174,7 @@ impl Transport {
         deadline: OperationDeadline,
     ) -> Result<ForgeFact<T>, ProviderError> {
         let token = self.token(deadline)?;
-        let request = self.client.get(self.url(route)?);
+        let request = self.client.get(api_url(&self.api_base, route)?);
         let response = github_headers(request, &token, ProviderError::AuthorizationRevoked)?
             .timeout(deadline.remaining()?)
             .send()
@@ -230,7 +232,7 @@ impl Transport {
             "/app/installations/{}/access_tokens",
             self.app.installation_id
         );
-        let request = self.client.post(self.url(&route)?);
+        let request = self.client.post(api_url(&self.api_base, &route)?);
         let response = github_headers(request, &jwt, ProviderError::Authentication)?
             .timeout(deadline.remaining()?)
             .send()
@@ -245,14 +247,6 @@ impl Transport {
         let minted: InstallationToken =
             serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)?;
         Ok(SecretString::from(minted.token))
-    }
-
-    fn url(&self, route: &str) -> Result<Url, ProviderError> {
-        if !route.starts_with('/') || route.starts_with("//") {
-            return Err(ProviderError::InvalidResponse);
-        }
-        Url::parse(&format!("{}{route}", self.api_base))
-            .map_err(|_defect| ProviderError::InvalidResponse)
     }
 }
 
@@ -352,12 +346,12 @@ fn read_artifact_body(
         .ok_or(ProviderError::InvalidResponse)
 }
 
-fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GitHubClientError> {
+fn validate_api_base(raw: &str, provider_instance: &str) -> Result<Url, GitHubClientError> {
     let configuration = GitHubClientError::Configuration;
     if raw.is_empty() || raw.len() > MAX_API_BASE_BYTES {
         return Err(configuration("the API base length is out of bounds"));
     }
-    let url =
+    let mut url =
         Url::parse(raw).map_err(|_defect| configuration("the API base is not a valid URL"))?;
     if url.scheme() != "https" {
         return Err(configuration("the API base must use https"));
@@ -381,7 +375,8 @@ fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GitHu
             "the API base must not carry a query or fragment",
         ));
     }
-    Ok(raw.trim_end_matches('/').to_owned())
+    url.set_path(&format!("{}/", url.path().trim_end_matches('/')));
+    Ok(url)
 }
 
 fn explicit_port(raw: &str) -> bool {

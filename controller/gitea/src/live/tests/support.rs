@@ -18,7 +18,7 @@ use super::super::model::{
 use super::super::rest::{GiteaRest, OperationDeadline};
 use super::super::{Client, Config};
 use crate::{
-    DedicatedReviewer, GiteaCommit, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects,
+    AcquiredCommit, DedicatedReviewer, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects,
     GiteaPullRequest,
 };
 
@@ -196,7 +196,7 @@ impl GiteaRest for FakeRest {
             status: status.state.clone(),
             target_url: status.target_url.clone(),
             description: status.description.clone(),
-            context: status.context.clone(),
+            context: status.context.to_string(),
         };
         state.statuses.insert(0, created.clone());
         Ok(created)
@@ -267,7 +267,7 @@ impl Fixture {
             config: Config {
                 provider,
                 reviewer: reviewer(),
-                review_name: "amiss".to_owned(),
+                review_name: "amiss".parse().unwrap(),
             },
             rest: rest.clone(),
             objects: Arc::new(FakeObjects { objects }),
@@ -311,7 +311,7 @@ impl Fixture {
             evaluation_id: ControllerEvaluationId::new(evaluation.to_owned()).unwrap(),
             check: CheckBinding {
                 plan_digest: digest,
-                required_status_name: "amiss".to_owned(),
+                required_status_name: "amiss".parse().unwrap(),
                 execution_constraint_digest: digest,
             },
             run: snapshot.run,
@@ -360,11 +360,11 @@ fn parent_names(parents: &[char]) -> Vec<String> {
         .collect()
 }
 
-pub(super) fn resolved(commit: char, tree: char, parents: &[char]) -> GiteaCommit {
-    GiteaCommit {
-        id: oid(commit).as_str().to_owned(),
-        tree: oid(tree).as_str().to_owned(),
-        parents: parent_names(parents),
+pub(super) fn resolved(commit: char, tree: char, parents: &[char]) -> AcquiredCommit {
+    AcquiredCommit {
+        id: oid(commit),
+        tree: oid(tree),
+        parents: parents.iter().map(|parent| oid(*parent)).collect(),
     }
 }
 
@@ -422,7 +422,7 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
         pull_request: PullRequestRecord {
             id: 4201,
             number: 42,
-            state: "open".to_owned(),
+            state: "open".parse().unwrap(),
             mergeable: true,
             merged: false,
             merge_base: oid('a').as_str().to_owned(),
@@ -458,7 +458,7 @@ fn refresh_data(protection: BranchProtectionRecord, repository: RepositoryRecord
                 id: 88,
                 login: "human".to_owned(),
             }),
-            state: "COMMENT".to_owned(),
+            state: "COMMENT".parse().unwrap(),
             body: "looks interesting".to_owned(),
             commit_id: oid('b').as_str().to_owned(),
             stale: false,

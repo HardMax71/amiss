@@ -16,7 +16,7 @@ pub const RELEASE_MANIFEST_DIGEST_PATH: &str = "release-manifest.digest";
 /// One staged runtime file: its action-tree path, its role, whether Git will
 /// record the execute bit, and its exact bytes.
 pub struct StagedFile<'bytes> {
-    pub path: String,
+    pub path: RepoPathText,
     pub role: RuntimeRole,
     pub executable: bool,
     pub bytes: &'bytes [u8],
@@ -27,19 +27,17 @@ pub struct StagedFile<'bytes> {
 /// carry the `executable` role.
 pub struct StagedArtifact<'bytes> {
     pub platform: ConstraintPlatform,
-    pub artifact_name: String,
+    pub artifact_name: ArtifactId,
     pub files: Vec<StagedFile<'bytes>>,
 }
 
 /// The build namespace and the lockfiles that pinned it.
 pub struct StagedBuild<'bytes> {
     pub engine_version: String,
-    pub host: String,
-    pub owner: String,
-    pub repository: String,
-    pub object_format: &'static str,
-    pub commit_oid: String,
-    pub locks: Vec<(String, &'bytes [u8])>,
+    pub repository: RepositoryIdentity,
+    pub object_format: ObjectFormat,
+    pub commit_oid: Oid,
+    pub locks: Vec<(RepoPathText, &'bytes [u8])>,
 }
 
 /// Builds the strict release manifest from the staged action tree: every
@@ -56,19 +54,17 @@ pub fn build_manifest(
     let mut files = build
         .locks
         .iter()
-        .map(|(path, bytes)| {
-            Ok(DependencyLockFile {
-                path: RepoPathText::new(path.clone()).ok_or("invalid dependency lock path")?,
-                raw_digest: Digest::from(
-                    sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
-                        .chain_update([0_u8])
-                        .chain_update(bytes)
-                        .finalize()
-                        .0,
-                ),
-            })
+        .map(|(path, bytes)| DependencyLockFile {
+            path: path.clone(),
+            raw_digest: Digest::from(
+                sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(bytes)
+                    .finalize()
+                    .0,
+            ),
         })
-        .collect::<Result<Vec<_>, &'static str>>()?;
+        .collect::<Vec<_>>();
     files.sort_by(|left, right| left.path.as_str().cmp(right.path.as_str()));
     let dependency_lock = DependencyLockInput {
         schema: DependencyLockSchema::Current,
@@ -90,23 +86,13 @@ pub fn build_manifest(
         .iter_mut()
         .map(build_artifact)
         .collect::<Result<Vec<_>, _>>()?;
-    let object_format = build
-        .object_format
-        .parse::<ObjectFormat>()
-        .map_err(|_defect| "invalid build object format")?;
     let manifest = ReleaseManifest {
         schema: ReleaseManifestSchema::Current,
         engine_version: build.engine_version.clone(),
         build_source: BuildSource {
-            repository: RepositoryIdentity::new(
-                build.host.clone(),
-                build.owner.clone(),
-                build.repository.clone(),
-            )
-            .ok_or("invalid build repository")?,
-            object_format,
-            commit_oid: Oid::new(object_format, build.commit_oid.clone())
-                .ok_or("invalid build commit")?,
+            repository: build.repository.clone(),
+            object_format: build.object_format,
+            commit_oid: build.commit_oid.clone(),
         },
         dependency_lock,
         dependency_lock_digest,
@@ -147,24 +133,21 @@ fn build_artifact(artifact: &mut StagedArtifact<'_>) -> Result<ReleaseArtifact, 
     let runtime_files = artifact
         .files
         .iter()
-        .map(|file| {
-            Ok(RuntimeFile {
-                path: RepoPathText::new(file.path.clone()).ok_or("invalid runtime path")?,
-                role: file.role,
-                git_mode: if file.executable {
-                    GitMode::ExecutableFile
-                } else {
-                    GitMode::RegularFile
-                },
-                file_sha256: Digest::from(sha2::Sha256::digest(file.bytes).0),
-            })
+        .map(|file| RuntimeFile {
+            path: file.path.clone(),
+            role: file.role,
+            git_mode: if file.executable {
+                GitMode::ExecutableFile
+            } else {
+                GitMode::RegularFile
+            },
+            file_sha256: Digest::from(sha2::Sha256::digest(file.bytes).0),
         })
-        .collect::<Result<Vec<_>, &'static str>>()?;
+        .collect::<Vec<_>>();
     Ok(ReleaseArtifact {
         platform: artifact.platform,
-        artifact_name: ArtifactId::new(artifact.artifact_name.clone())
-            .ok_or("invalid artifact name")?,
-        tree_path: RepoPathText::new(engine.path.clone()).ok_or("invalid executable path")?,
+        artifact_name: artifact.artifact_name.clone(),
+        tree_path: engine.path.clone(),
         binary_sha256,
         engine_digest: Digest::from(
             sha2::Sha256::new_with_prefix(ENGINE_DOMAIN)

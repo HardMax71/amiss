@@ -1,3 +1,4 @@
+use crate::states::WebhookAction;
 use amiss_controller::{
     AuthenticatedDelivery, ChangeLocator, DeliveryId, DeliveryIdentity, GiteaWebhook, IngressCheck,
     IntegrationId, ProviderError, ProviderIdentity, SignedTimePolicy, VerifiedDelivery,
@@ -12,7 +13,6 @@ use crate::identity::{
     branch_ref, canonical_host, canonical_segment, change_id, positive, provider_run,
 };
 
-const SUPPORTED_ACTIONS: [&str; 3] = ["opened", "reopened", "synchronized"];
 const DELIVERY_DOMAIN: &str = "amiss/controller-gitea-family-delivery-v1";
 
 pub struct GiteaPullRequestSource {
@@ -156,13 +156,15 @@ impl PullRequestFacts {
 }
 
 fn supported_action(payload: &PullRequestPayload) -> bool {
-    SUPPORTED_ACTIONS.contains(&payload.action.as_str())
-        || payload.action == "edited"
-            && payload
-                .changes
-                .as_ref()
-                .and_then(|changes| changes.reference.as_ref())
-                .is_some_and(|reference| branch_ref(&reference.from).is_some())
+    matches!(
+        payload.action,
+        WebhookAction::Opened | WebhookAction::Reopened | WebhookAction::Synchronized
+    ) || payload.action == WebhookAction::Edited
+        && payload
+            .changes
+            .as_ref()
+            .and_then(|changes| changes.reference.as_ref())
+            .is_some_and(|reference| branch_ref(&reference.from).is_some())
 }
 
 fn repository_identity(
@@ -178,7 +180,7 @@ fn repository_identity(
 
 #[derive(Deserialize)]
 struct PullRequestPayload {
-    action: String,
+    action: WebhookAction,
     changes: Option<PullRequestChanges>,
     repository: Repository,
     number: u64,

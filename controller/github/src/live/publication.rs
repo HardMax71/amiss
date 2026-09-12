@@ -1,3 +1,4 @@
+use crate::states::{CheckConclusion as GitHubConclusion, CheckStatus};
 use amiss_controller::{CheckConclusion, IntegrationId, ProviderError, Publication};
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
 
@@ -5,7 +6,6 @@ use super::Config;
 use super::model::{CheckRunRecord, CreateCheckRun, CreateCheckRunOutput};
 use crate::GitHubPullRequest;
 
-const COMPLETED: &str = "completed";
 const TITLE: &str = "Amiss provider verification";
 
 pub(super) enum CheckRunDecision {
@@ -65,7 +65,7 @@ pub(super) fn check_run_decision(
         if app.id != config.app_id {
             continue;
         }
-        if run.id == 0 || run.name != expected.name || run.head_sha != expected.head_sha {
+        if run.id == 0 || run.name != expected.name.as_str() || run.head_sha != expected.head_sha {
             return Err(ProviderError::InvalidResponse);
         }
         if run.external_id.as_deref() != Some(expected.external_id.as_str()) {
@@ -149,8 +149,8 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
         name: config.required_status_name.clone(),
         head_sha: publication.gate_commit.as_str().to_owned(),
         external_id: publication.evaluation_id.as_str().to_owned(),
-        status: COMPLETED,
-        conclusion: conclusion.to_owned(),
+        status: CheckStatus::Completed,
+        conclusion,
         output: CreateCheckRunOutput {
             title: TITLE.to_owned(),
             summary,
@@ -158,12 +158,12 @@ fn expected(config: &Config, publication: &Publication) -> Result<CreateCheckRun
     })
 }
 
-fn conclusion(conclusion: CheckConclusion) -> (&'static str, &'static str) {
+fn conclusion(conclusion: CheckConclusion) -> (&'static str, GitHubConclusion) {
     match conclusion {
-        CheckConclusion::Pass => ("pass", "success"),
-        CheckConclusion::Block => ("block", "failure"),
-        CheckConclusion::Superseded => ("superseded", "cancelled"),
-        CheckConclusion::Unavailable(_) => ("unavailable", "failure"),
+        CheckConclusion::Pass => ("pass", GitHubConclusion::Success),
+        CheckConclusion::Block => ("block", GitHubConclusion::Failure),
+        CheckConclusion::Superseded => ("superseded", GitHubConclusion::Cancelled),
+        CheckConclusion::Unavailable(_) => ("unavailable", GitHubConclusion::Failure),
     }
 }
 
@@ -173,10 +173,10 @@ fn matches_expected(run: &CheckRunRecord, expected: &CreateCheckRun) -> bool {
 }
 
 fn matches_stable_fields(run: &CheckRunRecord, expected: &CreateCheckRun) -> bool {
-    run.name == expected.name
+    run.name == expected.name.as_str()
         && run.head_sha == expected.head_sha
         && run.external_id.as_deref() == Some(expected.external_id.as_str())
         && run.status == expected.status
-        && run.conclusion.as_deref() == Some(expected.conclusion.as_str())
+        && run.conclusion.as_ref() == Some(&expected.conclusion)
         && run.output.title.as_deref() == Some(expected.output.title.as_str())
 }

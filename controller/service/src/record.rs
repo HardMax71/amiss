@@ -1,22 +1,31 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum RecordSchema {
+    #[serde(rename = "amiss/controller-inbox-record-v1")]
+    Current,
+}
+
 use serde::{Deserialize, Serialize};
+use serde_with::{hex::Hex, serde_as};
 
 use crate::InboxError;
-use crate::delivery::{StoredDelivery, source_key, validate_source};
+use crate::delivery::{Delivery, source_key, validate_source};
 use crate::limits::StoredLimits;
 
-const RECORD_SCHEMA: &str = "amiss/controller-inbox-record-v1";
+const RECORD_SCHEMA: RecordSchema = RecordSchema::Current;
 
+#[serde_as]
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Record {
-    schema: String,
+    schema: RecordSchema,
     pub(crate) route: String,
     pub(crate) source_id: String,
-    pub(crate) content_digest: String,
+    #[serde_as(as = "Hex")]
+    pub(crate) content_digest: [u8; 32],
     pub(crate) generation: u64,
     pub(crate) attempts: u64,
     pub(crate) fence: u64,
-    pub(crate) delivery: Option<StoredDelivery>,
+    pub(crate) delivery: Option<Delivery>,
     pub(crate) state: State,
 }
 
@@ -41,9 +50,9 @@ pub(crate) struct LeaseData {
 }
 
 impl Record {
-    pub(crate) fn pending(delivery: StoredDelivery) -> Result<Self, InboxError> {
+    pub(crate) fn pending(delivery: Delivery) -> Result<Self, InboxError> {
         Ok(Self {
-            schema: RECORD_SCHEMA.to_owned(),
+            schema: RECORD_SCHEMA,
             route: delivery.route().to_owned(),
             source_id: delivery.source_id().to_owned(),
             content_digest: delivery.content_digest()?,
@@ -60,12 +69,6 @@ impl Record {
     pub(crate) fn validate(&self, key: &str, limits: StoredLimits) -> Result<(), InboxError> {
         if self.schema != RECORD_SCHEMA
             || source_key(&self.route, &self.source_id)? != key
-            || self.content_digest.len() != 64
-            || self
-                .content_digest
-                .bytes()
-                .any(|byte| byte.is_ascii_uppercase())
-            || hex::decode_to_slice(&self.content_digest, &mut [0_u8; 32]).is_err()
             || self.attempts != self.fence
             || self.generation < self.attempts
         {
@@ -199,10 +202,11 @@ impl Record {
 
     fn validate_delivery(
         &self,
-        delivery: &StoredDelivery,
+        delivery: &Delivery,
         limits: StoredLimits,
     ) -> Result<(), InboxError> {
-        let materialized = delivery.materialize(limits)?;
+        delivery.validate(limits)?;
+        let materialized = delivery;
         if materialized.route != self.route
             || materialized.source_id != self.source_id
             || delivery.content_digest()? != self.content_digest

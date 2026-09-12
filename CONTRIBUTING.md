@@ -37,6 +37,13 @@ calls. Let derives infer generic bounds instead of adding `serde(bound)`, and us
 `Option<T>` for ordinary optional fields. Provider responses ignore unused fields;
 Amiss-owned closed formats remain strict. The accepted JSON behavior is described in
 [Architecture](docs/src/architecture.md).
+Keep admitted values typed through their consumers. Reuse existing domain models in
+configuration and persistence, and use provider-owned enums for protocol states and actions.
+Handle unknown provider values explicitly. A new scalar type needs a shared invariant or a
+concrete ambiguity to prevent; ordinary text and exact evidence spellings stay strings.
+Changing a Rust type must preserve stored bytes and accepted contracts, or move the contract
+and its documentation together. Constructors are not called by ordinary Serde derives, so
+retain domain validation wherever the representation alone does not establish validity.
 Tests reuse production wire models and validators. Do not add test-only wire replicas or
 JSON codec helpers; reserve raw JSON for representation and malformed-input checks.
 Important tests are exercised against deliberately broken behavior before they

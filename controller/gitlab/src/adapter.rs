@@ -103,7 +103,7 @@ impl<A: GitLabApi> GitLabMergeTrainAdapter<A> {
             &target.scope,
             target.candidate_commit.object_format(),
         )?;
-        if target.required_status_name != self.source.policy.job_name
+        if target.required_status_name.as_str() != self.source.policy.job_name
             || target.candidate_commit != delivery.provider_run.candidate_commit
         {
             return Err(ProviderError::InvalidResponse);

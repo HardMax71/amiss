@@ -161,7 +161,7 @@ fn workflow_artifacts_are_github_plan_inputs() {
             .err()
             .unwrap()
             .to_string(),
-        "workflow artifact configuration is invalid"
+        "configuration is not strict JSON"
     );
 }
 

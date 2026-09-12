@@ -1003,7 +1003,7 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
         evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),
         check: CheckBinding {
             plan_digest: digest,
-            required_status_name: "amiss".to_owned(),
+            required_status_name: "amiss".parse().unwrap(),
             execution_constraint_digest: digest,
         },
         run,

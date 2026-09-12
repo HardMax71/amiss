@@ -773,15 +773,14 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
         ExternalPolicy::BlockConfirmedRefutations
     );
     assert_ne!(blocking.digest, advisory.digest);
-    assert!(load_plan(&files("Observe", false, None), None).is_err());
-    assert!(
-        serde_json::from_value::<amiss_controller_service::CheckPlanFiles>(json!({
-            "profile": "enforce",
-            "external_policy": "block-everything",
-            "execution_constraint_file": constraint_path,
-        }))
-        .is_err()
-    );
+    for (field, value) in [
+        ("profile", "Observe"),
+        ("external_policy", "block-everything"),
+    ] {
+        let mut raw = json!({ "profile": "enforce", "execution_constraint_file": constraint_path });
+        raw[field] = json!(value);
+        assert!(serde_json::from_value::<amiss_controller_service::CheckPlanFiles>(raw).is_err());
+    }
 }
 
 #[test]

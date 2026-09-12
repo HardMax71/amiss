@@ -1,6 +1,5 @@
-use base64::Engine as _;
-use base64::engine::general_purpose::STANDARD;
 use serde::{Deserialize, Serialize};
+use serde_with::{base64::Base64, serde_as};
 
 use crate::InboxError;
 use crate::limits::StoredLimits;
@@ -24,36 +23,27 @@ pub struct IncomingDelivery<'a> {
     pub body: &'a [u8],
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[serde_as]
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct DeliveryHeader {
     pub name: String,
+    #[serde(rename = "value_base64")]
+    #[serde_as(as = "Base64")]
     pub value: Vec<u8>,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[serde_as]
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct Delivery {
     pub route: String,
     pub source_id: String,
     pub received_at_unix_millis: i64,
     pub headers: Vec<DeliveryHeader>,
+    #[serde(rename = "body_base64")]
+    #[serde_as(as = "Base64")]
     pub body: Vec<u8>,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct StoredHeader {
-    name: String,
-    value_base64: String,
-}
-
-#[derive(Clone, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct StoredDelivery {
-    route: String,
-    source_id: String,
-    received_at_unix_millis: i64,
-    headers: Vec<StoredHeader>,
-    body_base64: String,
 }
 
 #[derive(Serialize)]
@@ -62,65 +52,40 @@ struct Source<'a> {
     source_id: &'a str,
 }
 
+#[serde_as]
 #[derive(Serialize)]
 struct Content<'a> {
     route: &'a str,
     source_id: &'a str,
-    headers: &'a [StoredHeader],
-    body_base64: &'a str,
+    headers: &'a [DeliveryHeader],
+    #[serde(rename = "body_base64")]
+    #[serde_as(as = "Base64")]
+    body: &'a [u8],
 }
 
-impl StoredDelivery {
+impl Delivery {
     pub(crate) fn read(
         incoming: IncomingDelivery<'_>,
         limits: StoredLimits,
     ) -> Result<Self, InboxError> {
-        let delivery = normalize(&incoming, limits)?;
-        Ok(Self::from_delivery(&delivery))
+        normalize(&incoming, limits)
     }
 
-    pub(crate) fn materialize(&self, limits: StoredLimits) -> Result<Delivery, InboxError> {
-        let headers = self
-            .headers
-            .iter()
-            .map(|header| {
-                STANDARD
-                    .decode(&header.value_base64)
-                    .map(|value| DeliveryHeader {
-                        name: header.name.clone(),
-                        value,
-                    })
-                    .map_err(|_defect| InboxError::Corrupt)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let body = STANDARD
-            .decode(&self.body_base64)
-            .map_err(|_defect| InboxError::Corrupt)?;
-        let delivery = Delivery {
-            route: self.route.clone(),
-            source_id: self.source_id.clone(),
-            received_at_unix_millis: self.received_at_unix_millis,
-            headers,
-            body,
-        };
-        validate_delivery(&delivery, limits).map_err(|_defect| InboxError::Corrupt)?;
-        if Self::from_delivery(&delivery) != *self {
-            return Err(InboxError::Corrupt);
-        }
-        Ok(delivery)
+    pub(crate) fn validate(&self, limits: StoredLimits) -> Result<(), InboxError> {
+        validate_delivery(self, limits).map_err(|_defect| InboxError::Corrupt)
     }
 
-    pub(crate) fn content_digest(&self) -> Result<String, InboxError> {
+    pub(crate) fn content_digest(&self) -> Result<[u8; 32], InboxError> {
         let content = Content {
             route: &self.route,
             source_id: &self.source_id,
             headers: &self.headers,
-            body_base64: &self.body_base64,
+            body: &self.body,
         };
         let mut writer =
             digest_io::IoWrapper(Sha256::new_with_prefix(CONTENT_DOMAIN).chain_update([0_u8]));
         serde_json::to_writer(&mut writer, &content).map_err(|_defect| InboxError::Corrupt)?;
-        Ok(hex::encode(writer.0.finalize()))
+        Ok(writer.0.finalize().0)
     }
 
     pub(crate) fn key(&self) -> Result<String, InboxError> {
@@ -133,24 +98,6 @@ impl StoredDelivery {
 
     pub(crate) fn source_id(&self) -> &str {
         &self.source_id
-    }
-
-    fn from_delivery(delivery: &Delivery) -> Self {
-        let headers = delivery
-            .headers
-            .iter()
-            .map(|header| StoredHeader {
-                name: header.name.clone(),
-                value_base64: STANDARD.encode(&header.value),
-            })
-            .collect();
-        Self {
-            route: delivery.route.clone(),
-            source_id: delivery.source_id.clone(),
-            received_at_unix_millis: delivery.received_at_unix_millis,
-            headers,
-            body_base64: STANDARD.encode(&delivery.body),
-        }
     }
 }
 

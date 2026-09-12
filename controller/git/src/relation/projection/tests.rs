@@ -110,7 +110,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
         },
         status_destinations: vec![RelationStatusDestination {
             subject_role: artifact("documentation"),
-            required_status_name: "Amiss cross-repository".to_owned(),
+            required_status_name: "Amiss cross-repository".parse().unwrap(),
         }],
     });
     let transition = relation_transition(

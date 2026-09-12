@@ -178,6 +178,7 @@ enum ResolutionShape {
 }
 
 #[divan::bench(args = [ResolutionShape::Native, ResolutionShape::SameRepositoryForge])]
+#[expect(clippy::unwrap_used, reason = "fixed forge fixture identities")]
 fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
     let dir = tempfile::TempDir::new().unwrap_or_else(|defect| panic!("tempdir: {defect}"));
     amiss_fixtures::git(dir.path(), &["init", "-q"])
@@ -187,13 +188,17 @@ fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
     let oid = Oid::new(ObjectFormat::Sha1, "a".repeat(40))
         .unwrap_or_else(|| panic!("benchmark object id"));
     let context = ForgeContext {
-        host: "github.com".to_owned(),
         dialect: ForgeDialect::Github,
         object_format: ObjectFormat::Sha1,
-        owner: "acme".to_owned(),
-        repository: "widgets".to_owned(),
-        candidate_ref: "refs/heads/feature/x".to_owned(),
-        default_ref: "refs/heads/main".to_owned(),
+
+        repository: amiss_wire::model::RepositoryIdentity::new(
+            "github.com".to_owned(),
+            "acme".to_owned(),
+            "widgets".to_owned(),
+        )
+        .unwrap(),
+        candidate_ref: Some("refs/heads/feature/x".parse().unwrap()),
+        default_ref: Some("refs/heads/main".parse().unwrap()),
     };
     let (target, mode, forge, document, semantic) = match shape {
         ResolutionShape::Native => (

@@ -1,4 +1,7 @@
-use std::fmt;
+use std::{fmt, str::FromStr};
+
+use serde::{Deserialize, Serialize};
+use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -10,7 +13,7 @@ fn bounded(raw: String, maximum: usize, valid: impl Fn(u8) -> bool) -> Option<St
 
 /// The registry key for one provider family, in a lowercase DNS-label
 /// grammar so it can never collide by case or whitespace.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
 pub struct ProviderNamespace(String);
 
 impl ProviderNamespace {
@@ -39,7 +42,7 @@ impl fmt::Display for ProviderNamespace {
 /// One provider-issued opaque identifier: bounded printable bytes the
 /// controller stores and compares but never interprets. Which role a value
 /// plays is said by the field that holds it, not by a wrapper type.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
 pub struct OpaqueId(String);
 
 pub type ProviderInstance = OpaqueId;
@@ -71,7 +74,8 @@ impl fmt::Display for OpaqueId {
 
 /// A provider run attempt: one-based and inside the exact-integer range
 /// every JSON consumer can carry.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "u64", into = "u64")]
 pub struct ProviderRunAttempt(u64);
 
 impl ProviderRunAttempt {
@@ -88,9 +92,24 @@ impl ProviderRunAttempt {
     }
 }
 
+impl TryFrom<u64> for ProviderRunAttempt {
+    type Error = &'static str;
+
+    fn try_from(raw: u64) -> Result<Self, Self::Error> {
+        Self::new(raw).ok_or("invalid provider run attempt")
+    }
+}
+
+impl From<ProviderRunAttempt> for u64 {
+    fn from(attempt: ProviderRunAttempt) -> Self {
+        attempt.get()
+    }
+}
+
 /// A provider run pinned to the delivery-authenticated candidate commit
 /// before any refresh can substitute a newer head.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProviderRunIdentity {
     pub run_id: ProviderRunId,
     pub attempt: ProviderRunAttempt,
@@ -106,7 +125,7 @@ impl ProviderRunIdentity {
         object_format: ObjectFormat,
         candidate_commit: Oid,
     ) -> Option<Self> {
-        Oid::new(object_format, candidate_commit.as_str().to_owned())?;
+        (candidate_commit.object_format() == object_format).then_some(())?;
         Some(Self {
             run_id,
             attempt,
@@ -116,7 +135,8 @@ impl ProviderRunIdentity {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProviderIdentity {
     pub namespace: ProviderNamespace,
     pub instance: ProviderInstance,
@@ -131,7 +151,8 @@ impl ProviderIdentity {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DeliveryIdentity {
     pub provider: ProviderIdentity,
     pub integration: IntegrationId,
@@ -143,4 +164,20 @@ pub struct ChangeLocator {
     pub provider: ProviderIdentity,
     pub repository: RepositoryIdentity,
     pub change: ChangeId,
+}
+
+impl FromStr for ProviderNamespace {
+    type Err = &'static str;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        Self::new(raw.to_owned()).ok_or("invalid provider namespace")
+    }
+}
+
+impl FromStr for OpaqueId {
+    type Err = &'static str;
+
+    fn from_str(raw: &str) -> Result<Self, Self::Err> {
+        Self::new(raw.to_owned()).ok_or("invalid opaque identifier")
+    }
 }

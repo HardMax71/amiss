@@ -256,7 +256,7 @@ fn relation_outbox_retries_after_restart_and_acknowledges_only_success()
     let mut plan = fixture.transition.relation.plan.as_ref().clone();
     plan.status_destinations.push(RelationStatusDestination {
         subject_role: ArtifactId::new("source".to_owned()).unwrap(),
-        required_status_name: "Amiss source relation".to_owned(),
+        required_status_name: "Amiss source relation".parse().unwrap(),
     });
     fixture.transition.relation.plan = Arc::new(plan);
     let RelationStores {

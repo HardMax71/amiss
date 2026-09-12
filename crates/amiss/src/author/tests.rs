@@ -7,7 +7,7 @@ use super::round_trips;
 fn author(path: &str, line: u64, name: &str) -> AuthorInvocation {
     AuthorInvocation {
         repo: std::path::PathBuf::from("."),
-        path: path.to_owned(),
+        path: path.parse().unwrap(),
         line,
         name: name.to_owned(),
     }

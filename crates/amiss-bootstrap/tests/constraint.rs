@@ -38,7 +38,7 @@ fn derive(
         &mut resources,
         &identity(),
         &commit,
-        "amiss / assure",
+        &"amiss / assure".parse().unwrap(),
         bootstrap,
     )
 }
@@ -55,7 +55,7 @@ fn derivation_pins_and_validates_the_exact_release() {
     assert_eq!(descriptor.manifest_path.as_str(), "release-manifest.json");
     assert_eq!(descriptor.release_manifest_digest, release.manifest_digest);
     assert_eq!(descriptor.selected_platform, release.platform);
-    assert_eq!(descriptor.required_status_name, "amiss / assure");
+    assert_eq!(descriptor.required_status_name.as_str(), "amiss / assure");
     assert_eq!(
         descriptor.bootstrap_digest,
         amiss_wire::model::Digest::from(

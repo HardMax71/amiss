@@ -101,7 +101,7 @@ fn both_families_resolve_heads_and_publish_idempotent_statuses() {
         assert_eq!(state.created_statuses.len(), 1);
         let created = &state.created_statuses[0];
         assert_eq!(created.context, target.required_status_name);
-        assert_eq!(created.state, "failure");
+        assert_eq!(created.state, "failure".parse().unwrap());
         assert!(created.target_url.is_empty());
         assert!(
             created
@@ -136,7 +136,7 @@ fn all_relation_verdicts_map_to_the_two_provider_states() {
         status.audit.audit = ArtifactAuditDigests::Relation(audit);
         assert_eq!(
             relation_commit_status(&status, &target).unwrap().state,
-            expected
+            expected.parse().unwrap()
         );
     }
 }
@@ -166,16 +166,16 @@ fn commit_status_requests_and_responses_use_the_native_wire_shape() {
     .unwrap();
     assert_eq!(decoded.id, 42);
     assert_eq!(decoded.creator.unwrap().id, 77);
-    assert_eq!(decoded.status, "success");
+    assert_eq!(decoded.status, "success".parse().unwrap());
 
     let request = CreateCommitStatus {
-        state: "failure".to_owned(),
+        state: "failure".parse().unwrap(),
         target_url: String::new(),
         description: format!(
             "{MARKER}{}",
             Digest::from(sha2::Sha256::digest(b"projection").0)
         ),
-        context: "Amiss cross-repository".to_owned(),
+        context: "Amiss cross-repository".parse().unwrap(),
     };
     assert_eq!(
         serde_json::to_value(request).unwrap(),
@@ -207,7 +207,7 @@ fn a_new_owned_evaluation_advances_the_context_but_conflicts_do_not() {
 
     {
         let mut state = fixture.rest.state.lock().unwrap();
-        state.statuses[0].status = "success".to_owned();
+        state.statuses[0].status = "success".parse().unwrap();
     }
     assert_eq!(
         fixture.client.publish_relation_status(&newer, &target),
@@ -387,7 +387,7 @@ fn status_fixture(fixture: &Fixture) -> (RelationStatusRecord, RelationStatusTar
             .commits
             .candidate
             .clone(),
-        required_status_name: "Amiss cross-repository".to_owned(),
+        required_status_name: "Amiss cross-repository".parse().unwrap(),
     };
     let audit = validate_relation_audit(audit_bundle(&audit_fixture)).unwrap();
     (
@@ -438,6 +438,6 @@ fn record(fixture: &Fixture, expected: &CreateCommitStatus) -> CommitStatusRecor
         status: expected.state.clone(),
         target_url: expected.target_url.clone(),
         description: expected.description.clone(),
-        context: expected.context.clone(),
+        context: expected.context.to_string(),
     }
 }

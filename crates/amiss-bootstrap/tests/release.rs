@@ -309,16 +309,16 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     let binary_path = format!("dist/amiss-{}", platform.as_ref());
     let mut artifacts = vec![StagedArtifact {
         platform,
-        artifact_name: format!("amiss-{}", platform.as_ref()),
+        artifact_name: format!("amiss-{}", platform.as_ref()).parse().unwrap(),
         files: vec![
             StagedFile {
-                path: binary_path.clone(),
+                path: binary_path.parse().unwrap(),
                 role: RuntimeRole::Executable,
                 executable: true,
                 bytes: &binary,
             },
             StagedFile {
-                path: "action.yml".to_owned(),
+                path: "action.yml".parse().unwrap(),
                 role: RuntimeRole::RuntimeData,
                 executable: false,
                 bytes: ACTION,
@@ -327,12 +327,15 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     }];
     let build = StagedBuild {
         engine_version: "0.1.0-experimental".to_owned(),
-        host: "git.example.internal".to_owned(),
-        owner: "platform/security".to_owned(),
-        repository: "amiss".to_owned(),
-        object_format: "sha1",
-        commit_oid: "a".repeat(40),
-        locks: vec![("Cargo.lock".to_owned(), &lock)],
+        repository: amiss_wire::model::RepositoryIdentity::new(
+            "git.example.internal".to_owned(),
+            "platform/security".to_owned(),
+            "amiss".to_owned(),
+        )
+        .unwrap(),
+        object_format: ObjectFormat::Sha1,
+        commit_oid: "a".repeat(40).parse().unwrap(),
+        locks: vec![("Cargo.lock".parse().unwrap(), &lock)],
     };
     let (manifest_bytes, manifest_digest) = build_manifest(&build, &mut artifacts).unwrap();
     fs::create_dir_all(root.join("dist")).unwrap();

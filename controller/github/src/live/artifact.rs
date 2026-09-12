@@ -24,8 +24,8 @@ pub(super) struct WorkflowRunRecord {
     pub(super) id: u64,
     pub(super) head_sha: String,
     pub(super) event: String,
-    pub(super) status: String,
-    pub(super) conclusion: Option<String>,
+    pub(super) status: crate::states::CheckStatus,
+    pub(super) conclusion: Option<crate::states::CheckConclusion>,
     pub(super) workflow_id: u64,
     pub(super) run_attempt: u64,
     pub(super) repository: WorkflowRepositoryRecord,
@@ -66,7 +66,7 @@ pub(super) struct WorkflowArtifactPage {
 pub(super) struct WorkflowRunQuery<'a> {
     pub(super) event: &'a str,
     pub(super) head_sha: &'a str,
-    pub(super) status: &'static str,
+    pub(super) status: crate::states::CheckConclusion,
     pub(super) exclude_pull_requests: bool,
     pub(super) per_page: u8,
     pub(super) page: u8,
@@ -130,8 +130,8 @@ pub(super) fn select_workflow_run(
         && run.run_attempt > 0
         && run.head_sha == candidate.as_str()
         && run.event == expectation.event.as_str()
-        && run.status == "completed"
-        && run.conclusion.as_deref() == Some("success")
+        && run.status == crate::states::CheckStatus::Completed
+        && run.conclusion == Some(crate::states::CheckConclusion::Success)
         && repository == expectation.repository
         && numeric_workflow_matches;
     valid.then_some(run).ok_or(ProviderError::InvalidResponse)

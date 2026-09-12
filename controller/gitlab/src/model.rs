@@ -1,3 +1,4 @@
+use amiss_controller::AcquiredCommit;
 use std::time::Duration;
 
 use amiss_wire::model::Oid;
@@ -20,8 +21,8 @@ pub struct GitLabRefresh {
     pub train: Option<GitLabTrainCar>,
     pub merge_request: GitLabMergeRequest,
     pub target: GitLabBranch,
-    pub gate: GitLabCommit,
-    pub base: GitLabCommit,
+    pub gate: AcquiredCommit,
+    pub base: AcquiredCommit,
     pub protections: Vec<GitLabProtection>,
 }
 
@@ -31,11 +32,11 @@ pub struct GitLabProject {
     pub path_with_namespace: String,
     pub default_branch: String,
     pub http_url_to_repo: String,
-    pub repository_object_format: String,
+    pub repository_object_format: amiss_wire::model::ObjectFormat,
     pub checks: GitLabMergeChecks,
     pub train: GitLabTrainSettings,
-    pub merge_method: String,
-    pub squash_option: String,
+    pub merge_method: crate::states::MergeMethod,
+    pub squash_option: crate::states::SquashOption,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,17 +50,17 @@ pub struct GitLabMergeChecks {
 pub struct GitLabTrainSettings {
     pub enabled: bool,
     pub skip_allowed: bool,
-    pub enforcement: String,
+    pub enforcement: crate::states::TrainEnforcement,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitLabJob {
     pub id: u64,
     pub name: String,
-    pub status: String,
+    pub status: crate::states::PipelineStatus,
     /// gitlab.com serves a null REST job source while the signed OIDC
     /// `job_source` claim still states the policy provenance.
-    pub source: Option<String>,
+    pub source: Option<crate::states::JobSource>,
     pub pipeline_id: u64,
     pub commit: String,
     pub runner_id: u64,
@@ -72,38 +73,37 @@ pub struct GitLabPipeline {
     pub sha: String,
     #[serde(rename = "ref")]
     pub reference: String,
-    pub source: String,
-    pub status: String,
+    pub source: crate::states::PipelineSource,
+    pub status: crate::states::PipelineStatus,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitLabTrainCar {
     pub id: u64,
-    pub status: String,
+    pub status: crate::states::TrainStatus,
     pub target_branch: String,
     pub merge_request_iid: u64,
     pub merge_request_project_id: u64,
-    pub merge_request_state: String,
+    pub merge_request_state: crate::states::MergeRequestState,
     pub pipeline_id: u64,
     pub pipeline_project_id: u64,
     pub pipeline_sha: String,
     pub pipeline_ref: String,
-    pub pipeline_source: String,
-    pub pipeline_status: String,
+    pub pipeline_source: crate::states::PipelineSource,
+    pub pipeline_status: crate::states::PipelineStatus,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
 pub struct GitLabMergeRequest {
     pub iid: u64,
     pub project_id: u64,
-    pub state: String,
+    pub state: crate::states::MergeRequestState,
     pub draft: bool,
     pub source_project_id: u64,
     pub target_project_id: u64,
     pub source_branch: String,
     pub target_branch: String,
     pub sha: String,
-    pub detailed_merge_status: String,
     pub squash_on_merge: bool,
 }
 
@@ -111,13 +111,6 @@ pub struct GitLabMergeRequest {
 pub struct GitLabBranch {
     pub name: String,
     pub commit: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GitLabCommit {
-    pub id: String,
-    pub tree: String,
-    pub parents: Vec<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Deserialize)]
@@ -148,6 +141,6 @@ pub struct GitLabObjectRequest {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GitLabObjects {
-    pub gate: GitLabCommit,
-    pub base: GitLabCommit,
+    pub gate: AcquiredCommit,
+    pub base: AcquiredCommit,
 }

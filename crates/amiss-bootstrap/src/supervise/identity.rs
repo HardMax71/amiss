@@ -1,4 +1,4 @@
-use amiss_wire::model::{BranchRef, UtcInstant};
+use amiss_wire::model::UtcInstant;
 use amiss_wire::report::model::{Controls, IdentityPreimage, ResolvedEvaluation};
 use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, CandidateIdentitySchema};
 use sha2::Digest as _;
@@ -10,10 +10,8 @@ pub(super) fn accept(
     controls: &Controls,
     expected: &SealedExpectations,
 ) -> Result<(), AcceptanceDefect> {
-    if evaluation.candidate_ref.as_ref().map(BranchRef::as_str)
-        != Some(expected.candidate_ref.as_str())
-        || evaluation.target_ref.as_ref().map(BranchRef::as_str)
-            != Some(expected.target_ref.as_str())
+    if evaluation.candidate_ref.as_ref() != Some(&expected.candidate_ref)
+        || evaluation.target_ref.as_ref() != Some(&expected.target_ref)
         || !evaluation.trusted_time
     {
         return Err(AcceptanceDefect::SealedIdentity);

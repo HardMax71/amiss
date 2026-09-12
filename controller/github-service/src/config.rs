@@ -48,7 +48,7 @@ impl ServiceConfig {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawConfig {
-    listen: String,
+    listen: std::net::SocketAddr,
     webhook_path: String,
     github: RawGitHub,
     repository: RawRepository,
@@ -81,9 +81,7 @@ struct RawRepository {
 
 impl RawConfig {
     fn load(self) -> Result<ServiceConfig, ConfigError> {
-        let listen = self.listen.parse().map_err(|defect| {
-            ConfigError::caused_by("listen must be one socket address", defect)
-        })?;
+        let listen = self.listen;
         let scope = checked_scope(&self.github, self.repository)?;
         let plan = Arc::new(load_plan(
             &self.plan,

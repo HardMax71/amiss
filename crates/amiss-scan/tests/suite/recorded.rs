@@ -44,13 +44,17 @@ fn engine() -> EngineProvenance {
 /// GitHub URL resolves against the tree in hand only when they agree.
 fn spec_to_rest() -> ForgeContext {
     ForgeContext {
-        host: "github.com".to_owned(),
         dialect: ForgeDialect::Github,
         object_format: ObjectFormat::Sha1,
-        owner: "hardmax71".to_owned(),
-        repository: "spec_to_rest".to_owned(),
-        candidate_ref: "refs/heads/main".to_owned(),
-        default_ref: "refs/heads/main".to_owned(),
+
+        repository: RepositoryIdentity::new(
+            "github.com".to_owned(),
+            "hardmax71".to_owned(),
+            "spec_to_rest".to_owned(),
+        )
+        .unwrap(),
+        candidate_ref: Some("refs/heads/main".parse().unwrap()),
+        default_ref: Some("refs/heads/main".parse().unwrap()),
     }
 }
 

@@ -20,20 +20,20 @@ const DESTINATION_BINDING_DOMAIN: &str = "amiss/controller-relation-destination-
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct StoredStatus {
-    pub(super) relation: String,
-    pub(super) coordination: String,
-    pub(super) trigger_role: String,
+    pub(super) relation: ArtifactId,
+    pub(super) coordination: ArtifactId,
+    pub(super) trigger_role: ArtifactId,
     pub(super) fence: u64,
-    pub(super) status_binding: String,
-    pub(super) destinations: Vec<String>,
+    pub(super) status_binding: Digest,
+    pub(super) destinations: Vec<Digest>,
     artifact_id: String,
 }
 
 #[derive(Serialize)]
 struct BoundStatus<'a> {
-    relation: &'a str,
-    coordination: &'a str,
-    trigger_role: &'a str,
+    relation: &'a ArtifactId,
+    coordination: &'a ArtifactId,
+    trigger_role: &'a ArtifactId,
     fence: u64,
     destinations: Vec<BoundDestination<'a>>,
     artifact: BoundArtifact<'a>,
@@ -52,7 +52,7 @@ struct BoundDestination<'a> {
     credential: &'a str,
     object_format: &'a str,
     candidate_commit: &'a str,
-    required_status_name: &'a str,
+    required_status_name: &'a amiss_wire::controls::RequiredStatusName,
 }
 
 #[derive(Serialize)]
@@ -62,7 +62,7 @@ struct BoundDeliveryDestination<'a> {
     repository_host: &'a str,
     repository_owner: &'a str,
     repository_name: &'a str,
-    required_status_name: &'a str,
+    required_status_name: &'a amiss_wire::controls::RequiredStatusName,
 }
 
 #[derive(Serialize)]
@@ -96,9 +96,9 @@ pub(super) fn store_status(
         .collect::<Result<Vec<_>, _>>()?;
     destinations.sort();
     let stored = StoredStatus {
-        relation: record.targets.relation.as_str().to_owned(),
-        coordination: record.targets.coordination.as_str().to_owned(),
-        trigger_role: record.targets.trigger_role.as_str().to_owned(),
+        relation: record.targets.relation.clone(),
+        coordination: record.targets.coordination.clone(),
+        trigger_role: record.targets.trigger_role.clone(),
         fence: record.targets.fence.get(),
         status_binding: record_binding(record)?,
         destinations,
@@ -111,16 +111,8 @@ pub(super) fn store_status(
 pub(super) fn validate_stored_status(
     stored: &StoredStatus,
 ) -> Result<(), RelationScheduleStoreError> {
-    if ArtifactId::new(stored.relation.clone()).is_none()
-        || ArtifactId::new(stored.coordination.clone()).is_none()
-        || ArtifactId::new(stored.trigger_role.clone()).is_none()
-        || LeaseFence::new(stored.fence).is_none()
-        || Digest::from_wire(&stored.status_binding).is_none()
+    if LeaseFence::new(stored.fence).is_none()
         || !(1..=2).contains(&stored.destinations.len())
-        || stored
-            .destinations
-            .iter()
-            .any(|destination| Digest::from_wire(destination).is_none())
         || stored
             .destinations
             .windows(2)
@@ -134,7 +126,7 @@ pub(super) fn validate_stored_status(
 
 pub(super) fn destination_binding(
     target: &RelationStatusTarget,
-) -> Result<String, RelationScheduleStoreError> {
+) -> Result<Digest, RelationScheduleStoreError> {
     let bytes = serde_json::to_vec(&BoundDeliveryDestination {
         provider_namespace: target.scope.provider.namespace.as_str(),
         provider_instance: target.scope.provider.instance.as_str(),
@@ -150,24 +142,22 @@ pub(super) fn destination_binding(
             .chain_update(&bytes)
             .finalize()
             .0,
-    )
-    .to_string())
+    ))
 }
 
 pub(super) fn reopen_status(
     stored: &StoredStatus,
-    committed_plan_binding: &str,
+    committed_plan_binding: &Digest,
     registry: &RelationRegistry,
     artifacts: &FileArtifactStore,
 ) -> Result<RelationStatusRecord, RelationScheduleStoreError> {
     validate_stored_status(stored)?;
-    let relation =
-        ArtifactId::new(stored.relation.clone()).ok_or(RelationScheduleStoreError::Corrupt)?;
+    let relation = stored.relation.clone();
     let plan = registry
         .plans
         .get(&relation)
         .ok_or(RelationScheduleStoreError::Configuration)?;
-    if plan_binding(plan.as_ref())?.to_string() != committed_plan_binding {
+    if plan_binding(plan.as_ref())? != *committed_plan_binding {
         return Err(RelationScheduleStoreError::Schedule(
             RelationScheduleError::BindingConflict,
         ));
@@ -177,10 +167,9 @@ pub(super) fn reopen_status(
         .map_err(RelationScheduleStoreError::Artifact)?;
     let parsed =
         parse_plan(&retained.plan).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
-    let trigger_role =
-        ArtifactId::new(stored.trigger_role.clone()).ok_or(RelationScheduleStoreError::Corrupt)?;
+    let trigger_role = stored.trigger_role.clone();
     if parsed.payload.relation.identity != relation
-        || parsed.payload.coordination.as_str() != stored.coordination
+        || parsed.payload.coordination != stored.coordination
         || parsed.payload.trigger_role != trigger_role
     {
         return Err(RelationScheduleStoreError::Corrupt);
@@ -260,7 +249,7 @@ pub(super) fn reopen_status(
     Ok(record)
 }
 
-fn record_binding(record: &RelationStatusRecord) -> Result<String, RelationScheduleStoreError> {
+fn record_binding(record: &RelationStatusRecord) -> Result<Digest, RelationScheduleStoreError> {
     let ArtifactAuditDigests::Relation(audit) = record.audit.audit else {
         return Err(RelationScheduleStoreError::Corrupt);
     };
@@ -271,9 +260,9 @@ fn record_binding(record: &RelationStatusRecord) -> Result<String, RelationSched
         .map(bound_destination)
         .collect();
     let bytes = serde_json::to_vec(&BoundStatus {
-        relation: record.targets.relation.as_str(),
-        coordination: record.targets.coordination.as_str(),
-        trigger_role: record.targets.trigger_role.as_str(),
+        relation: &record.targets.relation,
+        coordination: &record.targets.coordination,
+        trigger_role: &record.targets.trigger_role,
         fence: record.targets.fence.get(),
         destinations,
         artifact: BoundArtifact {
@@ -297,8 +286,7 @@ fn record_binding(record: &RelationStatusRecord) -> Result<String, RelationSched
             .chain_update(&bytes)
             .finalize()
             .0,
-    )
-    .to_string())
+    ))
 }
 
 fn bound_destination(target: &RelationStatusTarget) -> BoundDestination<'_> {

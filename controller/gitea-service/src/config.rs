@@ -1,4 +1,3 @@
-use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -39,7 +38,7 @@ pub struct ServiceConfig {
     pub(crate) webhook: GiteaWebhook,
     pub(crate) api_timeouts: GiteaTimeouts,
     pub(crate) git_timeout: Duration,
-    pub(crate) review_name: String,
+    pub(crate) review_name: amiss_wire::controls::RequiredStatusName,
 }
 
 impl ServiceConfig {
@@ -61,7 +60,7 @@ impl ServiceConfig {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawConfig {
-    listen: String,
+    listen: std::net::SocketAddr,
     webhook_path: String,
     provider: RawProvider,
     repository: RawRepository,
@@ -101,7 +100,7 @@ struct RawRepository {
 
 impl RawConfig {
     fn load(self) -> Result<ServiceConfig, ConfigError> {
-        let listen = socket_address(&self.listen)?;
+        let listen = self.listen;
         let provider = provider_identity(&self.provider)?;
         let reviewer = dedicated_reviewer(&self.provider.reviewer)?;
         let repository_id = positive(self.repository.id)?;
@@ -244,11 +243,6 @@ fn gitea_route_id(
         ],
     )
     .ok_or(ConfigError::invalid("route identity is invalid"))
-}
-
-fn socket_address(raw: &str) -> Result<SocketAddr, ConfigError> {
-    raw.parse()
-        .map_err(|defect| ConfigError::caused_by("listen must be one socket address", defect))
 }
 
 fn provider_identity(raw: &RawProvider) -> Result<ProviderIdentity, ConfigError> {

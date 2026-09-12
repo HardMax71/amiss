@@ -82,7 +82,7 @@ fn plan(identity: &str, source: &str, documentation: &str) -> RelationPlan {
         aggregate_limits: limits(150, 1_572_864),
         status_destinations: vec![RelationStatusDestination {
             subject_role: artifact("documentation"),
-            required_status_name: "Amiss cross-repository".to_owned(),
+            required_status_name: "Amiss cross-repository".parse().unwrap(),
         }],
     }
 }
@@ -188,9 +188,9 @@ fn current_heads(transition: &RelationTransition) -> [RelationSubjectHead; 2] {
 #[test]
 fn either_authenticated_subject_selects_every_owned_relation_in_identity_order() {
     let mut zeta = plan("relation/zeta", "sdk", "handbook");
-    zeta.status_destinations[0].required_status_name = "Amiss zeta relation".to_owned();
+    zeta.status_destinations[0].required_status_name = "Amiss zeta relation".parse().unwrap();
     let mut alpha = plan("relation/alpha", "service", "handbook");
-    alpha.status_destinations[0].required_status_name = "Amiss alpha relation".to_owned();
+    alpha.status_destinations[0].required_status_name = "Amiss alpha relation".parse().unwrap();
     let registry = relation_registry(vec![zeta, alpha]).unwrap();
 
     let handbook =
@@ -411,13 +411,6 @@ fn status_destinations_are_exact_valid_subjects() {
         Some(RelationRegistryError::InvalidDestination)
     );
 
-    let mut malformed = plan("relation/api", "service", "handbook");
-    malformed.status_destinations[0].required_status_name = " trailing ".to_owned();
-    assert_eq!(
-        relation_registry(vec![malformed]).err(),
-        Some(RelationRegistryError::InvalidDestination)
-    );
-
     assert!(relation_registry(Vec::new()).is_ok());
 }
 
@@ -437,7 +430,7 @@ fn one_provider_repository_status_key_has_one_relation_owner() {
         Some(RelationRegistryError::DuplicateDestination)
     );
 
-    second.status_destinations[0].required_status_name = "Amiss schema relation".to_owned();
+    second.status_destinations[0].required_status_name = "Amiss schema relation".parse().unwrap();
     assert!(relation_registry(vec![first, second]).is_ok());
 }
 
@@ -573,7 +566,10 @@ fn current_subject_heads_freeze_only_operator_status_destinations() {
         destination.candidate_commit.as_str(),
         documentation.candidate
     );
-    assert_eq!(destination.required_status_name, "Amiss cross-repository");
+    assert_eq!(
+        destination.required_status_name.as_str(),
+        "Amiss cross-repository"
+    );
 }
 
 #[test]

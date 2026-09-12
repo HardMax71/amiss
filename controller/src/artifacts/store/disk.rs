@@ -208,7 +208,7 @@ fn load_or_create_root(
         Err(ArtifactError::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
             prepare_new_root(root)?;
             let state = Root {
-                schema: format::ROOT_SCHEMA.to_owned(),
+                schema: format::ROOT_SCHEMA,
                 base_url: config.base_url.clone(),
                 retention_millis: format::millis(config.retention)?,
                 max_records: config.max_records,
@@ -266,8 +266,7 @@ fn remove_written(paths: &[PathBuf]) -> Result<(), ArtifactError> {
 pub(super) fn read_blob(path: &Path, blob: &Blob) -> Result<Vec<u8>, ArtifactError> {
     let bytes = read_bounded(path, blob.length)?;
     if u64::try_from(bytes.len()).ok() != Some(blob.length)
-        || amiss_wire::model::Digest::from(sha2::Sha256::digest(&bytes).0).to_string()
-            != blob.digest
+        || amiss_wire::model::Digest::from(sha2::Sha256::digest(&bytes).0) != blob.digest
     {
         return Err(ArtifactError::Corrupt);
     }

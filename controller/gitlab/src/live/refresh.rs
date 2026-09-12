@@ -1,4 +1,5 @@
 use amiss_controller::ProviderError;
+use amiss_wire::model::Oid;
 use serde::de::DeserializeOwned;
 
 use crate::identity::{canonical_project_path, exact_sha1, repository_url};
@@ -216,8 +217,8 @@ pub(super) fn validated_repository_url(
 /// first parent to fetch the run's base by.
 pub(super) fn claimed_base(
     commit: &CommitResponse,
-    gate_commit: &amiss_wire::model::Oid,
-) -> Result<amiss_wire::model::Oid, ProviderError> {
+    gate_commit: &Oid,
+) -> Result<Oid, ProviderError> {
     let base = commit
         .parent_ids
         .first()
@@ -239,8 +240,13 @@ pub(super) fn resolved_matches_claim(
         .parents
         .first()
         .ok_or(ProviderError::InvalidResponse)?;
-    if objects.gate.id != commit.id
-        || objects.gate.parents != commit.parent_ids
+    if objects.gate.id.as_str() != commit.id
+        || !objects
+            .gate
+            .parents
+            .iter()
+            .map(Oid::as_str)
+            .eq(commit.parent_ids.iter().map(String::as_str))
         || &objects.base.id != resolved_base
     {
         return Err(ProviderError::InvalidResponse);

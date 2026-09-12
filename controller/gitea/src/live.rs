@@ -14,7 +14,6 @@ use amiss_controller::{
     ChangeSnapshot, ProviderError, ProviderIdentity, Publication, RelationStatusRecord,
     RelationStatusTarget, RelationSubject, RelationSubjectHead,
 };
-use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::RepositoryIdentity;
 use secrecy::{ExposeSecret as _, SecretString};
 
@@ -83,7 +82,7 @@ impl GiteaClient {
         reviewer: DedicatedReviewer,
         token: String,
         api_base: &str,
-        review_name: String,
+        review_name: amiss_wire::controls::RequiredStatusName,
         timeouts: GiteaTimeouts,
         objects: Arc<dyn GiteaObjectResolver>,
     ) -> Result<Self, GiteaClientError> {
@@ -99,9 +98,6 @@ impl GiteaClient {
         }
         if !(MIN_TOKEN_BYTES..=MAX_TOKEN_BYTES).contains(&token.expose_secret().len()) {
             return Err(configuration("the reviewer token size is out of bounds"));
-        }
-        if !valid_required_status_name(&review_name) {
-            return Err(configuration("the review label is not a valid status name"));
         }
         let rest = HttpRest::new(provider.instance.as_str(), api_base, token, timeouts)?;
         Ok(Self {
@@ -255,15 +251,15 @@ impl<R: GiteaRest> Client<R> {
 struct Config {
     provider: ProviderIdentity,
     reviewer: DedicatedReviewer,
-    review_name: String,
+    review_name: amiss_wire::controls::RequiredStatusName,
 }
 
-fn agrees(resolved: &crate::GiteaCommit, record: &CommitRecord) -> bool {
-    resolved.id == record.sha
+fn agrees(resolved: &crate::AcquiredCommit, record: &CommitRecord) -> bool {
+    resolved.id.as_str() == record.sha
         && resolved.parents.len() == record.parents.len()
         && resolved
             .parents
             .iter()
             .zip(&record.parents)
-            .all(|(resolved, record)| *resolved == record.sha)
+            .all(|(resolved, record)| resolved.as_str() == record.sha)
 }

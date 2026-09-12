@@ -55,7 +55,7 @@ struct WorkerSettings {
     token: SecretString,
     api_base: String,
     objects: Arc<dyn GiteaObjectResolver>,
-    review_name: String,
+    review_name: amiss_wire::controls::RequiredStatusName,
     api_timeouts: GiteaTimeouts,
 }
 

@@ -11,9 +11,8 @@ use crate::{
     Publication,
 };
 
-use super::model::{
-    StoredCheck, StoredConclusion, StoredProviderRun, StoredRun, materialize_check, store_check,
-};
+use super::model::{StoredConclusion, StoredRun};
+use crate::ProviderRunIdentity;
 use crate::file_ledger::FileLedgerError;
 
 const REPORT_DOMAIN: &str = "amiss/controller-report-blob-v1";
@@ -21,12 +20,12 @@ const REPORT_DOMAIN: &str = "amiss/controller-report-blob-v1";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger) struct StoredPublication {
-    provider_run: StoredProviderRun,
-    evaluation_id: String,
-    check: StoredCheck,
+    provider_run: ProviderRunIdentity,
+    evaluation_id: ControllerEvaluationId,
+    check: CheckBinding,
     run: StoredRun,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    gate_commit: Option<String>,
+    gate_commit: Option<Oid>,
     conclusion: StoredConclusion,
     report: StoredReport,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -38,11 +37,17 @@ impl StoredPublication {
         validate_artifact_report(publication.artifact.as_ref(), publication.report.as_deref())?;
         let report = StoredReport::new(publication.report.as_deref())?;
         Ok(Self {
-            provider_run: StoredProviderRun::new(&publication.provider_run),
-            evaluation_id: publication.evaluation_id.as_str().to_owned(),
-            check: store_check(&publication.check),
-            run: StoredRun::new(&publication.run),
-            gate_commit: Some(publication.gate_commit.as_str().to_owned()),
+            provider_run: publication.provider_run.clone(),
+            evaluation_id: publication.evaluation_id.clone(),
+            check: publication.check.clone(),
+            run: StoredRun {
+                change: super::model::StoredChange::new(&publication.run.change),
+                refs: publication.run.refs.clone(),
+                object_format: publication.run.object_format,
+                commits: publication.run.commits.clone(),
+                trees: publication.run.trees.clone(),
+            },
+            gate_commit: Some(publication.gate_commit.clone()),
             conclusion: StoredConclusion::new(publication.conclusion),
             report,
             artifact: publication.artifact.as_ref().map(StoredArtifact::new),
@@ -74,45 +79,38 @@ impl StoredPublication {
             reference.validate()?;
         }
         let artifact = match &self.artifact {
-            Some(stored) => {
-                let assessment_digest = stored
-                    .assessment_digest
-                    .as_deref()
-                    .map(|raw| Digest::from_wire(raw).ok_or(FileLedgerError::Corrupt))
-                    .transpose()?;
-                let semantic_digest = stored
-                    .semantic_digest
-                    .as_deref()
-                    .map(|raw| Digest::from_wire(raw).ok_or(FileLedgerError::Corrupt))
-                    .transpose()?;
-                Some(
-                    crate::artifacts::checked_reference(ArtifactReference {
-                        id: stored.id.clone(),
-                        locator: stored.locator.clone(),
-                        expires_at_unix_millis: stored.expires_at_unix_millis,
-                        report_digest: Digest::from_wire(&stored.report_digest)
-                            .ok_or(FileLedgerError::Corrupt)?,
-                        semantic_digest,
-                        assessment_digest,
-                        external_tally: stored.external_tally,
-                        external_incomplete: stored.external_incomplete,
-                    })
-                    .ok_or(FileLedgerError::Corrupt)?,
-                )
-            }
+            Some(stored) => Some(
+                crate::artifacts::checked_reference(ArtifactReference {
+                    id: stored.id.clone(),
+                    locator: stored.locator.clone(),
+                    expires_at_unix_millis: stored.expires_at_unix_millis,
+                    report_digest: stored.report_digest,
+                    semantic_digest: stored.semantic_digest,
+                    assessment_digest: stored.assessment_digest,
+                    external_tally: stored.external_tally,
+                    external_incomplete: stored.external_incomplete,
+                })
+                .ok_or(FileLedgerError::Corrupt)?,
+            ),
             None => None,
         };
         let run = self.run.materialize()?;
         let gate_commit = self
             .gate_commit
             .as_ref()
-            .and_then(|commit| Oid::new(run.object_format, commit.clone()))
+            .filter(|commit| commit.object_format() == run.object_format)
+            .cloned()
             .ok_or(FileLedgerError::Corrupt)?;
         Ok(Publication {
-            provider_run: self.provider_run.materialize()?,
-            evaluation_id: ControllerEvaluationId::new(self.evaluation_id.clone())
-                .ok_or(FileLedgerError::Corrupt)?,
-            check: materialize_check(&self.check)?,
+            provider_run: ProviderRunIdentity::new(
+                self.provider_run.run_id.clone(),
+                self.provider_run.attempt,
+                self.provider_run.object_format,
+                self.provider_run.candidate_commit.clone(),
+            )
+            .ok_or(FileLedgerError::Corrupt)?,
+            evaluation_id: self.evaluation_id.clone(),
+            check: self.check.clone(),
             run,
             gate_commit,
             conclusion: self.conclusion.materialize(),
@@ -123,7 +121,7 @@ impl StoredPublication {
 
     pub(super) fn validate_binding(
         &self,
-        expected_evaluation_id: &str,
+        expected_evaluation_id: &ControllerEvaluationId,
         delivery: &AuthenticatedDelivery,
         expected_check: &CheckBinding,
     ) -> Result<(), FileLedgerError> {
@@ -140,16 +138,21 @@ impl StoredPublication {
                 reference.validate()?;
             }
         }
-        let provider_run = self.provider_run.materialize()?;
-        let evaluation_id = ControllerEvaluationId::new(self.evaluation_id.clone())
-            .ok_or(FileLedgerError::Corrupt)?;
-        let check = materialize_check(&self.check)?;
+        let provider_run = ProviderRunIdentity::new(
+            self.provider_run.run_id.clone(),
+            self.provider_run.attempt,
+            self.provider_run.object_format,
+            self.provider_run.candidate_commit.clone(),
+        )
+        .ok_or(FileLedgerError::Corrupt)?;
+        let evaluation_id = &self.evaluation_id;
+        let check = self.check.clone();
         let run = self.run.materialize()?;
         if self
             .gate_commit
             .as_ref()
-            .is_some_and(|commit| Oid::new(run.object_format, commit.clone()).is_none())
-            || evaluation_id.as_str() != expected_evaluation_id
+            .is_some_and(|commit| commit.object_format() != run.object_format)
+            || evaluation_id != expected_evaluation_id
             || provider_run != delivery.provider_run
             || run.change != delivery.change
             || run.object_format != delivery.provider_run.object_format
@@ -180,15 +183,15 @@ struct StoredArtifact {
     id: String,
     locator: String,
     expires_at_unix_millis: i64,
-    report_digest: String,
+    report_digest: Digest,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    assessment_digest: Option<String>,
+    assessment_digest: Option<Digest>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     external_tally: Option<ExternalTally>,
     #[serde(default)]
     external_incomplete: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    semantic_digest: Option<String>,
+    semantic_digest: Option<Digest>,
 }
 
 impl StoredArtifact {
@@ -197,11 +200,11 @@ impl StoredArtifact {
             id: reference.id.clone(),
             locator: reference.locator.clone(),
             expires_at_unix_millis: reference.expires_at_unix_millis,
-            report_digest: reference.report_digest.to_string(),
-            assessment_digest: reference.assessment_digest.map(|digest| digest.to_string()),
+            report_digest: reference.report_digest,
+            assessment_digest: reference.assessment_digest,
             external_tally: reference.external_tally,
             external_incomplete: reference.external_incomplete,
-            semantic_digest: reference.semantic_digest.map(|digest| digest.to_string()),
+            semantic_digest: reference.semantic_digest,
         }
     }
 }

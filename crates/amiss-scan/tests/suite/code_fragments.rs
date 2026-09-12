@@ -78,13 +78,17 @@ fn run(
 
     let (host, _) = dialect_identity(dialect);
     let context = ForgeContext {
-        host: host.to_owned(),
         dialect,
         object_format: ObjectFormat::Sha1,
-        owner: "acme".to_owned(),
-        repository: "widgets".to_owned(),
-        candidate_ref: "refs/heads/main".to_owned(),
-        default_ref: "refs/heads/main".to_owned(),
+
+        repository: RepositoryIdentity::new(
+            host.to_owned(),
+            "acme".to_owned(),
+            "widgets".to_owned(),
+        )
+        .unwrap(),
+        candidate_ref: Some("refs/heads/main".parse().unwrap()),
+        default_ref: Some("refs/heads/main".parse().unwrap()),
     };
     let shell = SetupShell {
         engine: engine(),

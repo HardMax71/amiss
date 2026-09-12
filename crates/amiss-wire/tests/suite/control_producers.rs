@@ -74,7 +74,7 @@ fn execution_constraint() -> ExecutionConstraintDescriptor {
         manifest_path: RepoPathText::new("release/manifest.json".to_owned()).unwrap(),
         release_manifest_digest: Digest::from_wire(DIGEST_B).unwrap(),
         selected_platform: ConstraintPlatform::LinuxX8664,
-        required_status_name: "amiss / documentation assurance".to_owned(),
+        required_status_name: "amiss / documentation assurance".parse().unwrap(),
         bootstrap_contract: ActionBootstrapContract::Current,
         bootstrap_digest: Digest::from_wire(DIGEST_C).unwrap(),
     }
@@ -102,11 +102,6 @@ fn execution_constraint_public_fields_enforce_action_identity() {
     invalid.action_object_format = ObjectFormat::Sha256;
     let error = invalid.validate().unwrap_err();
     assert_eq!(error.path, "$.action_commit_oid");
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
-    let mut invalid = execution_constraint();
-    invalid.required_status_name = " trailing ".to_owned();
-    let error = invalid.validate().unwrap_err();
-    assert_eq!(error.path, "$.required_status_name");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 

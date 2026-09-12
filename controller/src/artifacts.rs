@@ -9,8 +9,8 @@ use amiss_wire::model::Digest;
 use url::Url;
 
 use crate::{
-    ControllerEvaluationId, ExternalTally, PublicationAuditBundle, PublicationAuditDigests,
-    RelationAuditBundle, RelationAuditDigests,
+    ExternalTally, PublicationAuditBundle, PublicationAuditDigests, RelationAuditBundle,
+    RelationAuditDigests,
 };
 
 pub(crate) use format::valid_id as valid_artifact_id;
@@ -180,8 +180,4 @@ pub(crate) fn reference_matches_report(
 ) -> bool {
     report
         .is_some_and(|bytes| Digest::from(sha2::Sha256::digest(bytes).0) == reference.report_digest)
-}
-
-pub(crate) fn evaluation_id(raw: &str) -> Result<ControllerEvaluationId, ArtifactError> {
-    ControllerEvaluationId::new(raw.to_owned()).ok_or(ArtifactError::Corrupt)
 }

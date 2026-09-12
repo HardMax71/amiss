@@ -4,7 +4,7 @@ use std::process::ExitCode;
 use amiss_scan::report::Built;
 use amiss_wire::controls::{DebtItem, DebtSnapshot, DebtSnapshotSchema, parse_fact};
 use amiss_wire::model::Digest;
-use amiss_wire::model::{ArtifactId, OwnerId, TreeIdentity, UtcInstant};
+use amiss_wire::model::{ArtifactId, TreeIdentity};
 use amiss_wire::report::model::{Evaluation, ReportPayload, Snapshot};
 use amiss_wire::report::{Disposition, FindingKind};
 use amiss_wire::requests::CandidateSnapshot;
@@ -74,9 +74,6 @@ fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
     payload: &ReportPayload<P, R, M, E>,
     adoption: &Adoption,
 ) -> Result<(Vec<DebtItem>, usize, usize), ()> {
-    let owner = OwnerId::new(adoption.owner.clone()).ok_or(())?;
-    let created_at = UtcInstant::new(adoption.created_at.clone()).ok_or(())?;
-    let expires_at = UtcInstant::new(adoption.expires_at.clone()).ok_or(())?;
     let mut rows = Vec::new();
     let mut ineligible = 0_usize;
     let mut factless = 0_usize;
@@ -104,10 +101,10 @@ fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
             accepted_fact: parse_fact(&serde_json::to_vec(fact).map_err(|_defect| ())?)
                 .map_err(|_defect| ())?,
             accepted_fact_digest: fact_digest,
-            owner: owner.clone(),
+            owner: adoption.owner.clone(),
             reason: adoption.reason.clone(),
-            created_at: created_at.clone(),
-            expires_at: expires_at.clone(),
+            created_at: adoption.created_at.clone(),
+            expires_at: adoption.expires_at.clone(),
         });
     }
     Ok((rows, ineligible, factless))
@@ -130,13 +127,13 @@ fn snapshot<P, R, M, E>(
         schema: DebtSnapshotSchema::Current,
         repository: identity.repository.clone(),
         ref_name: identity.ref_name.clone(),
-        organization_floor_digest: Digest::from_wire(&adoption.floor_digest)?,
+        organization_floor_digest: adoption.floor_digest,
         adoption_tree: TreeIdentity {
             object_format: candidate.object_format,
             tree_oid: candidate.tree_oid.clone(),
         },
         adoption_report_payload_digest: payload_digest,
-        created_at: UtcInstant::new(adoption.created_at.clone())?,
+        created_at: adoption.created_at.clone(),
         items,
     })
 }

@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use amiss_wire::controls::{DocumentInclude, IncludeKind, ScannerPolicy, ScannerPolicySchema};
-use amiss_wire::model::{Adapter, RepoPath, RepoPathText};
+use amiss_wire::model::{Adapter, RepoPathText};
 
 use super::super::arguments::Gathered;
 use super::super::{AuthorInvocation, Code, PolicyIncludeInvocation, PolicyIncludePreview};
@@ -68,15 +68,16 @@ pub(super) fn classify_claim(
             None
         }
     });
-    let path = gathered.claim_path.unique_value().filter(|value| {
-        RepoPath::new((*value).to_owned()).is_some_and(|path| path.as_str().is_some())
-            && !value.contains(['&', '<', '>', '"', ' ', '%', '?', '#', '\\'])
-    });
+    let path = gathered
+        .claim_path
+        .unique_value()
+        .filter(|value| !value.contains(['&', '<', '>', '"', ' ', '%', '?', '#', '\\']))
+        .and_then(|value| value.parse::<RepoPathText>().ok());
     match (repo, name, line, path) {
         (Some(repo), Some(name), Some(line), Some(path)) if codes.is_empty() => {
             Ok(AuthorInvocation {
                 repo,
-                path: path.to_owned(),
+                path,
                 line,
                 name: name.to_owned(),
             })

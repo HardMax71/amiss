@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use amiss_controller::ProviderError;
-use amiss_controller_gitea::{GiteaCommit, GiteaObjectRequest, GiteaObjectResolver, GiteaObjects};
-use amiss_controller_service::{GitObjectSource, ResolveWant, ResolvedCommit};
+use amiss_controller_gitea::{GiteaObjectRequest, GiteaObjectResolver, GiteaObjects};
+use amiss_controller_service::{GitObjectSource, ResolveWant};
 use secrecy::SecretString;
 
 const PREFIX: &str = "amiss-gitea-objects-";
@@ -59,17 +59,6 @@ impl GiteaObjectResolver for GiteaGitObjects {
             ],
             request.timeout,
         )?;
-        Ok(GiteaObjects {
-            candidate: commit(candidate),
-            base: commit(base),
-        })
-    }
-}
-
-fn commit(resolved: ResolvedCommit) -> GiteaCommit {
-    GiteaCommit {
-        id: resolved.id,
-        tree: resolved.tree,
-        parents: resolved.parents,
+        Ok(GiteaObjects { candidate, base })
     }
 }

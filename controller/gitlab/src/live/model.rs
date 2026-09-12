@@ -10,8 +10,8 @@ use crate::{
 pub(super) struct JobResponse {
     id: u64,
     name: String,
-    status: String,
-    source: Option<String>,
+    status: crate::states::PipelineStatus,
+    source: Option<crate::states::JobSource>,
     commit: CommitReference,
     pipeline: PipelineReference,
     runner: Option<RunnerReference>,
@@ -35,7 +35,7 @@ struct RunnerReference {
 #[derive(Deserialize)]
 pub(super) struct TrainResponse {
     id: u64,
-    status: String,
+    status: crate::states::TrainStatus,
     target_branch: String,
     merge_request: TrainMergeRequest,
     pipeline: Option<GitLabPipeline>,
@@ -45,7 +45,7 @@ pub(super) struct TrainResponse {
 struct TrainMergeRequest {
     iid: u64,
     project_id: u64,
-    state: String,
+    state: crate::states::MergeRequestState,
 }
 
 #[derive(Deserialize)]
@@ -54,13 +54,13 @@ pub(super) struct ProjectResponse {
     path_with_namespace: String,
     default_branch: String,
     http_url_to_repo: String,
-    repository_object_format: String,
+    repository_object_format: amiss_wire::model::ObjectFormat,
     #[serde(flatten)]
     checks: ProjectChecksResponse,
     #[serde(flatten)]
     train: ProjectTrainResponse,
-    merge_method: String,
-    squash_option: String,
+    merge_method: crate::states::MergeMethod,
+    squash_option: crate::states::SquashOption,
 }
 
 #[derive(Deserialize)]
@@ -77,7 +77,7 @@ struct ProjectTrainResponse {
     #[serde(rename = "merge_trains_skip_train_allowed")]
     skip_allowed: bool,
     #[serde(rename = "merge_train_enforcement")]
-    enforcement: String,
+    enforcement: crate::states::TrainEnforcement,
 }
 
 #[derive(Deserialize)]
