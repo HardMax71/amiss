@@ -98,7 +98,6 @@ pub enum VerifiedControlStatus {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VerifiedExecutionConstraint {
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub descriptor: ExecutionConstraintDescriptor,
     pub descriptor_digest: Digest,
     pub status: VerifiedControlStatus,
@@ -108,11 +107,8 @@ pub struct VerifiedExecutionConstraint {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ExecutionConstraintProvenance {
-    None(#[serde(deserialize_with = "crate::requests::object::deserialize")] NoExecutionConstraint),
-    Verified(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")]
-        Box<VerifiedExecutionConstraint>,
-    ),
+    None(NoExecutionConstraint),
+    Verified(Box<VerifiedExecutionConstraint>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -141,7 +137,6 @@ pub enum TrustedTimeTrustSource {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VerifiedTrustedTime {
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub statement: TrustedTimeStatement,
     pub statement_digest: Digest,
     pub status: VerifiedControlStatus,
@@ -151,11 +146,8 @@ pub struct VerifiedTrustedTime {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TrustedTimeProvenance {
-    None(#[serde(deserialize_with = "crate::requests::object::deserialize")] NoTrustedTime),
-    Verified(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")]
-        Box<VerifiedTrustedTime>,
-    ),
+    None(NoTrustedTime),
+    Verified(Box<VerifiedTrustedTime>),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -171,7 +163,6 @@ pub struct SemanticEvidenceProducer {
 #[serde(deny_unknown_fields)]
 pub struct SemanticEvidenceProvenance {
     pub payload_digest: Digest,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub producer: SemanticEvidenceProducer,
 }
 
@@ -182,13 +173,10 @@ pub struct ResolvedControls {
     pub base_repository_policy_digest: Option<Digest>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub candidate_repository_policy_digest: Option<Digest>,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub debt_snapshot: ControlProvenance,
     pub execution_constraint: ExecutionConstraintProvenance,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub organization_floor: ControlProvenance,
     pub profile: Profile,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub sandbox: SandboxProvenance,
     #[serde(
         default,
@@ -197,7 +185,6 @@ pub struct ResolvedControls {
     )]
     pub semantic_evidence: Option<Vec<SemanticEvidenceProvenance>>,
     pub trusted_time_source: TrustedTimeProvenance,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub waiver_bundle: ControlProvenance,
 }
 
@@ -235,10 +222,6 @@ pub struct UnavailableControls {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Controls {
-    Resolved(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")] Box<ResolvedControls>,
-    ),
-    Unavailable(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")] UnavailableControls,
-    ),
+    Resolved(Box<ResolvedControls>),
+    Unavailable(UnavailableControls),
 }

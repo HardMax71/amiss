@@ -60,31 +60,11 @@ pub enum ReportCompatibility {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    remote = "Self",
-    deny_unknown_fields,
-    bound(deserialize = "P: Deserialize<'de>")
-)]
+#[serde(deny_unknown_fields, bound(deserialize = "P: Deserialize<'de>"))]
 pub struct ReportEnvelope<P = ReportPayload> {
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: P,
     pub payload_digest: Digest,
     pub schema: ReportEnvelopeSchema,
-}
-
-impl<P: Serialize> Serialize for ReportEnvelope<P> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, P: Deserialize<'de>> Deserialize<'de> for ReportEnvelope<P> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -98,17 +78,14 @@ pub struct ReportPayload<
     pub compatibility: ReportCompatibility,
     pub controls: Controls,
     pub documents: Vec<DocumentResult<P, DocumentSide<M>>>,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub engine: Engine,
     pub errors: Vec<AnalysisError<P>>,
     pub evaluation: Evaluation,
     pub feedback: Feedback<P>,
     pub findings: Vec<Finding<P, E>>,
     pub observations: Vec<ObservationComparison<P, R>>,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub result: ReportResult,
     pub schema: ReportPayloadSchema,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub summary: Summary,
 }
 

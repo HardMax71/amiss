@@ -4,7 +4,7 @@ use serde_json::Value;
 use super::{Deviation, golden, refused};
 
 #[test]
-fn sealed_controls_require_objects_not_positional_arrays() {
+fn sealed_controls_reject_noncanonical_positional_arrays() {
     let paths: &[&[&str]] = &[
         &["controls"],
         &["controls", "organization_floor"],
@@ -30,7 +30,13 @@ fn sealed_controls_require_objects_not_positional_arrays() {
             };
             *value = Value::Array(members.into_iter().map(|(_, value)| value).collect());
         });
-        assert_eq!(refused(deviation), AcceptanceDefect::Shape, "{path:?}");
+        assert!(
+            matches!(
+                refused(deviation),
+                AcceptanceDefect::Noncanonical | AcceptanceDefect::Shape
+            ),
+            "{path:?}"
+        );
     }
 }
 

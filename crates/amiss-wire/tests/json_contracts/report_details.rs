@@ -132,7 +132,7 @@ fn refresh_candidate_facts(reports: &mut [ReportEnvelope]) {
 }
 
 #[test]
-fn evidence_details_preserve_nullable_fields_and_require_tree_objects() {
+fn evidence_details_preserve_required_nullable_fields() {
     let mut rejected = 0;
     for report in reports() {
         let encoded = serde_json::to_string(&report).unwrap();
@@ -164,23 +164,6 @@ fn evidence_details_preserve_nullable_fields_and_require_tree_objects() {
                 }
             }
         }
-        let fact = report.payload.findings[0].candidate_fact.as_ref().unwrap();
-        if let FindingFactEvidence::Control {
-            exception: Some(detail),
-            ..
-        } = &fact.evidence
-        {
-            let tree = match detail.as_ref() {
-                ExceptionDiagnostic::Debt { adoption_tree, .. } => adoption_tree,
-                ExceptionDiagnostic::Waiver { candidate_tree, .. } => candidate_tree,
-            };
-            let object = serde_json::to_string(tree).unwrap();
-            let sequence = serde_json::to_string(&(tree.object_format, &tree.tree_oid)).unwrap();
-            let invalid = encoded.replace(&object, &sequence);
-            assert_ne!(invalid, encoded);
-            assert!(serde_json::from_str::<ReportEnvelope>(&invalid).is_err());
-            rejected += 1;
-        }
     }
-    assert_eq!(rejected, 6);
+    assert_eq!(rejected, 4);
 }

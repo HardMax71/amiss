@@ -114,7 +114,7 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
         )
         .unwrap();
         let mut envelope_bytes = Vec::new();
-        semantic::write(&document, &mut envelope_bytes).unwrap();
+        serde_json_canonicalizer::to_writer(&document, &mut envelope_bytes).unwrap();
         assert_eq!(
             semantic::parse(&envelope_bytes)
                 .unwrap()
@@ -155,24 +155,9 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
 }
 
 #[test]
-fn semantic_observations_refuse_unknown_tags_and_positional_struct_forms() {
-    let record_array = serde_json::to_vec(&(
-        record::ObservationKind::Current,
-        "rust/api",
-        Vec::<record::Record>::new(),
-    ))
-    .unwrap();
-    let label_array = serde_json::to_vec(&(
-        SphinxLabelKind::Current,
-        "python",
-        "context managers",
-        "https://docs.python.org/reference/datamodel.html",
-    ))
-    .unwrap();
+fn semantic_observations_refuse_unknown_tags_and_members() {
     for invalid in [
-        record_array.as_slice(),
-        label_array.as_slice(),
-        br#"{"kind":"future-fact","data":{"arbitrary":[true,null,2]}}"#,
+        br#"{"kind":"future-fact","data":{"arbitrary":[true,null,2]}}"#.as_slice(),
         br#"{"kind":{"record-set":null},"name":"rust/api","records":[]}"#,
         br#"{"kind":"record-set","name":"rust/api","records":[{"key":"a","value":"A","extra":true}]}"#,
         br#"{"kind":"site-route","route":"/guide","anchors":[]}"#,

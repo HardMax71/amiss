@@ -43,29 +43,8 @@ fn supplied_time_is_a_closed_object_and_keeps_its_canonical_identity() {
 
     let statement = &supplied.value;
     let object = serde_json::to_string(statement).unwrap();
-    let positional = serde_json::to_string(&(
-        statement.candidate_identity_digest,
-        statement.controller,
-        &statement.evaluation_instant,
-        &statement.provider,
-        statement.provider_run_attempt,
-        &statement.provider_run_id,
-        &statement.ref_name,
-        &statement.repository,
-        statement.schema,
-        &statement.valid_until,
-    ))
-    .unwrap();
     let compact = serde_json::to_string(&request).unwrap();
-    for invalid in [
-        positional.as_str(),
-        "null",
-        "[]",
-        "{}",
-        "true",
-        "42",
-        "\"time\"",
-    ] {
+    for invalid in ["null", "[]", "{}", "true", "42", "\"time\""] {
         let altered = compact.replace(&object, invalid);
         assert_ne!(altered, compact);
         assert!(

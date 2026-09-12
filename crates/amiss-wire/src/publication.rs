@@ -29,27 +29,11 @@ pub const PUBLICATION_URI_BYTES: usize = 16_384;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self", bound(deserialize = "T: Deserialize<'de>"))]
+#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct PublicationPlanEnvelope<T = PublicationPlan> {
     pub schema: PlanEnvelopeSchema,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: T,
     pub payload_digest: Digest,
-}
-
-impl<T: Serialize> Serialize for PublicationPlanEnvelope<T> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for PublicationPlanEnvelope<T> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -62,7 +46,6 @@ pub enum PlanEnvelopeSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct PublicationPlan {
     pub schema: PlanPayloadSchema,
     pub report_payload_digest: Digest,
@@ -72,21 +55,6 @@ pub struct PublicationPlan {
     pub product: PublicationResource,
     pub producer: PublicationProducer,
     pub relation: PublicationRelation,
-}
-
-impl Serialize for PublicationPlan {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for PublicationPlan {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -99,7 +67,6 @@ pub enum PlanPayloadSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct DocsCandidate {
     pub repository: RepositoryIdentity,
     pub object_format: ObjectFormat,
@@ -110,24 +77,8 @@ pub struct DocsCandidate {
     pub candidate_identity_digest: Digest,
 }
 
-impl Serialize for DocsCandidate {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DocsCandidate {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct PublicationTarget {
     pub provider: ArtifactId,
     pub instance: ArtifactId,
@@ -136,131 +87,52 @@ pub struct PublicationTarget {
     pub canonical_url: String,
 }
 
-impl Serialize for PublicationTarget {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for PublicationTarget {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct CompletedSite {
     pub artifact: PublicationResource,
     pub input_digest: Digest,
 }
 
-impl Serialize for CompletedSite {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for CompletedSite {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct PublicationResource {
     pub uri: String,
     pub digest: Digest,
 }
 
-impl Serialize for PublicationResource {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for PublicationResource {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct PublicationProducer {
     pub identity: ArtifactId,
     pub version: String,
     pub context_digest: Digest,
 }
 
-impl Serialize for PublicationProducer {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for PublicationProducer {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct PublicationRelation {
     pub identity: ArtifactId,
     pub context_digest: Digest,
-}
-
-impl Serialize for PublicationRelation {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for PublicationRelation {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 /// Parses one closed, digest-bound publication plan.
 ///
 /// # Errors
 ///
-/// Fails on oversized or malformed strict JSON, an unknown field, an invalid
+/// Fails on oversized or malformed JSON, an unknown field, an invalid
 /// identity or URI, inconsistent Git object formats, or a payload digest mismatch.
 pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let document: PublicationPlanEnvelope = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| de::deserialize_error("$", &defect))?;
     deserializer
         .end()
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+
     if plan_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -285,7 +157,6 @@ pub fn plan(input: &PublicationPlan) -> Result<Vec<u8>, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(&canonical)?;
     Ok(canonical)
 }
 

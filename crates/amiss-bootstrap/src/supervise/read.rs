@@ -1,7 +1,6 @@
 use amiss_wire::report::model::{BaseSnapshot, Evaluation, ReportEnvelope, Snapshot};
 use amiss_wire::report::{PAYLOAD_SCHEMA, result_verdict};
 use amiss_wire::requests::CandidateSnapshot;
-use serde::Deserialize;
 use sha2::Digest as _;
 
 use super::{AcceptanceDefect, Expectations, identity};
@@ -17,14 +16,8 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
     let trimmed = wire
         .strip_suffix(b"\n")
         .ok_or(AcceptanceDefect::Noncanonical)?;
-    if amiss_wire::de::JsonProfile::validate(trimmed).is_err() {
-        return Err(AcceptanceDefect::Shape);
-    }
-    let mut deserializer = serde_json::Deserializer::from_slice(trimmed);
-    // The strict gate has already enforced the document depth ceiling.
-    deserializer.disable_recursion_limit();
-    let envelope: ReportEnvelope = <ReportEnvelope as Deserialize>::deserialize(&mut deserializer)
-        .map_err(|_defect| AcceptanceDefect::Shape)?;
+    let envelope: ReportEnvelope =
+        serde_json::from_slice(trimmed).map_err(|_defect| AcceptanceDefect::Shape)?;
     if serde_json_canonicalizer::to_vec(&envelope).map_err(|_defect| AcceptanceDefect::Shape)?
         != trimmed
     {

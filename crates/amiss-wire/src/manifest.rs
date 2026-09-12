@@ -46,27 +46,12 @@ pub enum EnvironmentContract {
 /// One runtime file of the reviewed action closure: a regular blob in the
 /// pinned action tree with its exact mode and plain SHA-256.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct RuntimeFile {
     pub file_sha256: Digest,
     pub git_mode: GitMode,
     pub path: RepoPathText,
     pub role: RuntimeRole,
-}
-
-impl Serialize for RuntimeFile {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for RuntimeFile {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -91,7 +76,7 @@ pub enum RuntimeRole {
 
 /// One published platform artifact and its complete runtime closure.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct ReleaseArtifact {
     pub artifact_name: ArtifactId,
     pub binary_sha256: Digest,
@@ -103,96 +88,36 @@ pub struct ReleaseArtifact {
     pub tree_path: RepoPathText,
 }
 
-impl Serialize for ReleaseArtifact {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ReleaseArtifact {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 /// The build namespace: the repository and exact commit the release was
 /// built from.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct BuildSource {
     pub commit_oid: Oid,
     pub object_format: ObjectFormat,
     pub repository: RepositoryIdentity,
 }
 
-impl Serialize for BuildSource {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for BuildSource {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct DependencyLockFile {
     pub path: RepoPathText,
     pub raw_digest: Digest,
 }
 
-impl Serialize for DependencyLockFile {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DependencyLockFile {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 /// Every build lockfile by canonical path and raw-evidence digest.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct DependencyLockInput {
     pub files: Vec<DependencyLockFile>,
     pub schema: DependencyLockSchema,
-}
-
-impl Serialize for DependencyLockInput {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DependencyLockInput {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 /// The strict release manifest: the reviewed release label, its build
 /// namespace, the complete dependency-lock set, and one to six artifacts
 /// sorted by platform.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct ReleaseManifest {
     pub artifacts: Vec<ReleaseArtifact>,
     pub build_source: BuildSource,
@@ -202,37 +127,21 @@ pub struct ReleaseManifest {
     pub schema: ReleaseManifestSchema,
 }
 
-impl Serialize for ReleaseManifest {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ReleaseManifest {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 /// Parses and validates one release manifest.
 ///
 /// # Errors
 ///
-/// Fails on strict-JSON defects, schema-shape violations, invalid grammar
+/// Fails on JSON defects, schema-shape violations, invalid grammar
 /// values, inconsistent digests or closure rows, and unsorted or duplicate
 /// set members.
 pub fn parse_release_manifest(bytes: &[u8]) -> Result<ReleaseManifest, Error> {
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    deserializer.disable_recursion_limit();
     let manifest: ReleaseManifest = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| de::deserialize_error("$", &defect))?;
     deserializer
         .end()
         .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+
     manifest.validate()?;
     Ok(manifest)
 }

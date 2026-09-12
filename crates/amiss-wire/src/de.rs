@@ -1,7 +1,3 @@
-mod profile;
-
-pub use profile::JsonProfile;
-
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("{kind} at {path}")]
 pub struct Error {
@@ -50,10 +46,13 @@ pub fn fail<T>(path: &str, kind: ErrorKind) -> Result<T, Error> {
     Err(Error::new(path, kind))
 }
 
-pub(crate) fn deserialize_error<E: std::fmt::Display>(
+pub(crate) fn deserialize_error(
     base: &str,
-    defect: &serde_path_to_error::Error<E>,
+    defect: &serde_path_to_error::Error<serde_json::Error>,
 ) -> Error {
+    if defect.inner().is_syntax() || defect.inner().is_eof() {
+        return Error::new(base, ErrorKind::Json(defect.to_string()));
+    }
     let message = defect.inner().to_string();
     let (kind, member) = if let Some(member) = message
         .strip_prefix("missing field `")

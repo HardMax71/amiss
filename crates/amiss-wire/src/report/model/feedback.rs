@@ -34,7 +34,6 @@ pub enum FeedbackAction {
 #[serde(deny_unknown_fields)]
 pub struct FeedbackAnnotation {
     pub path: RepoPathText,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub span: SourceSpan,
 }
 
@@ -76,10 +75,6 @@ pub struct UnavailableFeedback {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged, bound(deserialize = "P: Deserialize<'de>"))]
 pub enum Feedback<P = RepoPath> {
-    Available(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")] AvailableFeedback<P>,
-    ),
-    Unavailable(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")] UnavailableFeedback,
-    ),
+    Available(AvailableFeedback<P>),
+    Unavailable(UnavailableFeedback),
 }

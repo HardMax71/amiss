@@ -53,8 +53,6 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
         {
             return Err(ArtifactError::Corrupt);
         }
-        amiss_wire::de::JsonProfile::validate(&template_bytes)
-            .map_err(|_defect| ArtifactError::Corrupt)?;
         let template: amiss_wire::semantic::SemanticEvidenceTemplate<'static> =
             serde_json::from_slice(&template_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
         template
@@ -73,7 +71,7 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
         let document = amiss_wire::semantic::bind_template(&template, candidate)
             .map_err(|_defect| ArtifactError::Corrupt)?;
         let mut rebound = Vec::new();
-        amiss_wire::semantic::write(&document, &mut rebound)
+        serde_json_canonicalizer::to_writer(&document, &mut rebound)
             .map_err(|_defect| ArtifactError::Corrupt)?;
         if rebound != envelope_bytes {
             return Err(ArtifactError::Corrupt);

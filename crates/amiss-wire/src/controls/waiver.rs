@@ -31,7 +31,7 @@ pub enum WaiverResidualDisposition {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct WaiverItem {
     pub waiver_id: ArtifactId,
     pub finding_key: Digest,
@@ -47,23 +47,8 @@ pub struct WaiverItem {
     pub residual_disposition: WaiverResidualDisposition,
 }
 
-impl Serialize for WaiverItem {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for WaiverItem {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct WaiverBundle {
     pub schema: WaiverBundleSchema,
     pub repository: RepositoryIdentity,
@@ -74,38 +59,22 @@ pub struct WaiverBundle {
     pub items: Vec<WaiverItem>,
 }
 
-impl Serialize for WaiverBundle {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for WaiverBundle {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 /// Parses and validates one waiver bundle.
 ///
 /// # Errors
 ///
-/// Fails on strict-JSON defects, schema-shape violations, embedded key or
+/// Fails on JSON defects, schema-shape violations, embedded key or
 /// fact digests that do not recompute, fact-kind/resolution inconsistencies,
 /// causal time-order violations, duplicate waiver IDs, and duplicate
 /// `(candidate_tree, finding_key)` pairs.
 pub fn parse_waiver_bundle(bytes: &[u8]) -> Result<WaiverBundle, Error> {
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    deserializer.disable_recursion_limit();
     let bundle: WaiverBundle = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| de::deserialize_error("$", &defect))?;
     deserializer
         .end()
         .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+
     bundle.validate()?;
     Ok(bundle)
 }

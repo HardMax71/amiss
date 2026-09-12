@@ -138,7 +138,7 @@ cargo +nightly-2026-08-28 rustdoc -p example --lib -- \
 
 Do not edit the format number in an artifact.
 
-The context is strict JSON with this closed shape:
+The context uses Serde JSON with this closed shape:
 
 ```json
 {

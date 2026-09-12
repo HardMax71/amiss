@@ -20,7 +20,7 @@ pub enum EvaluationRequestSchema {
 /// identities to evaluate. The candidate commit is null exactly when the
 /// mode is `index`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct EvaluationRequest {
     pub schema: EvaluationRequestSchema,
     pub profile: Profile,
@@ -48,16 +48,16 @@ pub struct EvaluationRequest {
 impl EvaluationRequest {
     /// # Errors
     ///
-    /// Fails on strict-JSON defects, schema-shape violations, invalid
+    /// Fails on JSON defects, schema-shape violations, invalid
     /// grammar values, and a candidate commit inconsistent with the mode.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        de::JsonProfile::validate(bytes)?;
         let mut deserializer = serde_json::Deserializer::from_slice(bytes);
         let request: Self = serde_path_to_error::deserialize(&mut deserializer)
             .map_err(|defect| de::deserialize_error("$", &defect))?;
         deserializer
             .end()
             .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+
         request.validate()?;
         Ok(request)
     }
@@ -151,20 +151,5 @@ impl EvaluationRequest {
         (identity_is_complete && forge_is_coherent && owner_is_coherent)
             .then_some(())
             .ok_or_else(|| Error::new("$.forge", ErrorKind::Inconsistent))
-    }
-}
-
-impl Serialize for EvaluationRequest {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for EvaluationRequest {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
     }
 }

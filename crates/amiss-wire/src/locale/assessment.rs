@@ -84,26 +84,10 @@ pub enum LocaleLineageStatus {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct LocaleCoverageAssessmentEnvelope {
     pub schema: AssessmentEnvelopeSchema,
     pub payload: LocaleCoverageAssessment,
     pub payload_digest: Digest,
-}
-
-impl Serialize for LocaleCoverageAssessmentEnvelope {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for LocaleCoverageAssessmentEnvelope {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -116,7 +100,6 @@ pub enum AssessmentEnvelopeSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct LocaleCoverageAssessment {
     pub schema: AssessmentPayloadSchema,
     pub engine: AssessmentEngine,
@@ -125,21 +108,6 @@ pub struct LocaleCoverageAssessment {
     pub reasons: Vec<LocaleCoverageReason>,
     pub coverage: LocaleCoverageResult,
     pub product: Nullable<LocaleProductResult>,
-}
-
-impl Serialize for LocaleCoverageAssessment {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for LocaleCoverageAssessment {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -152,7 +120,6 @@ pub enum AssessmentPayloadSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct LocaleCoverageResult {
     pub complete: bool,
     pub source_missing: Vec<String>,
@@ -162,89 +129,26 @@ pub struct LocaleCoverageResult {
     pub lineage: Vec<LocaleLineageResult>,
 }
 
-impl Serialize for LocaleCoverageResult {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for LocaleCoverageResult {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct LocaleFallbackResult {
     pub key: String,
     pub class: ArtifactId,
     pub status: LocaleFallbackStatus,
 }
 
-impl Serialize for LocaleFallbackResult {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for LocaleFallbackResult {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct LocaleLineageResult {
     pub key: String,
     pub status: LocaleLineageStatus,
 }
 
-impl Serialize for LocaleLineageResult {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for LocaleLineageResult {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct LocaleProductResult {
     pub source: AssessmentVerdict,
     pub target: AssessmentVerdict,
-}
-
-impl Serialize for LocaleProductResult {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for LocaleProductResult {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 struct AssessmentOutcome {
@@ -258,13 +162,12 @@ struct AssessmentOutcome {
 ///
 /// # Errors
 ///
-/// Fails on oversized or malformed strict JSON, an unknown field, an invalid engine identity,
+/// Fails on oversized or malformed JSON, an unknown field, an invalid engine identity,
 /// unsorted or repeated rows, an inconsistent verdict, or a payload digest mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<LocaleCoverageAssessmentEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let document: LocaleCoverageAssessmentEnvelope =
         serde_path_to_error::deserialize(&mut deserializer)
@@ -272,6 +175,7 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<LocaleCoverageAssessmentEnvelope
     deserializer
         .end()
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+
     if assessment_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -391,7 +295,6 @@ pub fn assess(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(&canonical)?;
     Ok(canonical)
 }
 

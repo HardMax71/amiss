@@ -34,26 +34,11 @@ pub enum AssessDefect {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", bound(deserialize = "P: Deserialize<'de>"))]
+#[serde(bound(deserialize = "P: Deserialize<'de>"))]
 pub struct ExternalAssessmentEnvelope<P = ExternalAssessment> {
     pub schema: ExternalAssessmentEnvelopeSchema,
     pub payload: P,
     pub payload_digest: Digest,
-}
-
-impl<P: Serialize> Serialize for ExternalAssessmentEnvelope<P> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, P: Deserialize<'de>> Deserialize<'de> for ExternalAssessmentEnvelope<P> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -76,7 +61,6 @@ pub enum ExternalAssessmentEnvelopeSchema {
         .then_some(())
         .ok_or_else(|| wary::Error::new("duplicate_external_destination"))
 })]
-#[serde(remote = "Self")]
 pub struct ExternalAssessment {
     pub schema: ExternalAssessmentPayloadSchema,
     #[validate(dive)]
@@ -88,21 +72,6 @@ pub struct ExternalAssessment {
     pub verdicts: Vec<ExternalVerdictRow>,
 }
 
-impl Serialize for ExternalAssessment {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ExternalAssessment {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
 )]
@@ -112,26 +81,10 @@ pub enum ExternalAssessmentPayloadSchema {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self")]
 pub struct ExternalAssessmentSubject {
     pub report_payload_digest: Digest,
     pub plan_payload_digest: Digest,
     pub evidence_digest: Digest,
-}
-
-impl Serialize for ExternalAssessmentSubject {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ExternalAssessmentSubject {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, wary::Wary)]
@@ -144,7 +97,6 @@ impl<'de> Deserialize<'de> for ExternalAssessmentSubject {
         .then_some(())
         .ok_or_else(|| wary::Error::new("invalid_external_verdict"))
 })]
-#[serde(remote = "Self")]
 pub struct ExternalVerdictRow {
     #[validate(length(chars, 1..=16_384))]
     pub destination: String,
@@ -164,21 +116,6 @@ pub struct ExternalVerdictRow {
     )]
     #[validate(length(chars, 1..=16_384))]
     pub retarget: Option<String>,
-}
-
-impl Serialize for ExternalVerdictRow {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ExternalVerdictRow {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -237,11 +174,11 @@ pub enum AssessmentDefect {
     Contract(wary::Report),
 }
 
-/// Parses one strict, digest-bound external assessment. Additive fields are inert.
+/// Parses one digest-bound external assessment. Additive fields are inert.
 ///
 /// # Errors
 ///
-/// Fails on an oversized or malformed strict document, a malformed known
+/// Fails on an oversized or malformed JSON document, a malformed known
 /// field, a schema law reported by the derived validator, or a digest mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, AssessmentDefect> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
@@ -250,21 +187,19 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
             ErrorKind::LimitExceeded,
         )));
     }
-    de::JsonProfile::validate(bytes).map_err(AssessmentDefect::Wire)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    deserializer.disable_recursion_limit();
     let envelope: ExternalAssessmentEnvelope<&serde_json::value::RawValue> =
         serde_path_to_error::deserialize(&mut deserializer)
             .map_err(|defect| AssessmentDefect::Wire(de::deserialize_error("$", &defect)))?;
     deserializer
         .end()
         .map_err(|_defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
+
     let payload_digest = {
         let mut writer = digest_io::IoWrapper(
             sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA).chain_update([0_u8]),
         );
         let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
-        payload.disable_recursion_limit();
         serde_json_canonicalizer::to_writer(
             &serde_transcode::Transcoder::new(&mut payload),
             &mut writer,
@@ -273,7 +208,6 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
     }
     .map_err(|_defect| AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::InvalidValue)))?;
     let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
-    payload.disable_recursion_limit();
     let document: ExternalAssessmentEnvelope = ExternalAssessmentEnvelope {
         schema: envelope.schema,
         payload: serde_path_to_error::deserialize(&mut payload).map_err(|defect| {
@@ -343,7 +277,6 @@ pub fn assess(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
         return Err(AssessmentDefect::Wire(Error::new("$", ErrorKind::LimitExceeded)).into());
     }
-    de::JsonProfile::validate(&canonical).map_err(AssessmentDefect::Wire)?;
     Ok(canonical)
 }
 

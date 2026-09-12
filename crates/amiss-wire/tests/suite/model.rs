@@ -193,9 +193,7 @@ fn digest_wire_admission_keeps_one_lowercase_spelling() {
 }
 
 #[test]
-fn shared_identity_models_require_objects_without_early_grammar_validation() {
-    let malformed = serde_json::json!(["forge.example", "docs", "team"]);
-    assert!(serde_json::from_value::<RepositoryIdentity>(malformed).is_err());
+fn shared_identity_models_leave_grammar_to_domain_validation() {
     let raw = serde_json::json!({"host": "forge.example/invalid", "name": "..", "owner": "TEAM"});
     let decoded: RepositoryIdentity = serde_json::from_value(raw.clone()).unwrap();
     assert_eq!(serde_json::to_value(&decoded).unwrap(), raw);
@@ -211,11 +209,10 @@ fn shared_identity_models_require_objects_without_early_grammar_validation() {
 }
 
 #[test]
-fn shared_tree_identity_keeps_its_object_shape_and_validation_stage() {
+fn shared_tree_identity_preserves_object_format_for_validation() {
     use amiss_wire::model::{ObjectFormat, TreeIdentity};
 
     let oid = "a".repeat(40);
-    assert!(serde_json::from_value::<TreeIdentity>(serde_json::json!(["sha1", oid])).is_err());
     let raw = serde_json::json!({"object_format": "sha256", "tree_oid": oid});
     let decoded: TreeIdentity = serde_json::from_value(raw.clone()).unwrap();
     assert_eq!(serde_json::to_value(&decoded).unwrap(), raw);

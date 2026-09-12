@@ -17,7 +17,6 @@ use super::{EVIDENCE_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
         .then_some(())
         .ok_or_else(|| wary::Error::new("duplicate_evidence_row"))
 })]
-#[serde(remote = "Self")]
 pub struct ExternalEvidence {
     pub schema: ExternalEvidenceSchema,
     pub plan_payload_digest: Digest,
@@ -25,21 +24,6 @@ pub struct ExternalEvidence {
     pub producer: ExternalEvidenceProducer,
     #[validate(inner(dive))]
     pub rows: Vec<ExternalEvidenceRow>,
-}
-
-impl Serialize for ExternalEvidence {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ExternalEvidence {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -51,27 +35,11 @@ pub enum ExternalEvidenceSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, wary::Wary)]
-#[serde(remote = "Self")]
 pub struct ExternalEvidenceProducer {
     #[validate(length(chars, 1..))]
     pub name: String,
     #[validate(length(chars, 1..))]
     pub version: String,
-}
-
-impl Serialize for ExternalEvidenceProducer {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ExternalEvidenceProducer {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, wary::Wary)]
@@ -96,7 +64,6 @@ impl<'de> Deserialize<'de> for ExternalEvidenceProducer {
             .ok_or_else(|| wary::Error::new("invalid_forge_evidence_shape")),
     }
 })]
-#[serde(remote = "Self")]
 pub enum ExternalEvidenceRow {
     #[serde(rename = "http-probe")]
     HttpProbe {
@@ -146,21 +113,6 @@ pub enum ExternalEvidenceRow {
         #[validate(length(chars, 1..))]
         checked_at: String,
     },
-}
-
-impl Serialize for ExternalEvidenceRow {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ExternalEvidenceRow {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -257,7 +209,7 @@ pub enum EvidenceDefect {
 ///
 /// # Errors
 ///
-/// Fails on an oversized or malformed strict document, a malformed known
+/// Fails on an oversized or malformed JSON document, a malformed known
 /// field, or a schema law reported by the derived validator.
 pub fn parse_evidence(bytes: &[u8]) -> Result<(ExternalEvidence, Digest), EvidenceDefect> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
@@ -266,13 +218,11 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<(ExternalEvidence, Digest), Eviden
             ErrorKind::LimitExceeded,
         )));
     }
-    de::JsonProfile::validate(bytes).map_err(EvidenceDefect::Wire)?;
     let digest = {
         let mut writer = digest_io::IoWrapper(
             sha2::Sha256::new_with_prefix(EVIDENCE_SCHEMA).chain_update([0_u8]),
         );
         let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-        deserializer.disable_recursion_limit();
         serde_json_canonicalizer::to_writer(
             &serde_transcode::Transcoder::new(&mut deserializer),
             &mut writer,
@@ -281,12 +231,12 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<(ExternalEvidence, Digest), Eviden
     }
     .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    deserializer.disable_recursion_limit();
     let document: ExternalEvidence = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| EvidenceDefect::Wire(de::deserialize_error("$", &defect)))?;
     deserializer
         .end()
         .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
+
     document
         .validate(&())
         .map_err(EvidenceDefect::Contract)
@@ -309,6 +259,5 @@ pub fn evidence(input: &ExternalEvidence) -> Result<Vec<u8>, EvidenceDefect> {
             ErrorKind::LimitExceeded,
         )));
     }
-    de::JsonProfile::validate(&canonical).map_err(EvidenceDefect::Wire)?;
     Ok(canonical)
 }

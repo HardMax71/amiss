@@ -32,7 +32,7 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
     let envelope = amiss_wire::semantic::bind_template(&template, candidate)
         .map_err(|_defect| ArtifactError::Corrupt)?;
     let mut envelope_bytes = Vec::new();
-    amiss_wire::semantic::write(&envelope, &mut envelope_bytes)
+    serde_json_canonicalizer::to_writer(&envelope, &mut envelope_bytes)
         .map_err(|_defect| ArtifactError::Corrupt)?;
     let payload_digest = envelope.payload_digest;
     let artifact = serde_json::to_vec(&InputArtifact {

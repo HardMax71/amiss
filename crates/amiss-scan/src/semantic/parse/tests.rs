@@ -27,6 +27,11 @@ fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size(
             .0,
     );
     let limit = usize::try_from(semantic::SEMANTIC_EVIDENCE_BYTES).unwrap();
+    let envelope_overhead =
+        serde_json_canonicalizer::to_vec(&semantic::bind_template(&template, candidate).unwrap())
+            .unwrap()
+            .len()
+            - serde_json_canonicalizer::to_vec(&template).unwrap().len();
     let Observation::Record(observation) =
         std::sync::Arc::make_mut(&mut template.observations)[0].to_mut()
     else {
@@ -38,9 +43,8 @@ fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size(
             value: "x".repeat(semantic::RECORD_VALUE_BYTES),
         })
         .collect();
-    let document = semantic::bind_template(&template, candidate).unwrap();
-    let encoded_length = serde_json_canonicalizer::to_vec(&document).unwrap().len();
-    drop(document);
+    let encoded_length =
+        serde_json_canonicalizer::to_vec(&template).unwrap().len() + envelope_overhead;
     let Observation::Record(observation) =
         std::sync::Arc::make_mut(&mut template.observations)[0].to_mut()
     else {
@@ -55,12 +59,17 @@ fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size(
 
     for length in [limit - 1, limit, limit + 1] {
         assert!(semantic::template(template.clone()).unwrap().len() < limit);
-        let document = semantic::bind_template(&template, candidate).unwrap();
-        assert_eq!(
-            serde_json_canonicalizer::to_vec(&document).unwrap().len(),
-            length
-        );
-        drop(document);
+        let document = semantic::bind_template(&template, candidate);
+        if length <= limit {
+            assert_eq!(
+                serde_json_canonicalizer::to_vec(&document.unwrap())
+                    .unwrap()
+                    .len(),
+                length
+            );
+        } else {
+            assert_eq!(document.unwrap_err().kind, ErrorKind::LimitExceeded);
+        }
         let result = crate::semantic::bind(
             &crate::semantic::Input::Template(template.clone()),
             candidate,

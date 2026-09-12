@@ -100,12 +100,10 @@ pub struct ObservationIdInput<P = RepoPath> {
     pub adapter_contract_digest: Digest,
     pub adapter_id: Adapter,
     pub document: P,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub extracted_intent: TargetIntent<P>,
     pub schema: ObservationIdInputSchema,
     pub source_construct: SourceConstruct,
     pub source_projection_digest: Digest,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub structural_address: StructuralAddress,
 }
 
@@ -167,15 +165,12 @@ pub struct Occurrence<P = RepoPath, R = Resolution<P>> {
         skip_serializing_if = "Option::is_none"
     )]
     pub external_destination: Option<String>,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub intent: TargetIntent<P>,
     pub observation_id: Digest,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub observation_id_input: ObservationIdInput<P>,
     pub resolution: R,
     pub source_construct: SourceConstruct,
     pub source_projection_digest: Digest,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub source_span: SourceSpan,
 }
 
@@ -302,7 +297,6 @@ pub enum Impact {
     bound(deserialize = "P: Deserialize<'de>, R: Deserialize<'de>")
 )]
 pub struct ObservationComparison<P = RepoPath, R = Resolution<P>> {
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub alternatives: CorrelationAlternatives<P, R>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub base: Option<Occurrence<P, R>>,

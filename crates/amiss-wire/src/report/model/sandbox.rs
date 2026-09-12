@@ -99,16 +99,13 @@ pub struct SandboxDescriptor {
     pub environment: ScannerProcessEnvironment,
     pub isolation: SandboxIsolation,
     pub network: Denied,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub physical_memory: MemoryLimit,
     pub profile: SandboxProfile,
     pub repository_processes: Denied,
     pub schema: SandboxDescriptorSchema,
     pub secrets: Absent,
     pub shared_cache: Denied,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub temporary_storage: TemporaryStorage,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub watchdog: Watchdog,
     pub workspace: ReadOnly,
 }
@@ -193,7 +190,6 @@ pub struct SandboxVerification {
 #[serde(deny_unknown_fields)]
 pub struct SandboxProvenance {
     pub assurance: SandboxAssurance,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub descriptor: SandboxDescriptor,
     pub descriptor_digest: Digest,
     pub enforcement_source: SandboxEnforcementSource,

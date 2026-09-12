@@ -1,4 +1,3 @@
-use serde::Deserialize;
 use sha2::Digest as _;
 
 use crate::ExitClass;
@@ -11,19 +10,14 @@ use super::{ENVELOPE_SCHEMA, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect};
 ///
 /// # Errors
 ///
-/// Refuses oversized or non-strict JSON, invalid report shapes or identities, and
+/// Refuses oversized or malformed JSON, invalid report shapes or identities, and
 /// typed normalization before checking the payload digest and result tuple.
 pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitClass), ReportDefect> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES
-        || crate::de::JsonProfile::validate(bytes).is_err()
-    {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > MACHINE_JSON_BYTES {
         return Err(ReportDefect::NotAReport);
     }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    // The strict gate has already enforced the document depth ceiling.
-    deserializer.disable_recursion_limit();
-    let envelope: ReportEnvelope = <ReportEnvelope as Deserialize>::deserialize(&mut deserializer)
-        .map_err(|_defect| ReportDefect::NotAReport)?;
+    let envelope: ReportEnvelope =
+        serde_json::from_slice(bytes).map_err(|_defect| ReportDefect::NotAReport)?;
     let typed_digest = {
         let mut writer = digest_io::IoWrapper(
             sha2::Sha256::new_with_prefix(ENVELOPE_SCHEMA).chain_update([0_u8]),
@@ -33,7 +27,6 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitCla
     }
     .map_err(|_defect| ReportDefect::NotAReport)?;
     let mut input = serde_json::Deserializer::from_slice(bytes);
-    input.disable_recursion_limit();
     let input_digest = {
         let mut writer = digest_io::IoWrapper(
             sha2::Sha256::new_with_prefix(ENVELOPE_SCHEMA).chain_update([0_u8]),

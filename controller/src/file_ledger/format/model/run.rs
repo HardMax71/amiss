@@ -93,7 +93,6 @@ impl StoredRun {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StoredRefs {
-    #[serde(with = "StoredForge")]
     forge: ForgeDialect,
     candidate: String,
     target: String,
@@ -164,18 +163,6 @@ impl StoredObjectFormat {
             Self::Sha256 => ObjectFormat::Sha256,
         }
     }
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(remote = "ForgeDialect", rename_all = "lowercase")]
-enum StoredForge {
-    Github,
-    Gitlab,
-    Gitea,
-    #[serde(rename = "bitbucket-cloud")]
-    BitbucketCloud,
-    #[serde(rename = "bitbucket-data-center")]
-    BitbucketDataCenter,
 }
 
 fn branch(raw: &str) -> MaterializeResult<BranchRef> {

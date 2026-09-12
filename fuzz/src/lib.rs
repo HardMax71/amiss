@@ -1,9 +1,10 @@
 use amiss_scan::{ScanLimits, ScanResources};
 use amiss_wire::model::{Adapter, ObjectFormat};
 
-/// Exercise the wire profile on arbitrary input without constructing a JSON tree.
+/// Exercise report and semantic artifact admission on arbitrary input.
 pub fn json(bytes: &[u8]) {
-    let _ = amiss_wire::de::JsonProfile::validate(bytes);
+    let _ = amiss_wire::report::validate_envelope(bytes);
+    let _ = amiss_wire::semantic::parse(bytes);
 }
 
 /// Exercise each control's JSON admission and typed contract validation once.

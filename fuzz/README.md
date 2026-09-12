@@ -1,7 +1,6 @@
 # Fuzzing the dependency boundary
 
-Every parser that consumes untrusted bytes has a harness here: strict JSON
-with canonicalization round-trips, the six control parsers, the three
+Every parser that consumes untrusted bytes has a harness here: report and semantic JSON admission, the six control parsers, the three
 request parsers, both document adapters under the contract ceilings, the
 index-file grammar, the commit and tree grammars, and the human atom
 renderer. The bodies live in `src/lib.rs` with their invariants asserted;

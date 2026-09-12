@@ -63,19 +63,15 @@ pub struct UnavailableSnapshot {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BaseSnapshot {
-    Git(#[serde(deserialize_with = "crate::requests::object::deserialize")] GitSnapshot),
-    Unavailable(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")] UnavailableSnapshot,
-    ),
+    Git(GitSnapshot),
+    Unavailable(UnavailableSnapshot),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Snapshot {
     Available(CandidateSnapshot),
-    Unavailable(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")] UnavailableSnapshot,
-    ),
+    Unavailable(UnavailableSnapshot),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -144,10 +140,6 @@ pub struct UnavailableEvaluation {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Evaluation {
-    Resolved(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")] Box<ResolvedEvaluation>,
-    ),
-    Unavailable(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")] UnavailableEvaluation,
-    ),
+    Resolved(Box<ResolvedEvaluation>),
+    Unavailable(UnavailableEvaluation),
 }

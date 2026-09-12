@@ -58,9 +58,7 @@ pub enum FindingKeyScope<P = RepoPath> {
     },
     Reference {
         document: P,
-        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         normalized_target_intent: RepositoryTargetIntent<P>,
-        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         occurrence: ReferenceOccurrence,
         source_construct: SourceConstruct,
     },
@@ -208,7 +206,6 @@ pub enum ProjectionDifference<R = RowsProjectionDifference> {
 pub enum ExceptionDiagnostic {
     Debt {
         accepted_fact_digest: Digest,
-        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         adoption_tree: TreeIdentity,
         created_at: UtcInstant,
         current_fact_digest: Digest,
@@ -220,7 +217,6 @@ pub enum ExceptionDiagnostic {
     },
     Waiver {
         authorized_fact_digest: Digest,
-        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         candidate_tree: TreeIdentity,
         created_at: UtcInstant,
         #[serde(deserialize_with = "Option::deserialize")]
@@ -288,7 +284,6 @@ pub enum FindingFactEvidence<
         rule_id: String,
     },
     Document {
-        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         document_result: DocumentResult<P, DocumentSide<M>>,
     },
     DuplicateRoute {
@@ -297,7 +292,6 @@ pub enum FindingFactEvidence<
         sources: Vec<P>,
     },
     Observation {
-        #[serde(deserialize_with = "crate::requests::object::deserialize")]
         comparison: Box<ObservationComparison<P, R>>,
     },
     Projection {
@@ -474,7 +468,6 @@ pub struct FindingFix {
     pub description: String,
     pub path: RepoPathText,
     pub replacement: String,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub span: ByteSpan,
 }
 
@@ -515,7 +508,6 @@ pub struct PolicyStep {
 #[serde(deny_unknown_fields)]
 pub struct DebtApplication {
     pub accepted_fact_digest: Digest,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub adoption_tree: TreeIdentity,
     pub created_at: UtcInstant,
     pub debt_id: ArtifactId,
@@ -529,7 +521,6 @@ pub struct DebtApplication {
 #[serde(deny_unknown_fields)]
 pub struct WaiverApplication {
     pub authorized_fact_digest: Digest,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub candidate_tree: TreeIdentity,
     pub created_at: UtcInstant,
     pub expires_at: UtcInstant,
@@ -548,7 +539,6 @@ pub struct WaiverApplication {
     bound(deserialize = "P: Deserialize<'de>, E: Deserialize<'de>")
 )]
 pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub aggregation: FindingAggregation,
     pub attribution: Attribution,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -570,10 +560,8 @@ pub struct Finding<P = RepoPath, E = FindingFactEvidence<P>> {
     #[serde(deserialize_with = "Option::deserialize")]
     pub fix: Option<FindingFix>,
     pub invariant_class: InvariantClass,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub key_input: FindingKeyInput<P>,
     pub kind: FindingKind,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub location: FindingLocation<P>,
     pub observation_ids: Vec<Digest>,
     pub policy_trace: Vec<PolicyStep>,

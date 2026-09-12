@@ -31,9 +31,23 @@ digraph amiss {
 The graph above is the root workspace. `amiss-wire` owns the shared report, control, request,
 and evidence models and their validation rules. Serde reads and writes those types directly;
 `serde_json_canonicalizer` supplies RFC 8785 output, and RustCrypto supplies hashing and HMAC.
-The wire profile uses a Serde visitor to reject duplicate keys, numbers outside the safe integer
-range, and more than 512 nested containers. It builds no separate JSON tree and does not parse
-JSON syntax or implement cryptographic algorithms.
+Models derive their Serde implementations and use library attributes and adapters. Handwritten
+Serde implementations, visitors, field codecs, and forwarding serialization helpers are forbidden.
+Domain validation checks identities, digest bindings, sorted sets, and resource limits after
+decoding; it does not implement JSON syntax.
+
+Readers now accept standard Serde JSON behavior. Named structs can also deserialize from
+positional arrays in declaration order. Known duplicate struct fields are rejected; ignored
+fields and maps follow Serde's normal behavior, including last-value-wins map entries. Numbers
+are governed by the destination Rust type rather than a document-wide safe-integer rule.
+Typed integer fields still reject fractional values, and domain-specific numeric limits remain.
+The default `serde_json` recursion checks replace the former 512-container profile. Complete
+input readers still reject trailing data.
+
+This broadens accepted input without changing emitted object shapes or canonical examples.
+The published JSON Schemas describe the object representation. Canonical-byte comparisons and
+digest checks can still reject alternate representations at authenticated report and request
+boundaries; accepting a value through Serde does not establish its domain validity.
 
 `amiss-git` reads Git storage behind the never-follow-links boundary: loose objects, packs,
 deltas, and the index, each under a parser that rejects malformed input and a published

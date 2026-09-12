@@ -20,7 +20,7 @@ json-serde.workspace = true
 js_int.workspace = true
 serde.workspace = true
 serde-transcode.workspace = true
-serde_json = { workspace = true, features = ["unbounded_depth", "raw_value"] }
+serde_json = { workspace = true, features = ["raw_value"] }
 serde_json_canonicalizer.workspace = true
 serde_path_to_error.workspace = true
 serde_with = { workspace = true, features = ["std"] }

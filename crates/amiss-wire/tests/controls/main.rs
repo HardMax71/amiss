@@ -2,7 +2,6 @@ mod constraint;
 mod debt;
 mod facts;
 mod floors;
-mod objects;
 mod policy;
 mod support;
 mod time;

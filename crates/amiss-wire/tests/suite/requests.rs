@@ -135,7 +135,6 @@ fn control_readers_reject_unknown_payloads_within_the_json_depth_limit() {
             1,
         );
         assert_ne!(invalid, example);
-        amiss_wire::de::JsonProfile::validate(invalid.as_bytes()).unwrap();
         assert!(serde_json::from_str::<ControlsRequest>(&invalid).is_err());
         assert_eq!(
             ControlsRequest::parse(invalid.as_bytes()).unwrap_err().kind,
@@ -699,72 +698,4 @@ fn supplied_fact_multiplicity_keeps_numeric_and_semantic_validation_separate() {
             "multiplicity semantics remain a fact constraint"
         );
     }
-}
-
-#[test]
-fn request_models_refuse_positional_root_and_supplied_objects() {
-    let snapshot = serde_json::json!(["amiss/scanner-snapshot-request", "git-objects", 3, true]);
-    assert!(serde_json::from_value::<SnapshotRequest>(snapshot).is_err());
-    let controls: serde_json::Value =
-        serde_json::from_slice(&request_example("scanner-controls-request.json")).unwrap();
-    let root = serde_json::json!([
-        controls["schema"],
-        controls["organization_floor"],
-        controls["debt_snapshot"],
-        controls["waiver_bundle"],
-        controls["trusted_time"],
-        controls["execution_constraint"],
-        controls["semantic_evidence"]
-    ]);
-    assert!(ControlsRequest::parse(&serde_json::to_vec(&root).unwrap()).is_err());
-    for (field, fields) in [
-        (
-            "organization_floor",
-            &["value", "expected_digest", "trust_source"][..],
-        ),
-        (
-            "trusted_time",
-            &[
-                "value",
-                "expected_digest",
-                "provider",
-                "provider_run_id",
-                "provider_run_attempt",
-            ][..],
-        ),
-    ] {
-        let mut malformed = controls.clone();
-        malformed[field] = fields
-            .iter()
-            .map(|key| controls[field][key].clone())
-            .collect();
-        assert!(
-            ControlsRequest::parse(&serde_json::to_vec(&malformed).unwrap()).is_err(),
-            "{field}"
-        );
-        assert!(
-            serde_json::from_value::<ControlsRequest>(malformed).is_err(),
-            "{field}"
-        );
-    }
-    let evaluation: serde_json::Value =
-        serde_json::from_slice(&request_example("scanner-evaluation-request.json")).unwrap();
-    let root: serde_json::Value = [
-        "schema",
-        "profile",
-        "mode",
-        "object_format",
-        "repository",
-        "forge",
-        "candidate_ref",
-        "target_ref",
-        "default_branch_ref",
-        "base_commit_oid",
-        "candidate_commit_oid",
-    ]
-    .iter()
-    .map(|key| evaluation[key].clone())
-    .collect();
-    assert!(EvaluationRequest::parse(&serde_json::to_vec(&root).unwrap()).is_err());
-    assert!(serde_json::from_value::<EvaluationRequest>(root).is_err());
 }

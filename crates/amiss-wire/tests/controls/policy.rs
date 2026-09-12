@@ -243,7 +243,7 @@ fn projection_assertions_refuse_unknown_or_unsafe_words() {
         parse_scanner_policy(unsafe_integer.as_bytes())
             .unwrap_err()
             .kind,
-        ErrorKind::Json(_)
+        ErrorKind::InvalidValue
     ));
 
     let named = |start: &str, end: &str| {

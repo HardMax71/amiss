@@ -38,8 +38,6 @@ pub(super) fn capture_requests(
     let streams = request_streams(args)?;
     let evaluation = EvaluationRequest::parse(&streams.evaluation)
         .map_err(|_defect| tampered("evaluation-request-invalid"))?;
-    amiss_wire::de::JsonProfile::validate(&streams.snapshot)
-        .map_err(|_defect| tampered("snapshot-request-invalid"))?;
     let snapshot: SnapshotRequest = serde_json::from_slice(&streams.snapshot)
         .map_err(|_defect| tampered("snapshot-request-invalid"))?;
     snapshot

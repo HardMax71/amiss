@@ -98,14 +98,13 @@ pub struct IndexSnapshotIdentity {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum CandidateSnapshot {
-    Git(#[serde(deserialize_with = "super::object::deserialize")] GitSnapshotIdentity),
-    Index(#[serde(deserialize_with = "super::object::deserialize")] IndexSnapshotIdentity),
+    Git(GitSnapshotIdentity),
+    Index(IndexSnapshotIdentity),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CandidateIdentity {
-    #[serde(deserialize_with = "super::object::deserialize")]
     pub base: GitSnapshotIdentity,
     pub candidate: CandidateSnapshot,
     pub candidate_ref: Nullable<BranchRef>,

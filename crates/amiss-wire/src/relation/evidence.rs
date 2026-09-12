@@ -14,75 +14,27 @@ pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/relation-evidence-payload";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self", bound(deserialize = "T: Deserialize<'de>"))]
+#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct RelationEvidenceEnvelope<T = RelationEvidence> {
     pub schema: EvidenceEnvelopeSchema,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: T,
     pub payload_digest: Digest,
 }
 
-impl<T: Serialize> Serialize for RelationEvidenceEnvelope<T> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for RelationEvidenceEnvelope<T> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct RelationEvidence {
     pub schema: EvidencePayloadSchema,
     pub plan_payload_digest: Digest,
     pub subjects: [RelationEvidenceSubject; 2],
 }
 
-impl Serialize for RelationEvidence {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for RelationEvidence {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct RelationEvidenceSubject {
     pub role: ArtifactId,
     pub base: RelationProjectionSlot,
     pub candidate: RelationProjectionSlot,
-}
-
-impl Serialize for RelationEvidenceSubject {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for RelationEvidenceSubject {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -94,25 +46,9 @@ pub enum RelationProjectionSlot {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct RelationProjectedValue {
     pub value_digest: Digest,
     pub value_bytes: u64,
-}
-
-impl Serialize for RelationProjectedValue {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for RelationProjectedValue {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -135,20 +71,20 @@ pub enum EvidencePayloadSchema {
 ///
 /// # Errors
 ///
-/// Fails on oversized or malformed strict JSON, an unknown field, an invalid
+/// Fails on oversized or malformed JSON, an unknown field, an invalid
 /// identity or digest, reordered or repeated subject roles, an unsafe byte
 /// count, or a payload digest mismatch.
 pub fn parse_evidence(bytes: &[u8]) -> Result<RelationEvidenceEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let document: RelationEvidenceEnvelope = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| de::deserialize_error("$", &defect))?;
     deserializer
         .end()
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+
     if evidence_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -174,7 +110,6 @@ pub fn evidence(input: &RelationEvidence) -> Result<Vec<u8>, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(&canonical)?;
     Ok(canonical)
 }
 

@@ -60,7 +60,7 @@ pub enum FactEvidenceKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct TargetIntent<P = RepoPathText> {
     #[serde(
         default,
@@ -77,45 +77,15 @@ pub struct TargetIntent<P = RepoPathText> {
     pub target_kind: TargetKind,
 }
 
-impl<P: Serialize> Serialize for TargetIntent<P> {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, P: Deserialize<'de>> Deserialize<'de> for TargetIntent<P> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct FindingOccurrence {
     pub kind: OccurrenceKind,
     pub source_projection_digest: Digest,
 }
 
-impl Serialize for FindingOccurrence {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for FindingOccurrence {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct FindingScope {
     pub document: RepoPathText,
     pub kind: ReferenceScopeKind,
@@ -124,52 +94,19 @@ pub struct FindingScope {
     pub source_construct: SourceConstruct,
 }
 
-impl Serialize for FindingScope {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for FindingScope {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
-    remote = "Self",
     deny_unknown_fields,
     bound(deserialize = "F: Deserialize<'de>, S: Deserialize<'de>")
 )]
 pub struct FindingKeyInput<F = EligibleFindingKind, S = FindingScope> {
     pub finding_kind: F,
     pub schema: FindingKeyInputSchema,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub scope: S,
-}
-
-impl<F: Serialize, S: Serialize> Serialize for FindingKeyInput<F, S> {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, F: Deserialize<'de>, S: Deserialize<'de>> Deserialize<'de> for FindingKeyInput<F, S> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
-    remote = "Self",
     tag = "reason",
     rename_all = "kebab-case",
     deny_unknown_fields,
@@ -198,117 +135,47 @@ pub enum MissingResolution<P = RepoPathText> {
     },
 }
 
-impl<P: Serialize> Serialize for MissingResolution<P> {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, P: Deserialize<'de>> Deserialize<'de> for MissingResolution<P> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    remote = "Self",
-    tag = "kind",
-    rename_all = "kebab-case",
-    deny_unknown_fields
-)]
+#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 pub enum StructuralResolution {
     Missing(MissingResolution),
     TypeMismatch { target: Target<RepoPathText> },
 }
 
-impl Serialize for StructuralResolution {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for StructuralResolution {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct FactEvidence {
     pub kind: FactEvidenceKind,
     pub resolution: StructuralResolution,
     pub occurrence_multiplicity: u64,
 }
 
-impl Serialize for FactEvidence {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for FactEvidence {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(
-    remote = "Self",
     deny_unknown_fields,
     bound(deserialize = "K: Deserialize<'de>, E: Deserialize<'de>, F: Deserialize<'de>")
 )]
 pub struct Fact<K = FindingKeyInput, E = FactEvidence, F = EligibleFindingKind> {
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub evidence: E,
     pub finding_kind: F,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub key_input: K,
     pub schema: FactSchema,
-}
-
-impl<K: Serialize, E: Serialize, F: Serialize> Serialize for Fact<K, E, F> {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, K: Deserialize<'de>, E: Deserialize<'de>, F: Deserialize<'de>> Deserialize<'de>
-    for Fact<K, E, F>
-{
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 /// Parses and validates one structural finding fact.
 ///
 /// # Errors
 ///
-/// Fails on strict-JSON defects, schema-shape violations, or inconsistent
+/// Fails on JSON defects, schema-shape violations, or inconsistent
 /// finding, key, resolution, and multiplicity values.
 pub fn parse_fact(bytes: &[u8]) -> Result<Fact, Error> {
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let fact: Fact = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| de::deserialize_error("$", &defect))?;
     deserializer
         .end()
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+
     fact.validate()?;
     Ok(fact)
 }

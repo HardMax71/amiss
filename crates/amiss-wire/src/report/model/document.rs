@@ -16,7 +16,7 @@ pub struct RepoPathBytes {
 #[serde(untagged)]
 pub enum RepoPath {
     Text(RepoPathText),
-    Bytes(#[serde(deserialize_with = "crate::requests::object::deserialize")] RepoPathBytes),
+    Bytes(RepoPathBytes),
 }
 
 #[derive(

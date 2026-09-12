@@ -343,7 +343,7 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
 }
 
 #[test]
-fn projection_slots_require_objects_even_when_the_received_digest_matches() {
+fn projection_slots_must_match_the_canonical_typed_payload_digest() {
     let mut document = serde_json::to_value(
         parse_evidence(&evidence(&relation_contract().evidence).unwrap()).unwrap(),
     )
@@ -360,8 +360,8 @@ fn projection_slots_require_objects_even_when_the_received_digest_matches() {
             .0
     ));
     let error = parse_evidence(&serde_json::to_vec(&document).unwrap()).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::InvalidValue);
-    assert_eq!(error.path, "$.payload.subjects[0].base");
+    assert_eq!(error.kind, ErrorKind::DigestMismatch);
+    assert_eq!(error.path, "$.payload_digest");
 }
 
 #[test]

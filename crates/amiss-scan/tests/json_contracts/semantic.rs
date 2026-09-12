@@ -73,7 +73,7 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
     };
     let envelope = bind_template(&template, identity).unwrap();
     let mut bytes = Vec::new();
-    semantic::write(&envelope, &mut bytes).unwrap();
+    serde_json_canonicalizer::to_writer(&envelope, &mut bytes).unwrap();
     let request = ControlsRequest {
         semantic_evidence: vec![SuppliedSemanticEvidence {
             value: serde_json::from_slice(&bytes).unwrap(),

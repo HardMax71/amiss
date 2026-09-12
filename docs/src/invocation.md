@@ -277,7 +277,7 @@ it verifies the report's own payload digest, refuses an incomplete report, and p
 the delegated-evidence delta the report already carries. `--format` takes `human` or `json` here;
 SARIF, Code Quality, and JUnit remain report projections and are refused here. Exit 0 wrote the plan. Exit 2 means the input
 could not be trusted: unreadable, larger than a scanner report can be, not the scanner's
-strict JSON, not a report envelope, digest mismatch, incomplete, or carrying a malformed
+valid JSON, not a report envelope, digest mismatch, incomplete, or carrying a malformed
 eligible occurrence.
 
 `amiss external-assess` judges [an external plan](external-plan.md) against one

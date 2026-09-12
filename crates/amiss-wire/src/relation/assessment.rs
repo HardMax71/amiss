@@ -57,53 +57,21 @@ pub enum RelationReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self", bound(deserialize = "T: Deserialize<'de>"))]
+#[serde(bound(deserialize = "T: Deserialize<'de>"))]
 pub struct RelationAssessmentEnvelope<T = RelationAssessment> {
     pub schema: AssessmentEnvelopeSchema,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: T,
     pub payload_digest: Digest,
 }
 
-impl<T: Serialize> Serialize for RelationAssessmentEnvelope<T> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for RelationAssessmentEnvelope<T> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct RelationAssessment {
     pub schema: AssessmentPayloadSchema,
     pub engine: AssessmentEngine,
     pub subject: AssessmentSubject,
     pub verdict: RelationVerdict,
     pub reason: Nullable<RelationReason>,
-}
-
-impl Serialize for RelationAssessment {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for RelationAssessment {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -126,20 +94,20 @@ pub enum AssessmentPayloadSchema {
 ///
 /// # Errors
 ///
-/// Fails on oversized or malformed strict JSON, an unknown field, an invalid
+/// Fails on oversized or malformed JSON, an unknown field, an invalid
 /// engine identity, an inconsistent verdict/reason pair, or a payload digest
 /// mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<RelationAssessmentEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let document: RelationAssessmentEnvelope = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| de::deserialize_error("$", &defect))?;
     deserializer
         .end()
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+
     validate_assessment(&document.payload)?;
     let canonical = serde_json_canonicalizer::to_vec(&document.payload)
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
@@ -179,7 +147,6 @@ pub fn assess(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(&canonical)?;
     Ok(canonical)
 }
 

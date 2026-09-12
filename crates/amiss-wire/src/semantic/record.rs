@@ -38,25 +38,10 @@ pub enum InputSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct Record {
     pub key: String,
     pub value: String,
-}
-
-impl Serialize for Record {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for Record {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -79,20 +64,17 @@ pub enum ObservationKind {
 ///
 /// # Errors
 ///
-/// Fails on oversized or malformed strict JSON, unknown fields, invalid identities or digests,
+/// Fails on oversized or malformed JSON, unknown fields, invalid identities or digests,
 /// and records that are not bounded, control-free, sorted, and unique by key.
 pub fn parse_input(bytes: &[u8]) -> Result<Input, Error> {
     super::validate_document_size(bytes.len())?;
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let input: Input = serde_path_to_error::deserialize(serde_with::with_prefix::WithPrefix {
-        delegate: &mut deserializer,
-        prefix: "",
-    })
-    .map_err(|defect| de::deserialize_error("$", &defect))?;
+    let input: Input = serde_path_to_error::deserialize(&mut deserializer)
+        .map_err(|defect| de::deserialize_error("$", &defect))?;
     deserializer
         .end()
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+
     validate_records("$.records", &input.records)?;
     Ok(input)
 }

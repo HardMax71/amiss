@@ -60,12 +60,9 @@ pub struct FindingCounts {
 #[serde(deny_unknown_fields)]
 pub struct Summary {
     pub counts_complete: bool,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub documents: DocumentCounts,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub findings: FindingCounts,
     pub governed_claims: u64,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub references: ReferenceCounts,
     pub unattested_claims: u64,
 }
