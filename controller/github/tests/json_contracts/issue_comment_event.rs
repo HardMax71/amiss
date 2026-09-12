@@ -134,7 +134,7 @@ fn issue_metadata_retains_declared_shapes_without_unknown_or_missing_data() {
 fn issue_accounts_and_apps_reuse_their_declared_contracts() -> Result<(), Box<dyn std::error::Error>>
 {
     let input = amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT;
-    let IssueCommentEvent::Created { event: payload } = serde_json::from_slice(input)? else {
+    let IssueCommentEvent::Created { event: payload, .. } = serde_json::from_slice(input)? else {
         return Err("expected a created issue-comment event".into());
     };
     let mut issue = payload.issue;

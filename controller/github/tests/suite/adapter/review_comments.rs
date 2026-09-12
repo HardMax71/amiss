@@ -1,5 +1,4 @@
 use amiss_controller::ProviderError;
-use amiss_controller_github::webhook::GitHubPayload;
 use amiss_controller_github::webhook::comment::issue::IssueCommentEvent;
 use amiss_controller_github::webhook::comment::{
     CommentPayload, ReviewCommentEvent, ReviewCommentRecord,
@@ -7,13 +6,14 @@ use amiss_controller_github::webhook::comment::{
 use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::pull::review::CommentPullRequest;
 use amiss_controller_github::webhook::review::ReviewEvent;
+use amiss_controller_github::webhook::{Absent, GitHubPayload};
 use amiss_wire::model::BranchRef;
 
 use super::{BODY, authenticate_target, replaced_once, source};
 
 #[test]
 fn signed_review_comments_retain_the_published_events_and_remain_no_work() {
-    let ReviewEvent::Submitted { event } =
+    let ReviewEvent::Submitted { event, .. } =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW).unwrap()
     else {
         panic!("the fixture is a submitted review")
@@ -23,14 +23,21 @@ fn signed_review_comments_retain_the_published_events_and_remain_no_work() {
     pull.draft = None;
     pull.auto_merge = None;
     let created = serde_json::to_vec(&ReviewCommentEvent::Created {
+        changes: Absent,
         event: CommentPayload {
             comment: serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW_COMMENT).unwrap(),
             pull_request: pull,
             repository: event.repository,
-            sender: event.sender,
             installation: event.installation,
-            organization: event.organization,
-            enterprise: event.enterprise,
+            number: Absent,
+            issue: Absent,
+            review: Absent,
+            thread: Absent,
+            check_run: Absent,
+            check_suite: Absent,
+            workflow: Absent,
+            workflow_run: Absent,
+            requested_action: Absent,
         },
     })
     .unwrap();
@@ -54,7 +61,6 @@ fn signed_review_comments_retain_the_published_events_and_remain_no_work() {
             );
         }
         for (old, new) in [
-            ("{", r#"{"unknown":true,"#),
             (r#""comment":{"#, r#""comment":{"unknown":true,"#),
             (r#""id":279147437"#, r#""id":279147437,"unknown":true"#),
             (r#""original_line":265,"#, ""),
@@ -101,7 +107,7 @@ fn issue_comments_remain_no_work_without_becoming_pr_deliveries() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let input = amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT;
-    let IssueCommentEvent::Created { event } = serde_json::from_slice(input).unwrap() else {
+    let IssueCommentEvent::Created { event, .. } = serde_json::from_slice(input).unwrap() else {
         panic!("the fixture is a created issue comment")
     };
     for action in ["created", "edited", "deleted"] {

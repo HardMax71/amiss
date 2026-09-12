@@ -56,9 +56,9 @@ fn review_events_keep_action_specific_rules() {
         };
         let state_member = format!(r#""state":"{state}""#);
         for (old, new, valid) in [
-            ("{", r#"{"unknown":true,"#, false),
-            ("{", r#"{"organization":null,"#, false),
-            ("{", r#"{"enterprise":null,"#, false),
+            ("{", r#"{"unknown":true,"#, true),
+            ("{", r#"{"organization":null,"#, true),
+            ("{", r#"{"enterprise":null,"#, true),
             (r#""review":{"#, r#""review":{"unknown":true,"#, false),
             (
                 r#""id":279147437"#,

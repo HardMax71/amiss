@@ -9,7 +9,7 @@ use amiss_wire::assessment::Nullable;
 
 #[test]
 fn ordinary_issue_metadata_does_not_inherit_comment_requiredness() {
-    let IssueCommentEvent::Created { event } =
+    let IssueCommentEvent::Created { event, .. } =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap()
     else {
         panic!("the fixture is a created issue comment")

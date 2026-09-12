@@ -1,14 +1,14 @@
 use amiss_controller::ProviderError;
-use amiss_controller_github::webhook::GitHubPayload;
 use amiss_controller_github::webhook::review::ReviewEvent;
 use amiss_controller_github::webhook::thread::{ReviewThread, ReviewThreadEvent, ThreadPayload};
+use amiss_controller_github::webhook::{Absent, GitHubPayload};
 use amiss_wire::model::BranchRef;
 
 use super::{BODY, authenticate_target, replaced_once, source};
 
 #[test]
 fn signed_review_threads_keep_the_published_payloads_and_reject_invalid_metadata() {
-    let ReviewEvent::Submitted { event } =
+    let ReviewEvent::Submitted { event, .. } =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW).unwrap()
     else {
         panic!("submitted review")
@@ -24,11 +24,17 @@ fn signed_review_threads_keep_the_published_payloads_and_reject_invalid_metadata
             pull_request: serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW_PULL)
                 .unwrap(),
             repository: event.repository,
-            sender: Some(event.sender),
             installation: event.installation,
-            organization: event.organization,
-            enterprise: event.enterprise,
-            updated_at: None,
+            number: Absent,
+            issue: Absent,
+            review: Absent,
+            comment: Absent,
+            check_run: Absent,
+            check_suite: Absent,
+            workflow: Absent,
+            workflow_run: Absent,
+            requested_action: Absent,
+            changes: Absent,
         },
     })
     .unwrap();
@@ -42,7 +48,6 @@ fn signed_review_threads_keep_the_published_payloads_and_reject_invalid_metadata
         );
         assert_eq!(authenticate_target(&source, &input, &target), Ok(None));
         for (old, new) in [
-            ("{", r#"{"unknown":true,"#),
             (r#""thread":{"#, r#""thread":{"unknown":true,"#),
             (r#""comments":[{"#, r#""comments":[{"unknown":true,"#),
             (r#""id":279147437"#, r#""id":279147437,"unknown":true"#),

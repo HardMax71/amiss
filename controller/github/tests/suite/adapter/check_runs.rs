@@ -1,11 +1,11 @@
 use amiss_controller::ProviderError;
 use amiss_controller_github::GitHubPullRequestSource;
-use amiss_controller_github::webhook::GitHubPayload;
 use amiss_controller_github::webhook::app::WebhookApp;
 use amiss_controller_github::webhook::comment::issue::IssueCommentEvent;
 use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::run::{CheckRunAction, CheckRunEvent};
 use amiss_controller_github::webhook::suite::CheckSuiteEvent;
+use amiss_controller_github::webhook::{Absent, GitHubPayload};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::model::BranchRef;
 
@@ -21,7 +21,7 @@ fn signed_webhook_app_fields_preserve_no_work_in_every_consumer() {
     let mut suite: CheckSuiteEvent =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_CHECK_SUITE).unwrap();
     suite.check_suite.app.id = None;
-    let IssueCommentEvent::Created { mut event } =
+    let IssueCommentEvent::Created { mut event, .. } =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap()
     else {
         panic!("the fixture is a created issue comment")
@@ -56,6 +56,7 @@ fn signed_webhook_app_fields_preserve_no_work_in_every_consumer() {
             ),
             (
                 serde_json::to_string(&IssueCommentEvent::Created {
+                    changes: Absent,
                     event: event.clone(),
                 })
                 .unwrap(),

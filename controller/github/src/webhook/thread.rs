@@ -7,14 +7,13 @@ use super::comment::ReviewCommentRecord;
 use super::pull::thread::ThreadPullRequest;
 use super::pull::{PullRequestAccountKind, ReviewTeam, Team};
 use super::repository::WorkflowOwner;
-use super::{Installation, Organization};
-use crate::check::EnterpriseRecord;
+use super::{Absent, Installation};
 use crate::owner::OwnerRecord;
 use crate::pull::PullRefRecord;
 use crate::repository::WorkflowRepositoryRecord;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "action", rename_all = "snake_case")]
 pub enum ReviewThreadEvent {
     Resolved {
         #[serde(flatten)]
@@ -32,18 +31,18 @@ pub enum ReviewThreadEvent {
     },
 }
 
-#[serde_with::apply(Option<_> => #[serde(
-    default,
-    deserialize_with = "deserialize_some",
-    skip_serializing_if = "Option::is_none"
-)])]
-#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(
-        deserialize = "OriginalLine: Deserialize<'de>, Account: Deserialize<'de>, Head: Deserialize<'de>, RequestedTeam: Deserialize<'de>, Title: Deserialize<'de>"
-    )
+#[serde_with::apply(
+    Option<_> => #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )],
+    Absent => #[serde(default, skip_serializing)]
 )]
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(bound(
+    deserialize = "OriginalLine: Deserialize<'de>, Account: Deserialize<'de>, Head: Deserialize<'de>, RequestedTeam: Deserialize<'de>, Title: Deserialize<'de>"
+))]
 pub struct ThreadPayload<
     OriginalLine = Nullable<UInt>,
     Account = WorkflowOwner<PullRequestAccountKind>,
@@ -54,11 +53,17 @@ pub struct ThreadPayload<
     pub thread: ReviewThread<ReviewCommentRecord<OriginalLine, Account>>,
     pub pull_request: ThreadPullRequest<Account, Head, RequestedTeam, Title>,
     pub repository: WorkflowRepositoryRecord,
-    pub sender: Option<OwnerRecord>,
     pub installation: Option<Installation>,
-    pub organization: Option<Organization>,
-    pub enterprise: Option<EnterpriseRecord>,
-    pub updated_at: Option<Nullable<String>>,
+    pub number: Absent,
+    pub issue: Absent,
+    pub review: Absent,
+    pub comment: Absent,
+    pub check_run: Absent,
+    pub check_suite: Absent,
+    pub workflow: Absent,
+    pub workflow_run: Absent,
+    pub requested_action: Absent,
+    pub changes: Absent,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

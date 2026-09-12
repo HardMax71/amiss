@@ -9,20 +9,21 @@ use strum::{Display, EnumString};
 use super::pull::PullRequestAccountKind;
 use super::pull::review::{ReviewActivityPullRequest, ReviewPullRequest};
 use super::repository::WorkflowOwner;
-use super::{Installation, Organization, PreviousReference};
-use crate::check::EnterpriseRecord;
-use crate::owner::OwnerRecord;
+use super::{Absent, Installation, PreviousReference};
 use crate::pull::metadata::{AuthorAssociation, Link};
 use crate::repository::WorkflowRepositoryRecord;
 
+#[serde_with::apply(Absent => #[serde(default, skip_serializing)])]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "action", rename_all = "snake_case")]
 pub enum ReviewEvent {
     Submitted {
+        changes: Absent,
         #[serde(flatten)]
         event: ReviewPayload,
     },
     Dismissed {
+        changes: Absent,
         #[serde(flatten)]
         event: ReviewPayload<
             ReviewActivityPullRequest,
@@ -36,24 +37,30 @@ pub enum ReviewEvent {
     },
 }
 
-#[serde_with::apply(Option<_> => #[serde(
-    default,
-    deserialize_with = "deserialize_some",
-    skip_serializing_if = "Option::is_none"
-)])]
-#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(deserialize = "Pull: Deserialize<'de>, Review: Deserialize<'de>")
+#[serde_with::apply(
+    Option<_> => #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )],
+    Absent => #[serde(default, skip_serializing)]
 )]
+#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(bound(deserialize = "Pull: Deserialize<'de>, Review: Deserialize<'de>"))]
 pub struct ReviewPayload<Pull = ReviewActivityPullRequest, Review = ReviewRecord> {
     pub review: Review,
     pub pull_request: Pull,
     pub repository: WorkflowRepositoryRecord,
-    pub sender: OwnerRecord,
     pub installation: Option<Installation>,
-    pub organization: Option<Organization>,
-    pub enterprise: Option<EnterpriseRecord>,
+    pub number: Absent,
+    pub issue: Absent,
+    pub comment: Absent,
+    pub thread: Absent,
+    pub check_run: Absent,
+    pub check_suite: Absent,
+    pub workflow: Absent,
+    pub workflow_run: Absent,
+    pub requested_action: Absent,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

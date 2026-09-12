@@ -80,23 +80,6 @@ pub struct Installation {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct Organization {
-    pub login: String,
-    pub id: UInt,
-    pub node_id: String,
-    pub url: String,
-    pub repos_url: String,
-    pub events_url: String,
-    pub hooks_url: String,
-    pub issues_url: String,
-    pub members_url: String,
-    pub public_members_url: String,
-    pub avatar_url: String,
-    pub description: Nullable<String>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 pub struct Repository {
     pub id: u64,
     pub name: String,

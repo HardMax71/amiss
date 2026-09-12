@@ -2,6 +2,7 @@ use amiss_controller_github::owner::OwnerRecord;
 use amiss_controller_github::pull::PullRefRecord;
 use amiss_controller_github::pull::metadata::{AutoMergeRecord, MergeMethod};
 use amiss_controller_github::repository::WorkflowRepositoryRecord;
+use amiss_controller_github::webhook::Absent;
 use amiss_controller_github::webhook::pull::Team;
 use amiss_controller_github::webhook::pull::thread::ThreadPullRequest;
 use amiss_controller_github::webhook::repository::WorkflowOwner;
@@ -11,7 +12,7 @@ use amiss_wire::assessment::Nullable;
 
 #[test]
 fn thread_envelopes_keep_optional_metadata_and_action_specific_merge_titles() {
-    let ReviewEvent::Submitted { event } =
+    let ReviewEvent::Submitted { event, .. } =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW).unwrap()
     else {
         panic!("submitted review")
@@ -32,11 +33,17 @@ fn thread_envelopes_keep_optional_metadata_and_action_specific_merge_titles() {
             },
             pull_request: pull,
             repository: event.repository,
-            sender: None,
             installation: None,
-            organization: None,
-            enterprise: None,
-            updated_at: None,
+            number: Absent,
+            issue: Absent,
+            review: Absent,
+            comment: Absent,
+            check_run: Absent,
+            check_suite: Absent,
+            workflow: Absent,
+            workflow_run: Absent,
+            requested_action: Absent,
+            changes: Absent,
         },
     })
     .unwrap();
@@ -46,15 +53,15 @@ fn thread_envelopes_keep_optional_metadata_and_action_specific_merge_titles() {
             &format!(r#""action":"{action}""#),
             1,
         );
-        assert!(amiss_wire::read_json::<ReviewThreadEvent>(input.as_bytes(), u64::MAX).is_ok());
+        assert!(serde_json::from_str::<ReviewThreadEvent>(&input).is_ok());
         for (old, new, valid) in [
             ("{", r#"{"updated_at":null,"#, true),
             ("{", r#"{"updated_at":"2026-09-10T00:00:00Z","#, true),
-            ("{", r#"{"updated_at":false,"#, false),
-            ("{", r#"{"sender":null,"#, false),
+            ("{", r#"{"updated_at":false,"#, true),
+            ("{", r#"{"sender":null,"#, true),
             ("{", r#"{"installation":null,"#, false),
-            ("{", r#"{"organization":null,"#, false),
-            ("{", r#"{"enterprise":null,"#, false),
+            ("{", r#"{"organization":null,"#, true),
+            ("{", r#"{"enterprise":null,"#, true),
             (
                 r#""commit_title":"docs""#,
                 r#""commit_title":null"#,
@@ -64,7 +71,7 @@ fn thread_envelopes_keep_optional_metadata_and_action_specific_merge_titles() {
             assert!(input.contains(old));
             let candidate = input.replacen(old, new, 1);
             assert_eq!(
-                amiss_wire::read_json::<ReviewThreadEvent>(candidate.as_bytes(), u64::MAX).is_ok(),
+                serde_json::from_str::<ReviewThreadEvent>(&candidate).is_ok(),
                 valid,
                 "{action}: {new}"
             );

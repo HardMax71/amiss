@@ -809,7 +809,7 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
     let check_suite = amiss_fixtures::GITHUB_WEBHOOK_CHECK_SUITE;
     assert_eq!(authenticate_target(&source, check_suite, &main), Ok(None));
 
-    let IssueCommentEvent::Created { event } =
+    let IssueCommentEvent::Created { event, .. } =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap()
     else {
         panic!("the fixture is a created issue comment")

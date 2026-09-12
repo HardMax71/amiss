@@ -4,7 +4,7 @@ use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
 
 use super::Reactions;
-use crate::check::{CheckRunApp, EnterpriseRecord};
+use crate::check::CheckRunApp;
 use crate::owner::OwnerRecord;
 use crate::pull::metadata::AuthorAssociation;
 use crate::repository::WorkflowRepositoryRecord;
@@ -12,12 +12,14 @@ use crate::webhook::issue::IssueRecord;
 use crate::webhook::pull::PullRequestAccountKind;
 use crate::webhook::repository::WorkflowOwner;
 use crate::webhook::review::ReviewChanges;
-use crate::webhook::{Installation, Organization};
+use crate::webhook::{Absent, Installation};
 
+#[serde_with::apply(Absent => #[serde(default, skip_serializing)])]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+#[serde(tag = "action", rename_all = "snake_case")]
 pub enum IssueCommentEvent {
     Created {
+        changes: Absent,
         #[serde(flatten)]
         event: IssueCommentPayload<IssueCommentRecord<WorkflowOwner>>,
     },
@@ -27,26 +29,35 @@ pub enum IssueCommentEvent {
         event: IssueCommentPayload,
     },
     Deleted {
+        changes: Absent,
         #[serde(flatten)]
         event: IssueCommentPayload,
     },
 }
 
-#[serde_with::apply(Option<_> => #[serde(
-    default,
-    deserialize_with = "deserialize_some",
-    skip_serializing_if = "Option::is_none"
-)])]
+#[serde_with::apply(
+    Option<_> => #[serde(
+        default,
+        deserialize_with = "deserialize_some",
+        skip_serializing_if = "Option::is_none"
+    )],
+    Absent => #[serde(default, skip_serializing)]
+)]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct IssueCommentPayload<Comment = IssueCommentRecord> {
     pub issue: IssueRecord,
     pub comment: Comment,
     pub repository: WorkflowRepositoryRecord,
-    pub sender: OwnerRecord,
     pub installation: Option<Installation>,
-    pub organization: Option<Organization>,
-    pub enterprise: Option<EnterpriseRecord>,
+    pub number: Absent,
+    pub pull_request: Absent,
+    pub review: Absent,
+    pub thread: Absent,
+    pub check_run: Absent,
+    pub check_suite: Absent,
+    pub workflow: Absent,
+    pub workflow_run: Absent,
+    pub requested_action: Absent,
 }
 
 #[serde_with::apply(Option<_> => #[serde(
