@@ -38,6 +38,13 @@ const INSTALLATION_ID: u64 = 7;
 fn refresh_maps_exact_trees_and_moved_head() {
     let mut fixture = Fixture::new();
     fixture.data.repository.default_branch = "trunk".to_owned();
+    let input = serde_json::to_string(&fixture.data.repository).unwrap();
+    let metadata = input.replacen(
+        '{',
+        r#"{"permissions":null,"parent":[],"private":{},"security_and_analysis":false,"extra":42,"#,
+        1,
+    );
+    fixture.data.repository = serde_json::from_str(&metadata).unwrap();
     let active =
         super::refresh::snapshot(&fixture.config, fixture.request(), &fixture.data).unwrap();
     assert_eq!(active.state, ChangeState::Active);
@@ -102,6 +109,10 @@ fn refresh_rejects_wrong_ids_and_github_path_shapes() {
     let fixture = Fixture::new();
     for mutate in [
         |data: &mut RefreshData| data.repository.id = 102,
+        |data: &mut RefreshData| data.repository.name = "other".to_owned(),
+        |data: &mut RefreshData| data.repository.full_name = "Other/Widget".to_owned(),
+        |data: &mut RefreshData| data.repository.owner.login = "Other".to_owned(),
+        |data: &mut RefreshData| data.repository.default_branch = "bad branch".to_owned(),
         |data: &mut RefreshData| data.pull_request.id = 4_202,
         |data: &mut RefreshData| data.pull_request.number = 43,
         |data: &mut RefreshData| {
@@ -1066,11 +1077,6 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             full_name: "Acme/Widget".to_owned(),
             owner: base_repository.owner.clone(),
             default_branch: "main".to_owned(),
-            ..amiss_wire::read_json(
-                include_bytes!("../../tests/fixtures/repository.json"),
-                u64::MAX,
-            )
-            .unwrap()
         },
         pull_request: PullRequestRecord {
             id: 4_201,
