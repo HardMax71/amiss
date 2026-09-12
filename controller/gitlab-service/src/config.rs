@@ -43,7 +43,11 @@ impl ServiceConfig {
     ///
     /// The config, credential, key, identity, plan, path, or bound limit is invalid.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
-        let raw: raw::RawConfig = amiss_controller_service::read_strict_json(path)?;
+        let raw: raw::RawConfig = serde_json::from_slice(&amiss_controller_service::read_regular(
+            path,
+            amiss_controller_service::CONFIG_BYTES,
+        )?)
+        .map_err(|defect| ConfigError::caused_by("configuration is not strict JSON", defect))?;
         load::load(raw)
     }
 }

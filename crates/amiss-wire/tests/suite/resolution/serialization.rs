@@ -1,6 +1,6 @@
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::resolution::{
-    BlobMode, BlobTarget, DeclaredUntracked, Missing, TaggedBlobTarget, Target,
+    BlobContent, BlobMode, BlobTarget, DeclaredUntracked, Missing, TaggedBlobTarget, Target,
     UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
 use serde::Serialize;
@@ -106,7 +106,15 @@ fn target_and_version_details_keep_their_wire_fields() -> Result<(), serde_json:
 #[test]
 fn semantic_details_tag_blob_fragments_without_changing_target_decoding()
 -> Result<(), serde_json::Error> {
-    for content in [super::available(), super::pointer()] {
+    for content in [
+        BlobContent::Available {
+            raw_digest: amiss_wire::model::Digest::from([1; 32]),
+            projection_digest: amiss_wire::model::Digest::from([2; 32]),
+        },
+        BlobContent::LfsPointer {
+            raw_digest: amiss_wire::model::Digest::from([3; 32]),
+        },
+    ] {
         for mode in [BlobMode::Regular, BlobMode::Executable] {
             let blob = BlobTarget {
                 path: "docs/guide.md",
@@ -158,4 +166,101 @@ fn semantic_details_tag_blob_fragments_without_changing_target_decoding()
         assert_json(&semantics, expected)?;
     }
     Ok(())
+}
+
+#[test]
+fn shared_resolution_models_refuse_positional_and_map_tag_alternatives() {
+    let raw = amiss_wire::model::Digest::from([1; 32]);
+    let projection = amiss_wire::model::Digest::from([2; 32]);
+    let content = serde_json::json!({
+        "kind": "available", "raw_digest": raw, "projection_digest": projection
+    });
+    let blob = serde_json::json!({
+        "kind": "blob", "path": "guide.md", "mode": "100644", "content": content
+    });
+    assert!(serde_json::from_value::<Target<String>>(blob.clone()).is_ok());
+    let mut nested = blob;
+    nested["content"] = serde_json::json!(["available", raw, projection]);
+    let cases = [
+        (
+            "available content",
+            serde_json::from_value::<BlobContent>(serde_json::json!([
+                "available",
+                raw,
+                projection
+            ]))
+            .is_ok(),
+        ),
+        (
+            "pointer content",
+            serde_json::from_value::<BlobContent>(serde_json::json!(["lfs-pointer", raw])).is_ok(),
+        ),
+        (
+            "blob fields",
+            serde_json::from_value::<BlobTarget<String>>(serde_json::json!([
+                "guide.md", "100644", content
+            ]))
+            .is_ok(),
+        ),
+        (
+            "blob tag",
+            serde_json::from_value::<TaggedBlobTarget<String>>(serde_json::json!([
+                "blob", "guide.md", "100644", content
+            ]))
+            .is_ok(),
+        ),
+        (
+            "tree target",
+            serde_json::from_value::<Target<String>>(serde_json::json!(["tree", "guide.md"]))
+                .is_ok(),
+        ),
+        (
+            "blob target",
+            serde_json::from_value::<Target<String>>(serde_json::json!([
+                "blob", "guide.md", "100644", content
+            ]))
+            .is_ok(),
+        ),
+        (
+            "buffered blob content",
+            serde_json::from_value::<Target<String>>(nested).is_ok(),
+        ),
+        (
+            "known path scope",
+            serde_json::from_value::<VersionScope<String>>(serde_json::json!([
+                "known-path",
+                "guide.md"
+            ]))
+            .is_ok(),
+        ),
+        (
+            "known commit scope",
+            serde_json::from_value::<VersionScope<String>>(serde_json::json!([
+                "known-commit",
+                "a".repeat(40),
+                "guide.md"
+            ]))
+            .is_ok(),
+        ),
+        (
+            "unknown path scope",
+            serde_json::from_value::<VersionScope<String>>(serde_json::json!(["unknown-path"]))
+                .is_ok(),
+        ),
+        (
+            "unsupported reason tag",
+            serde_json::from_value::<amiss_wire::resolution::UnsupportedTargetTag>(
+                serde_json::json!({"symlink": null}),
+            )
+            .is_ok(),
+        ),
+    ];
+    let accepted: Vec<_> = cases
+        .iter()
+        .filter_map(|(name, accepted)| accepted.then_some(name))
+        .collect();
+    assert!(
+        accepted.is_empty(),
+        "accepted non-contract shapes: {accepted:?}"
+    );
 }

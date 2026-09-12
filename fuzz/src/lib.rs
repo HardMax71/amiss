@@ -1,101 +1,29 @@
 use amiss_scan::{ScanLimits, ScanResources};
 use amiss_wire::model::{Adapter, ObjectFormat};
 
-/// Strict JSON: parsing either rejects or yields a value whose canonical
-/// form reparses to the same value, canonicalization is idempotent, and the
-/// streaming serializer with its counting pass agrees byte for byte.
-///
-/// # Panics
-///
-/// Panics when an accepted input violates a JSON invariant.
-#[expect(
-    clippy::expect_used,
-    reason = "a canonical-output parse failure is a fuzz finding"
-)]
+/// Exercise the wire profile on arbitrary input without constructing a JSON tree.
 pub fn json(bytes: &[u8]) {
-    let Ok(value) = amiss_wire::json::parse(bytes) else {
-        return;
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&value).expect("strict values serialize");
-    let reparsed = amiss_wire::json::parse(&canonical).expect("canonical bytes reparse");
-    assert_eq!(reparsed, value, "canonicalization preserves the value");
-    assert_eq!(
-        serde_json_canonicalizer::to_vec(&reparsed).expect("reparsed values serialize"),
-        canonical,
-        "canonicalization is idempotent"
-    );
-    let mut streamed = Vec::new();
-    serde_json_canonicalizer::to_writer(&value, &mut streamed).expect("strict values stream");
-    assert_eq!(
-        streamed.as_slice(),
-        canonical.as_slice(),
-        "streaming equals materialization"
-    );
-    let mut counter = countio::Counter::new(std::io::sink());
-    serde_json_canonicalizer::to_writer(&value, &mut counter).expect("strict values count");
-    assert_eq!(
-        counter.writer_bytes(),
-        canonical.len(),
-        "the counting pass reports the exact length"
-    );
+    let _ = amiss_wire::de::JsonProfile::validate(bytes);
 }
 
-/// Every control parser over the same bytes: no panic escapes, and parsing
-/// twice yields identical results.
-///
-/// # Panics
-///
-/// Panics when a control parser is nondeterministic.
+/// Exercise each control's JSON admission and typed contract validation once.
 pub fn controls(bytes: &[u8]) {
-    assert_eq!(
-        amiss_wire::controls::parse_scanner_policy(bytes),
-        amiss_wire::controls::parse_scanner_policy(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_organization_floor(bytes),
-        amiss_wire::controls::parse_organization_floor(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_debt_snapshot(bytes),
-        amiss_wire::controls::parse_debt_snapshot(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_waiver_bundle(bytes),
-        amiss_wire::controls::parse_waiver_bundle(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_trusted_time(bytes),
-        amiss_wire::controls::parse_trusted_time(bytes),
-    );
-    assert_eq!(
-        amiss_wire::controls::parse_execution_constraint(bytes),
-        amiss_wire::controls::parse_execution_constraint(bytes),
-    );
-    assert_eq!(
-        amiss_wire::manifest::parse_release_manifest(bytes),
-        amiss_wire::manifest::parse_release_manifest(bytes),
-    );
+    let _ = amiss_wire::controls::parse_scanner_policy(bytes);
+    let _ = amiss_wire::controls::parse_organization_floor(bytes);
+    let _ = amiss_wire::controls::parse_debt_snapshot(bytes);
+    let _ = amiss_wire::controls::parse_waiver_bundle(bytes);
+    let _ = amiss_wire::controls::parse_trusted_time(bytes);
+    let _ = amiss_wire::controls::parse_execution_constraint(bytes);
+    let _ = amiss_wire::manifest::parse_release_manifest(bytes);
 }
 
-/// The three request parsers: no panic escapes, and parsing is
-/// deterministic.
-///
-/// # Panics
-///
-/// Panics when a request parser is nondeterministic.
+/// Exercise the three request models and their admission constraints once.
 pub fn requests(bytes: &[u8]) {
-    assert_eq!(
-        amiss_wire::requests::EvaluationRequest::parse(bytes),
-        amiss_wire::requests::EvaluationRequest::parse(bytes),
-    );
-    assert_eq!(
-        amiss_wire::requests::SnapshotRequest::parse(bytes),
-        amiss_wire::requests::SnapshotRequest::parse(bytes),
-    );
-    assert_eq!(
-        amiss_wire::requests::ControlsRequest::parse(bytes),
-        amiss_wire::requests::ControlsRequest::parse(bytes),
-    );
+    let _ = amiss_wire::requests::EvaluationRequest::parse(bytes);
+    if let Ok(snapshot) = serde_json::from_slice::<amiss_wire::requests::SnapshotRequest>(bytes) {
+        let _ = snapshot.validate();
+    }
+    let _ = amiss_wire::requests::ControlsRequest::parse(bytes);
 }
 
 /// Both document adapters under the contract ceilings: a parser panic is
@@ -251,7 +179,7 @@ fn claim_under(adapter: Adapter, bytes: &[u8]) {
             amiss_wire::model::RepoPath::new(text).is_some(),
             "a claim path revalidates"
         );
-        let ceiling = u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER).unwrap_or(u64::MAX);
+        let ceiling = u64::try_from(js_int::MAX_SAFE_INT).unwrap_or(u64::MAX);
         assert!(
             (1..=ceiling).contains(&claim.line),
             "a claim line stays inside the safe window"

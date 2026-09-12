@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::controls::{Profile, root};
+use crate::controls::Profile;
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -20,7 +20,7 @@ pub enum EvaluationRequestSchema {
 /// identities to evaluate. The candidate commit is null exactly when the
 /// mode is `index`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct EvaluationRequest {
     pub schema: EvaluationRequestSchema,
     pub profile: Profile,
@@ -51,9 +51,14 @@ impl EvaluationRequest {
     /// Fails on strict-JSON defects, schema-shape violations, invalid
     /// grammar values, and a candidate commit inconsistent with the mode.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        root(bytes)?;
-        let request: Self = de::deserialize_json(bytes)?;
-        validate_evaluation(&request)?;
+        de::JsonProfile::validate(bytes)?;
+        let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+        let request: Self = serde_path_to_error::deserialize(&mut deserializer)
+            .map_err(|defect| de::deserialize_error("$", &defect))?;
+        deserializer
+            .end()
+            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+        request.validate()?;
         Ok(request)
     }
 
@@ -100,58 +105,66 @@ impl EvaluationRequest {
         }
     }
 
-    /// Serializes one valid request to its unique canonical JSON bytes.
+    /// Checks the run's object format, mode, and complete forge identity.
     ///
     /// # Errors
-    ///
-    /// The constructed fields violate the same laws [`Self::parse`] enforces.
-    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        validate_evaluation(self)?;
-        serde_json_canonicalizer::to_vec(self)
-            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))
+    /// Refuses inconsistent commits, repository identity, or forge bindings.
+    pub fn validate(&self) -> Result<(), Error> {
+        if self.repository.as_ref().is_some_and(|repository| {
+            RepositoryIdentity::new(
+                repository.host().to_owned(),
+                repository.owner().to_owned(),
+                repository.name().to_owned(),
+            )
+            .as_ref()
+                != Some(repository)
+        }) {
+            return fail("$.repository", ErrorKind::InvalidValue);
+        }
+        for (path, oid) in [
+            ("$.base_commit_oid", Some(&self.base_commit)),
+            ("$.candidate_commit_oid", self.candidate_commit.as_ref()),
+        ] {
+            if oid.is_some_and(|value| value.object_format() != self.object_format) {
+                return fail(path, ErrorKind::InvalidValue);
+            }
+        }
+        ((self.mode == RequestMode::CommitPair) == self.candidate_commit.is_some())
+            .then_some(())
+            .ok_or_else(|| Error::new("$.candidate_commit_oid", ErrorKind::Inconsistent))?;
+
+        let repository_present = self.repository.is_some();
+        let identity_is_complete = [
+            self.candidate_ref.is_some(),
+            self.target_ref.is_some(),
+            self.default_branch_ref.is_some(),
+        ]
+        .into_iter()
+        .all(|present| present == repository_present);
+        let forge_is_coherent = repository_present || self.forge.is_none();
+        let owner_is_coherent = self.forge.is_none()
+            || self.forge == Some(ForgeDialect::Gitlab)
+            || self
+                .repository
+                .as_ref()
+                .is_none_or(|repository| !repository.owner().contains('/'));
+        (identity_is_complete && forge_is_coherent && owner_is_coherent)
+            .then_some(())
+            .ok_or_else(|| Error::new("$.forge", ErrorKind::Inconsistent))
     }
 }
 
-fn validate_evaluation(request: &EvaluationRequest) -> Result<(), Error> {
-    if request.repository.as_ref().is_some_and(|repository| {
-        RepositoryIdentity::new(
-            repository.host().to_owned(),
-            repository.owner().to_owned(),
-            repository.name().to_owned(),
-        )
-        .as_ref()
-            != Some(repository)
-    }) {
-        return fail("$.repository", ErrorKind::InvalidValue);
+impl Serialize for EvaluationRequest {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
     }
-    for (path, oid) in [
-        ("$.base_commit_oid", Some(&request.base_commit)),
-        ("$.candidate_commit_oid", request.candidate_commit.as_ref()),
-    ] {
-        if oid.is_some_and(|value| value.object_format() != request.object_format) {
-            return fail(path, ErrorKind::InvalidValue);
-        }
-    }
-    ((request.mode == RequestMode::CommitPair) == request.candidate_commit.is_some())
-        .then_some(())
-        .ok_or_else(|| Error::new("$.candidate_commit_oid", ErrorKind::Inconsistent))?;
+}
 
-    let repository_present = request.repository.is_some();
-    let identity_is_complete = [
-        request.candidate_ref.is_some(),
-        request.target_ref.is_some(),
-        request.default_branch_ref.is_some(),
-    ]
-    .into_iter()
-    .all(|present| present == repository_present);
-    let forge_is_coherent = repository_present || request.forge.is_none();
-    let owner_is_coherent = request.forge.is_none()
-        || request.forge == Some(ForgeDialect::Gitlab)
-        || request
-            .repository
-            .as_ref()
-            .is_none_or(|repository| !repository.owner().contains('/'));
-    (identity_is_complete && forge_is_coherent && owner_is_coherent)
-        .then_some(())
-        .ok_or_else(|| Error::new("$.forge", ErrorKind::Inconsistent))
+impl<'de> Deserialize<'de> for EvaluationRequest {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }

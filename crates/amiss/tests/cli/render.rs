@@ -1,8 +1,9 @@
+use sha2::Digest as _;
 use std::fs;
 use std::process::{Command, Stdio};
 
-use amiss_wire::json::{self, Value};
 use amiss_wire::report::PAYLOAD_SCHEMA;
+use serde_json::Value;
 
 use crate::support::{amiss, fixture};
 
@@ -30,24 +31,14 @@ fn check(
     ])
 }
 
-#[expect(clippy::panic, reason = "test mutation of a known report shape")]
-fn member_mut<'value>(value: &'value mut Value, name: &str) -> &'value mut Value {
-    let Value::Object(members) = value else {
-        panic!("expected an object");
-    };
-    members
-        .iter_mut()
-        .find(|(key, _value)| key == name)
-        .map_or_else(|| panic!("missing {name}"), |(_key, value)| value)
-}
-
 fn bind_digest(envelope: &mut Value) -> serde_json::Result<()> {
-    let digest = amiss_wire::digest::hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(member_mut(envelope, "payload"))?,
-    )
-    .to_string();
-    *member_mut(envelope, "payload_digest") = Value::string(digest);
+    envelope["payload_digest"] = serde_json::json!(amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&envelope["payload"])?)
+            .finalize()
+            .0
+    ));
     Ok(())
 }
 
@@ -100,26 +91,34 @@ fn every_projection_replays_identical_bytes_and_the_recorded_verdict() {
 fn untrusted_reports_are_refused_before_projection() {
     let fx = fixture();
     let (_code, bytes, _stderr) = check(&fx.repo, &fx.base, &fx.candidate, "observe", "json");
-    let report = json::parse(&bytes).unwrap_or(Value::Null);
+    let report = serde_json::from_slice::<Value>(&bytes).unwrap_or(Value::Null);
 
     let mut digest_mismatch = report.clone();
-    let payload = member_mut(&mut digest_mismatch, "payload");
-    let result = member_mut(payload, "result");
-    *member_mut(result, "status") = Value::string("fail");
+    let payload = digest_mismatch
+        .get_mut("payload")
+        .expect("fixture member exists");
+    let result = (payload).get_mut("result").expect("fixture member exists");
+    *(result).get_mut("status").expect("fixture member exists") = Value::from("fail");
     let mismatch_path = format!("{}/mismatch.json", fx.repo);
     write_value(&mismatch_path, &digest_mismatch).unwrap();
 
     let mut unsupported = report.clone();
-    let payload = member_mut(&mut unsupported, "payload");
-    *member_mut(payload, "compatibility") = Value::string("2");
+    let payload = unsupported
+        .get_mut("payload")
+        .expect("fixture member exists");
+    *(payload)
+        .get_mut("compatibility")
+        .expect("fixture member exists") = Value::from("2");
     bind_digest(&mut unsupported).unwrap();
     let unsupported_path = format!("{}/unsupported.json", fx.repo);
     write_value(&unsupported_path, &unsupported).unwrap();
 
     let mut invalid_result = report;
-    let payload = member_mut(&mut invalid_result, "payload");
-    let result = member_mut(payload, "result");
-    *member_mut(result, "status") = Value::string("fail");
+    let payload = invalid_result
+        .get_mut("payload")
+        .expect("fixture member exists");
+    let result = (payload).get_mut("result").expect("fixture member exists");
+    *(result).get_mut("status").expect("fixture member exists") = Value::from("fail");
     bind_digest(&mut invalid_result).unwrap();
     let result_path = format!("{}/result.json", fx.repo);
     write_value(&result_path, &invalid_result).unwrap();

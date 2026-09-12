@@ -3,14 +3,11 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
 use crate::extraction::governed_name_valid;
-use crate::json;
+
 use crate::model::{Adapter, ArtifactId, RepoPathText};
 
-use super::{
-    Disposition, IncludeKind, PromotableFindingKind, SCANNER_POLICY_SCHEMA, root, sorted_set,
-};
+use super::{Disposition, IncludeKind, PromotableFindingKind, sorted_set};
 
 /// Maximum UTF-8 byte length of one exact document suffix selector.
 pub const DOCUMENT_SUFFIX_BYTES: usize = 64;
@@ -61,7 +58,7 @@ pub enum ProjectionSink {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct DocumentInclude {
     pub path: RepoPathText,
     pub kind: IncludeKind,
@@ -71,31 +68,91 @@ pub struct DocumentInclude {
     pub adapter: Option<Adapter>,
 }
 
+impl Serialize for DocumentInclude {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for DocumentInclude {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct FindingDisposition {
     pub finding_kind: PromotableFindingKind,
     pub disposition: Disposition,
 }
 
+impl Serialize for FindingDisposition {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for FindingDisposition {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct BlobLineSelection {
     pub path: RepoPathText,
     pub first_line: u64,
     pub last_line: u64,
 }
 
+impl Serialize for BlobLineSelection {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for BlobLineSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct NamedRegionSelection {
     pub path: RepoPathText,
     pub start_marker: String,
     pub end_marker: String,
 }
 
+impl Serialize for NamedRegionSelection {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for NamedRegionSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct TreePathSelection {
     pub root: RepoPathText,
     #[serde(
@@ -107,21 +164,71 @@ pub struct TreePathSelection {
     pub maximum_depth: u64,
 }
 
+impl Serialize for TreePathSelection {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for TreePathSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct RecordValueSelection {
     pub set: ArtifactId,
     pub key: String,
 }
 
+impl Serialize for RecordValueSelection {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RecordValueSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct RecordSetSelection {
     pub set: ArtifactId,
 }
 
+impl Serialize for RecordSetSelection {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RecordSetSelection {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(
+    remote = "Self",
+    tag = "kind",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
 pub enum ProjectionSource {
     BlobLines(BlobLineSelection),
     NamedRegion(NamedRegionSelection),
@@ -130,8 +237,23 @@ pub enum ProjectionSource {
     RecordSet(RecordSetSelection),
 }
 
+impl Serialize for ProjectionSource {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ProjectionSource {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct ProjectionAssertion {
     pub document: RepoPathText,
     pub name: String,
@@ -140,8 +262,23 @@ pub struct ProjectionAssertion {
     pub source: ProjectionSource,
 }
 
+impl Serialize for ProjectionAssertion {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ProjectionAssertion {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct ScannerPolicy {
     pub schema: ScannerPolicySchema,
     pub document_includes: Vec<DocumentInclude>,
@@ -155,6 +292,21 @@ pub struct ScannerPolicy {
     pub finding_dispositions: Vec<FindingDisposition>,
 }
 
+impl Serialize for ScannerPolicy {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ScannerPolicy {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 /// Parses and validates one repository scanner policy.
 ///
 /// # Errors
@@ -162,24 +314,16 @@ pub struct ScannerPolicy {
 /// Fails on strict-JSON defects, schema-shape violations, unknown fields,
 /// invalid grammar values, and unsorted or duplicate set members.
 pub fn parse_scanner_policy(bytes: &[u8]) -> Result<ScannerPolicy, Error> {
-    root(bytes)?;
-    let policy = de::deserialize_json(bytes)?;
-    validate_scanner_policy(&policy)?;
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    deserializer.disable_recursion_limit();
+    let policy: ScannerPolicy = serde_path_to_error::deserialize(&mut deserializer)
+        .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
+        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+    policy.validate()?;
     Ok(policy)
-}
-
-/// Produces one valid scanner policy's canonical bytes and digest.
-///
-/// # Errors
-///
-/// A public field violates the same laws [`parse_scanner_policy`] enforces,
-/// or the typed value cannot be serialized.
-pub fn canonical_scanner_policy(policy: &ScannerPolicy) -> Result<(Vec<u8>, Digest), Error> {
-    validate_scanner_policy(policy)?;
-    let bytes = serde_json_canonicalizer::to_vec(policy)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let digest = hb(SCANNER_POLICY_SCHEMA, &bytes);
-    Ok((bytes, digest))
 }
 
 /// Checks a directly constructed source through the same closed grammar and
@@ -196,64 +340,55 @@ pub fn check_projection_source(
     validate_projection_source("$", projection, source)
 }
 
-/// Parses one standalone projection source through the scanner-policy grammar.
-///
-/// # Errors
-///
-/// The JSON is not strict, the source is malformed, or it is incompatible with the selected
-/// projection.
-pub fn parse_projection_source(
-    bytes: &[u8],
-    projection: ProjectionKind,
-) -> Result<ProjectionSource, Error> {
-    root(bytes)?;
-    let source = de::deserialize_json(bytes)?;
-    validate_projection_source("$", projection, &source)?;
-    Ok(source)
-}
+impl ScannerPolicy {
+    /// Checks this control's domain rules and resource limits.
+    ///
+    /// # Errors
+    ///
+    /// A public field violates the contract enforced by [`parse_scanner_policy`].
+    pub fn validate(&self) -> Result<(), Error> {
+        if self.document_includes.len() > 100_000 {
+            return fail("$.document_includes", ErrorKind::LimitExceeded);
+        }
+        for (index, include) in self.document_includes.iter().enumerate() {
+            validate_document_include(&format!("$.document_includes[{index}]"), include)?;
+        }
+        sorted_set(
+            "$.document_includes",
+            &self.document_includes,
+            |left, right| (left.path.as_str(), left.kind).cmp(&(right.path.as_str(), right.kind)),
+        )?;
 
-fn validate_scanner_policy(policy: &ScannerPolicy) -> Result<(), Error> {
-    if policy.document_includes.len() > 100_000 {
-        return fail("$.document_includes", ErrorKind::LimitExceeded);
-    }
-    for (index, include) in policy.document_includes.iter().enumerate() {
-        validate_document_include(&format!("$.document_includes[{index}]"), include)?;
-    }
-    sorted_set(
-        "$.document_includes",
-        &policy.document_includes,
-        |left, right| (left.path.as_str(), left.kind).cmp(&(right.path.as_str(), right.kind)),
-    )?;
+        let assertions = self.projection_assertions.as_deref().unwrap_or_default();
+        if assertions.len() > 100_000 {
+            return fail("$.projection_assertions", ErrorKind::LimitExceeded);
+        }
+        for (index, assertion) in assertions.iter().enumerate() {
+            validate_projection_assertion(&format!("$.projection_assertions[{index}]"), assertion)?;
+        }
+        sorted_set("$.projection_assertions", assertions, |left, right| {
+            (left.document.as_str(), left.name.as_str())
+                .cmp(&(right.document.as_str(), right.name.as_str()))
+        })?;
 
-    let assertions = policy.projection_assertions.as_deref().unwrap_or_default();
-    if assertions.len() > 100_000 {
-        return fail("$.projection_assertions", ErrorKind::LimitExceeded);
-    }
-    for (index, assertion) in assertions.iter().enumerate() {
-        validate_projection_assertion(&format!("$.projection_assertions[{index}]"), assertion)?;
-    }
-    sorted_set("$.projection_assertions", assertions, |left, right| {
-        (left.document.as_str(), left.name.as_str())
-            .cmp(&(right.document.as_str(), right.name.as_str()))
-    })?;
+        if self.protected_inventory.len() > 100_000 {
+            return fail("$.protected_inventory", ErrorKind::LimitExceeded);
+        }
+        sorted_set(
+            "$.protected_inventory",
+            &self.protected_inventory,
+            |left, right| left.as_str().cmp(right.as_str()),
+        )?;
 
-    if policy.protected_inventory.len() > 100_000 {
-        return fail("$.protected_inventory", ErrorKind::LimitExceeded);
+        if self.finding_dispositions.len() > 3 {
+            return fail("$.finding_dispositions", ErrorKind::LimitExceeded);
+        }
+        sorted_set(
+            "$.finding_dispositions",
+            &self.finding_dispositions,
+            |left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()),
+        )
     }
-    sorted_set(
-        "$.protected_inventory",
-        &policy.protected_inventory,
-        |left, right| left.as_str().cmp(right.as_str()),
-    )?;
-
-    if policy.finding_dispositions.len() > 3 {
-        return fail("$.finding_dispositions", ErrorKind::LimitExceeded);
-    }
-    sorted_set(
-        "$.finding_dispositions",
-        &policy.finding_dispositions,
-        |left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()),
-    )
 }
 
 fn validate_document_include(path: &str, include: &DocumentInclude) -> Result<(), Error> {
@@ -333,7 +468,7 @@ fn exact_suffix_valid(suffix: &str) -> bool {
 }
 
 fn safe_line_valid(line: u64) -> bool {
-    (1..=json::MAX_SAFE_INTEGER.unsigned_abs()).contains(&line)
+    (1..=js_int::MAX_SAFE_INT.unsigned_abs()).contains(&line)
 }
 
 fn source_marker_valid(marker: &str) -> bool {

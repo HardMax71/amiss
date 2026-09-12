@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 #[derive(Clone, Deserialize)]
 pub(super) struct RepositoryRecord {
@@ -72,20 +71,23 @@ pub(super) struct GitObjectRecord {
 }
 
 #[derive(Clone, Deserialize)]
-pub(super) struct BranchRule {
-    #[serde(rename = "type")]
-    pub kind: String,
-    #[serde(default)]
-    pub parameters: Option<Value>,
+#[serde(tag = "type")]
+pub(super) enum BranchRule {
+    #[serde(rename = "required_status_checks")]
+    RequiredStatusChecks {
+        parameters: RequiredStatusParameters,
+    },
+    #[serde(other)]
+    Other,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub(super) struct RequiredStatusParameters {
     pub required_status_checks: Vec<RequiredStatus>,
     pub strict_required_status_checks_policy: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 pub(super) struct RequiredStatus {
     pub context: String,
     pub integration_id: Option<u64>,

@@ -7,7 +7,6 @@ mod endpoint;
 mod error;
 mod evaluation;
 mod frame;
-mod hash;
 mod inbox;
 mod lane;
 mod launcher;
@@ -29,11 +28,11 @@ pub use artifact::{
     open_artifact_service,
 };
 pub use config::{
-    ArtifactLimits, CheckPlanFiles, ConfigError, ExecutionLimits, ExecutionPaths, GitLimits,
-    HttpLimits, LedgerLimits, LoadedExecutionLimits, LoadedExecutionPaths, LoadedLimits,
+    ArtifactLimits, CONFIG_BYTES, CheckPlanFiles, ConfigError, ExecutionLimits, ExecutionPaths,
+    GitLimits, HttpLimits, LedgerLimits, LoadedExecutionLimits, LoadedExecutionPaths, LoadedLimits,
     LoadedPaths, RunnerLimits, ServiceLimits, ServicePaths, WebhookKeyFile, WorkerLimits,
     framed_route_id, load_execution_limits, load_execution_paths, load_limits, load_paths,
-    load_plan, load_relation_registry, load_webhook_keyring, read_regular, read_strict_json,
+    load_plan, load_relation_registry, load_webhook_keyring, read_regular,
 };
 pub use delivery::{Delivery, DeliveryHeader, IncomingDelivery, IncomingHeader};
 pub use endpoint::{EndpointConfig, EndpointConfigError};

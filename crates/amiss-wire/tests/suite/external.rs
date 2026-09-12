@@ -4,93 +4,47 @@
 )]
 
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::{Digest, hb};
 use amiss_wire::external::{
     ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, AssessmentDefect, EVIDENCE_SCHEMA, ExternalEvidence,
     ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema, ExternalVerdict,
     PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod, assess, parse_assessment,
     parse_evidence, parse_plan, plan,
 };
-use amiss_wire::json::Value;
+use amiss_wire::model::Digest;
 use amiss_wire::report::PAYLOAD_SCHEMA;
+use serde_json::Value;
+use sha2::Digest as _;
 
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
-fn object(members: Vec<(&str, Value)>) -> Value {
-    let mut members: Vec<(String, Value)> = members
-        .into_iter()
-        .map(|(key, value)| (key.to_owned(), value))
-        .collect();
-    members.sort_by(|left, right| left.0.cmp(&right.0));
-    Value::object(members)
-}
-
-fn string(value: &str) -> Value {
-    Value::string(value)
-}
-
-fn field<'v>(value: &'v Value, name: &str) -> &'v Value {
-    if let Value::Object(members) = value {
-        members
-            .iter()
-            .find(|(key, _)| key == name)
-            .map(|(_, value)| value)
-    } else {
-        None
-    }
-    .expect("the value holds the field")
-}
-
-fn array(value: &Value) -> &[Value] {
-    if let Value::Array(items) = value {
-        Some(items)
-    } else {
-        None
-    }
-    .expect("an array value")
-}
-
-fn text(value: &Value) -> &str {
-    if let Value::String(text) = value {
-        Some(text)
-    } else {
-        None
-    }
-    .expect("a string value")
-}
-
 fn external_occurrence(document: &str, destination: &str) -> Value {
-    object(vec![
-        ("document", string(document)),
-        ("external_destination", string(destination)),
-        ("intent", object(vec![("external_scheme", string("https"))])),
+    Value::from_iter(vec![
+        ("document", Value::from(document)),
+        ("external_destination", Value::from(destination)),
+        (
+            "intent",
+            Value::from_iter(vec![("external_scheme", Value::from("https"))]),
+        ),
         (
             "resolution",
-            object(vec![
-                ("kind", string("external")),
-                ("reason", string("url")),
+            Value::from_iter(vec![
+                ("kind", Value::from("external")),
+                ("reason", Value::from("url")),
             ]),
         ),
     ])
 }
 
-fn resolved_occurrence(document: &str) -> Value {
-    object(vec![
-        ("document", string(document)),
-        ("resolution", object(vec![("kind", string("resolved"))])),
-    ])
-}
-
 fn row(base: Value, candidate: Value) -> Value {
-    object(vec![("base", base), ("candidate", candidate)])
+    Value::from_iter(vec![("base", base), ("candidate", candidate)])
 }
 
 fn report(observations: Vec<Value>) -> Value {
-    let mut document: serde_json::Value =
+    let mut document: Value =
         serde_json::from_slice(REPORT).expect("the report example is valid JSON");
     let examples = document
         .pointer("/payload/observations")
-        .and_then(serde_json::Value::as_array)
+        .and_then(Value::as_array)
         .expect("the report example has observations");
     let resolved = examples
         .first()
@@ -108,7 +62,7 @@ fn report(observations: Vec<Value>) -> Value {
     let rows = observations
         .into_iter()
         .map(|row| {
-            let supplied = serde_json::to_value(&row).expect("the test comparison is JSON");
+            let supplied = row;
             let mut comparison = external.clone();
             for side in ["base", "candidate"] {
                 let expanded = expand_occurrence(
@@ -125,18 +79,24 @@ fn report(observations: Vec<Value>) -> Value {
         .collect();
     *document
         .pointer_mut("/payload/observations")
-        .expect("the report example has observations") = serde_json::Value::Array(rows);
-    let bytes = refresh_payload_digest(&mut document, PAYLOAD_SCHEMA);
-    amiss_wire::json::parse(&bytes).expect("the completed test report is strict JSON")
+        .expect("the report example has observations") = Value::Array(rows);
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(document.get("payload").expect("fixture payload"))
+                    .expect("canonical payload"),
+            )
+            .finalize()
+            .0,
+    );
+    *document.get_mut("payload_digest").expect("fixture digest") = Value::from(digest.to_string());
+    document
 }
 
-fn expand_occurrence(
-    supplied: &serde_json::Value,
-    resolved: &serde_json::Value,
-    external: &serde_json::Value,
-) -> serde_json::Value {
+fn expand_occurrence(supplied: &Value, resolved: &Value, external: &Value) -> Value {
     if supplied.is_null() {
-        return serde_json::Value::Null;
+        return Value::Null;
     }
     let is_resolved = supplied
         .pointer("/resolution/kind")
@@ -168,13 +128,10 @@ fn expand_occurrence(
             occurrence_object.remove("external_destination");
         }
     }
-    if let Some(intent) = supplied
-        .get("intent")
-        .and_then(serde_json::Value::as_object)
-    {
+    if let Some(intent) = supplied.get("intent").and_then(Value::as_object) {
         let target = occurrence_object
             .get_mut("intent")
-            .and_then(serde_json::Value::as_object_mut)
+            .and_then(Value::as_object_mut)
             .expect("the example occurrence has an intent");
         target.extend(intent.clone());
     }
@@ -197,52 +154,70 @@ fn planned(observations: Vec<Value>) -> Value {
         sample_digest(),
     )
     .expect("the report yields a plan");
-    amiss_wire::json::parse(&bytes).expect("the plan is strict JSON")
+    serde_json::from_slice::<Value>(&bytes).expect("the plan is strict JSON")
 }
 
 fn sample_digest() -> Digest {
-    hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&Value::Null).expect("fixture JSON"),
+    Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(b"null")
+            .finalize()
+            .0,
     )
 }
 
-fn refresh_payload_digest(document: &mut serde_json::Value, domain: &str) -> Vec<u8> {
+fn refresh_payload_digest(document: &mut Value, domain: &str) -> Vec<u8> {
     let payload = document
         .get("payload")
         .expect("the plan document holds its payload");
     let canonical = serde_json_canonicalizer::to_vec(payload)
         .expect("the plan payload is canonically serializable");
-    let digest = hb(domain, &canonical).to_string();
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix(domain)
+            .chain_update([0_u8])
+            .chain_update(&canonical)
+            .finalize()
+            .0,
+    )
+    .to_string();
     let recorded = document
         .get_mut("payload_digest")
         .expect("the plan document holds its digest");
-    *recorded = serde_json::Value::String(digest);
+    *recorded = Value::String(digest);
     serde_json_canonicalizer::to_vec(document).expect("the plan document is serializable")
 }
 
 fn destinations(planned: &Value, side: &str) -> Vec<(String, Vec<String>)> {
-    array(field(field(planned, "payload"), side))
-        .iter()
-        .map(|row| {
-            (
-                text(field(row, "destination")).to_owned(),
-                array(field(row, "documents"))
-                    .iter()
-                    .map(|document| text(document).to_owned())
-                    .collect(),
-            )
-        })
-        .collect()
+    (((planned).get("payload").expect("fixture field"))
+        .get(side)
+        .expect("fixture field"))
+    .as_array()
+    .expect("fixture array")
+    .iter()
+    .map(|row| {
+        (
+            ((row).get("destination").expect("fixture field"))
+                .as_str()
+                .expect("fixture text")
+                .to_owned(),
+            ((row).get("documents").expect("fixture field"))
+                .as_array()
+                .expect("fixture array")
+                .iter()
+                .map(|document| (document).as_str().expect("fixture text").to_owned())
+                .collect(),
+        )
+    })
+    .collect()
 }
 
 fn retained(planned: &Value) -> i64 {
-    if let Value::Integer(count) = field(field(planned, "payload"), "retained_count") {
-        Some(*count)
-    } else {
-        None
-    }
-    .expect("a retained count")
+    planned
+        .get("payload")
+        .and_then(|payload| payload.get("retained_count"))
+        .and_then(Value::as_i64)
+        .expect("a retained count")
 }
 
 #[test]
@@ -264,7 +239,10 @@ fn the_delta_is_set_wise_and_document_attributed() {
             external_occurrence("docs/a.md", "https://kept.example/k"),
             external_occurrence("docs/a.md", "https://kept.example/k"),
         ),
-        row(resolved_occurrence("docs/a.md"), Value::Null),
+        row(
+            serde_json::json!({"document": "docs/a.md", "resolution": {"kind": "resolved"}}),
+            Value::Null,
+        ),
     ]);
     assert_eq!(
         destinations(&plan, "introduced"),
@@ -293,13 +271,13 @@ fn trusted_semantic_resolutions_never_enter_the_network_plan() {
     .map(|(document, reason)| {
         row(
             Value::Null,
-            object(vec![
-                ("document", string(document)),
+            Value::from_iter(vec![
+                ("document", Value::from(document)),
                 (
                     "resolution",
-                    object(vec![
-                        ("kind", string("external")),
-                        ("reason", string(reason)),
+                    Value::from_iter(vec![
+                        ("kind", Value::from("external")),
+                        ("reason", Value::from(reason)),
                     ]),
                 ),
             ]),
@@ -334,23 +312,23 @@ fn a_destination_moving_documents_is_retained() {
 fn unavailable_exact_history_enters_the_same_setwise_plan() {
     let destination =
         "https://github.com/acme/widgets/blob/0123456789012345678901234567890123456789/docs/a.md";
-    let historical = object(vec![
-        ("document", string("docs/a.md")),
-        ("external_destination", string(destination)),
-        ("intent", object(Vec::new())),
+    let historical = Value::from_iter(vec![
+        ("document", Value::from("docs/a.md")),
+        ("external_destination", Value::from(destination)),
+        ("intent", serde_json::json!({})),
         (
             "resolution",
-            object(vec![
-                ("kind", string("unsupported-version")),
+            Value::from_iter(vec![
+                ("kind", Value::from("unsupported-version")),
                 (
                     "scope",
-                    object(vec![
-                        ("kind", string("known-commit")),
+                    Value::from_iter(vec![
+                        ("kind", Value::from("known-commit")),
                         (
                             "commit_oid",
-                            string("0123456789012345678901234567890123456789"),
+                            Value::from("0123456789012345678901234567890123456789"),
                         ),
-                        ("path", string("docs/a.md")),
+                        ("path", Value::from("docs/a.md")),
                     ]),
                 ),
             ]),
@@ -361,11 +339,23 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
         destinations(&introduced_plan, "introduced"),
         vec![(destination.to_owned(), vec!["docs/a.md".to_owned()])]
     );
-    let introduced = &array(field(field(&introduced_plan, "payload"), "introduced"))[0];
-    assert_eq!(text(field(introduced, "scheme")), "https");
+    let introduced = &(((introduced_plan).get("payload").expect("fixture field"))
+        .get("introduced")
+        .expect("fixture field"))
+    .as_array()
+    .expect("fixture array")[0];
+    assert_eq!(
+        ((introduced).get("scheme").expect("fixture field"))
+            .as_str()
+            .expect("fixture text"),
+        "https"
+    );
     assert_eq!(
         String::from_utf8(
-            serde_json_canonicalizer::to_vec(field(introduced, "repository")).unwrap()
+            serde_json_canonicalizer::to_vec(
+                (introduced).get("repository").expect("fixture field")
+            )
+            .unwrap()
         )
         .expect("canonical utf-8"),
         r#"{"dialect":"github","form":"blob","host":"github.com","name":"widgets","owner":"acme","tail":"0123456789012345678901234567890123456789/docs/a.md"}"#
@@ -379,9 +369,9 @@ fn unavailable_exact_history_enters_the_same_setwise_plan() {
     let Value::Object(historical) = historical else {
         panic!("the occurrence is an object");
     };
-    let mut historical = historical.into_vec();
-    historical.retain(|(name, _)| name != "external_destination");
-    let source = report(vec![row(Value::Null, Value::object(historical))]);
+    let mut historical = historical;
+    historical.remove("external_destination");
+    let source = report(vec![row(Value::Null, Value::from_iter(historical))]);
     assert_eq!(
         plan(
             &serde_json_canonicalizer::to_vec(&source).unwrap(),
@@ -401,22 +391,30 @@ fn the_envelope_binds_the_source_digest_and_its_own() {
         sample_digest(),
     )
     .expect("an empty report yields a plan");
-    let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
-    assert_eq!(field(&derived, "schema"), &string(PLAN_ENVELOPE_SCHEMA));
-    let payload = field(&derived, "payload");
-    let recomputed = hb(
-        PLAN_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(payload).expect("fixture JSON"),
+    let derived = serde_json::from_slice::<Value>(&derived).expect("the plan is strict JSON");
+    assert_eq!(
+        (derived).get("schema").expect("fixture field"),
+        &Value::from(PLAN_ENVELOPE_SCHEMA)
+    );
+    let payload = (derived).get("payload").expect("fixture field");
+    let recomputed = Digest::from(
+        sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(payload).expect("fixture JSON"))
+            .finalize()
+            .0,
     )
     .to_string();
     assert_eq!(
-        field(&derived, "payload_digest"),
-        &string(&recomputed),
+        (derived).get("payload_digest").expect("fixture field"),
+        &Value::from(recomputed),
         "the plan digest is recomputable from its payload"
     );
     assert_eq!(
-        field(field(payload, "report"), "payload_digest"),
-        field(&source, "payload_digest"),
+        ((payload).get("report").expect("fixture field"))
+            .get("payload_digest")
+            .expect("fixture field"),
+        (source).get("payload_digest").expect("fixture field"),
         "the plan binds the digest of the report it read"
     );
 }
@@ -441,7 +439,7 @@ fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
         sample_digest(),
     )
     .expect("valid report");
-    let document: serde_json::Value = serde_json::from_slice(&written).expect("valid plan");
+    let document: Value = serde_json::from_slice(&written).expect("valid plan");
     for side in ["base", "candidate"] {
         let mut extended = document.clone();
         extended["payload"]["report"][side] = serde_json::json!({
@@ -454,7 +452,7 @@ fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
             bytes
         );
         for value in [
-            serde_json::Value::Null,
+            Value::Null,
             serde_json::json!(true),
             serde_json::json!(42),
             serde_json::json!("snapshot"),
@@ -472,12 +470,12 @@ fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
 #[test]
 fn additive_plan_fields_are_digest_bound_but_inert() {
     let written = planned(Vec::new());
-    let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
+    let mut document = written;
     document
         .get_mut("payload")
-        .and_then(serde_json::Value::as_object_mut)
+        .and_then(Value::as_object_mut)
         .expect("the plan payload is an object")
-        .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
+        .insert("future_fact".to_owned(), Value::Bool(true));
     let parsed = parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA))
         .expect("an additive field remains compatible");
     assert!(parsed.payload.introduced.is_empty());
@@ -486,12 +484,12 @@ fn additive_plan_fields_are_digest_bound_but_inert() {
 #[test]
 fn known_optional_plan_fields_do_not_accept_null() {
     let written = planned(introduced("https://github.com/acme/widgets/blob/main/a.md"));
-    let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
+    let mut document = written;
     let repository = document
         .pointer_mut("/payload/introduced/0/repository")
-        .and_then(serde_json::Value::as_object_mut)
+        .and_then(Value::as_object_mut)
         .expect("the introduced destination has a repository shape");
-    repository.insert("form".to_owned(), serde_json::Value::Null);
+    repository.insert("form".to_owned(), Value::Null);
     let error =
         parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA)).unwrap_err();
     assert_eq!(error.kind, ErrorKind::WrongType);
@@ -501,11 +499,11 @@ fn known_optional_plan_fields_do_not_accept_null() {
 #[test]
 fn malformed_known_plan_fields_are_refused_after_binding() {
     let written = planned(introduced("https://example.com/manual"));
-    let mut document = serde_json::to_value(&written).expect("the written plan is JSON");
+    let mut document = written;
     let destination = document
         .pointer_mut("/payload/introduced/0/destination")
         .expect("the introduced row holds a destination");
-    *destination = serde_json::Value::String(String::new());
+    *destination = Value::String(String::new());
     let error =
         parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA)).unwrap_err();
     assert_eq!(error.kind, ErrorKind::InvalidValue);
@@ -533,11 +531,10 @@ fn a_tampered_payload_is_refused() {
 
 #[test]
 fn an_incomplete_report_is_refused() {
-    let mut document =
-        serde_json::to_value(report(Vec::new())).expect("the complete report is JSON");
-    document["payload"]["result"]["complete"] = serde_json::Value::Bool(false);
-    document["payload"]["result"]["status"] = serde_json::Value::String("incomplete".to_owned());
-    document["payload"]["result"]["exit_code"] = serde_json::Value::Number(2.into());
+    let mut document = report(Vec::new());
+    document["payload"]["result"]["complete"] = Value::Bool(false);
+    document["payload"]["result"]["status"] = Value::String("incomplete".to_owned());
+    document["payload"]["result"]["exit_code"] = Value::Number(2.into());
     let envelope = refresh_payload_digest(&mut document, PAYLOAD_SCHEMA);
     assert_eq!(
         plan(&envelope, "0.0.0", sample_digest()),
@@ -562,19 +559,19 @@ fn a_foreign_value_is_not_a_report() {
 }
 
 fn repository_of(planned: &Value, destination: &str) -> Option<Value> {
-    array(field(field(planned, "payload"), "introduced"))
-        .iter()
-        .find(|row| text(field(row, "destination")) == destination)
-        .and_then(|row| {
-            if let Value::Object(members) = row {
-                members
-                    .iter()
-                    .find(|(key, _)| key == "repository")
-                    .map(|(_, value)| value.clone())
-            } else {
-                None
-            }
-        })
+    (((planned).get("payload").expect("fixture field"))
+        .get("introduced")
+        .expect("fixture field"))
+    .as_array()
+    .expect("fixture array")
+    .iter()
+    .find(|row| {
+        ((row).get("destination").expect("fixture field"))
+            .as_str()
+            .expect("fixture text")
+            == destination
+    })
+    .and_then(|row| row.get("repository").cloned())
 }
 
 fn introduced(destination: &str) -> Vec<Value> {
@@ -690,15 +687,14 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
         ),
     ];
     for (host, dialect, destination, expected) in cases {
-        let mut document: serde_json::Value = serde_json::from_slice(
+        let mut document: Value = serde_json::from_slice(
             &serde_json_canonicalizer::to_vec(&report(introduced(destination))).unwrap(),
         )
         .expect("the complete report is JSON");
-        document["payload"]["evaluation"]["forge"] = serde_json::Value::String(dialect.to_owned());
-        document["payload"]["evaluation"]["repository"]["host"] =
-            serde_json::Value::String(host.to_owned());
+        document["payload"]["evaluation"]["forge"] = Value::String(dialect.to_owned());
+        document["payload"]["evaluation"]["repository"]["host"] = Value::String(host.to_owned());
         let envelope =
-            amiss_wire::json::parse(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
+            serde_json::from_slice::<Value>(&refresh_payload_digest(&mut document, PAYLOAD_SCHEMA))
                 .expect("the declared-host report is strict JSON");
         let derived = plan(
             &serde_json_canonicalizer::to_vec(&envelope).unwrap(),
@@ -706,7 +702,7 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
             sample_digest(),
         )
         .expect("the declared-host report yields a plan");
-        let derived = amiss_wire::json::parse(&derived).expect("the plan is strict JSON");
+        let derived = serde_json::from_slice::<Value>(&derived).expect("the plan is strict JSON");
         let repository = repository_of(&derived, destination).expect("the declared host is shaped");
         assert_eq!(
             String::from_utf8(serde_json_canonicalizer::to_vec(&repository).unwrap())
@@ -718,42 +714,45 @@ fn the_declared_host_is_recognized_with_its_declared_dialect() {
 }
 
 fn evidence(plan: &Value, rows: Vec<Value>) -> Vec<u8> {
-    serde_json_canonicalizer::to_vec(&object(vec![
-        ("schema", string(EVIDENCE_SCHEMA)),
-        ("plan_payload_digest", field(plan, "payload_digest").clone()),
+    serde_json_canonicalizer::to_vec(&Value::from_iter(vec![
+        ("schema", Value::from(EVIDENCE_SCHEMA)),
+        (
+            "plan_payload_digest",
+            (plan).get("payload_digest").expect("fixture field").clone(),
+        ),
         (
             "producer",
-            object(vec![
-                ("name", string("amiss-probe")),
-                ("version", string("0.0.0")),
+            Value::from_iter(vec![
+                ("name", Value::from("amiss-probe")),
+                ("version", Value::from("0.0.0")),
             ]),
         ),
-        ("rows", Value::array(rows)),
+        ("rows", Value::Array(rows)),
     ]))
     .expect("fixture JSON")
 }
 
 fn probe(destination: &str, method: &str, status: i64) -> Value {
-    object(vec![
-        ("kind", string("http-probe")),
-        ("destination", string(destination)),
-        ("method", string(method)),
-        ("status", Value::Integer(status)),
-        ("checked_at", string("t0")),
+    Value::from_iter(vec![
+        ("kind", Value::from("http-probe")),
+        ("destination", Value::from(destination)),
+        ("method", Value::from(method)),
+        ("status", Value::from(status)),
+        ("checked_at", Value::from("t0")),
     ])
 }
 
 fn forge_row(destination: &str, repository: &str, tail: Option<&str>) -> Value {
     let mut members = vec![
-        ("kind", string("forge-api")),
-        ("destination", string(destination)),
-        ("repository", string(repository)),
-        ("checked_at", string("t0")),
+        ("kind", Value::from("forge-api")),
+        ("destination", Value::from(destination)),
+        ("repository", Value::from(repository)),
+        ("checked_at", Value::from("t0")),
     ];
     if let Some(tail) = tail {
-        members.push(("tail", string(tail)));
+        members.push(("tail", Value::from(tail)));
     }
-    object(members)
+    Value::from_iter(members)
 }
 
 #[test]
@@ -763,20 +762,20 @@ fn additive_evidence_fields_are_inert_but_known_nulls_are_refused() {
         "/../../spec/examples/scanner-external-evidence.json"
     ))
     .expect("the evidence example is readable");
-    let mut document: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+    let mut document: Value = serde_json::from_slice(&bytes).expect("valid JSON");
     document
         .as_object_mut()
         .expect("the evidence is an object")
-        .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
+        .insert("future_fact".to_owned(), Value::Bool(true));
     assert!(
         parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
             .is_ok()
     );
     document
         .pointer_mut("/rows/0")
-        .and_then(serde_json::Value::as_object_mut)
+        .and_then(Value::as_object_mut)
         .expect("the evidence has one row")
-        .insert("failure".to_owned(), serde_json::Value::Null);
+        .insert("failure".to_owned(), Value::Null);
     assert!(
         parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
             .is_err()
@@ -807,8 +806,10 @@ fn evidence_bytes_preserve_escaping_and_round_trip() {
     assert_eq!(parsed, document);
     assert_eq!(
         bytes,
-        serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(&bytes).expect("strict JSON"))
-            .unwrap(),
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<Value>(&bytes).expect("strict JSON")
+        )
+        .unwrap(),
     );
     assert!(!bytes.ends_with(b"\n"));
 }
@@ -816,7 +817,7 @@ fn evidence_bytes_preserve_escaping_and_round_trip() {
 #[test]
 fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
     let plan = planned(introduced("https://a.example/x"));
-    let mut document: serde_json::Value = serde_json::from_slice(&evidence(
+    let mut document: Value = serde_json::from_slice(&evidence(
         &plan,
         vec![probe("https://a.example/x", "get", 200)],
     ))
@@ -831,18 +832,39 @@ fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
         sample_digest(),
     )
     .expect("valid evidence");
-    let assessment = amiss_wire::json::parse(&assessment).expect("the assessment is strict JSON");
-    let subject = field(field(&assessment, "payload"), "subject");
+    let assessment =
+        serde_json::from_slice::<Value>(&assessment).expect("the assessment is strict JSON");
+    let subject = ((assessment).get("payload").expect("fixture field"))
+        .get("subject")
+        .expect("fixture field");
     assert_eq!(
-        text(field(subject, "evidence_digest")),
-        hb(EVIDENCE_SCHEMA, &canonical).to_string(),
+        ((subject).get("evidence_digest").expect("fixture field"))
+            .as_str()
+            .expect("fixture text"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix(EVIDENCE_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(&canonical)
+                .finalize()
+                .0
+        )
+        .to_string(),
     );
     let (typed, _digest) = parse_evidence(&canonical).expect("valid evidence");
     assert_ne!(
-        hb(EVIDENCE_SCHEMA, &canonical),
-        hb(
-            EVIDENCE_SCHEMA,
-            &amiss_wire::external::evidence(&typed).expect("typed evidence")
+        Digest::from(
+            sha2::Sha256::new_with_prefix(EVIDENCE_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(&canonical)
+                .finalize()
+                .0
+        ),
+        Digest::from(
+            sha2::Sha256::new_with_prefix(EVIDENCE_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(amiss_wire::external::evidence(&typed).expect("typed evidence"))
+                .finalize()
+                .0
         ),
     );
     let mut trailing = pretty;
@@ -888,14 +910,14 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
         "/../../spec/examples/scanner-external-assessment.json"
     ))
     .expect("the assessment example is readable");
-    let document: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+    let document: Value = serde_json::from_slice(&bytes).expect("valid JSON");
 
     let mut extended = document.clone();
     extended
         .get_mut("payload")
-        .and_then(serde_json::Value::as_object_mut)
+        .and_then(Value::as_object_mut)
         .expect("the assessment payload is an object")
-        .insert("future_fact".to_owned(), serde_json::Value::Bool(true));
+        .insert("future_fact".to_owned(), Value::Bool(true));
     let extended_bytes = refresh_payload_digest(&mut extended, ASSESSMENT_PAYLOAD_SCHEMA);
     let parsed = parse_assessment(&extended_bytes).expect("an additive field remains compatible");
     assert_eq!(
@@ -905,7 +927,7 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
 
     extended
         .pointer_mut("/payload/future_fact")
-        .map(|value| *value = serde_json::Value::Bool(false))
+        .map(|value| *value = Value::Bool(false))
         .expect("the additive field is present");
     let tampered = serde_json_canonicalizer::to_vec(&extended).expect("canonical JSON");
     let Err(AssessmentDefect::Wire(error)) = parse_assessment(&tampered) else {
@@ -916,9 +938,9 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
     for field in ["reason", "retarget"] {
         let mut null = document.clone();
         null.pointer_mut("/payload/verdicts/0")
-            .and_then(serde_json::Value::as_object_mut)
+            .and_then(Value::as_object_mut)
             .expect("the assessment has one verdict")
-            .insert(field.to_owned(), serde_json::Value::Null);
+            .insert(field.to_owned(), Value::Null);
         let bytes = refresh_payload_digest(&mut null, ASSESSMENT_PAYLOAD_SCHEMA);
         let defect = parse_assessment(&bytes);
         assert!(
@@ -930,8 +952,7 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
     let mut inconsistent = document.clone();
     *inconsistent
         .pointer_mut("/payload/verdicts/0/verdict")
-        .expect("the assessment has one verdict") =
-        serde_json::Value::String("reachable".to_owned());
+        .expect("the assessment has one verdict") = Value::String("reachable".to_owned());
     assert!(matches!(
         parse_assessment(&refresh_payload_digest(
             &mut inconsistent,
@@ -943,13 +964,12 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
     let mut repeated = document;
     let verdicts = repeated
         .pointer_mut("/payload/verdicts")
-        .and_then(serde_json::Value::as_array_mut)
+        .and_then(Value::as_array_mut)
         .expect("the assessment verdicts are an array");
     let mut other = verdicts.first().cloned().expect("one verdict");
     *other
         .pointer_mut("/documents/0")
-        .expect("the verdict has one document") =
-        serde_json::Value::String("docs/other.md".to_owned());
+        .expect("the verdict has one document") = Value::String("docs/other.md".to_owned());
     verdicts.push(other);
     assert!(matches!(
         parse_assessment(&refresh_payload_digest(
@@ -961,26 +981,33 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
 }
 
 fn verdicts_of(assessment: &[u8]) -> Vec<(String, String, String)> {
-    let assessment = amiss_wire::json::parse(assessment).expect("the assessment is strict JSON");
-    array(field(field(&assessment, "payload"), "verdicts"))
-        .iter()
-        .map(|row| {
-            let reason = if let Value::Object(members) = row {
-                members
-                    .iter()
-                    .find(|(key, _)| key == "reason")
-                    .map(|(_, value)| text(value).to_owned())
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            };
-            (
-                text(field(row, "destination")).to_owned(),
-                text(field(row, "verdict")).to_owned(),
-                reason,
-            )
-        })
-        .collect()
+    let assessment =
+        serde_json::from_slice::<Value>(assessment).expect("the assessment is strict JSON");
+    (((assessment).get("payload").expect("fixture field"))
+        .get("verdicts")
+        .expect("fixture field"))
+    .as_array()
+    .expect("fixture array")
+    .iter()
+    .map(|row| {
+        let reason = row
+            .get("reason")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
+        (
+            ((row).get("destination").expect("fixture field"))
+                .as_str()
+                .expect("fixture text")
+                .to_owned(),
+            ((row).get("verdict").expect("fixture field"))
+                .as_str()
+                .expect("fixture text")
+                .to_owned(),
+            reason,
+        )
+    })
+    .collect()
 }
 
 #[test]
@@ -1077,22 +1104,22 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
     let observed = evidence(
         &plan,
         vec![
-            object(vec![
-                ("checked_at", string("t0")),
-                ("destination", string(permanent)),
-                ("final_destination", string(permanent_target)),
-                ("kind", string("http-probe")),
-                ("method", string("head")),
+            Value::from_iter(vec![
+                ("checked_at", Value::from("t0")),
+                ("destination", Value::from(permanent)),
+                ("final_destination", Value::from(permanent_target)),
+                ("kind", Value::from("http-probe")),
+                ("method", Value::from("head")),
                 ("redirect_chain_permanent", Value::Bool(true)),
-                ("status", Value::Integer(200)),
+                ("status", Value::from(200)),
             ]),
-            object(vec![
-                ("checked_at", string("t0")),
-                ("destination", string(temporary)),
-                ("final_destination", string(temporary_target)),
-                ("kind", string("http-probe")),
-                ("method", string("head")),
-                ("status", Value::Integer(200)),
+            Value::from_iter(vec![
+                ("checked_at", Value::from("t0")),
+                ("destination", Value::from(temporary)),
+                ("final_destination", Value::from(temporary_target)),
+                ("kind", Value::from("http-probe")),
+                ("method", Value::from("head")),
+                ("status", Value::from(200)),
             ]),
         ],
     );
@@ -1103,34 +1130,45 @@ fn only_a_proved_permanent_redirect_becomes_a_retarget() {
         sample_digest(),
     )
     .expect("the redirects are evidence");
-    let assessment = amiss_wire::json::parse(&assessment).expect("the assessment is strict JSON");
-    let verdicts = array(field(field(&assessment, "payload"), "verdicts"));
+    let assessment =
+        serde_json::from_slice::<Value>(&assessment).expect("the assessment is strict JSON");
+    let verdicts = (((assessment).get("payload").expect("fixture field"))
+        .get("verdicts")
+        .expect("fixture field"))
+    .as_array()
+    .expect("fixture array");
     let verdict = |destination: &str| {
         verdicts
             .iter()
-            .find(|row| row.text("destination") == Some(destination))
+            .find(|row| row.get("destination").and_then(Value::as_str) == Some(destination))
             .expect("the plan destination has one verdict")
     };
-    assert_eq!(verdict(permanent).text("retarget"), Some(permanent_target));
-    assert_eq!(verdict(temporary).text("retarget"), None);
+    assert_eq!(
+        verdict(permanent).get("retarget").and_then(Value::as_str),
+        Some(permanent_target)
+    );
+    assert_eq!(
+        verdict(temporary).get("retarget").and_then(Value::as_str),
+        None
+    );
 
     for malformed in [
-        object(vec![
-            ("checked_at", string("t0")),
-            ("destination", string(permanent)),
-            ("kind", string("http-probe")),
-            ("method", string("head")),
+        Value::from_iter(vec![
+            ("checked_at", Value::from("t0")),
+            ("destination", Value::from(permanent)),
+            ("kind", Value::from("http-probe")),
+            ("method", Value::from("head")),
             ("redirect_chain_permanent", Value::Bool(true)),
-            ("status", Value::Integer(200)),
+            ("status", Value::from(200)),
         ]),
-        object(vec![
-            ("checked_at", string("t0")),
-            ("destination", string(permanent)),
-            ("final_destination", string(permanent_target)),
-            ("kind", string("http-probe")),
-            ("method", string("head")),
+        Value::from_iter(vec![
+            ("checked_at", Value::from("t0")),
+            ("destination", Value::from(permanent)),
+            ("final_destination", Value::from(permanent_target)),
+            ("kind", Value::from("http-probe")),
+            ("method", Value::from("head")),
             ("redirect_chain_permanent", Value::Bool(false)),
-            ("status", Value::Integer(200)),
+            ("status", Value::from(200)),
         ]),
     ] {
         assert!(matches!(
@@ -1199,19 +1237,17 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
             Err(AssessDefect::UnboundEvidence)
         ));
     }
-    let Value::Object(members) =
-        amiss_wire::json::parse(&evidence(&plan, Vec::new())).expect("the evidence is strict JSON")
+    let Value::Object(members) = serde_json::from_slice::<Value>(&evidence(&plan, Vec::new()))
+        .expect("the evidence is strict JSON")
     else {
         panic!("the evidence is an object");
     };
-    let mut members = members.into_vec();
-    members.retain(|(key, _)| key != "plan_payload_digest");
-    members.push((
+    let mut members = members;
+    members.insert(
         "plan_payload_digest".to_owned(),
-        string(&sample_digest().to_string()),
-    ));
-    members.sort_by(|left, right| left.0.cmp(&right.0));
-    let foreign = serde_json_canonicalizer::to_vec(&Value::object(members)).unwrap();
+        Value::from(sample_digest().to_string()),
+    );
+    let foreign = serde_json_canonicalizer::to_vec(&Value::from_iter(members)).unwrap();
     assert!(matches!(
         assess(
             &serde_json_canonicalizer::to_vec(&plan).unwrap(),
@@ -1226,19 +1262,19 @@ fn stray_or_repeated_evidence_invalidates_the_assessment() {
 #[test]
 fn malformed_evidence_rows_are_refused() {
     let plan = planned(introduced("https://a.example/x"));
-    let both = object(vec![
-        ("kind", string("http-probe")),
-        ("destination", string("https://a.example/x")),
-        ("method", string("get")),
-        ("status", Value::Integer(200)),
-        ("failure", string("tls")),
-        ("checked_at", string("t0")),
+    let both = Value::from_iter(vec![
+        ("kind", Value::from("http-probe")),
+        ("destination", Value::from("https://a.example/x")),
+        ("method", Value::from("get")),
+        ("status", Value::from(200)),
+        ("failure", Value::from("tls")),
+        ("checked_at", Value::from("t0")),
     ]);
-    let neither = object(vec![
-        ("kind", string("http-probe")),
-        ("destination", string("https://a.example/x")),
-        ("method", string("get")),
-        ("checked_at", string("t0")),
+    let neither = Value::from_iter(vec![
+        ("kind", Value::from("http-probe")),
+        ("destination", Value::from("https://a.example/x")),
+        ("method", Value::from("get")),
+        ("checked_at", Value::from("t0")),
     ]);
     let below = probe("https://a.example/x", "get", 42);
     let above = probe("https://a.example/x", "get", 1000);
@@ -1261,52 +1297,58 @@ fn malformed_evidence_rows_are_refused() {
 #[test]
 fn the_judge_is_no_laxer_than_its_contracts() {
     let plan = planned(introduced("https://a.example/x"));
-    let Value::Object(unnamed) =
-        amiss_wire::json::parse(&evidence(&plan, Vec::new())).expect("the evidence is strict JSON")
+    let Value::Object(unnamed) = serde_json::from_slice::<Value>(&evidence(&plan, Vec::new()))
+        .expect("the evidence is strict JSON")
     else {
         panic!("the evidence is an object");
     };
-    let mut unnamed = unnamed.into_vec();
+    let mut unnamed = unnamed;
     for (key, value) in &mut unnamed {
         if key == "producer" {
-            *value = object(vec![("name", string("p")), ("version", string(""))]);
+            *value = Value::from_iter(vec![
+                ("name", Value::from("p")),
+                ("version", Value::from("")),
+            ]);
         }
     }
     assert!(matches!(
         assess(
             &serde_json_canonicalizer::to_vec(&plan).unwrap(),
-            &serde_json_canonicalizer::to_vec(&Value::object(unnamed)).unwrap(),
+            &serde_json_canonicalizer::to_vec(&Value::from_iter(unnamed)).unwrap(),
             "0.0.0",
             sample_digest(),
         ),
         Err(AssessDefect::Evidence(_))
     ));
 
-    let broken_row = object(vec![
-        ("destination", string("https://a.example/x")),
-        ("scheme", string("https")),
+    let broken_row = Value::from_iter(vec![
+        ("destination", Value::from("https://a.example/x")),
+        ("scheme", Value::from("https")),
     ]);
-    let payload = object(vec![
-        ("schema", string(PLAN_PAYLOAD_SCHEMA)),
+    let payload = Value::from_iter(vec![
+        ("schema", Value::from(PLAN_PAYLOAD_SCHEMA)),
         (
             "report",
-            object(vec![(
+            Value::from_iter(vec![(
                 "payload_digest",
-                string(&sample_digest().to_string()),
+                Value::from(sample_digest().to_string()),
             )]),
         ),
-        ("introduced", Value::array(vec![broken_row])),
-        ("removed", Value::array(Vec::new())),
-        ("retained_count", Value::Integer(0)),
+        ("introduced", Value::Array(vec![broken_row])),
+        ("removed", Value::Array(Vec::new())),
+        ("retained_count", Value::from(0)),
     ]);
-    let digest = hb(
-        PLAN_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&payload).expect("fixture JSON"),
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&payload).expect("fixture JSON"))
+            .finalize()
+            .0,
     );
-    let handcrafted = object(vec![
-        ("schema", string(PLAN_ENVELOPE_SCHEMA)),
+    let handcrafted = Value::from_iter(vec![
+        ("schema", Value::from(PLAN_ENVELOPE_SCHEMA)),
         ("payload", payload),
-        ("payload_digest", string(&digest.to_string())),
+        ("payload_digest", Value::from(digest.to_string())),
     ]);
     let empty = evidence(&handcrafted, Vec::new());
     assert!(matches!(
@@ -1360,22 +1402,39 @@ fn the_assessment_binds_the_whole_chain() {
         sample_digest(),
     )
     .expect("the pair yields an assessment");
-    let assessment = amiss_wire::json::parse(&assessment).expect("the assessment is strict JSON");
-    let subject = field(field(&assessment, "payload"), "subject");
+    let assessment =
+        serde_json::from_slice::<Value>(&assessment).expect("the assessment is strict JSON");
+    let subject = ((assessment).get("payload").expect("fixture field"))
+        .get("subject")
+        .expect("fixture field");
     assert_eq!(
-        field(subject, "plan_payload_digest"),
-        field(&plan, "payload_digest")
+        (subject).get("plan_payload_digest").expect("fixture field"),
+        (plan).get("payload_digest").expect("fixture field")
     );
     assert_eq!(
-        text(field(subject, "evidence_digest")),
-        hb(EVIDENCE_SCHEMA, &evidence).to_string()
+        ((subject).get("evidence_digest").expect("fixture field"))
+            .as_str()
+            .expect("fixture text"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix(EVIDENCE_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(&evidence)
+                .finalize()
+                .0
+        )
+        .to_string()
     );
-    let payload = field(&assessment, "payload");
+    let payload = (assessment).get("payload").expect("fixture field");
     assert_eq!(
-        text(field(&assessment, "payload_digest")),
-        hb(
-            "amiss/external-assessment-payload",
-            &serde_json_canonicalizer::to_vec(payload).expect("fixture JSON")
+        ((assessment).get("payload_digest").expect("fixture field"))
+            .as_str()
+            .expect("fixture text"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/external-assessment-payload")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(payload).expect("fixture JSON"))
+                .finalize()
+                .0
         )
         .to_string()
     );
@@ -1386,9 +1445,9 @@ fn an_external_occurrence_missing_its_promise_is_refused() {
     let Value::Object(occurrence) = external_occurrence("docs/a.md", "https://x.example/a") else {
         panic!("the occurrence is an object");
     };
-    let mut occurrence = occurrence.into_vec();
-    occurrence.retain(|(name, _)| name != "external_destination");
-    let source = report(vec![row(Value::Null, Value::object(occurrence))]);
+    let mut occurrence = occurrence;
+    occurrence.remove("external_destination");
+    let source = report(vec![row(Value::Null, Value::from_iter(occurrence))]);
     assert_eq!(
         plan(
             &serde_json_canonicalizer::to_vec(&source).unwrap(),

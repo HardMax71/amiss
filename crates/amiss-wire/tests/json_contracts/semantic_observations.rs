@@ -1,12 +1,12 @@
 use amiss_wire::{
     assessment::Nullable,
-    digest::hb,
     semantic::{
         self, SemanticEvidenceEnvelope, SemanticEvidenceTemplate, TemplateSchema,
         observation::{Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
         record,
     },
 };
+use sha2::Digest as _;
 
 #[expect(
     clippy::unwrap_used,
@@ -104,7 +104,10 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
             observations: vec![std::borrow::Cow::Owned(observation)].into(),
         };
         let template_bytes = semantic::template(template.clone()).unwrap();
-        assert_eq!(semantic::parse_template(&template_bytes).unwrap(), template);
+        assert_eq!(
+            serde_json::from_slice::<SemanticEvidenceTemplate<'static>>(&template_bytes).unwrap(),
+            template
+        );
         let document = semantic::bind_template(
             &template,
             original.payload.subject.candidate_identity_digest,
@@ -122,12 +125,23 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
         let malformed_template = String::from_utf8(template_bytes)
             .unwrap()
             .replace(&text, &unknown_member);
-        assert!(semantic::parse_template(malformed_template.as_bytes()).is_err());
+        assert!(
+            serde_json::from_slice::<SemanticEvidenceTemplate<'static>>(
+                malformed_template.as_bytes()
+            )
+            .is_err()
+        );
         let malformed_payload =
             String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
                 .unwrap()
                 .replace(&text, &unknown_member);
-        let malformed_digest = hb(semantic::PAYLOAD_SCHEMA, malformed_payload.as_bytes());
+        let malformed_digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(malformed_payload.as_bytes())
+                .finalize()
+                .0,
+        );
         let malformed_envelope = format!(
             r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{malformed_payload},"payload_digest":"{malformed_digest}"}}"#
         );

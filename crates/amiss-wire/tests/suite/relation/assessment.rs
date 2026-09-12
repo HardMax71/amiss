@@ -1,11 +1,10 @@
 use crate::relation_fixture::{digest, identity, projected, relation_contract};
+use sha2::Digest as _;
 
 use std::{fs, path::Path};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::digest::hb;
-use amiss_wire::json;
 use amiss_wire::relation::{
     ASSESSMENT_PAYLOAD_SCHEMA, RelationAssessmentEnvelope, RelationEvidence,
     RelationEvidenceEnvelope, RelationPlanEnvelope, RelationProjectionSlot, RelationReason,
@@ -24,7 +23,8 @@ fn assessed(
     plan: &RelationPlanEnvelope,
     evidence: Option<&RelationEvidenceEnvelope>,
 ) -> RelationAssessmentEnvelope {
-    parse_assessment(&assess(plan, evidence, "0.26.0", digest('a')).unwrap()).unwrap()
+    amiss_wire::relation::RelationAssessment::evaluate(plan, evidence, "0.26.0", digest('a'))
+        .unwrap()
 }
 
 #[test]
@@ -131,18 +131,27 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
 
     let evidence = evidence_envelope(&input);
     let bytes = assess(&plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let value = json::parse(&bytes).unwrap();
-    let recorded = value.text("payload_digest").unwrap();
+    let value = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
+    let recorded = value
+        .get("payload_digest")
+        .and_then(serde_json::Value::as_str)
+        .unwrap();
     let inconsistent = String::from_utf8(bytes)
         .unwrap()
         .replace("\"introduced-drift\"", "\"unproven\"");
-    let inconsistent_value = json::parse(inconsistent.as_bytes()).unwrap();
+    let inconsistent_value =
+        serde_json::from_slice::<serde_json::Value>(inconsistent.as_bytes()).unwrap();
     let rebound = inconsistent.replace(
         recorded,
-        &hb(
-            ASSESSMENT_PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(inconsistent_value.member("payload").unwrap())
-                .unwrap(),
+        &amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(inconsistent_value.get("payload").unwrap())
+                        .unwrap(),
+                )
+                .finalize()
+                .0,
         )
         .to_string(),
     );
@@ -164,13 +173,21 @@ fn nullable_assessment_fields_are_required() {
             .is_some()
     );
     let payload = serde_json_canonicalizer::to_vec(&missing_reason["payload"]).unwrap();
-    missing_reason["payload_digest"] =
-        serde_json::json!(hb(ASSESSMENT_PAYLOAD_SCHEMA, &payload).to_string());
+    missing_reason["payload_digest"] = serde_json::json!(
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(&payload)
+                .finalize()
+                .0
+        )
+        .to_string()
+    );
     assert_eq!(
         parse_assessment(&serde_json_canonicalizer::to_vec(&missing_reason).unwrap())
             .unwrap_err()
             .kind,
-        ErrorKind::InvalidValue
+        ErrorKind::MissingField
     );
 
     let mut missing_evidence_digest: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -182,13 +199,21 @@ fn nullable_assessment_fields_are_required() {
             .is_some()
     );
     let payload = serde_json_canonicalizer::to_vec(&missing_evidence_digest["payload"]).unwrap();
-    missing_evidence_digest["payload_digest"] =
-        serde_json::json!(hb(ASSESSMENT_PAYLOAD_SCHEMA, &payload).to_string());
+    missing_evidence_digest["payload_digest"] = serde_json::json!(
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(&payload)
+                .finalize()
+                .0
+        )
+        .to_string()
+    );
     assert_eq!(
         parse_assessment(&serde_json_canonicalizer::to_vec(&missing_evidence_digest).unwrap())
             .unwrap_err()
             .kind,
-        ErrorKind::InvalidValue
+        ErrorKind::MissingField
     );
 }
 
@@ -210,6 +235,9 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
 
     assert_eq!(
         replayed,
-        serde_json_canonicalizer::to_vec(&json::parse(&published_bytes).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<serde_json::Value>(&published_bytes).unwrap()
+        )
+        .unwrap()
     );
 }

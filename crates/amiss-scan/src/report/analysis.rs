@@ -1,9 +1,10 @@
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::{Digest, hj_serde};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::FindingScope;
 use amiss_wire::report::model;
 use amiss_wire::resolution::Resolution;
+use sha2::Digest as _;
 
 use crate::correlate::{Comparison, Observation};
 use crate::discovery::{DocumentRecord, DocumentStatus};
@@ -39,12 +40,12 @@ fn occurrence(
         raw_destination_digest: observation.raw_destination_digest,
     };
     let input = observe::observation_input(identity)?;
-    let id = hj_serde(observe::OBSERVATION_ID_DOMAIN, |writer| {
-        serde_json::to_writer(writer, &input)
-    })
-    .map_err(|_defect| crate::Error::Internal)?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(observe::OBSERVATION_ID_DOMAIN).chain_update([0_u8]),
+    );
+    serde_json::to_writer(&mut writer, &input).map_err(|_defect| crate::Error::Internal)?;
     Ok(model::Occurrence {
-        observation_id: id,
+        observation_id: Digest::from(writer.0.finalize().0),
         intent: input.extracted_intent.clone(),
         observation_id_input: input,
         adapter_id: observation.adapter,

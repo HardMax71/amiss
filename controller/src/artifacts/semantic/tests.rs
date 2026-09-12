@@ -1,11 +1,10 @@
 #![cfg(test)]
 
-use std::sync::Arc;
-
-use amiss_wire::digest::{hb, sha256};
-use amiss_wire::model::ArtifactId;
+use amiss_wire::model::{ArtifactId, Digest};
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 use base64::Engine as _;
+use sha2::Digest as _;
+use std::sync::Arc;
 
 use super::validate;
 use crate::semantic_artifact::{InputArtifact, InputArtifactRow, InputArtifactSchema};
@@ -13,15 +12,16 @@ use crate::{ArtifactError, SemanticEvidenceTemplate};
 
 #[test]
 fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), ArtifactError> {
-    let candidate = hb("amiss/test-candidate", b"candidate");
+    let candidate = Digest::from([1; 32]);
+    let other = Digest::from([4; 32]);
     let template: SemanticEvidenceTemplate<'static> = SemanticEvidenceTemplate {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
             identity: ArtifactId::new("test-records".to_owned()).ok_or(ArtifactError::Corrupt)?,
             version: "1".to_owned(),
-            context_digest: hb("amiss/test-context", b"context"),
-            input_digest: hb("amiss/test-input", b"input"),
+            context_digest: Digest::from([2; 32]),
+            input_digest: Digest::from([3; 32]),
         },
         complete: true,
         observations: Arc::from([]),
@@ -42,11 +42,11 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
             ),
             envelope_bytes_base64: base64::engine::general_purpose::STANDARD
                 .encode(&envelope_bytes),
-            envelope_digest: sha256(&envelope_bytes),
+            envelope_digest: Digest::from(sha2::Sha256::digest(&envelope_bytes).0),
             payload_digest,
             template_bytes_base64: base64::engine::general_purpose::STANDARD
                 .encode(&template_bytes),
-            template_digest: sha256(&template_bytes),
+            template_digest: Digest::from(sha2::Sha256::digest(&template_bytes).0),
         }],
         schema: InputArtifactSchema::Current,
     })
@@ -57,8 +57,7 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
     validate(&report, &artifact)?;
     assert!(matches!(
         validate(
-            &amiss_fixtures::semantic_report(&[hb("amiss/test-other", b"other")])
-                .ok_or(ArtifactError::Corrupt)?,
+            &amiss_fixtures::semantic_report(&[other]).ok_or(ArtifactError::Corrupt)?,
             &artifact
         ),
         Err(ArtifactError::Corrupt)
@@ -74,10 +73,7 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
             "/inputs/0/acquisition_identity",
             serde_json::json!("../bad"),
         ),
-        (
-            "/inputs/0/template_digest",
-            serde_json::json!(hb("amiss/test-other", b"other")),
-        ),
+        ("/inputs/0/template_digest", serde_json::json!(other)),
         ("/inputs/0/envelope_digest", serde_json::json!("SHA256:bad")),
         ("/inputs/0/payload_digest", serde_json::json!(null)),
         ("/inputs/0/template_bytes_base64", serde_json::json!("A")),

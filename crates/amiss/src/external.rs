@@ -1,8 +1,8 @@
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
-use amiss_wire::digest::Digest;
 use amiss_wire::external::{parse_assessment, parse_plan};
+use amiss_wire::model::Digest;
 
 use crate::invocation::{AssessInvocation, OutputFormat, PlanInvocation};
 

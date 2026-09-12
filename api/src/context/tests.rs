@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use super::{Error, parse};
+use sha2::Digest as _;
 
 fn context(features: &str, target_triple: &str) -> Vec<u8> {
     format!(
@@ -54,16 +55,19 @@ fn context_refuses_ambiguous_sets_and_unscoped_names() {
 fn typed_context_preserves_canonical_bytes_and_every_digest_input() {
     let bytes = context(r#"["default","serde"]"#, "x86_64-unknown-linux-gnu");
     let (parsed, digest) = parse(&bytes).unwrap();
-    let strict = amiss_wire::json::parse(&bytes).unwrap();
+    let strict = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
     assert_eq!(
         serde_json::to_vec(&parsed).unwrap(),
         serde_json_canonicalizer::to_vec(&strict).unwrap()
     );
     assert_eq!(
         digest,
-        amiss_wire::digest::hb(
-            super::DIGEST_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&strict).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(super::DIGEST_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&strict).unwrap())
+                .finalize()
+                .0
         )
     );
     assert_eq!(
@@ -96,12 +100,15 @@ fn typed_context_preserves_canonical_bytes_and_every_digest_input() {
         let bytes = serde_json::to_vec(&changed).unwrap();
         let (_, changed_digest) = parse(&bytes).unwrap();
         assert_ne!(changed_digest, digest, "{field}");
-        let strict = amiss_wire::json::parse(&bytes).unwrap();
+        let strict = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
         assert_eq!(
             changed_digest,
-            amiss_wire::digest::hb(
-                super::DIGEST_DOMAIN,
-                &serde_json_canonicalizer::to_vec(&strict).unwrap()
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(super::DIGEST_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(serde_json_canonicalizer::to_vec(&strict).unwrap())
+                    .finalize()
+                    .0
             ),
             "{field}"
         );

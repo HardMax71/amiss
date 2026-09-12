@@ -1,8 +1,8 @@
 use amiss_controller::{
     ChangeId, ChangeLocator, IntegrationId, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
+use sha2::Digest as _;
 
 const RUN_DOMAIN: &str = "amiss/controller-gitea-family-pull-request-v1";
 
@@ -26,7 +26,16 @@ pub(crate) fn provider_run(
     ])
     .ok()?;
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!("pr:{}", hb(RUN_DOMAIN, &fields)))?,
+        ProviderRunId::new(format!(
+            "pr:{}",
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(RUN_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&fields)
+                    .finalize()
+                    .0
+            )
+        ))?,
         ProviderRunAttempt::new(1)?,
         ObjectFormat::Sha1,
         candidate.clone(),

@@ -1,4 +1,4 @@
-use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{
     DocsCandidate, PublicationEvidenceEnvelope, assess, evidence, parse_evidence, parse_plan, plan,
@@ -52,7 +52,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
         &plan_envelope,
         evidence_envelope.as_ref(),
         env!("CARGO_PKG_VERSION"),
-        sha256(b"publication evaluator fixture"),
+        Digest::from([32; 32]),
     )
     .ok()?;
     let evidence = evidence_envelope

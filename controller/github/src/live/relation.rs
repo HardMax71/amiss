@@ -1,10 +1,10 @@
+use sha2::Digest as _;
 mod tests;
 
 use amiss_controller::{
     IntegrationId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
     RelationSubject, RelationSubjectHead, relation_status_publication,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::RelationSnapshot;
 
@@ -88,7 +88,14 @@ fn relation_check_run(
     Ok(CreateCheckRun {
         name: target.required_status_name.clone(),
         head_sha: target.candidate_commit.as_str().to_owned(),
-        external_id: hb(CHECK_RUN_DOMAIN, publication.summary.as_bytes()).to_string(),
+        external_id: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(CHECK_RUN_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(publication.summary.as_bytes())
+                .finalize()
+                .0,
+        )
+        .to_string(),
         status: COMPLETED,
         conclusion: if publication.passing {
             "success".to_owned()

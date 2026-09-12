@@ -3,7 +3,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::ContentAvailability;
-use crate::digest::Digest;
+use crate::model::Digest;
 use crate::model::{Adapter, Oid, RepoPathText};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

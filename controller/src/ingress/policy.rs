@@ -1,6 +1,5 @@
+use sha2::Digest as _;
 use std::time::Duration;
-
-use amiss_wire::digest::hb;
 
 use super::{
     AcceptedDelivery, ReplayIdentity, ReplayWindow, RequestBinding, SignedTimePolicy,
@@ -253,7 +252,17 @@ fn normalize_delivery(
 }
 
 fn exact_body_id(body: &[u8]) -> Result<DeliveryId, IngressError> {
-    DeliveryId::new(format!("body:{}", hb(EXACT_BODY_DOMAIN, body))).ok_or(IngressError::Replay)
+    DeliveryId::new(format!(
+        "body:{}",
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(EXACT_BODY_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(body)
+                .finalize()
+                .0
+        )
+    ))
+    .ok_or(IngressError::Replay)
 }
 
 fn check_window(

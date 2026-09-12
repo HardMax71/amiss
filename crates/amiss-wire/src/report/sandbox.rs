@@ -3,7 +3,8 @@ use super::{
     EVALUATOR_MANAGED_MEMORY_BYTES, PRIVATE_TEMPORARY_STORAGE_BYTES, SANDBOX_SCHEMA,
     WATCHDOG_MILLISECONDS,
 };
-use crate::digest::{Digest, hj_serde};
+use crate::model::Digest;
+use sha2::Digest as _;
 
 /// The engine's self-asserted zero-capability descriptor and its exact digest.
 ///
@@ -33,8 +34,12 @@ pub fn sandbox_descriptor() -> serde_json::Result<(model::SandboxDescriptor, Dig
             maximum_milliseconds: WATCHDOG_MILLISECONDS,
         },
     };
-    let digest = hj_serde(SANDBOX_SCHEMA, |writer| {
-        serde_json::to_writer(writer, &descriptor)
-    })?;
+    let digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(SANDBOX_SCHEMA).chain_update([0_u8]),
+        );
+        serde_json::to_writer(&mut writer, &descriptor)
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }?;
     Ok((descriptor, digest))
 }

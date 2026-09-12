@@ -1,13 +1,11 @@
-use amiss_wire::{
-    controls::{canonical_debt_snapshot, canonical_waiver_bundle},
-    report::{
-        Disposition, FixKind,
-        model::{
-            ByteSpan, DebtApplication, Finding, FindingFix, PolicySource, PolicyStep,
-            ReportEnvelope, WaiverApplication,
-        },
+use amiss_wire::report::{
+    Disposition, FixKind,
+    model::{
+        ByteSpan, DebtApplication, Finding, FindingFix, PolicySource, PolicyStep, ReportEnvelope,
+        WaiverApplication,
     },
 };
+use sha2::Digest as _;
 
 #[expect(
     clippy::unwrap_used,
@@ -19,16 +17,28 @@ pub(super) fn reports() -> [ReportEnvelope; 2] {
         "../../../../spec/examples/scanner-report.frozen-1.json"
     ))
     .unwrap();
-    let snapshot = serde_json::from_slice(include_bytes!(
+    let snapshot: amiss_wire::controls::DebtSnapshot = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/debt-snapshot.json"
     ))
     .unwrap();
-    let bundle = serde_json::from_slice(include_bytes!(
+    let bundle: amiss_wire::controls::WaiverBundle = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/waiver-bundle.json"
     ))
     .unwrap();
-    let (_, debt_snapshot_digest) = canonical_debt_snapshot(&snapshot).unwrap();
-    let (_, waiver_bundle_digest) = canonical_waiver_bundle(&bundle).unwrap();
+    let debt_snapshot_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&snapshot).unwrap())
+            .finalize()
+            .0,
+    );
+    let waiver_bundle_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&bundle).unwrap())
+            .finalize()
+            .0,
+    );
     let mut waiver = debt.clone();
     let finding = &mut debt.payload.findings[0];
     let item = snapshot.items.into_iter().next().unwrap();

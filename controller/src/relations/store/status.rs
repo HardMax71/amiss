@@ -1,7 +1,8 @@
-use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 use amiss_wire::relation::{RelationSnapshot, parse_plan};
 use serde::{Deserialize, Serialize};
+use sha2::Digest as _;
 
 use super::RelationScheduleStoreError;
 use super::binding::plan_binding;
@@ -143,7 +144,14 @@ pub(super) fn destination_binding(
         required_status_name: &target.required_status_name,
     })
     .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
-    Ok(hb(DESTINATION_BINDING_DOMAIN, &bytes).to_string())
+    Ok(Digest::from(
+        sha2::Sha256::new_with_prefix(DESTINATION_BINDING_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&bytes)
+            .finalize()
+            .0,
+    )
+    .to_string())
 }
 
 pub(super) fn reopen_status(
@@ -283,7 +291,14 @@ fn record_binding(record: &RelationStatusRecord) -> Result<String, RelationSched
         },
     })
     .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
-    Ok(hb(STATUS_BINDING_DOMAIN, &bytes).to_string())
+    Ok(Digest::from(
+        sha2::Sha256::new_with_prefix(STATUS_BINDING_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&bytes)
+            .finalize()
+            .0,
+    )
+    .to_string())
 }
 
 fn bound_destination(target: &RelationStatusTarget) -> BoundDestination<'_> {

@@ -5,6 +5,7 @@ use amiss_wire::report::model::{
     RepoPathBytes,
 };
 use amiss_wire::report::{Disposition, FindingKind};
+use sha2::Digest as _;
 
 use super::{FeedbackPayload, ReportFeedback, feedback_lines, with_feedback};
 use crate::{ArtifactReference, ExternalTally};
@@ -213,7 +214,7 @@ fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
                 with_feedback("summary", Some(&bytes), None),
                 Some(format!(
                     "summary\nreport: {}",
-                    amiss_wire::digest::sha256(&bytes)
+                    amiss_wire::model::Digest::from(sha2::Sha256::digest(&bytes).0)
                 ))
             );
         }
@@ -276,7 +277,7 @@ fn large_exact_counts_are_preserved_but_unknown_feedback_fields_are_rejected() {
         "\"status\":\"available\"",
         &format!("\"status\":\"available\",\"future\":{nested}"),
     );
-    assert!(amiss_wire::json::parse(extended.as_bytes()).is_ok());
+    assert!(amiss_wire::de::JsonProfile::validate(extended.as_bytes()).is_ok());
     assert!(feedback_lines(Some(extended.as_bytes()), false).is_empty());
 }
 
@@ -286,7 +287,7 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         with_feedback("summary", None, None),
         Some(format!(
             "summary\nreport: {}",
-            amiss_wire::digest::sha256(&[])
+            amiss_wire::model::Digest::from(sha2::Sha256::digest([]).0)
         ))
     );
     let bytes = report(
@@ -302,7 +303,7 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         Some(format!(
             "summary\nreport: {}\nfindings: fix 1, check 0, existing 0\n\
              - Fix target \"docs/new.md\" affected places 1",
-            amiss_wire::digest::sha256(&bytes)
+            amiss_wire::model::Digest::from(sha2::Sha256::digest(&bytes).0)
         ))
     );
 
@@ -311,8 +312,10 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         id: id.clone(),
         locator: format!("https://amiss.example/artifacts/{id}/report"),
         expires_at_unix_millis: 1_800_000_000_000,
-        report_digest: amiss_wire::digest::sha256(&bytes),
-        semantic_digest: Some(amiss_wire::digest::sha256(b"semantic input")),
+        report_digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(&bytes).0),
+        semantic_digest: Some(amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(b"semantic input").0,
+        )),
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,
@@ -323,14 +326,16 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
     assert!(projected.contains("artifact-expires-unix-millis: 1800000000000"));
     assert!(projected.contains(&format!(
         "semantic-input: {}",
-        amiss_wire::digest::sha256(b"semantic input")
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(b"semantic input").0)
     )));
     assert!(projected.contains(&format!(
         "semantic-input-artifact: https://amiss.example/artifacts/{id}/semantic"
     )));
 
     let mut assessed = artifact.clone();
-    assessed.assessment_digest = Some(amiss_wire::digest::sha256(b"assessment"));
+    assessed.assessment_digest = Some(amiss_wire::model::Digest::from(
+        sha2::Sha256::digest(b"assessment").0,
+    ));
     assessed.external_tally = Some(ExternalTally {
         refuted: 1,
         unproven: 2,
@@ -357,7 +362,8 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
     );
 
     let mut mismatched = artifact;
-    mismatched.report_digest = amiss_wire::digest::sha256(b"different");
+    mismatched.report_digest =
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(b"different").0);
     assert_eq!(
         with_feedback("summary", Some(&bytes), Some(&mismatched)),
         None

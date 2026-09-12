@@ -3,10 +3,10 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
+use crate::model::Digest;
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
-use super::{root, validate_repository};
+use super::validate_repository;
 
 pub const EXECUTION_CONSTRAINT_SCHEMA: &str = "amiss/scanner-execution-constraint";
 pub const ACTION_BOOTSTRAP_CONTRACT: &str = "amiss-action-bootstrap";
@@ -58,7 +58,7 @@ pub enum ConstraintPlatform {
 /// The externally protected allow-list entry for one scanner action tree,
 /// release manifest, bootstrap contract, and required provider status name.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct ExecutionConstraintDescriptor {
     pub action_commit_oid: Oid,
     pub action_object_format: ObjectFormat,
@@ -71,6 +71,21 @@ pub struct ExecutionConstraintDescriptor {
     pub required_status_name: String,
     pub schema: ExecutionConstraintSchema,
     pub selected_platform: ConstraintPlatform,
+}
+
+impl Serialize for ExecutionConstraintDescriptor {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ExecutionConstraintDescriptor {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[must_use]
@@ -100,40 +115,37 @@ pub fn valid_required_status_name(raw: &str) -> bool {
 /// Fails on strict-JSON defects, schema-shape violations, invalid grammar
 /// values, or object IDs inconsistent with the declared object format.
 pub fn parse_execution_constraint(bytes: &[u8]) -> Result<ExecutionConstraintDescriptor, Error> {
-    root(bytes)?;
-    let descriptor = de::deserialize_json(bytes)?;
-    validate_execution_constraint(&descriptor)?;
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    deserializer.disable_recursion_limit();
+    let descriptor: ExecutionConstraintDescriptor =
+        serde_path_to_error::deserialize(&mut deserializer)
+            .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
+        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+    descriptor.validate()?;
     Ok(descriptor)
 }
 
-/// Produces one valid execution constraint's canonical bytes and
-/// domain-separated digest together.
-///
-/// # Errors
-///
-/// A public field violates the same laws [`parse_execution_constraint`]
-/// enforces, or the typed value cannot be serialized.
-pub fn canonical_execution_constraint(
-    descriptor: &ExecutionConstraintDescriptor,
-) -> Result<(Vec<u8>, Digest), Error> {
-    validate_execution_constraint(descriptor)?;
-    let bytes = serde_json_canonicalizer::to_vec(descriptor)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let digest = hb(EXECUTION_CONSTRAINT_SCHEMA, &bytes);
-    Ok((bytes, digest))
-}
-
-fn validate_execution_constraint(descriptor: &ExecutionConstraintDescriptor) -> Result<(), Error> {
-    validate_repository("$.action_repository", &descriptor.action_repository)?;
-    for (path, oid) in [
-        ("$.action_commit_oid", &descriptor.action_commit_oid),
-        ("$.action_tree_oid", &descriptor.action_tree_oid),
-    ] {
-        if oid.object_format() != descriptor.action_object_format {
-            return fail(path, ErrorKind::InvalidValue);
+impl ExecutionConstraintDescriptor {
+    /// Checks this control's domain rules and resource limits.
+    ///
+    /// # Errors
+    ///
+    /// A public field violates the contract enforced by [`parse_execution_constraint`].
+    pub fn validate(&self) -> Result<(), Error> {
+        validate_repository("$.action_repository", &self.action_repository)?;
+        for (path, oid) in [
+            ("$.action_commit_oid", &self.action_commit_oid),
+            ("$.action_tree_oid", &self.action_tree_oid),
+        ] {
+            if oid.object_format() != self.action_object_format {
+                return fail(path, ErrorKind::InvalidValue);
+            }
         }
+        valid_required_status_name(&self.required_status_name)
+            .then_some(())
+            .ok_or_else(|| Error::new("$.required_status_name", ErrorKind::InvalidValue))
     }
-    valid_required_status_name(&descriptor.required_status_name)
-        .then_some(())
-        .ok_or_else(|| Error::new("$.required_status_name", ErrorKind::InvalidValue))
 }

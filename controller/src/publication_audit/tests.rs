@@ -1,12 +1,13 @@
 #![cfg(test)]
 
 use amiss_fixtures::{PublicationAuditFixture, publication_audit};
-use amiss_wire::digest::{Digest, sha256};
-use amiss_wire::json::{self, Value};
+use amiss_wire::model::Digest;
 use amiss_wire::publication::{
     PublicationPlanEnvelope, PublicationVerdict, assess, parse_evidence, parse_plan,
     plan as write_plan,
 };
+use serde_json::Value;
+use sha2::Digest as _;
 
 use super::{PublicationAuditBundle, validate_publication_audit};
 use crate::ArtifactError;
@@ -17,13 +18,25 @@ fn one_exact_chain_binds_every_retained_byte_to_the_report() -> Result<(), Artif
     let fixture = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
     let audit = validate_publication_audit(bundle(&fixture))?;
 
-    assert_eq!(audit.report_digest, sha256(&fixture.report));
-    assert_eq!(audit.plan_digest, sha256(&fixture.plan));
+    assert_eq!(
+        audit.report_digest,
+        Digest::from(sha2::Sha256::digest(&fixture.report).0)
+    );
+    assert_eq!(
+        audit.plan_digest,
+        Digest::from(sha2::Sha256::digest(&fixture.plan).0)
+    );
     assert_eq!(
         audit.evidence_digest,
-        fixture.evidence.as_deref().map(sha256)
+        fixture
+            .evidence
+            .as_deref()
+            .map(|bytes| Digest::from(sha2::Sha256::digest(bytes).0))
     );
-    assert_eq!(audit.assessment_digest, sha256(&fixture.assessment));
+    assert_eq!(
+        audit.assessment_digest,
+        Digest::from(sha2::Sha256::digest(&fixture.assessment).0)
+    );
     assert_eq!(audit.verdict, PublicationVerdict::Matched);
     Ok(())
 }
@@ -32,12 +45,11 @@ fn one_exact_chain_binds_every_retained_byte_to_the_report() -> Result<(), Artif
 fn the_reported_candidate_identity_has_the_published_preimage() -> Result<(), ArtifactError> {
     let fixture = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
     let report = accepted_report(&fixture.report)?;
-    let parsed = json::parse(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
-    let payload = parsed.member("payload").ok_or(ArtifactError::Corrupt)?;
-    let evaluation = payload.member("evaluation").ok_or(ArtifactError::Corrupt)?;
-    let candidate = evaluation
-        .member("candidate")
-        .ok_or(ArtifactError::Corrupt)?;
+    let parsed = serde_json::from_slice::<Value>(&fixture.report)
+        .map_err(|_defect| ArtifactError::Corrupt)?;
+    let payload = parsed.get("payload").ok_or(ArtifactError::Corrupt)?;
+    let evaluation = payload.get("evaluation").ok_or(ArtifactError::Corrupt)?;
+    let candidate = evaluation.get("candidate").ok_or(ArtifactError::Corrupt)?;
     assert_eq!(
         report.candidate_identity_digest,
         Digest::from_wire(
@@ -46,7 +58,7 @@ fn the_reported_candidate_identity_has_the_published_preimage() -> Result<(), Ar
         .ok_or(ArtifactError::Corrupt)?
     );
     assert_eq!(
-        candidate.text("commit_oid"),
+        candidate.get("commit_oid").and_then(Value::as_str),
         Some(report.candidate.commit.as_str())
     );
     Ok(())
@@ -57,7 +69,8 @@ fn null_target_is_distinct_from_an_absent_target_key() -> Result<(), ArtifactErr
     let fixture = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
     assert_eq!(accepted_report(&fixture.report)?.target_ref, None);
 
-    let mut report = json::parse(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
+    let mut report = serde_json::from_slice::<Value>(&fixture.report)
+        .map_err(|_defect| ArtifactError::Corrupt)?;
     let Value::Object(envelope) = &mut report else {
         return Err(ArtifactError::Corrupt);
     };
@@ -75,21 +88,18 @@ fn null_target_is_distinct_from_an_absent_target_key() -> Result<(), ArtifactErr
     let Value::Object(members) = evaluation else {
         return Err(ArtifactError::Corrupt);
     };
-    let target = members
-        .iter()
-        .position(|(key, _value)| key == "target_ref")
-        .ok_or(ArtifactError::Corrupt)?;
-    let mut without_target = std::mem::take(members).into_vec();
-    without_target.remove(target);
-    *members = without_target.into_boxed_slice();
-    let payload_digest = amiss_wire::digest::hb(
-        amiss_wire::report::PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(payload).unwrap(),
+    members.remove("target_ref").ok_or(ArtifactError::Corrupt)?;
+    let payload_digest = Digest::from(
+        sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(payload).unwrap())
+            .finalize()
+            .0,
     );
     *envelope
         .iter_mut()
         .find_map(|(key, value)| (key == "payload_digest").then_some(value))
-        .ok_or(ArtifactError::Corrupt)? = Value::string(payload_digest.to_string());
+        .ok_or(ArtifactError::Corrupt)? = Value::from(payload_digest.to_string());
 
     assert!(matches!(
         accepted_report(&serde_json_canonicalizer::to_vec(&report).unwrap()),
@@ -147,7 +157,8 @@ fn report_plan_and_assessment_rebindings_are_refused() -> Result<(), ArtifactErr
 fn incomplete_reports_and_oversized_publication_documents_are_refused() -> Result<(), ArtifactError>
 {
     let fixture = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
-    let mut report = json::parse(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
+    let mut report = serde_json::from_slice::<Value>(&fixture.report)
+        .map_err(|_defect| ArtifactError::Corrupt)?;
     let Value::Object(envelope) = &mut report else {
         return Err(ArtifactError::Corrupt);
     };
@@ -162,20 +173,23 @@ fn incomplete_reports_and_oversized_publication_documents_are_refused() -> Resul
         .iter_mut()
         .find_map(|(key, value)| (key == "result").then_some(value))
         .ok_or(ArtifactError::Corrupt)?;
-    *result = Value::object(vec![
+    *result = Value::from_iter(vec![
         ("complete".to_owned(), Value::Bool(false)),
-        ("exit_code".to_owned(), Value::Integer(2)),
-        ("status".to_owned(), Value::string("incomplete".to_owned())),
+        ("exit_code".to_owned(), Value::from(2)),
+        ("status".to_owned(), Value::from("incomplete".to_owned())),
     ]);
-    let digest = amiss_wire::digest::hb(
-        amiss_wire::report::PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(payload).unwrap(),
+    let digest = Digest::from(
+        sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(payload).unwrap())
+            .finalize()
+            .0,
     );
     let digest_value = envelope
         .iter_mut()
         .find_map(|(key, value)| (key == "payload_digest").then_some(value))
         .ok_or(ArtifactError::Corrupt)?;
-    *digest_value = Value::string(digest.to_string());
+    *digest_value = Value::from(digest.to_string());
     let incomplete = serde_json_canonicalizer::to_vec(&report).unwrap();
     assert!(matches!(
         validate_publication_audit(PublicationAuditBundle {
@@ -218,7 +232,7 @@ fn rebuilt(
         &plan,
         parsed_evidence.as_ref(),
         "0.26.0",
-        sha256(b"publication evaluator"),
+        Digest::from(sha2::Sha256::digest(b"publication evaluator").0),
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
     Ok(PublicationAuditFixture {

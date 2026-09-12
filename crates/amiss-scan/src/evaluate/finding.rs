@@ -1,7 +1,7 @@
 use amiss_wire::controls::GitMode;
 use amiss_wire::controls::ProjectionSource;
 use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, Profile};
-use amiss_wire::digest::{Digest, hj_serde};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::model::ProjectionDifference;
 use amiss_wire::report::model::RowsProjectionDifference;
@@ -10,6 +10,7 @@ use amiss_wire::report::model::{
 };
 use amiss_wire::report::{Disposition, FindingKind, FixKind};
 use amiss_wire::resolution::{Missing, Resolution};
+use sha2::Digest as _;
 
 use crate::correlate::Observation;
 
@@ -34,9 +35,12 @@ pub(crate) fn fact(
         key_input: key.clone(),
         schema: FactSchema::Current,
     };
-    let digest = hj_serde(FACT_DOMAIN, |mut writer| {
+    let digest = {
+        let mut writer =
+            digest_io::IoWrapper(sha2::Sha256::new_with_prefix(FACT_DOMAIN).chain_update([0_u8]));
         serde_json_canonicalizer::to_writer(&input, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| crate::Error::Internal)?;
     Ok(FindingFact { input, digest })
 }
@@ -166,9 +170,13 @@ pub(super) fn simple(
         schema: FindingKeyInputSchema::Current,
         scope,
     };
-    let finding_key = hj_serde(FINDING_KEY_DOMAIN, |mut writer| {
+    let finding_key = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&key_input, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| crate::Error::Internal)?;
     let configured = kind.built_in_disposition(profile);
     Ok(Finding {

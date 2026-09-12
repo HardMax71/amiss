@@ -3,12 +3,11 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
 use crate::model::{ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdentity};
 
 use super::{
-    EligibleFindingKind, FindingDisposition, ORGANIZATION_FLOOR_SCHEMA, Profile, ResourceName,
-    root, sorted_set, validate_owner, validate_repository,
+    EligibleFindingKind, FindingDisposition, Profile, ResourceName, sorted_set, validate_owner,
+    validate_repository,
 };
 
 #[derive(
@@ -20,14 +19,29 @@ pub enum OrganizationFloorSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct ResourceLimit {
     pub resource: ResourceName,
     pub maximum: i64,
 }
 
+impl Serialize for ResourceLimit {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ResourceLimit {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct OrganizationFloor {
     pub schema: OrganizationFloorSchema,
     pub floor_id: ArtifactId,
@@ -42,6 +56,21 @@ pub struct OrganizationFloor {
     pub authorized_debt_owners: Vec<OwnerId>,
     pub authorized_waiver_issuers: Vec<OwnerId>,
     pub resource_limits: Vec<ResourceLimit>,
+}
+
+impl Serialize for OrganizationFloor {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for OrganizationFloor {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 /// A floor rejection: a schema-layer defect, or the combined
@@ -66,64 +95,61 @@ pub const ORGANIZATION_POLICY_ENTRIES_LIMIT: u64 = 100_000;
 /// duplicate set members, and a combined entry count over the built-in
 /// `organization-policy-entries` limit or a tighter self-declared one.
 pub fn parse_organization_floor(bytes: &[u8]) -> Result<OrganizationFloor, FloorDefect> {
-    root(bytes).map_err(FloorDefect::Schema)?;
-    let floor = de::deserialize_json(bytes).map_err(FloorDefect::Schema)?;
-    validate_organization_floor(&floor)?;
+    de::JsonProfile::validate(bytes).map_err(FloorDefect::Schema)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    deserializer.disable_recursion_limit();
+    let floor: OrganizationFloor = serde_path_to_error::deserialize(&mut deserializer)
+        .map_err(|defect| FloorDefect::Schema(de::deserialize_error("$", &defect)))?;
+    deserializer.end().map_err(|defect| {
+        FloorDefect::Schema(Error::new("$", ErrorKind::Json(defect.to_string())))
+    })?;
+    floor.validate()?;
     Ok(floor)
 }
 
-/// Produces one valid organization floor's canonical bytes and digest.
-///
-/// # Errors
-///
-/// A public field violates the same laws [`parse_organization_floor`]
-/// enforces, or the typed value cannot be serialized.
-pub fn canonical_organization_floor(
-    floor: &OrganizationFloor,
-) -> Result<(Vec<u8>, Digest), FloorDefect> {
-    validate_organization_floor(floor)?;
-    let bytes = serde_json_canonicalizer::to_vec(floor)
-        .map_err(|_defect| FloorDefect::Schema(Error::new("$", ErrorKind::InvalidValue)))?;
-    let digest = hb(ORGANIZATION_FLOOR_SCHEMA, &bytes);
-    Ok((bytes, digest))
-}
-
-fn validate_organization_floor(floor: &OrganizationFloor) -> Result<(), FloorDefect> {
-    validate_repository("$.repository", &floor.repository).map_err(FloorDefect::Schema)?;
-    let combined = [
-        floor.minimum_dispositions.len(),
-        floor.protected_inventory.len(),
-        floor.protected_control_paths.len(),
-        floor.waivable_finding_kinds.len(),
-        floor.authorized_debt_owners.len(),
-        floor.authorized_waiver_issuers.len(),
-        floor.resource_limits.len(),
-    ]
-    .into_iter()
-    .map(|length| u64::try_from(length).unwrap_or(u64::MAX))
-    .fold(0_u64, u64::saturating_add);
-    if combined > ORGANIZATION_POLICY_ENTRIES_LIMIT {
-        return Err(FloorDefect::Entries {
-            configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
-            observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT.saturating_add(1),
-        });
-    }
-
-    validate_floor_shape(floor).map_err(FloorDefect::Schema)?;
-    if let Some(declared) = floor
-        .resource_limits
-        .iter()
-        .find(|row| row.resource == ResourceName::OrganizationPolicyEntries)
-    {
-        let declared = u64::try_from(declared.maximum).unwrap_or(u64::MAX);
-        if combined > declared {
+impl OrganizationFloor {
+    /// Checks this control's domain rules and resource limits.
+    ///
+    /// # Errors
+    ///
+    /// A public field violates the contract enforced by [`parse_organization_floor`].
+    pub fn validate(&self) -> Result<(), FloorDefect> {
+        validate_repository("$.repository", &self.repository).map_err(FloorDefect::Schema)?;
+        let combined = [
+            self.minimum_dispositions.len(),
+            self.protected_inventory.len(),
+            self.protected_control_paths.len(),
+            self.waivable_finding_kinds.len(),
+            self.authorized_debt_owners.len(),
+            self.authorized_waiver_issuers.len(),
+            self.resource_limits.len(),
+        ]
+        .into_iter()
+        .map(|length| u64::try_from(length).unwrap_or(u64::MAX))
+        .fold(0_u64, u64::saturating_add);
+        if combined > ORGANIZATION_POLICY_ENTRIES_LIMIT {
             return Err(FloorDefect::Entries {
-                configured_limit: declared,
-                observed_lower_bound: declared.saturating_add(1),
+                configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
+                observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT.saturating_add(1),
             });
         }
+
+        validate_floor_shape(self).map_err(FloorDefect::Schema)?;
+        if let Some(declared) = self
+            .resource_limits
+            .iter()
+            .find(|row| row.resource == ResourceName::OrganizationPolicyEntries)
+        {
+            let declared = u64::try_from(declared.maximum).unwrap_or(u64::MAX);
+            if combined > declared {
+                return Err(FloorDefect::Entries {
+                    configured_limit: declared,
+                    observed_lower_bound: declared.saturating_add(1),
+                });
+            }
+        }
+        Ok(())
     }
-    Ok(())
 }
 
 fn validate_floor_shape(floor: &OrganizationFloor) -> Result<(), Error> {
@@ -197,6 +223,6 @@ fn resource_maximum_valid(resource: ResourceName, maximum: i64) -> bool {
     } else if resource == ResourceName::MachineJsonBytes {
         u64::try_from(maximum).is_ok_and(|value| value == crate::report::MACHINE_JSON_BYTES)
     } else {
-        (0..=crate::json::MAX_SAFE_INTEGER).contains(&maximum)
+        (0..=js_int::MAX_SAFE_INT).contains(&maximum)
     }
 }

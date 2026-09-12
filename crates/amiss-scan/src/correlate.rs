@@ -3,7 +3,7 @@ mod model;
 
 use std::collections::BTreeMap;
 
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::resolution::Resolution as WireResolution;
 

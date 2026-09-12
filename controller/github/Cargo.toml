@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+sha2.workspace = true
 amiss-controller = { path = ".." }
 amiss-controller-git = { path = "../git" }
 amiss-wire = { path = "../../crates/amiss-wire" }
@@ -29,7 +30,6 @@ amiss-controller-fixtures.workspace = true
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 hex.workspace = true
 hmac.workspace = true
-sha2.workspace = true
 tempfile.workspace = true
 
 [lints]

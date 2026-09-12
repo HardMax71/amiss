@@ -1,6 +1,5 @@
 #![expect(
     clippy::expect_used,
-    clippy::panic,
     reason = "integration assertions over the published heading-anchor vectors"
 )]
 
@@ -11,8 +10,8 @@ use std::path::{Path, PathBuf};
 
 use amiss_md::{Heading, analyze};
 use amiss_scan::anchor::{Attribute, RULES, RawHtml, anchor_set, identities};
-use amiss_wire::json::{Value, parse};
 use amiss_wire::model::Adapter;
+use serde_json::Value;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -21,47 +20,7 @@ fn root() -> PathBuf {
 fn vectors() -> Value {
     let bytes = fs::read(root().join("spec/examples/heading-anchor-vectors.json"))
         .expect("the specification ships the heading-anchor vectors");
-    parse(&bytes).expect("heading-anchor vectors are strict JSON")
-}
-
-fn members(value: &Value, label: &str) -> Vec<(String, Value)> {
-    let Value::Object(members) = value else {
-        panic!("{label} is an object")
-    };
-    members.to_vec()
-}
-
-fn member(value: &Value, key: &str, label: &str) -> Value {
-    members(value, label)
-        .into_iter()
-        .find(|(name, _)| name == key)
-        .map_or_else(|| panic!("{label} has no {key}"), |(_, found)| found)
-}
-
-fn optional(value: &Value, key: &str) -> Option<Value> {
-    let Value::Object(members) = value else {
-        return None;
-    };
-    members
-        .iter()
-        .find(|(name, _)| name == key)
-        .map(|(_, found)| found.clone())
-}
-
-fn text(value: &Value, key: &str, label: &str) -> String {
-    let found = member(value, key, label);
-    let Value::String(found) = found else {
-        panic!("{label}.{key} is a string, found {found:?}")
-    };
-    found.into_string()
-}
-
-fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
-    let found = member(value, key, label);
-    let Value::Array(found) = found else {
-        panic!("{label}.{key} is an array, found {found:?}")
-    };
-    found.into_vec()
+    serde_json::from_slice::<Value>(&bytes).expect("heading-anchor vectors are JSON")
 }
 
 fn headings(source: &str) -> (Vec<Heading>, Vec<String>, Vec<String>) {
@@ -92,33 +51,30 @@ fn one(text: &str) -> Vec<Heading> {
 fn the_published_vectors_drive_every_rule() {
     let vectors = vectors();
     assert_eq!(
-        text(&vectors, "schema", "vectors"),
+        vectors["schema"].as_str().expect("vector schema"),
         "amiss/heading-anchor-vectors"
     );
-    assert_eq!(text(&vectors, "contract", "vectors"), "heading-anchor");
+    assert_eq!(
+        vectors["contract"].as_str().expect("vector contract"),
+        "heading-anchor"
+    );
 
-    let cases = array(&vectors, "cases", "vectors");
+    let cases = vectors["cases"].as_array().expect("heading cases");
     assert!(cases.len() >= 24, "the corpus keeps its divergence cases");
     let mut seen = BTreeSet::new();
-    for case in &cases {
-        let id = text(case, "id", "case");
-        assert!(seen.insert(id.clone()), "case {id} is unique");
-        let heading = text(case, "heading", "case");
-        let expected = member(case, "ids", "case");
-        let headings = one(&heading);
+    for case in cases {
+        let id = case["id"].as_str().expect("id string");
+        assert!(seen.insert(id), "case {id} is unique");
+        let heading = case["heading"].as_str().expect("heading string");
+        let expected = case["ids"].as_object().expect("expected anchor identities");
+        let headings = one(heading);
         for rule in &RULES {
             let published = identities(rule, &headings);
-            let found = member(&expected, rule.name, &format!("case {id}"));
-            let want = if let Value::String(identity) = &found {
-                vec![identity.to_string()]
-            } else if found == Value::Null {
-                Vec::new()
-            } else {
-                panic!(
-                    "case {id}.ids.{} is a string or null, got {found:?}",
-                    rule.name
-                )
-            };
+            let found = expected.get(rule.name).expect("every rule has a verdict");
+            let want: Vec<String> = serde_json::from_value::<Option<String>>(found.clone())
+                .expect("anchor identity is a string or null")
+                .into_iter()
+                .collect();
             assert_eq!(
                 published, want,
                 "case {id} under {}: heading {heading:?}",
@@ -133,36 +89,40 @@ fn the_published_vectors_drive_every_rule() {
 #[test]
 fn every_rendered_document_reproduces_its_identities() {
     let vectors = vectors();
-    let documents = array(&vectors, "documents", "vectors");
+    let documents = vectors["documents"].as_array().expect("rendered documents");
     assert!(documents.len() >= 5, "the corpus keeps its rendered pairs");
     let directory = root().join("corpus/third_party/anchor-fixtures");
 
-    for document in &documents {
-        let id = text(document, "id", "document");
+    for document in documents {
+        let id = document["id"].as_str().expect("id string");
         let label = format!("document {id}");
-        let rule_name = text(document, "rule", &label);
-        let prefix = text(document, "prefix", &label);
-        let source = fs::read_to_string(directory.join(text(document, "document", &label)))
-            .expect("the fixture document is readable");
-        let published = fs::read_to_string(directory.join(text(document, "identities", &label)))
-            .expect("the published identities are readable");
+        let rule_name = document["rule"].as_str().expect("rule string");
+        let prefix = document["prefix"].as_str().expect("prefix string");
+        let source = fs::read_to_string(
+            directory.join(document["document"].as_str().expect("document string")),
+        )
+        .expect("the fixture document is readable");
+        let published = fs::read_to_string(
+            directory.join(document["identities"].as_str().expect("identities string")),
+        )
+        .expect("the published identities are readable");
 
         let want: Vec<String> = published
             .lines()
             .filter(|line| !line.is_empty())
-            .map(|line| line.strip_prefix(&prefix).unwrap_or(line).to_owned())
+            .map(|line| line.strip_prefix(prefix).unwrap_or(line).to_owned())
             .collect();
         let rule = RULES
             .iter()
             .find(|rule| rule.name == rule_name)
             .unwrap_or_else(|| panic!("{label} names a known rule"));
-        let name = text(document, "document", &label);
+        let name = document["document"].as_str().expect("document string");
         let adapter = match name.rsplit('.').next() {
             Some("mdx") => Adapter::Mdx,
             Some(_) | None => Adapter::Markdown,
         };
         let (headings, anchors, declared) = parsed(adapter, &source);
-        if optional(document, "covers") == Some(Value::string("union")) {
+        if document.get("covers").and_then(Value::as_str) == Some("union") {
             let union = anchor_set(&headings, &anchors, &declared);
             for identity in &want {
                 assert!(

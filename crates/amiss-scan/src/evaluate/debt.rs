@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::UtcInstant;
 use amiss_wire::report::FindingKind;
 use amiss_wire::report::model::ExceptionDiagnostic;

@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -6,7 +7,6 @@ use amiss_controller::{
     ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId, ProviderError,
     ProviderIdentity, ProviderInstance, ProviderNamespace, Publication,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::super::model::{
@@ -299,7 +299,13 @@ impl Fixture {
         evaluation: &str,
         conclusion: CheckConclusion,
     ) -> Publication {
-        let digest = hb("amiss/controller-gitea-live-test", b"fixture");
+        let digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/controller-gitea-live-test")
+                .chain_update([0_u8])
+                .chain_update(b"fixture")
+                .finalize()
+                .0,
+        );
         Publication {
             provider_run: self.delivery.provider_run.clone(),
             evaluation_id: ControllerEvaluationId::new(evaluation.to_owned()).unwrap(),

@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -8,7 +9,7 @@ use amiss_controller::ProviderError;
 use amiss_fixtures::{external_facts, external_plan};
 
 use amiss_wire::external::{ExternalReason, ExternalVerdict, assess};
-use amiss_wire::json::Value;
+use serde_json::Value;
 
 use super::super::rest::{GitHubVerification, OperationDeadline, Presence, RefFamily, Visibility};
 use super::{PRODUCER_NAME, verify_external};
@@ -337,9 +338,12 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
         &plan,
         &evidence,
         "0.0.0",
-        amiss_wire::digest::hb(
-            "t",
-            &serde_json_canonicalizer::to_vec(&Value::Null).unwrap(),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("t")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&Value::Null).unwrap())
+                .finalize()
+                .0,
         ),
     )
     .expect("the engine judges the evidence");

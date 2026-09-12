@@ -1,5 +1,5 @@
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText};
 use serde::Serialize;
 

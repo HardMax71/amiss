@@ -55,14 +55,6 @@ fn blob_oid(payload: &[u8]) -> [u8; 20] {
     sha1(&framed)
 }
 
-fn to_hex(bytes: &[u8]) -> String {
-    use std::fmt::Write as _;
-    bytes.iter().fold(String::new(), |mut out, byte| {
-        let _ = write!(out, "{byte:02x}");
-        out
-    })
-}
-
 fn trailer(pack: &[u8]) -> &[u8] {
     pack.get(pack.len().saturating_sub(20)..).unwrap()
 }
@@ -225,7 +217,7 @@ fn write_idx_v2_large(rows: &[(u64, [u8; 20])], pack: &[u8], data_end: u64) -> V
 }
 
 fn install(root: &Path, pack: &[u8], idx: &[u8]) {
-    let name = to_hex(trailer(pack));
+    let name = hex::encode(trailer(pack));
     let dir = root.join(".git/objects/pack");
     fs::create_dir_all(&dir).unwrap();
     fs::write(dir.join(format!("pack-{name}.pack")), pack).unwrap();
@@ -250,7 +242,7 @@ fn sorted_rows(entries: &[Entry], offsets: &[u64]) -> Vec<(u64, [u8; 20])> {
 
 fn read_with(root: &Path, oid: &[u8; 20], limits: GitLimits) -> Result<Vec<u8>, Error> {
     let repo = Repository::open(root, ObjectFormat::Sha1).expect("fixture repository opens");
-    let oid = Oid::new(ObjectFormat::Sha1, to_hex(oid)).unwrap();
+    let oid = Oid::new(ObjectFormat::Sha1, hex::encode(oid)).unwrap();
     let mut resources = GitResources::new(limits);
     repo.read_expected(&mut resources, &oid, ObjectKind::Blob)
         .map(|object| object.body)
@@ -313,7 +305,7 @@ fn a_packed_tag_is_a_tag() {
     install(dir.path(), &pack, &idx);
     let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
     let mut res = GitResources::new(GitLimits::CONTRACT);
-    let oid = Oid::new(ObjectFormat::Sha1, to_hex(&entry.oid)).unwrap();
+    let oid = Oid::new(ObjectFormat::Sha1, hex::encode(entry.oid)).unwrap();
     let object = repo.read_object(&mut res, &oid).unwrap();
     assert_eq!(object.kind, ObjectKind::Tag);
     assert_eq!(object.body, payload);
@@ -729,7 +721,7 @@ fn the_delta_value_cap_is_exact() {
     let length = u64::try_from(target.len()).unwrap();
 
     let repo = Repository::open(dir.path(), ObjectFormat::Sha1).unwrap();
-    let oid = Oid::new(ObjectFormat::Sha1, to_hex(&oid)).unwrap();
+    let oid = Oid::new(ObjectFormat::Sha1, hex::encode(oid)).unwrap();
     let cap = |limit: u64| ValueCap {
         resource: ResourceName::DocumentBlobBytes,
         limit,

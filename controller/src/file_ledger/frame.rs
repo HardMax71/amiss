@@ -1,6 +1,6 @@
-use amiss_wire::digest::hb;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
+use sha2::Digest as _;
 
 use super::FileLedgerError;
 
@@ -39,9 +39,7 @@ pub(crate) fn encode<T: Serialize>(
     let frame_length = format
         .magic
         .len()
-        .checked_add(1)
-        .and_then(|length| length.checked_add(LENGTH_BYTES))
-        .and_then(|length| length.checked_add(DIGEST_BYTES))
+        .checked_add(1 + LENGTH_BYTES + DIGEST_BYTES)
         .and_then(|length| length.checked_add(payload.len()))
         .ok_or(FileLedgerError::Corrupt)?;
     if u64::try_from(frame_length).map_err(|_defect| FileLedgerError::Corrupt)? > format.maximum {
@@ -51,7 +49,12 @@ pub(crate) fn encode<T: Serialize>(
     frame.extend_from_slice(format.magic);
     frame.push(VERSION);
     frame.extend_from_slice(&payload_length.to_be_bytes());
-    frame.extend_from_slice(hb(format.domain, &payload).as_bytes());
+    frame.extend_from_slice(
+        &sha2::Sha256::new_with_prefix(format.domain)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize(),
+    );
     frame.extend_from_slice(&payload);
     Ok(frame)
 }
@@ -64,38 +67,26 @@ pub(crate) fn decode<T: DeserializeOwned + Serialize>(
     if u64::try_from(frame.len()).unwrap_or(u64::MAX) > format.maximum {
         return Err(FileLedgerError::Corrupt);
     }
-    let header_length = format
-        .magic
-        .len()
-        .checked_add(1)
-        .and_then(|length| length.checked_add(LENGTH_BYTES))
-        .and_then(|length| length.checked_add(DIGEST_BYTES))
+    let (version, header) = frame
+        .strip_prefix(format.magic)
+        .and_then(<[u8]>::split_first)
         .ok_or(FileLedgerError::Corrupt)?;
-    let header = frame.get(..header_length).ok_or(FileLedgerError::Corrupt)?;
-    let payload = frame.get(header_length..).ok_or(FileLedgerError::Corrupt)?;
-    let magic_end = format.magic.len();
-    if header.get(..magic_end) != Some(format.magic) || header.get(magic_end) != Some(&VERSION) {
+    if *version != VERSION {
         return Err(FileLedgerError::Corrupt);
     }
-    let length_start = magic_end.checked_add(1).ok_or(FileLedgerError::Corrupt)?;
-    let length_end = length_start
-        .checked_add(LENGTH_BYTES)
+    let (length, header) = header
+        .split_first_chunk::<LENGTH_BYTES>()
         .ok_or(FileLedgerError::Corrupt)?;
-    let payload_length = u64::from_be_bytes(
-        header
-            .get(length_start..length_end)
-            .ok_or(FileLedgerError::Corrupt)?
-            .try_into()
-            .map_err(|_defect| FileLedgerError::Corrupt)?,
-    );
-    let digest_end = length_end
-        .checked_add(DIGEST_BYTES)
+    let (expected_digest, payload) = header
+        .split_first_chunk::<DIGEST_BYTES>()
         .ok_or(FileLedgerError::Corrupt)?;
-    let expected_digest = header
-        .get(length_end..digest_end)
-        .ok_or(FileLedgerError::Corrupt)?;
-    if u64::try_from(payload.len()).ok() != Some(payload_length)
-        || hb(format.domain, payload).as_bytes().as_slice() != expected_digest
+    if u64::try_from(payload.len()).ok() != Some(u64::from_be_bytes(*length))
+        || sha2::Sha256::new_with_prefix(format.domain)
+            .chain_update([0_u8])
+            .chain_update(payload)
+            .finalize()
+            .as_slice()
+            != expected_digest
     {
         return Err(FileLedgerError::Corrupt);
     }

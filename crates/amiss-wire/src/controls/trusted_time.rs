@@ -3,11 +3,11 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{self, Error, ErrorKind};
-use crate::digest::{Digest, hb};
-use crate::json::MAX_SAFE_INTEGER;
+use crate::model::Digest;
 use crate::model::{ArtifactId, BranchRef, RepositoryIdentity, UtcInstant};
+use js_int::MAX_SAFE_INT as MAX_SAFE_INTEGER;
 
-use super::{provider_run_id_valid, root, validate_instant, validate_repository};
+use super::{provider_run_id_valid, validate_instant, validate_repository};
 
 pub const TRUSTED_TIME_STATEMENT_SCHEMA: &str = "amiss/scanner-trusted-time-statement";
 pub const TRUSTED_TIME_CONTROLLER: &str = "external-required-check-clock";
@@ -36,7 +36,7 @@ pub enum TrustedTimeController {
 /// externally controlled run. Its evaluation-side bindings remain separate
 /// verification.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct TrustedTimeStatement {
     pub candidate_identity_digest: Digest,
     pub controller: TrustedTimeController,
@@ -51,6 +51,21 @@ pub struct TrustedTimeStatement {
     pub valid_until: UtcInstant,
 }
 
+impl Serialize for TrustedTimeStatement {
+    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for TrustedTimeStatement {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 /// Parses and validates one trusted-time statement.
 ///
 /// # Errors
@@ -59,50 +74,46 @@ pub struct TrustedTimeStatement {
 /// values, or a lifetime outside `0 < valid_until - evaluation_instant <= 600`
 /// seconds.
 pub fn parse_trusted_time(bytes: &[u8]) -> Result<TrustedTimeStatement, Error> {
-    root(bytes)?;
-    let statement = de::deserialize_json(bytes)?;
-    validate_trusted_time(&statement)?;
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    deserializer.disable_recursion_limit();
+    let statement: TrustedTimeStatement = serde_path_to_error::deserialize(&mut deserializer)
+        .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
+        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+    statement.validate()?;
     Ok(statement)
 }
 
-/// Produces one valid statement's canonical bytes and their domain-separated
-/// digest together.
-///
-/// # Errors
-///
-/// A public field violates the same laws [`parse_trusted_time`] enforces, or
-/// the typed value cannot be serialized.
-pub fn canonical_trusted_time(
-    statement: &TrustedTimeStatement,
-) -> Result<(Vec<u8>, Digest), Error> {
-    validate_trusted_time(statement)?;
-    let bytes = serde_json_canonicalizer::to_vec(statement)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    let digest = hb(TRUSTED_TIME_STATEMENT_SCHEMA, &bytes);
-    Ok((bytes, digest))
-}
-
-fn validate_trusted_time(statement: &TrustedTimeStatement) -> Result<(), Error> {
-    validate_repository("$.repository", &statement.repository)?;
-    ArtifactId::new(statement.provider.clone())
-        .is_some()
-        .then_some(())
-        .ok_or_else(|| Error::new("$.provider", ErrorKind::InvalidValue))?;
-    provider_run_id_valid(&statement.provider_run_id)
-        .then_some(())
-        .ok_or_else(|| Error::new("$.provider_run_id", ErrorKind::InvalidValue))?;
-    (1..=MAX_SAFE_INTEGER.unsigned_abs())
-        .contains(&statement.provider_run_attempt)
-        .then_some(())
-        .ok_or_else(|| Error::new("$.provider_run_attempt", ErrorKind::InvalidValue))?;
-    validate_instant("$.evaluation_instant", &statement.evaluation_instant)?;
-    validate_instant("$.valid_until", &statement.valid_until)?;
-    let lifetime = statement
-        .valid_until
-        .epoch_seconds()
-        .saturating_sub(statement.evaluation_instant.epoch_seconds());
-    (1..=STATEMENT_TTL_MAX_SECONDS)
-        .contains(&lifetime)
-        .then_some(())
-        .ok_or_else(|| Error::new("$.valid_until", ErrorKind::InvalidValue))
+impl TrustedTimeStatement {
+    /// Checks this control's domain rules and resource limits.
+    ///
+    /// # Errors
+    ///
+    /// A public field violates the contract enforced by [`parse_trusted_time`].
+    pub fn validate(&self) -> Result<(), Error> {
+        validate_repository("$.repository", &self.repository)?;
+        ArtifactId::new(self.provider.clone())
+            .is_some()
+            .then_some(())
+            .ok_or_else(|| Error::new("$.provider", ErrorKind::InvalidValue))?;
+        provider_run_id_valid(&self.provider_run_id)
+            .then_some(())
+            .ok_or_else(|| Error::new("$.provider_run_id", ErrorKind::InvalidValue))?;
+        (1..=MAX_SAFE_INTEGER.unsigned_abs())
+            .contains(&self.provider_run_attempt)
+            .then_some(())
+            .ok_or_else(|| Error::new("$.provider_run_attempt", ErrorKind::InvalidValue))?;
+        validate_instant("$.evaluation_instant", &self.evaluation_instant)?;
+        validate_instant("$.valid_until", &self.valid_until)?;
+        let lifetime = self
+            .valid_until
+            .epoch_seconds()
+            .saturating_sub(self.evaluation_instant.epoch_seconds());
+        (1..=STATEMENT_TTL_MAX_SECONDS)
+            .contains(&lifetime)
+            .then_some(())
+            .ok_or_else(|| Error::new("$.valid_until", ErrorKind::InvalidValue))
+    }
 }

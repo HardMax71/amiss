@@ -114,6 +114,7 @@ pub fn project_relation_evidence(
     }
 
     evidence(&RelationEvidence {
+        schema: amiss_wire::relation::EvidencePayloadSchema::Current,
         plan_payload_digest: request.plan.payload_digest,
         subjects: subjects
             .try_into()

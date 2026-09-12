@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use sha2::Digest as _;
 use std::io::{Cursor, Write as _};
 use std::sync::Arc;
 
@@ -8,7 +9,6 @@ use amiss_controller::{
     ProviderIdentity, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
     WorkflowArtifactExpectation,
 };
-use amiss_wire::digest::{hb, sha256};
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
@@ -143,7 +143,7 @@ fn request_and_download_metadata_are_independently_exact() {
     let selected = SelectedArtifact {
         id: 7,
         size: u64::try_from(archive.len()).unwrap(),
-        digest: sha256(archive),
+        digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(archive).0),
     };
     let (_, expectation, _) = fixture();
     let wrong_size = SelectedArtifact {
@@ -155,7 +155,7 @@ fn request_and_download_metadata_are_independently_exact() {
         Err(ProviderError::InvalidResponse)
     );
     let wrong_digest = SelectedArtifact {
-        digest: sha256(b"other"),
+        digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(b"other").0),
         ..selected
     };
     assert_eq!(
@@ -167,7 +167,13 @@ fn request_and_download_metadata_are_independently_exact() {
 fn fixture() -> (Config, WorkflowArtifactExpectation, Oid) {
     let provider = ProviderIdentity::new("github".to_owned(), "github.com".to_owned()).unwrap();
     let candidate = Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap();
-    let context_digest = hb("amiss/test-workflow-context", b"site/current");
+    let context_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-workflow-context")
+            .chain_update([0_u8])
+            .chain_update(b"site/current")
+            .finalize()
+            .0,
+    );
     (
         Config {
             provider: provider.clone(),
@@ -232,7 +238,7 @@ fn artifact_page(run: &WorkflowRunRecord, name: &str, archive: &[u8]) -> Workflo
             name: name.to_owned(),
             size_in_bytes: u64::try_from(archive.len()).unwrap(),
             expired: false,
-            digest: sha256(archive).to_string(),
+            digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(archive).0).to_string(),
             workflow_run: Some(ArtifactRunRecord {
                 id: run.id,
                 repository_id: run.repository.id,
@@ -243,7 +249,7 @@ fn artifact_page(run: &WorkflowRunRecord, name: &str, archive: &[u8]) -> Workflo
     }
 }
 
-fn template(context_digest: amiss_wire::digest::Digest) -> Vec<u8> {
+fn template(context_digest: amiss_wire::model::Digest) -> Vec<u8> {
     amiss_wire::semantic::template(SemanticEvidenceTemplate {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
@@ -251,7 +257,13 @@ fn template(context_digest: amiss_wire::digest::Digest) -> Vec<u8> {
             identity: ArtifactId::new("test-site-builder".to_owned()).unwrap(),
             version: "0.5.1".to_owned(),
             context_digest,
-            input_digest: hb("amiss/test-workflow-input", b"completed site"),
+            input_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-workflow-input")
+                    .chain_update([0_u8])
+                    .chain_update(b"completed site")
+                    .finalize()
+                    .0,
+            ),
         },
         complete: true,
         observations: Arc::from([]),

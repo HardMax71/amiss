@@ -1,4 +1,4 @@
-use crate::digest::Digest;
+use crate::model::Digest;
 use crate::model::Oid;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
@@ -29,7 +29,12 @@ pub enum BlobMode {
 /// The content evidence retained for a located blob. An available blob has
 /// both digests; an LFS pointer has only the digest of the pointer bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(
+    remote = "Self",
+    tag = "kind",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
 #[strum_discriminants(name(BlobContentTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
@@ -41,6 +46,21 @@ pub enum BlobContent {
     LfsPointer {
         raw_digest: Digest,
     },
+}
+
+impl Serialize for BlobContent {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for BlobContent {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 impl BlobContent {
@@ -62,29 +82,84 @@ impl BlobContent {
 
 /// A located ordinary blob and the evidence read from it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct BlobTarget<P> {
     pub path: P,
     pub mode: BlobMode,
     pub content: BlobContent,
 }
 
+impl<P: Serialize> Serialize for BlobTarget<P> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, P: Deserialize<'de>> Deserialize<'de> for BlobTarget<P> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(
+    remote = "Self",
+    tag = "kind",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
 pub enum TaggedBlobTarget<P> {
     Blob(BlobTarget<P>),
+}
+
+impl<P: Serialize> Serialize for TaggedBlobTarget<P> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, P: Deserialize<'de>> Deserialize<'de> for TaggedBlobTarget<P> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 /// A located target. A tree has no blob content; a blob always carries a
 /// valid blob mode and one exact content-evidence shape.
 #[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(
+    remote = "Self",
+    tag = "kind",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
 #[strum_discriminants(name(TargetTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
 pub enum Target<P> {
     Tree { path: P },
     Blob(BlobTarget<P>),
+}
+
+impl<P: Serialize> Serialize for Target<P> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, P: Deserialize<'de>> Deserialize<'de> for Target<P> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 impl<P> Target<P> {
@@ -142,9 +217,15 @@ pub struct DeclaredUntracked<P> {
 #[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize)]
 #[serde(tag = "reason", rename_all = "kebab-case")]
 #[strum_discriminants(name(UnsupportedTargetTag))]
-#[strum_discriminants(derive(AsRefStr, EnumString, EnumIter, Serialize, Deserialize))]
+#[strum_discriminants(derive(
+    AsRefStr,
+    Display,
+    EnumString,
+    EnumIter,
+    SerializeDisplay,
+    DeserializeFromStr
+))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
-#[strum_discriminants(serde(rename_all = "kebab-case"))]
 pub enum UnsupportedTarget<P> {
     Symlink { path: P },
     Gitlink { path: P },
@@ -186,7 +267,12 @@ impl<P> UnsupportedSemantics<P> {
 /// Version-scoped forge references identify a contained path under a named
 /// ref, a full immutable commit and path, or no trustworthy path at all.
 #[derive(Clone, Debug, PartialEq, Eq, EnumDiscriminants, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(
+    remote = "Self",
+    tag = "kind",
+    rename_all = "kebab-case",
+    deny_unknown_fields
+)]
 #[strum_discriminants(name(VersionScopeTag))]
 #[strum_discriminants(derive(AsRefStr, EnumString, EnumIter))]
 #[strum_discriminants(strum(serialize_all = "kebab-case"))]
@@ -194,6 +280,21 @@ pub enum VersionScope<P> {
     KnownPath { path: P },
     KnownCommit { commit_oid: Oid, path: P },
     UnknownPath {},
+}
+
+impl<P: Serialize> Serialize for VersionScope<P> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, P: Deserialize<'de>> Deserialize<'de> for VersionScope<P> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 /// A syntax defect that prevents a reference from identifying a repository or

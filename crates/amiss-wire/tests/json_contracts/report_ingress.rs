@@ -1,11 +1,9 @@
-use amiss_wire::{
-    digest::hb,
-    report::{
-        PAYLOAD_SCHEMA, ReportDefect,
-        model::{ReportEnvelope, ReportStatus},
-        validate_envelope,
-    },
+use amiss_wire::report::{
+    PAYLOAD_SCHEMA, ReportDefect,
+    model::{ReportEnvelope, ReportStatus},
+    validate_envelope,
 };
+use sha2::Digest as _;
 
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
@@ -25,7 +23,14 @@ fn positional_rows_are_rejected_with_original_and_rebound_digests() {
         .replace(&payload, &changed);
     let rebound = wire.replace(
         &report.payload_digest.to_string(),
-        &hb(PAYLOAD_SCHEMA, changed.as_bytes()).to_string(),
+        &amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(changed.as_bytes())
+                .finalize()
+                .0,
+        )
+        .to_string(),
     );
     let refused = [wire, rebound].map(|input| {
         assert_eq!(
@@ -94,12 +99,15 @@ fn known_fields_cannot_hide_non_strict_json_tokens() {
 #[test]
 fn typed_counts_keep_the_safe_integer_boundary() {
     let mut report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
-    let safe = u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER).unwrap();
+    let safe = u64::try_from(js_int::MAX_SAFE_INT).unwrap();
     assert_eq!(safe, js_int::MAX_SAFE_UINT);
     report.payload.summary.findings.warn = safe;
-    report.payload_digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+    report.payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&report.payload).unwrap())
+            .finalize()
+            .0,
     );
     let input = serde_json_canonicalizer::to_vec(&report).unwrap();
     assert_eq!(
@@ -129,9 +137,12 @@ fn payload_digest_precedes_the_semantic_verdict() {
         validate_envelope(&serde_json_canonicalizer::to_vec(&report).unwrap()).map(drop),
         Err(ReportDefect::DigestMismatch)
     );
-    report.payload_digest = hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+    report.payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&report.payload).unwrap())
+            .finalize()
+            .0,
     );
     assert_eq!(
         validate_envelope(&serde_json_canonicalizer::to_vec(&report).unwrap()).map(drop),

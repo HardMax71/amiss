@@ -1,10 +1,11 @@
+use sha2::Digest as _;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::{Error, ErrorKind, fail};
-use amiss_wire::digest::{Digest, hj_serde};
+use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{BrokenRedirectReason, FindingFactEvidence};
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
@@ -38,9 +39,13 @@ pub(super) fn site_build_inputs(
         let Observation::Site(observation) = observation.into_owned() else {
             return fail(&observation_path, ErrorKind::Inconsistent);
         };
-        let digest = hj_serde(SITE_CLAIM_DOMAIN, |mut writer| {
+        let digest = {
+            let mut writer = digest_io::IoWrapper(
+                sha2::Sha256::new_with_prefix(SITE_CLAIM_DOMAIN).chain_update([0_u8]),
+            );
             serde_json_canonicalizer::to_writer(&observation, &mut writer)
-        })
+                .map(|()| Digest::from(writer.0.finalize().0))
+        }
         .map_err(|_defect| Error::new(&observation_path, ErrorKind::InvalidValue))?;
         match observation {
             SiteBuildObservation::Navigation {
@@ -371,9 +376,13 @@ pub(crate) fn fragment_target(anchors: &[String], fragment: &str) -> bool {
 }
 
 fn site_defect_id(kind: &impl std::fmt::Display, route: &str) -> serde_json::Result<Digest> {
-    hj_serde(SITE_DEFECT_DOMAIN, |mut writer| {
+    {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(SITE_DEFECT_DOMAIN).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&SiteDefectIdentity { kind, route }, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
 }
 
 fn validate_navigation(

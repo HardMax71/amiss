@@ -1,10 +1,9 @@
 use amiss_scan::resolve::{RAW_EVIDENCE_DOMAIN, TARGET_LINE_PROJECTION_DOMAIN};
 use amiss_scan::{Error, Resolution, ScanLimits};
 use amiss_wire::controls::{GitMode, ResourceName};
-use amiss_wire::digest::hb;
-use amiss_wire::json::Value;
 use amiss_wire::model::{Adapter, ForgeDialect};
 use amiss_wire::resolution::{BlobContent, BlobMode, Missing, Target, UnsupportedSemantics};
+use sha2::Digest as _;
 
 use crate::support::{MIXED_LINES, bed, bed_with, forge_context};
 
@@ -66,20 +65,22 @@ fn line_fragments_have_a_hard_grammar() {
 fn expected_line_projection(
     mode: GitMode,
     selected: &[u8],
-) -> Result<amiss_wire::digest::Digest, Box<dyn std::error::Error>> {
-    let selected_raw = hb(RAW_EVIDENCE_DOMAIN, selected);
-    Ok(hb(
-        TARGET_LINE_PROJECTION_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&Value::object(vec![
-            (
-                "git_mode".to_owned(),
-                Value::string(mode.as_ref().to_owned()),
-            ),
-            (
-                "raw_digest".to_owned(),
-                Value::string(selected_raw.to_string()),
-            ),
-        ]))?,
+) -> Result<amiss_wire::model::Digest, Box<dyn std::error::Error>> {
+    let selected_raw = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(selected)
+            .finalize()
+            .0,
+    );
+    Ok(amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(TARGET_LINE_PROJECTION_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&serde_json_canonicalizer::to_vec(
+                &serde_json::json!({ "git_mode": mode, "raw_digest": selected_raw }),
+            )?)
+            .finalize()
+            .0,
     ))
 }
 
@@ -120,7 +121,13 @@ fn line_selections_digest_the_exact_raw_inclusive_slice() {
         };
         assert_eq!(
             raw_digest,
-            hb(RAW_EVIDENCE_DOMAIN, MIXED_LINES),
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(MIXED_LINES)
+                    .finalize()
+                    .0
+            ),
             "the evidence digest remains the complete target for {fragment}"
         );
         assert_eq!(

@@ -1,7 +1,7 @@
 use amiss_scan::report::{INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, synthetic_candidate};
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
+use sha2::Digest as _;
 
 #[test]
 fn typed_index_identities_hash_every_entry_field_without_changing_the_wire() {
@@ -45,9 +45,12 @@ fn typed_index_identities_hash_every_entry_field_without_changing_the_wire() {
                          "object_oid": "a".repeat(width), "skip_worktree": !skip}
                     ]
                 });
-                let projection_digest = hb(
-                    INDEX_PROJECTION_SCHEMA,
-                    &serde_json_canonicalizer::to_vec(&projection).unwrap(),
+                let projection_digest = amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix(INDEX_PROJECTION_SCHEMA)
+                        .chain_update([0_u8])
+                        .chain_update(serde_json_canonicalizer::to_vec(&projection).unwrap())
+                        .finalize()
+                        .0,
                 );
                 let snapshot = serde_json::json!({
                     "schema": "amiss/scanner-snapshot", "kind": "index",
@@ -62,9 +65,12 @@ fn typed_index_identities_hash_every_entry_field_without_changing_the_wire() {
                 );
                 assert_eq!(
                     candidate.snapshot.snapshot_digest,
-                    hb(
-                        SNAPSHOT_SCHEMA,
-                        &serde_json_canonicalizer::to_vec(&snapshot).unwrap()
+                    amiss_wire::model::Digest::from(
+                        sha2::Sha256::new_with_prefix(SNAPSHOT_SCHEMA)
+                            .chain_update([0_u8])
+                            .chain_update(serde_json_canonicalizer::to_vec(&snapshot).unwrap())
+                            .finalize()
+                            .0
                     )
                 );
                 assert_eq!(candidate.snapshot.entry_count, 2);
@@ -90,9 +96,12 @@ fn an_empty_index_still_has_a_complete_projection() {
     assert_eq!(candidate.skip_worktree_paths, 0);
     assert_eq!(
         candidate.snapshot.index_projection_digest,
-        hb(
-            INDEX_PROJECTION_SCHEMA,
-            br#"{"entries":[],"schema":"amiss/scanner-index-projection"}"#
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(INDEX_PROJECTION_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(br#"{"entries":[],"schema":"amiss/scanner-index-projection"}"#)
+                .finalize()
+                .0
         )
     );
 }

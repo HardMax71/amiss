@@ -1,7 +1,8 @@
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::{FactSchema, FindingKeyInputSchema, Profile, TargetKind};
-use amiss_wire::digest::{Digest, hj_serde};
+use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
     EmptyRepositoryPath, FindingFactEvidence, FindingFactInput, FindingKeyInput, PolicySource,
@@ -47,9 +48,13 @@ pub fn structural_facts(
                 key_input: &group.key,
                 schema: FactSchema::Current,
             };
-            let fact_digest = hj_serde(FACT_DOMAIN, |mut writer| {
+            let fact_digest = {
+                let mut writer = digest_io::IoWrapper(
+                    sha2::Sha256::new_with_prefix(FACT_DOMAIN).chain_update([0_u8]),
+                );
                 serde_json_canonicalizer::to_writer(&input, &mut writer)
-            })
+                    .map(|()| Digest::from(writer.0.finalize().0))
+            }
             .map_err(|_defect| crate::Error::Internal)?;
             Ok((digest, (multiplicity, fact_digest)))
         })
@@ -78,13 +83,29 @@ fn collect_structural<'a>(
             document: observation.document.clone(),
             normalized_target_intent: RepositoryTargetIntent {
                 commit_oid: intent.commit_oid.clone(),
-                fragment_digest: observe::fragment_digest(intent),
+                fragment_digest: intent.fragment.as_deref().map(|text| {
+                    Digest::from(
+                        sha2::Sha256::new_with_prefix(observe::LINK_FRAGMENT_DOMAIN)
+                            .chain_update([0_u8])
+                            .chain_update(text.as_bytes())
+                            .finalize()
+                            .0,
+                    )
+                }),
                 kind: RepositoryIntentKind::RepositoryPath,
                 path: intent.repository_path.clone().map_or(
                     RepositoryIntentPath::Empty(EmptyRepositoryPath::Empty),
                     RepositoryIntentPath::Path,
                 ),
-                query_digest: observe::query_digest(intent),
+                query_digest: intent.query.as_deref().map(|text| {
+                    Digest::from(
+                        sha2::Sha256::new_with_prefix(observe::LINK_QUERY_DOMAIN)
+                            .chain_update([0_u8])
+                            .chain_update(text.as_bytes())
+                            .finalize()
+                            .0,
+                    )
+                }),
                 target_kind: intent.target_kind.unwrap_or(TargetKind::Either),
             },
             occurrence: ReferenceOccurrence {
@@ -94,9 +115,13 @@ fn collect_structural<'a>(
             source_construct: observation.construct,
         },
     };
-    let digest = hj_serde(FINDING_KEY_DOMAIN, |mut writer| {
+    let digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&key, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| crate::Error::Internal)?;
     let group = groups.entry(digest).or_insert_with(|| KeyGroup {
         key,

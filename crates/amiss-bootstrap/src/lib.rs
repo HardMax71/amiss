@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 pub mod build;
 pub mod constraint;
 pub mod result;
@@ -6,11 +7,8 @@ pub mod supervise;
 use amiss_git::{GitResources, ObjectKind, Repository};
 use amiss_wire::action::{executable_platform, host_platform};
 use amiss_wire::controls::{ConstraintPlatform, ExecutionConstraintDescriptor, GitMode};
-use amiss_wire::digest::{Digest, RAW_EVIDENCE_DOMAIN, hb, sha256};
-use amiss_wire::manifest::{
-    ReleaseArtifact, ReleaseManifest, RuntimeRole, canonical_release_manifest,
-    parse_release_manifest,
-};
+use amiss_wire::manifest::{ReleaseArtifact, ReleaseManifest, RuntimeRole, parse_release_manifest};
+use amiss_wire::model::{Digest, RAW_EVIDENCE_DOMAIN};
 use amiss_wire::model::{Oid, RepoPathText};
 
 /// The engine names itself with this domain over its own bytes, and the
@@ -67,7 +65,14 @@ pub fn validate(
     constraint: &ExecutionConstraintDescriptor,
     bootstrap_bytes: &[u8],
 ) -> Result<Validated, Refusal> {
-    if hb(BOOTSTRAP_DOMAIN, bootstrap_bytes) != constraint.bootstrap_digest {
+    if Digest::from(
+        sha2::Sha256::new_with_prefix(BOOTSTRAP_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(bootstrap_bytes)
+            .finalize()
+            .0,
+    ) != constraint.bootstrap_digest
+    {
         return Err(tampered("bootstrap-digest-mismatch"));
     }
     let platform = host_platform().ok_or(Refusal::Unavailable("unsupported-platform"))?;
@@ -106,7 +111,14 @@ pub(crate) fn validate_release(
         if lock_mode != GitMode::RegularFile {
             return Err(tampered("path-not-regular-blob"));
         }
-        if hb(RAW_EVIDENCE_DOMAIN, &lock_bytes) != lock.raw_digest {
+        if Digest::from(
+            sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&lock_bytes)
+                .finalize()
+                .0,
+        ) != lock.raw_digest
+        {
             return Err(tampered("dependency-lock-mismatch"));
         }
     }
@@ -124,7 +136,7 @@ pub(crate) fn validate_release(
         if mode != file.git_mode {
             return Err(tampered("runtime-closure-mismatch"));
         }
-        if sha256(&bytes) != file.file_sha256 {
+        if Digest::from(sha2::Sha256::digest(&bytes).0) != file.file_sha256 {
             return Err(tampered("runtime-closure-mismatch"));
         }
         if file.role == RuntimeRole::Executable {
@@ -133,10 +145,16 @@ pub(crate) fn validate_release(
     }
     let binary = binary.ok_or(tampered("runtime-closure-mismatch"))?;
 
-    if sha256(&binary) != artifact.binary_sha256 {
+    if Digest::from(sha2::Sha256::digest(&binary).0) != artifact.binary_sha256 {
         return Err(tampered("engine-digest-mismatch"));
     }
-    let engine_digest = hb(ENGINE_DOMAIN, &binary);
+    let engine_digest = Digest::from(
+        sha2::Sha256::new_with_prefix(ENGINE_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(&binary)
+            .finalize()
+            .0,
+    );
     if engine_digest != artifact.engine_digest {
         return Err(tampered("engine-digest-mismatch"));
     }
@@ -186,9 +204,12 @@ pub(crate) fn load_release_manifest(
     }
     let manifest =
         parse_release_manifest(&bytes).map_err(|_defect| tampered("manifest-unreadable"))?;
-    let digest = canonical_release_manifest(&manifest)
-        .map_err(|_defect| tampered("manifest-unreadable"))?
-        .1;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::manifest::MANIFEST_DOMAIN).chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&manifest, &mut writer)
+        .map_err(|_defect| tampered("manifest-unreadable"))?;
+    let digest = Digest::from(writer.0.finalize().0);
     Ok((manifest, digest))
 }
 

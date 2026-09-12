@@ -1,7 +1,7 @@
 use amiss_wire::controls::GitMode;
 use amiss_wire::controls::Profile;
 use amiss_wire::controls::ProjectionSource;
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{RepoPath, RepoPathText};
 use amiss_wire::report::FindingKind;
 use amiss_wire::report::model::ProjectionDifference;

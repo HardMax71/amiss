@@ -1,8 +1,9 @@
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 
 use amiss_controller_files::read_bounded_at;
 use amiss_wire::assessment::Nullable;
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPathText;
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 use amiss_wire::semantic::{PayloadSchema, SemanticProducer, SemanticSubject};
@@ -58,7 +59,7 @@ pub enum MdBookEvidenceError {
     #[error("the mdBook renderer context exceeds its byte ceiling")]
     ContextBytes,
     #[error("the mdBook renderer context is not strict JSON")]
-    Context(#[source] amiss_wire::json::Error),
+    Context(#[source] amiss_wire::de::Error),
     #[error("the mdBook renderer context has an invalid shape")]
     ContextShape,
     #[error("the mdBook build is not supported by this producer")]
@@ -101,7 +102,7 @@ pub fn mdbook_site_evidence(
     if u64::try_from(context_bytes.len()).unwrap_or(u64::MAX) > MDBOOK_RENDER_CONTEXT_BYTES {
         return Err(MdBookEvidenceError::ContextBytes);
     }
-    amiss_wire::json::parse(context_bytes).map_err(MdBookEvidenceError::Context)?;
+    amiss_wire::de::JsonProfile::validate(context_bytes).map_err(MdBookEvidenceError::Context)?;
     let mut deserializer = serde_json::Deserializer::from_slice(context_bytes);
     // The strict JSON gate has already enforced the document depth ceiling.
     deserializer.disable_recursion_limit();
@@ -142,7 +143,15 @@ pub fn mdbook_site_evidence(
         navigation: &navigation,
         pages: &inputs,
     })
-    .map(|canonical| hb(INPUT_DOMAIN, &canonical))
+    .map(|canonical| {
+        Digest::from(
+            sha2::Sha256::new_with_prefix(INPUT_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&canonical)
+                .finalize()
+                .0,
+        )
+    })
     .map_err(|_defect| MdBookEvidenceError::Evidence)?;
     let document = amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
         schema: PayloadSchema::Current,
@@ -207,7 +216,13 @@ fn collect_pages(
         collected.inputs.push(SiteInputPage {
             route: route.clone(),
             source: source.clone(),
-            html_digest: hb(HTML_DOMAIN, &html),
+            html_digest: Digest::from(
+                sha2::Sha256::new_with_prefix(HTML_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&html)
+                    .finalize()
+                    .0,
+            ),
         });
         collected.observations.push(match source {
             None => SiteBuildObservation::GeneratedRoute {

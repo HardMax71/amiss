@@ -1,10 +1,11 @@
+use sha2::Digest as _;
 mod format;
 mod semantic;
 mod store;
 
 use std::time::Duration;
 
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use url::Url;
 
 use crate::{
@@ -177,7 +178,8 @@ pub(crate) fn reference_matches_report(
     reference: &ArtifactReference,
     report: Option<&[u8]>,
 ) -> bool {
-    report.is_some_and(|bytes| amiss_wire::digest::sha256(bytes) == reference.report_digest)
+    report
+        .is_some_and(|bytes| Digest::from(sha2::Sha256::digest(bytes).0) == reference.report_digest)
 }
 
 pub(crate) fn evaluation_id(raw: &str) -> Result<ControllerEvaluationId, ArtifactError> {

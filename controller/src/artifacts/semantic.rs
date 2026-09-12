@@ -1,9 +1,10 @@
+use sha2::Digest as _;
 mod tests;
 
 use std::collections::BTreeSet;
 
 use amiss_wire::assessment::Nullable;
-use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::model::Digest;
 use base64::Engine as _;
 
 use crate::semantic_artifact::InputArtifact;
@@ -41,13 +42,23 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
         let envelope_bytes = base64::engine::general_purpose::STANDARD
             .decode(row.envelope_bytes_base64)
             .map_err(|_defect| ArtifactError::Corrupt)?;
-        if sha256(&template_bytes) != row.template_digest
-            || sha256(&envelope_bytes) != row.envelope_digest
+        if Digest::from(sha2::Sha256::digest(&template_bytes).0) != row.template_digest
+            || Digest::from(sha2::Sha256::digest(&envelope_bytes).0) != row.envelope_digest
         {
             return Err(ArtifactError::Corrupt);
         }
 
-        let template = amiss_wire::semantic::parse_template(&template_bytes)
+        if u64::try_from(template_bytes.len()).unwrap_or(u64::MAX)
+            > amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES
+        {
+            return Err(ArtifactError::Corrupt);
+        }
+        amiss_wire::de::JsonProfile::validate(&template_bytes)
+            .map_err(|_defect| ArtifactError::Corrupt)?;
+        let template: amiss_wire::semantic::SemanticEvidenceTemplate<'static> =
+            serde_json::from_slice(&template_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
+        template
+            .validate()
             .map_err(|_defect| ArtifactError::Corrupt)?;
         let envelope = amiss_wire::semantic::parse(&envelope_bytes)
             .map_err(|_defect| ArtifactError::Corrupt)?;

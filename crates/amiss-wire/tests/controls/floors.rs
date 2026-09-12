@@ -1,11 +1,10 @@
 use amiss_wire::controls::{
     EligibleFindingKind, FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloorSchema,
-    ResourceName, canonical_organization_floor, canonical_scanner_policy, parse_organization_floor,
-    parse_scanner_policy,
+    ResourceName, parse_organization_floor, parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
+use sha2::Digest as _;
 
-use amiss_wire::json;
 use amiss_wire::model::BranchRef;
 
 use crate::support::{FLOOR, POLICY};
@@ -18,10 +17,23 @@ fn a_floor_may_require_warn_where_the_fixture_requires_fail() {
     let floor =
         parse_organization_floor(doc.as_bytes()).expect("warn is a disposition a floor may set");
     assert_ne!(
-        canonical_organization_floor(&floor).unwrap().1,
-        canonical_organization_floor(&parse_organization_floor(FLOOR).unwrap())
-            .unwrap()
-            .1
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(&parse_organization_floor(FLOOR).unwrap())
+                        .unwrap()
+                )
+                .finalize()
+                .0
+        )
     );
 }
 
@@ -30,10 +42,24 @@ fn parses_the_floor_fixture() {
     let floor = parse_organization_floor(FLOOR).unwrap();
     assert_eq!(floor.schema, OrganizationFloorSchema::Current);
     assert_eq!(
-        canonical_organization_floor(&floor).unwrap().1,
-        amiss_wire::digest::hb(
-            "amiss/organization-floor",
-            &serde_json_canonicalizer::to_vec(&json::parse(FLOOR).unwrap()).unwrap()
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(
+                        &serde_json::from_slice::<serde_json::Value>(FLOOR).unwrap()
+                    )
+                    .unwrap()
+                )
+                .finalize()
+                .0
         )
     );
     assert_eq!(floor.floor_id.as_str(), "platform/scanner-floor-2026-07");
@@ -60,10 +86,23 @@ fn parses_the_floor_fixture() {
     assert_eq!(waivable, [expected]);
     assert_eq!(expected, "explicit-target-missing");
     assert_ne!(
-        canonical_organization_floor(&floor).unwrap().1,
-        canonical_scanner_policy(&parse_scanner_policy(POLICY).unwrap())
-            .unwrap()
-            .1
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-policy")
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(&parse_scanner_policy(POLICY).unwrap())
+                        .unwrap()
+                )
+                .finalize()
+                .0
+        )
     );
 }
 
@@ -151,7 +190,7 @@ fn canonical_floor_rechecks_mutable_public_fields() {
         .expect("the fixture has resource limits")
         .maximum = -1;
     assert_eq!(
-        canonical_organization_floor(&floor).unwrap_err(),
+        floor.validate().unwrap_err(),
         FloorDefect::Schema(amiss_wire::de::Error::new(
             "$.resource_limits[0].maximum",
             ErrorKind::InvalidValue,
@@ -167,16 +206,16 @@ fn canonical_floor_keeps_resource_limits_inside_safe_integers() {
         .first_mut()
         .expect("the fixture has resource limits");
     limit.resource = ResourceName::DocumentsPerSnapshot;
-    limit.maximum = json::MAX_SAFE_INTEGER;
-    assert!(canonical_organization_floor(&floor).is_ok());
+    limit.maximum = js_int::MAX_SAFE_INT;
+    assert!(floor.validate().is_ok());
 
     floor
         .resource_limits
         .first_mut()
         .expect("the fixture has resource limits")
-        .maximum = json::MAX_SAFE_INTEGER + 1;
+        .maximum = js_int::MAX_SAFE_INT + 1;
     assert_eq!(
-        canonical_organization_floor(&floor).unwrap_err(),
+        floor.validate().unwrap_err(),
         FloorDefect::Schema(amiss_wire::de::Error::new(
             "$.resource_limits[0].maximum",
             ErrorKind::InvalidValue,

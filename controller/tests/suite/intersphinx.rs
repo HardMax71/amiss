@@ -3,13 +3,13 @@
     reason = "the fixture constructs known-valid bounded inventories"
 )]
 
+use sha2::Digest as _;
 use std::io::Write as _;
 
 use amiss_controller::{
     INTERSPHINX_INVENTORY_BYTES, IntersphinxError, IntersphinxInventory, bind_semantic_evidence,
     intersphinx_evidence,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::semantic::observation::Observation;
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
@@ -43,7 +43,13 @@ pub(super) fn evidence() -> Vec<amiss_controller::SemanticEvidenceTemplate<'stat
 #[test]
 fn a_bounded_inventory_becomes_only_complete_label_evidence() {
     let evidence = evidence();
-    let candidate = hb("amiss/test-candidate", b"candidate");
+    let candidate = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-candidate")
+            .chain_update([0_u8])
+            .chain_update(b"candidate")
+            .finalize()
+            .0,
+    );
     let bound = bind_semantic_evidence(&evidence, &[], &[], candidate).unwrap();
     let parsed = amiss_wire::semantic::parse(
         &serde_json::to_vec(&bound.supplied.first().unwrap().value).unwrap(),

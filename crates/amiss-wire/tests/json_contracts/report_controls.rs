@@ -1,7 +1,4 @@
 use amiss_wire::{
-    controls::{canonical_execution_constraint, canonical_trusted_time},
-    digest::hb,
-    manifest::canonical_release_manifest,
     report::{
         PAYLOAD_SCHEMA, ReportDefect,
         model::{
@@ -18,6 +15,7 @@ use amiss_wire::{
     requests::RequestTrust,
     semantic::SemanticProducerKind,
 };
+use sha2::Digest as _;
 
 #[expect(
     clippy::unwrap_used,
@@ -33,40 +31,30 @@ fn reports() -> Vec<ReportEnvelope> {
     let Controls::Resolved(controls) = &mut report.payload.controls else {
         panic!("the report fixture has resolved controls");
     };
-    let descriptor = serde_json::from_slice(include_bytes!(
-        "../../../../spec/examples/scanner-execution-constraint.json"
-    ))
+    let descriptor: amiss_wire::controls::ExecutionConstraintDescriptor = serde_json::from_slice(
+        include_bytes!("../../../../spec/examples/scanner-execution-constraint.json"),
+    )
     .unwrap();
-    let (_, descriptor_digest) = canonical_execution_constraint(&descriptor).unwrap();
-    let release_manifest = serde_json::from_slice(include_bytes!(
-        "../../../../spec/examples/scanner-release-manifest.json"
-    ))
-    .unwrap();
-    let (_, release_manifest_digest) = canonical_release_manifest(&release_manifest).unwrap();
-    let artifact = release_manifest
-        .artifacts
-        .iter()
-        .find(|artifact| artifact.platform == descriptor.selected_platform)
-        .unwrap();
+    let descriptor_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&descriptor).unwrap())
+            .finalize()
+            .0,
+    );
     report.payload.engine.action_provenance =
-        ActionProvenance::ForgeAction(Box::new(ForgeActionProvenance {
-            action_commit_oid: descriptor.action_commit_oid.clone(),
-            action_object_format: descriptor.action_object_format,
-            action_repository: descriptor.action_repository.clone(),
-            action_tree_oid: descriptor.action_tree_oid.clone(),
-            dependency_lock_digest: release_manifest.dependency_lock_digest,
-            kind: ForgeActionKind::ForgeAction,
-            manifest_path: descriptor.manifest_path.clone(),
-            selected_artifact_name: artifact.artifact_name.to_string(),
-            release_manifest,
-            release_manifest_digest,
-            selected_platform: descriptor.selected_platform,
-        }));
-    let statement = serde_json::from_slice(include_bytes!(
-        "../../../../spec/examples/scanner-trusted-time-statement.json"
-    ))
+        ActionProvenance::ForgeAction(Box::new(forge_action(&descriptor)));
+    let statement: amiss_wire::controls::TrustedTimeStatement = serde_json::from_slice(
+        include_bytes!("../../../../spec/examples/scanner-trusted-time-statement.json"),
+    )
     .unwrap();
-    let (_, statement_digest) = canonical_trusted_time(&statement).unwrap();
+    let statement_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&statement).unwrap())
+            .finalize()
+            .0,
+    );
     controls.sandbox.assurance = SandboxAssurance::ProviderVerified;
     controls.sandbox.enforcement_source = SandboxEnforcementSource::ExternalRequiredCheck;
     controls.sandbox.verification = Some(SandboxVerification {
@@ -95,10 +83,10 @@ fn reports() -> Vec<ReportEnvelope> {
         trust_source: TrustedTimeTrustSource::ExternalRequiredCheck,
     }));
     controls.semantic_evidence = Some(vec![SemanticEvidenceProvenance {
-        payload_digest: hb("test", b"evidence"),
+        payload_digest: amiss_wire::model::Digest::from([23; 32]),
         producer: SemanticEvidenceProducer {
             identity: "producer".parse().unwrap(),
-            input_digest: hb("test", b"input"),
+            input_digest: amiss_wire::model::Digest::from([21; 32]),
             kind: SemanticProducerKind::RecordSet,
             version: "1".to_owned(),
         },
@@ -111,6 +99,44 @@ fn reports() -> Vec<ReportEnvelope> {
     });
     reports.push(report);
     reports
+}
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "published execution provenance fixtures"
+)]
+fn forge_action(
+    descriptor: &amiss_wire::controls::ExecutionConstraintDescriptor,
+) -> ForgeActionProvenance {
+    let release_manifest: amiss_wire::manifest::ReleaseManifest = serde_json::from_slice(
+        include_bytes!("../../../../spec/examples/scanner-release-manifest.json"),
+    )
+    .unwrap();
+    let release_manifest_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-release-manifest")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&release_manifest).unwrap())
+            .finalize()
+            .0,
+    );
+    let artifact = release_manifest
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.platform == descriptor.selected_platform)
+        .unwrap();
+    ForgeActionProvenance {
+        action_commit_oid: descriptor.action_commit_oid.clone(),
+        action_object_format: descriptor.action_object_format,
+        action_repository: descriptor.action_repository.clone(),
+        action_tree_oid: descriptor.action_tree_oid.clone(),
+        dependency_lock_digest: release_manifest.dependency_lock_digest,
+        kind: ForgeActionKind::ForgeAction,
+        manifest_path: descriptor.manifest_path.clone(),
+        selected_artifact_name: artifact.artifact_name.to_string(),
+        release_manifest,
+        release_manifest_digest,
+        selected_platform: descriptor.selected_platform,
+    }
 }
 
 #[test]
@@ -130,7 +156,13 @@ fn complete_report_payloads_reject_unknown_members_with_matching_digests() {
     for mut report in cases {
         let payload =
             String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
-        report.payload_digest = hb(PAYLOAD_SCHEMA, payload.as_bytes());
+        report.payload_digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(payload.as_bytes())
+                .finalize()
+                .0,
+        );
         let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&report).unwrap()).unwrap();
         assert_eq!(
             validate_envelope(wire.as_bytes()).unwrap().0,
@@ -141,7 +173,14 @@ fn complete_report_payloads_reject_unknown_members_with_matching_digests() {
             invalid.insert_str(offset + 1, "\"__unexpected\":true,");
             let altered = wire.replace(&payload, &invalid).replace(
                 &report.payload_digest.to_string(),
-                &hb(PAYLOAD_SCHEMA, invalid.as_bytes()).to_string(),
+                &amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                        .chain_update([0_u8])
+                        .chain_update(invalid.as_bytes())
+                        .finalize()
+                        .0,
+                )
+                .to_string(),
             );
             assert_eq!(
                 validate_envelope(altered.as_bytes()).map(drop),

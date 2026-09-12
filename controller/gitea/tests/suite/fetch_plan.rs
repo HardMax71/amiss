@@ -3,6 +3,7 @@
     reason = "fixed provider identities and constraints must fail loudly"
 )]
 
+use sha2::Digest as _;
 use std::sync::Arc;
 
 use amiss_controller::{
@@ -13,7 +14,6 @@ use amiss_controller::{
 };
 use amiss_controller_gitea::{GiteaPlanError, gitea_fetch_plan};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, parse_execution_constraint};
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 const RUN_DOMAIN: &str = "amiss/controller-gitea-family-pull-request-v1";
@@ -180,7 +180,17 @@ fn provider_run(
     ])
     .unwrap();
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!("pr:{}", hb(RUN_DOMAIN, &fields))).unwrap(),
+        ProviderRunId::new(format!(
+            "pr:{}",
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(RUN_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&fields)
+                    .finalize()
+                    .0
+            )
+        ))
+        .unwrap(),
         ProviderRunAttempt::new(1).unwrap(),
         ObjectFormat::Sha1,
         candidate.clone(),

@@ -107,9 +107,11 @@ pub(super) fn publishable(state: ChangeState, conclusion: CheckConclusion) -> bo
 
 fn expected(publication: &Publication) -> Result<CreateReview, ProviderError> {
     let (label, event) = conclusion(publication.conclusion);
-    let failure = provider_failure(publication.conclusion)?
-        .map(|failure| format!("\nfailure: {failure}"))
-        .unwrap_or_default();
+    let failure = if let CheckConclusion::Unavailable(failure) = publication.conclusion {
+        format!("\nfailure: {}", failure.as_ref())
+    } else {
+        String::new()
+    };
     let run = &publication.run;
     let repository = &run.change.repository;
     let body = format!(
@@ -146,18 +148,6 @@ fn expected(publication: &Publication) -> Result<CreateReview, ProviderError> {
         commit_id: publication.gate_commit.as_str().to_owned(),
         comments: Vec::new(),
     })
-}
-
-fn provider_failure(conclusion: CheckConclusion) -> Result<Option<String>, ProviderError> {
-    let CheckConclusion::Unavailable(failure) = conclusion else {
-        return Ok(None);
-    };
-    serde_json::to_value(failure)
-        .map_err(|_defect| ProviderError::InvalidResponse)?
-        .as_str()
-        .map(str::to_owned)
-        .map(Some)
-        .ok_or(ProviderError::InvalidResponse)
 }
 
 fn conclusion(conclusion: CheckConclusion) -> (&'static str, &'static str) {

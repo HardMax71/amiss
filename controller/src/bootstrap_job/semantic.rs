@@ -1,11 +1,12 @@
+use sha2::Digest as _;
 mod tests;
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use amiss_wire::digest::{Digest, sha256};
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 use amiss_wire::requests::SuppliedSemanticEvidence;
 use amiss_wire::semantic::{SemanticEvidence, SemanticEvidenceEnvelope};
 use base64::Engine as _;
@@ -67,7 +68,17 @@ pub fn bind_semantic_evidence(
         )?);
     }
     for source in acquired {
-        let template = amiss_wire::semantic::parse_template(&source.bytes)
+        if u64::try_from(source.bytes.len()).unwrap_or(u64::MAX)
+            > amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES
+        {
+            return Err(BootstrapJobError::SemanticEvidence);
+        }
+        amiss_wire::de::JsonProfile::validate(&source.bytes)
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+        let template: SemanticEvidenceTemplate<'static> = serde_json::from_slice(&source.bytes)
+            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
+        template
+            .validate()
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
         let actual = SemanticEvidenceExpectation {
             acquisition_identity: source.acquisition_identity.clone(),
@@ -135,9 +146,9 @@ fn bind_input(
             expected_context_digest: template.producer.context_digest,
         },
         acquisition_identity,
-        template_digest: sha256(&template_bytes),
+        template_digest: Digest::from(sha2::Sha256::digest(&template_bytes).0),
         template_bytes,
-        envelope_digest: sha256(&envelope_bytes),
+        envelope_digest: Digest::from(sha2::Sha256::digest(&envelope_bytes).0),
         envelope_bytes,
     })
 }

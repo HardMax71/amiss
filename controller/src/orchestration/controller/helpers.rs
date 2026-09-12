@@ -1,6 +1,7 @@
+use sha2::Digest as _;
 use std::time::Duration;
 
-use amiss_wire::{external::ExternalVerdict, model::Oid};
+use amiss_wire::{external::ExternalVerdict, model::Oid, report::model::ReportEnvelope};
 
 use crate::{
     AcceptedDelivery, ArtifactBundle, ArtifactError, ArtifactReference, AuthenticatedDelivery,
@@ -272,9 +273,12 @@ pub(super) fn retain_publication(
         .as_deref()
         .ok_or(ArtifactError::Corrupt)?;
     let artifact = if let Some(reference) = store.find(&publication.evaluation_id)? {
-        if reference.report_digest != amiss_wire::digest::sha256(report)
+        if reference.report_digest
+            != amiss_wire::model::Digest::from(sha2::Sha256::digest(report).0)
             || reference.semantic_digest.is_some_and(|digest| {
-                Some(digest) != semantic_artifact.map(amiss_wire::digest::sha256)
+                Some(digest)
+                    != semantic_artifact
+                        .map(|bytes| amiss_wire::model::Digest::from(sha2::Sha256::digest(bytes).0))
             })
         {
             return Err(ArtifactError::Conflict);
@@ -335,30 +339,16 @@ fn prepare_external(
     clock: &dyn ControllerClock,
     report: &[u8],
 ) -> PreparedExternal {
-    let Ok(parsed) = amiss_wire::json::parse(report) else {
+    let Ok(engine) =
+        serde_json::from_slice::<ReportEnvelope>(report).map(|report| report.payload.engine)
+    else {
         return PreparedExternal {
             incomplete: true,
             ..PreparedExternal::default()
         };
     };
-    let engine = parsed
-        .member("payload")
-        .and_then(|payload| payload.member("engine"));
-    let (Some(version), Some(digest)) = (
-        engine.and_then(|engine| engine.text("engine_version")),
-        engine.and_then(|engine| engine.text("engine_digest")),
-    ) else {
-        return PreparedExternal {
-            incomplete: true,
-            ..PreparedExternal::default()
-        };
-    };
-    let Some(engine_digest) = amiss_wire::digest::Digest::from_wire(digest) else {
-        return PreparedExternal {
-            incomplete: true,
-            ..PreparedExternal::default()
-        };
-    };
+    let version = &engine.engine_version;
+    let engine_digest = engine.engine_digest;
     let Ok(plan_bytes) = amiss_wire::external::plan(report, version, engine_digest) else {
         return PreparedExternal {
             incomplete: true,

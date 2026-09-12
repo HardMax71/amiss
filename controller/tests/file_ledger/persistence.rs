@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::fs;
 use std::mem::size_of;
 use std::path::Path;
@@ -7,7 +8,6 @@ use amiss_controller::{
     ArtifactReference, ControllerClock, DeliveryClaim, DeliveryLedger, FileLedger, FileLedgerError,
     LeaseCompletion, StageOutcome,
 };
-use amiss_wire::digest::{hb, sha256};
 use tempfile::TempDir;
 
 use super::support::{
@@ -59,7 +59,7 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
         id: "f".repeat(64),
         locator: format!("https://amiss.example/artifacts/{}/report", "f".repeat(64)),
         expires_at_unix_millis: 2_000,
-        report_digest: sha256(b"another report"),
+        report_digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(b"another report").0),
         semantic_digest: None,
         assessment_digest: None,
         external_tally: None,
@@ -73,8 +73,12 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
         id: "a".repeat(64),
         locator: format!("https://amiss.example/artifacts/{}/report", "a".repeat(64)),
         expires_at_unix_millis: 2_000,
-        report_digest: sha256(publication.report.as_deref().unwrap()),
-        semantic_digest: Some(sha256(b"semantic")),
+        report_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(publication.report.as_deref().unwrap()).0,
+        ),
+        semantic_digest: Some(amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(b"semantic").0,
+        )),
         assessment_digest: None,
         external_tally: None,
         external_incomplete: false,
@@ -476,7 +480,16 @@ fn rewrite_payload(root: &Path, change: impl FnOnce(&[u8]) -> Vec<u8>) {
     frame.extend_from_slice(MAGIC);
     frame.push(VERSION);
     frame.extend_from_slice(&payload_length.to_be_bytes());
-    frame.extend_from_slice(hb(DOMAIN, &payload).as_bytes());
+    frame.extend_from_slice(
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&payload)
+                .finalize()
+                .0,
+        )
+        .as_bytes(),
+    );
     frame.extend_from_slice(&payload);
     fs::write(path, frame).unwrap();
 }

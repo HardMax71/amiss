@@ -3,6 +3,7 @@
     reason = "the fixture constructs known-valid renderer contexts and output trees"
 )]
 
+use sha2::Digest as _;
 use std::{borrow::Cow, fs};
 
 use amiss_controller::{
@@ -11,7 +12,6 @@ use amiss_controller::{
 };
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
-use amiss_wire::digest::hb;
 use amiss_wire::model::RepoPathText;
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
 use cap_std::ambient_authority;
@@ -93,7 +93,13 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
             json!("Separator"),
         ],
     );
-    let candidate = hb("amiss/test-mdbook-candidate", b"candidate");
+    let candidate = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-mdbook-candidate")
+            .chain_update([0_u8])
+            .chain_update(b"candidate")
+            .finalize()
+            .0,
+    );
     let site = site("docs/book.toml", "/manual/");
 
     let evidence = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
@@ -165,7 +171,13 @@ fn generated_chapters_need_no_repository_attribution() {
     let context = context("0.5.4", true, &[chapter(Some("generated.md"), None, &[])]);
 
     let evidence = mdbook_site_evidence(
-        hb("amiss/test", b"candidate"),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test")
+                .chain_update([0_u8])
+                .chain_update(b"candidate")
+                .finalize()
+                .0,
+        ),
         &site("book.toml", "/manual/"),
         &context,
         &output(&root),
@@ -228,7 +240,13 @@ fn completed_links_not_chapter_membership_define_navigation() {
     );
 
     let evidence = mdbook_site_evidence(
-        hb("amiss/test", b"candidate"),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test")
+                .chain_update([0_u8])
+                .chain_update(b"candidate")
+                .finalize()
+                .0,
+        ),
         &site("book.toml", "/manual/"),
         &context,
         &output(&root),
@@ -307,7 +325,13 @@ fn resolved_renderer_configuration_is_part_of_the_input_identity() {
         )
         .into_bytes();
     assert_ne!(original, changed);
-    let candidate = hb("amiss/test", b"candidate");
+    let candidate = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test")
+            .chain_update([0_u8])
+            .chain_update(b"candidate")
+            .finalize()
+            .0,
+    );
     let site = site("book.toml", "/");
     let first = mdbook_site_evidence(candidate, &site, &original, &output(&root)).unwrap();
     let second = mdbook_site_evidence(candidate, &site, &changed, &output(&root)).unwrap();
@@ -335,7 +359,13 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
         &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
     );
     let original: serde_json::Value = serde_json::from_slice(&ordinary).unwrap();
-    let candidate = hb("amiss/test", b"candidate");
+    let candidate = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test")
+            .chain_update([0_u8])
+            .chain_update(b"candidate")
+            .finalize()
+            .0,
+    );
     let site = site("book.toml", "/");
     for (path, invalid) in [
         ("/book/items", json!(null)),
@@ -412,7 +442,13 @@ fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth
         &[chapter(Some("chapter.md"), Some("chapter.md"), &[])],
     );
     let mut changed: serde_json::Value = serde_json::from_slice(&ordinary).unwrap();
-    let candidate = hb("amiss/test", b"candidate");
+    let candidate = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test")
+            .chain_update([0_u8])
+            .chain_update(b"candidate")
+            .finalize()
+            .0,
+    );
     let site = site("book.toml", "/");
     let baseline = mdbook_site_evidence(candidate, &site, &ordinary, &output(&root)).unwrap();
     let baseline = amiss_wire::semantic::parse(&baseline).unwrap();
@@ -456,7 +492,13 @@ fn version_renderer_and_route_ownership_must_be_exact() {
     invalid_renderer["config"]["output"]["html"] = json!([]);
     assert!(matches!(
         mdbook_site_evidence(
-            hb("amiss/test", b"candidate"),
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test")
+                    .chain_update([0_u8])
+                    .chain_update(b"candidate")
+                    .finalize()
+                    .0
+            ),
             &site("book.toml", "/"),
             &serde_json::to_vec(&invalid_renderer).unwrap(),
             &output(&root),
@@ -465,7 +507,13 @@ fn version_renderer_and_route_ownership_must_be_exact() {
     ));
     assert!(matches!(
         mdbook_site_evidence(
-            hb("amiss/test", b"candidate"),
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test")
+                    .chain_update([0_u8])
+                    .chain_update(b"candidate")
+                    .finalize()
+                    .0
+            ),
             &site("book.toml", "/"),
             &context("0.5.3", true, &ordinary),
             &output(&root),
@@ -474,7 +522,13 @@ fn version_renderer_and_route_ownership_must_be_exact() {
     ));
     assert!(matches!(
         mdbook_site_evidence(
-            hb("amiss/test", b"candidate"),
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test")
+                    .chain_update([0_u8])
+                    .chain_update(b"candidate")
+                    .finalize()
+                    .0
+            ),
             &site("book.toml", "/"),
             &context("0.5.4", false, &ordinary),
             &output(&root),
@@ -483,7 +537,13 @@ fn version_renderer_and_route_ownership_must_be_exact() {
     ));
     assert!(matches!(
         mdbook_site_evidence(
-            hb("amiss/test", b"candidate"),
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test")
+                    .chain_update([0_u8])
+                    .chain_update(b"candidate")
+                    .finalize()
+                    .0
+            ),
             &site("book.toml", "/"),
             &context(
                 "0.5.4",
@@ -502,7 +562,13 @@ fn version_renderer_and_route_ownership_must_be_exact() {
 #[test]
 fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
     let root = tempfile::tempdir().unwrap();
-    let candidate = hb("amiss/test", b"candidate");
+    let candidate = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test")
+            .chain_update([0_u8])
+            .chain_update(b"candidate")
+            .finalize()
+            .0,
+    );
     let ordinary = context(
         "0.5.4",
         true,
@@ -588,7 +654,13 @@ fn unrepresentable_published_anchor_fails_the_complete_set() {
     );
     assert!(matches!(
         mdbook_site_evidence(
-            hb("amiss/test", b"candidate"),
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test")
+                    .chain_update([0_u8])
+                    .chain_update(b"candidate")
+                    .finalize()
+                    .0
+            ),
             &site("book.toml", "/"),
             &context,
             &output(&root),

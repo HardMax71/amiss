@@ -5,6 +5,7 @@
     reason = "integration assertions over exact semantic-evidence and report shapes"
 )]
 
+use sha2::Digest as _;
 use std::borrow::Cow;
 
 use amiss_git::Repository;
@@ -14,7 +15,7 @@ use amiss_scan::request::controls;
 use amiss_scan::{Effects, semantic};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::{ControlsRequest, SuppliedSemanticEvidence};
@@ -24,7 +25,13 @@ use amiss_wire::semantic::{observation::Observation, record};
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"test engine"),
+        digest: Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"test engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 
@@ -60,7 +67,13 @@ fn semantic_inputs(
     set: &str,
     records: &[(&str, &str)],
 ) -> semantic::Inputs {
-    let context_digest = hb("test/record-set-context", b"rust public api");
+    let context_digest = Digest::from(
+        sha2::Sha256::new_with_prefix("test/record-set-context")
+            .chain_update([0_u8])
+            .chain_update(b"rust public api")
+            .finalize()
+            .0,
+    );
     let evidence = SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
@@ -72,7 +85,13 @@ fn semantic_inputs(
             identity: ArtifactId::new("test-rust-public-api".to_owned()).unwrap(),
             version: "1".to_owned(),
             context_digest,
-            input_digest: hb("test/record-set-input", b"rust public api output"),
+            input_digest: Digest::from(
+                sha2::Sha256::new_with_prefix("test/record-set-input")
+                    .chain_update([0_u8])
+                    .chain_update(b"rust public api output")
+                    .finalize()
+                    .0,
+            ),
         },
         complete,
         observations: vec![Cow::Owned(Observation::Record(record::Observation {

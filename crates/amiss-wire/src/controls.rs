@@ -1,7 +1,6 @@
 use std::cmp::Ordering;
 
 use crate::de::{Error, ErrorKind, fail};
-use crate::json::{self, Value};
 use crate::model::{OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
 
 pub use crate::semantic::RECORD_KEY_BYTES;
@@ -19,22 +18,20 @@ mod taxonomy;
 mod trusted_time;
 mod waiver;
 
-pub use debt::{
-    DebtItem, DebtSnapshot, DebtSnapshotSchema, canonical_debt_snapshot, parse_debt_snapshot,
-};
+pub use debt::{DebtItem, DebtSnapshot, DebtSnapshotSchema, parse_debt_snapshot};
 pub use execution_constraint::{
     ACTION_BOOTSTRAP_CONTRACT, ActionBootstrapContract, ConstraintPlatform,
     EXECUTION_CONSTRAINT_SCHEMA, ExecutionConstraintDescriptor, ExecutionConstraintSchema,
-    canonical_execution_constraint, parse_execution_constraint, valid_required_status_name,
+    parse_execution_constraint, valid_required_status_name,
 };
 pub use fact::{
     Fact, FactEvidence, FactEvidenceKind, FactSchema, FindingKeyInput, FindingKeyInputSchema,
     FindingOccurrence, FindingScope, MissingResolution, OccurrenceKind, ReferenceScopeKind,
-    StructuralResolution, TargetIntent, TargetIntentKind, canonical_fact, parse_fact,
+    StructuralResolution, TargetIntent, TargetIntentKind, parse_fact,
 };
 pub use floor::{
     FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloor, OrganizationFloorSchema,
-    ResourceLimit, canonical_organization_floor, parse_organization_floor,
+    ResourceLimit, parse_organization_floor,
 };
 pub use policy::{
     BLOB_LINES_SOURCE, BlobLineSelection, DOCUMENT_SUFFIX_BYTES, DocumentInclude,
@@ -42,8 +39,7 @@ pub use policy::{
     ProjectionAssertion, ProjectionKind, ProjectionSink, ProjectionSource, RECORD_SET_SOURCE,
     RECORD_VALUE_SOURCE, RecordSetSelection, RecordValueSelection, SOURCE_MARKER_BYTES,
     ScannerPolicy, ScannerPolicySchema, TREE_PATHS_SOURCE, TreePathSelection,
-    canonical_scanner_policy, check_projection_source, parse_projection_source,
-    parse_scanner_policy,
+    check_projection_source, parse_scanner_policy,
 };
 pub use resources::{ResourceName, ResourceNameIter};
 pub use taxonomy::{
@@ -52,32 +48,21 @@ pub use taxonomy::{
 };
 pub use trusted_time::{
     STATEMENT_TTL_MAX_SECONDS, TRUSTED_TIME_CONTROLLER, TRUSTED_TIME_STATEMENT_SCHEMA,
-    TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement, canonical_trusted_time,
-    parse_trusted_time,
+    TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement, parse_trusted_time,
 };
 pub use waiver::{
-    WaiverBundle, WaiverBundleSchema, WaiverItem, WaiverResidualDisposition,
-    canonical_waiver_bundle, parse_waiver_bundle,
+    WaiverBundle, WaiverBundleSchema, WaiverItem, WaiverResidualDisposition, parse_waiver_bundle,
 };
 
 pub const SCANNER_POLICY_PATH: &str = ".amiss/scanner-policy.json";
 
-const SCANNER_POLICY_SCHEMA: &str = "amiss/scanner-policy";
-const ORGANIZATION_FLOOR_SCHEMA: &str = "amiss/organization-floor";
-const DEBT_SNAPSHOT_SCHEMA: &str = "amiss/debt-snapshot";
-const WAIVER_BUNDLE_SCHEMA: &str = "amiss/waiver-bundle";
+pub const SCANNER_POLICY_SCHEMA: &str = "amiss/scanner-policy";
+pub const ORGANIZATION_FLOOR_SCHEMA: &str = "amiss/organization-floor";
+pub const DEBT_SNAPSHOT_SCHEMA: &str = "amiss/debt-snapshot";
+pub const WAIVER_BUNDLE_SCHEMA: &str = "amiss/waiver-bundle";
 
 pub const FINDING_KEY_DOMAIN: &str = "amiss/scanner-finding-key";
 pub const FACT_DOMAIN: &str = "amiss/scanner-fact";
-
-/// The one restricted-JSON root every control document parses through.
-///
-/// # Errors
-///
-/// Any strict-JSON defect, carried as `ErrorKind::Json`.
-pub fn root(bytes: &[u8]) -> Result<Value, Error> {
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))
-}
 
 pub(crate) fn sorted_set<T>(
     path: &str,

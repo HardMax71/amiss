@@ -33,23 +33,12 @@ struct RunnerReference {
 }
 
 #[derive(Deserialize)]
-pub(super) struct PipelineResponse {
-    id: u64,
-    project_id: u64,
-    sha: String,
-    #[serde(rename = "ref")]
-    reference: String,
-    source: String,
-    status: String,
-}
-
-#[derive(Deserialize)]
 pub(super) struct TrainResponse {
     id: u64,
     status: String,
     target_branch: String,
     merge_request: TrainMergeRequest,
-    pipeline: Option<PipelineResponse>,
+    pipeline: Option<GitLabPipeline>,
 }
 
 #[derive(Deserialize)]
@@ -124,19 +113,8 @@ fn job_record(raw: JobResponse, runner_id: u64) -> GitLabJob {
     }
 }
 
-pub(super) fn pipeline(raw: PipelineResponse) -> GitLabPipeline {
-    GitLabPipeline {
-        id: raw.id,
-        project_id: raw.project_id,
-        sha: raw.sha,
-        reference: raw.reference,
-        source: raw.source,
-        status: raw.status,
-    }
-}
-
 pub(super) fn train(raw: TrainResponse) -> Result<GitLabTrainCar, ProviderError> {
-    let pipeline = pipeline(raw.pipeline.ok_or(ProviderError::InvalidResponse)?);
+    let pipeline = raw.pipeline.ok_or(ProviderError::InvalidResponse)?;
     Ok(GitLabTrainCar {
         id: raw.id,
         status: raw.status,

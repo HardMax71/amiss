@@ -67,10 +67,25 @@ pub enum ObjectFormat {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct TreeIdentity {
     pub object_format: ObjectFormat,
     pub tree_oid: Oid,
+}
+
+impl Serialize for TreeIdentity {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for TreeIdentity {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 /// Full lowercase object ID for one declared object format.
@@ -117,12 +132,11 @@ impl FromStr for Oid {
 }
 
 fn oid_hex(object_format: ObjectFormat, raw: &str) -> bool {
-    let expected = match object_format {
-        ObjectFormat::Sha1 => 40,
-        ObjectFormat::Sha256 => 64,
-    };
-    raw.len() == expected
-        && raw
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    if !matches!(raw.len(), 40 | 64) || raw.bytes().any(|byte| byte.is_ascii_uppercase()) {
+        return false;
+    }
+    match object_format {
+        ObjectFormat::Sha1 => hex::decode_to_slice(raw, &mut [0_u8; 20]).is_ok(),
+        ObjectFormat::Sha256 => hex::decode_to_slice(raw, &mut [0_u8; 32]).is_ok(),
+    }
 }

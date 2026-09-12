@@ -11,6 +11,9 @@ exclude.workspace = true
 bench = false
 
 [dependencies]
+js_int.workspace = true
+digest-io.workspace = true
+sha2.workspace = true
 countio.workspace = true
 amiss-adoc = { path = "../amiss-adoc", version = "0.27.0" }
 amiss-git = { path = "../amiss-git", version = "0.27.0" }
@@ -28,6 +31,7 @@ unicode-general-category.workspace = true
 unicode-normalization.workspace = true
 
 [dev-dependencies]
+hex.workspace = true
 amiss-fixtures = { path = "../amiss-fixtures" }
 divan.workspace = true
 dhat = "0.3"

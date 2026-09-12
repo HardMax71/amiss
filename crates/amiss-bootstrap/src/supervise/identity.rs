@@ -1,7 +1,7 @@
-use amiss_wire::digest::hj_serde;
 use amiss_wire::model::{BranchRef, UtcInstant};
 use amiss_wire::report::model::{Controls, IdentityPreimage, ResolvedEvaluation};
 use amiss_wire::requests::{CANDIDATE_IDENTITY_DOMAIN, CandidateIdentitySchema};
+use sha2::Digest as _;
 
 use super::{AcceptanceDefect, SealedExpectations, controls};
 
@@ -22,9 +22,13 @@ pub(super) fn accept(
         evaluation,
         schema: CandidateIdentitySchema::Current,
     };
-    let identity_digest = hj_serde(CANDIDATE_IDENTITY_DOMAIN, |mut writer| {
+    let identity_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&preimage, &mut writer)
-    })
+            .map(|()| amiss_wire::model::Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| AcceptanceDefect::SealedIdentity)?;
     if identity_digest != expected.candidate_identity_digest {
         return Err(AcceptanceDefect::SealedIdentity);

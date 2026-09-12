@@ -4,6 +4,7 @@
     reason = "fixed runtime boundary fixtures must fail loudly"
 )]
 
+use sha2::Digest as _;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -59,9 +60,10 @@ fn only_a_published_pass_is_an_http_success() {
 fn a_completed_result_exposes_the_authenticated_artifact_locator() {
     let id = "c".repeat(64);
     let locator = format!("https://amiss.example/artifacts/{id}/report");
-    let report_digest = amiss_wire::digest::sha256(b"report");
-    let semantic_digest = amiss_wire::digest::sha256(b"semantic input");
-    let assessment_digest = amiss_wire::digest::sha256(b"assessment");
+    let report_digest = amiss_wire::model::Digest::from(sha2::Sha256::digest(b"report").0);
+    let semantic_digest =
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(b"semantic input").0);
+    let assessment_digest = amiss_wire::model::Digest::from(sha2::Sha256::digest(b"assessment").0);
     let response = result_response::<ServiceError>(Ok(HandleOutcome::Published {
         conclusion: CheckConclusion::Pass,
         artifact: Some(ArtifactReference {

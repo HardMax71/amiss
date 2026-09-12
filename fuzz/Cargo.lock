@@ -31,9 +31,9 @@ dependencies = [
  "amiss-git",
  "amiss-scan",
  "amiss-wire",
- "countio",
+ "js_int",
  "libfuzzer-sys",
- "serde_json_canonicalizer",
+ "serde_json",
 ]
 
 [[package]]
@@ -44,6 +44,7 @@ dependencies = [
  "crc32fast",
  "flate2",
  "fs_at",
+ "hex",
  "libc",
  "sha1-checked",
  "sha2",
@@ -76,12 +77,15 @@ dependencies = [
  "amiss-rst",
  "amiss-wire",
  "countio",
+ "digest-io",
+ "js_int",
  "memchr",
  "percent-encoding",
  "serde",
  "serde_json",
  "serde_json_canonicalizer",
  "serde_with",
+ "sha2",
  "strum",
  "unicode-general-category",
  "unicode-normalization",
@@ -97,6 +101,7 @@ dependencies = [
  "hex_fmt",
  "js_int",
  "json-serde",
+ "percent-encoding",
  "serde",
  "serde-transcode",
  "serde_json",
@@ -561,9 +566,6 @@ name = "hex"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "hex_fmt"

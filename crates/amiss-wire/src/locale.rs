@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
@@ -6,9 +7,8 @@ use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hb};
-use crate::json;
 use crate::model::ArtifactId;
+use crate::model::Digest;
 use crate::publication::{
     DocsCandidate, PublicationProducer, PublicationResource, PublicationUriKind, validate_docs,
     validate_producer, validate_publication_uri,
@@ -40,10 +40,27 @@ pub const PAGE_KEY_BYTES: usize = crate::semantic::RECORD_KEY_BYTES;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self", bound(deserialize = "T: Deserialize<'de>"))]
 pub struct LocaleCoveragePlanEnvelope<T = LocaleCoveragePlan> {
     pub schema: PlanEnvelopeSchema,
+    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub payload: T,
     pub payload_digest: Digest,
+}
+
+impl<T: Serialize> Serialize for LocaleCoveragePlanEnvelope<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for LocaleCoveragePlanEnvelope<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -56,6 +73,7 @@ pub enum PlanEnvelopeSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleCoveragePlan {
     pub schema: PlanPayloadSchema,
     pub report_payload_digest: Digest,
@@ -64,6 +82,21 @@ pub struct LocaleCoveragePlan {
     pub product: Nullable<PublicationResource>,
     pub producer: PublicationProducer,
     pub policy: LocaleCoveragePolicy,
+}
+
+impl Serialize for LocaleCoveragePlan {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleCoveragePlan {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -76,6 +109,7 @@ pub enum PlanPayloadSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleCoverageScope {
     pub site: ArtifactId,
     pub source_locale: String,
@@ -84,8 +118,24 @@ pub struct LocaleCoverageScope {
     pub version: Nullable<String>,
 }
 
+impl Serialize for LocaleCoverageScope {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleCoverageScope {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleCoveragePolicy {
     pub identity: ArtifactId,
     pub context_digest: Digest,
@@ -94,18 +144,65 @@ pub struct LocaleCoveragePolicy {
     pub require_target_lineage: bool,
 }
 
+impl Serialize for LocaleCoveragePolicy {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleCoveragePolicy {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub struct LocaleFallbackRule {
     pub class: ArtifactId,
     pub pages: LocalePageRequirement,
 }
 
+impl Serialize for LocaleFallbackRule {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocaleFallbackRule {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "mode", rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(remote = "Self")]
 pub enum LocalePageRequirement {
-    AllSource,
+    AllSource {},
     Named { keys: Vec<String> },
+}
+
+impl Serialize for LocalePageRequirement {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for LocalePageRequirement {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 /// Parses one closed, report-bound locale coverage plan.
@@ -118,8 +215,13 @@ pub fn parse_plan(bytes: &[u8]) -> Result<LocaleCoveragePlanEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > LOCALE_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    let document: LocaleCoveragePlanEnvelope = de::deserialize_json(bytes)?;
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    let document: LocaleCoveragePlanEnvelope = serde_path_to_error::deserialize(&mut deserializer)
+        .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if plan_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -144,14 +246,22 @@ pub fn plan(input: &LocaleCoveragePlan) -> Result<Vec<u8>, Error> {
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > LOCALE_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    json::parse(&canonical).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
+    de::JsonProfile::validate(&canonical)?;
     Ok(canonical)
 }
 
 fn plan_payload_digest(input: &LocaleCoveragePlan) -> Result<Digest, Error> {
     validate_plan(input)?;
     serde_json_canonicalizer::to_vec(input)
-        .map(|canonical| hb(PLAN_PAYLOAD_SCHEMA, &canonical))
+        .map(|canonical| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(&canonical)
+                    .finalize()
+                    .0,
+            )
+        })
         .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 

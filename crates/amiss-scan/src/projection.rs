@@ -1,8 +1,9 @@
+use sha2::Digest as _;
 use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use amiss_wire::controls::{ProjectionAssertion, ProjectionKind, ProjectionSource};
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPath};
 use amiss_wire::report::model::{
     ProjectionDifference, ProjectionObserved, RowsProjectionDifference,
@@ -249,7 +250,13 @@ fn record_projection(
             }
             Ok(Verdict::Drift {
                 reason: ProjectionObserved::ContentDiffers,
-                expected_digest: Some(hb(CODE_TEXT_SOURCE_DOMAIN, value.as_bytes())),
+                expected_digest: Some(Digest::from(
+                    sha2::Sha256::new_with_prefix(CODE_TEXT_SOURCE_DOMAIN)
+                        .chain_update([0_u8])
+                        .chain_update(value.as_bytes())
+                        .finalize()
+                        .0,
+                )),
                 observed_digest: Some(sink.digest),
                 expected_bytes: Some(u64::try_from(value.len()).unwrap_or(u64::MAX)),
                 observed_bytes: Some(u64::try_from(sink.value.len()).unwrap_or(u64::MAX)),

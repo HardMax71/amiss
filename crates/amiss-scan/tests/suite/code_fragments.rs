@@ -4,6 +4,7 @@
     reason = "integration assertions over a controlled report fixture"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 
@@ -11,7 +12,6 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::RequestDigests;
 use amiss_scan::resolve::ForgeContext;
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
 use tempfile::TempDir;
@@ -23,7 +23,13 @@ fn git(root: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"test engine"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"test engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 

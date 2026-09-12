@@ -4,8 +4,8 @@ use std::collections::btree_map::Entry;
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::{Error, ErrorKind, fail};
-use amiss_wire::digest::Digest;
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 use amiss_wire::semantic::observation::Observation;
 
 use super::RecordSet;

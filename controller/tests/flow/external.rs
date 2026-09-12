@@ -40,17 +40,11 @@ fn external_outcome(run: &amiss_controller::RunIdentity) -> RunnerOutcome {
 
 fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Vec<u8> {
     let report = amiss_fixtures::external_report(&[DESTINATION]).unwrap();
-    let parsed = amiss_wire::json::parse(&report).unwrap();
-    let engine = parsed
-        .member("payload")
-        .and_then(|payload| payload.member("engine"))
-        .unwrap();
-    let plan = amiss_wire::external::plan(
-        &report,
-        engine.text("engine_version").unwrap(),
-        amiss_wire::digest::Digest::from_wire(engine.text("engine_digest").unwrap()).unwrap(),
-    )
-    .unwrap();
+    let parsed: amiss_wire::report::model::ReportEnvelope =
+        serde_json::from_slice(&report).unwrap();
+    let engine = parsed.payload.engine;
+    let plan =
+        amiss_wire::external::plan(&report, &engine.engine_version, engine.engine_digest).unwrap();
     evidence(&ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
         plan_payload_digest: amiss_wire::external::parse_plan(&plan)

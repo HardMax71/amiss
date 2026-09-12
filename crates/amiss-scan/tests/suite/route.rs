@@ -9,8 +9,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use amiss_scan::route::{ROUTERS, RouteRule, Spelling, candidates, spellings};
-use amiss_wire::json::{Value, parse};
 use amiss_wire::model::RepoPath;
+use serde_json::Value;
 
 fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
@@ -19,49 +19,11 @@ fn root() -> PathBuf {
 fn vectors() -> Value {
     let bytes = fs::read(root().join("spec/examples/route-spelling-vectors.json"))
         .expect("the specification ships the route-spelling vectors");
-    parse(&bytes).expect("route-spelling vectors are strict JSON")
-}
-
-fn member(value: &Value, key: &str, label: &str) -> Value {
-    let Value::Object(members) = value else {
-        panic!("{label} is an object")
-    };
-    members.iter().find(|(name, _)| name == key).map_or_else(
-        || panic!("{label} has no {key}"),
-        |(_, found)| found.clone(),
-    )
-}
-
-fn text(value: &Value, key: &str, label: &str) -> String {
-    let found = member(value, key, label);
-    let Value::String(found) = found else {
-        panic!("{label}.{key} is a string, found {found:?}")
-    };
-    found.into_string()
-}
-
-fn array(value: &Value, key: &str, label: &str) -> Vec<Value> {
-    let found = member(value, key, label);
-    let Value::Array(found) = found else {
-        panic!("{label}.{key} is an array, found {found:?}")
-    };
-    found.into_vec()
+    serde_json::from_slice::<Value>(&bytes).expect("route-spelling vectors are JSON")
 }
 
 fn path(raw: &str) -> RepoPath {
     RepoPath::new(raw.to_owned()).unwrap_or_else(|| panic!("{raw} is a repository path"))
-}
-
-fn tree(vectors: &Value) -> BTreeSet<String> {
-    array(vectors, "tree", "vectors")
-        .into_iter()
-        .map(|entry| {
-            let Value::String(entry) = entry else {
-                panic!("a tree entry is a string")
-            };
-            entry.into_string()
-        })
-        .collect()
 }
 
 fn served(rule: &RouteRule, destination: &str, tree: &BTreeSet<String>) -> Option<String> {
@@ -88,39 +50,35 @@ fn answered_by_the_tree(destination: &str, tree: &BTreeSet<String>) -> bool {
 fn the_published_vectors_drive_every_router() {
     let vectors = vectors();
     assert_eq!(
-        text(&vectors, "schema", "vectors"),
+        vectors["schema"].as_str().expect("vector schema"),
         "amiss/route-spelling-vectors"
     );
-    assert_eq!(text(&vectors, "contract", "vectors"), "route-spelling");
+    assert_eq!(
+        vectors["contract"].as_str().expect("vector contract"),
+        "route-spelling"
+    );
 
-    let tree = tree(&vectors);
-    let cases = array(&vectors, "cases", "vectors");
+    let tree: BTreeSet<String> =
+        serde_json::from_value(vectors["tree"].clone()).expect("tree paths");
+    let cases = vectors["cases"].as_array().expect("route cases");
     assert!(cases.len() >= 14, "the corpus keeps its probe set");
     let mut seen = BTreeSet::new();
     let mut asked = 0_usize;
-    for case in &cases {
-        let id = text(case, "id", "case");
-        assert!(seen.insert(id.clone()), "case {id} is unique");
-        let destination = text(case, "destination", "case");
-        if answered_by_the_tree(&destination, &tree) {
+    for case in cases {
+        let id = case["id"].as_str().expect("case id");
+        assert!(seen.insert(id), "case {id} is unique");
+        let destination = case["destination"].as_str().expect("case destination");
+        if answered_by_the_tree(destination, &tree) {
             continue;
         }
         asked = asked.saturating_add(1);
-        let harvest = member(case, "serves", "case");
+        let harvest = case["serves"].as_object().expect("router outcomes");
         for rule in &ROUTERS {
-            let found = member(&harvest, rule.name, &format!("case {id}"));
-            let want = if let Value::String(source) = found {
-                Some(source.into_string())
-            } else if found == Value::Null {
-                None
-            } else {
-                panic!(
-                    "case {id}.serves.{} is a string or null, got {found:?}",
-                    rule.name
-                )
-            };
+            let found = harvest.get(rule.name).expect("every router has a verdict");
+            let want: Option<String> =
+                serde_json::from_value(found.clone()).expect("served source is a string or null");
             assert_eq!(
-                served(rule, &destination, &tree),
+                served(rule, destination, &tree),
                 want,
                 "case {id} under {}: destination {destination:?}",
                 rule.name

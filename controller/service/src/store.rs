@@ -250,7 +250,10 @@ pub(crate) fn row_key(name: &str) -> Option<&str> {
 }
 
 fn validate_key(key: &str) -> Result<(), InboxError> {
-    if crate::hash::is_digest(key) {
+    if key.len() == 64
+        && !key.bytes().any(|byte| byte.is_ascii_uppercase())
+        && hex::decode_to_slice(key, &mut [0_u8; 32]).is_ok()
+    {
         Ok(())
     } else {
         Err(InboxError::Corrupt)

@@ -9,8 +9,7 @@ use crate::{
 
 use super::GitLabClient;
 use super::model::{
-    self, BranchResponse, CommitResponse, JobResponse, PipelineResponse, ProjectResponse,
-    TrainResponse,
+    self, BranchResponse, CommitResponse, JobResponse, ProjectResponse, TrainResponse,
 };
 use super::transport::Budget;
 
@@ -93,12 +92,12 @@ impl GitLabClient {
             budget,
         )?;
         let job = model::job(job)?;
-        let (pipeline, budget) = self.fetch_project::<PipelineResponse>(
+        let (pipeline, budget) = self.fetch_project::<GitLabPipeline>(
             project_id,
             ["pipelines".to_owned(), job.pipeline_id.to_string()],
             budget,
         )?;
-        Ok((job, model::pipeline(pipeline), budget))
+        Ok((job, pipeline, budget))
     }
 
     fn change_data(

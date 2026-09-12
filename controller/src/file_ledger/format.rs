@@ -1,8 +1,9 @@
+use sha2::Digest as _;
 mod model;
 mod publication;
 mod record;
 
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use serde::Serialize;
 
 use crate::{ControllerEvaluationId, DeliveryIdentity};
@@ -32,9 +33,11 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Record, FileLedgerError> {
 }
 
 pub(super) fn delivery_key(identity: &DeliveryIdentity) -> Result<String, FileLedgerError> {
-    let bytes = serde_json::to_vec(&StoredDeliveryKey::new(identity))
+    let mut writer =
+        digest_io::IoWrapper(sha2::Sha256::new_with_prefix(KEY_DOMAIN).chain_update([0_u8]));
+    serde_json::to_writer(&mut writer, &StoredDeliveryKey::new(identity))
         .map_err(|_defect| FileLedgerError::Corrupt)?;
-    digest_hex(&hb(KEY_DOMAIN, &bytes).to_string())
+    Ok(hex::encode(writer.0.finalize()))
 }
 
 pub(super) fn evaluation_id(
@@ -59,15 +62,10 @@ pub(super) fn staged_digest(
         fence,
         publication,
     };
-    let bytes = serde_json::to_vec(&value).map_err(|_defect| FileLedgerError::Corrupt)?;
-    Ok(hb(STAGED_DOMAIN, &bytes).to_string())
-}
-
-pub(super) fn digest_hex(wire: &str) -> Result<String, FileLedgerError> {
-    Digest::from_wire(wire).ok_or(FileLedgerError::Corrupt)?;
-    wire.strip_prefix("sha256:")
-        .map(str::to_owned)
-        .ok_or(FileLedgerError::Corrupt)
+    let mut writer =
+        digest_io::IoWrapper(sha2::Sha256::new_with_prefix(STAGED_DOMAIN).chain_update([0_u8]));
+    serde_json::to_writer(&mut writer, &value).map_err(|_defect| FileLedgerError::Corrupt)?;
+    Ok(Digest::from(writer.0.finalize().0).to_string())
 }
 
 #[derive(Serialize)]

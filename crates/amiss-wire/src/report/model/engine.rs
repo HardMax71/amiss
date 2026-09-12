@@ -3,8 +3,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::ConstraintPlatform;
-use crate::digest::Digest;
 use crate::manifest::ReleaseManifest;
+use crate::model::Digest;
 use crate::model::{Adapter, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
 #[derive(

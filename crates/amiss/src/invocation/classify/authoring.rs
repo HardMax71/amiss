@@ -1,9 +1,8 @@
+use sha2::Digest as _;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use amiss_wire::controls::{
-    DocumentInclude, IncludeKind, ScannerPolicy, ScannerPolicySchema, canonical_scanner_policy,
-};
+use amiss_wire::controls::{DocumentInclude, IncludeKind, ScannerPolicy, ScannerPolicySchema};
 use amiss_wire::model::{Adapter, RepoPath, RepoPathText};
 
 use super::super::arguments::Gathered;
@@ -62,7 +61,7 @@ pub(super) fn classify_claim(
             && value.len() <= 16
             && !value.starts_with('0')
             && value.bytes().all(|byte| byte.is_ascii_digit());
-        let ceiling = u64::try_from(amiss_wire::json::MAX_SAFE_INTEGER).ok()?;
+        let ceiling = u64::try_from(js_int::MAX_SAFE_INT).ok()?;
         if lawful {
             value.parse::<u64>().ok().filter(|line| *line <= ceiling)
         } else {
@@ -144,9 +143,17 @@ pub(super) fn classify_policy_include(
                 protected_inventory: Vec::new(),
                 finding_dispositions: Vec::new(),
             };
-            canonical_scanner_policy(&policy)
-                .map(|(_, digest)| (policy, digest))
-                .ok()
+            policy.validate().ok().and_then(|()| {
+                let mut writer = digest_io::IoWrapper(
+                    sha2::Sha256::new_with_prefix(amiss_wire::controls::SCANNER_POLICY_SCHEMA)
+                        .chain_update([0_u8]),
+                );
+                serde_json_canonicalizer::to_writer(&policy, &mut writer).ok()?;
+                Some((
+                    policy,
+                    amiss_wire::model::Digest::from(writer.0.finalize().0),
+                ))
+            })
         }
         (None, _, _) | (_, None, _) | (_, _, None) => None,
     };

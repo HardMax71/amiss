@@ -1,8 +1,9 @@
+use sha2::Digest as _;
 use std::io::Cursor;
 use std::sync::Arc;
 
-use amiss_wire::digest::{Digest, hb};
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 use amiss_wire::semantic::observation::{
     Observation, SPHINX_INVENTORY_VERSION, SphinxLabelKind, SphinxLabelObservation,
 };
@@ -109,12 +110,26 @@ pub fn intersphinx_evidence(
         inputs.push(InventoryInput {
             inventory: identity,
             base_url: base_url.as_str().to_owned(),
-            source_digest: hb(SOURCE_DOMAIN, &inventory.bytes),
+            source_digest: Digest::from(
+                sha2::Sha256::new_with_prefix(SOURCE_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&inventory.bytes)
+                    .finalize()
+                    .0,
+            ),
         });
     }
 
     let input_digest = serde_json_canonicalizer::to_vec(&inputs)
-        .map(|canonical| hb(INPUT_DOMAIN, &canonical))
+        .map(|canonical| {
+            Digest::from(
+                sha2::Sha256::new_with_prefix(INPUT_DOMAIN)
+                    .chain_update([0_u8])
+                    .chain_update(&canonical)
+                    .finalize()
+                    .0,
+            )
+        })
         .map_err(|_defect| IntersphinxError::Evidence)?;
     let observations = observations
         .into_iter()

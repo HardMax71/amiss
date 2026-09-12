@@ -3,19 +3,16 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_controller::{
     AcquiringRunner, AdapterRegistry, Controller, ControllerClock, DeliveryHeader, DeliveryRoute,
     FileLedgerConfig, FileLedgerRoot, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
-    PlanScope, PolicyControls, ProviderAdapter, ReplayWindow, SignedTimePolicy, SystemClock,
-    UntrustedDelivery, check_plan, register_plan,
+    PlanScope, ProviderAdapter, ReplayWindow, SignedTimePolicy, SystemClock, UntrustedDelivery,
+    register_plan,
 };
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
     AdmissionRejection, EndpointConfig, Operations, check_lane, evaluation_router_with_clock,
 };
-use amiss_wire::controls::Profile;
-use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use axum::Router;
 use axum::body::Body;
@@ -26,7 +23,7 @@ use tower::ServiceExt as _;
 
 use super::provider::{FakeGitLab, HOST, claims, policy, provider, refresh, sign, source};
 use amiss_controller_fixtures::clock::TestClock;
-use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories, execution_constraint};
+use amiss_controller_fixtures::lane::{CopyAcquisition, Repositories};
 
 const ENDPOINT: &str = "/gitlab/policy/evaluate";
 
@@ -74,21 +71,18 @@ impl Harness {
         let repositories = Repositories::new().unwrap();
         let executable =
             PathBuf::from(env!("CARGO_BIN_EXE_amiss-gitlab-service-bootstrap-fixture"));
-        let bootstrap_digest = hb(BOOTSTRAP_DOMAIN, &std::fs::read(&executable).unwrap());
-        let execution = execution_constraint(
-            &repositories,
-            RepositoryIdentity::new(
-                HOST.to_owned(),
-                "security".to_owned(),
-                "amiss-action".to_owned(),
+        let plan = repositories
+            .execution_plan(
+                &executable,
+                RepositoryIdentity::new(
+                    HOST.to_owned(),
+                    "security".to_owned(),
+                    "amiss-action".to_owned(),
+                )
+                .unwrap(),
+                case.status(),
             )
-            .unwrap(),
-            case.status(),
-            bootstrap_digest,
-        )
-        .unwrap();
-        let plan =
-            Arc::new(check_plan(Profile::Enforce, PolicyControls::default(), execution).unwrap());
+            .unwrap();
         let replay = ReplayWindow::new(Duration::from_mins(5), Duration::from_mins(1)).unwrap();
         let ingress = IngressPolicy::new(
             IngressLimits::new(1_024, 32, 32 * 1_024).unwrap(),

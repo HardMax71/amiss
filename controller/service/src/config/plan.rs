@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::path::{Path, PathBuf};
 
 use amiss_controller::{
@@ -6,10 +7,10 @@ use amiss_controller::{
     WorkflowArtifactExpectation, check_plan, intersphinx_evidence,
 };
 use amiss_wire::controls::{
-    Profile, canonical_debt_snapshot, canonical_organization_floor, canonical_waiver_bundle,
-    parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_waiver_bundle,
+    Profile, parse_debt_snapshot, parse_execution_constraint, parse_organization_floor,
+    parse_waiver_bundle,
 };
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
 use amiss_wire::requests::{REQUEST_STREAM_BYTES, RequestTrust, SuppliedControl};
 use serde::Deserialize;
@@ -92,19 +93,19 @@ pub fn load_plan(
         organization_floor: load_control(
             raw.organization_floor_file.as_deref(),
             parse_organization_floor,
-            canonical_organization_floor,
+            amiss_wire::controls::ORGANIZATION_FLOOR_SCHEMA,
             BootstrapJobError::OrganizationFloor,
         )?,
         debt_snapshot: load_control(
             raw.debt_snapshot_file.as_deref(),
             parse_debt_snapshot,
-            canonical_debt_snapshot,
+            amiss_wire::controls::DEBT_SNAPSHOT_SCHEMA,
             BootstrapJobError::DebtSnapshot,
         )?,
         waiver_bundle: load_control(
             raw.waiver_bundle_file.as_deref(),
             parse_waiver_bundle,
-            canonical_waiver_bundle,
+            amiss_wire::controls::WAIVER_BUNDLE_SCHEMA,
             BootstrapJobError::WaiverBundle,
         )?,
         semantic_evidence,
@@ -183,17 +184,21 @@ fn load_intersphinx(
         .map(|(loaded, _remaining)| loaded)
 }
 
-fn load_control<T, E>(
+fn load_control<T: serde::Serialize, E>(
     path: Option<&Path>,
     parse: impl FnOnce(&[u8]) -> Result<T, E>,
-    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), E>,
+    domain: &str,
     error: BootstrapJobError,
 ) -> Result<Option<SuppliedControl<T>>, ConfigError> {
     path.map(|path| {
         let bytes = read_regular(path, REQUEST_STREAM_BYTES)?;
         let invalid = |_defect| ConfigError::caused_by("check plan is invalid", error);
         let value = parse(&bytes).map_err(invalid)?;
-        let expected_digest = canonical(&value).map_err(invalid)?.1;
+        let mut writer =
+            digest_io::IoWrapper(sha2::Sha256::new_with_prefix(domain).chain_update([0_u8]));
+        serde_json_canonicalizer::to_writer(&value, &mut writer)
+            .map_err(|_defect| ConfigError::caused_by("check plan is invalid", error))?;
+        let expected_digest = Digest::from(writer.0.finalize().0);
         Ok(SuppliedControl {
             value,
             expected_digest,

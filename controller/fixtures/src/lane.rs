@@ -1,16 +1,17 @@
 use std::collections::VecDeque;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::Ordering;
+
+use sha2::Digest as _;
 
 use amiss_controller::{
     AcquiredSemanticTemplate, Acquisition, AcquisitionTarget, OidPair, RunRequest,
 };
 use amiss_fixtures::{CommitPair, commit_pair};
-use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, canonical_execution_constraint, parse_execution_constraint,
-};
-use amiss_wire::digest::Digest;
+use amiss_wire::controls::{ExecutionConstraintDescriptor, parse_execution_constraint};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 /// The checked repository and the action repository a provider lane acquires,
@@ -54,6 +55,39 @@ impl Repositories {
         })
     }
 
+    /// Pins a lane's enforced check plan to its fixture executable and action tree.
+    ///
+    /// # Errors
+    ///
+    /// The executable cannot be read or its execution constraint is invalid.
+    pub fn execution_plan(
+        &self,
+        executable: &Path,
+        action_repository: RepositoryIdentity,
+        required_status_name: &str,
+    ) -> io::Result<Arc<amiss_controller::CheckPlan>> {
+        let bootstrap_digest = Digest::from(
+            sha2::Sha256::new_with_prefix(amiss_bootstrap::BOOTSTRAP_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(std::fs::read(executable)?)
+                .finalize()
+                .0,
+        );
+        let execution = execution_constraint(
+            self,
+            action_repository,
+            required_status_name,
+            bootstrap_digest,
+        )?;
+        amiss_controller::check_plan(
+            amiss_wire::controls::Profile::Enforce,
+            amiss_controller::PolicyControls::default(),
+            execution,
+        )
+        .map(Arc::new)
+        .map_err(io::Error::other)
+    }
+
     pub fn acquisition(&self) -> CopyAcquisition {
         CopyAcquisition {
             repository: self.repository.root().to_path_buf(),
@@ -83,7 +117,7 @@ pub fn execution_constraint(
     descriptor.action_tree_oid = repositories.action_tree.clone();
     required_status_name.clone_into(&mut descriptor.required_status_name);
     descriptor.bootstrap_digest = bootstrap_digest;
-    canonical_execution_constraint(&descriptor).map_err(io::Error::other)?;
+    descriptor.validate().map_err(io::Error::other)?;
     Ok(descriptor)
 }
 

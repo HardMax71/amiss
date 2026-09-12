@@ -1,3 +1,5 @@
+use hmac::{Hmac, KeyInit as _, Mac as _};
+use sha2::Sha256;
 use std::fmt;
 
 use base64::Engine as _;
@@ -5,7 +7,7 @@ use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
 
 use crate::{TrustAnchorId, TrustSetId};
 
-use super::{WebhookError, WebhookKeyringError, crypto};
+use super::{WebhookError, WebhookKeyringError};
 
 const MAX_KEYS: usize = 8;
 const MIN_SECRET_BYTES: usize = 16;
@@ -193,10 +195,16 @@ impl WebhookKeyring {
             .filter(|key| key.is_active(received_at_unix_millis))
         {
             active = true;
+            let Ok(mut verifier) = Hmac::<Sha256>::new_from_slice(key.secret.expose_secret())
+            else {
+                continue;
+            };
+            for part in message_parts {
+                verifier.update(part);
+            }
             let mut key_matches = false;
             for signature in signatures {
-                key_matches = crypto::verify(key.secret.expose_secret(), signature, message_parts)
-                    || key_matches;
+                key_matches = verifier.clone().verify_slice(signature).is_ok() || key_matches;
             }
             if key_matches && matched.is_none() {
                 matched = Some(key.anchor.clone());

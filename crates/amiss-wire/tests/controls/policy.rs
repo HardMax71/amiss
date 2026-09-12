@@ -1,10 +1,10 @@
 use amiss_wire::controls::{
     BlobLineSelection, DOCUMENT_SUFFIX_BYTES, ProjectionKind, ProjectionSource,
-    SOURCE_MARKER_BYTES, canonical_scanner_policy, check_projection_source,
-    parse_projection_source, parse_scanner_policy,
+    SOURCE_MARKER_BYTES, check_projection_source, parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
-use amiss_wire::json;
+use sha2::Digest as _;
+
 use amiss_wire::model::RepoPathText;
 
 use crate::support::POLICY;
@@ -40,9 +40,24 @@ fn parses_the_policy_fixture() {
     assert_eq!(source.path.as_str(), "examples/generated.txt");
     assert_eq!(source.start_marker, "// amiss:generated:start");
     assert_eq!(source.end_marker, "// amiss:generated:end");
-    let digest = canonical_scanner_policy(&policy).unwrap().1;
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-policy")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&policy).unwrap())
+            .finalize()
+            .0,
+    );
     let reparsed = parse_scanner_policy(POLICY).unwrap();
-    assert_eq!(digest, canonical_scanner_policy(&reparsed).unwrap().1);
+    assert_eq!(
+        digest,
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-policy")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&reparsed).unwrap())
+                .finalize()
+                .0
+        )
+    );
 }
 
 #[test]
@@ -63,9 +78,8 @@ fn directly_constructed_projection_sources_reuse_the_policy_grammar() {
     let source = &policy.projection_assertions.as_deref().unwrap_or_default()[0].source;
     assert!(check_projection_source(ProjectionKind::CodeTextV1, source).is_ok());
     assert_eq!(
-        parse_projection_source(
+        serde_json::from_slice::<ProjectionSource>(
             br#"{"kind":"blob-lines","path":"crates/amiss/src/request.rs","first_line":10,"last_line":14}"#,
-            ProjectionKind::CodeTextV1,
         )
         .unwrap(),
         *source
@@ -318,16 +332,34 @@ fn optional_projection_assertions_preserve_presence_and_reject_null() {
     assert_eq!(absent_policy.projection_assertions, None);
     assert_eq!(present_policy.projection_assertions, Some(Vec::new()));
     assert_eq!(
-        canonical_scanner_policy(&absent_policy).unwrap().0,
-        serde_json_canonicalizer::to_vec(&json::parse(absent).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(&absent_policy).unwrap(),
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<serde_json::Value>(absent).unwrap()
+        )
+        .unwrap()
     );
     assert_eq!(
-        canonical_scanner_policy(&present_policy).unwrap().0,
-        serde_json_canonicalizer::to_vec(&json::parse(present).unwrap()).unwrap()
+        serde_json_canonicalizer::to_vec(&present_policy).unwrap(),
+        serde_json_canonicalizer::to_vec(
+            &serde_json::from_slice::<serde_json::Value>(present).unwrap()
+        )
+        .unwrap()
     );
     assert_ne!(
-        canonical_scanner_policy(&absent_policy).unwrap().1,
-        canonical_scanner_policy(&present_policy).unwrap().1
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-policy")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&absent_policy).unwrap())
+                .finalize()
+                .0
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-policy")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&present_policy).unwrap())
+                .finalize()
+                .0
+        )
     );
     assert_eq!(
         parse_scanner_policy(null).unwrap_err().kind,
@@ -336,13 +368,10 @@ fn optional_projection_assertions_preserve_presence_and_reject_null() {
 }
 
 #[test]
-fn canonical_policy_rechecks_mutable_public_fields() {
+fn policy_rechecks_mutable_public_fields() {
     let mut policy = parse_scanner_policy(POLICY).unwrap();
     policy.document_includes.swap(0, 1);
-    assert_eq!(
-        canonical_scanner_policy(&policy).unwrap_err().kind,
-        ErrorKind::UnsortedSet
-    );
+    assert_eq!(policy.validate().unwrap_err().kind, ErrorKind::UnsortedSet);
 }
 
 /// An include's optional adapter is a closed spelling: each wire id parses to

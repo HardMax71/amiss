@@ -86,6 +86,7 @@ fn finding_key_intents_preserve_required_nullable_fields() {
         target_kind: TargetKind::Either,
     };
     let encoded = serde_json::to_string(&intent).unwrap();
+    assert!(serde_json::from_str::<amiss_wire::controls::TargetIntent>(&encoded).is_err());
     assert_eq!(
         serde_json::from_str::<RepositoryTargetIntent>(&encoded).unwrap(),
         intent

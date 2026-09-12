@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use amiss_controller::{
-    ForgeFact, ForgeNegative, ProviderError, ProviderIdentity, decode_bounded_json,
+    ForgeFact, ForgeNegative, ProviderError, ProviderIdentity, read_response_body,
 };
 use reqwest::StatusCode;
 use reqwest::blocking::{Client, RequestBuilder, Response};
@@ -204,13 +204,15 @@ impl Transport {
     ) -> Result<(ForgeFact<T>, Budget), ProviderError> {
         let response = self.send(self.shared.client.get(url), budget)?;
         let status = response.status();
-        match classified(status).ok_or_else(|| map_status(status))? {
-            Ok(()) => {
-                let (value, budget) = decode_response(response, budget)?;
-                Ok((Ok(value), budget))
-            }
-            Err(negative) => Ok((Err(negative), budget)),
+        if let Err(negative) = classified(status).ok_or_else(|| map_status(status))? {
+            return Ok((Err(negative), budget));
         }
+        let declared = response.content_length();
+        let bytes = read_response_body(response, declared, budget.response_bytes)?;
+        let value =
+            serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)?;
+        let budget = consume_bytes(budget, bytes.len())?;
+        Ok((Ok(value), budget))
     }
 
     /// The same classification over HEAD, for routes whose bodies carry
@@ -251,7 +253,11 @@ impl Transport {
         if !status.is_success() {
             return Err(map_status(status));
         }
-        let (value, budget) = decode_response(response, budget)?;
+        let declared = response.content_length();
+        let bytes = read_response_body(response, declared, budget.response_bytes)?;
+        let value =
+            serde_json::from_slice(&bytes).map_err(|_defect| ProviderError::InvalidResponse)?;
+        let budget = consume_bytes(budget, bytes.len())?;
         Ok((Some(value), budget))
     }
 }
@@ -306,15 +312,6 @@ fn map_status(status: StatusCode) -> ProviderError {
     } else {
         ProviderError::InvalidResponse
     }
-}
-
-fn decode_response<T: DeserializeOwned>(
-    response: Response,
-    budget: Budget,
-) -> Result<(T, Budget), ProviderError> {
-    let declared = response.content_length();
-    let (value, length) = decode_bounded_json(response, declared, budget.response_bytes)?;
-    Ok((value, consume_bytes(budget, length)?))
 }
 
 fn consume_bytes(budget: Budget, bytes: usize) -> Result<Budget, ProviderError> {

@@ -15,6 +15,7 @@ test = false
 bench = false
 
 [dependencies]
+digest-io.workspace = true
 amiss-bootstrap = { path = "../crates/amiss-bootstrap" }
 amiss-controller-files = { path = "files" }
 amiss-git = { path = "../crates/amiss-git" }

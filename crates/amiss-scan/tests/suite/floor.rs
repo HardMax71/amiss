@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 
@@ -6,8 +7,7 @@ use amiss_git::Repository;
 use amiss_scan::SetupShell;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{FloorInput, verify_floor};
-use amiss_wire::controls::{Profile, canonical_organization_floor, parse_organization_floor};
-use amiss_wire::digest::hb;
+use amiss_wire::controls::{Profile, parse_organization_floor};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::RequestTrust;
@@ -21,7 +21,13 @@ fn git(dir: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"test engine"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"test engine")
+                .finalize()
+                .0,
+        ),
     }
 }
 
@@ -49,7 +55,13 @@ const EMPTY_ARRAYS: &str = r#"  "minimum_dispositions": [],
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn floor_input(extra: &str) -> FloorInput {
     let floor = parse_organization_floor(floor_json(extra).as_bytes()).unwrap();
-    let digest = canonical_organization_floor(&floor).unwrap().1;
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/organization-floor")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+            .finalize()
+            .0,
+    );
     FloorInput {
         floor,
         digest,
@@ -157,7 +169,13 @@ fn the_floor_binding_is_repository_ref_and_profile_ordering() {
     .map_err(|defect| format!("{defect:?}"))
     .unwrap();
     let strict = FloorInput {
-        digest: canonical_organization_floor(&strict_floor).unwrap().1,
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&strict_floor).unwrap())
+                .finalize()
+                .0,
+        ),
         floor: strict_floor,
         trust_source: RequestTrust::OrganizationPolicy,
     };

@@ -16,12 +16,7 @@ use tempfile::TempDir;
 fn sha1_hex(preimage: &[u8]) -> String {
     let mut hasher = sha1_checked::Sha1::builder().build();
     hasher.update(preimage);
-    let mut out = String::new();
-    for byte in hasher.try_finalize().hash().iter().copied() {
-        out.push(char::from_digit(u32::from(byte.wrapping_shr(4)), 16).unwrap_or('0'));
-        out.push(char::from_digit(u32::from(byte & 0xF), 16).unwrap_or('0'));
-    }
-    out
+    hex::encode(hasher.try_finalize().hash())
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]

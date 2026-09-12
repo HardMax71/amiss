@@ -1,5 +1,6 @@
 #![cfg(not(miri))]
 
+use sha2::Digest as _;
 use std::fs::{self, OpenOptions};
 use std::io::Write as _;
 use std::sync::{Arc, Barrier};
@@ -8,7 +9,6 @@ use amiss_controller::{
     FileRelationScheduleStore, RelationAdmission, RelationScheduleError, RelationScheduleStoreError,
 };
 use amiss_controller_fixtures::relation::relation_audit;
-use amiss_wire::digest::sha256;
 use amiss_wire::model::ArtifactId;
 
 #[test]
@@ -127,7 +127,9 @@ fn configuration_rebinding_and_missing_state_fail_closed() {
 
     let mut rebound = transition;
     let mut plan = rebound.relation.plan.as_ref().clone();
-    plan.context_digest = sha256(b"different complete operator configuration");
+    plan.context_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::digest(b"different complete operator configuration").0,
+    );
     rebound.relation.plan = Arc::new(plan);
     assert!(matches!(
         store.schedule(rebound),

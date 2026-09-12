@@ -1,9 +1,9 @@
+use sha2::Digest as _;
 use std::borrow::Cow;
 
 use amiss_controller::bind_semantic_evidence;
 use amiss_wire::{
     assessment::Nullable,
-    digest::{hb, sha256},
     semantic::{
         SemanticEvidenceTemplate, SemanticProducer, TemplateSchema, observation::Observation,
         record,
@@ -26,8 +26,20 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
             kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
             identity: "fixture".parse().unwrap(),
             version: "1".to_owned(),
-            context_digest: hb("test", b"context"),
-            input_digest: hb("test", b"input"),
+            context_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("test")
+                    .chain_update([0_u8])
+                    .chain_update(b"context")
+                    .finalize()
+                    .0,
+            ),
+            input_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("test")
+                    .chain_update([0_u8])
+                    .chain_update(b"input")
+                    .finalize()
+                    .0,
+            ),
         },
         complete: true,
         observations: vec![Cow::Borrowed(&observation)].into(),
@@ -35,8 +47,20 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
     let expected_producer = template.producer.clone();
     let expected_observation = observation.clone();
     let candidates = [
-        hb("test", b"first candidate"),
-        hb("test", b"second candidate"),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("test")
+                .chain_update([0_u8])
+                .chain_update(b"first candidate")
+                .finalize()
+                .0,
+        ),
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("test")
+                .chain_update([0_u8])
+                .chain_update(b"second candidate")
+                .finalize()
+                .0,
+        ),
     ];
     let bindings = candidates.map(|candidate| {
         bind_semantic_evidence(std::slice::from_ref(&template), &[], &[], candidate).unwrap()
@@ -75,7 +99,10 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
         assert_eq!(row["payload_digest"], document.payload_digest.to_string());
         assert_eq!(
             row["envelope_digest"],
-            sha256(&serde_json_canonicalizer::to_vec(document).unwrap()).to_string()
+            amiss_wire::model::Digest::from(
+                sha2::Sha256::digest(serde_json_canonicalizer::to_vec(document).unwrap()).0
+            )
+            .to_string()
         );
     }
 }

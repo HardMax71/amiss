@@ -1,7 +1,7 @@
 use amiss_bootstrap::supervise::{AcceptanceDefect, accept};
-use amiss_wire::digest::hb;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use serde_json::{Value, json};
+use sha2::Digest as _;
 
 use super::accepted_report;
 
@@ -46,7 +46,14 @@ fn report_rows_are_decoded_not_just_counted() {
         assert_ne!(changed, payload);
         let altered = wire.replace(&payload, &changed).replace(
             &report.payload_digest.to_string(),
-            &hb(PAYLOAD_SCHEMA, changed.as_bytes()).to_string(),
+            &amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(changed.as_bytes())
+                    .finalize()
+                    .0,
+            )
+            .to_string(),
         );
         accept(altered.as_bytes(), &expectations)
     });
@@ -87,7 +94,13 @@ fn typed_counts_still_obey_the_strict_json_integer_limit() {
         String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
     let invalid = payload.replace("9007199254740991", "9007199254740992");
     assert_ne!(invalid, payload);
-    report.payload_digest = hb(PAYLOAD_SCHEMA, invalid.as_bytes());
+    report.payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(invalid.as_bytes())
+            .finalize()
+            .0,
+    );
     let wire = format!(
         "{}\n",
         String::from_utf8(serde_json_canonicalizer::to_vec(&report).unwrap())
@@ -126,9 +139,12 @@ fn report_readers_agree_on_complete_status_and_exit_code() {
                 report.payload.result.complete = complete;
                 report.payload.result.status = status;
                 report.payload.result.exit_code = exit_code;
-                report.payload_digest = hb(
-                    PAYLOAD_SCHEMA,
-                    &serde_json_canonicalizer::to_vec(&report.payload).unwrap(),
+                report.payload_digest = amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                        .chain_update([0_u8])
+                        .chain_update(serde_json_canonicalizer::to_vec(&report.payload).unwrap())
+                        .finalize()
+                        .0,
                 );
                 let mut bytes = serde_json_canonicalizer::to_vec(&report).unwrap();
                 bytes.push(b'\n');
@@ -191,7 +207,14 @@ fn report_result_members_are_required_and_typed_in_both_readers() {
         let altered_payload = payload.replace(&result, &invalid);
         let altered = wire.replace(&payload, &altered_payload).replace(
             &report.payload_digest.to_string(),
-            &hb(PAYLOAD_SCHEMA, altered_payload.as_bytes()).to_string(),
+            &amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                    .chain_update([0_u8])
+                    .chain_update(altered_payload.as_bytes())
+                    .finalize()
+                    .0,
+            )
+            .to_string(),
         );
         assert_eq!(
             validate_envelope(altered.as_bytes()).map(drop),
@@ -363,9 +386,21 @@ fn available_and_unavailable_candidates_without_an_expected_commit_remain_suppor
         base_object_format: serde_json::from_value(candidate["object_format"].clone()).unwrap(),
         entry_count: 0,
         identity_scope: IndexIdentityScope::CompleteLogicalIndex,
-        index_projection_digest: hb("test", b"index projection"),
+        index_projection_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("test")
+                .chain_update([0_u8])
+                .chain_update(b"index projection")
+                .finalize()
+                .0,
+        ),
         kind: IndexSnapshotKind::Index,
-        snapshot_digest: hb("test", b"snapshot"),
+        snapshot_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("test")
+                .chain_update([0_u8])
+                .chain_update(b"snapshot")
+                .finalize()
+                .0,
+        ),
         snapshot_schema: IndexSnapshotSchema::Current,
     };
     report["payload"]["evaluation"]["candidate"] = serde_json::to_value(index).unwrap();
@@ -500,7 +535,13 @@ fn the_core_reader_keeps_strict_json_and_exact_canonical_bytes() {
 
 fn bind(report: &mut Value) -> Vec<u8> {
     let payload = serde_json_canonicalizer::to_vec(&report["payload"]).unwrap();
-    report["payload_digest"] = json!(hb(PAYLOAD_SCHEMA, &payload));
+    report["payload_digest"] = json!(amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize()
+            .0
+    ));
     let mut bytes = serde_json_canonicalizer::to_vec(report).unwrap();
     bytes.push(b'\n');
     bytes

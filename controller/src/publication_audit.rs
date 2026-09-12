@@ -1,9 +1,10 @@
+use sha2::Digest as _;
 mod tests;
 
-use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::model::Digest;
 use amiss_wire::publication::{
-    DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationVerdict, assess, parse_assessment,
-    parse_evidence, parse_plan,
+    DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationAssessment, PublicationVerdict,
+    parse_assessment, parse_evidence, parse_plan,
 };
 
 use crate::ArtifactError;
@@ -68,22 +69,23 @@ pub fn validate_publication_audit(
         .map_err(|_defect| ArtifactError::Corrupt)?;
     let assessment =
         parse_assessment(bundle.assessment).map_err(|_defect| ArtifactError::Corrupt)?;
-    let replayed = assess(
+    let replayed = PublicationAssessment::evaluate(
         &plan,
         evidence.as_ref(),
         &assessment.payload.engine.engine_version,
         assessment.payload.engine.engine_digest,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    let replayed = parse_assessment(&replayed).map_err(|_defect| ArtifactError::Corrupt)?;
     if replayed.payload_digest != assessment.payload_digest {
         return Err(ArtifactError::Corrupt);
     }
     Ok(PublicationAuditDigests {
         report_digest: report.report_digest,
-        plan_digest: sha256(bundle.plan),
-        evidence_digest: bundle.evidence.map(sha256),
-        assessment_digest: sha256(bundle.assessment),
+        plan_digest: Digest::from(sha2::Sha256::digest(bundle.plan).0),
+        evidence_digest: bundle
+            .evidence
+            .map(|bytes| Digest::from(sha2::Sha256::digest(bytes).0)),
+        assessment_digest: Digest::from(sha2::Sha256::digest(bundle.assessment).0),
         verdict: assessment.payload.verdict,
     })
 }

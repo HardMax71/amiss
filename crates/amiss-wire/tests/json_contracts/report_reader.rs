@@ -1,6 +1,6 @@
-use amiss_wire::digest::hb;
 use amiss_wire::report::{PAYLOAD_SCHEMA, ReportDefect, validate_envelope};
 use serde_json::{Value, json};
+use sha2::Digest as _;
 
 const REPORT: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
 
@@ -176,6 +176,12 @@ fn unknown_payload_fields_are_rejected_below_and_above_the_depth_ceiling() {
 
 fn bind(report: &mut Value) -> serde_json::Result<Vec<u8>> {
     let payload = serde_json_canonicalizer::to_vec(&report["payload"])?;
-    report["payload_digest"] = json!(hb(PAYLOAD_SCHEMA, &payload));
+    report["payload_digest"] = json!(amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize()
+            .0
+    ));
     serde_json_canonicalizer::to_vec(report)
 }

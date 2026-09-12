@@ -2,32 +2,49 @@ use amiss_controller::{
     BootstrapJobError, OpaqueId, PolicyControls, ProviderInstance, ProviderNamespace,
     SemanticEvidenceTemplate, WorkflowArtifactExpectation, check_binding, check_plan,
 };
-use amiss_wire::controls::{
-    Profile, canonical_debt_snapshot, canonical_organization_floor, canonical_waiver_bundle,
-};
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::controls::Profile;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
 use amiss_wire::requests::RequestTrust;
+use sha2::Digest as _;
 
 use super::{execution, site_acquisition, workflow_acquisition};
 
 fn full_policy() -> PolicyControls {
     PolicyControls {
         semantic_evidence: vec![
-            amiss_wire::semantic::parse_template(&super::semantic_template(hb(
-                "amiss/test-site-context",
-                b"direct",
-            )))
+            serde_json::from_slice::<SemanticEvidenceTemplate<'static>>(&super::semantic_template(
+                Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/test-site-context")
+                        .chain_update([0_u8])
+                        .chain_update(b"direct")
+                        .finalize()
+                        .0,
+                ),
+            ))
             .unwrap(),
         ],
         semantic_acquisitions: vec![
-            site_acquisition(hb("amiss/test-site-context", b"acquired")).expectation,
+            site_acquisition(Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-site-context")
+                    .chain_update([0_u8])
+                    .chain_update(b"acquired")
+                    .finalize()
+                    .0,
+            ))
+            .expectation,
         ],
         workflow_artifacts: vec![
             workflow_acquisition(
                 "workflow-site",
                 "site \"β\"",
-                hb("amiss/test-site-context", b"workflow"),
+                Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/test-site-context")
+                        .chain_update([0_u8])
+                        .chain_update(b"workflow")
+                        .finalize()
+                        .0,
+                ),
             )
             .0,
         ],
@@ -78,7 +95,13 @@ fn retained_control_digests_are_verified_before_a_plan_is_used() {
     let original = check_plan(Profile::Enforce, full_policy(), execution()).unwrap();
     for select in fields {
         let mut changed = original.clone();
-        *select(&mut changed.policy) = hb("amiss/test-control", b"changed");
+        *select(&mut changed.policy) = Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-control")
+                .chain_update([0_u8])
+                .chain_update(b"changed")
+                .finalize()
+                .0,
+        );
         assert!(check_binding(&changed).is_err());
     }
 }
@@ -89,17 +112,47 @@ fn changing_a_typed_control_and_its_digest_cannot_preserve_a_frozen_plan() {
         |policy| {
             let floor = policy.organization_floor.as_mut().unwrap();
             floor.value.floor_id = ArtifactId::new("other-floor".to_owned()).unwrap();
-            floor.expected_digest = canonical_organization_floor(&floor.value).unwrap().1;
+            floor.expected_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                    .chain_update([0_u8])
+                    .chain_update(serde_json_canonicalizer::to_vec(&floor.value).unwrap())
+                    .finalize()
+                    .0,
+            );
         },
         |policy| {
             let debt = policy.debt_snapshot.as_mut().unwrap();
-            debt.value.organization_floor_digest = hb("amiss/test-floor", b"changed");
-            debt.expected_digest = canonical_debt_snapshot(&debt.value).unwrap().1;
+            debt.value.organization_floor_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-floor")
+                    .chain_update([0_u8])
+                    .chain_update(b"changed")
+                    .finalize()
+                    .0,
+            );
+            debt.expected_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
+                    .chain_update([0_u8])
+                    .chain_update(serde_json_canonicalizer::to_vec(&debt.value).unwrap())
+                    .finalize()
+                    .0,
+            );
         },
         |policy| {
             let waiver = policy.waiver_bundle.as_mut().unwrap();
-            waiver.value.organization_floor_digest = hb("amiss/test-floor", b"changed");
-            waiver.expected_digest = canonical_waiver_bundle(&waiver.value).unwrap().1;
+            waiver.value.organization_floor_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-floor")
+                    .chain_update([0_u8])
+                    .chain_update(b"changed")
+                    .finalize()
+                    .0,
+            );
+            waiver.expected_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
+                    .chain_update([0_u8])
+                    .chain_update(serde_json_canonicalizer::to_vec(&waiver.value).unwrap())
+                    .finalize()
+                    .0,
+            );
         },
         |policy| {
             policy.organization_floor.as_mut().unwrap().trust_source =
@@ -169,7 +222,15 @@ fn every_workflow_identity_member_changes_the_frozen_binding() {
                 ArtifactId::new("other-producer".to_owned()).unwrap();
         },
         |artifact| artifact.semantic.producer_version = "0.5.2".to_owned(),
-        |artifact| artifact.semantic.context_digest = hb("amiss/test-site-context", b"other"),
+        |artifact| {
+            artifact.semantic.context_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-site-context")
+                    .chain_update([0_u8])
+                    .chain_update(b"other")
+                    .finalize()
+                    .0,
+            );
+        },
     ];
     assert_frozen_binding_changes(&changes, |policy| {
         policy.workflow_artifacts.first_mut().unwrap()
@@ -180,8 +241,24 @@ fn every_workflow_identity_member_changes_the_frozen_binding() {
 fn semantic_template_identity_members_cannot_change_under_a_frozen_plan() {
     let changes: [fn(&mut SemanticEvidenceTemplate<'static>); 6] = [
         |template| template.complete = !template.complete,
-        |template| template.producer.context_digest = hb("amiss/test-context", b"other"),
-        |template| template.producer.input_digest = hb("amiss/test-input", b"other"),
+        |template| {
+            template.producer.context_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-context")
+                    .chain_update([0_u8])
+                    .chain_update(b"other")
+                    .finalize()
+                    .0,
+            );
+        },
+        |template| {
+            template.producer.input_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-input")
+                    .chain_update([0_u8])
+                    .chain_update(b"other")
+                    .finalize()
+                    .0,
+            );
+        },
         |template| template.producer.kind = amiss_wire::semantic::SemanticProducerKind::RecordSet,
         |template| {
             template.producer.identity = ArtifactId::new("other-producer".to_owned()).unwrap();

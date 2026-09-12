@@ -3,10 +3,11 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 
-use amiss_wire::controls::{Profile, canonical_organization_floor, canonical_trusted_time};
+use amiss_wire::controls::Profile;
 use amiss_wire::de::ErrorKind;
 
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
@@ -66,8 +67,10 @@ fn the_request_examples_parse_to_what_they_say() {
         "a commit-pair run names both sides"
     );
 
-    let snapshot =
-        SnapshotRequest::parse(&request_example("scanner-snapshot-request.json")).unwrap();
+    let snapshot = serde_json::from_slice::<SnapshotRequest>(&request_example(
+        "scanner-snapshot-request.json",
+    ))
+    .unwrap();
     assert_eq!(
         snapshot.materialization,
         SnapshotMaterialization::GitObjects
@@ -82,7 +85,13 @@ fn the_request_examples_parse_to_what_they_say() {
     assert_eq!(floor.trust_source, RequestTrust::OrganizationPolicy);
     assert_eq!(
         floor.expected_digest,
-        canonical_organization_floor(&floor.value).unwrap().1,
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&floor.value).unwrap())
+                .finalize()
+                .0
+        ),
         "the request carries the floor's independently reproducible semantic digest"
     );
     let time = controls
@@ -94,7 +103,13 @@ fn the_request_examples_parse_to_what_they_say() {
     assert_eq!(time.provider_run_attempt, 2);
     assert_eq!(
         time.expected_digest,
-        canonical_trusted_time(&time.value).unwrap().1,
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&time.value).unwrap())
+                .finalize()
+                .0
+        ),
         "the request carries the statement's independently reproducible semantic digest"
     );
     assert!(
@@ -120,7 +135,7 @@ fn control_readers_reject_unknown_payloads_within_the_json_depth_limit() {
             1,
         );
         assert_ne!(invalid, example);
-        assert!(amiss_wire::json::parse(invalid.as_bytes()).is_ok());
+        amiss_wire::de::JsonProfile::validate(invalid.as_bytes()).unwrap();
         assert!(serde_json::from_str::<ControlsRequest>(&invalid).is_err());
         assert_eq!(
             ControlsRequest::parse(invalid.as_bytes()).unwrap_err().kind,
@@ -143,14 +158,33 @@ fn commit_identity_construction_matches_the_published_preimage() {
     evaluation.target_ref = BranchRef::new("refs/heads/main".to_owned());
     evaluation.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
 
-    let published = amiss_wire::json::parse(&request_example("candidate-identity.json"))
-        .expect("the candidate identity example is strict JSON");
+    let published =
+        serde_json::from_slice::<serde_json::Value>(&request_example("candidate-identity.json"))
+            .expect("the candidate identity example is strict JSON");
     assert_eq!(
         commit_candidate_identity_digest(&evaluation, &oid('2'), &oid('4')),
-        Some(amiss_wire::digest::hb(
-            CANDIDATE_IDENTITY_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&published).expect("fixture JSON")
+        Some(amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&published).expect("fixture JSON"))
+                .finalize()
+                .0
         ))
+    );
+
+    let mut mismatched = evaluation.clone();
+    mismatched.object_format = ObjectFormat::Sha256;
+    assert_eq!(
+        commit_candidate_identity_digest(&mismatched, &oid('2'), &oid('4')),
+        None,
+        "identity construction validates commit formats without serializing the request"
+    );
+    mismatched = evaluation.clone();
+    mismatched.target_ref = None;
+    assert_eq!(
+        commit_candidate_identity_digest(&mismatched, &oid('2'), &oid('4')),
+        None,
+        "identity construction rejects incomplete repository identity"
     );
 
     let index = EvaluationRequest::index(Profile::Enforce, ObjectFormat::Sha1, oid('1'));
@@ -195,7 +229,7 @@ fn wrong_or_legacy_request_contracts_are_not_silent_aliases() {
         "amiss/not-the-scanner-snapshot-request",
     );
     assert!(
-        SnapshotRequest::parse(wrong_schema.as_bytes()).is_err(),
+        serde_json::from_slice::<SnapshotRequest>(wrong_schema.as_bytes()).is_err(),
         "snapshot requests use the same rolling identity rule"
     );
 }
@@ -250,18 +284,23 @@ fn the_forge_and_provider_run_are_closed_and_coherent() {
 fn request_writers_are_canonical_and_the_sealed_frame_is_exact() {
     let evaluation =
         EvaluationRequest::parse(&request_example("scanner-evaluation-request.json")).unwrap();
-    let snapshot =
-        SnapshotRequest::parse(&request_example("scanner-snapshot-request.json")).unwrap();
+    let snapshot = serde_json::from_slice::<SnapshotRequest>(&request_example(
+        "scanner-snapshot-request.json",
+    ))
+    .unwrap();
     let controls =
         ControlsRequest::parse(&request_example("scanner-controls-request.json")).unwrap();
     let streams = RequestStreams {
-        evaluation: evaluation.canonical_bytes().unwrap(),
-        snapshot: snapshot.canonical_bytes().unwrap(),
-        controls: controls.canonical_bytes().unwrap(),
+        evaluation: serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
+        snapshot: serde_json_canonicalizer::to_vec(&snapshot).unwrap(),
+        controls: serde_json_canonicalizer::to_vec(&controls).unwrap(),
     };
     for bytes in [&streams.evaluation, &streams.snapshot, &streams.controls] {
         assert_eq!(
-            serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(bytes).unwrap()).unwrap(),
+            serde_json_canonicalizer::to_vec(
+                &serde_json::from_slice::<serde_json::Value>(bytes).unwrap()
+            )
+            .unwrap(),
             *bytes
         );
     }
@@ -286,7 +325,7 @@ fn request_writers_are_canonical_and_the_sealed_frame_is_exact() {
             .as_mut()
             .expect("the request example carries trusted time")
             .provider_run_attempt = attempt;
-        let error = invalid.canonical_bytes().unwrap_err();
+        let error = invalid.validate().unwrap_err();
         assert_eq!(error.path, "$.trusted_time.provider_run_attempt");
         assert_eq!(error.kind, ErrorKind::InvalidValue);
     }
@@ -348,13 +387,19 @@ fn the_snapshot_request_pins_the_handle_and_the_pre_acquisition() {
 
     let other_handle = example.replace(r#""repository_handle": 3"#, r#""repository_handle": 4"#);
     assert!(
-        SnapshotRequest::parse(other_handle.as_bytes()).is_err(),
+        serde_json::from_slice::<SnapshotRequest>(other_handle.as_bytes())
+            .unwrap()
+            .validate()
+            .is_err(),
         "the handle ordinal is the contract, not a parameter"
     );
 
     let unacquired = example.replace(r#""pre_acquired": true"#, r#""pre_acquired": false"#);
     assert!(
-        SnapshotRequest::parse(unacquired.as_bytes()).is_err(),
+        serde_json::from_slice::<SnapshotRequest>(unacquired.as_bytes())
+            .unwrap()
+            .validate()
+            .is_err(),
         "an engine that acquires its own repository is an engine with the network"
     );
 
@@ -374,7 +419,7 @@ fn the_snapshot_request_pins_the_handle_and_the_pre_acquisition() {
             "$.pre_acquired",
         ),
     ] {
-        let error = request.canonical_bytes().unwrap_err();
+        let error = request.validate().unwrap_err();
         assert_eq!(error.path, path);
         assert_eq!(error.kind, ErrorKind::InvalidValue);
     }
@@ -384,7 +429,7 @@ fn the_snapshot_request_pins_the_handle_and_the_pre_acquisition() {
         r#""materialization": "index""#,
     );
     assert_eq!(
-        SnapshotRequest::parse(index.as_bytes())
+        serde_json::from_slice::<SnapshotRequest>(index.as_bytes())
             .unwrap()
             .materialization,
         SnapshotMaterialization::Index,
@@ -452,7 +497,7 @@ fn semantic_evidence_is_a_bounded_set_of_envelopes() {
         semantic_evidence: vec![supplied; SEMANTIC_EVIDENCE_REQUEST_LIMIT.saturating_add(1)],
         ..ControlsRequest::default()
     };
-    let error = oversized.canonical_bytes().unwrap_err();
+    let error = oversized.validate().unwrap_err();
     assert_eq!(error.path, "$.semantic_evidence");
     assert_eq!(error.kind, ErrorKind::LimitExceeded);
 }
@@ -551,4 +596,175 @@ fn a_stream_may_reach_the_ceiling_and_not_pass_it() {
             .kind(),
         std::io::ErrorKind::InvalidData
     );
+}
+
+#[test]
+fn constructed_controls_keep_the_safe_integer_law_without_validating_control_meaning() {
+    let original =
+        ControlsRequest::parse(&request_example("scanner-controls-request.json")).unwrap();
+    let mut request = original.clone();
+    request
+        .organization_floor
+        .as_mut()
+        .unwrap()
+        .value
+        .resource_limits = vec![amiss_wire::controls::ResourceLimit {
+        resource: amiss_wire::controls::ResourceName::MachineJsonBytes,
+        maximum: 0,
+    }];
+    for maximum in [
+        i64::MIN,
+        -9_007_199_254_740_992,
+        9_007_199_254_740_992,
+        i64::MAX,
+    ] {
+        request
+            .organization_floor
+            .as_mut()
+            .unwrap()
+            .value
+            .resource_limits[0]
+            .maximum = maximum;
+        let error = request.validate().unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert_eq!(
+            error.path,
+            "$.organization_floor.value.resource_limits[0].maximum"
+        );
+    }
+    request
+        .organization_floor
+        .as_mut()
+        .unwrap()
+        .value
+        .resource_limits[0]
+        .maximum = -js_int::MAX_SAFE_INT;
+    assert!(
+        request.validate().is_ok(),
+        "a semantically invalid floor belongs to the control consumer"
+    );
+    request = original;
+    for attempt in [9_007_199_254_740_992, u64::MAX] {
+        request
+            .trusted_time
+            .as_mut()
+            .unwrap()
+            .value
+            .provider_run_attempt = attempt;
+        let error = request.validate().unwrap_err();
+        assert_eq!(error.kind, ErrorKind::InvalidValue);
+        assert_eq!(error.path, "$.trusted_time.value.provider_run_attempt");
+    }
+    request
+        .trusted_time
+        .as_mut()
+        .unwrap()
+        .value
+        .provider_run_attempt = 0;
+    assert!(
+        request.validate().is_ok(),
+        "the supplied statement is validated by its consumer"
+    );
+}
+
+#[test]
+fn supplied_fact_multiplicity_keeps_numeric_and_semantic_validation_separate() {
+    for (name, field, fact_field) in [
+        ("debt-snapshot.json", "debt_snapshot", "accepted_fact"),
+        ("waiver-bundle.json", "waiver_bundle", "authorized_fact"),
+    ] {
+        let control: serde_json::Value = serde_json::from_slice(&request_example(name)).unwrap();
+        let mut value = serde_json::to_value(ControlsRequest::default()).unwrap();
+        value[field] = serde_json::json!({
+            "value": control,
+            "expected_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "trust_source": "organization-policy"
+        });
+        let pointer =
+            format!("/{field}/value/items/0/{fact_field}/evidence/occurrence_multiplicity");
+        for multiplicity in [9_007_199_254_740_992_u64, u64::MAX] {
+            *value.pointer_mut(&pointer).unwrap() = serde_json::json!(multiplicity);
+            let request: ControlsRequest = serde_json::from_value(value.clone()).unwrap();
+            let error = request.validate().unwrap_err();
+            assert_eq!(error.kind, ErrorKind::InvalidValue);
+            assert_eq!(
+                error.path,
+                format!("$.{field}.value.items[0].{fact_field}.evidence.occurrence_multiplicity")
+            );
+        }
+        *value.pointer_mut(&pointer).unwrap() = serde_json::json!(2);
+        let request: ControlsRequest = serde_json::from_value(value).unwrap();
+        assert!(
+            request.validate().is_ok(),
+            "multiplicity semantics remain a fact constraint"
+        );
+    }
+}
+
+#[test]
+fn request_models_refuse_positional_root_and_supplied_objects() {
+    let snapshot = serde_json::json!(["amiss/scanner-snapshot-request", "git-objects", 3, true]);
+    assert!(serde_json::from_value::<SnapshotRequest>(snapshot).is_err());
+    let controls: serde_json::Value =
+        serde_json::from_slice(&request_example("scanner-controls-request.json")).unwrap();
+    let root = serde_json::json!([
+        controls["schema"],
+        controls["organization_floor"],
+        controls["debt_snapshot"],
+        controls["waiver_bundle"],
+        controls["trusted_time"],
+        controls["execution_constraint"],
+        controls["semantic_evidence"]
+    ]);
+    assert!(ControlsRequest::parse(&serde_json::to_vec(&root).unwrap()).is_err());
+    for (field, fields) in [
+        (
+            "organization_floor",
+            &["value", "expected_digest", "trust_source"][..],
+        ),
+        (
+            "trusted_time",
+            &[
+                "value",
+                "expected_digest",
+                "provider",
+                "provider_run_id",
+                "provider_run_attempt",
+            ][..],
+        ),
+    ] {
+        let mut malformed = controls.clone();
+        malformed[field] = fields
+            .iter()
+            .map(|key| controls[field][key].clone())
+            .collect();
+        assert!(
+            ControlsRequest::parse(&serde_json::to_vec(&malformed).unwrap()).is_err(),
+            "{field}"
+        );
+        assert!(
+            serde_json::from_value::<ControlsRequest>(malformed).is_err(),
+            "{field}"
+        );
+    }
+    let evaluation: serde_json::Value =
+        serde_json::from_slice(&request_example("scanner-evaluation-request.json")).unwrap();
+    let root: serde_json::Value = [
+        "schema",
+        "profile",
+        "mode",
+        "object_format",
+        "repository",
+        "forge",
+        "candidate_ref",
+        "target_ref",
+        "default_branch_ref",
+        "base_commit_oid",
+        "candidate_commit_oid",
+    ]
+    .iter()
+    .map(|key| evaluation[key].clone())
+    .collect();
+    assert!(EvaluationRequest::parse(&serde_json::to_vec(&root).unwrap()).is_err());
+    assert!(serde_json::from_value::<EvaluationRequest>(root).is_err());
 }

@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 use std::time::Instant;
 
@@ -7,7 +8,6 @@ use amiss_scan::report::RequestDigests;
 use amiss_scan::resolve::{Resolver, TargetCache};
 use amiss_scan::{Resolution, ScanLimits, ScanResources, SnapshotDiscovery};
 use amiss_wire::controls::GitMode;
-use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -33,7 +33,13 @@ fn representative_repository_latency_and_memory() {
     let shell = SetupShell {
         engine: EngineProvenance {
             version: "0.0.0-measure".to_owned(),
-            digest: hb("amiss/scanner-engine", b"measure engine"),
+            digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                    .chain_update([0_u8])
+                    .chain_update(b"measure engine")
+                    .finalize()
+                    .0,
+            ),
         },
         profile: amiss_wire::controls::Profile::Observe,
         repository: None,

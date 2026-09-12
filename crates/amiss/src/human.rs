@@ -134,9 +134,8 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
     for row in occurrences {
         let document = match &row.document {
             amiss_wire::report::model::RepoPath::Text(path) => atom(path.as_str()),
-            amiss_wire::report::model::RepoPath::Bytes(path) => {
-                atom_bytes(&amiss_wire::human::decode_hex(&path.bytes_hex))
-            }
+            amiss_wire::report::model::RepoPath::Bytes(path) => hex::decode(&path.bytes_hex)
+                .map_or_else(|_defect| atom(&path.bytes_hex), |bytes| atom_bytes(&bytes)),
         };
         say!(
             &mut out,

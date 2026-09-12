@@ -3,7 +3,6 @@
     reason = "integration assertions over repository-owned documentation and fixtures"
 )]
 
-use std::fmt::Write as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -350,10 +349,7 @@ fn third_party_material_keeps_its_attribution() {
         ),
     ] {
         let bytes = fs::read(root.join("docs/src/fonts").join(file)).expect("font is readable");
-        let mut actual = String::with_capacity(64);
-        for byte in Sha256::digest(bytes) {
-            write!(&mut actual, "{byte:02x}").expect("writing to a string is infallible");
-        }
+        let actual = hex::encode(Sha256::digest(bytes));
         assert_eq!(actual, expected);
     }
 

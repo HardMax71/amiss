@@ -2,9 +2,9 @@
 
 use amiss_wire::{
     assessment::Nullable,
-    digest::hb,
     semantic::{self, SemanticEvidenceEnvelope, observation::SiteBuildObservation},
 };
+use sha2::Digest as _;
 use std::borrow::Cow;
 
 use super::{ErrorKind, Observation, SuppliedSemanticEvidence, validated_envelope};
@@ -15,11 +15,17 @@ const PATH: &str = "$.semantic_evidence[0]";
 
 #[test]
 fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size() {
-    let mut template = semantic::parse_template(include_bytes!(
-        "../../../../../spec/examples/scanner-semantic-template.json"
-    ))
+    let mut template = serde_json::from_slice::<semantic::SemanticEvidenceTemplate<'static>>(
+        include_bytes!("../../../../../spec/examples/scanner-semantic-template.json"),
+    )
     .unwrap();
-    let candidate = hb("test", b"candidate");
+    let candidate = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("test")
+            .chain_update([0_u8])
+            .chain_update(b"candidate")
+            .finalize()
+            .0,
+    );
     let limit = usize::try_from(semantic::SEMANTIC_EVIDENCE_BYTES).unwrap();
     let Observation::Record(observation) =
         std::sync::Arc::make_mut(&mut template.observations)[0].to_mut()
@@ -125,9 +131,12 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
         (unsorted, ErrorKind::UnsortedSet),
         (too_many, ErrorKind::LimitExceeded),
     ] {
-        value.payload_digest = hb(
-            semantic::PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(&value.payload).unwrap(),
+        value.payload_digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&value.payload).unwrap())
+                .finalize()
+                .0,
         );
         assert_eq!(
             validated_envelope(
@@ -153,7 +162,13 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
         },
         SuppliedSemanticEvidence {
             value: original,
-            expected_context_digest: hb("test", b"wrong context"),
+            expected_context_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("test")
+                    .chain_update([0_u8])
+                    .chain_update(b"wrong context")
+                    .finalize()
+                    .0,
+            ),
         },
     ] {
         assert_eq!(
@@ -183,9 +198,12 @@ fn in_process_intake_keeps_the_exact_encoded_byte_ceiling() {
     route.extend(std::iter::repeat_n('a', limit - initial - 1));
 
     for length in [limit - 1, limit, limit + 1] {
-        document.payload_digest = hb(
-            semantic::PAYLOAD_SCHEMA,
-            &serde_json_canonicalizer::to_vec(&document.payload).unwrap(),
+        document.payload_digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
+                .finalize()
+                .0,
         );
         let encoded = serde_json::to_vec(&document).unwrap();
         assert_eq!(encoded.len(), length);

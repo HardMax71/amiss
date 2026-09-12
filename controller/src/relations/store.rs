@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 mod binding;
 mod journal;
 mod outbox;
@@ -11,7 +12,7 @@ use std::io::{self, Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use amiss_wire::digest::{Digest, hb};
+use amiss_wire::model::Digest;
 use atomicwrites::{AllowOverwrite, AtomicFile};
 use serde::{Deserialize, Serialize};
 
@@ -313,7 +314,14 @@ impl FileRelationScheduleStore {
             .checked_add(1)
             .filter(|count| *count <= max_entries)
             .ok_or(RelationScheduleStoreError::Full)?;
-        let tail_digest = hb(JOURNAL_CHAIN_DOMAIN, &chunk).to_string();
+        let tail_digest = Digest::from(
+            sha2::Sha256::new_with_prefix(JOURNAL_CHAIN_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&chunk)
+                .finalize()
+                .0,
+        )
+        .to_string();
         validate_append(state, &entry, chunk_length, self.max_bindings)?;
         if journal
             .seek(SeekFrom::End(0))
@@ -529,7 +537,14 @@ fn read_entries(
                 .get(length_bytes.len()..)
                 .ok_or(RelationScheduleStoreError::Corrupt)?,
         )?;
-        let tail_digest = hb(JOURNAL_CHAIN_DOMAIN, &chunk).to_string();
+        let tail_digest = Digest::from(
+            sha2::Sha256::new_with_prefix(JOURNAL_CHAIN_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&chunk)
+                .finalize()
+                .0,
+        )
+        .to_string();
         apply_entry(state, entry, tail_digest, chunk_length, max_bindings)?;
     }
     Ok(())

@@ -1,7 +1,8 @@
+use sha2::Digest as _;
 use std::collections::{BTreeMap, HashMap};
 
 use amiss_wire::controls::{SourceConstruct, TargetKind};
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 
@@ -37,8 +38,24 @@ enum CorrelationIntent<'a> {
 
 fn correlation_intent(observation: &Observation) -> CorrelationIntent<'_> {
     let intent = &observation.intent;
-    let query = observe::query_digest(intent);
-    let fragment = observe::fragment_digest(intent);
+    let query = intent.query.as_deref().map(|text| {
+        Digest::from(
+            sha2::Sha256::new_with_prefix(observe::LINK_QUERY_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(text.as_bytes())
+                .finalize()
+                .0,
+        )
+    });
+    let fragment = intent.fragment.as_deref().map(|text| {
+        Digest::from(
+            sha2::Sha256::new_with_prefix(observe::LINK_FRAGMENT_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(text.as_bytes())
+                .finalize()
+                .0,
+        )
+    });
     match intent.kind {
         IntentKind::RepositoryPath
         | IntentKind::SameRepositoryGithub

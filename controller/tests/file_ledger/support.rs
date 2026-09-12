@@ -1,4 +1,5 @@
 pub(super) use amiss_controller_fixtures::clock::TestClock;
+use sha2::Digest as _;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,7 +15,6 @@ use amiss_controller::{
     ReplayWindow, RunIdentity, RunRefs, SignedTimePolicy, StageOutcome, StagedPublication,
     UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use base64::Engine as _;
 use hmac::{Hmac, KeyInit as _, Mac as _};
@@ -49,9 +49,21 @@ pub(super) fn replay_window() -> ReplayWindow {
 
 pub(super) fn check_binding() -> CheckBinding {
     CheckBinding {
-        plan_digest: hb("amiss/test-check-plan", b"plan"),
+        plan_digest: amiss_wire::model::Digest::from(
+            Sha256::new_with_prefix("amiss/test-check-plan")
+                .chain_update([0_u8])
+                .chain_update(b"plan")
+                .finalize()
+                .0,
+        ),
         required_status_name: "amiss/enforce".to_owned(),
-        execution_constraint_digest: hb("amiss/test-execution-constraint", b"constraint"),
+        execution_constraint_digest: amiss_wire::model::Digest::from(
+            Sha256::new_with_prefix("amiss/test-execution-constraint")
+                .chain_update([0_u8])
+                .chain_update(b"constraint")
+                .finalize()
+                .0,
+        ),
     }
 }
 
@@ -305,7 +317,16 @@ pub(super) fn write_capacity_frame(root: &Path, version: u8, length: u64, digest
     frame.extend_from_slice(MAGIC);
     frame.push(version);
     frame.extend_from_slice(&length.to_be_bytes());
-    frame.extend_from_slice(hb(DOMAIN, digest_over).as_bytes());
+    frame.extend_from_slice(
+        amiss_wire::model::Digest::from(
+            Sha256::new_with_prefix(DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(digest_over)
+                .finalize()
+                .0,
+        )
+        .as_bytes(),
+    );
     frame.extend_from_slice(payload.as_bytes());
     fs::write(root.join(".amiss-capacity.state"), frame).unwrap();
 }
@@ -381,7 +402,16 @@ fn test_frame(magic: &[u8], domain: &str, payload: &[u8]) -> Vec<u8> {
     frame.extend_from_slice(magic);
     frame.push(1);
     frame.extend_from_slice(&u64::try_from(payload.len()).unwrap().to_be_bytes());
-    frame.extend_from_slice(hb(domain, payload).as_bytes());
+    frame.extend_from_slice(
+        amiss_wire::model::Digest::from(
+            Sha256::new_with_prefix(domain)
+                .chain_update([0_u8])
+                .chain_update(payload)
+                .finalize()
+                .0,
+        )
+        .as_bytes(),
+    );
     frame.extend_from_slice(payload);
     frame
 }

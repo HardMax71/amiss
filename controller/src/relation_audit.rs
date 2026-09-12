@@ -1,8 +1,9 @@
-use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::model::Digest;
 use amiss_wire::relation::{
-    self, RELATION_DOCUMENT_BYTES, RelationVerdict, assess, parse_assessment, parse_evidence,
-    parse_plan,
+    self, RELATION_DOCUMENT_BYTES, RelationAssessment, RelationVerdict, parse_assessment,
+    parse_evidence, parse_plan,
 };
+use sha2::Digest as _;
 
 use crate::audit_report::accepted_report;
 use crate::{ArtifactError, RelationSubjectTransition, RelationTransition, relation_transition};
@@ -71,22 +72,23 @@ pub fn validate_relation_audit(
         .map_err(|_defect| ArtifactError::Corrupt)?;
     let assessment =
         parse_assessment(bundle.assessment).map_err(|_defect| ArtifactError::Corrupt)?;
-    let replayed = assess(
+    let replayed = RelationAssessment::evaluate(
         &plan,
         evidence.as_ref(),
         &assessment.payload.engine.engine_version,
         assessment.payload.engine.engine_digest,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    let replayed = parse_assessment(&replayed).map_err(|_defect| ArtifactError::Corrupt)?;
     if replayed.payload_digest != assessment.payload_digest {
         return Err(ArtifactError::Corrupt);
     }
     Ok(RelationAuditDigests {
         report_digest,
-        plan_digest: sha256(bundle.plan),
-        evidence_digest: bundle.evidence.map(sha256),
-        assessment_digest: sha256(bundle.assessment),
+        plan_digest: Digest::from(sha2::Sha256::digest(bundle.plan).0),
+        evidence_digest: bundle
+            .evidence
+            .map(|bytes| Digest::from(sha2::Sha256::digest(bytes).0)),
+        assessment_digest: Digest::from(sha2::Sha256::digest(bundle.assessment).0),
         verdict: assessment.payload.verdict,
     })
 }
@@ -141,6 +143,7 @@ fn checked_relation_plan(
         .ok_or(ArtifactError::Corrupt)?;
     Ok((
         relation::RelationPlan {
+            schema: relation::PlanPayloadSchema::Current,
             report_payload_digest: report.payload_digest,
             relation: relation::RelationIdentity {
                 identity: registered.identity.clone(),

@@ -2,10 +2,8 @@ use std::fs;
 use std::process::ExitCode;
 
 use amiss_scan::report::Built;
-use amiss_wire::controls::{
-    DebtItem, DebtSnapshot, DebtSnapshotSchema, canonical_debt_snapshot, parse_fact,
-};
-use amiss_wire::digest::Digest;
+use amiss_wire::controls::{DebtItem, DebtSnapshot, DebtSnapshotSchema, parse_fact};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, OwnerId, TreeIdentity, UtcInstant};
 use amiss_wire::report::model::{Evaluation, ReportPayload, Snapshot};
 use amiss_wire::report::{Disposition, FindingKind};
@@ -41,7 +39,11 @@ pub(crate) fn run(invocation: &Invocation, adoption: &Adoption, built: &Built) -
         println!("amiss adopt: the report carries no candidate tree; nothing recorded");
         return ExitCode::from(2);
     };
-    let Ok((bytes, _digest)) = canonical_debt_snapshot(&snapshot) else {
+    if snapshot.validate().is_err() {
+        println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
+        return ExitCode::from(2);
+    }
+    let Ok(bytes) = serde_json_canonicalizer::to_vec(&snapshot) else {
         println!("amiss adopt: the minted snapshot failed its own reader; nothing recorded");
         return ExitCode::from(2);
     };

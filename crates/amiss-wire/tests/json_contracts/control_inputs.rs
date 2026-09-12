@@ -1,25 +1,23 @@
-use amiss_wire::{
-    controls::{
-        canonical_debt_snapshot, canonical_execution_constraint, canonical_organization_floor,
-        canonical_waiver_bundle,
-    },
-    digest::Digest,
-    requests::{ControlsRequest, RequestTrust, SuppliedControl},
-};
+use amiss_wire::requests::{ControlsRequest, RequestTrust, SuppliedControl};
 use serde::de::DeserializeOwned;
+use sha2::Digest as _;
 
 #[expect(
     clippy::expect_used,
     reason = "published control fixtures must parse and validate"
 )]
-fn supplied<T: DeserializeOwned, E: std::fmt::Debug>(
+fn supplied<T: DeserializeOwned + serde::Serialize>(
     bytes: &[u8],
-    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), E>,
+    domain: &str,
 ) -> SuppliedControl<T> {
     let value = serde_json::from_slice(bytes).expect("the published control parses");
-    let expected_digest = canonical(&value)
-        .expect("the published control validates")
-        .1;
+    let expected_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(domain)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&value).expect("the fixture serializes"))
+            .finalize()
+            .0,
+    );
     SuppliedControl {
         value,
         expected_digest,
@@ -32,23 +30,23 @@ fn control_inputs_keep_their_concrete_shapes_and_identities() {
     let request = ControlsRequest {
         organization_floor: Some(supplied(
             include_bytes!("../../../../spec/examples/organization-floor.json"),
-            canonical_organization_floor,
+            "amiss/organization-floor",
         )),
         debt_snapshot: Some(supplied(
             include_bytes!("../../../../spec/examples/debt-snapshot.json"),
-            canonical_debt_snapshot,
+            "amiss/debt-snapshot",
         )),
         waiver_bundle: Some(supplied(
             include_bytes!("../../../../spec/examples/waiver-bundle.json"),
-            canonical_waiver_bundle,
+            "amiss/waiver-bundle",
         )),
         execution_constraint: Some(supplied(
             include_bytes!("../../../../spec/examples/scanner-execution-constraint.json"),
-            canonical_execution_constraint,
+            "amiss/scanner-execution-constraint",
         )),
         ..ControlsRequest::default()
     };
-    let bytes = request.canonical_bytes().unwrap();
+    let bytes = serde_json_canonicalizer::to_vec(&request).unwrap();
     assert_eq!(ControlsRequest::parse(&bytes).unwrap(), request);
     let encoded = serde_json::to_string(&request).unwrap();
     let floor = &request.organization_floor.as_ref().unwrap().value;

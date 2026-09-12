@@ -19,6 +19,7 @@ test = false
 bench = false
 
 [dependencies]
+serde_json.workspace = true
 amiss-controller = { path = ".." }
 amiss-controller-bootstrap-fixture.workspace = true
 amiss-controller-git = { path = "../git" }
@@ -31,11 +32,9 @@ thiserror.workspace = true
 
 [dev-dependencies]
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }
-amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller-fixtures.workspace = true
 hex.workspace = true
 hmac.workspace = true
-serde_json.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
 

@@ -1,6 +1,6 @@
 mod tests;
 
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::report::model::ReportPayload;
 use amiss_wire::report::{Disposition, FindingKind};
 use serde::Serialize;

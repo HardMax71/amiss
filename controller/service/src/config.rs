@@ -8,7 +8,7 @@ mod route;
 mod webhook;
 
 pub use error::ConfigError;
-pub use files::{read_regular, read_strict_json};
+pub use files::{CONFIG_BYTES, read_regular};
 pub use limits::{
     ArtifactLimits, ExecutionLimits, GitLimits, HttpLimits, LedgerLimits, LoadedExecutionLimits,
     LoadedLimits, RunnerLimits, ServiceLimits, WorkerLimits, load_execution_limits, load_limits,

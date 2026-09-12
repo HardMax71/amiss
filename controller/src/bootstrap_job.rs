@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 mod controls;
 mod plan;
 mod semantic;
@@ -6,9 +7,9 @@ use std::sync::Arc;
 
 use amiss_wire::controls::{
     ExecutionConstraintDescriptor, Profile, TrustedTimeController, TrustedTimeSchema,
-    TrustedTimeStatement, canonical_execution_constraint, canonical_trusted_time,
+    TrustedTimeStatement,
 };
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity, UtcInstant};
 use amiss_wire::requests::{
     EvaluationRequest, RequestStreams, RequestTrust, SnapshotRequest, SuppliedControl,
@@ -187,12 +188,20 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         evaluation_instant: input.evaluation_instant,
         valid_until: input.valid_until,
     };
-    let (_, statement_digest) =
-        canonical_trusted_time(&statement).map_err(|_defect| BootstrapJobError::TrustedTime)?;
+    statement
+        .validate()
+        .map_err(|_defect| BootstrapJobError::TrustedTime)?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&statement, &mut writer)
+        .map_err(|_defect| BootstrapJobError::TrustedTime)?;
+    let statement_digest = Digest::from(writer.0.finalize().0);
 
-    let (constraint, constraint_digest) =
-        canonical_execution_constraint(&checked_plan.execution)
-            .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    let constraint = serde_json_canonicalizer::to_vec(&checked_plan.execution)
+        .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
+    let constraint_digest = checked_plan.execution_digest;
     let semantic_expectations = plan::semantic_acquisition_expectations(&checked_plan.policy);
     let semantic = bind_semantic_evidence(
         &checked_plan.policy.semantic_evidence,
@@ -217,14 +226,25 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         },
         semantic.supplied,
     )?;
+    evaluation
+        .validate()
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    controls
+        .validate()
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    let control_bytes = serde_json_canonicalizer::to_vec(&controls)
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    if u64::try_from(control_bytes.len()).unwrap_or(u64::MAX)
+        > amiss_wire::requests::REQUEST_STREAM_BYTES
+    {
+        return Err(BootstrapJobError::RequestEncoding);
+    }
     let streams = RequestStreams {
-        evaluation: evaluation
-            .canonical_bytes()
+        evaluation: serde_json_canonicalizer::to_vec(&evaluation)
             .map_err(|_defect| BootstrapJobError::RequestEncoding)?,
-        snapshot: SnapshotRequest::git_objects()
-            .canonical_bytes()
+        snapshot: serde_json_canonicalizer::to_vec(&SnapshotRequest::git_objects())
             .map_err(|_defect| BootstrapJobError::RequestEncoding)?,
-        controls: controls::canonical_request(&controls)?,
+        controls: control_bytes,
     };
     Ok(BootstrapJob {
         streams,

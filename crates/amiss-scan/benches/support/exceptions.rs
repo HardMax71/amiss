@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::collections::BTreeMap;
 
 use amiss_md::extract::BlockKind;
@@ -13,9 +14,7 @@ use amiss_wire::controls::{
     FindingKeyInput, FindingKeyInputSchema, FindingOccurrence, FindingScope, MissingResolution,
     OccurrenceKind, ReferenceScopeKind, SourceConstruct, StructuralResolution, TargetIntent,
     TargetIntentKind, TargetKind, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
-    canonical_trusted_time,
 };
-use amiss_wire::digest::hb;
 use amiss_wire::model::{
     Adapter, ArtifactId, BranchRef, ObjectFormat, OwnerId, RepoPath, RepoPathText,
     RepositoryIdentity, TreeIdentity, UtcInstant,
@@ -73,23 +72,13 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
             }
         })
         .collect();
-    let debt_digest = hb("amiss/bench-debt-context", b"matching debt items");
-    let statement = TrustedTimeStatement {
-        schema: TrustedTimeSchema::Current,
-        controller: TrustedTimeController::ExternalRequiredCheckClock,
-        repository: RepositoryIdentity::github("bench".to_owned(), "docs".to_owned())
-            .unwrap_or_else(|| panic!("benchmark repository identity")),
-        ref_name: BranchRef::new("refs/heads/main".to_owned())
-            .unwrap_or_else(|| panic!("benchmark branch")),
-        candidate_identity_digest: hb("amiss/bench-candidate-identity", b"candidate"),
-        provider: "github-actions".to_owned(),
-        provider_run_id: "1".to_owned(),
-        provider_run_attempt: 1,
-        evaluation_instant: instant("2026-07-12T10:00:00Z"),
-        valid_until: instant("2026-07-12T10:05:00Z"),
-    };
-    let (_, time_digest) = canonical_trusted_time(&statement)
-        .unwrap_or_else(|error| panic!("benchmark trusted time: {error}"));
+    let debt_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/bench-debt-context")
+            .chain_update([0_u8])
+            .chain_update(b"matching debt items")
+            .finalize()
+            .0,
+    );
     let policy = Effects {
         debt: Some(DebtContext {
             digest: debt_digest,
@@ -97,13 +86,47 @@ pub(super) fn exception_fixture(count: usize) -> (Vec<Comparison>, Effects) {
             adoption_tree: tree("a"),
             items,
         }),
-        time: Some(TimeContext {
-            statement,
-            digest: time_digest,
-        }),
+        time: Some(trusted_time()),
         ..Effects::default()
     };
     (comparisons, policy)
+}
+
+fn trusted_time() -> TimeContext {
+    let statement = TrustedTimeStatement {
+        schema: TrustedTimeSchema::Current,
+        controller: TrustedTimeController::ExternalRequiredCheckClock,
+        repository: RepositoryIdentity::github("bench".to_owned(), "docs".to_owned())
+            .unwrap_or_else(|| panic!("benchmark repository identity")),
+        ref_name: BranchRef::new("refs/heads/main".to_owned())
+            .unwrap_or_else(|| panic!("benchmark branch")),
+        candidate_identity_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/bench-candidate-identity")
+                .chain_update([0_u8])
+                .chain_update(b"candidate")
+                .finalize()
+                .0,
+        ),
+        provider: "github-actions".to_owned(),
+        provider_run_id: "1".to_owned(),
+        provider_run_attempt: 1,
+        evaluation_instant: instant("2026-07-12T10:00:00Z"),
+        valid_until: instant("2026-07-12T10:05:00Z"),
+    };
+    statement
+        .validate()
+        .unwrap_or_else(|error| panic!("benchmark trusted time: {error}"));
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&statement, &mut writer)
+        .unwrap_or_else(|error| panic!("benchmark trusted time: {error}"));
+    let time_digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
+    TimeContext {
+        statement,
+        digest: time_digest,
+    }
 }
 
 fn exception_observation(index: usize) -> (Observation, Fact) {
@@ -112,7 +135,13 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
     let target_text = format!("targets/{token}.rs");
     let document = repo_path(document_text.clone());
     let target = repo_path(target_text.clone());
-    let projection_digest = hb("amiss/scanner-source-projection", b"reference");
+    let projection_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-source-projection")
+            .chain_update([0_u8])
+            .chain_update(b"reference")
+            .finalize()
+            .0,
+    );
     let fact = Fact {
         schema: FactSchema::Current,
         finding_kind: EligibleFindingKind::ExplicitTargetMissing,
@@ -148,8 +177,19 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
         },
     };
     let observation = Observation {
-        id: hb("amiss/bench-exception-observation", token.as_bytes()),
-        adapter_contract_digest: hb("amiss/bench-adapter-contract", b"markdown"),
+        id: sha2::Sha256::new_with_prefix("amiss/bench-exception-observation")
+            .chain_update([0_u8])
+            .chain_update(token.as_bytes())
+            .finalize()
+            .0
+            .into(),
+        adapter_contract_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/bench-adapter-contract")
+                .chain_update([0_u8])
+                .chain_update(b"markdown")
+                .finalize()
+                .0,
+        ),
         document,
         span: (0, 0),
         display: SpanDisplay {
@@ -173,7 +213,13 @@ fn exception_observation(index: usize) -> (Observation, Fact) {
             fragment: None,
         },
         raw_destination: String::new(),
-        raw_destination_digest: hb("amiss/scanner-raw-destination", target_text.as_bytes()),
+        raw_destination_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-raw-destination")
+                .chain_update([0_u8])
+                .chain_update(target_text.as_bytes())
+                .finalize()
+                .0,
+        ),
         projection_digest,
         resolution: Resolution::<RepoPath>::Missing(Missing::PathNotFound {
             path: target,

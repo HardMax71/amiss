@@ -11,8 +11,8 @@ use amiss_wire::controls::{
     BlobLineSelection, NamedRegionSelection, ProjectionKind, ProjectionSource, RecordSetSelection,
     TreePathSelection,
 };
-use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText};
+use sha2::Digest as _;
 
 fn path(raw: &str) -> RepoPathText {
     RepoPathText::new(raw.to_owned()).unwrap()
@@ -67,7 +67,7 @@ fn line_and_named_region_sources_share_the_code_text_canonicalization() {
         assert_eq!(
             outcome.value,
             Some(amiss_wire::relation::RelationProjectedValue {
-                value_digest: sha256(b"one\ntwo"),
+                value_digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(b"one\ntwo").0),
                 value_bytes: 7,
             })
         );
@@ -105,7 +105,9 @@ fn complete_tree_paths_project_sorted_rows_or_their_decimal_count() {
     assert_eq!(
         rows.value,
         Some(amiss_wire::relation::RelationProjectedValue {
-            value_digest: sha256(b"a.md\nnested/b.md\nz.md"),
+            value_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::digest(b"a.md\nnested/b.md\nz.md").0
+            ),
             value_bytes: 21,
         })
     );
@@ -121,7 +123,7 @@ fn complete_tree_paths_project_sorted_rows_or_their_decimal_count() {
     assert_eq!(
         count.value,
         Some(amiss_wire::relation::RelationProjectedValue {
-            value_digest: sha256(b"3"),
+            value_digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(b"3").0),
             value_bytes: 1,
         })
     );
@@ -158,7 +160,7 @@ fn exact_count_includes_selected_paths_that_cannot_form_rows() {
     assert_eq!(
         count.value,
         Some(amiss_wire::relation::RelationProjectedValue {
-            value_digest: sha256(b"2"),
+            value_digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(b"2").0),
             value_bytes: 1,
         })
     );

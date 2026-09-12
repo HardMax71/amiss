@@ -1,8 +1,9 @@
+use sha2::Digest as _;
 use std::{fs, sync::Arc};
 
 use amiss_controller::{FileRelationScheduleStore, RelationAdmission};
 use amiss_controller_fixtures::relation::relation_audit;
-use amiss_wire::{controls::ProjectionKind, digest::sha256};
+use amiss_wire::controls::ProjectionKind;
 
 #[test]
 fn every_projection_source_preserves_durable_schedule_bytes() {
@@ -55,7 +56,7 @@ fn every_projection_source_preserves_durable_schedule_bytes() {
         let journal = directory.path().join(".amiss-relation-schedules.journal");
         let bytes = fs::read(&journal).unwrap();
         assert_eq!(
-            sha256(&bytes).to_string(),
+            amiss_wire::model::Digest::from(sha2::Sha256::digest(&bytes).0).to_string(),
             expected_digest,
             "journal drift for {projection:?}, source: {source}"
         );

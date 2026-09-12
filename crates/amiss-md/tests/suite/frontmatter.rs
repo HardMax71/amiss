@@ -1,14 +1,9 @@
-#![expect(
-    clippy::panic,
-    reason = "test fixture reader reports malformed published vectors"
-)]
-
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
 use amiss_md::frontmatter::{MAX_BYTES, Region, recognize};
-use amiss_wire::json::{Value, parse};
+use serde::Deserialize;
 
 const REQUIRED_VECTOR_IDS: [&str; 11] = [
     "FM-001-no-bom-exact-bound",
@@ -25,175 +20,62 @@ const REQUIRED_VECTOR_IDS: [&str; 11] = [
 ];
 const DOCUMENT_SUFFIX: &[u8] = b"body";
 
-fn object<'a>(value: &'a Value, context: &str) -> &'a [(String, Value)] {
-    let Value::Object(members) = value else {
-        panic!("{context} is an object")
-    };
-    members
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Vectors {
+    schema: String,
+    contract: String,
+    cases: Vec<Vector>,
 }
 
-fn member<'a>(members: &'a [(String, Value)], name: &str, context: &str) -> &'a Value {
-    members
-        .iter()
-        .find(|(key, _value)| key == name)
-        .map_or_else(
-            || panic!("{context} has a {name} member"),
-            |(_key, value)| value,
-        )
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum Newline {
+    #[default]
+    Lf,
+    CrLf,
+    Cr,
 }
 
-fn string<'a>(members: &'a [(String, Value)], name: &str, context: &str) -> &'a str {
-    let Value::String(value) = member(members, name, context) else {
-        panic!("{context}.{name} is a string")
-    };
-    value
-}
-
-fn boolean(members: &[(String, Value)], name: &str, context: &str) -> bool {
-    let Value::Bool(value) = member(members, name, context) else {
-        panic!("{context}.{name} is a boolean")
-    };
-    *value
-}
-
-fn nonnegative_integer(members: &[(String, Value)], name: &str, context: &str) -> usize {
-    let Value::Integer(value) = member(members, name, context) else {
-        panic!("{context}.{name} is an integer")
-    };
-    usize::try_from(*value).unwrap_or_else(|_error| panic!("{context}.{name} is nonnegative"))
-}
-
-fn optional_string<'a>(
-    members: &'a [(String, Value)],
-    name: &str,
-    context: &str,
-) -> Option<&'a str> {
-    match member(members, name, context) {
-        Value::Null => None,
-        Value::String(value) => Some(value),
-        Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_) => {
-            panic!("{context}.{name} is a string or null")
-        }
-    }
-}
-
-fn optional_integer(members: &[(String, Value)], name: &str, context: &str) -> Option<usize> {
-    match member(members, name, context) {
-        Value::Null => None,
-        Value::Integer(value) => Some(
-            usize::try_from(*value)
-                .unwrap_or_else(|_error| panic!("{context}.{name} is nonnegative")),
-        ),
-        Value::Bool(_) | Value::String(_) | Value::Array(_) | Value::Object(_) => {
-            panic!("{context}.{name} is an integer or null")
-        }
-    }
-}
-
-fn assert_shape(members: &[(String, Value)], expected: &[&str], context: &str) {
-    let actual: BTreeSet<&str> = members.iter().map(|(key, _value)| key.as_str()).collect();
-    let expected: BTreeSet<&str> = expected.iter().copied().collect();
-    assert_eq!(actual, expected, "{context} has the closed member set");
-}
-
-fn newline(members: &[(String, Value)], context: &str) -> &'static [u8] {
-    match members
-        .iter()
-        .find(|(key, _value)| key == "newline")
-        .map(|(_key, value)| value)
-    {
-        None => b"\n",
-        Some(Value::String(value)) if value.as_ref() == "crlf" => b"\r\n",
-        Some(Value::String(value)) if value.as_ref() == "cr" => b"\r",
-        Some(Value::String(value)) if value.as_ref() == "lf" => b"\n",
-        Some(Value::String(value)) => panic!("{context}.newline has unknown value {value:?}"),
-        Some(
-            Value::Null | Value::Bool(_) | Value::Integer(_) | Value::Array(_) | Value::Object(_),
-        ) => panic!("{context}.newline is a string"),
-    }
-}
-
-struct Vector<'a> {
-    id: &'a str,
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Vector {
+    id: String,
     bom_count: usize,
-    opener: &'a str,
-    closer: Option<&'a str>,
+    opener: String,
+    #[serde(deserialize_with = "Option::deserialize")]
+    closer: Option<String>,
     payload_bytes: usize,
     closer_at_eof: bool,
     expected: bool,
+    #[serde(
+        rename = "expected_frontmatter_bytes",
+        deserialize_with = "Option::deserialize"
+    )]
     expected_bytes: Option<usize>,
-    ending: &'static [u8],
+    #[serde(default)]
+    newline: Newline,
 }
 
-impl<'a> Vector<'a> {
-    fn read(case: &'a Value) -> Self {
-        let members = object(case, "frontmatter vector case");
-        let has_newline = members.iter().any(|(key, _value)| key == "newline");
-        let required = [
-            "id",
-            "bom_count",
-            "opener",
-            "closer",
-            "payload_bytes",
-            "closer_at_eof",
-            "expected",
-            "expected_frontmatter_bytes",
-        ];
-        let with_newline = [
-            "id",
-            "bom_count",
-            "opener",
-            "closer",
-            "payload_bytes",
-            "closer_at_eof",
-            "expected",
-            "expected_frontmatter_bytes",
-            "newline",
-        ];
-        assert_shape(
-            members,
-            if has_newline {
-                &with_newline
-            } else {
-                &required
-            },
-            "frontmatter vector case",
-        );
-
-        let id = string(members, "id", "frontmatter vector case");
-        let bom_count = nonnegative_integer(members, "bom_count", id);
-        assert!(bom_count <= 2, "{id}.bom_count is at most two");
-        let payload_bytes = nonnegative_integer(members, "payload_bytes", id);
-        assert!(
-            payload_bytes <= MAX_BYTES.saturating_add(1),
-            "{id}.payload_bytes stays within the recognizer boundary corpus"
-        );
-        Self {
-            id,
-            bom_count,
-            opener: string(members, "opener", id),
-            closer: optional_string(members, "closer", id),
-            payload_bytes,
-            closer_at_eof: boolean(members, "closer_at_eof", id),
-            expected: boolean(members, "expected", id),
-            expected_bytes: optional_integer(members, "expected_frontmatter_bytes", id),
-            ending: newline(members, id),
-        }
-    }
-
+impl Vector {
     fn source(&self) -> Vec<u8> {
+        let ending: &[u8] = match self.newline {
+            Newline::Lf => b"\n",
+            Newline::CrLf => b"\r\n",
+            Newline::Cr => b"\r",
+        };
         let mut source = Vec::new();
         for _ in 0..self.bom_count {
             source.extend_from_slice(&[0xef, 0xbb, 0xbf]);
         }
         source.extend_from_slice(self.opener.as_bytes());
-        source.extend_from_slice(self.ending);
+        source.extend_from_slice(ending);
         source.resize(source.len().saturating_add(self.payload_bytes), b'a');
-        source.extend_from_slice(self.ending);
-        if let Some(closer) = self.closer {
+        source.extend_from_slice(ending);
+        if let Some(closer) = &self.closer {
             source.extend_from_slice(closer.as_bytes());
             if !self.closer_at_eof {
-                source.extend_from_slice(self.ending);
+                source.extend_from_slice(ending);
                 source.extend_from_slice(DOCUMENT_SUFFIX);
             }
         }
@@ -253,36 +135,33 @@ fn the_published_vectors_drive_the_production_recognizer() {
     let path =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/frontmatter-vectors.json");
     let bytes = fs::read(&path).expect("frontmatter vectors are readable");
-    let vectors = parse(&bytes).expect("frontmatter vectors are strict JSON");
-    let root = object(&vectors, "frontmatter vectors");
-    assert_shape(
-        root,
-        &["schema", "contract", "cases"],
-        "frontmatter vectors",
+    let vectors: Vectors =
+        serde_json::from_slice(&bytes).expect("frontmatter vectors have the published shape");
+    assert_eq!(vectors.schema, "amiss/frontmatter-vectors");
+    assert_eq!(vectors.contract, "frontmatter");
+    assert!(
+        !vectors.cases.is_empty(),
+        "frontmatter vectors are nonempty"
     );
-    assert_eq!(
-        string(root, "schema", "frontmatter vectors"),
-        "amiss/frontmatter-vectors"
-    );
-    assert_eq!(
-        string(root, "contract", "frontmatter vectors"),
-        "frontmatter"
-    );
-
-    let Value::Array(cases) = member(root, "cases", "frontmatter vectors") else {
-        panic!("frontmatter vectors.cases is an array")
-    };
-    assert!(!cases.is_empty(), "frontmatter vectors are nonempty");
 
     let mut ids = BTreeSet::new();
-    for case in cases {
-        let vector = Vector::read(case);
+    for vector in &vectors.cases {
+        assert!(
+            vector.bom_count <= 2,
+            "{}.bom_count is at most two",
+            vector.id
+        );
+        assert!(
+            vector.payload_bytes <= MAX_BYTES.saturating_add(1),
+            "{}.payload_bytes stays within the recognizer boundary corpus",
+            vector.id
+        );
         assert!(
             !vector.id.trim().is_empty(),
             "frontmatter vector IDs are nonempty"
         );
         assert!(
-            ids.insert(vector.id),
+            ids.insert(vector.id.as_str()),
             "frontmatter vector ID {:?} is unique",
             vector.id
         );

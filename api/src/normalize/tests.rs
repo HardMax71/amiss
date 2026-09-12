@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use sha2::Digest as _;
 use std::collections::HashMap;
 
 use rustdoc_types::{
@@ -17,7 +18,13 @@ fn produced_templates_keep_the_context_and_rustdoc_digest_preimages() {
     let context = crate::context::Context {
         cfg: vec!["custom".to_owned()],
         compiler: "rustc test".to_owned(),
-        dependencies_digest: amiss_wire::digest::hb("test/dependencies", b"dependencies"),
+        dependencies_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("test/dependencies")
+                .chain_update([0_u8])
+                .chain_update(b"dependencies")
+                .finalize()
+                .0,
+        ),
         features: vec!["default".to_owned()],
         name: amiss_wire::model::ArtifactId::new(
             "rust/example/local-function-declarations".to_owned(),
@@ -30,21 +37,43 @@ fn produced_templates_keep_the_context_and_rustdoc_digest_preimages() {
         target_triple: "x86_64-unknown-linux-gnu".to_owned(),
     };
     let context_bytes = serde_json::to_vec(&context).unwrap();
-    let context_digest = amiss_wire::digest::hb(
-        "amiss/rust-public-api-context-v1",
-        &serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(&context_bytes).unwrap())
-            .unwrap(),
+    let context_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/rust-public-api-context-v1")
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<serde_json::Value>(&context_bytes).unwrap(),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     );
-    let rustdoc_digest = amiss_wire::digest::hb("amiss/rust-public-api-rustdoc-v1", &rustdoc);
+    let rustdoc_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/rust-public-api-rustdoc-v1")
+            .chain_update([0_u8])
+            .chain_update(&rustdoc)
+            .finalize()
+            .0,
+    );
     let identity =
         format!(r#"{{"context_digest":"{context_digest}","rustdoc_digest":"{rustdoc_digest}"}}"#);
-    let input_digest = amiss_wire::digest::hb(
-        "amiss/rust-public-api-input-v1",
-        &serde_json_canonicalizer::to_vec(&amiss_wire::json::parse(identity.as_bytes()).unwrap())
-            .unwrap(),
+    let input_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/rust-public-api-input-v1")
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<serde_json::Value>(identity.as_bytes()).unwrap(),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     );
     let bytes = crate::produce(&context_bytes, &rustdoc).unwrap();
-    let template = amiss_wire::semantic::parse_template(&bytes).unwrap();
+    let template =
+        serde_json::from_slice::<amiss_wire::semantic::SemanticEvidenceTemplate<'static>>(&bytes)
+            .unwrap();
     assert_eq!(template.producer.context_digest, context_digest);
     assert_eq!(template.producer.input_digest, input_digest);
     let amiss_wire::semantic::observation::Observation::Record(observation) =

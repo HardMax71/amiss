@@ -125,3 +125,32 @@ fn typed_sarif_preserves_optional_fields_and_canonical_order() {
     );
     assert!(without_span.get("fixes").is_none());
 }
+
+#[test]
+fn sarif_paths_escape_uri_delimiters_and_utf8_in_locations_and_fixes() {
+    for (path, expected) in [
+        ("docs/a-._~/file.md", "docs/a-._~/file.md"),
+        ("docs/a?#%é😀.md", "docs/a%3F%23%25%C3%A9%F0%9F%98%80.md"),
+        ("docs/%20\u{1b}.md", "docs/%2520%1B.md"),
+    ] {
+        let mut payload = projection_payload();
+        let path = RepoPathText::new(path.to_owned()).unwrap();
+        let finding = &mut payload.findings[0];
+        finding.location.path = Some(RepoPath::Text(path.clone()));
+        finding.fix.as_mut().unwrap().path = path;
+        let log = super::log(&payload, |path| match path {
+            RepoPath::Text(text) => Some(text.as_str()),
+            RepoPath::Bytes(_) => None,
+        });
+        let value = serde_json::to_value(log).unwrap();
+        let finding = &value["runs"][0]["results"][0];
+        assert_eq!(
+            finding["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+            expected
+        );
+        assert_eq!(
+            finding["fixes"][0]["artifactChanges"][0]["artifactLocation"]["uri"],
+            expected
+        );
+    }
+}

@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::fs;
 use std::io::Write as _;
 use std::time::Duration;
@@ -13,7 +14,6 @@ use amiss_controller_service::{
     read_regular,
 };
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -54,7 +54,7 @@ fn relation_registry() -> Value {
     json!({
         "relations": [{
             "identity": "relation/public-api",
-            "context_digest": sha256(b"operator relation context").to_string(),
+            "context_digest": amiss_wire::model::Digest::from(sha2::Sha256::digest(b"operator relation context").0).to_string(),
             "projection": "sorted-rows-v1",
             "subjects": [
                 subject(
@@ -746,9 +746,13 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
     assert_eq!(floor.value, expected);
     assert_eq!(
         floor.expected_digest,
-        amiss_wire::controls::canonical_organization_floor(&expected)
-            .unwrap()
-            .1
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&expected).unwrap())
+                .finalize()
+                .0
+        )
     );
     let advisory = load_plan(&files("enforce", false, None), None).unwrap();
     assert_eq!(advisory.profile, Profile::Enforce);

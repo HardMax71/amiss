@@ -1,11 +1,11 @@
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{
     DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, MissingResolution, StructuralResolution,
-    canonical_fact, parse_debt_snapshot, parse_fact,
+    parse_debt_snapshot, parse_fact,
 };
 use amiss_wire::de::{Error, ErrorKind};
+use sha2::Digest as _;
 
-use amiss_wire::json;
 use amiss_wire::resolution::{BlobContent, BlobMode, Target};
 
 use crate::support::{
@@ -31,14 +31,30 @@ fn parse_debt_fact(
     resolution: &str,
 ) -> Result<DebtSnapshot, Error> {
     let fact = fact_json_for(fact_finding_kind, key_input, resolution);
-    let finding_key = amiss_wire::digest::hb(
-        FINDING_KEY_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
+    let finding_key = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<serde_json::Value>(key_input.as_bytes()).unwrap(),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
-    let fact_digest = amiss_wire::digest::hb(
-        FACT_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&json::parse(fact.as_bytes()).unwrap()).unwrap(),
+    let fact_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(FACT_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(
+                    &serde_json::from_slice::<serde_json::Value>(fact.as_bytes()).unwrap(),
+                )
+                .unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
     let item = debt_item_json(
@@ -70,7 +86,10 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         .unwrap();
         assert_eq!(
             serde_json::to_vec(&parsed.items[0].accepted_fact.key_input).unwrap(),
-            serde_json_canonicalizer::to_vec(&json::parse(key_input.as_bytes()).unwrap()).unwrap(),
+            serde_json_canonicalizer::to_vec(
+                &serde_json::from_slice::<serde_json::Value>(key_input.as_bytes()).unwrap()
+            )
+            .unwrap(),
         );
         assert_eq!(
             parsed.items[0]
@@ -199,11 +218,21 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
         assert_eq!(
             serde_json::to_vec(&item.accepted_fact.key_input).unwrap(),
             serde_json_canonicalizer::to_vec(
-                &json::parse(key_input_json("explicit-target-missing").as_bytes()).unwrap()
+                &serde_json::from_slice::<serde_json::Value>(
+                    key_input_json("explicit-target-missing").as_bytes()
+                )
+                .unwrap()
             )
             .unwrap(),
         );
-        let (bytes, digest) = canonical_fact(&item.accepted_fact).unwrap();
+        let bytes = serde_json_canonicalizer::to_vec(&item.accepted_fact).unwrap();
+        let digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-fact")
+                .chain_update([0_u8])
+                .chain_update(&bytes)
+                .finalize()
+                .0,
+        );
         assert_eq!(digest, item.accepted_fact_digest);
         assert_eq!(parse_fact(&bytes).unwrap(), item.accepted_fact);
         assert!(
@@ -448,7 +477,7 @@ fn structural_fact_validation_rejects_invalid_programmatic_states() {
     )
     .unwrap();
     let accepted = &parsed.items[0].accepted_fact;
-    assert!(canonical_fact(accepted).is_ok());
+    assert!(accepted.validate().is_ok());
 
     let mut mismatched = accepted.clone();
     mismatched.evidence.resolution = StructuralResolution::TypeMismatch {
@@ -462,13 +491,13 @@ fn structural_fact_validation_rejects_invalid_programmatic_states() {
         },
     };
     assert_eq!(
-        canonical_fact(&mismatched).unwrap_err().kind,
+        mismatched.validate().unwrap_err().kind,
         ErrorKind::Inconsistent
     );
 
     mismatched.finding_kind = amiss_wire::controls::EligibleFindingKind::ExplicitTargetTypeMismatch;
     assert_eq!(
-        canonical_fact(&mismatched).unwrap_err().kind,
+        mismatched.validate().unwrap_err().kind,
         ErrorKind::Inconsistent
     );
 }

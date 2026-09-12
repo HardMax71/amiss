@@ -1,4 +1,4 @@
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use serde::{Deserialize, Serialize};
 
 use crate::{AcceptedDelivery, CheckBinding, ControllerEvaluationId};

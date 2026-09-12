@@ -1,98 +1,17 @@
 #![expect(clippy::panic, reason = "benchmark fixture setup fails loudly")]
 
 use amiss_wire::controls::parse_organization_floor;
-use amiss_wire::digest::{hb, hj_serde};
 use amiss_wire::external::{
     EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
     ExternalEvidenceSchema, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess, evidence,
 };
-use amiss_wire::json::{Value, parse};
 use divan::counter::BytesCount;
 use divan::{Bencher, black_box};
+use serde_json::Value;
+use sha2::Digest as _;
 
 fn main() {
     divan::main();
-}
-
-/// A synthetic wire-shaped value: wide sorted-on-emit objects, escape-dense
-/// strings, and nested rows, around eight megabytes canonical.
-fn synthetic_value() -> (Value, Vec<u8>) {
-    let mut rows = Vec::new();
-    for index in 0..8_192_usize {
-        let text = format!("row {index} \"quoted\" and\ttabbed and plain padding text");
-        rows.push(Value::object(vec![
-            ("path".to_owned(), Value::string(text.repeat(8))),
-            (
-                "index".to_owned(),
-                Value::Integer(i64::try_from(index).unwrap_or(0)),
-            ),
-            (
-                "nested".to_owned(),
-                Value::array(vec![
-                    Value::string("sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".to_owned()),
-                    Value::Bool(index.is_multiple_of(2)),
-                    Value::Null,
-                ]),
-            ),
-        ]));
-    }
-    let value = Value::object(vec![
-        (
-            "schema".to_owned(),
-            Value::string("bench/synthetic".to_owned()),
-        ),
-        ("rows".to_owned(), Value::array(rows)),
-    ]);
-    let bytes = serde_json_canonicalizer::to_vec(&value)
-        .unwrap_or_else(|defect| panic!("benchmark value: {defect}"));
-    (value, bytes)
-}
-
-#[divan::bench(sample_count = 20)]
-fn canonicalize(bencher: Bencher<'_, '_>) {
-    let (value, bytes) = synthetic_value();
-    bencher
-        .counter(BytesCount::of_slice(&bytes))
-        .bench_local(|| serde_json_canonicalizer::to_vec(black_box(&value)));
-}
-
-#[divan::bench(sample_count = 20)]
-fn digest_value(bencher: Bencher<'_, '_>) {
-    let (value, bytes) = synthetic_value();
-    bencher
-        .counter(BytesCount::of_slice(&bytes))
-        .bench_local(|| {
-            let mut length = 0;
-            let digest = hj_serde("amiss/scanner-report-payload", |writer| {
-                let mut counter = countio::Counter::new(writer);
-                serde_json_canonicalizer::to_writer(black_box(&value), &mut counter)?;
-                length = counter.writer_bytes();
-                Ok(())
-            });
-            digest.map(|digest| (digest, length))
-        });
-}
-
-#[divan::bench(sample_count = 20)]
-fn parse_wire(bencher: Bencher<'_, '_>) {
-    let (_, bytes) = synthetic_value();
-    bencher
-        .counter(BytesCount::of_slice(&bytes))
-        .bench_local(|| parse(black_box(&bytes)));
-}
-
-#[divan::bench(sample_count = 20)]
-fn digest_bytes(bencher: Bencher<'_, '_>) {
-    let (_, bytes) = synthetic_value();
-    bencher
-        .counter(BytesCount::of_slice(&bytes))
-        .bench_local(|| hb("amiss/raw-evidence", black_box(&bytes)));
-}
-
-#[divan::bench(sample_count = 10_000)]
-fn format_digest(bencher: Bencher<'_, '_>) {
-    let digest = hb("amiss/bench", b"digest formatting");
-    bencher.bench_local(|| black_box(digest).to_string());
 }
 
 #[divan::bench(sample_count = 1_000)]
@@ -106,7 +25,13 @@ fn decode_organization_floor(bencher: Bencher<'_, '_>) {
 #[divan::bench(sample_count = 3, sample_size = 1)]
 fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     let (plan, evidence) = assessment_fixture(16_384);
-    let engine_digest = hb("amiss/benchmark-engine", b"null");
+    let engine_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/benchmark-engine")
+            .chain_update([0_u8])
+            .chain_update(b"null")
+            .finalize()
+            .0,
+    );
     let validation = assess(&plan, &evidence, "0.0.0", engine_digest)
         .unwrap_or_else(|defect| panic!("dense assessment fixture: {defect:?}"));
     let document = amiss_wire::external::parse_assessment(&validation)
@@ -145,7 +70,13 @@ fn assessment_fixture(count: usize) -> (Vec<u8>, Vec<u8>) {
     document.payload.retained_count = 0;
     let payload = serde_json_canonicalizer::to_vec(&document.payload)
         .unwrap_or_else(|defect| panic!("benchmark payload: {defect}"));
-    document.payload_digest = hb(PLAN_PAYLOAD_SCHEMA, &payload);
+    document.payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize()
+            .0,
+    );
     let plan = serde_json_canonicalizer::to_vec(&document)
         .unwrap_or_else(|defect| panic!("benchmark plan: {defect}"));
     let rows = destinations
@@ -172,10 +103,10 @@ fn assessment_fixture(count: usize) -> (Vec<u8>, Vec<u8>) {
     })
     .unwrap_or_else(|defect| panic!("benchmark evidence is malformed: {defect}"));
     assert_eq!(
-        parse(&evidence)
+        serde_json::from_slice::<Value>(&evidence)
             .ok()
             .as_ref()
-            .and_then(|value| value.text("schema")),
+            .and_then(|value| value.get("schema").and_then(Value::as_str)),
         Some(EVIDENCE_SCHEMA)
     );
     (plan, evidence)

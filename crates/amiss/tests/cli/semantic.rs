@@ -78,14 +78,15 @@ fn fixture() -> (amiss_fixtures::CommitPair, String) {
     let input_path = amiss_fixtures::path_arg(&input_path);
     let (code, stdout, stderr) = amiss(&["record-set", "--evidence", &input_path]);
     assert_eq!((code, stderr.as_str()), (0, ""));
-    let parsed = amiss_wire::json::parse(&stdout).unwrap();
+    let parsed = serde_json::from_slice::<serde_json::Value>(&stdout).unwrap();
     let mut canonical = serde_json_canonicalizer::to_vec(&parsed).unwrap();
     canonical.push(b'\n');
     assert_eq!(
         stdout, canonical,
         "record-set output is canonical JSON plus LF"
     );
-    amiss_wire::semantic::parse_template(&stdout).unwrap();
+    serde_json::from_slice::<amiss_wire::semantic::SemanticEvidenceTemplate<'static>>(&stdout)
+        .unwrap();
 
     let template_path = fixture.root().join("public-api.json");
     fs::write(&template_path, stdout).unwrap();
@@ -134,8 +135,8 @@ fn rust_api_template_projects_one_declaration_and_the_complete_set() {
 }
 
 #[test]
-fn a_template_cannot_choose_its_candidate() {
-    let (fixture, _valid_template) = fixture();
+fn template_intake_enforces_binding_and_raw_byte_limits() {
+    let (fixture, valid_template) = fixture();
     let path = fixture.root().join("invalid-template.json");
     let bytes = br#"{
       "schema":"amiss/semantic-evidence-template",
@@ -150,29 +151,39 @@ fn a_template_cannot_choose_its_candidate() {
       "observations":[],
       "candidate_identity_digest":"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }"#;
-    fs::write(&path, bytes).unwrap();
-    let path = amiss_fixtures::path_arg(&path);
-    let (code, stdout, stderr) = amiss(&[
-        "check",
-        "--repo",
-        &fixture.repo,
-        "--object-format",
-        "sha1",
-        "--base",
-        &fixture.base,
-        "--candidate",
-        &fixture.candidate,
-        "--profile",
-        "observe",
-        "--semantic-template",
-        &path,
-        "--format",
-        "json",
-    ]);
-    assert_eq!((code, stderr.as_str()), (2, ""));
-    let body = payload(&stdout);
-    assert_eq!(body["result"]["complete"], false);
-    assert_eq!(body["errors"][0]["code"], "UNKNOWN_FIELD");
+    let mut oversized = fs::read(valid_template).unwrap();
+    oversized.resize(
+        usize::try_from(amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES).unwrap() + 1,
+        b' ',
+    );
+    for (bytes, expected_code) in [
+        (bytes.as_slice(), "UNKNOWN_FIELD"),
+        (oversized.as_slice(), "CONFIGURATION_INVALID"),
+    ] {
+        fs::write(&path, bytes).unwrap();
+        let path = amiss_fixtures::path_arg(&path);
+        let (code, stdout, stderr) = amiss(&[
+            "check",
+            "--repo",
+            &fixture.repo,
+            "--object-format",
+            "sha1",
+            "--base",
+            &fixture.base,
+            "--candidate",
+            &fixture.candidate,
+            "--profile",
+            "observe",
+            "--semantic-template",
+            &path,
+            "--format",
+            "json",
+        ]);
+        assert_eq!((code, stderr.as_str()), (2, ""));
+        let body = payload(&stdout);
+        assert_eq!(body["result"]["complete"], false);
+        assert_eq!(body["errors"][0]["code"], expected_code);
+    }
 }
 
 #[test]

@@ -1,10 +1,9 @@
 use amiss_wire::{
     de::ErrorKind,
-    digest::hb,
     external::{self, AssessmentDefect},
-    json,
 };
 use serde_json::{Value, json};
+use sha2::Digest as _;
 
 const PLAN: &[u8] = include_bytes!("../../../../spec/examples/scanner-external-plan.json");
 const ASSESSMENT: &[u8] =
@@ -29,9 +28,17 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
             let mut extended = original.clone();
             extended.pointer_mut(path).unwrap()["future"] = json!({"😀": 1, "\u{e000}": 2});
             let payload = serde_json::to_vec(&extended["payload"]).unwrap();
-            extended["payload_digest"] = json!(hb(
-                domain,
-                &serde_json_canonicalizer::to_vec(&json::parse(&payload).unwrap()).unwrap()
+            extended["payload_digest"] = json!(amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix(domain)
+                    .chain_update([0_u8])
+                    .chain_update(
+                        serde_json_canonicalizer::to_vec(
+                            &serde_json::from_slice::<Value>(&payload).unwrap()
+                        )
+                        .unwrap()
+                    )
+                    .finalize()
+                    .0
             ));
             assert!(read(&serde_json::to_vec(&extended).unwrap()));
             extended.pointer_mut(path).unwrap()["future"] = json!({"😀": 2, "\u{e000}": 1});
@@ -44,9 +51,12 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
             nested = json!([nested]);
         }
         extended["payload"]["future"] = nested;
-        extended["payload_digest"] = json!(hb(
-            domain,
-            &serde_json_canonicalizer::to_vec(&extended["payload"]).unwrap()
+        extended["payload_digest"] = json!(amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(domain)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&extended["payload"]).unwrap())
+                .finalize()
+                .0
         ));
         let bytes = serde_json::to_vec(&extended).unwrap();
         assert!(read(&bytes));
@@ -94,9 +104,12 @@ fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
             .kind,
         ErrorKind::DigestMismatch
     );
-    plan["payload_digest"] = json!(hb(
-        external::PLAN_PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&plan["payload"]).unwrap()
+    plan["payload_digest"] = json!(amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(external::PLAN_PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&plan["payload"]).unwrap())
+            .finalize()
+            .0
     ));
     assert_eq!(
         external::parse_plan(&serde_json::to_vec(&plan).unwrap())

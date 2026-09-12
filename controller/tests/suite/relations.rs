@@ -3,6 +3,7 @@
     reason = "integration fixtures construct known-valid relation identities"
 )]
 
+use sha2::Digest as _;
 use std::sync::Arc;
 
 use amiss_controller::{
@@ -20,7 +21,6 @@ use amiss_fixtures::{CommitPair, commit_pair, git};
 use amiss_wire::controls::{
     ProjectionKind, ProjectionSource, RecordSetSelection, RecordValueSelection,
 };
-use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::RelationSnapshot;
 
@@ -71,7 +71,9 @@ fn subject(role: &str, repository: &str, set: &str) -> RelationSubject {
 fn plan(identity: &str, source: &str, documentation: &str) -> RelationPlan {
     RelationPlan {
         identity: artifact(identity),
-        context_digest: sha256(identity.as_bytes()),
+        context_digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::digest(identity.as_bytes()).0,
+        ),
         projection: ProjectionKind::SortedRowsV1,
         subjects: [
             subject("source", source, "rust/public-api"),
@@ -671,7 +673,9 @@ fn scheduling_refuses_configuration_rebinding_and_fence_overflow() {
     };
     let mut rebound = transition.clone();
     let mut plan = rebound.relation.plan.as_ref().clone();
-    plan.context_digest = sha256(b"another operator relation context");
+    plan.context_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::digest(b"another operator relation context").0,
+    );
     rebound.relation.plan = Arc::new(plan);
     assert_eq!(
         schedule_relation(Some(previous), rebound).unwrap_err(),

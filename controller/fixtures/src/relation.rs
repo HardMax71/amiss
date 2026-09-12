@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::sync::Arc;
 
 use amiss_controller::{
@@ -7,7 +8,6 @@ use amiss_controller::{
     relation_transition,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
-use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
     RelationEvidence, RelationEvidenceSubject, RelationProjectedValue, RelationProjectionSlot,
@@ -50,7 +50,7 @@ pub fn relation_audit_with_coordination(
         &parsed_plan,
         parsed_evidence.as_ref(),
         env!("CARGO_PKG_VERSION"),
-        sha256(b"relation evaluator fixture"),
+        amiss_wire::model::Digest::from([28; 32]),
     )
     .ok()?;
     Some(RelationAuditFixture {
@@ -93,7 +93,11 @@ fn transition(coordination: &str) -> Option<RelationTransition> {
 fn registered_relation() -> Option<Arc<RelationPlan>> {
     let registered = Arc::new(RelationPlan {
         identity: ArtifactId::new("relation/public-api".to_owned())?,
-        context_digest: sha256(b"operator relation context"),
+        context_digest: amiss_wire::model::Digest::from([
+            0xf3, 0x56, 0xae, 0x83, 0xe3, 0x5d, 0xa8, 0xec, 0x17, 0xf6, 0xaf, 0x65, 0xba, 0xf3,
+            0x16, 0x67, 0xcd, 0x1b, 0xe0, 0x32, 0x88, 0xa7, 0xc1, 0x4b, 0x7e, 0xa8, 0x0e, 0x7d,
+            0x76, 0xc8, 0x4a, 0x31,
+        ]),
         projection: ProjectionKind::SortedRowsV1,
         subjects: [
             subject(
@@ -138,9 +142,12 @@ fn report() -> Option<Vec<u8>> {
         return None;
     };
     evaluation.target_ref = Some("refs/heads/main".parse().ok()?);
-    report.payload_digest = amiss_wire::digest::hb(
-        amiss_wire::report::PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(&report.payload).ok()?,
+    report.payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&report.payload).ok()?)
+            .finalize()
+            .0,
     );
     serde_json_canonicalizer::to_vec(&report).ok()
 }
@@ -199,14 +206,15 @@ fn frozen(
 
 fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Option<Vec<u8>> {
     let aligned = RelationProjectedValue {
-        value_digest: sha256(b"timeout: u64"),
+        value_digest: amiss_wire::model::Digest::from([30; 32]),
         value_bytes: 12,
     };
     let changed = RelationProjectedValue {
-        value_digest: sha256(b"timeout: u128"),
+        value_digest: amiss_wire::model::Digest::from([31; 32]),
         value_bytes: 13,
     };
     evidence(&RelationEvidence {
+        schema: amiss_wire::relation::EvidencePayloadSchema::Current,
         plan_payload_digest: plan.payload_digest,
         subjects: [
             RelationEvidenceSubject {

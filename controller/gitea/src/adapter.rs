@@ -7,7 +7,7 @@ use amiss_controller::{
     IngressCheck, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace, Publication,
     VerifiedDelivery,
 };
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::identity::{parse_change_id, positive, provider_run};

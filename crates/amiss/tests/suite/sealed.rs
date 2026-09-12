@@ -4,13 +4,13 @@
     reason = "black-box harness over asserted fixture shapes"
 )]
 
+use sha2::Digest as _;
 use std::io::Write as _;
 use std::process::{Command, Stdio};
 
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
-use amiss_wire::controls::{Profile, canonical_organization_floor, parse_organization_floor};
-use amiss_wire::digest::hb;
+use amiss_wire::controls::{Profile, parse_organization_floor};
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity,
 };
@@ -64,16 +64,17 @@ fn example_streams() -> RequestStreams {
         &std::fs::read(root.join("scanner-evaluation-request.json")).unwrap(),
     )
     .unwrap();
-    let snapshot =
-        SnapshotRequest::parse(&std::fs::read(root.join("scanner-snapshot-request.json")).unwrap())
-            .unwrap();
+    let snapshot = serde_json::from_slice::<SnapshotRequest>(
+        &std::fs::read(root.join("scanner-snapshot-request.json")).unwrap(),
+    )
+    .unwrap();
     let controls =
         ControlsRequest::parse(&std::fs::read(root.join("scanner-controls-request.json")).unwrap())
             .unwrap();
     RequestStreams {
-        evaluation: evaluation.canonical_bytes().unwrap(),
-        snapshot: snapshot.canonical_bytes().unwrap(),
-        controls: controls.canonical_bytes().unwrap(),
+        evaluation: serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
+        snapshot: serde_json_canonicalizer::to_vec(&snapshot).unwrap(),
+        controls: serde_json_canonicalizer::to_vec(&controls).unwrap(),
     }
 }
 
@@ -121,7 +122,7 @@ fn a_sealed_frame_is_canonical_in_every_stream_and_agrees_on_the_mode() {
         cases.push((name, streams));
     }
     let mut mismatched = example_streams();
-    mismatched.snapshot = SnapshotRequest::index().canonical_bytes().unwrap();
+    mismatched.snapshot = serde_json_canonicalizer::to_vec(&SnapshotRequest::index()).unwrap();
     cases.push(("the snapshot mode", mismatched));
 
     for (name, streams) in cases {
@@ -166,9 +167,9 @@ fn a_sealed_run_resolves_against_the_identity_it_was_given() {
     evaluation.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
 
     let streams = RequestStreams {
-        evaluation: evaluation.canonical_bytes().unwrap(),
-        snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
-        controls: ControlsRequest::default().canonical_bytes().unwrap(),
+        evaluation: serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
+        snapshot: serde_json_canonicalizer::to_vec(&SnapshotRequest::git_objects()).unwrap(),
+        controls: serde_json_canonicalizer::to_vec(&ControlsRequest::default()).unwrap(),
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
@@ -220,16 +221,22 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
     let floor = parse_organization_floor(floor_bytes).unwrap();
     let controls = ControlsRequest {
         organization_floor: Some(SuppliedControl {
-            expected_digest: canonical_organization_floor(&floor).unwrap().1,
+            expected_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                    .chain_update([0_u8])
+                    .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
+                    .finalize()
+                    .0,
+            ),
             value: floor,
             trust_source: RequestTrust::OrganizationPolicy,
         }),
         ..ControlsRequest::default()
     };
     let streams = RequestStreams {
-        evaluation: evaluation.canonical_bytes().unwrap(),
-        snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
-        controls: controls.canonical_bytes().unwrap(),
+        evaluation: serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
+        snapshot: serde_json_canonicalizer::to_vec(&SnapshotRequest::git_objects()).unwrap(),
+        controls: serde_json_canonicalizer::to_vec(&controls).unwrap(),
     };
     let mut frame = Vec::new();
     streams.write_to(&mut frame).unwrap();
@@ -288,7 +295,13 @@ fn intersphinx_case() -> (
         &Oid::new(format, fixture.candidate_tree.clone()).unwrap(),
     )
     .unwrap();
-    let context_digest = hb("amiss-test/inventory", b"python and another");
+    let context_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss-test/inventory")
+            .chain_update([0_u8])
+            .chain_update(b"python and another")
+            .finalize()
+            .0,
+    );
     let semantic = SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
@@ -324,7 +337,13 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     use amiss_wire::report::model::{SemanticEvidenceProducer, SemanticEvidenceProvenance};
 
     let (fixture, evaluation, mut semantic) = intersphinx_case();
-    semantic.producer.input_digest = hb("amiss-test/input", b"inventory bytes");
+    semantic.producer.input_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss-test/input")
+            .chain_update([0_u8])
+            .chain_update(b"inventory bytes")
+            .finalize()
+            .0,
+    );
     let producer = semantic.producer.clone();
     let expected_context_digest = semantic.producer.context_digest;
     let evidence = amiss_wire::semantic::envelope(semantic).unwrap();
@@ -345,9 +364,9 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
         ..ControlsRequest::default()
     };
     let streams = RequestStreams {
-        evaluation: evaluation.canonical_bytes().unwrap(),
-        snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
-        controls: controls.canonical_bytes().unwrap(),
+        evaluation: serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
+        snapshot: serde_json_canonicalizer::to_vec(&SnapshotRequest::git_objects()).unwrap(),
+        controls: serde_json_canonicalizer::to_vec(&controls).unwrap(),
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
@@ -427,14 +446,23 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         &Oid::new(format, fixture.candidate_tree.clone()).unwrap(),
     )
     .unwrap();
-    let context_digest = hb("amiss-test/site-context", b"default/current");
+    let context_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss-test/site-context")
+            .chain_update([0_u8])
+            .chain_update(b"default/current")
+            .finalize()
+            .0,
+    );
     let evidence = amiss_wire::semantic::envelope(SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
             candidate_identity_digest: identity,
-            source_report_payload_digest: Nullable::Value(hb(
-                "amiss-test/report",
-                b"source report",
+            source_report_payload_digest: Nullable::Value(amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss-test/report")
+                    .chain_update([0_u8])
+                    .chain_update(b"source report")
+                    .finalize()
+                    .0,
             )),
         },
         producer: SemanticProducer {
@@ -442,7 +470,13 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
             identity: id("amiss-test"),
             version: "0.5.1".to_owned(),
             context_digest,
-            input_digest: hb("amiss-test/site-output", b"site output"),
+            input_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss-test/site-output")
+                    .chain_update([0_u8])
+                    .chain_update(b"site output")
+                    .finalize()
+                    .0,
+            ),
         },
         complete: true,
         observations: site_build_observations()
@@ -452,16 +486,15 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
     })
     .unwrap();
     let streams = RequestStreams {
-        evaluation: evaluation.canonical_bytes().unwrap(),
-        snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
-        controls: ControlsRequest {
+        evaluation: serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
+        snapshot: serde_json_canonicalizer::to_vec(&SnapshotRequest::git_objects()).unwrap(),
+        controls: serde_json_canonicalizer::to_vec(&ControlsRequest {
             semantic_evidence: vec![SuppliedSemanticEvidence {
                 value: evidence,
                 expected_context_digest: context_digest,
             }],
             ..ControlsRequest::default()
-        }
-        .canonical_bytes()
+        })
         .unwrap(),
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
@@ -745,23 +778,28 @@ fn stale_intersphinx_evidence_refuses_the_run() {
     let expected_context_digest = semantic.producer.context_digest;
     let stale = amiss_wire::semantic::envelope(SemanticEvidence {
         subject: SemanticSubject {
-            candidate_identity_digest: hb("amiss-test/stale", b"another candidate"),
+            candidate_identity_digest: amiss_wire::model::Digest::from(
+                sha2::Sha256::new_with_prefix("amiss-test/stale")
+                    .chain_update([0_u8])
+                    .chain_update(b"another candidate")
+                    .finalize()
+                    .0,
+            ),
             source_report_payload_digest: Nullable::Null,
         },
         ..semantic
     })
     .unwrap();
     let streams = RequestStreams {
-        evaluation: evaluation.canonical_bytes().unwrap(),
-        snapshot: SnapshotRequest::git_objects().canonical_bytes().unwrap(),
-        controls: ControlsRequest {
+        evaluation: serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
+        snapshot: serde_json_canonicalizer::to_vec(&SnapshotRequest::git_objects()).unwrap(),
+        controls: serde_json_canonicalizer::to_vec(&ControlsRequest {
             semantic_evidence: vec![SuppliedSemanticEvidence {
                 value: stale,
                 expected_context_digest,
             }],
             ..ControlsRequest::default()
-        }
-        .canonical_bytes()
+        })
         .unwrap(),
     };
     let output = run(Some(&fixture.repo), &framed(&streams));

@@ -1,7 +1,8 @@
+use sha2::Digest as _;
 mod tests;
 
 use amiss_controller::{AcquiredSemanticTemplate, ProviderError, WorkflowArtifactExpectation};
-use amiss_wire::digest::{Digest, sha256};
+use amiss_wire::model::Digest;
 use amiss_wire::model::Oid;
 use serde::{Deserialize, Serialize};
 
@@ -178,7 +179,8 @@ pub(super) fn finish_workflow_artifact(
     selected: SelectedArtifact,
     archive: &[u8],
 ) -> Result<AcquiredSemanticTemplate, ProviderError> {
-    (u64::try_from(archive.len()) == Ok(selected.size) && sha256(archive) == selected.digest)
+    (u64::try_from(archive.len()) == Ok(selected.size)
+        && Digest::from(sha2::Sha256::digest(archive).0) == selected.digest)
         .then_some(())
         .ok_or(ProviderError::InvalidResponse)?;
     crate::decode_workflow_artifact(expectation, archive)

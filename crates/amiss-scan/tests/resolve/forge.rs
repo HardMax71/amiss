@@ -3,12 +3,12 @@ use amiss_git::GitLimits;
 use amiss_scan::resolve::{ForgeContext, RAW_EVIDENCE_DOMAIN};
 use amiss_scan::{Error, Resolution, ScanLimits};
 use amiss_wire::controls::{ResourceName, TargetKind};
-use amiss_wire::digest::hb;
 use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobContent, ExternalReference, Missing, Target, UnsupportedSemantics, VersionScope,
 };
+use sha2::Digest as _;
 
 use crate::support::{Bed, bed, bed_at, forge_context};
 
@@ -211,7 +211,13 @@ fn an_exact_historical_url_reads_only_its_own_tree_and_content() {
     };
     assert_eq!(
         raw_digest,
-        hb(RAW_EVIDENCE_DOMAIN, HISTORICAL_BODY.as_bytes())
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(RAW_EVIDENCE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(HISTORICAL_BODY.as_bytes())
+                .finalize()
+                .0
+        )
     );
 
     let (_intent, old_anchor) = bed

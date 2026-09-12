@@ -1,6 +1,6 @@
 use amiss_md::extract::RESERVED_LABEL_PREFIX;
-use amiss_wire::digest::Digest;
 use amiss_wire::extraction::GovernedDefinition;
+use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPath;
 
 use crate::scan::SpanDisplay;

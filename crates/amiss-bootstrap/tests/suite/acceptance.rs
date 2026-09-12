@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 use std::process::{Command, ExitStatus, Stdio};
@@ -14,15 +15,12 @@ use amiss_bootstrap::supervise::{
     AcceptanceDefect, Defect, Expectations, SealedControlExpectation, SealedExpectations,
     Supervised, accept, settle, supervise,
 };
-use amiss_wire::controls::{
-    canonical_execution_constraint, canonical_trusted_time, parse_execution_constraint,
-    parse_trusted_time,
-};
+use amiss_wire::controls::{parse_execution_constraint, parse_trusted_time};
 
-use amiss_wire::json::{Value, parse};
 use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
+use serde_json::Value;
 
 mod reader;
 
@@ -193,7 +191,7 @@ fn exited(code: i32) -> ExitStatus {
 /// identities that payload carries.
 fn accepted_report() -> (Vec<u8>, Expectations) {
     let wire = dossier_example("scanner-report.canonical.json");
-    let envelope = parse(&wire).unwrap();
+    let envelope = serde_json::from_slice::<Value>(&wire).unwrap();
     let payload = member(&envelope, "payload").unwrap();
 
     let engine_digest = text(member(payload, "engine").unwrap(), "engine_digest").unwrap();
@@ -216,9 +214,9 @@ fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
     match value {
         Value::Object(members) => members
             .iter()
-            .find(|(name, _)| name == key)
+            .find(|(name, _)| name.as_str() == key)
             .map(|(_, member)| member),
-        Value::Null | Value::Bool(_) | Value::Integer(_) | Value::String(_) | Value::Array(_) => {
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) | Value::Array(_) => {
             None
         }
     }
@@ -226,7 +224,7 @@ fn member<'value>(value: &'value Value, key: &str) -> Option<&'value Value> {
 
 fn text(value: &Value, key: &str) -> Option<String> {
     match member(value, key) {
-        Some(Value::String(text)) => Some(text.to_string()),
+        Some(Value::String(text)) => Some(text.clone()),
         _ => None,
     }
 }
@@ -245,7 +243,7 @@ fn the_indented_contract_example_is_rejected_as_noncanonical() {
 fn the_contract_golden_is_the_canonicalization_of_its_indented_value() {
     let indented = dossier_example("scanner-report.json");
     let golden = dossier_example("scanner-report.canonical.json");
-    let parsed = parse(&indented).unwrap();
+    let parsed = serde_json::from_slice::<Value>(&indented).unwrap();
     let mut recanonicalized = serde_json_canonicalizer::to_vec(&parsed).unwrap();
     recanonicalized.push(b'\n');
     assert_eq!(
@@ -300,12 +298,12 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
     assert_eq!(accept(&wire, &expectations), Ok(0));
 
     let wrong_ref = rewrite(&wire, |payload| {
-        let evaluation = member_mut(payload, "evaluation");
-        set_member(
-            evaluation,
-            "target_ref",
-            Value::string("refs/heads/other".to_owned()),
-        );
+        let evaluation = (payload)
+            .get_mut("evaluation")
+            .expect("fixture member exists");
+        *(evaluation)
+            .get_mut("target_ref")
+            .expect("fixture member exists") = Value::from("refs/heads/other".to_owned());
     });
     assert_eq!(
         accept(&wrong_ref, &expectations),
@@ -313,10 +311,18 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
     );
 
     let wrong_provider = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        let trusted = member_mut(controls, "trusted_time_source");
-        let statement = member_mut(trusted, "statement");
-        set_member(statement, "provider", Value::string("github".to_owned()));
+        let controls = (payload)
+            .get_mut("controls")
+            .expect("fixture member exists");
+        let trusted = (controls)
+            .get_mut("trusted_time_source")
+            .expect("fixture member exists");
+        let statement = (trusted)
+            .get_mut("statement")
+            .expect("fixture member exists");
+        *(statement)
+            .get_mut("provider")
+            .expect("fixture member exists") = Value::from("github".to_owned());
     });
     assert_eq!(
         accept(&wrong_provider, &expectations),
@@ -324,8 +330,12 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
     );
 
     let wrong_profile = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        set_member(controls, "profile", Value::string("enforce".to_owned()));
+        let controls = (payload)
+            .get_mut("controls")
+            .expect("fixture member exists");
+        *(controls)
+            .get_mut("profile")
+            .expect("fixture member exists") = Value::from("enforce".to_owned());
     });
     assert_eq!(
         accept(&wrong_profile, &expectations),
@@ -333,9 +343,13 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
     );
 
     let dropped_floor = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        let floor = member_mut(controls, "organization_floor");
-        set_member(floor, "status", Value::string("none".to_owned()));
+        let controls = (payload)
+            .get_mut("controls")
+            .expect("fixture member exists");
+        let floor = (controls)
+            .get_mut("organization_floor")
+            .expect("fixture member exists");
+        *(floor).get_mut("status").expect("fixture member exists") = Value::from("none".to_owned());
     });
     assert_eq!(
         accept(&dropped_floor, &expectations),
@@ -343,14 +357,18 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
     );
 
     let changed_descriptor = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        let constraint = member_mut(controls, "execution_constraint");
-        let descriptor = member_mut(constraint, "descriptor");
-        set_member(
-            descriptor,
-            "required_status_name",
-            Value::string("amiss / changed".to_owned()),
-        );
+        let controls = (payload)
+            .get_mut("controls")
+            .expect("fixture member exists");
+        let constraint = (controls)
+            .get_mut("execution_constraint")
+            .expect("fixture member exists");
+        let descriptor = (constraint)
+            .get_mut("descriptor")
+            .expect("fixture member exists");
+        *(descriptor)
+            .get_mut("required_status_name")
+            .expect("fixture member exists") = Value::from("amiss / changed".to_owned());
     });
     assert_eq!(
         accept(&changed_descriptor, &expectations),
@@ -359,9 +377,11 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
 
     let unavailable_hybrid = rewrite(&wire, |payload| {
         insert_member(
-            member_mut(payload, "evaluation"),
+            (payload)
+                .get_mut("evaluation")
+                .expect("fixture member exists"),
             "status",
-            Value::string("unavailable".to_owned()),
+            Value::from("unavailable".to_owned()),
         );
     });
     assert_eq!(
@@ -376,21 +396,38 @@ fn sealed_acceptance_binds_refs_provider_controls_and_candidate_identity() {
 fn a_statement_issued_for_another_repository_is_refused() {
     let (wire, mut expectations) = sealed_report();
     let foreign = rewrite(&wire, |payload| {
-        let controls = member_mut(payload, "controls");
-        let trusted = member_mut(controls, "trusted_time_source");
+        let controls = (payload)
+            .get_mut("controls")
+            .expect("fixture member exists");
+        let trusted = (controls)
+            .get_mut("trusted_time_source")
+            .expect("fixture member exists");
         {
-            let statement = member_mut(trusted, "statement");
-            let repository = member_mut(statement, "repository");
-            set_member(repository, "name", Value::string("other".to_owned()));
+            let statement = (trusted)
+                .get_mut("statement")
+                .expect("fixture member exists");
+            let repository = (statement)
+                .get_mut("repository")
+                .expect("fixture member exists");
+            *(repository).get_mut("name").expect("fixture member exists") =
+                Value::from("other".to_owned());
         }
-        let digest = amiss_wire::digest::hb(
-            "amiss/scanner-trusted-time-statement",
-            &serde_json_canonicalizer::to_vec(member(trusted, "statement").unwrap()).unwrap(),
+        let digest = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(member(trusted, "statement").unwrap())
+                        .unwrap(),
+                )
+                .finalize()
+                .0,
         )
         .to_string();
-        set_member(trusted, "statement_digest", Value::string(digest));
+        *(trusted)
+            .get_mut("statement_digest")
+            .expect("fixture member exists") = Value::from(digest);
     });
-    let rewritten = parse(&foreign).unwrap();
+    let rewritten = serde_json::from_slice::<Value>(&foreign).unwrap();
     let trusted = member(member(&rewritten, "payload").unwrap(), "controls")
         .and_then(|controls| member(controls, "trusted_time_source"))
         .unwrap();
@@ -411,21 +448,31 @@ const FLOOR_DIGEST: &str =
 
 fn sealed_report() -> (Vec<u8>, Expectations) {
     let (wire, mut expectations) = accepted_report();
-    let descriptor = parse(&dossier_example("scanner-execution-constraint.json")).unwrap();
+    let descriptor =
+        serde_json::from_slice::<Value>(&dossier_example("scanner-execution-constraint.json"))
+            .unwrap();
     let constraint =
         parse_execution_constraint(&serde_json_canonicalizer::to_vec(&descriptor).unwrap())
             .unwrap();
-    let constraint_digest = canonical_execution_constraint(&constraint)
-        .unwrap()
-        .1
-        .to_string();
-    let mut envelope = parse(&wire).unwrap();
-    let payload = member_mut(&mut envelope, "payload");
-    let evaluation = member_mut(payload, "evaluation");
+    let constraint_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&constraint).unwrap())
+            .finalize()
+            .0,
+    )
+    .to_string();
+    let mut envelope = serde_json::from_slice::<Value>(&wire).unwrap();
+    let payload = envelope.get_mut("payload").expect("fixture member exists");
+    let evaluation = (payload)
+        .get_mut("evaluation")
+        .expect("fixture member exists");
     let candidate_identity_digest = seal_evaluation(evaluation);
     let (statement, time_digest) = sealed_statement(evaluation, &candidate_identity_digest);
     seal_controls(
-        member_mut(payload, "controls"),
+        (payload)
+            .get_mut("controls")
+            .expect("fixture member exists"),
         descriptor,
         &constraint_digest,
         statement,
@@ -465,22 +512,18 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
 }
 
 fn seal_evaluation(evaluation: &mut Value) -> String {
-    set_member(
-        evaluation,
-        "candidate_ref",
-        Value::string("refs/heads/feature/docs".to_owned()),
-    );
-    set_member(
-        evaluation,
-        "target_ref",
-        Value::string("refs/heads/main".to_owned()),
-    );
-    set_member(evaluation, "trusted_time", Value::Bool(true));
-    set_member(
-        evaluation,
-        "evaluation_instant",
-        Value::string("2026-07-12T10:00:00Z".to_owned()),
-    );
+    *(evaluation)
+        .get_mut("candidate_ref")
+        .expect("fixture member exists") = Value::from("refs/heads/feature/docs".to_owned());
+    *(evaluation)
+        .get_mut("target_ref")
+        .expect("fixture member exists") = Value::from("refs/heads/main".to_owned());
+    *(evaluation)
+        .get_mut("trusted_time")
+        .expect("fixture member exists") = Value::Bool(true);
+    *(evaluation)
+        .get_mut("evaluation_instant")
+        .expect("fixture member exists") = Value::from("2026-07-12T10:00:00Z".to_owned());
     let Value::Object(members) = evaluation.clone() else {
         panic!("evaluation is an object");
     };
@@ -490,49 +533,59 @@ fn seal_evaluation(evaluation: &mut Value) -> String {
         .collect();
     identity.push((
         "schema".to_owned(),
-        Value::string(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
+        Value::from(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
     ));
-    amiss_wire::digest::hb(
-        CANDIDATE_IDENTITY_DOMAIN,
-        &serde_json_canonicalizer::to_vec(&Value::object(identity)).unwrap(),
+    amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&Value::from_iter(identity)).unwrap())
+            .finalize()
+            .0,
     )
     .to_string()
 }
 
 fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String) {
-    let statement = object(vec![
+    let statement = Value::from_iter(vec![
         (
             "schema",
-            Value::string("amiss/scanner-trusted-time-statement".to_owned()),
+            Value::from("amiss/scanner-trusted-time-statement".to_owned()),
         ),
         (
             "controller",
-            Value::string("external-required-check-clock".to_owned()),
+            Value::from("external-required-check-clock".to_owned()),
         ),
-        ("provider", Value::string("gitlab".to_owned())),
+        ("provider", Value::from("gitlab".to_owned())),
         (
             "repository",
             member(evaluation, "repository").unwrap().clone(),
         ),
-        ("ref", Value::string("refs/heads/main".to_owned())),
+        ("ref", Value::from("refs/heads/main".to_owned())),
         (
             "candidate_identity_digest",
-            Value::string(identity_digest.to_owned()),
+            Value::from(identity_digest.to_owned()),
         ),
-        ("provider_run_id", Value::string("pipeline/42".to_owned())),
-        ("provider_run_attempt", Value::Integer(2)),
+        ("provider_run_id", Value::from("pipeline/42".to_owned())),
+        ("provider_run_attempt", Value::from(2)),
         (
             "evaluation_instant",
-            Value::string("2026-07-12T10:00:00Z".to_owned()),
+            Value::from("2026-07-12T10:00:00Z".to_owned()),
         ),
         (
             "valid_until",
-            Value::string("2026-07-12T10:09:00Z".to_owned()),
+            Value::from("2026-07-12T10:09:00Z".to_owned()),
         ),
     ]);
     let parsed =
         parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap()).unwrap();
-    let digest = canonical_trusted_time(&parsed).unwrap().1.to_string();
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&parsed).unwrap())
+            .finalize()
+            .0,
+    )
+    .to_string();
     (statement, digest)
 }
 
@@ -543,53 +596,49 @@ fn seal_controls(
     statement: Value,
     time_digest: &str,
 ) {
-    set_member(controls, "semantic_evidence", Value::array(Vec::new()));
-    set_member(
-        controls,
-        "organization_floor",
-        object(vec![
-            ("status", Value::string("verified".to_owned())),
-            ("digest", Value::string(FLOOR_DIGEST.to_owned())),
-            (
-                "trust_source",
-                Value::string("organization-policy".to_owned()),
-            ),
-        ]),
-    );
-    set_member(
-        controls,
-        "execution_constraint",
-        object(vec![
-            ("status", Value::string("verified".to_owned())),
-            (
-                "descriptor_digest",
-                Value::string(constraint_digest.to_owned()),
-            ),
-            ("descriptor", descriptor),
-            (
-                "trust_source",
-                Value::string("external-required-check".to_owned()),
-            ),
-        ]),
-    );
-    set_member(
-        controls,
-        "trusted_time_source",
-        object(vec![
-            ("status", Value::string("verified".to_owned())),
-            (
-                "trust_source",
-                Value::string("external-required-check".to_owned()),
-            ),
-            ("statement_digest", Value::string(time_digest.to_owned())),
-            ("statement", statement),
-        ]),
-    );
+    *(controls)
+        .get_mut("semantic_evidence")
+        .expect("fixture member exists") = Value::Array(Vec::new());
+    *(controls)
+        .get_mut("organization_floor")
+        .expect("fixture member exists") = Value::from_iter(vec![
+        ("status", Value::from("verified".to_owned())),
+        ("digest", Value::from(FLOOR_DIGEST.to_owned())),
+        (
+            "trust_source",
+            Value::from("organization-policy".to_owned()),
+        ),
+    ]);
+    *(controls)
+        .get_mut("execution_constraint")
+        .expect("fixture member exists") = Value::from_iter(vec![
+        ("status", Value::from("verified".to_owned())),
+        (
+            "descriptor_digest",
+            Value::from(constraint_digest.to_owned()),
+        ),
+        ("descriptor", descriptor),
+        (
+            "trust_source",
+            Value::from("external-required-check".to_owned()),
+        ),
+    ]);
+    *(controls)
+        .get_mut("trusted_time_source")
+        .expect("fixture member exists") = Value::from_iter(vec![
+        ("status", Value::from("verified".to_owned())),
+        (
+            "trust_source",
+            Value::from("external-required-check".to_owned()),
+        ),
+        ("statement_digest", Value::from(time_digest.to_owned())),
+        ("statement", statement),
+    ]);
 }
 
 fn rewrite(wire: &[u8], edit: impl FnOnce(&mut Value)) -> Vec<u8> {
-    let mut envelope = parse(wire).unwrap();
-    edit(member_mut(&mut envelope, "payload"));
+    let mut envelope = serde_json::from_slice::<Value>(wire).unwrap();
+    edit(envelope.get_mut("payload").expect("fixture member exists"));
     refresh_digest(&mut envelope);
     let mut rewritten = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     rewritten.push(b'\n');
@@ -597,43 +646,27 @@ fn rewrite(wire: &[u8], edit: impl FnOnce(&mut Value)) -> Vec<u8> {
 }
 
 fn refresh_digest(envelope: &mut Value) {
-    let digest = amiss_wire::digest::hb(
-        PAYLOAD_SCHEMA,
-        &serde_json_canonicalizer::to_vec(member(envelope, "payload").unwrap()).unwrap(),
+    let digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(
+                serde_json_canonicalizer::to_vec(member(envelope, "payload").unwrap()).unwrap(),
+            )
+            .finalize()
+            .0,
     )
     .to_string();
-    set_member(envelope, "payload_digest", Value::string(digest));
-}
-
-fn member_mut<'value>(value: &'value mut Value, key: &str) -> &'value mut Value {
-    let Value::Object(members) = value else {
-        panic!("value is an object");
-    };
-    &mut members
-        .iter_mut()
-        .find(|(name, _value)| name == key)
-        .expect("member exists")
-        .1
-}
-
-fn set_member(value: &mut Value, key: &str, replacement: Value) {
-    *member_mut(value, key) = replacement;
+    *(envelope)
+        .get_mut("payload_digest")
+        .expect("fixture member exists") = Value::from(digest);
 }
 
 fn insert_member(value: &mut Value, key: &str, member: Value) {
-    let Value::Object(members) = value else {
-        panic!("value is an object");
-    };
-    assert!(members.iter().all(|(name, _value)| name != key));
-    let mut expanded = std::mem::take(members).into_vec();
-    expanded.push((key.to_owned(), member));
-    *members = expanded.into_boxed_slice();
-}
-
-fn object(rows: Vec<(&str, Value)>) -> Value {
-    Value::object(
-        rows.into_iter()
-            .map(|(name, value)| (name.to_owned(), value))
-            .collect(),
-    )
+    assert!(
+        value
+            .as_object_mut()
+            .expect("fixture object")
+            .insert(key.to_owned(), member)
+            .is_none()
+    );
 }

@@ -1,4 +1,4 @@
-use amiss_wire::digest::hb;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::resolution::{
     BlobContent, BlobContentTag, BlobMode, BlobTarget, ExternalReference, InvalidReference,
@@ -75,19 +75,6 @@ fn generated_tags_decode_payload_variant_names_without_payload_defaults() {
     assert_eq!(BlobMode::Executable.as_ref(), "100755");
 }
 
-fn available() -> BlobContent {
-    BlobContent::Available {
-        raw_digest: hb("amiss/raw-evidence", b"raw"),
-        projection_digest: hb("amiss/scanner-source-projection", b"projection"),
-    }
-}
-
-fn pointer() -> BlobContent {
-    BlobContent::LfsPointer {
-        raw_digest: hb("amiss/raw-evidence", b"pointer"),
-    }
-}
-
 fn blob(content: BlobContent) -> Target<()> {
     Target::Blob(BlobTarget {
         path: (),
@@ -100,16 +87,23 @@ fn blob(content: BlobContent) -> Target<()> {
 /// while a tree is not a pointer at all.
 #[test]
 fn the_pointer_answer_survives_every_wrapper() {
-    assert!(available().projection_digest().is_some());
-    assert!(pointer().projection_digest().is_none());
-    assert!(!available().is_lfs_pointer());
-    assert!(pointer().is_lfs_pointer());
+    let available = BlobContent::Available {
+        raw_digest: Digest::from([1; 32]),
+        projection_digest: Digest::from([2; 32]),
+    };
+    let pointer = BlobContent::LfsPointer {
+        raw_digest: Digest::from([3; 32]),
+    };
+    assert!(available.projection_digest().is_some());
+    assert!(pointer.projection_digest().is_none());
+    assert!(!available.is_lfs_pointer());
+    assert!(pointer.is_lfs_pointer());
 
-    assert!(blob(available()).projection_digest().is_some());
-    assert!(blob(pointer()).projection_digest().is_none());
+    assert!(blob(available).projection_digest().is_some());
+    assert!(blob(pointer).projection_digest().is_none());
     assert!(Target::Tree { path: () }.projection_digest().is_none());
-    assert!(!blob(available()).is_lfs_pointer());
-    assert!(blob(pointer()).is_lfs_pointer());
+    assert!(!blob(available).is_lfs_pointer());
+    assert!(blob(pointer).is_lfs_pointer());
     assert!(!Target::Tree { path: () }.is_lfs_pointer());
 
     let fragment = |content| {
@@ -119,32 +113,32 @@ fn the_pointer_answer_survives_every_wrapper() {
             content,
         }))
     };
-    assert!(fragment(pointer()).is_lfs_pointer());
-    assert!(!fragment(available()).is_lfs_pointer());
-    assert!(UnsupportedSemantics::<()>::Query(blob(pointer())).is_lfs_pointer());
-    assert!(!UnsupportedSemantics::<()>::Query(blob(available())).is_lfs_pointer());
+    assert!(fragment(pointer).is_lfs_pointer());
+    assert!(!fragment(available).is_lfs_pointer());
+    assert!(UnsupportedSemantics::<()>::Query(blob(pointer)).is_lfs_pointer());
+    assert!(!UnsupportedSemantics::<()>::Query(blob(available)).is_lfs_pointer());
     assert!(!UnsupportedSemantics::<()>::SiteRoute.is_lfs_pointer());
 
     assert!(
         Resolution::Resolved {
-            target: blob(pointer())
+            target: blob(pointer)
         }
         .is_lfs_pointer()
     );
     assert!(
         !Resolution::Resolved {
-            target: blob(available())
+            target: blob(available)
         }
         .is_lfs_pointer()
     );
     assert!(
         Resolution::TypeMismatch {
-            target: blob(pointer())
+            target: blob(pointer)
         }
         .is_lfs_pointer()
     );
     assert!(
-        Resolution::UnsupportedSemantics(fragment(pointer())).is_lfs_pointer(),
+        Resolution::UnsupportedSemantics(fragment(pointer)).is_lfs_pointer(),
         "a wrapper does not lose the answer"
     );
     assert!(

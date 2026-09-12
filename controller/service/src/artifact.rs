@@ -80,7 +80,10 @@ pub fn load_artifact_service(
     {
         return Err(ConfigError::invalid("artifact bearer token is invalid"));
     }
-    let authorization = Authorization(token_mac(&token)?);
+    let mut mac = HmacSha256::new_from_slice(&token)
+        .map_err(|_defect| ConfigError::invalid("artifact bearer token is invalid"))?;
+    mac.update(AUTH_DOMAIN);
+    let authorization = Authorization(mac.finalize().into_bytes().into());
     let component_bytes = limits.record_bytes.min(MACHINE_JSON_BYTES);
     if component_bytes == 0 || endpoint.max_concurrent_requests == 0 {
         return Err(ConfigError::invalid("artifact limits are invalid"));
@@ -239,13 +242,6 @@ fn authorized(headers: &HeaderMap, authorization: &Authorization) -> bool {
     };
     verifier.update(AUTH_DOMAIN);
     verifier.verify_slice(&authorization.0).is_ok()
-}
-
-fn token_mac(token: &[u8]) -> Result<[u8; 32], ConfigError> {
-    let mut mac = HmacSha256::new_from_slice(token)
-        .map_err(|_defect| ConfigError::invalid("artifact bearer token is invalid"))?;
-    mac.update(AUTH_DOMAIN);
-    Ok(mac.finalize().into_bytes().into())
 }
 
 const fn bearer_byte(byte: u8) -> bool {

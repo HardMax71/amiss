@@ -1,13 +1,14 @@
 use amiss_wire::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeController,
-    TrustedTimeSchema, TrustedTimeStatement, WaiverBundle, canonical_trusted_time,
+    TrustedTimeSchema, TrustedTimeStatement, WaiverBundle,
 };
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, RepositoryIdentity, UtcInstant};
 use amiss_wire::requests::{
     ControlsRequest, ControlsRequestSchema, REQUEST_STREAM_BYTES, RequestTrust, SuppliedControl,
     SuppliedTime,
 };
+use sha2::Digest as _;
 
 use crate::RunIdentity;
 
@@ -48,7 +49,16 @@ pub(super) fn validate_request_size(
         )?
         .supplied,
     };
-    canonical_request(&request).map(|_bytes| ())
+    request
+        .validate()
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    let mut counter = countio::Counter::new(std::io::sink());
+    serde_json_canonicalizer::to_writer(&request, &mut counter)
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    u64::try_from(counter.writer_bytes())
+        .is_ok_and(|length| length <= REQUEST_STREAM_BYTES)
+        .then_some(())
+        .ok_or(BootstrapJobError::RequestEncoding)
 }
 
 fn maximal_trusted_time(
@@ -80,8 +90,16 @@ fn maximal_trusted_time(
         evaluation_instant,
         valid_until,
     };
-    let (_, expected_digest) =
-        canonical_trusted_time(&statement).map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    statement
+        .validate()
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&statement, &mut writer)
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
+    let expected_digest = Digest::from(writer.0.finalize().0);
     Ok(SuppliedTime {
         value: statement,
         expected_digest,
@@ -142,16 +160,4 @@ pub(super) fn request(
         execution_constraint: Some(execution_constraint),
         semantic_evidence,
     })
-}
-
-pub(super) fn canonical_request(request: &ControlsRequest) -> Result<Vec<u8>, BootstrapJobError> {
-    request
-        .canonical_bytes()
-        .map_err(|_defect| BootstrapJobError::RequestEncoding)
-        .and_then(|bytes| {
-            u64::try_from(bytes.len())
-                .is_ok_and(|length| length <= REQUEST_STREAM_BYTES)
-                .then_some(bytes)
-                .ok_or(BootstrapJobError::RequestEncoding)
-        })
 }

@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
+use sha2::Digest as _;
 use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
-use crate::digest::{Digest, hb};
+use crate::model::Digest;
 use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::{CANDIDATE_IDENTITY_DOMAIN, EvaluationRequest, RequestMode, SnapshotMaterialization};
@@ -130,7 +131,7 @@ pub fn commit_candidate_identity_digest(
     base_tree: &Oid,
     candidate_tree: &Oid,
 ) -> Option<Digest> {
-    evaluation.canonical_bytes().ok()?;
+    evaluation.validate().ok()?;
     let candidate_commit = match (evaluation.mode, evaluation.candidate_commit.as_ref()) {
         (RequestMode::CommitPair, Some(candidate)) => candidate.clone(),
         (RequestMode::CommitPair | RequestMode::Index, None | Some(_)) => return None,
@@ -176,7 +177,9 @@ pub fn commit_candidate_identity_digest(
         index_only_materialized_paths: 0,
         forge: evaluation.forge.map_or(Nullable::Null, Nullable::Value),
     };
-    serde_json::to_vec(&identity)
-        .ok()
-        .map(|canonical| hb(CANDIDATE_IDENTITY_DOMAIN, &canonical))
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN).chain_update([0_u8]),
+    );
+    serde_json::to_writer(&mut writer, &identity).ok()?;
+    Some(Digest::from(writer.0.finalize().0))
 }

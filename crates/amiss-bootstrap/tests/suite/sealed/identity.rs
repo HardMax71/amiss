@@ -1,8 +1,8 @@
 use amiss_bootstrap::supervise::{AcceptanceDefect, accept};
-use amiss_wire::json::Value;
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
+use serde_json::Value;
 
-use super::{Deviation, entry, golden, refused, set, string};
+use super::{Deviation, golden, refused};
 
 #[test]
 fn identity_extensions_are_refused_even_with_matching_bindings() {
@@ -10,25 +10,26 @@ fn identity_extensions_are_refused_even_with_matching_bindings() {
         for changed in [false, true] {
             let deviation = Deviation {
                 pre: Some(Box::new(move |payload| {
-                    let evaluation = entry(payload, "evaluation");
+                    let evaluation = (payload)
+                        .get_mut("evaluation")
+                        .expect("fixture member exists");
                     let target = match path {
-                        Some(key) => entry(evaluation, key),
+                        Some(key) => (evaluation).get_mut(key).expect("fixture member exists"),
                         None => evaluation,
                     };
-                    set(
-                        target,
-                        "future",
-                        Value::array(vec![Value::Null, string("\u{1f600}\u{e000}")]),
-                    );
+                    (target)["future"] =
+                        Value::Array(vec![Value::Null, Value::from("\u{1f600}\u{e000}")]);
                 })),
                 post: changed.then(|| -> super::Patch {
                     Box::new(move |payload: &mut Value| {
-                        let evaluation = entry(payload, "evaluation");
+                        let evaluation = (payload)
+                            .get_mut("evaluation")
+                            .expect("fixture member exists");
                         let target = match path {
-                            Some(key) => entry(evaluation, key),
+                            Some(key) => (evaluation).get_mut(key).expect("fixture member exists"),
                             None => evaluation,
                         };
-                        set(target, "future", Value::Bool(true));
+                        (target)["future"] = Value::Bool(true);
                     })
                 }),
                 ..Deviation::default()
@@ -48,11 +49,13 @@ fn a_reserved_schema_cannot_join_the_identity_preimage() {
     for schema in [
         Value::Null,
         Value::Bool(false),
-        string(CANDIDATE_IDENTITY_DOMAIN),
+        Value::from(CANDIDATE_IDENTITY_DOMAIN),
     ] {
         assert_eq!(
             refused(Deviation::pre(move |payload| {
-                set(entry(payload, "evaluation"), "schema", schema);
+                ((payload)
+                    .get_mut("evaluation")
+                    .expect("fixture member exists"))["schema"] = schema;
             })),
             AcceptanceDefect::Shape
         );
@@ -64,22 +67,29 @@ fn clock_shape_and_binding_defects_remain_distinct() {
     for (value, defect) in [
         (Value::Null, AcceptanceDefect::SealedControls),
         (Value::Bool(true), AcceptanceDefect::Shape),
-        (string("not-an-instant"), AcceptanceDefect::SealedControls),
+        (
+            Value::from("not-an-instant"),
+            AcceptanceDefect::SealedControls,
+        ),
     ] {
         assert_eq!(
             refused(Deviation::post(move |payload| {
-                set(entry(payload, "evaluation"), "evaluation_instant", value);
+                ((payload)
+                    .get_mut("evaluation")
+                    .expect("fixture member exists"))["evaluation_instant"] = value;
             })),
             defect
         );
     }
     assert_eq!(
         refused(Deviation::post(|payload| {
-            let Value::Object(members) = entry(payload, "evaluation") else {
+            let Value::Object(members) = (payload)
+                .get_mut("evaluation")
+                .expect("fixture member exists")
+            else {
                 panic!("an evaluation object")
             };
             *members = std::mem::take(members)
-                .into_vec()
                 .into_iter()
                 .filter(|(name, _)| name != "evaluation_instant")
                 .collect();
@@ -92,12 +102,12 @@ fn clock_shape_and_binding_defects_remain_distinct() {
 fn identity_extensions_cannot_bypass_the_closed_shape_or_outer_depth_limit() {
     for depth in [256, 513] {
         let (wire, expectations) = golden(Deviation::pre(move |payload| {
-            let nested = (0..depth).fold(Value::Null, |value, _| Value::array(vec![value]));
-            set(
-                entry(entry(payload, "evaluation"), "candidate"),
-                "future",
-                nested,
-            );
+            let nested = (0..depth).fold(Value::Null, |value, _| Value::Array(vec![value]));
+            (((payload)
+                .get_mut("evaluation")
+                .expect("fixture member exists"))
+            .get_mut("candidate")
+            .expect("fixture member exists"))["future"] = nested;
         }));
         assert_eq!(
             accept(&wire, &expectations),

@@ -1,6 +1,5 @@
 use amiss_wire::{
     controls::{FACT_DOMAIN, FINDING_KEY_DOMAIN, ProjectionKind},
-    digest::hb,
     report::{
         FindingKind,
         model::{
@@ -10,6 +9,7 @@ use amiss_wire::{
         },
     },
 };
+use sha2::Digest as _;
 
 #[expect(
     clippy::unwrap_used,
@@ -76,9 +76,12 @@ pub(super) fn reports() -> Vec<ReportEnvelope> {
             control_path: None,
             rule_id: kind.as_ref().to_owned(),
         };
-        finding.finding_key = hb(
-            FINDING_KEY_DOMAIN,
-            &serde_json_canonicalizer::to_vec(&finding.key_input).unwrap(),
+        finding.finding_key = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&finding.key_input).unwrap())
+                .finalize()
+                .0,
         );
         let fact = finding.candidate_fact.as_mut().unwrap();
         fact.finding_kind = kind;
@@ -92,7 +95,7 @@ pub(super) fn reports() -> Vec<ReportEnvelope> {
                 rule_id: kind.as_ref().to_owned(),
                 schema: ControlStateSchema::Current,
                 sources: vec![ControlStateSource {
-                    digest: hb("test", b"control"),
+                    digest: amiss_wire::model::Digest::from([24; 32]),
                     multiplicity: 1,
                 }],
                 state: ControlState::Present,
@@ -103,14 +106,29 @@ pub(super) fn reports() -> Vec<ReportEnvelope> {
         };
         reports.push(report);
     }
-    for report in &mut reports {
+    refresh_candidate_facts(&mut reports);
+    reports
+}
+
+#[expect(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "report fixture construction"
+)]
+fn refresh_candidate_facts(reports: &mut [ReportEnvelope]) {
+    for report in reports {
         let finding = &mut report.payload.findings[0];
-        finding.candidate_fact_digest = Some(hb(
-            FACT_DOMAIN,
-            &serde_json_canonicalizer::to_vec(finding.candidate_fact.as_ref().unwrap()).unwrap(),
+        finding.candidate_fact_digest = Some(amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(FACT_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(
+                    serde_json_canonicalizer::to_vec(finding.candidate_fact.as_ref().unwrap())
+                        .unwrap(),
+                )
+                .finalize()
+                .0,
         ));
     }
-    reports
 }
 
 #[test]
@@ -122,7 +140,14 @@ fn evidence_details_preserve_nullable_fields_and_require_tree_objects() {
             ("observed_count", "0".to_owned()),
             (
                 "current_fact_digest",
-                serde_json::to_string(&hb("test", b"fact")).unwrap(),
+                serde_json::to_string(&amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("test")
+                        .chain_update([0_u8])
+                        .chain_update(b"fact")
+                        .finalize()
+                        .0,
+                ))
+                .unwrap(),
             ),
         ] {
             let member = format!("\"{field}\":null");

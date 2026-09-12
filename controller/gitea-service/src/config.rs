@@ -16,7 +16,6 @@ use amiss_controller_service::{
     AcquiringWorkerSettings, ArtifactFiles, CheckPlanFiles, HttpLimits, QueuedLaneSetupInput,
     QueuedServiceSettings, ServiceLimits, ServicePaths, WebhookKeyFile, framed_route_id,
     load_artifact_service, load_limits, load_paths, load_plan, load_webhook_keyring, read_regular,
-    read_strict_json,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
 use secrecy::{ExposeSecret as _, SecretString};
@@ -50,7 +49,11 @@ impl ServiceConfig {
     ///
     /// The config, a trust file, an identity, a bound plan, or a limit is invalid.
     pub fn load(path: &Path) -> Result<Self, ConfigError> {
-        let raw: RawConfig = read_strict_json(path)?;
+        let raw: RawConfig =
+            serde_json::from_slice(&read_regular(path, amiss_controller_service::CONFIG_BYTES)?)
+                .map_err(|defect| {
+                    ConfigError::caused_by("configuration is not strict JSON", defect)
+                })?;
         raw.load()
     }
 }

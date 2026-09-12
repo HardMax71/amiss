@@ -1,9 +1,9 @@
-use amiss_wire::digest::hb;
-use amiss_wire::json::{Value, parse};
 use amiss_wire::model::Adapter;
 use amiss_wire::report::AnalysisErrorCode;
+use serde_json::{Value, json};
+use sha2::Digest as _;
 
-use amiss_md::{Extraction, Heading, Occurrence, analyze};
+use amiss_md::analyze;
 
 pub(crate) const SCHEMA: &str = "amiss/parser-profile-corpus";
 
@@ -82,49 +82,32 @@ impl Case {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum Defect {
-    NotJson,
-    NotAnExampleArray,
-    MissingMember,
+#[derive(serde::Deserialize)]
+struct CommonmarkExample {
+    example: usize,
+    section: String,
+    markdown: String,
+    html: String,
 }
 
-/// Reads the `CommonMark` specification's own machine-readable example array.
+/// Reads the `CommonMark` specification's machine-readable example array.
 ///
 /// # Errors
-///
-/// `NotJson` when the bytes fail strict JSON, and `NotAnExampleArray` or
-/// `MissingMember` when the array does not hold the documented example shape.
-pub(crate) fn commonmark(spec_json: &[u8]) -> Result<Vec<Case>, Defect> {
-    let Value::Array(rows) = parse(spec_json).map_err(|_invalid| Defect::NotJson)? else {
-        return Err(Defect::NotAnExampleArray);
-    };
-    rows.iter()
-        .map(|row| {
-            let Value::Object(members) = row else {
-                return Err(Defect::NotAnExampleArray);
-            };
-            let text = |key: &str| match members.iter().find(|(name, _)| name == key) {
-                Some((_, Value::String(value))) => Ok(value.to_string()),
-                _ => Err(Defect::MissingMember),
-            };
-            let number = match members.iter().find(|(name, _)| name == "example") {
-                Some((_, Value::Integer(value))) => {
-                    usize::try_from(*value).map_err(|_range| Defect::MissingMember)?
-                }
-                _ => return Err(Defect::MissingMember),
-            };
-            Ok(Case {
-                family: COMMONMARK_FAMILY,
-                number,
-                section: text("section")?,
-                tag: None,
-                source: text("markdown")?,
-                expect: Expect::Html(text("html")?),
-                config: String::new(),
-            })
+/// Rejects invalid JSON or examples without their source, HTML, section and ordinal.
+pub(crate) fn commonmark(spec_json: &[u8]) -> serde_json::Result<Vec<Case>> {
+    let examples: Vec<CommonmarkExample> = serde_json::from_slice(spec_json)?;
+    Ok(examples
+        .into_iter()
+        .map(|row| Case {
+            family: COMMONMARK_FAMILY,
+            number: row.example,
+            section: row.section,
+            tag: None,
+            source: row.markdown,
+            expect: Expect::Html(row.html),
+            config: String::new(),
         })
-        .collect()
+        .collect())
 }
 
 /// Reads the GFM specification source. An example opens with exactly
@@ -472,153 +455,55 @@ fn rfind_within(hay: &[u8], needle: &[u8], from: usize, before: usize) -> Option
     (at >= from).then_some(at)
 }
 
-fn span_value(span: (usize, usize)) -> Value {
-    Value::array(vec![
-        Value::Integer(clamp(span.0)),
-        Value::Integer(clamp(span.1)),
-    ])
-}
-
-fn occurrence_value(entry: &Occurrence) -> Value {
-    Value::object(vec![
-        (
-            "block_kind".to_owned(),
-            Value::string(entry.block_kind.as_ref().to_owned()),
-        ),
-        ("block_span".to_owned(), span_value(entry.block_span)),
-        (
-            "node_path".to_owned(),
-            Value::array(
-                entry
-                    .node_path
-                    .iter()
-                    .map(|index| Value::Integer(clamp(*index)))
-                    .collect(),
-            ),
-        ),
-        (
-            "raw_destination".to_owned(),
-            Value::string(entry.raw_destination.clone()),
-        ),
-        (
-            "semantic_destination".to_owned(),
-            Value::string(entry.semantic_destination.clone()),
-        ),
-        (
-            "source_construct".to_owned(),
-            Value::string(entry.construct.as_ref().to_owned()),
-        ),
-        ("span".to_owned(), span_value(entry.span)),
-    ])
-}
-
-fn heading_value(heading: &Heading) -> Value {
-    let attribute = heading.attribute.as_ref().map_or(Value::Null, |attribute| {
-        Value::object(vec![
-            ("id".to_owned(), Value::string(attribute.id.clone())),
-            ("suffix".to_owned(), Value::string(attribute.suffix.clone())),
-        ])
-    });
-    Value::object(vec![
-        ("attribute".to_owned(), attribute),
-        (
-            "source".to_owned(),
-            Value::string(heading.source.as_ref().to_owned()),
-        ),
-        ("span".to_owned(), span_value(heading.span)),
-        ("text".to_owned(), Value::string(heading.text.clone())),
-    ])
-}
-
-fn extraction_members(extraction: &Extraction) -> Vec<(String, Value)> {
-    vec![
-        (
-            "declared_anchors".to_owned(),
-            Value::array(
-                extraction
-                    .declared_anchors
-                    .iter()
-                    .map(|anchor| Value::string(anchor.clone()))
-                    .collect(),
-            ),
-        ),
-        (
-            "headings".to_owned(),
-            Value::array(extraction.headings.iter().map(heading_value).collect()),
-        ),
-        (
-            "html_anchors".to_owned(),
-            Value::array(
-                extraction
-                    .html_anchors
-                    .iter()
-                    .map(|anchor| Value::string(anchor.clone()))
-                    .collect(),
-            ),
-        ),
-        (
-            "occurrences".to_owned(),
-            Value::array(
-                extraction
-                    .occurrences
-                    .iter()
-                    .map(occurrence_value)
-                    .collect(),
-            ),
-        ),
-        (
-            "opaque".to_owned(),
-            Value::object(vec![
-                (
-                    "frontmatter_bytes".to_owned(),
-                    Value::Integer(clamp(extraction.opaque.frontmatter_bytes)),
-                ),
-                (
-                    "html".to_owned(),
-                    Value::array(
-                        extraction
-                            .opaque
-                            .html
-                            .iter()
-                            .map(|span| span_value(*span))
-                            .collect(),
-                    ),
-                ),
-                (
-                    "mdx".to_owned(),
-                    Value::array(
-                        extraction
-                            .opaque
-                            .mdx
-                            .iter()
-                            .map(|span| span_value(*span))
-                            .collect(),
-                    ),
-                ),
-            ]),
-        ),
-    ]
-}
-
-fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
+fn profile_work(adapter: Adapter, source: &[u8]) -> Value {
     match analyze(adapter, source, u64::MAX) {
         Ok(analysis) => {
-            let mut members = vec![
-                (
-                    "nesting".to_owned(),
-                    Value::Integer(i64::try_from(analysis.work.nesting).unwrap_or(i64::MAX)),
-                ),
-                (
-                    "nodes".to_owned(),
-                    Value::Integer(i64::try_from(analysis.work.nodes).unwrap_or(i64::MAX)),
-                ),
-            ];
-            if let Some(extraction) = &analysis.extraction {
-                members.extend(extraction_members(extraction));
-            }
-            // Canonical JSON wants sorted keys, and every key here is ASCII.
-            members.sort_by(|left, right| left.0.cmp(&right.0));
-            Value::object(members)
+            let Some(extraction) = &analysis.extraction else {
+                return json!({ "nesting": analysis.work.nesting, "nodes": analysis.work.nodes });
+            };
+            let occurrences: Vec<_> = extraction
+                .occurrences
+                .iter()
+                .map(|entry| {
+                    json!({
+                        "block_kind": entry.block_kind,
+                        "block_span": entry.block_span,
+                        "node_path": entry.node_path,
+                        "raw_destination": entry.raw_destination,
+                        "semantic_destination": entry.semantic_destination,
+                        "source_construct": entry.construct,
+                        "span": entry.span,
+                    })
+                })
+                .collect();
+            let headings: Vec<_> = extraction
+                .headings
+                .iter()
+                .map(|heading| {
+                    json!({
+                        "attribute": heading.attribute.as_ref().map(|attribute| json!({
+                            "id": attribute.id,
+                            "suffix": attribute.suffix,
+                        })),
+                        "source": heading.source.as_ref(),
+                        "span": heading.span,
+                        "text": heading.text,
+                    })
+                })
+                .collect();
+            json!({
+                "declared_anchors": extraction.declared_anchors,
+                "headings": headings,
+                "html_anchors": extraction.html_anchors,
+                "nesting": analysis.work.nesting,
+                "nodes": analysis.work.nodes,
+                "occurrences": occurrences,
+                "opaque": {
+                    "frontmatter_bytes": extraction.opaque.frontmatter_bytes,
+                    "html": extraction.opaque.html,
+                    "mdx": extraction.opaque.mdx,
+                },
+            })
         }
         Err(error) => {
             let code = match error {
@@ -627,47 +512,22 @@ fn profile_value(adapter: Adapter, source: &[u8]) -> Value {
                     AnalysisErrorCode::ResourceLimitExceeded
                 }
             };
-            Value::object(vec![(
-                "fault".to_owned(),
-                Value::string(code.as_ref().to_owned()),
-            )])
+            json!({ "fault": code })
         }
     }
 }
 
-fn clamp(count: usize) -> i64 {
-    i64::try_from(count).unwrap_or(i64::MAX)
-}
-
-fn case_value(case: &Case) -> Value {
-    let charged: Vec<(String, Value)> = PROFILES
-        .iter()
-        .map(|adapter| {
-            (
-                adapter.metadata().grammar_profile.to_owned(),
-                profile_value(*adapter, case.source.as_bytes()),
-            )
-        })
-        .collect();
-    let mut members = vec![
-        ("case_id".to_owned(), Value::string(case.case_id())),
-        ("section".to_owned(), Value::string(case.section.clone())),
-        ("source".to_owned(), Value::string(case.source.clone())),
-    ];
-    match &case.expect {
-        Expect::Html(_) | Expect::Accepted => {
-            members.push(("upstream".to_owned(), Value::string("accepted".to_owned())));
-        }
-        Expect::Rejected(reason) => {
-            members.push(("upstream".to_owned(), Value::string("rejected".to_owned())));
-            members.push(("upstream_reason".to_owned(), Value::string(reason.clone())));
-        }
-    }
-    if let Some(tag) = &case.tag {
-        members.push(("tag".to_owned(), Value::string(tag.clone())));
-    }
-    members.push(("work".to_owned(), Value::object(charged)));
-    Value::object(members)
+#[derive(serde::Serialize)]
+struct ManifestCase<'a> {
+    case_id: String,
+    section: &'a str,
+    source: &'a str,
+    upstream: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    upstream_reason: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tag: Option<&'a str>,
+    work: std::collections::BTreeMap<&'static str, Value>,
 }
 
 /// Builds the manifest: every case's raw source, what upstream says about it,
@@ -684,35 +544,42 @@ pub(crate) fn manifest(cases: &[Case], skipped: &[(&'static str, usize)]) -> Val
         (STRIKETHROUGH_FAMILY, STRIKETHROUGH_PIN),
         (GITHUB_FOOTNOTE_FAMILY, GITHUB_FOOTNOTE_PIN),
     ];
-    let family_rows: Vec<Value> = families
+    let family_rows: Vec<_> = families.iter().map(|(family, pin)| {
+        let count = cases.iter().filter(|case| case.family == *family).count();
+        let dropped = skipped.iter().find(|(name, _)| name == family).map_or(0, |(_, count)| *count);
+        json!({ "cases": count, "family": family, "input_digest": pin, "not_a_literal": dropped })
+    }).collect();
+    let profiles: Vec<_> = PROFILES
         .iter()
-        .map(|(family, pin)| {
-            let count = cases.iter().filter(|case| case.family == *family).count();
-            let dropped = skipped
-                .iter()
-                .find(|(name, _)| name == family)
-                .map_or(0, |(_, count)| *count);
-            Value::object(vec![
-                ("cases".to_owned(), Value::Integer(clamp(count))),
-                ("family".to_owned(), Value::string((*family).to_owned())),
-                ("input_digest".to_owned(), Value::string((*pin).to_owned())),
-                ("not_a_literal".to_owned(), Value::Integer(clamp(dropped))),
-            ])
+        .map(|adapter| adapter.metadata().grammar_profile)
+        .collect();
+    let cases: Vec<_> = cases
+        .iter()
+        .map(|case| {
+            let (upstream, upstream_reason) = match &case.expect {
+                Expect::Html(_) | Expect::Accepted => ("accepted", None),
+                Expect::Rejected(reason) => ("rejected", Some(reason.as_str())),
+            };
+            ManifestCase {
+                case_id: case.case_id(),
+                section: &case.section,
+                source: &case.source,
+                upstream,
+                upstream_reason,
+                tag: case.tag.as_deref(),
+                work: PROFILES
+                    .iter()
+                    .map(|adapter| {
+                        (
+                            adapter.metadata().grammar_profile,
+                            profile_work(*adapter, case.source.as_bytes()),
+                        )
+                    })
+                    .collect(),
+            }
         })
         .collect();
-    let profiles: Vec<Value> = PROFILES
-        .iter()
-        .map(|adapter| Value::string(adapter.metadata().grammar_profile.to_owned()))
-        .collect();
-    Value::object(vec![
-        ("schema".to_owned(), Value::string(SCHEMA.to_owned())),
-        ("families".to_owned(), Value::array(family_rows)),
-        ("profiles".to_owned(), Value::array(profiles)),
-        (
-            "cases".to_owned(),
-            Value::array(cases.iter().map(case_value).collect()),
-        ),
-    ])
+    json!({ "schema": SCHEMA, "families": family_rows, "profiles": profiles, "cases": cases })
 }
 
 /// The documents the footnote suite renders against github.com's own HTML.
@@ -740,13 +607,14 @@ pub(crate) fn github_fixtures(pairs: &[(String, String, String)]) -> Vec<Case> {
 pub(crate) fn directory_digest(
     files: &[(String, String)],
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let members: Vec<(String, Value)> = files
-        .iter()
-        .map(|(name, body)| (name.clone(), Value::string(body.clone())))
-        .collect();
-    Ok(hb(
-        GITHUB_FOOTNOTE_FAMILY,
-        &serde_json_canonicalizer::to_vec(&Value::object(members))?,
+    let members: std::collections::BTreeMap<_, _> =
+        files.iter().map(|(name, body)| (name, body)).collect();
+    Ok(amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(GITHUB_FOOTNOTE_FAMILY)
+            .chain_update([0_u8])
+            .chain_update(&serde_json_canonicalizer::to_vec(&members)?)
+            .finalize()
+            .0,
     )
     .to_string())
 }

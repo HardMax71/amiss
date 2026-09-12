@@ -1,7 +1,6 @@
 #![cfg(test)]
 
 use amiss_wire::external::parse_plan;
-use amiss_wire::json::parse;
 
 use super::targets;
 
@@ -15,15 +14,24 @@ fn only_unshaped_https_destinations_are_selected_up_to_the_cap() {
         "http://plain.example/insecure",
     ])
     .unwrap();
-    let parsed = parse(&report).unwrap();
+    let parsed = serde_json::from_slice::<serde_json::Value>(&report).unwrap();
     let engine = parsed
-        .member("payload")
-        .and_then(|payload| payload.member("engine"))
+        .get("payload")
+        .and_then(|payload| payload.get("engine"))
         .unwrap();
     let plan = amiss_wire::external::plan(
         &report,
-        engine.text("engine_version").unwrap(),
-        amiss_wire::digest::Digest::from_wire(engine.text("engine_digest").unwrap()).unwrap(),
+        engine
+            .get("engine_version")
+            .and_then(serde_json::Value::as_str)
+            .unwrap(),
+        amiss_wire::model::Digest::from_wire(
+            engine
+                .get("engine_digest")
+                .and_then(serde_json::Value::as_str)
+                .unwrap(),
+        )
+        .unwrap(),
     )
     .unwrap();
     let plan = parse_plan(&plan).unwrap();

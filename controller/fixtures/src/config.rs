@@ -1,9 +1,9 @@
+use sha2::Digest as _;
 use std::io;
 use std::path::{Path, PathBuf};
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
 use amiss_wire::action::host_platform;
-use amiss_wire::digest::hb;
 use serde_json::{Value, json};
 use tempfile::TempDir;
 
@@ -41,7 +41,7 @@ impl TrustFiles {
                 "selected_platform": platform.as_ref(),
                 "required_status_name": "amiss / documentation assurance",
                 "bootstrap_contract": "amiss-action-bootstrap",
-                "bootstrap_digest": hb(BOOTSTRAP_DOMAIN, BOOTSTRAP_BYTES).to_string()
+                "bootstrap_digest": amiss_wire::model::Digest::from(sha2::Sha256::new_with_prefix(BOOTSTRAP_DOMAIN).chain_update([0_u8]).chain_update(BOOTSTRAP_BYTES).finalize().0).to_string()
             }))
             .map_err(io::Error::other)?,
         )?;

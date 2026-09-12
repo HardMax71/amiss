@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::fs;
 
 use amiss_fixtures::git;
@@ -5,7 +6,6 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair, staged_index};
 use amiss_scan::report::RequestDigests;
 use amiss_wire::controls::Profile;
-use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::model::DocumentClassification;
 use amiss_wire::report::{EngineProvenance, validate_envelope};
@@ -31,7 +31,13 @@ fn unparsed_documents_survive_the_report_contract() {
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let engine = EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: hb("amiss/scanner-engine", b"document contract"),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-engine")
+                .chain_update([0_u8])
+                .chain_update(b"document contract")
+                .finalize()
+                .0,
+        ),
     };
     let setup = SetupShell {
         engine: engine.clone(),

@@ -1,10 +1,11 @@
 use super::{CANDIDATE_IDENTITY_DOMAIN, CandidateBlock, Setup};
-use amiss_wire::digest::{Digest, hj_serde};
+use amiss_wire::model::Digest;
 use amiss_wire::report::{model, sandbox_descriptor};
 use amiss_wire::requests::{
     CandidateEventKind, CandidateFinality, CandidateIdentitySchema, CandidateSnapshot, RequestMode,
     RequestTrust, SnapshotMaterialization,
 };
+use sha2::Digest as _;
 
 /// The candidate-identity digest a trusted-time statement must carry: `HJ`
 /// over the resolved-evaluation identity, including its forge.
@@ -24,9 +25,13 @@ pub fn candidate_identity_digest(setup: &Setup) -> Result<Digest, crate::Error> 
         evaluation: &evaluation,
         schema: CandidateIdentitySchema::Current,
     };
-    hj_serde(CANDIDATE_IDENTITY_DOMAIN, |mut writer| {
+    {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(&identity, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| crate::Error::Internal)
 }
 

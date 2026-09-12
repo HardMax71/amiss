@@ -1,21 +1,8 @@
 use std::path::Path;
 
-use serde::de::DeserializeOwned;
-
 use super::ConfigError;
 
-const CONFIG_BYTES: u64 = 65_536;
-
-/// Loads one bounded regular file as strict JSON.
-///
-/// # Errors
-///
-/// The path is not an absolute bounded regular file or its contents do not
-/// satisfy the target's serde contract.
-pub fn read_strict_json<T: DeserializeOwned>(path: &Path) -> Result<T, ConfigError> {
-    serde_json::from_slice(&read_regular(path, CONFIG_BYTES)?)
-        .map_err(|defect| ConfigError::caused_by("configuration is not strict JSON", defect))
-}
+pub const CONFIG_BYTES: u64 = 65_536;
 
 /// Reads one absolute, bounded, non-symlink regular file.
 ///

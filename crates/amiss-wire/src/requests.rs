@@ -6,11 +6,11 @@ use strum::{Display, EnumString};
 
 use crate::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeStatement,
-    WaiverBundle, provider_run_id_valid, root,
+    WaiverBundle, provider_run_id_valid,
 };
 use crate::de::{self, Error, ErrorKind};
-use crate::digest::Digest;
 use crate::model::ArtifactId;
+use crate::model::Digest;
 use crate::semantic::SemanticEvidenceEnvelope;
 
 mod candidate;
@@ -85,7 +85,7 @@ pub enum SnapshotMaterialization {
 /// and `index` with mode `index`; the pairing law is checked against the
 /// evaluation request by the consumer, since each request parses alone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct SnapshotRequest {
     pub schema: SnapshotSchema,
     pub materialization: SnapshotMaterialization,
@@ -114,44 +114,25 @@ impl SnapshotRequest {
         }
     }
 
-    /// # Errors
-    ///
-    /// Fails on strict-JSON defects, schema-shape violations, and invalid
-    /// grammar values.
-    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        root(bytes)?;
-        let request: Self = de::deserialize_json(bytes)?;
-        validate_snapshot(&request)?;
-        Ok(request)
-    }
-
-    /// Serializes one valid request to its unique canonical JSON bytes.
+    /// Checks the fixed handle and prior repository acquisition required by the launcher.
     ///
     /// # Errors
-    ///
-    /// The constructed fields violate the same laws [`Self::parse`] enforces.
-    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        validate_snapshot(self)?;
-        serde_json_canonicalizer::to_vec(self)
-            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))
+    /// Refuses a different repository handle or a request to acquire the repository.
+    pub fn validate(&self) -> Result<(), Error> {
+        (self.repository_handle == REPOSITORY_HANDLE_ORDINAL)
+            .then_some(())
+            .ok_or_else(|| Error::new("$.repository_handle", ErrorKind::InvalidValue))?;
+        self.pre_acquired
+            .then_some(())
+            .ok_or_else(|| Error::new("$.pre_acquired", ErrorKind::InvalidValue))
     }
-}
-
-fn validate_snapshot(request: &SnapshotRequest) -> Result<(), Error> {
-    (request.repository_handle == REPOSITORY_HANDLE_ORDINAL)
-        .then_some(())
-        .ok_or_else(|| Error::new("$.repository_handle", ErrorKind::InvalidValue))?;
-    request
-        .pre_acquired
-        .then_some(())
-        .ok_or_else(|| Error::new("$.pre_acquired", ErrorKind::InvalidValue))
 }
 
 /// One supplied external control: its concrete typed payload, the
 /// independently acquired expected semantic digest, and the external trust
 /// source that authorized it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct SuppliedControl<T> {
     #[serde(
         deserialize_with = "object::deserialize",
@@ -184,7 +165,7 @@ pub enum RequestTrust {
 /// The supplied trusted-time statement with the provider-authenticated run
 /// context the statement must identify. Its trust source is fixed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct SuppliedTime {
     #[serde(deserialize_with = "object::deserialize")]
     pub value: TrustedTimeStatement,
@@ -200,7 +181,7 @@ serde_with::with_prefix!(pub(crate) object "");
 /// One semantic envelope paired with the independently planned build or
 /// inventory context it must identify.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct SuppliedSemanticEvidence {
     #[serde(deserialize_with = "object::deserialize")]
     pub value: SemanticEvidenceEnvelope<'static>,
@@ -228,7 +209,7 @@ pub enum ControlsRequestSchema {
 /// The external-input request: five nullable supplied controls and the
 /// bounded semantic-evidence set the trusted caller acquired.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct ControlsRequest {
     pub schema: ControlsRequestSchema,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -251,50 +232,178 @@ impl ControlsRequest {
     /// grammar values. Controls and semantic evidence decode under their closed schemas.
     /// Consumers verify semantic constraints and independent digests.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        root(bytes)?;
-        let request: Self = de::deserialize_json(bytes)?;
-        validate_controls(&request)?;
+        de::JsonProfile::validate(bytes)?;
+        let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+        deserializer.disable_recursion_limit();
+        let request: Self = serde_path_to_error::deserialize(&mut deserializer)
+            .map_err(|defect| de::deserialize_error("$", &defect))?;
+        deserializer
+            .end()
+            .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+        request.validate()?;
         Ok(request)
     }
 
-    /// Serializes one valid request to its unique canonical JSON bytes.
+    /// Checks request grammar, numeric bounds, and the semantic evidence count.
+    /// Nested control meaning and independent digests remain checks for the consumer.
     ///
     /// # Errors
-    ///
-    /// The constructed fields violate the same laws [`Self::parse`] enforces.
-    pub fn canonical_bytes(&self) -> Result<Vec<u8>, Error> {
-        validate_controls(self)?;
-        let bytes = serde_json_canonicalizer::to_vec(self)
-            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-        root(&bytes)?;
-        Ok(bytes)
-    }
-}
+    /// Refuses malformed provider context, unsafe integers, or too many evidence envelopes.
+    pub fn validate(&self) -> Result<(), Error> {
+        if let Some(time) = &self.trusted_time {
+            ArtifactId::new(time.provider.clone())
+                .is_some()
+                .then_some(())
+                .ok_or_else(|| Error::new("$.trusted_time.provider", ErrorKind::InvalidValue))?;
+            provider_run_id_valid(&time.provider_run_id)
+                .then_some(())
+                .ok_or_else(|| {
+                    Error::new("$.trusted_time.provider_run_id", ErrorKind::InvalidValue)
+                })?;
+            (1..=js_int::MAX_SAFE_INT.unsigned_abs())
+                .contains(&time.provider_run_attempt)
+                .then_some(())
+                .ok_or_else(|| {
+                    Error::new(
+                        "$.trusted_time.provider_run_attempt",
+                        ErrorKind::InvalidValue,
+                    )
+                })?;
+        }
 
-fn validate_controls(request: &ControlsRequest) -> Result<(), Error> {
-    if let Some(time) = &request.trusted_time {
-        ArtifactId::new(time.provider.clone())
-            .is_some()
-            .then_some(())
-            .ok_or_else(|| Error::new("$.trusted_time.provider", ErrorKind::InvalidValue))?;
-        provider_run_id_valid(&time.provider_run_id)
-            .then_some(())
-            .ok_or_else(|| Error::new("$.trusted_time.provider_run_id", ErrorKind::InvalidValue))?;
-        (1..=9_007_199_254_740_991)
-            .contains(&time.provider_run_attempt)
-            .then_some(())
-            .ok_or_else(|| {
+        if self.semantic_evidence.len() > SEMANTIC_EVIDENCE_REQUEST_LIMIT {
+            return Err(Error::new("$.semantic_evidence", ErrorKind::LimitExceeded));
+        }
+        if let Some(time) = &self.trusted_time {
+            js_int::UInt::try_from(time.value.provider_run_attempt).map_err(|_defect| {
                 Error::new(
-                    "$.trusted_time.provider_run_attempt",
+                    "$.trusted_time.value.provider_run_attempt",
                     ErrorKind::InvalidValue,
                 )
             })?;
+        }
+        if let Some(floor) = &self.organization_floor {
+            for (index, limit) in floor.value.resource_limits.iter().enumerate() {
+                js_int::Int::try_from(limit.maximum).map_err(|_defect| {
+                    Error::new(
+                        &format!("$.organization_floor.value.resource_limits[{index}].maximum"),
+                        ErrorKind::InvalidValue,
+                    )
+                })?;
+            }
+        }
+        let debt = self.debt_snapshot.iter().flat_map(|snapshot| {
+            snapshot
+                .value
+                .items
+                .iter()
+                .enumerate()
+                .map(|(index, item)| {
+                    (
+                        "debt_snapshot",
+                        "accepted_fact",
+                        index,
+                        item.accepted_fact.evidence.occurrence_multiplicity,
+                    )
+                })
+        });
+        let waivers = self.waiver_bundle.iter().flat_map(|bundle| {
+            bundle.value.items.iter().enumerate().map(|(index, item)| {
+                (
+                    "waiver_bundle",
+                    "authorized_fact",
+                    index,
+                    item.authorized_fact.evidence.occurrence_multiplicity,
+                )
+            })
+        });
+        for (control, fact, index, multiplicity) in debt.chain(waivers) {
+            js_int::UInt::try_from(multiplicity).map_err(|_defect| {
+                Error::new(
+                    &format!(
+                        "$.{control}.value.items[{index}].{fact}.evidence.occurrence_multiplicity"
+                    ),
+                    ErrorKind::InvalidValue,
+                )
+            })?;
+        }
+        Ok(())
     }
+}
 
-    if request.semantic_evidence.len() > SEMANTIC_EVIDENCE_REQUEST_LIMIT {
-        return Err(Error::new("$.semantic_evidence", ErrorKind::LimitExceeded));
+impl Serialize for SnapshotRequest {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
     }
-    Ok(())
+}
+
+impl<'de> Deserialize<'de> for SnapshotRequest {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
+impl Serialize for SuppliedTime {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SuppliedTime {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
+impl Serialize for SuppliedSemanticEvidence {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SuppliedSemanticEvidence {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
+impl Serialize for ControlsRequest {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for ControlsRequest {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
+impl<T: Serialize> Serialize for SuppliedControl<T> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for SuppliedControl<T> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 /// The three exact streams carried through the bootstrap-to-engine pipe.

@@ -1,11 +1,11 @@
 use amiss_wire::controls::ResourceName;
-use amiss_wire::digest::hj_serde;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model;
 use amiss_wire::report::{
     AnalysisErrorCode, Disposition, ErrorDetail, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, engine_block,
     error_row,
 };
+use sha2::Digest as _;
 
 use crate::correlate::Comparison;
 use crate::discovery::{DocumentStatus, SnapshotDiscovery};
@@ -130,14 +130,13 @@ pub(crate) fn construct_with_site(
         findings: finding_rows,
         errors,
     };
-    let mut payload_length = 0;
-    let payload_digest = hj_serde(PAYLOAD_SCHEMA, |writer| {
-        let mut counter = countio::Counter::new(writer);
-        serde_json_canonicalizer::to_writer(&payload, &mut counter)?;
-        payload_length = u64::try_from(counter.writer_bytes()).unwrap_or(u64::MAX);
-        Ok(())
-    })
-    .map_err(|_defect| crate::Error::Internal)?;
+    let mut writer =
+        digest_io::IoWrapper(sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]));
+    let mut counter = countio::Counter::new(&mut writer);
+    serde_json_canonicalizer::to_writer(&payload, &mut counter)
+        .map_err(|_defect| crate::Error::Internal)?;
+    let payload_length = u64::try_from(counter.writer_bytes()).unwrap_or(u64::MAX);
+    let payload_digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
     let built = Built {
         envelope: model::ReportEnvelope {
             schema: model::ReportEnvelopeSchema::Current,
@@ -398,9 +397,13 @@ pub fn construct_incomplete(setup: &Setup, details: &[ErrorDetail]) -> Result<Bu
         findings: Vec::new(),
         errors,
     };
-    let payload_digest = hj_serde(PAYLOAD_SCHEMA, |writer| {
-        serde_json::to_writer(writer, &payload)
-    })
+    let payload_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
+        );
+        serde_json::to_writer(&mut writer, &payload)
+            .map(|()| amiss_wire::model::Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| crate::Error::Internal)?;
     Ok(Built {
         envelope: model::ReportEnvelope {

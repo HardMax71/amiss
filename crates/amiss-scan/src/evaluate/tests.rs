@@ -1,8 +1,5 @@
 #![cfg(test)]
 
-use std::collections::BTreeSet;
-
-use amiss_wire::digest::hb;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model as report;
 use amiss_wire::resolution::{
@@ -10,14 +7,16 @@ use amiss_wire::resolution::{
     Missing, Resolution, ResolutionTag, TaggedBlobTarget, Target, UnsupportedSemantics,
     UnsupportedTarget, VersionScope,
 };
+use sha2::Digest as _;
+use std::collections::BTreeSet;
 use strum::{IntoDiscriminant, IntoEnumIterator};
 
 #[test]
 fn source_groups_preserve_sorted_digests_and_exact_multiplicities() {
     let first =
-        amiss_wire::digest::Digest::from_wire(&format!("sha256:{}", "1".repeat(64))).unwrap();
+        amiss_wire::model::Digest::from_wire(&format!("sha256:{}", "1".repeat(64))).unwrap();
     let second =
-        amiss_wire::digest::Digest::from_wire(&format!("sha256:{}", "a".repeat(64))).unwrap();
+        amiss_wire::model::Digest::from_wire(&format!("sha256:{}", "a".repeat(64))).unwrap();
     for first_count in 0..=3 {
         for second_count in 0..=3 {
             let mut input: Vec<_> = std::iter::repeat_n(first, first_count)
@@ -92,11 +91,29 @@ fn resolution_cases(path: &RepoPath) -> Vec<Resolution<RepoPath>> {
     for mode in [BlobMode::Regular, BlobMode::Executable] {
         for content in [
             BlobContent::Available {
-                raw_digest: hb("amiss/raw-evidence", b"raw"),
-                projection_digest: hb("amiss/scanner-source-projection", b"projection"),
+                raw_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                        .chain_update([0_u8])
+                        .chain_update(b"raw")
+                        .finalize()
+                        .0,
+                ),
+                projection_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/scanner-source-projection")
+                        .chain_update([0_u8])
+                        .chain_update(b"projection")
+                        .finalize()
+                        .0,
+                ),
             },
             BlobContent::LfsPointer {
-                raw_digest: hb("amiss/raw-evidence", b"pointer"),
+                raw_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/raw-evidence")
+                        .chain_update([0_u8])
+                        .chain_update(b"pointer")
+                        .finalize()
+                        .0,
+                ),
             },
         ] {
             let blob = BlobTarget {

@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 use std::{borrow::Cow, cmp::Ordering, sync::Arc};
 
 use serde::{Deserialize, Serialize};
@@ -6,14 +7,15 @@ use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
-use crate::digest::{Digest, hj_serde};
-use crate::json;
 use crate::model::ArtifactId;
+use crate::model::Digest;
 
 pub mod observation;
 pub mod record;
 
 use observation::Observation;
+
+serde_with::with_prefix!(object "");
 
 pub const ENVELOPE_SCHEMA: &str = "amiss/semantic-evidence-envelope";
 pub const PAYLOAD_SCHEMA: &str = "amiss/semantic-evidence-payload";
@@ -24,11 +26,13 @@ pub const PRODUCER_VERSION_BYTES: usize = 128;
 pub const RECORD_KEY_BYTES: usize = 4_096;
 pub const RECORD_VALUE_BYTES: usize = 65_536;
 
+pub type SemanticEvidenceEnvelope<'a> = SemanticEnvelope<SemanticEvidence<'a>>;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct SemanticEvidenceEnvelope<'a> {
+pub struct SemanticEnvelope<T> {
     pub schema: EnvelopeSchema,
-    pub payload: SemanticEvidence<'a>,
+    pub payload: T,
     pub payload_digest: Digest,
 }
 
@@ -41,13 +45,30 @@ pub enum EnvelopeSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct SemanticEvidence<'a> {
     pub schema: PayloadSchema,
+    #[serde(with = "object")]
     pub subject: SemanticSubject,
+    #[serde(with = "object")]
     pub producer: SemanticProducer,
     pub complete: bool,
     pub observations: Vec<Cow<'a, Observation>>,
+}
+
+impl Serialize for SemanticEvidence<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SemanticEvidence<'_> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
 }
 
 #[derive(
@@ -97,12 +118,40 @@ pub enum SemanticProducerKind {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(remote = "Self", deny_unknown_fields)]
 pub struct SemanticEvidenceTemplate<'a> {
     pub schema: TemplateSchema,
+    #[serde(with = "object")]
     pub producer: SemanticProducer,
     pub complete: bool,
     pub observations: Arc<[Cow<'a, Observation>]>,
+}
+
+impl Serialize for SemanticEvidenceTemplate<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        Self::serialize(self, serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SemanticEvidenceTemplate<'_> {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Self::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: deserializer,
+            prefix: "",
+        })
+    }
+}
+
+impl SemanticEvidenceTemplate<'_> {
+    /// Checks the producer and bounded canonical observation set after typed deserialization.
+    /// Intake callers enforce the raw document byte ceiling and strict JSON profile.
+    ///
+    /// # Errors
+    /// Refuses invalid producer versions, oversized observation sets, duplicates, or unsorted rows.
+    pub fn validate(&self) -> Result<(), Error> {
+        validate_producer("$.producer", &self.producer)?;
+        validate_observations("$.observations", &self.observations)
+    }
 }
 
 #[derive(
@@ -120,7 +169,41 @@ pub enum TemplateSchema {
 /// Fails on an oversized stream, strict-JSON or shape defects, a payload digest mismatch,
 /// invalid producer identity, or observations outside the closed, bounded, sorted contract.
 pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope<'static>, Error> {
-    let document: SemanticEvidenceEnvelope<'static> = parse_document(bytes)?;
+    validate_document_size(bytes.len())?;
+    de::JsonProfile::validate(bytes)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    let envelope: SemanticEnvelope<&serde_json::value::RawValue> =
+        serde_path_to_error::deserialize(serde_with::with_prefix::WithPrefix {
+            delegate: &mut deserializer,
+            prefix: "",
+        })
+        .map_err(|defect| de::deserialize_error("$", &defect))?;
+    deserializer
+        .end()
+        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+    let received_digest = {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
+        );
+        let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
+        payload.disable_recursion_limit();
+        serde_json_canonicalizer::to_writer(
+            &serde_transcode::Transcoder::new(&mut payload),
+            &mut writer,
+        )
+        .map(|()| Digest::from(writer.0.finalize().0))
+    }
+    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
+    let document = SemanticEnvelope {
+        schema: envelope.schema,
+        payload: serde_path_to_error::deserialize(&mut payload)
+            .map_err(|defect| de::deserialize_error("$.payload", &defect))?,
+        payload_digest: envelope.payload_digest,
+    };
+    if received_digest != document.payload_digest {
+        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    }
     validate(&document)?;
     Ok(document)
 }
@@ -137,27 +220,6 @@ pub fn validate(document: &SemanticEvidenceEnvelope<'_>) -> Result<(), Error> {
     }
     validate_producer("$.payload.producer", &document.payload.producer)?;
     validate_observations("$.payload.observations", &document.payload.observations)
-}
-
-/// Parses one candidate-independent semantic evidence template.
-///
-/// # Errors
-///
-/// Fails on an oversized stream, strict-JSON or shape defect, invalid producer identity, or
-/// observations outside the closed, bounded, sorted contract.
-pub fn parse_template(bytes: &[u8]) -> Result<SemanticEvidenceTemplate<'static>, Error> {
-    let document: SemanticEvidenceTemplate<'static> = parse_document(bytes)?;
-    validate_producer("$.producer", &document.producer)?;
-    validate_observations("$.observations", &document.observations)?;
-    Ok(document)
-}
-
-fn parse_document<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> Result<T, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    json::parse(bytes).map_err(|defect| Error::new("$", ErrorKind::Json(defect)))?;
-    de::deserialize_json(bytes)
 }
 
 /// Binds a template to one candidate without encoding the resulting envelope.
@@ -191,7 +253,7 @@ pub fn bind_template<'a>(
 ///
 /// # Errors
 ///
-/// Fails when producer metadata or an observation violates the same bounds [`parse_template`]
+/// Fails when producer metadata or an observation violates the same bounds [`SemanticEvidenceTemplate::validate`]
 /// enforces, when observations repeat, or when the resulting template exceeds the byte ceiling.
 pub fn template(input: SemanticEvidenceTemplate<'_>) -> Result<Vec<u8>, Error> {
     validate_producer("$.producer", &input.producer)?;
@@ -295,9 +357,13 @@ fn ordered_observations<'a>(
 }
 
 fn payload_digest(payload: &SemanticEvidence<'_>) -> Result<Digest, Error> {
-    hj_serde(PAYLOAD_SCHEMA, |mut writer| {
+    {
+        let mut writer = digest_io::IoWrapper(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
+        );
         serde_json_canonicalizer::to_writer(payload, &mut writer)
-    })
+            .map(|()| Digest::from(writer.0.finalize().0))
+    }
     .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
@@ -312,7 +378,11 @@ pub fn write<T: Serialize>(document: &T, writer: impl std::io::Write) -> Result<
     let mut writer = countio::Counter::new(writer);
     serde_json_canonicalizer::to_writer(document, &mut writer)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(writer.writer_bytes()).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
+    validate_document_size(writer.writer_bytes())
+}
+
+fn validate_document_size(bytes: usize) -> Result<(), Error> {
+    if u64::try_from(bytes).unwrap_or(u64::MAX) > SEMANTIC_EVIDENCE_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
     Ok(())

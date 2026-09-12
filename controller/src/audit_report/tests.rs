@@ -1,9 +1,8 @@
 #![cfg(test)]
-
-use amiss_wire::digest::{hb, sha256};
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::requests::CANDIDATE_IDENTITY_DOMAIN;
 use serde_json::{Value, json};
+use sha2::Digest as _;
 
 use super::accepted_report;
 use crate::ArtifactError;
@@ -93,7 +92,10 @@ fn evaluation_extensions_are_refused_and_time_stays_out_of_identity() -> Result<
         Ok(())
     })?;
     let accepted = accepted_report(&timed)?;
-    assert_eq!(accepted.report_digest, sha256(&timed));
+    assert_eq!(
+        accepted.report_digest,
+        amiss_wire::model::Digest::from(sha2::Sha256::digest(&timed).0)
+    );
     assert_eq!(
         accepted.candidate_identity_digest,
         original.candidate_identity_digest
@@ -143,6 +145,12 @@ fn edited_report(
     edit(&mut report["payload"]["evaluation"])?;
     let payload = serde_json_canonicalizer::to_vec(&report["payload"])
         .map_err(|_defect| ArtifactError::Corrupt)?;
-    report["payload_digest"] = json!(hb(PAYLOAD_SCHEMA, &payload));
+    report["payload_digest"] = json!(amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize()
+            .0
+    ));
     serde_json_canonicalizer::to_vec(&report).map_err(|_defect| ArtifactError::Corrupt)
 }

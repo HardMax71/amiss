@@ -1,8 +1,8 @@
 use amiss_wire::{
-    controls::{FACT_DOMAIN, ProjectionKind, parse_projection_source},
-    digest::hb,
+    controls::{FACT_DOMAIN, ProjectionKind, ProjectionSource, check_projection_source},
     report::model::{FindingFactEvidence, ReportEnvelope},
 };
+use sha2::Digest as _;
 
 #[expect(
     clippy::unwrap_used,
@@ -43,7 +43,8 @@ pub(super) fn reports() -> Vec<ReportEnvelope> {
     ]
     .into_iter()
     .map(|(kind, wire)| {
-        let producer = parse_projection_source(wire.as_bytes(), kind).unwrap();
+        let producer: ProjectionSource = serde_json::from_str(wire).unwrap();
+        check_projection_source(kind, &producer).unwrap();
         assert_eq!(
             serde_json_canonicalizer::to_vec(&producer).unwrap(),
             wire.as_bytes()
@@ -59,9 +60,12 @@ pub(super) fn reports() -> Vec<ReportEnvelope> {
         };
         *projection = kind;
         *source = producer;
-        finding.candidate_fact_digest = Some(hb(
-            FACT_DOMAIN,
-            &serde_json_canonicalizer::to_vec(fact).unwrap(),
+        finding.candidate_fact_digest = Some(amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(FACT_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(fact).unwrap())
+                .finalize()
+                .0,
         ));
         report
     })

@@ -3,6 +3,7 @@
     reason = "fixed provider records and identities must fail loudly"
 )]
 
+use sha2::Digest as _;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
@@ -19,7 +20,6 @@ use amiss_controller_gitlab::{
 };
 
 use amiss_wire::controls::{ProjectionSource, RecordSetSelection};
-use amiss_wire::digest::sha256;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
@@ -442,7 +442,7 @@ fn relation_status(
     delivery: &amiss_controller::AuthenticatedDelivery,
     verdict: RelationVerdict,
 ) -> (RelationStatusRecord, RelationStatusTarget) {
-    let report_digest = sha256(b"report");
+    let report_digest = amiss_wire::model::Digest::from(sha2::Sha256::digest(b"report").0);
     let target = RelationStatusTarget {
         role: ArtifactId::new("source".to_owned()).unwrap(),
         scope: PlanScope {
@@ -476,9 +476,13 @@ fn relation_status(
                 },
                 audit: ArtifactAuditDigests::Relation(RelationAuditDigests {
                     report_digest,
-                    plan_digest: sha256(b"plan"),
-                    evidence_digest: Some(sha256(b"evidence")),
-                    assessment_digest: sha256(b"assessment"),
+                    plan_digest: amiss_wire::model::Digest::from(sha2::Sha256::digest(b"plan").0),
+                    evidence_digest: Some(amiss_wire::model::Digest::from(
+                        sha2::Sha256::digest(b"evidence").0,
+                    )),
+                    assessment_digest: amiss_wire::model::Digest::from(
+                        sha2::Sha256::digest(b"assessment").0,
+                    ),
                     verdict,
                 }),
             },

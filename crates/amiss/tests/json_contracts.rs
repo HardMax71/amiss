@@ -1,7 +1,7 @@
+use sha2::Digest as _;
 use std::{fs, process::Command};
 
 use amiss_wire::{
-    digest::hb,
     report::{
         PAYLOAD_SCHEMA,
         model::{
@@ -85,7 +85,14 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
     let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&report).unwrap()).unwrap();
     let wire = wire.replace(&payload, &invalid).replace(
         &report.payload_digest.to_string(),
-        &hb(PAYLOAD_SCHEMA, invalid.as_bytes()).to_string(),
+        &amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+                .chain_update([0_u8])
+                .chain_update(invalid.as_bytes())
+                .finalize()
+                .0,
+        )
+        .to_string(),
     );
     fs::write(&path, wire).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
@@ -174,7 +181,13 @@ fn bind(
     path: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let payload = serde_json_canonicalizer::to_vec(&report.payload)?;
-    report.payload_digest = hb(PAYLOAD_SCHEMA, &payload);
+    report.payload_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(&payload)
+            .finalize()
+            .0,
+    );
     fs::write(path, serde_json::to_vec_pretty(report)?)?;
     Ok(())
 }

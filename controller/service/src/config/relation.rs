@@ -5,7 +5,7 @@ use amiss_controller::{
     RelationRegistry, RelationStatusDestination, RelationSubject, relation_registry,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource};
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, RepositoryIdentity};
 use amiss_wire::requests::REQUEST_STREAM_BYTES;
 use serde::Deserialize;
@@ -75,7 +75,7 @@ struct RepositoryFile {
 /// complete registry violates a relation identity, projection, limit, or destination law.
 pub fn load_relation_registry(path: &Path) -> Result<RelationRegistry, ConfigError> {
     let bytes = read_regular(path, REQUEST_STREAM_BYTES)?;
-    amiss_wire::json::parse(&bytes)
+    amiss_wire::de::JsonProfile::validate(&bytes)
         .map_err(|defect| ConfigError::caused_by("relation registry is not strict JSON", defect))?;
     let raw: RegistryFile = serde_json::from_slice(&bytes)
         .map_err(|defect| ConfigError::caused_by("relation registry is not strict JSON", defect))?;

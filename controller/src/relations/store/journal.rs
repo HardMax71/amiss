@@ -1,5 +1,5 @@
-use amiss_wire::digest::Digest;
 use amiss_wire::model::ArtifactId;
+use amiss_wire::model::Digest;
 
 use crate::file_ledger::{FileLedgerError, frame};
 

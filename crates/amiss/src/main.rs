@@ -1,3 +1,4 @@
+use sha2::Digest as _;
 mod adopt;
 mod author;
 mod codequality;
@@ -22,7 +23,6 @@ use std::io::{BufWriter, Stdout};
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
-use amiss_wire::digest::hb;
 use amiss_wire::model::Oid;
 use amiss_wire::report::model::{
     ControlsUnavailableReason, ReportEnvelope, ReportPayload, SnapshotUnavailableReason,
@@ -165,7 +165,10 @@ where
                 || "-".to_owned(),
                 |value| match path(value) {
                     Ok(text) => amiss_wire::human::atom(text),
-                    Err(hex) => amiss_wire::human::atom_bytes(&amiss_wire::human::decode_hex(&hex)),
+                    Err(hex) => hex::decode(hex.as_bytes()).map_or_else(
+                        |_defect| amiss_wire::human::atom(&hex),
+                        |bytes| amiss_wire::human::atom_bytes(&bytes),
+                    ),
                 },
             )
         }),
@@ -204,8 +207,6 @@ fn machine_refusal(
 
 #[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
 fn run_sealed(reserve: &mut BufWriter<Stdout>) -> ExitCode {
-    use amiss_scan::pipeline::SetupShell;
-
     let failure = ExitCode::from(ExitClass::Failure.code());
     let Some(engine) = engine_provenance() else {
         eprintln!("amiss: {}", AnalysisErrorCode::InternalError.as_ref());
@@ -217,16 +218,21 @@ fn run_sealed(reserve: &mut BufWriter<Stdout>) -> ExitCode {
     };
     let parsed = (
         EvaluationRequest::parse(&streams.evaluation),
-        SnapshotRequest::parse(&streams.snapshot),
+        serde_json::from_slice::<SnapshotRequest>(&streams.snapshot),
         ControlsRequest::parse(&streams.controls),
     );
     let (Ok(evaluation), Ok(snapshot), Ok(controls)) = parsed else {
         eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_ref());
         return failure;
     };
-    let canonical = evaluation.canonical_bytes().ok().as_deref() == Some(&streams.evaluation)
-        && snapshot.canonical_bytes().ok().as_deref() == Some(&streams.snapshot)
-        && controls.canonical_bytes().ok().as_deref() == Some(&streams.controls);
+    let canonical = amiss_wire::de::JsonProfile::validate(&streams.snapshot).is_ok()
+        && snapshot.validate().is_ok()
+        && serde_json_canonicalizer::to_vec(&evaluation)
+            .ok()
+            .as_deref()
+            == Some(&streams.evaluation)
+        && serde_json_canonicalizer::to_vec(&snapshot).ok().as_deref() == Some(&streams.snapshot)
+        && serde_json_canonicalizer::to_vec(&controls).ok().as_deref() == Some(&streams.controls);
     let modes_match = matches!(
         (evaluation.mode, snapshot.materialization),
         (RequestMode::CommitPair, SnapshotMaterialization::GitObjects)
@@ -236,6 +242,20 @@ fn run_sealed(reserve: &mut BufWriter<Stdout>) -> ExitCode {
         eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_ref());
         return failure;
     }
+    scan_sealed(engine, &streams, &evaluation, controls, reserve)
+}
+
+#[expect(clippy::print_stderr, reason = "contract diagnostics channel")]
+fn scan_sealed(
+    engine: EngineProvenance,
+    streams: &RequestStreams,
+    evaluation: &EvaluationRequest,
+    controls: ControlsRequest,
+    reserve: &mut BufWriter<Stdout>,
+) -> ExitCode {
+    use amiss_scan::pipeline::SetupShell;
+
+    let failure = ExitCode::from(ExitClass::Failure.code());
     let control_result = amiss_scan::request::controls(controls);
     let (inputs, external_defect) = match control_result {
         Ok(inputs) => (inputs, None),
@@ -259,10 +279,24 @@ fn run_sealed(reserve: &mut BufWriter<Stdout>) -> ExitCode {
         evaluation.candidate_ref.as_ref(),
         evaluation.default_branch_ref.as_ref(),
     );
+    let [evaluation_digest, snapshot_digest, controls_digest] = [
+        (EVALUATION_REQUEST_SCHEMA, &streams.evaluation),
+        (SNAPSHOT_REQUEST_SCHEMA, &streams.snapshot),
+        (CONTROLS_REQUEST_SCHEMA, &streams.controls),
+    ]
+    .map(|(domain, bytes)| {
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(domain)
+                .chain_update([0_u8])
+                .chain_update(bytes)
+                .finalize()
+                .0,
+        )
+    });
     let requests = amiss_scan::report::RequestDigests {
-        evaluation: Some(hb(EVALUATION_REQUEST_SCHEMA, &streams.evaluation)),
-        snapshot: Some(hb(SNAPSHOT_REQUEST_SCHEMA, &streams.snapshot)),
-        controls: Some(hb(CONTROLS_REQUEST_SCHEMA, &streams.controls)),
+        evaluation: Some(evaluation_digest),
+        snapshot: Some(snapshot_digest),
+        controls: Some(controls_digest),
     };
     let shell = SetupShell {
         engine,
@@ -452,9 +486,23 @@ fn semantic_input(
             resource: None,
         },
     )?;
-    amiss_wire::semantic::parse_template(&bytes)
-        .map(amiss_scan::semantic::Input::Template)
-        .map_err(|error| amiss_scan::request::configuration_detail(&error))
+    amiss_wire::de::JsonProfile::validate(&bytes)
+        .map_err(|error| amiss_scan::request::configuration_detail(&error))?;
+    let template: amiss_wire::semantic::SemanticEvidenceTemplate<'static> =
+        serde_json::from_slice(&bytes).map_err(|error| ErrorDetail {
+            code: if error.to_string().starts_with("unknown field") {
+                AnalysisErrorCode::UnknownField
+            } else {
+                AnalysisErrorCode::ConfigurationInvalid
+            },
+            path: None,
+            path_bytes: None,
+            resource: None,
+        })?;
+    template
+        .validate()
+        .map_err(|error| amiss_scan::request::configuration_detail(&error))?;
+    Ok(amiss_scan::semantic::Input::Template(template))
 }
 
 /// The repair verb pins the index before the evaluation reads it, so the
@@ -550,6 +598,12 @@ fn engine_provenance() -> Option<EngineProvenance> {
     let bytes = fs::read(exe).ok()?;
     Some(EngineProvenance {
         version: env!("CARGO_PKG_VERSION").to_owned(),
-        digest: hb(report::ENGINE_DOMAIN, &bytes),
+        digest: amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(report::ENGINE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&bytes)
+                .finalize()
+                .0,
+        ),
     })
 }

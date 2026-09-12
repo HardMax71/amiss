@@ -3,6 +3,7 @@
     reason = "integration fixtures construct known-valid wire identities"
 )]
 
+use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -17,12 +18,10 @@ use amiss_controller::{
     bootstrap_job, check_binding, check_plan,
 };
 use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, OrganizationFloor, Profile, canonical_debt_snapshot,
-    canonical_execution_constraint, canonical_organization_floor, canonical_waiver_bundle,
-    parse_debt_snapshot, parse_execution_constraint, parse_organization_floor, parse_waiver_bundle,
+    ExecutionConstraintDescriptor, OrganizationFloor, Profile, parse_debt_snapshot,
+    parse_execution_constraint, parse_organization_floor, parse_waiver_bundle,
 };
-use amiss_wire::digest::{Digest, hb};
-use amiss_wire::json::{self, Value};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
     UtcInstant,
@@ -32,6 +31,7 @@ use amiss_wire::requests::{
     SuppliedControl, commit_candidate_identity_digest,
 };
 use base64::Engine as _;
+use serde_json::Value;
 
 mod plan_identity;
 
@@ -61,14 +61,14 @@ fn near_ceiling_floor() -> OrganizationFloor {
     floor.protected_inventory = (0..LARGE_INVENTORY_ENTRIES)
         .map(|index| RepoPathText::new(inventory_path(index, MAX_PATH_BYTES)).unwrap())
         .collect();
-    let maximal = canonical_organization_floor(&floor).unwrap().0;
+    let maximal = serde_json_canonicalizer::to_vec(&floor).unwrap();
     let floor_length = ceiling.checked_sub(1).unwrap();
     let excess = maximal.len().checked_sub(floor_length).unwrap();
     let last = LARGE_INVENTORY_ENTRIES.checked_sub(1).unwrap();
     let shorter_path = inventory_path(last, MAX_PATH_BYTES.checked_sub(excess).unwrap());
     *floor.protected_inventory.last_mut().unwrap() = RepoPathText::new(shorter_path).unwrap();
     assert_eq!(
-        canonical_organization_floor(&floor).unwrap().0.len(),
+        serde_json_canonicalizer::to_vec(&floor).unwrap().len(),
         floor_length
     );
     floor
@@ -153,15 +153,15 @@ fn policy() -> PolicyControls {
         external_policy: ExternalPolicy::Advisory,
         organization_floor: Some(supplied(
             parse_organization_floor(&example("organization-floor.json")).unwrap(),
-            canonical_organization_floor,
+            "amiss/organization-floor",
         )),
         debt_snapshot: Some(supplied(
             parse_debt_snapshot(&example("debt-snapshot.json")).unwrap(),
-            canonical_debt_snapshot,
+            "amiss/debt-snapshot",
         )),
         waiver_bundle: Some(supplied(
             parse_waiver_bundle(&example("waiver-bundle.json")).unwrap(),
-            canonical_waiver_bundle,
+            "amiss/waiver-bundle",
         )),
         semantic_evidence: super::intersphinx::evidence(),
         semantic_acquisitions: Vec::new(),
@@ -169,12 +169,15 @@ fn policy() -> PolicyControls {
     }
 }
 
-fn supplied<T, E: std::fmt::Debug>(
-    value: T,
-    canonical: impl FnOnce(&T) -> Result<(Vec<u8>, Digest), E>,
-) -> SuppliedControl<T> {
+fn supplied<T: serde::Serialize>(value: T, domain: &str) -> SuppliedControl<T> {
     SuppliedControl {
-        expected_digest: canonical(&value).unwrap().1,
+        expected_digest: Digest::from(
+            sha2::Sha256::new_with_prefix(domain)
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&value).unwrap())
+                .finalize()
+                .0,
+        ),
         value,
         trust_source: RequestTrust::OrganizationPolicy,
     }
@@ -211,7 +214,13 @@ fn semantic_template(context_digest: Digest) -> Vec<u8> {
             identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
             version: "0.5.1".to_owned(),
             context_digest,
-            input_digest: hb("amiss/test-site-build", b"output"),
+            input_digest: Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-site-build")
+                    .chain_update([0_u8])
+                    .chain_update(b"output")
+                    .finalize()
+                    .0,
+            ),
         },
         complete: true,
         observations: Arc::from([]),
@@ -291,7 +300,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
         Some("refs/heads/main")
     );
     assert_eq!(
-        SnapshotRequest::parse(&job.streams.snapshot).unwrap(),
+        serde_json::from_slice::<SnapshotRequest>(&job.streams.snapshot).unwrap(),
         SnapshotRequest::git_objects()
     );
 
@@ -322,20 +331,27 @@ fn job_construction_binds_the_complete_authenticated_run() {
     );
     assert_eq!(
         job.constraint,
-        canonical_execution_constraint(&execution()).unwrap().0
+        serde_json_canonicalizer::to_vec(&execution()).unwrap()
     );
 }
 
 #[test]
 fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes() {
     let candidate = candidate_identity(&run_request(policy()));
-    let context = hb("amiss/test-site-context", b"english/current");
+    let context = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-site-context")
+            .chain_update([0_u8])
+            .chain_update(b"english/current")
+            .finalize()
+            .0,
+    );
     let mut policy = policy();
     let acquisition = site_acquisition(context);
     policy.semantic_acquisitions = vec![acquisition.expectation];
     let run = run_request(policy);
     let source = acquisition.template;
-    let template = amiss_wire::semantic::parse_template(&source.bytes).unwrap();
+    let template =
+        serde_json::from_slice::<SemanticEvidenceTemplate<'static>>(&source.bytes).unwrap();
     let evidence = amiss_wire::semantic::bind_template(&template, candidate).unwrap();
     let evidence_digest = evidence.payload_digest;
     let mut evidence_bytes = Vec::new();
@@ -359,35 +375,47 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     assert!(payload_digests.windows(2).all(|pair| pair[0] < pair[1]));
 
     let artifact_bytes = job.semantic_artifact.as_deref().unwrap();
-    let artifact = json::parse(artifact_bytes).unwrap();
-    let Value::Array(inputs) = artifact.member("inputs").unwrap() else {
+    let artifact = serde_json::from_slice::<Value>(artifact_bytes).unwrap();
+    let Value::Array(inputs) = artifact.get("inputs").unwrap() else {
         panic!("the semantic artifact contains its input rows")
     };
     let acquired = inputs
         .iter()
-        .find(|input| input.text("acquisition_identity") == Some("test-site-artifact"))
+        .find(|input| {
+            input.get("acquisition_identity").and_then(Value::as_str) == Some("test-site-artifact")
+        })
         .unwrap();
     let retained_template = base64::engine::general_purpose::STANDARD
-        .decode(acquired.text("template_bytes_base64").unwrap())
+        .decode(
+            acquired
+                .get("template_bytes_base64")
+                .and_then(Value::as_str)
+                .unwrap(),
+        )
         .unwrap();
     let retained_envelope = base64::engine::general_purpose::STANDARD
-        .decode(acquired.text("envelope_bytes_base64").unwrap())
+        .decode(
+            acquired
+                .get("envelope_bytes_base64")
+                .and_then(Value::as_str)
+                .unwrap(),
+        )
         .unwrap();
-    let template_digest = amiss_wire::digest::sha256(&source.bytes).to_string();
-    let envelope_digest = amiss_wire::digest::sha256(&retained_envelope).to_string();
+    let template_digest = Digest::from(sha2::Sha256::digest(&source.bytes).0).to_string();
+    let envelope_digest = Digest::from(sha2::Sha256::digest(&retained_envelope).0).to_string();
     let payload_digest = evidence_digest.to_string();
     assert_eq!(retained_template, source.bytes.as_ref());
     assert_eq!(retained_envelope, evidence_bytes);
     assert_eq!(
-        acquired.text("template_digest"),
+        acquired.get("template_digest").and_then(Value::as_str),
         Some(template_digest.as_str())
     );
     assert_eq!(
-        acquired.text("envelope_digest"),
+        acquired.get("envelope_digest").and_then(Value::as_str),
         Some(envelope_digest.as_str())
     );
     assert_eq!(
-        acquired.text("payload_digest"),
+        acquired.get("payload_digest").and_then(Value::as_str),
         Some(payload_digest.as_str())
     );
 }
@@ -397,12 +425,24 @@ fn workflow_artifacts_are_normalized_and_feed_semantic_binding() {
     let first = workflow_acquisition(
         "workflow-site-primary",
         "site-primary",
-        hb("amiss/test-site-context", b"primary"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-site-context")
+                .chain_update([0_u8])
+                .chain_update(b"primary")
+                .finalize()
+                .0,
+        ),
     );
     let second = workflow_acquisition(
         "workflow-site-secondary",
         "site-secondary",
-        hb("amiss/test-site-context", b"secondary"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-site-context")
+                .chain_update([0_u8])
+                .chain_update(b"secondary")
+                .finalize()
+                .0,
+        ),
     );
     let forward = check_plan(
         Profile::Enforce,
@@ -437,7 +477,13 @@ fn workflow_artifact_plans_reject_invalid_or_ambiguous_sources() {
     let (valid, _template) = workflow_acquisition(
         "workflow-site-primary",
         "site-primary",
-        hb("amiss/test-site-context", b"primary"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-site-context")
+                .chain_update([0_u8])
+                .chain_update(b"primary")
+                .finalize()
+                .0,
+        ),
     );
     let mut wrong_host = valid.clone();
     wrong_host.provider =
@@ -484,7 +530,13 @@ fn workflow_artifact_plans_reject_invalid_or_ambiguous_sources() {
     let (same_artifact, _template) = workflow_acquisition(
         "workflow-site-other",
         "site-primary",
-        hb("amiss/test-site-context", b"other"),
+        Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-site-context")
+                .chain_update([0_u8])
+                .chain_update(b"other")
+                .finalize()
+                .0,
+        ),
     );
     assert_eq!(
         check_plan(
@@ -516,7 +568,13 @@ fn workflow_artifact_plans_reject_invalid_or_ambiguous_sources() {
 
 #[test]
 fn acquired_semantic_templates_must_match_the_planned_identity_and_context() {
-    let context = hb("amiss/test-site-context", b"english/current");
+    let context = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-site-context")
+            .chain_update([0_u8])
+            .chain_update(b"english/current")
+            .finalize()
+            .0,
+    );
     let acquisition = site_acquisition(context);
     let run = run_request(PolicyControls {
         semantic_acquisitions: vec![acquisition.expectation],
@@ -531,7 +589,14 @@ fn acquired_semantic_templates_must_match_the_planned_identity_and_context() {
             acquisition_identity: ArtifactId::new("other-site-artifact".to_owned()).unwrap(),
             bytes: semantic_template(context).into(),
         },
-        site_acquisition(hb("amiss/test-site-context", b"french/current")).template,
+        site_acquisition(Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/test-site-context")
+                .chain_update([0_u8])
+                .chain_update(b"french/current")
+                .finalize()
+                .0,
+        ))
+        .template,
     ];
 
     for defect in defects {
@@ -557,7 +622,13 @@ fn acquired_semantic_templates_must_match_the_planned_identity_and_context() {
     );
 
     let mut repeated_identity = site_acquisition(context).expectation;
-    repeated_identity.context_digest = hb("amiss/test-site-context", b"other");
+    repeated_identity.context_digest = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-site-context")
+            .chain_update([0_u8])
+            .chain_update(b"other")
+            .finalize()
+            .0,
+    );
     let duplicate_plan = PolicyControls {
         semantic_acquisitions: vec![site_acquisition(context).expectation, repeated_identity],
         ..PolicyControls::default()
@@ -592,7 +663,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
     .unwrap();
     let wrong_policy = PolicyControls {
         external_policy: ExternalPolicy::Advisory,
-        organization_floor: Some(supplied(wrong_floor, canonical_organization_floor)),
+        organization_floor: Some(supplied(wrong_floor, "amiss/organization-floor")),
         debt_snapshot: None,
         waiver_bundle: None,
         semantic_evidence: Vec::new(),
@@ -629,7 +700,7 @@ fn plan_validation_rejects_an_aggregate_controls_stream_above_the_ceiling() {
     let floor = near_ceiling_floor();
     let policy = PolicyControls {
         external_policy: ExternalPolicy::Advisory,
-        organization_floor: Some(supplied(floor, canonical_organization_floor)),
+        organization_floor: Some(supplied(floor, "amiss/organization-floor")),
         debt_snapshot: None,
         waiver_bundle: None,
         semantic_evidence: Vec::new(),
@@ -663,7 +734,13 @@ fn typed_policy_controls_remain_bound_to_the_target_and_the_supplied_floor() {
                 .as_mut()
                 .unwrap()
                 .value
-                .organization_floor_digest = hb("amiss/test-floor", b"other");
+                .organization_floor_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-floor")
+                    .chain_update([0_u8])
+                    .chain_update(b"other")
+                    .finalize()
+                    .0,
+            );
         },
         |policy| {
             policy
@@ -671,18 +748,42 @@ fn typed_policy_controls_remain_bound_to_the_target_and_the_supplied_floor() {
                 .as_mut()
                 .unwrap()
                 .value
-                .organization_floor_digest = hb("amiss/test-floor", b"other");
+                .organization_floor_digest = Digest::from(
+                sha2::Sha256::new_with_prefix("amiss/test-floor")
+                    .chain_update([0_u8])
+                    .chain_update(b"other")
+                    .finalize()
+                    .0,
+            );
         },
     ];
     for mutate in changes {
         let mut policy = policy();
         mutate(&mut policy);
         let floor = policy.organization_floor.as_mut().unwrap();
-        floor.expected_digest = canonical_organization_floor(&floor.value).unwrap().1;
+        floor.expected_digest = Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/organization-floor")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&floor.value).unwrap())
+                .finalize()
+                .0,
+        );
         let debt = policy.debt_snapshot.as_mut().unwrap();
-        debt.expected_digest = canonical_debt_snapshot(&debt.value).unwrap().1;
+        debt.expected_digest = Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&debt.value).unwrap())
+                .finalize()
+                .0,
+        );
         let waiver = policy.waiver_bundle.as_mut().unwrap();
-        waiver.expected_digest = canonical_waiver_bundle(&waiver.value).unwrap().1;
+        waiver.expected_digest = Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&waiver.value).unwrap())
+                .finalize()
+                .0,
+        );
         assert_eq!(
             bootstrap(&run_request(policy), &[]).unwrap_err(),
             BootstrapJobError::ControlBinding,
@@ -712,8 +813,20 @@ fn a_changed_constraint_gets_a_new_semantic_digest() {
     let mut changed = original.clone();
     changed.required_status_name = "amiss / another check".to_owned();
     assert_ne!(
-        canonical_execution_constraint(&changed).unwrap().1,
-        canonical_execution_constraint(&original).unwrap().1
+        Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&changed).unwrap())
+                .finalize()
+                .0
+        ),
+        Digest::from(
+            sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
+                .chain_update([0_u8])
+                .chain_update(serde_json_canonicalizer::to_vec(&original).unwrap())
+                .finalize()
+                .0
+        )
     );
     assert!(check_plan(Profile::Enforce, PolicyControls::default(), changed,).is_ok());
 }
@@ -737,7 +850,13 @@ fn a_validated_plan_cannot_be_changed_in_place() {
 #[test]
 fn a_job_cannot_escape_the_ledger_frozen_plan_binding() {
     let mut run = run_request(PolicyControls::default());
-    run.check.plan_digest = hb("amiss/test-plan", b"other");
+    run.check.plan_digest = Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/test-plan")
+            .chain_update([0_u8])
+            .chain_update(b"other")
+            .finalize()
+            .0,
+    );
 
     assert_eq!(
         bootstrap_job(BootstrapJobInput {

@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::report::{AnalysisErrorCode, FindingKind};
 
 #[derive(Serialize)]

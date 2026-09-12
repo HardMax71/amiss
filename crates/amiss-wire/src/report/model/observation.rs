@@ -2,10 +2,9 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::assessment::Nullable;
 use crate::controls::{SourceConstruct, TargetKind};
-use crate::digest::Digest;
 use crate::extraction::BlockKind;
+use crate::model::Digest;
 use crate::model::{Adapter, Oid};
 pub use crate::resolution::{
     ExternalReference as ExternalResolutionReason, InvalidReference as InvalidResolutionReason,
@@ -110,35 +109,7 @@ pub struct ObservationIdInput<P = RepoPath> {
     pub structural_address: StructuralAddress,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(
-    tag = "reason",
-    rename_all = "kebab-case",
-    deny_unknown_fields,
-    bound(deserialize = "P: Deserialize<'de>")
-)]
-pub enum MissingResolution<P = RepoPath> {
-    HeadingAnchorNotFound {
-        #[serde(deserialize_with = "Option::deserialize")]
-        near: Option<String>,
-        path: P,
-    },
-    LabelNotDeclared {},
-    LineFragmentOutOfRange {
-        path: P,
-    },
-    PathNotFound {
-        #[serde(deserialize_with = "Option::deserialize")]
-        near: Option<P>,
-        path: P,
-        #[serde(
-            default,
-            deserialize_with = "json_serde::deserialize_some",
-            skip_serializing_if = "Option::is_none"
-        )]
-        same_object_at: Option<Nullable<P>>,
-    },
-}
+pub type MissingResolution<P = RepoPath> = crate::controls::MissingResolution<P>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "kebab-case", deny_unknown_fields)]

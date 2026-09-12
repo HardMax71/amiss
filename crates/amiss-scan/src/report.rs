@@ -11,7 +11,7 @@ pub use identity::candidate_identity_digest;
 pub use index::{INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, synthetic_candidate};
 
 use amiss_wire::controls::{GitMode, Profile, ProjectionSource};
-use amiss_wire::digest::Digest;
+use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, RepoPath};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::report::model;

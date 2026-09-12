@@ -3,6 +3,7 @@
     reason = "benchmark fixture paths are fixed and valid"
 )]
 
+use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_scan::claim::{ClaimCarrier, ClaimMissingReason, ClaimOutcome, ClaimVerdict};
@@ -10,10 +11,7 @@ use amiss_scan::evaluate::claim_groups;
 use amiss_scan::policy::{InventoryState, effects};
 use amiss_scan::scan::SpanDisplay;
 use amiss_scan::{Includes, PolicySide};
-use amiss_wire::controls::{
-    DocumentInclude, IncludeKind, ScannerPolicy, ScannerPolicySchema, canonical_scanner_policy,
-};
-use amiss_wire::digest::hb;
+use amiss_wire::controls::{DocumentInclude, IncludeKind, ScannerPolicy, ScannerPolicySchema};
 use amiss_wire::model::{RepoPath, RepoPathText};
 use divan::{Bencher, black_box};
 
@@ -114,9 +112,13 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
         protected_inventory: Vec::new(),
         finding_dispositions: Vec::new(),
     };
-    let digest = canonical_scanner_policy(&policy)
-        .expect("benchmark policy is valid")
-        .1;
+    policy.validate().expect("benchmark policy is valid");
+    let mut writer = digest_io::IoWrapper(
+        sha2::Sha256::new_with_prefix(amiss_wire::controls::SCANNER_POLICY_SCHEMA)
+            .chain_update([0_u8]),
+    );
+    serde_json_canonicalizer::to_writer(&policy, &mut writer).expect("benchmark policy serializes");
+    let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
     PolicySide {
         digest: Some(digest),
         policy: Some(policy),
@@ -126,7 +128,13 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
 fn claim_outcomes(count: usize) -> Vec<ClaimOutcome> {
     let document = path("docs/claims.md".to_owned());
     let target = path("src/value.rs".to_owned());
-    let expected_digest = hb("amiss/bench-expected", b"expected");
+    let expected_digest = amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix("amiss/bench-expected")
+            .chain_update([0_u8])
+            .chain_update(b"expected")
+            .finalize()
+            .0,
+    );
     (0..count)
         .map(|index| {
             let token = index.to_string();
@@ -142,7 +150,13 @@ fn claim_outcomes(count: usize) -> Vec<ClaimOutcome> {
                     end_line: display_line,
                     end_column: 2,
                 },
-                source_digest: hb("amiss/bench-claim-source", token.as_bytes()),
+                source_digest: amiss_wire::model::Digest::from(
+                    sha2::Sha256::new_with_prefix("amiss/bench-claim-source")
+                        .chain_update([0_u8])
+                        .chain_update(token.as_bytes())
+                        .finalize()
+                        .0,
+                ),
                 path: target.clone(),
                 line: 1,
                 expected_digest,

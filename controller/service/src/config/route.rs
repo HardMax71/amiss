@@ -1,5 +1,4 @@
-use amiss_wire::digest::hb;
-
+use sha2::Digest as _;
 /// Frames ordered string fields into one provider-neutral route identity.
 #[must_use]
 pub fn framed_route_id(domain: &str, prefix: &str, fields: &[&str]) -> Option<String> {
@@ -16,5 +15,14 @@ pub fn framed_route_id(domain: &str, prefix: &str, fields: &[&str]) -> Option<St
         frame.extend_from_slice(&u64::try_from(field.len()).ok()?.to_be_bytes());
         frame.extend_from_slice(field.as_bytes());
     }
-    Some(format!("{prefix}:{}", hb(domain, &frame)))
+    Some(format!(
+        "{prefix}:{}",
+        amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(domain)
+                .chain_update([0_u8])
+                .chain_update(&frame)
+                .finalize()
+                .0
+        )
+    ))
 }

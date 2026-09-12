@@ -97,8 +97,9 @@ pub enum Evaluation {
     Block,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, strum::AsRefStr)]
 #[serde(rename_all = "kebab-case")]
+#[strum(serialize_all = "kebab-case")]
 pub enum RunFailure {
     MissingOutput,
     Timeout,
