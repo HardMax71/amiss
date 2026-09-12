@@ -134,9 +134,9 @@ date/username fields in tests are synthetic cases from the pinned webhook
 contract. The REST workflow fixtures keep their distinct nullable-author contract.
 
 webhook-workflow-run.json projects the complete unchanged workflow_run from that
-published completion example. It retains all 34 supplied fields; optional referenced
-workflows, nullable actors and PR entries, and additional terminal states in tests
-are synthetic cases from GitHub's pinned OpenAPI contract, not new live captures.
+published completion example. The capture retains all 34 supplied fields; the model
+keeps only completion identity and state. Tests vary nullable conclusions and PR
+entries, state tags, and unused metadata without changing the captured bytes.
 
 webhook-pull-repository.json retains the complete head.repo member from
 [Octokit's synchronize example](https://github.com/octokit/webhooks/blob/7dd7fa56498a827a08b71919fae89428f5e8e283/payload-examples/api.github.com/pull_request/synchronize.payload.json).

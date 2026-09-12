@@ -9,7 +9,7 @@ use strum::{Display, EnumString};
 use crate::check::CheckRunStatus;
 use crate::owner::OwnerRecord;
 use crate::repository::WorkflowRepositoryRecord;
-use crate::workflow::{ReferencedWorkflow, WorkflowCommit, WorkflowPullRequest};
+use crate::workflow::WorkflowPullRequest;
 
 pub mod app;
 pub mod comment;
@@ -24,7 +24,6 @@ pub mod thread;
 pub mod workflow;
 
 use crate::pull::PullRequestRecord;
-use repository::WorkflowOwner;
 
 #[serde_with::apply(Option<_> => #[serde(skip_serializing_if = "Option::is_none")])]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -148,66 +147,26 @@ pub struct Base {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct Workflow {
     #[serde(with = "As::<TryFromInto<UInt>>")]
     pub id: u64,
-    pub node_id: String,
-    pub name: String,
     pub path: String,
-    pub state: String,
-    pub created_at: String,
-    pub updated_at: String,
-    pub url: String,
-    pub html_url: String,
-    pub badge_url: String,
 }
 
-#[serde_with::apply(
-    u64 => #[serde(with = "As::<TryFromInto<UInt>>")],
-    Option<_> => #[serde(default, deserialize_with = "deserialize_some", skip_serializing_if = "Option::is_none")],
-)]
+#[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkflowRun<Title = workflow::WorkflowRunTitle> {
+pub struct WorkflowRun {
     pub id: u64,
     pub event: String,
     pub status: CheckRunStatus,
-    #[serde_with(skip_apply)]
     #[serde(deserialize_with = "Option::deserialize")]
     pub conclusion: Option<WorkflowRunConclusion>,
     pub workflow_id: u64,
     pub run_attempt: u64,
     pub head_sha: Oid,
-    pub head_commit: WorkflowCommit<Committer>,
     pub repository: WorkflowRepositoryRecord<Option<OwnerRecord>>,
     pub head_repository: WorkflowRepositoryRecord<Option<OwnerRecord>>,
     pub pull_requests: Vec<Option<WorkflowPullRequest>>,
-    pub actor: Nullable<WorkflowOwner>,
-    pub artifacts_url: String,
-    pub cancel_url: String,
-    pub check_suite_id: UInt,
-    pub check_suite_node_id: String,
-    pub check_suite_url: String,
-    pub created_at: String,
-    pub head_branch: Nullable<String>,
-    pub html_url: String,
-    pub jobs_url: String,
-    pub logs_url: String,
-    pub name: Nullable<String>,
-    pub node_id: String,
-    pub path: String,
-    pub previous_attempt_url: Nullable<String>,
-    pub rerun_url: String,
-    pub run_number: UInt,
-    pub run_started_at: String,
-    pub triggering_actor: Nullable<WorkflowOwner>,
-    pub updated_at: String,
-    pub url: String,
-    pub workflow_url: String,
-    #[serde(flatten)]
-    pub title: Title,
-    pub referenced_workflows: Option<Nullable<Vec<ReferencedWorkflow>>>,
 }
 
 #[derive(

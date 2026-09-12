@@ -41,7 +41,6 @@ fn workflow_roots_are_checked_before_a_configured_completion_becomes_work() {
         (r#""workflow":null,"#, ""),
         (r#""action":"completed","#, ""),
         (r#""action":"completed""#, r#""action":null"#),
-        (r#""workflow_run":{"#, r#""workflow_run":{"unknown":true,"#),
     ] {
         let candidate = replaced_once(&input, old, new);
         assert!(candidate != input, "mutation absent: {old}");
@@ -88,26 +87,25 @@ fn workflow_markers_cannot_fall_back_into_pr_delivery_paths() {
 }
 
 #[test]
-fn requested_workflows_are_typed_no_work_even_with_a_successful_run() {
+fn requested_workflows_are_no_work_regardless_of_unused_title_metadata() {
     let source = GitHubPullRequestSource::new(provider(), webhook(), &[workflow_artifact("321")]);
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let mut payload = workflow_payload();
-    for valid in [true, false] {
-        if !valid {
-            payload.workflow_run.title.display_title = None;
-        }
-        let input = serde_json::to_string(&payload).unwrap().replacen(
-            r#""action":"completed""#,
-            r#""action":"requested""#,
+    let requested = serde_json::to_string(&workflow_payload())
+        .unwrap()
+        .replacen(r#""action":"completed""#, r#""action":"requested""#, 1);
+    for title in ["null", "false", r#""Workflow title""#, "{}"] {
+        let input = requested.replacen(
+            r#""workflow_run":{"#,
+            &format!(r#""workflow_run":{{"display_title":{title},"#),
             1,
         );
         assert_eq!(
             authenticate_target(&source, input.as_bytes(), &target),
-            if valid {
-                Ok(None)
-            } else {
-                Err(ProviderError::Authentication)
-            }
+            Ok(None)
         );
     }
+    assert_eq!(
+        authenticate_target(&source, requested.as_bytes(), &target),
+        Ok(None)
+    );
 }

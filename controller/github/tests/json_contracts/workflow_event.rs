@@ -1,7 +1,4 @@
-use amiss_controller_github::webhook::WorkflowRun;
-use amiss_controller_github::webhook::workflow::{
-    RequestedWorkflowRunAction, RequestedWorkflowRunTitle, WorkflowRunEvent,
-};
+use amiss_controller_github::webhook::workflow::{RequestedWorkflowRunAction, WorkflowRunEvent};
 
 #[test]
 fn workflow_event_captures_keep_their_completed_action() {
@@ -48,45 +45,28 @@ fn workflow_event_nullability_does_not_hide_missing_required_members() {
 }
 
 #[test]
-fn requested_workflow_runs_require_their_own_display_title() {
-    let mut event: WorkflowRunEvent =
+fn requested_workflow_runs_ignore_unused_display_titles() {
+    let event: WorkflowRunEvent =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_WORKFLOW_RUN).unwrap();
-    event.workflow_run.title.display_title = None;
-    let completed = serde_json::to_string(&event).unwrap();
-    assert!(amiss_wire::read_json::<WorkflowRunEvent>(completed.as_bytes(), u64::MAX).is_ok());
-    let requested = completed.replacen(r#""action":"completed""#, r#""action":"requested""#, 1);
-    for (addition, valid) in [
-        ("", false),
-        (r#""display_title":null,"#, false),
-        (r#""display_title":false,"#, false),
-        (r#""display_title":"Workflow title","#, true),
-        (r#""display_title":"x","\u0064isplay_title":"x","#, false),
+    let requested = serde_json::to_string(&event).unwrap().replacen(
+        r#""action":"completed""#,
+        r#""action":"requested""#,
+        1,
+    );
+    for addition in [
+        "",
+        r#""display_title":null,"#,
+        r#""display_title":false,"#,
+        r#""display_title":"Workflow title","#,
     ] {
         let input = requested.replacen(
             r#""workflow_run":{"#,
             &format!(r#""workflow_run":{{{addition}"#),
             1,
         );
-        assert_eq!(
-            serde_json::from_str::<
-                WorkflowRunEvent<
-                    WorkflowRun<RequestedWorkflowRunTitle>,
-                    RequestedWorkflowRunAction,
-                >,
-            >(&input)
-            .is_ok(),
-            valid,
-            "{addition}"
-        );
-        assert_eq!(
-            amiss_wire::read_json::<
-                WorkflowRunEvent<
-                    WorkflowRun<RequestedWorkflowRunTitle>,
-                    RequestedWorkflowRunAction,
-                >,
-            >(input.as_bytes(), u64::MAX)
-            .is_ok(),
-            valid
-        );
+        let decoded: WorkflowRunEvent<RequestedWorkflowRunAction> =
+            serde_json::from_str(&input).unwrap();
+        assert_eq!(decoded.workflow_run, event.workflow_run);
+        assert!(serde_json::from_str::<WorkflowRunEvent>(&input).is_err());
     }
 }

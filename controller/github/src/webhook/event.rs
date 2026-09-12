@@ -10,8 +10,8 @@ use super::review::ReviewEvent;
 use super::run::{CheckRunEvent, RequestedAction};
 use super::suite::CheckSuiteEvent;
 use super::thread::ReviewThreadEvent;
-use super::workflow::{RequestedWorkflowRunAction, RequestedWorkflowRunTitle, WorkflowRunEvent};
-use super::{GitHubPayload, PullRequest, WorkflowRun};
+use super::workflow::{RequestedWorkflowRunAction, WorkflowRunEvent};
+use super::{GitHubPayload, PullRequest};
 use crate::pull::PullRequestRecord;
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
@@ -19,9 +19,7 @@ use crate::pull::PullRequestRecord;
 pub enum GitHubEvent {
     IssueComment(Box<IssueCommentEvent>),
     WorkflowRun(Box<WorkflowRunEvent>),
-    RequestedWorkflowRun(
-        Box<WorkflowRunEvent<WorkflowRun<RequestedWorkflowRunTitle>, RequestedWorkflowRunAction>>,
-    ),
+    RequestedWorkflowRun(Box<WorkflowRunEvent<RequestedWorkflowRunAction>>),
     CheckRun(Box<CheckRunEvent>),
     RequestedCheckRun(Box<CheckRunEvent<RequestedAction>>),
     CheckSuite(Box<CheckSuiteEvent>),

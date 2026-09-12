@@ -82,17 +82,3 @@ pub struct WorkflowPullRepository {
     pub name: String,
     pub url: String,
 }
-
-#[serde_with::apply(Option<_> => #[serde(
-    default,
-    deserialize_with = "deserialize_some",
-    skip_serializing_if = "Option::is_none"
-)])]
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct ReferencedWorkflow {
-    pub path: String,
-    pub sha: Oid,
-    #[serde(rename = "ref")]
-    pub reference: Option<String>,
-}

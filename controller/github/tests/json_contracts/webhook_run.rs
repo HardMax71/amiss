@@ -1,90 +1,51 @@
+use amiss_controller::{ProviderError, decode_bounded_json};
 use amiss_controller_github::webhook::WorkflowRun;
-use amiss_controller_github::workflow::ReferencedWorkflow;
-use amiss_wire::assessment::Nullable;
 
 const RUN: &str = include_str!("../fixtures/webhook-workflow-run.json");
 
 #[test]
-fn webhook_run_keeps_repository_owners_across_native_round_trips() {
-    let run: WorkflowRun = serde_json::from_str(RUN).unwrap();
-    let encoded = serde_json::to_vec(&run).unwrap();
-    assert_eq!(
-        serde_json::from_slice::<WorkflowRun>(&encoded).unwrap(),
-        run
-    );
+fn webhook_run_keeps_completion_facts_without_unused_metadata() {
+    let (run, consumed): (WorkflowRun, _) =
+        decode_bounded_json(RUN.as_bytes(), None, RUN.len(), |bytes| {
+            serde_json::from_slice(bytes)
+        })
+        .unwrap();
+    assert_eq!(consumed, RUN.len());
+    assert_eq!(run.id, 289_782_451);
+    assert_eq!(run.workflow_id, 2_823_525);
+    assert_eq!(run.run_attempt, 1);
     assert_eq!(run.repository.owner.as_ref().unwrap().login, "octo-org");
     assert_eq!(
         run.head_repository.owner.as_ref().unwrap().login,
         "octo-org"
     );
+    let encoded = serde_json::to_string(&run).unwrap();
+    for metadata in [
+        "",
+        r#""head_commit":false,"actor":[],"triggering_actor":null,"display_title":{},"#,
+        r#""run_number":-1,"check_suite_id":null,"referenced_workflows":false,"unknown":[],"#,
+        r#""name":null,"path":false,"head_branch":[],"artifacts_url":{},"#,
+    ] {
+        let input = encoded.replacen('{', &format!("{{{metadata}"), 1);
+        assert_eq!(serde_json::from_str::<WorkflowRun>(&input).unwrap(), run);
+    }
+    assert_eq!(
+        decode_bounded_json::<WorkflowRun, _>(RUN.as_bytes(), None, RUN.len() - 1, |bytes| {
+            serde_json::from_slice(bytes)
+        }),
+        Err(ProviderError::InvalidResponse)
+    );
+    assert!(serde_json::from_str::<WorkflowRun>(&format!("{RUN} {{}}")).is_err());
 }
 
 #[test]
-fn workflow_run_nulls_keep_required_and_optional_presence_distinct() {
+fn workflow_conclusion_can_be_null_but_not_missing() {
     let mut run: WorkflowRun = serde_json::from_str(RUN).unwrap();
-    run.actor = Nullable::Null;
-    run.triggering_actor = Nullable::Null;
-    run.head_branch = Nullable::Null;
-    run.name = Nullable::Null;
-    run.previous_attempt_url = Nullable::Null;
     run.conclusion = None;
-    run.title.display_title = None;
     run.pull_requests = vec![None];
-    for workflows in [
-        None,
-        Some(Nullable::Null),
-        Some(Nullable::Value(vec![ReferencedWorkflow {
-            path: "example/workflows/docs.yml".to_owned(),
-            sha: run.head_sha.clone(),
-            reference: Some("refs/heads/main".to_owned()),
-        }])),
-    ] {
-        run.referenced_workflows = workflows;
-        let encoded = serde_json::to_vec(&run).unwrap();
-        assert_eq!(
-            serde_json::from_slice::<WorkflowRun>(&encoded).unwrap(),
-            run
-        );
-        assert_eq!(
-            amiss_wire::read_json::<WorkflowRun>(&encoded, u64::MAX).unwrap(),
-            run
-        );
-    }
     let input = serde_json::to_string(&run).unwrap();
-    for field in [
-        "actor",
-        "triggering_actor",
-        "head_branch",
-        "name",
-        "previous_attempt_url",
-        "conclusion",
-    ] {
-        let member = format!("\"{field}\":null,");
-        assert_eq!(input.matches(&member).count(), 1, "{field}");
-        let missing = input.replacen(&member, "", 1);
-        assert!(
-            serde_json::from_str::<WorkflowRun>(&missing).is_err(),
-            "{field}"
-        );
-    }
-    assert!(!input.contains("\"display_title\":"));
-    for (old, new) in [
-        ("{", "{\"display_title\":null,"),
-        (
-            "\"referenced_workflows\":[{",
-            "\"referenced_workflows\":[{\"unknown\":true,",
-        ),
-        ("\"ref\":\"refs/heads/main\"", "\"ref\":null"),
-        ("\"head_branch\":null", "\"head_branch\":false"),
-        ("\"actor\":null", "\"actor\":false"),
-    ] {
-        assert!(input.contains(old), "{old}");
-        let changed = input.replacen(old, new, 1);
-        assert!(
-            serde_json::from_str::<WorkflowRun>(&changed).is_err(),
-            "{new}"
-        );
-    }
+    assert_eq!(serde_json::from_str::<WorkflowRun>(&input).unwrap(), run);
+    amiss_fixtures::assert_json_rejections::<WorkflowRun>(&input, &[(r#""conclusion":null,"#, "")]);
 }
 
 #[test]
@@ -149,52 +110,47 @@ fn workflow_run_state_tags_keep_their_distinct_provider_contract() {
 }
 
 #[test]
-fn workflow_run_refuses_unbounded_incomplete_and_ambiguous_inputs() {
+fn workflow_run_requires_typed_unique_completion_fields() {
     let run: WorkflowRun = serde_json::from_str(RUN).unwrap();
     let input = serde_json::to_string(&run).unwrap();
-    let node_member = format!(
-        "\"node_id\":{},",
-        serde_json::to_string(&run.node_id).unwrap()
-    );
-    for (old, new) in [
-        ("{", "{\"unknown\":true,"),
-        ("\"actor\":{", "\"actor\":{\"unknown\":true,"),
-        (
-            "\"triggering_actor\":{",
-            "\"triggering_actor\":{\"unknown\":true,",
-        ),
-        ("\"id\":289782451", "\"id\":9007199254740992"),
-        (
-            "\"workflow_id\":2823525",
-            "\"workflow_id\":9007199254740992",
-        ),
-        ("\"run_attempt\":1", "\"run_attempt\":9007199254740992"),
-        ("\"run_number\":163", "\"run_number\":-1"),
-        ("\"run_number\":163", "\"run_number\":9007199254740992"),
-        ("\"check_suite_id\":1291536064", "\"check_suite_id\":1.5"),
-        (
-            "\"check_suite_id\":1291536064",
-            "\"check_suite_id\":9007199254740992",
-        ),
-        ("\"check_suite_id\":1291536064,", ""),
-        ("\"run_number\":163,", ""),
-        ("\"status\":\"completed\",", ""),
-        ("\"event\":\"repository_dispatch\",", ""),
-        (node_member.as_str(), ""),
-        ("\"head_sha\":", "\"\\u0068ead_sha\":null,\"head_sha\":"),
+    for field in [
+        "id",
+        "event",
+        "status",
+        "conclusion",
+        "workflow_id",
+        "run_attempt",
+        "head_sha",
+        "repository",
+        "head_repository",
+        "pull_requests",
     ] {
-        assert!(input.contains(old), "{old}");
-        let changed = input.replacen(old, new, 1);
-        assert!(
-            serde_json::from_str::<WorkflowRun>(&changed).is_err(),
-            "{old}"
-        );
-        assert!(
-            amiss_wire::read_json::<WorkflowRun>(changed.as_bytes(), u64::MAX).is_err(),
-            "{old}"
-        );
+        let original = format!(r#""{field}":"#);
+        for replacement in [
+            format!(r#""missing_{field}":"#),
+            format!(r#""{field}":null,"{field}":"#),
+        ] {
+            amiss_fixtures::assert_json_rejections::<WorkflowRun>(
+                &input,
+                &[(&original, &replacement)],
+            );
+        }
     }
-    assert!(amiss_wire::read_json::<WorkflowRun>(RUN.as_bytes(), 0).is_err());
-    let trailing = format!("{RUN} {{}}");
-    assert!(amiss_wire::read_json::<WorkflowRun>(trailing.as_bytes(), u64::MAX).is_err());
+    for (field, value) in [
+        ("id", run.id),
+        ("workflow_id", run.workflow_id),
+        ("run_attempt", run.run_attempt),
+    ] {
+        let original = format!(r#""{field}":{value}"#);
+        for invalid in ["null", "false", "-1", "1.5", "9007199254740992"] {
+            amiss_fixtures::assert_json_rejections::<WorkflowRun>(
+                &input,
+                &[(&original, &format!(r#""{field}":{invalid}"#))],
+            );
+        }
+    }
+    amiss_fixtures::assert_json_rejections::<WorkflowRun>(
+        &input,
+        &[(r#""head_sha":"#, r#""\u0068ead_sha":null,"head_sha":"#)],
+    );
 }
