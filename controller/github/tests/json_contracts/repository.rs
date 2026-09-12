@@ -1,6 +1,4 @@
 use amiss_controller_github::repository::WorkflowRepositoryRecord;
-use amiss_controller_github::repository::metadata::{CustomProperties, CustomProperty};
-use amiss_wire::assessment::Nullable;
 
 const CAPTURE: &str = include_str!("../fixtures/workflow-repository.json");
 
@@ -55,43 +53,6 @@ fn workflow_repository_identity_is_required_typed_and_unique() {
         amiss_fixtures::assert_json_rejections::<WorkflowRepositoryRecord>(
             &encoded,
             &[(&original, &format!(r#""id":{invalid}"#))],
-        );
-    }
-}
-
-#[test]
-fn repository_properties_keep_real_strings_and_reject_untyped_values() {
-    let input = include_str!("../fixtures/repository-custom-properties.json");
-    let properties: CustomProperties = amiss_wire::read_json(input.as_bytes(), u64::MAX).unwrap();
-    assert_eq!(properties.entries.len(), 11);
-    assert_eq!(
-        properties.entries["CodeQL-Block"],
-        Nullable::Value(CustomProperty::Text("true".to_owned()))
-    );
-    assert_eq!(
-        properties.entries["deployable"],
-        Nullable::Value(CustomProperty::Text("false".to_owned()))
-    );
-    assert_eq!(
-        amiss_fixtures::canonical_json(&serde_json::to_vec(&properties).unwrap()).unwrap(),
-        amiss_fixtures::canonical_json(input.as_bytes()).unwrap()
-    );
-    for invalid in [
-        r#"{"feature":true}"#,
-        r#"{"feature":1}"#,
-        r#"{"feature":{}}"#,
-        r#"{"feature":[null]}"#,
-        r#"{"feature":[["a"]]}"#,
-        r#"{"feature":"a","feature":"b"}"#,
-        r#"{"feature":"a","\u0066eature":"b"}"#,
-    ] {
-        assert!(
-            serde_json::from_str::<CustomProperties>(invalid).is_err(),
-            "{invalid}"
-        );
-        assert!(
-            amiss_wire::read_json::<CustomProperties>(invalid.as_bytes(), u64::MAX).is_err(),
-            "{invalid}"
         );
     }
 }

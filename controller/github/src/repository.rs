@@ -4,9 +4,6 @@ use serde_with::{As, TryFromInto};
 
 use crate::owner::OwnerRecord;
 
-pub mod metadata;
-pub mod template;
-
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub struct RepositoryRecord {
     #[serde(with = "As::<TryFromInto<UInt>>")]

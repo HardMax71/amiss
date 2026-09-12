@@ -29,11 +29,8 @@ captures, not complete repository-response fixtures.
 
 The workflow-repository fixture is the complete repository member of public
 [run 34409057444](https://api.github.com/repos/HardMax71/amiss/actions/runs/34409057444),
-captured read-only on 2026-09-10 with API version 2022-11-28. The custom-properties
-fixture is the member of [github/docs](https://api.github.com/repos/github/docs)
-captured the same way; its 11 entries were cross-checked against the read-only
-repository properties endpoint. Optional metadata in contract tests is synthetic,
-not claimed as captured from the workflow run.
+captured read-only on 2026-09-10 with API version 2022-11-28. Additional metadata
+in tests is synthetic, not claimed as captured from the workflow run.
 
 The workflow-run fixture is the complete response for that same run. The
 workflow-runs page uses the adapter's query for its workflow ID and head SHA,
@@ -59,9 +56,8 @@ though its response-schema enumeration omits it. No check was created or updated
 The pull-repository fixture is the complete head repository member of
 [pull request 935](https://api.github.com/repos/HardMax71/amiss/pulls/935), captured
 read-only on 2026-09-10 with API version 2022-11-28; the base repository member was
-identical. The repository-access fixture is the complete permissions member of
-the ordinary Amiss repository GET on the same date. Optional policies, code-search
-metadata and token text in tests are synthetic, not captured credentials.
+identical. Tests retain the consumed repository identity and ignore unrelated
+metadata through native Serde.
 
 The full repository fixtures are read-only GETs of
 [Amiss](https://api.github.com/repos/HardMax71/amiss) and an existing
@@ -130,16 +126,7 @@ is identical. Every member and value is retained with pretty-printing and a
 trailing newline. Nullable and minimally populated owners in tests follow the
 official OpenAPI contract, which is broader than Octokit's owner reference.
 
-webhook-template-repository.json is synthetic: it populates all 87 template fields
-and all 18 optional owner fields in repository-webhooks from the pinned official
-OpenAPI contract. Compatible values come from the published completion example;
-other fields use explicit sample values. It is not an observed template response.
 The complete event-root repository example is shared through amiss-fixtures.
-
-Root organization fixtures cover the name declared by Octokit's completion
-schema and the nullable simple-user object declared by GitHub OpenAPI. Both
-forms are explicit typed alternatives; the account form keeps the existing
-closed owner contract. These additional forms are constructed, not live captures.
 
 webhook-workflow-commit.json projects the unchanged workflow_run.head_commit
 from the published completion example linked above. Null emails and optional
@@ -157,12 +144,9 @@ Its base.repo and both references in the published opened example are identical.
 All 78 supplied fields remain unchanged, with pretty-printing and a final newline.
 This is a published example, not a newly captured live delivery.
 
-The pinned OpenAPI synchronize and Octokit common-repository schemas disagree on
-required discussion/template/signoff/custom-property fields. The model preserves
-their 74 shared required fields and all 25 named optional additions: absent disputed
-fields receive no invented defaults, and supplied nulls remain invalid. Timestamp,
-license, owner and policy variations in tests are synthetic schema-backed cases.
-The existing REST repository contract is deliberately not widened to match them.
+Repository inputs share the consumed ID, name, full name, and owner login.
+Tests cover required and nullable owners for the relevant event; unused
+discussion, template, license, and policy metadata is not modeled.
 
 webhook-pull-refs.json retains the complete head and base references, in that
 order, from the same published synchronize example. Both references are identical
@@ -179,6 +163,6 @@ deleted and notification_setting fields come from OpenAPI and Octokit respective
 
 GITHUB_WEBHOOK_PULL in amiss-fixtures retains the complete unchanged pull_request
 member from both linked opened and synchronize examples; the two members are identical.
-Ordinary webhooks inherit the REST PR contract with eight optional merge-policy fields.
-Synchronize instead has 36 required fields, nullable participants and optional merge
-details. Contract tests construct the documented differences; they are not live captures.
+Ordinary webhooks use the consumed REST pull-request fields. Synchronize keeps
+only its identity and references; event routing and repository bindings are
+checked separately from unused provider metadata.
