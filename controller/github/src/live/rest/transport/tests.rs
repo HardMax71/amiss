@@ -9,10 +9,9 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Validation};
 use reqwest::blocking::Client;
 use reqwest::header::{HeaderMap, LOCATION};
 use secrecy::{ExposeSecret as _, SecretSlice, SecretString};
-use serde::Deserialize;
 
 use super::{
-    AppCredential, MAX_API_BASE_BYTES, MAX_ARTIFACT_LOCATION_BYTES, MAX_RESPONSE_BYTES,
+    AppClaims, AppCredential, MAX_API_BASE_BYTES, MAX_ARTIFACT_LOCATION_BYTES, MAX_RESPONSE_BYTES,
     MintedToken, OperationDeadline, Transport, app_jwt, artifact_location, classified, map_error,
     map_status, rate_limited, read_artifact_body, settled, validate_api_base,
 };
@@ -146,7 +145,7 @@ fn app_jwt_binds_the_app_and_a_bounded_lifetime() {
     let token = app_jwt(&credential).unwrap();
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_issuer(&["99"]);
-    let decoded = jsonwebtoken::decode::<Claims>(
+    let decoded = jsonwebtoken::decode::<AppClaims>(
         token.expose_secret(),
         &DecodingKey::from_rsa_pem(&RSA_KEYS.public_pem).unwrap(),
         &validation,
@@ -154,13 +153,6 @@ fn app_jwt_binds_the_app_and_a_bounded_lifetime() {
     .unwrap();
     assert_eq!(decoded.claims.iss, "99");
     assert_eq!(decoded.claims.exp - decoded.claims.iat, 600);
-}
-
-#[derive(Deserialize)]
-struct Claims {
-    iat: u64,
-    exp: u64,
-    iss: String,
 }
 
 #[test]

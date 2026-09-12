@@ -83,48 +83,29 @@ pub(super) fn capture(staged: &Release) {
 }
 
 fn malformed_controls(request: &ControlsRequest) -> Vec<Vec<u8>> {
-    #[derive(serde::Serialize)]
-    struct Extended<'a, T> {
-        #[serde(flatten)]
-        original: &'a T,
-        future: bool,
-    }
-
     let document = &request.semantic_evidence.first().unwrap().value;
     let envelope = String::from_utf8(serde_json_canonicalizer::to_vec(document).unwrap()).unwrap();
     let payload =
         String::from_utf8(serde_json_canonicalizer::to_vec(&document.payload).unwrap()).unwrap();
     let controls = String::from_utf8(serde_json_canonicalizer::to_vec(&request).unwrap()).unwrap();
-    let unknown_envelope = serde_json_canonicalizer::to_vec(&Extended {
-        original: document,
-        future: true,
-    })
-    .unwrap();
-    let unknown_payload = serde_json_canonicalizer::to_vec(&Extended {
-        original: &document.payload,
-        future: true,
-    })
-    .unwrap();
-    let unknown_producer = serde_json_canonicalizer::to_vec(&Extended {
-        original: &document.payload.producer,
-        future: true,
-    })
-    .unwrap();
-    let unknown_subject = serde_json_canonicalizer::to_vec(&Extended {
-        original: &document.payload.subject,
-        future: true,
-    })
-    .unwrap();
+    let producer = serde_json_canonicalizer::to_string(&document.payload.producer).unwrap();
+    let subject = serde_json_canonicalizer::to_string(&document.payload.subject).unwrap();
     let cases = [
-        (envelope.as_bytes().to_vec(), unknown_envelope),
-        (payload.as_bytes().to_vec(), unknown_payload),
+        (
+            envelope.as_bytes().to_vec(),
+            envelope.replacen('{', "{\"future\":true,", 1).into_bytes(),
+        ),
+        (
+            payload.as_bytes().to_vec(),
+            payload.replacen('{', "{\"future\":true,", 1).into_bytes(),
+        ),
         (
             serde_json_canonicalizer::to_vec(&document.payload.producer).unwrap(),
-            unknown_producer,
+            producer.replacen('{', "{\"future\":true,", 1).into_bytes(),
         ),
         (
             serde_json_canonicalizer::to_vec(&document.payload.subject).unwrap(),
-            unknown_subject,
+            subject.replacen('{', "{\"future\":true,", 1).into_bytes(),
         ),
         (
             serde_json_canonicalizer::to_vec(&document.payload.observations).unwrap(),

@@ -256,7 +256,7 @@ impl Transport {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 struct AppClaims {
     iat: u64,
     exp: u64,

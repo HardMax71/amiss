@@ -21,13 +21,6 @@ use amiss_wire::{
     },
 };
 
-#[derive(serde::Serialize)]
-struct ExtendedObservation<'a> {
-    #[serde(flatten)]
-    observation: &'a Observation,
-    unexpected: bool,
-}
-
 #[test]
 fn template_and_captured_evidence_produce_identical_scanner_reports() {
     let fixture = amiss_fixtures::commit_pair(
@@ -183,15 +176,12 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
         let request_bytes =
             String::from_utf8(serde_json_canonicalizer::to_vec(&request).unwrap()).unwrap();
         assert!(amiss_scan::request::controls(request).is_ok(), "{kind}");
-        let extended = ExtendedObservation {
-            observation,
-            unexpected: true,
-        };
         let observation = serde_json_canonicalizer::to_string(observation).unwrap();
+        let extended = observation.replacen('{', "{\"unexpected\":true,", 1);
         let payload = serde_json_canonicalizer::to_string(&document.payload).unwrap();
         let mut invalids = vec![
             (br#"{"kind":"future-fact"}"#.to_vec(), false),
-            (serde_json_canonicalizer::to_vec(&extended).unwrap(), false),
+            (extended.into_bytes(), false),
         ];
         invalids.extend(
             cases
