@@ -8,6 +8,7 @@ use crate::{
 
 use super::{MaterializeResult, checked};
 use crate::ProviderRunIdentity;
+use crate::file_ledger::FileLedgerError;
 
 #[derive(Serialize)]
 pub(in crate::file_ledger::format) struct StoredDeliveryKey<'a> {
@@ -28,12 +29,12 @@ impl<'a> StoredDeliveryKey<'a> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger::format) struct StoredDelivery {
-    identity: DeliveryIdentity,
-    change: StoredChange,
-    provider_run: ProviderRunIdentity,
+    pub(in crate::file_ledger::format) identity: DeliveryIdentity,
+    pub(in crate::file_ledger::format) change: StoredChange,
+    pub(in crate::file_ledger::format) provider_run: ProviderRunIdentity,
 }
 
 impl StoredDelivery {
@@ -45,24 +46,22 @@ impl StoredDelivery {
         }
     }
 
-    pub(in crate::file_ledger::format) fn materialize(
-        &self,
-    ) -> MaterializeResult<AuthenticatedDelivery> {
-        let provider_run = checked(ProviderRunIdentity::new(
-            self.provider_run.run_id.clone(),
-            self.provider_run.attempt,
-            self.provider_run.object_format,
-            self.provider_run.candidate_commit.clone(),
-        ))?;
-        Ok(AuthenticatedDelivery {
-            identity: self.identity.clone(),
-            change: self.change.materialize()?,
-            provider_run,
-        })
+    pub(in crate::file_ledger::format) fn matches(&self, delivery: &AuthenticatedDelivery) -> bool {
+        self.identity == delivery.identity
+            && self.change.matches(&delivery.change)
+            && self.provider_run == delivery.provider_run
+    }
+
+    pub(in crate::file_ledger::format) fn validate(&self) -> MaterializeResult<()> {
+        (self.change.is_valid()
+            && self.provider_run.is_valid()
+            && self.identity.provider == self.change.provider)
+            .then_some(())
+            .ok_or(FileLedgerError::Corrupt)
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger::format) struct StoredChange {
     provider: ProviderIdentity,
@@ -79,17 +78,38 @@ impl StoredChange {
         }
     }
 
-    pub(in crate::file_ledger::format) fn materialize(&self) -> MaterializeResult<ChangeLocator> {
+    pub(in crate::file_ledger::format) fn materialize(self) -> MaterializeResult<ChangeLocator> {
+        let Self {
+            provider,
+            repository: StoredRepository { host, owner, name },
+            change,
+        } = self;
         Ok(ChangeLocator {
-            provider: self.provider.clone(),
-            repository: self.repository.materialize()?,
-            change: self.change.clone(),
+            provider,
+            repository: checked(RepositoryIdentity::new(host, owner, name))?,
+            change,
         })
+    }
+
+    fn matches(&self, change: &ChangeLocator) -> bool {
+        self.provider == change.provider
+            && self.change == change.change
+            && self.repository.host == change.repository.host()
+            && self.repository.owner == change.repository.owner()
+            && self.repository.name == change.repository.name()
+    }
+
+    pub(in crate::file_ledger::format) fn is_valid(&self) -> bool {
+        RepositoryIdentity::valid_components(
+            &self.repository.host,
+            &self.repository.owner,
+            &self.repository.name,
+        )
     }
 }
 
 // The stored frame fixes host/owner/name order, unlike the report identity.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct StoredRepository {
     host: String,
@@ -104,13 +124,5 @@ impl StoredRepository {
             owner: repository.owner().to_owned(),
             name: repository.name().to_owned(),
         }
-    }
-
-    fn materialize(&self) -> MaterializeResult<RepositoryIdentity> {
-        checked(RepositoryIdentity::new(
-            self.host.clone(),
-            self.owner.clone(),
-            self.name.clone(),
-        ))
     }
 }

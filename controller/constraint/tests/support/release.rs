@@ -26,7 +26,7 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
     let binary = amiss_fixtures::executable_bytes(platform);
     let lock = b"# Cargo.lock fixture\nversion = 4\n";
     let binary_path = format!("dist/amiss-{}", platform.as_ref());
-    let mut artifacts = [StagedArtifact {
+    let artifacts = [StagedArtifact {
         platform,
         artifact_name: format!("amiss-{}", platform.as_ref()).parse().unwrap(),
         files: vec![
@@ -56,7 +56,7 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
         commit_oid: "a".repeat(40).parse().unwrap(),
         locks: vec![("Cargo.lock".parse().unwrap(), lock)],
     };
-    let (manifest, digest) = build_manifest(&build, &mut artifacts).unwrap();
+    let (manifest, digest) = build_manifest(build, artifacts).unwrap();
 
     fs::create_dir_all(root.join("dist")).unwrap();
     fs::write(root.join("action.yml"), ACTION).unwrap();

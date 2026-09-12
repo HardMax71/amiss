@@ -29,7 +29,7 @@ pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
     let listen = raw.listen;
     let provider = provider(raw.gitlab.instance)?;
     let policy = policy(raw.policy)?;
-    let plan = Arc::new(load_plan(&raw.plan, None)?);
+    let plan = Arc::new(load_plan(raw.plan, None)?);
     validate_action(&provider, &plan)?;
     let scope = scope(&provider, &policy)?;
     let limits = load_execution_limits(

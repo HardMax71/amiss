@@ -41,16 +41,21 @@ pub struct ArtifactBundle<'a> {
     pub external_incomplete: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ArtifactReference {
     pub id: String,
     pub locator: String,
     pub expires_at_unix_millis: i64,
     pub report_digest: Digest,
-    pub semantic_digest: Option<Digest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub assessment_digest: Option<Digest>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_tally: Option<ExternalTally>,
+    #[serde(default)]
     pub external_incomplete: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub semantic_digest: Option<Digest>,
 }
 
 #[derive(Clone, Copy)]
@@ -162,16 +167,19 @@ const fn route_byte(byte: u8) -> bool {
 }
 
 pub(crate) fn checked_reference(reference: ArtifactReference) -> Option<ArtifactReference> {
-    let suffix = format!("/{}/report", reference.id);
-    (format::valid_id(&reference.id)
+    valid_reference(&reference).then_some(reference)
+}
+
+pub(crate) fn valid_reference(reference: &ArtifactReference) -> bool {
+    format::valid_id(&reference.id)
         && reference
             .locator
-            .strip_suffix(&suffix)
-            .is_some_and(|base| artifact_route(base).is_some())
+            .strip_suffix("/report")
+            .and_then(|path| path.rsplit_once('/'))
+            .is_some_and(|(base, id)| id == reference.id && artifact_route(base).is_some())
         && reference.expires_at_unix_millis >= 0
         && !(reference.external_incomplete && reference.external_tally.is_some())
-        && reference.assessment_digest.is_some() == reference.external_tally.is_some())
-    .then_some(reference)
+        && reference.assessment_digest.is_some() == reference.external_tally.is_some()
 }
 
 pub(crate) fn reference_matches_report(

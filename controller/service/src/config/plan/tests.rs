@@ -28,7 +28,7 @@ fn policy_files_decode_at_ingress_and_do_not_follow_later_file_changes() {
     ] {
         fs::write(directory.path().join(name), bytes).unwrap();
     }
-    let files = CheckPlanFiles {
+    let files = || CheckPlanFiles {
         profile: amiss_wire::controls::Profile::Enforce,
         external_policy: ExternalPolicy::Advisory,
         execution_constraint_file: directory.path().join("constraint"),
@@ -38,7 +38,7 @@ fn policy_files_decode_at_ingress_and_do_not_follow_later_file_changes() {
         intersphinx_inventories: Vec::new(),
         workflow_artifacts: Vec::new(),
     };
-    let plan = load_plan(&files, None).unwrap();
+    let plan = load_plan(files(), None).unwrap();
     let binding = amiss_controller::check_binding(&plan).unwrap();
     assert_eq!(
         plan.policy.organization_floor.as_ref().unwrap().value,
@@ -65,7 +65,7 @@ fn policy_files_decode_at_ingress_and_do_not_follow_later_file_changes() {
             original.replacen('{', "{\"schema\":\"amiss/unknown\",", 1),
         ] {
             fs::write(&path, invalid).unwrap();
-            assert!(load_plan(&files, None).is_err(), "{name}");
+            assert!(load_plan(files(), None).is_err(), "{name}");
             assert_eq!(amiss_controller::check_binding(&plan).unwrap(), binding);
         }
         fs::write(path, original).unwrap();

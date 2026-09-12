@@ -40,7 +40,7 @@ fn main() -> ExitCode {
         eprintln!("amiss-manifest: invalid-invocation");
         return ExitCode::from(2);
     };
-    match run(&parsed) {
+    match run(parsed) {
         Ok(()) => ExitCode::SUCCESS,
         Err(reason) => {
             eprintln!("amiss-manifest: {reason}");
@@ -61,17 +61,17 @@ struct Args {
     action: String,
 }
 
-fn run(args: &Args) -> Result<(), String> {
-    let lock_bytes: Vec<(String, Vec<u8>)> = args
+fn run(args: Args) -> Result<(), String> {
+    let lock_bytes: Vec<(&str, Vec<u8>)> = args
         .locks
         .iter()
-        .map(|path| read_at(&args.tree, path).map(|bytes| (path.clone(), bytes)))
+        .map(|path| read_at(&args.tree, path).map(|bytes| (path.as_str(), bytes)))
         .collect::<Result<_, _>>()?;
     let action_bytes = read_at(&args.tree, &args.action)?;
-    let artifact_bytes: Vec<(String, Vec<u8>)> = args
+    let artifact_bytes: Vec<(&str, Vec<u8>)> = args
         .artifacts
         .iter()
-        .map(|path| read_at(&args.tree, path).map(|bytes| (path.clone(), bytes)))
+        .map(|path| read_at(&args.tree, path).map(|bytes| (path.as_str(), bytes)))
         .collect::<Result<_, _>>()?;
 
     let mut staged: Vec<StagedArtifact<'_>> = Vec::with_capacity(artifact_bytes.len());
@@ -102,13 +102,9 @@ fn run(args: &Args) -> Result<(), String> {
     }
 
     let build = StagedBuild {
-        engine_version: args.version.clone(),
-        repository: RepositoryIdentity::new(
-            args.host.clone(),
-            args.owner.clone(),
-            args.repository.clone(),
-        )
-        .ok_or("invalid build repository")?,
+        engine_version: args.version,
+        repository: RepositoryIdentity::new(args.host, args.owner, args.repository)
+            .ok_or("invalid build repository")?,
         object_format: ObjectFormat::Sha1,
         commit_oid: args.commit.parse().map_err(str::to_owned)?,
         locks: lock_bytes
@@ -116,7 +112,7 @@ fn run(args: &Args) -> Result<(), String> {
             .map(|(path, bytes)| Ok((path.parse().map_err(str::to_owned)?, bytes.as_slice())))
             .collect::<Result<_, String>>()?,
     };
-    let (manifest, digest) = build_manifest(&build, &mut staged).map_err(str::to_owned)?;
+    let (manifest, digest) = build_manifest(build, staged).map_err(str::to_owned)?;
     std::fs::write(args.tree.join(RELEASE_MANIFEST_PATH), &manifest)
         .map_err(|defect| format!("{RELEASE_MANIFEST_PATH}: {defect}"))?;
     std::fs::write(

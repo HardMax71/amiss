@@ -44,6 +44,8 @@ relevant checks without unrelated Rust builds. Unknown paths take the full code 
 - Preserve domain types after admission. Reuse the owning ID, digest, OID, ref, path,
   profile, or verdict type in configuration, storage, and tests; format it only at an
   output or foreign-library boundary. Do not add string mirrors or parse/format loops.
+  Consume inputs when ownership transfers, and borrow for comparisons and validation. Do not
+  rebuild an owned object just to check it; Serde can serialize borrowed values directly.
   Provider states belong to provider enums, with explicit handling of unknown values.
   New wrappers must own a shared invariant; text, extensible labels, and exact evidence
   spellings remain strings. Cross-field validation and storage byte compatibility still apply.

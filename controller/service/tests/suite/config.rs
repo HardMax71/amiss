@@ -343,7 +343,7 @@ fn load_intersphinx_plan(
             "file": inventory_path,
         }],
     }))?;
-    load_plan(&files, None).map_err(Into::into)
+    load_plan(files, None).map_err(Into::into)
 }
 
 #[test]
@@ -734,7 +734,7 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
         }
         serde_json::from_value(value).unwrap()
     };
-    let observed = load_plan(&files("observe", true, None), None).unwrap();
+    let observed = load_plan(files("observe", true, None), None).unwrap();
     assert_eq!(observed.profile, Profile::Observe);
     assert_eq!(observed.policy.external_policy, ExternalPolicy::Advisory);
     let floor = observed
@@ -754,17 +754,17 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
                 .0
         )
     );
-    let advisory = load_plan(&files("enforce", false, None), None).unwrap();
+    let advisory = load_plan(files("enforce", false, None), None).unwrap();
     assert_eq!(advisory.profile, Profile::Enforce);
     assert_eq!(advisory.policy.external_policy, ExternalPolicy::Advisory);
     let with_inventory = load_intersphinx_plan(&dir, &constraint_path).unwrap();
     assert_eq!(with_inventory.policy.semantic_evidence.len(), 1);
     assert_ne!(with_inventory.digest, advisory.digest);
-    let off = load_plan(&files("enforce", false, Some("off")), None).unwrap();
+    let off = load_plan(files("enforce", false, Some("off")), None).unwrap();
     assert_eq!(off.policy.external_policy, ExternalPolicy::Off);
     assert_ne!(off.digest, advisory.digest);
     let blocking = load_plan(
-        &files("enforce", false, Some("block-confirmed-refutations")),
+        files("enforce", false, Some("block-confirmed-refutations")),
         None,
     )
     .unwrap();
@@ -814,13 +814,14 @@ fn workflow_artifacts_require_and_reproduce_the_provider_scope() {
     let files: amiss_controller_service::CheckPlanFiles =
         serde_json::from_value(raw.clone()).unwrap();
     assert_eq!(
-        load_plan(&files, None).unwrap_err().to_string(),
+        load_plan(files, None).unwrap_err().to_string(),
         "workflow artifacts are unsupported by this provider lane"
     );
 
     let provider = ProviderIdentity::new("github".to_owned(), "github.com".to_owned()).unwrap();
     let repository = RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap();
-    let plan = load_plan(&files, Some((&provider, &repository))).unwrap();
+    let files = serde_json::from_value(raw.clone()).unwrap();
+    let plan = load_plan(files, Some((&provider, &repository))).unwrap();
     let [artifact] = plan.policy.workflow_artifacts.as_slice() else {
         panic!("one configured artifact")
     };
@@ -839,7 +840,7 @@ fn workflow_artifacts_require_and_reproduce_the_provider_scope() {
         }))
         .unwrap();
     assert_ne!(
-        load_plan(&without_artifacts, None).unwrap().digest,
+        load_plan(without_artifacts, None).unwrap().digest,
         plan.digest
     );
 }

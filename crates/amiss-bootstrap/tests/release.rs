@@ -307,7 +307,7 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     let binary = engine_bytes(other);
     let lock = b"# Cargo.lock fixture\nversion = 4\n".to_vec();
     let binary_path = format!("dist/amiss-{}", platform.as_ref());
-    let mut artifacts = vec![StagedArtifact {
+    let artifacts = vec![StagedArtifact {
         platform,
         artifact_name: format!("amiss-{}", platform.as_ref()).parse().unwrap(),
         files: vec![
@@ -337,7 +337,7 @@ fn an_engine_whose_header_names_another_platform_refuses() {
         commit_oid: "a".repeat(40).parse().unwrap(),
         locks: vec![("Cargo.lock".parse().unwrap(), &lock)],
     };
-    let (manifest_bytes, manifest_digest) = build_manifest(&build, &mut artifacts).unwrap();
+    let (manifest_bytes, manifest_digest) = build_manifest(build, artifacts).unwrap();
     fs::create_dir_all(root.join("dist")).unwrap();
     fs::write(root.join("action.yml"), ACTION).unwrap();
     fs::write(root.join("release-manifest.json"), &manifest_bytes).unwrap();

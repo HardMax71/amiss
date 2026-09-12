@@ -106,7 +106,7 @@ impl RawConfig {
         let repository_id = positive(self.repository.id)?;
         let target = target_branch(&self.repository.target_branch)?;
         let repository = repository_identity(&provider, self.repository)?;
-        let plan = Arc::new(load_plan(&self.plan, None)?);
+        let plan = Arc::new(load_plan(self.plan, None)?);
         validate_action(&provider, &plan)?;
         let limits = load_limits(&self.limits, self.webhook_path)?;
         let token = load_token(&self.provider.reviewer.token_file)?;

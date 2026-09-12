@@ -187,7 +187,7 @@ impl<R: GiteaRest> Client<R> {
             .rest
             .refresh_data(&self.config, pull_request, deadline)?;
         let objects = self.resolve_objects(pull_request, &data, deadline)?;
-        snapshot(&self.config, pull_request, &data, &objects)
+        snapshot(&self.config, pull_request, &data, objects)
     }
 
     fn resolve_objects(
@@ -227,13 +227,8 @@ impl<R: GiteaRest> Client<R> {
             .rest
             .refresh_data(&self.config, pull_request, deadline)?;
         let objects = self.resolve_objects(pull_request, &data, deadline)?;
-        let state = publication_target_is_current(
-            &self.config,
-            pull_request,
-            publication,
-            &data,
-            &objects,
-        )?;
+        let state =
+            publication_target_is_current(&self.config, pull_request, publication, &data, objects)?;
         if !publishable(state, publication.conclusion) {
             return Ok(());
         }

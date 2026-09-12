@@ -17,7 +17,7 @@ impl FileLedger {
             owner,
             fence,
             expires_at_unix_millis,
-        } = record.state.clone()
+        } = record.state
         else {
             return Err(FileLedgerError::Corrupt);
         };

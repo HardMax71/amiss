@@ -15,7 +15,7 @@ use crate::file_ledger::FileLedgerError;
 
 const RECORD_SCHEMA: RecordSchema = RecordSchema::Current;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(in crate::file_ledger) struct Record {
     schema: RecordSchema,
@@ -58,13 +58,13 @@ impl Record {
         delivery: &AcceptedDelivery,
         check: &CheckBinding,
     ) -> bool {
-        self.binding == StoredDelivery::new(delivery.delivery())
+        self.binding.matches(delivery.delivery())
             && self.replay_keep == StoredReplayKeep::new(delivery.replay_keep())
-            && self.check == check.clone()
+            && self.check == *check
     }
 
     pub(in crate::file_ledger) fn matches_key(&self, key: &str) -> Result<bool, FileLedgerError> {
-        Ok(super::delivery_key(&self.binding.materialize()?.identity)? == key)
+        Ok(super::delivery_key(&self.binding.identity)? == key)
     }
 
     pub(in crate::file_ledger) fn evaluation_id(&self) -> ControllerEvaluationId {
@@ -84,12 +84,8 @@ impl Record {
         if self.schema != RECORD_SCHEMA || self.generation == 0 || self.last_seen_unix_millis < 0 {
             return Err(FileLedgerError::Corrupt);
         }
-        let delivery = self.binding.materialize()?;
+        self.binding.validate()?;
         self.replay_keep.validate()?;
-        let check = self.check.clone();
-        if delivery.identity.provider != delivery.change.provider {
-            return Err(FileLedgerError::Corrupt);
-        }
         match &self.state {
             State::Running {
                 fence,
@@ -107,7 +103,7 @@ impl Record {
                 if *fence == 0 || *fence > self.generation {
                     return Err(FileLedgerError::Corrupt);
                 }
-                publication.validate_binding(&self.evaluation_id, &delivery, &check)?;
+                publication.validate_binding(&self.evaluation_id, &self.binding, &self.check)?;
             }
             State::Done {
                 fence,
@@ -126,7 +122,7 @@ impl Record {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
 #[serde(tag = "state", rename_all = "kebab-case", deny_unknown_fields)]
 pub(in crate::file_ledger) enum State {
     Running {

@@ -204,10 +204,8 @@ impl FileRelationScheduleStore {
             let Some(selected) = selected else {
                 continue;
             };
-            let relation = selected.status.relation.clone();
-            let coordination = selected.status.coordination.clone();
             let (stored, plan_binding) = self
-                .load_staged_status(&relation, &coordination)?
+                .load_staged_status(&selected.status.relation, &selected.status.coordination)?
                 .ok_or(RelationScheduleStoreError::Corrupt)?;
             if stored != selected.status {
                 return Err(RelationScheduleStoreError::Corrupt);
