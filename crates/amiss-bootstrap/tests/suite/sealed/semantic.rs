@@ -111,7 +111,7 @@ fn semantic_metadata_shape_is_checked_before_bindings() {
                 &producer.version,
             ))
             .unwrap(),
-            AcceptanceDefect::Shape,
+            AcceptanceDefect::Noncanonical,
         ),
         (
             serde_json::to_string(&producer.kind).unwrap(),

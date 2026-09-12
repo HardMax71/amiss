@@ -80,14 +80,8 @@ fn generated_semantic_digests_keep_the_exact_payload_preimage() {
         );
         assert_eq!(semantic::validate(&document), Ok(()));
         let mut bytes = Vec::new();
-        semantic::write(&document, &mut bytes).unwrap();
+        serde_json_canonicalizer::to_writer(&document, &mut bytes).unwrap();
         assert_eq!(semantic::parse(&bytes).unwrap(), document);
-        semantic::write(&document, std::io::sink()).unwrap();
-        let mut short_output = [0; 32];
-        let defect = semantic::write(&document, std::io::Cursor::new(short_output.as_mut_slice()))
-            .unwrap_err();
-        assert_eq!(defect.kind, ErrorKind::InvalidValue);
-        assert_eq!(defect.path, "$");
     }
 }
 

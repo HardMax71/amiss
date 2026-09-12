@@ -432,7 +432,7 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
 }
 
 #[test]
-fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth_limit() {
+fn opaque_renderer_configuration_keeps_canonical_identity_and_the_serde_depth_limit() {
     let root = tempfile::tempdir().unwrap();
     fs::write(root.path().join("chapter.html"), "<h1 id=\"chapter\"></h1>").unwrap();
     fs::write(root.path().join("index.html"), "<p>index</p>").unwrap();
@@ -453,7 +453,7 @@ fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth
     let baseline = mdbook_site_evidence(candidate, &site, &ordinary, &output(&root)).unwrap();
     let baseline = amiss_wire::semantic::parse(&baseline).unwrap();
     let mut nested = json!({ "\u{1f600}": 1, "\u{e000}": 2 });
-    for _ in 0..256 {
+    for _ in 0..64 {
         nested = json!([nested]);
     }
     changed["config"]["future-renderer-options"] = nested.clone();
@@ -472,14 +472,14 @@ fn opaque_renderer_configuration_keeps_canonical_identity_and_the_existing_depth
         parsed.payload.producer.input_digest
     );
     let mut nested = json!(null);
-    for _ in 0..513 {
+    for _ in 0..128 {
         nested = json!([nested]);
     }
     changed["config"]["future-renderer-options"] = nested;
     let bytes = serde_json::to_vec(&changed).unwrap();
     assert!(matches!(
         mdbook_site_evidence(candidate, &site, &bytes, &output(&root)),
-        Err(MdBookEvidenceError::Context(_))
+        Err(MdBookEvidenceError::ContextShape)
     ));
 }
 
@@ -612,7 +612,7 @@ fn malformed_escaping_oversized_or_unreadable_input_fails_closed() {
             br#"{"version":"0.5.4","version":"0.5.4"}"#,
             &output(&root),
         ),
-        Err(MdBookEvidenceError::Context(_))
+        Err(MdBookEvidenceError::ContextShape)
     ));
     let oversized_context = vec![b' '; usize::try_from(MDBOOK_RENDER_CONTEXT_BYTES).unwrap() + 1];
     assert!(matches!(

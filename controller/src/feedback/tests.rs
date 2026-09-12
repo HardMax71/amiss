@@ -236,7 +236,7 @@ fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
 }
 
 #[test]
-fn the_strict_profile_also_covers_fields_the_projection_ignores() {
+fn ignored_extensions_preserve_feedback_but_trailing_input_is_rejected() {
     let bytes = report(0, vec![item(FeedbackAction::Fix, None, 1)]);
     let text = std::str::from_utf8(&bytes).unwrap();
     let prefix = text.strip_suffix('}').unwrap();
@@ -247,7 +247,7 @@ fn the_strict_profile_also_covers_fields_the_projection_ignores() {
     ] {
         let invalid = format!("{prefix},\"future\":{invalid}}}");
         assert!(
-            feedback_lines(Some(invalid.as_bytes()), false).is_empty(),
+            feedback_lines(Some(invalid.as_bytes()), false) == feedback_lines(Some(&bytes), false),
             "{invalid}"
         );
     }
@@ -277,7 +277,6 @@ fn large_exact_counts_are_preserved_but_unknown_feedback_fields_are_rejected() {
         "\"status\":\"available\"",
         &format!("\"status\":\"available\",\"future\":{nested}"),
     );
-    assert!(amiss_wire::de::JsonProfile::validate(extended.as_bytes()).is_ok());
     assert!(feedback_lines(Some(extended.as_bytes()), false).is_empty());
 }
 

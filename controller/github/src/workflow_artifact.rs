@@ -99,8 +99,6 @@ pub fn decode_workflow_artifact(
     {
         return Err(GitHubArtifactError::Semantic);
     }
-    amiss_wire::de::JsonProfile::validate(&payload)
-        .map_err(|_defect| GitHubArtifactError::Semantic)?;
     let template: amiss_wire::semantic::SemanticEvidenceTemplate<'static> =
         serde_json::from_slice(&payload).map_err(|_defect| GitHubArtifactError::Semantic)?;
     template

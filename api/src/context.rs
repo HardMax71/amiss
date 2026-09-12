@@ -56,8 +56,6 @@ pub(crate) enum ContextSchema {
 pub(crate) enum Error {
     #[error("the producer context exceeds its byte ceiling")]
     Bytes,
-    #[error("the producer context is not strict JSON")]
-    Json(#[source] amiss_wire::de::Error),
     #[error("the producer context is invalid")]
     Shape(#[source] serde_json::Error),
     #[error("the producer context is invalid")]
@@ -68,7 +66,6 @@ pub(crate) fn parse(bytes: &[u8]) -> Result<(Context, Digest), Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > BYTES {
         return Err(Error::Bytes);
     }
-    amiss_wire::de::JsonProfile::validate(bytes).map_err(Error::Json)?;
     let context: Context = serde_json::from_slice(bytes).map_err(Error::Shape)?;
     context.validate(&()).map_err(Error::Contract)?;
     let digest = serde_json::to_vec(&context)

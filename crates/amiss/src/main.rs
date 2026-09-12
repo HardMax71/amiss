@@ -225,8 +225,7 @@ fn run_sealed(reserve: &mut BufWriter<Stdout>) -> ExitCode {
         eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_ref());
         return failure;
     };
-    let canonical = amiss_wire::de::JsonProfile::validate(&streams.snapshot).is_ok()
-        && snapshot.validate().is_ok()
+    let canonical = snapshot.validate().is_ok()
         && serde_json_canonicalizer::to_vec(&evaluation)
             .ok()
             .as_deref()
@@ -486,8 +485,6 @@ fn semantic_input(
             resource: None,
         },
     )?;
-    amiss_wire::de::JsonProfile::validate(&bytes)
-        .map_err(|error| amiss_scan::request::configuration_detail(&error))?;
     let template: amiss_wire::semantic::SemanticEvidenceTemplate<'static> =
         serde_json::from_slice(&bytes).map_err(|error| ErrorDetail {
             code: if error.to_string().starts_with("unknown field") {

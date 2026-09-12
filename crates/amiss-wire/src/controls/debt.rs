@@ -23,7 +23,7 @@ pub enum DebtSnapshotSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct DebtItem {
     pub debt_id: ArtifactId,
     pub finding_key: Digest,
@@ -35,23 +35,8 @@ pub struct DebtItem {
     pub expires_at: UtcInstant,
 }
 
-impl Serialize for DebtItem {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DebtItem {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct DebtSnapshot {
     pub schema: DebtSnapshotSchema,
     pub repository: RepositoryIdentity,
@@ -64,37 +49,21 @@ pub struct DebtSnapshot {
     pub items: Vec<DebtItem>,
 }
 
-impl Serialize for DebtSnapshot {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DebtSnapshot {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 /// Parses and validates one adoption-debt snapshot.
 ///
 /// # Errors
 ///
-/// Fails on strict-JSON defects, schema-shape violations, embedded key or
+/// Fails on JSON defects, schema-shape violations, embedded key or
 /// fact digests that do not recompute, fact-kind/resolution inconsistencies,
 /// causal time-order violations, and unsorted or duplicate items or keys.
 pub fn parse_debt_snapshot(bytes: &[u8]) -> Result<DebtSnapshot, Error> {
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    deserializer.disable_recursion_limit();
     let snapshot: DebtSnapshot = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| de::deserialize_error("$", &defect))?;
     deserializer
         .end()
         .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+
     snapshot.validate()?;
     Ok(snapshot)
 }

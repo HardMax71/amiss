@@ -3,8 +3,8 @@ mod producer_paths;
 mod projection;
 
 use amiss_wire::report::model::{
-    BaseSnapshot, Evaluation, FindingFactEvidence, FindingFactInput, FindingKeyScope,
-    MissingResolution, RepoPath, ReportEnvelope, Resolution, Snapshot,
+    BaseSnapshot, Evaluation, FindingFactEvidence, FindingKeyScope, MissingResolution, RepoPath,
+    ReportEnvelope, Resolution, Snapshot,
 };
 use amiss_wire::requests::CandidateSnapshot;
 use amiss_wire::resolution::{Target, VersionScope};
@@ -136,63 +136,6 @@ fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::
         );
     }
     Ok(())
-}
-
-#[test]
-fn fact_evidence_requires_document_and_comparison_objects() {
-    let report: ReportEnvelope = serde_json::from_slice(include_bytes!(
-        "../../../../spec/examples/scanner-report.frozen-1.json"
-    ))
-    .unwrap();
-    let mut rejected = Vec::new();
-    for fact in report
-        .payload
-        .findings
-        .iter()
-        .flat_map(|finding| finding.base_fact.iter().chain(&finding.candidate_fact))
-    {
-        let mut fragments = Vec::new();
-        if let FindingFactEvidence::Document { document_result } = &fact.evidence {
-            fragments.push((
-                serde_json::to_string(document_result).unwrap(),
-                serde_json::to_string(&(
-                    &document_result.base,
-                    &document_result.candidate,
-                    document_result.change,
-                    document_result.classification,
-                    &document_result.path,
-                ))
-                .unwrap(),
-            ));
-        }
-        if let FindingFactEvidence::Observation { comparison } = &fact.evidence {
-            fragments.push((
-                serde_json::to_string(comparison).unwrap(),
-                serde_json::to_string(&(
-                    &comparison.alternatives,
-                    &comparison.base,
-                    &comparison.candidate,
-                    comparison.correlation,
-                    comparison.correlation_reason,
-                    comparison.impact,
-                    comparison.source_change,
-                    comparison.target_change,
-                ))
-                .unwrap(),
-            ));
-        }
-        let encoded = serde_json::to_string(fact).unwrap();
-        assert_eq!(
-            serde_json::from_str::<FindingFactInput>(&encoded).unwrap(),
-            *fact
-        );
-        for (object, sequence) in fragments {
-            let invalid = encoded.replace(&object, &sequence);
-            assert_ne!(invalid, encoded);
-            rejected.push(serde_json::from_str::<FindingFactInput>(&invalid).is_err());
-        }
-    }
-    assert_eq!(rejected, [true; 2]);
 }
 
 fn assert_canonical<T>(wire: &str) -> Result<(), Box<dyn std::error::Error>>

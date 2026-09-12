@@ -658,7 +658,7 @@ fn the_semantic_evidence_example_matches_its_checked_writer() {
     let document = amiss_wire::semantic::envelope(parsed.payload)
         .expect("the semantic evidence example clears typed construction");
     let mut written = Vec::new();
-    amiss_wire::semantic::write(&document, &mut written)
+    serde_json_canonicalizer::to_writer(&document, &mut written)
         .expect("the semantic evidence example clears the checked writer");
     let example = serde_json::from_slice::<serde_json::Value>(&bytes)
         .expect("the semantic evidence example is strict JSON");

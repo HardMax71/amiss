@@ -75,8 +75,6 @@ struct RepositoryFile {
 /// complete registry violates a relation identity, projection, limit, or destination law.
 pub fn load_relation_registry(path: &Path) -> Result<RelationRegistry, ConfigError> {
     let bytes = read_regular(path, REQUEST_STREAM_BYTES)?;
-    amiss_wire::de::JsonProfile::validate(&bytes)
-        .map_err(|defect| ConfigError::caused_by("relation registry is not strict JSON", defect))?;
     let raw: RegistryFile = serde_json::from_slice(&bytes)
         .map_err(|defect| ConfigError::caused_by("relation registry is not strict JSON", defect))?;
     let plans = raw

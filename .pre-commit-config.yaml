@@ -32,6 +32,11 @@ repos:
         language: system
         files: ^(api|crates/[^/]+|controller(/[^/]+)?)/src/.*\.rs$
         exclude: /tests(\.rs$|/)
+      - id: no-custom-serde
+        name: serialization belongs to Serde derives and libraries
+        entry: python3 scripts/check-serde.py
+        language: system
+        types: [rust]
       # The inner gate keeps the module out of non-test builds and tells
       # cargo-mutants to skip the file.
       - id: tests-file-self-gates

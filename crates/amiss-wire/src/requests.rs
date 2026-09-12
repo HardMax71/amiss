@@ -85,7 +85,7 @@ pub enum SnapshotMaterialization {
 /// and `index` with mode `index`; the pairing law is checked against the
 /// evaluation request by the consumer, since each request parses alone.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct SnapshotRequest {
     pub schema: SnapshotSchema,
     pub materialization: SnapshotMaterialization,
@@ -132,12 +132,9 @@ impl SnapshotRequest {
 /// independently acquired expected semantic digest, and the external trust
 /// source that authorized it.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct SuppliedControl<T> {
-    #[serde(
-        deserialize_with = "object::deserialize",
-        bound(deserialize = "T: Deserialize<'de>")
-    )]
+    #[serde(bound(deserialize = "T: Deserialize<'de>"))]
     pub value: T,
     pub expected_digest: Digest,
     pub trust_source: RequestTrust,
@@ -165,9 +162,8 @@ pub enum RequestTrust {
 /// The supplied trusted-time statement with the provider-authenticated run
 /// context the statement must identify. Its trust source is fixed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct SuppliedTime {
-    #[serde(deserialize_with = "object::deserialize")]
     pub value: TrustedTimeStatement,
     pub expected_digest: Digest,
     pub provider: String,
@@ -175,15 +171,11 @@ pub struct SuppliedTime {
     pub provider_run_attempt: u64,
 }
 
-// An empty prefix preserves every key while the library requires an object, not a sequence.
-serde_with::with_prefix!(pub(crate) object "");
-
 /// One semantic envelope paired with the independently planned build or
 /// inventory context it must identify.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct SuppliedSemanticEvidence {
-    #[serde(deserialize_with = "object::deserialize")]
     pub value: SemanticEvidenceEnvelope<'static>,
     pub expected_context_digest: Digest,
 }
@@ -209,7 +201,7 @@ pub enum ControlsRequestSchema {
 /// The external-input request: five nullable supplied controls and the
 /// bounded semantic-evidence set the trusted caller acquired.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct ControlsRequest {
     pub schema: ControlsRequestSchema,
     #[serde(deserialize_with = "Option::deserialize")]
@@ -228,18 +220,17 @@ pub struct ControlsRequest {
 impl ControlsRequest {
     /// # Errors
     ///
-    /// Fails on strict-JSON defects, schema-shape violations, and invalid
+    /// Fails on JSON defects, schema-shape violations, and invalid
     /// grammar values. Controls and semantic evidence decode under their closed schemas.
     /// Consumers verify semantic constraints and independent digests.
     pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        de::JsonProfile::validate(bytes)?;
         let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-        deserializer.disable_recursion_limit();
         let request: Self = serde_path_to_error::deserialize(&mut deserializer)
             .map_err(|defect| de::deserialize_error("$", &defect))?;
         deserializer
             .end()
             .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+
         request.validate()?;
         Ok(request)
     }
@@ -328,81 +319,6 @@ impl ControlsRequest {
             })?;
         }
         Ok(())
-    }
-}
-
-impl Serialize for SnapshotRequest {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for SnapshotRequest {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
-impl Serialize for SuppliedTime {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for SuppliedTime {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
-impl Serialize for SuppliedSemanticEvidence {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for SuppliedSemanticEvidence {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
-impl Serialize for ControlsRequest {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ControlsRequest {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
-impl<T: Serialize> Serialize for SuppliedControl<T> {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de, T: Deserialize<'de>> Deserialize<'de> for SuppliedControl<T> {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
     }
 }
 

@@ -10,7 +10,7 @@ const ASSESSMENT: &[u8] =
     include_bytes!("../../../../spec/examples/scanner-external-assessment.json");
 
 #[test]
-fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
+fn external_envelopes_use_standard_serde_and_complete_payload_digests() {
     let readers: [fn(&[u8]) -> bool; 2] = [
         |bytes| external::parse_plan(bytes).is_ok(),
         |bytes| external::parse_assessment(bytes).is_ok(),
@@ -47,7 +47,7 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
 
         let mut extended = original.clone();
         let mut nested = Value::Null;
-        for _ in 0..510 {
+        for _ in 0..64 {
             nested = json!([nested]);
         }
         extended["payload"]["future"] = nested;
@@ -60,8 +60,11 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
         ));
         let bytes = serde_json::to_vec(&extended).unwrap();
         assert!(read(&bytes));
-        let nested = extended["payload"]["future"].take();
-        extended["payload"]["future"] = json!([nested]);
+        let mut nested = extended["payload"]["future"].take();
+        for _ in 0..128 {
+            nested = json!([nested]);
+        }
+        extended["payload"]["future"] = nested;
         assert!(!read(&serde_json::to_vec(&extended).unwrap()));
 
         let text = String::from_utf8(serde_json::to_vec(&original).unwrap()).unwrap();
@@ -74,7 +77,7 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
             r#""future":0,"\u0066uture":1,"#,
         ] {
             let invalid = text.replacen('{', &format!("{{{member}"), 1);
-            assert!(!read(invalid.as_bytes()), "{member}");
+            assert!(read(invalid.as_bytes()), "{member}");
         }
         for suffix in ["null", "{}", "garbage"] {
             assert!(!read(format!("{text}{suffix}").as_bytes()));
@@ -84,7 +87,7 @@ fn external_envelopes_keep_strict_inputs_and_complete_payload_digests() {
             original["payload"],
             original["payload_digest"]
         ]);
-        assert!(!read(&serde_json::to_vec(&positional).unwrap()));
+        assert!(read(&serde_json::to_vec(&positional).unwrap()));
         let oversized = vec![b' '; usize::try_from(external::EXTERNAL_DOCUMENT_BYTES + 1).unwrap()];
         assert!(!read(&oversized));
     }

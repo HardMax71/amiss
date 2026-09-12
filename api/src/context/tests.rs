@@ -240,7 +240,7 @@ fn context_keeps_strict_json_and_complete_stream_limits() {
         [b"\xef\xbb\xbf".as_slice(), &valid].concat(),
         [valid.as_slice(), b" false"].concat(),
     ] {
-        assert!(matches!(parse(&bytes), Err(Error::Json(_))));
+        assert!(matches!(parse(&bytes), Err(Error::Shape(_))));
     }
     let mut padded = valid;
     padded.resize(usize::try_from(super::BYTES).unwrap(), b' ');

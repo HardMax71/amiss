@@ -58,7 +58,7 @@ pub enum ConstraintPlatform {
 /// The externally protected allow-list entry for one scanner action tree,
 /// release manifest, bootstrap contract, and required provider status name.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct ExecutionConstraintDescriptor {
     pub action_commit_oid: Oid,
     pub action_object_format: ObjectFormat,
@@ -71,21 +71,6 @@ pub struct ExecutionConstraintDescriptor {
     pub required_status_name: String,
     pub schema: ExecutionConstraintSchema,
     pub selected_platform: ConstraintPlatform,
-}
-
-impl Serialize for ExecutionConstraintDescriptor {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ExecutionConstraintDescriptor {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[must_use]
@@ -112,18 +97,17 @@ pub fn valid_required_status_name(raw: &str) -> bool {
 ///
 /// # Errors
 ///
-/// Fails on strict-JSON defects, schema-shape violations, invalid grammar
+/// Fails on JSON defects, schema-shape violations, invalid grammar
 /// values, or object IDs inconsistent with the declared object format.
 pub fn parse_execution_constraint(bytes: &[u8]) -> Result<ExecutionConstraintDescriptor, Error> {
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    deserializer.disable_recursion_limit();
     let descriptor: ExecutionConstraintDescriptor =
         serde_path_to_error::deserialize(&mut deserializer)
             .map_err(|defect| de::deserialize_error("$", &defect))?;
     deserializer
         .end()
         .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+
     descriptor.validate()?;
     Ok(descriptor)
 }

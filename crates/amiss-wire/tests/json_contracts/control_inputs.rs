@@ -75,24 +75,4 @@ fn control_inputs_keep_their_concrete_shapes_and_identities() {
             );
         }
     }
-
-    let positional = serde_json::to_string(&(
-        floor.schema,
-        &floor.floor_id,
-        &floor.repository,
-        &floor.ref_name,
-        floor.minimum_profile,
-        &floor.minimum_dispositions,
-        &floor.protected_inventory,
-        &floor.protected_control_paths,
-        &floor.waivable_finding_kinds,
-        &floor.authorized_debt_owners,
-        &floor.authorized_waiver_issuers,
-        &floor.resource_limits,
-    ))
-    .unwrap();
-    let altered = encoded.replace(&serde_json::to_string(floor).unwrap(), &positional);
-    assert_ne!(altered, encoded);
-    assert!(ControlsRequest::parse(altered.as_bytes()).is_err());
-    assert!(serde_json::from_str::<ControlsRequest>(&altered).is_err());
 }

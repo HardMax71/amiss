@@ -96,52 +96,6 @@ pub(super) fn reports() -> [ReportEnvelope; 2] {
 }
 
 #[test]
-fn finding_metadata_requires_object_fields() {
-    let [debt_report, waiver_report] = reports();
-    let debt = debt_report.payload.findings[0].debt.as_ref().unwrap();
-    let finding = &waiver_report.payload.findings[0];
-    let waiver = finding.waiver.as_ref().unwrap();
-    let fix = finding.fix.as_ref().unwrap();
-    let aggregation = &finding.aggregation;
-    let location = &finding.location;
-    let encoded = serde_json::to_string(&[&debt_report.payload.findings[0], finding]).unwrap();
-    let rejected: Vec<_> = [
-        (
-            serde_json::to_string(aggregation).unwrap(),
-            serde_json::to_string(&(
-                aggregation.locations_omitted,
-                aggregation.member_count,
-                aggregation.representative_rule,
-                aggregation.strategy,
-            ))
-            .unwrap(),
-        ),
-        (
-            serde_json::to_string(location).unwrap(),
-            serde_json::to_string(&(&location.path, location.side, location.span)).unwrap(),
-        ),
-        (
-            serde_json::to_string(&fix.span).unwrap(),
-            serde_json::to_string(&(fix.span.end_byte, fix.span.start_byte)).unwrap(),
-        ),
-    ]
-    .into_iter()
-    .chain([&debt.adoption_tree, &waiver.candidate_tree].map(|tree| {
-        (
-            serde_json::to_string(tree).unwrap(),
-            serde_json::to_string(&(tree.object_format, &tree.tree_oid)).unwrap(),
-        )
-    }))
-    .map(|(object, sequence)| {
-        let altered = encoded.replace(&object, &sequence);
-        assert_ne!(altered, encoded);
-        serde_json::from_str::<[Finding; 2]>(&altered).is_err()
-    })
-    .collect();
-    assert_eq!(rejected, [true; 5]);
-}
-
-#[test]
 fn nullable_finding_fields_remain_required() {
     let [report, _waiver_report] = reports();
     let mut finding = report.payload.findings.into_iter().next().unwrap();

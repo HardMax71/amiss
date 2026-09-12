@@ -43,26 +43,10 @@ pub enum PublicationReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct PublicationAssessmentEnvelope {
     pub schema: AssessmentEnvelopeSchema,
     pub payload: PublicationAssessment,
     pub payload_digest: Digest,
-}
-
-impl Serialize for PublicationAssessmentEnvelope {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for PublicationAssessmentEnvelope {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -75,28 +59,12 @@ pub enum AssessmentEnvelopeSchema {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-#[serde(remote = "Self")]
 pub struct PublicationAssessment {
     pub schema: AssessmentPayloadSchema,
     pub engine: AssessmentEngine,
     pub subject: AssessmentSubject,
     pub verdict: AssessmentVerdict,
     pub reasons: Vec<PublicationReason>,
-}
-
-impl Serialize for PublicationAssessment {
-    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for PublicationAssessment {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 #[derive(
@@ -111,14 +79,13 @@ pub enum AssessmentPayloadSchema {
 ///
 /// # Errors
 ///
-/// Fails on oversized or malformed strict JSON, an unknown field, an invalid
+/// Fails on oversized or malformed JSON, an unknown field, an invalid
 /// engine identity, unsorted reasons, an inconsistent verdict, or a payload
 /// digest mismatch.
 pub fn parse_assessment(bytes: &[u8]) -> Result<PublicationAssessmentEnvelope, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(bytes)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let document: PublicationAssessmentEnvelope =
         serde_path_to_error::deserialize(&mut deserializer)
@@ -126,6 +93,7 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<PublicationAssessmentEnvelope, E
     deserializer
         .end()
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+
     if assessment_payload_digest(&document.payload)? != document.payload_digest {
         return fail("$.payload_digest", ErrorKind::DigestMismatch);
     }
@@ -155,7 +123,6 @@ pub fn assess(
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
-    de::JsonProfile::validate(&canonical)?;
     Ok(canonical)
 }
 

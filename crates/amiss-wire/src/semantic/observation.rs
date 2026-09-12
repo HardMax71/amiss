@@ -8,14 +8,12 @@ use crate::model::{ArtifactId, RepoPathText};
 pub const SPHINX_INVENTORY_VERSION: &str = "1";
 pub const SITE_BUILD_VERSION: &str = "0.5.1";
 
-serde_with::with_prefix!(object "");
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum Observation {
-    Site(#[serde(with = "object")] SiteBuildObservation),
-    Sphinx(#[serde(with = "object")] SphinxLabelObservation),
-    Record(#[serde(with = "object")] super::record::Observation),
+    Site(SiteBuildObservation),
+    Sphinx(SphinxLabelObservation),
+    Record(super::record::Observation),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

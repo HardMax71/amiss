@@ -62,7 +62,6 @@ pub struct AdapterContractDescriptor {
 #[serde(deny_unknown_fields)]
 pub struct ReportAdapter {
     pub adapter_id: Adapter,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub contract_descriptor: AdapterContractDescriptor,
     pub contract_digest: Digest,
 }
@@ -94,13 +93,11 @@ pub enum ForgeActionKind {
 pub struct ForgeActionProvenance {
     pub action_commit_oid: Oid,
     pub action_object_format: ObjectFormat,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub action_repository: RepositoryIdentity,
     pub action_tree_oid: Oid,
     pub dependency_lock_digest: Digest,
     pub kind: ForgeActionKind,
     pub manifest_path: RepoPathText,
-    #[serde(deserialize_with = "crate::requests::object::deserialize")]
     pub release_manifest: ReleaseManifest,
     pub release_manifest_digest: Digest,
     pub selected_artifact_name: String,
@@ -110,13 +107,8 @@ pub struct ForgeActionProvenance {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ActionProvenance {
-    ForgeAction(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")]
-        Box<ForgeActionProvenance>,
-    ),
-    Local(
-        #[serde(deserialize_with = "crate::requests::object::deserialize")] LocalActionProvenance,
-    ),
+    ForgeAction(Box<ForgeActionProvenance>),
+    Local(LocalActionProvenance),
 }
 
 #[derive(

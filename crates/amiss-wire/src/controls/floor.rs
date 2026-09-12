@@ -19,29 +19,14 @@ pub enum OrganizationFloorSchema {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct ResourceLimit {
     pub resource: ResourceName,
     pub maximum: i64,
 }
 
-impl Serialize for ResourceLimit {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for ResourceLimit {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(remote = "Self", deny_unknown_fields)]
+#[serde(deny_unknown_fields)]
 pub struct OrganizationFloor {
     pub schema: OrganizationFloorSchema,
     pub floor_id: ArtifactId,
@@ -56,21 +41,6 @@ pub struct OrganizationFloor {
     pub authorized_debt_owners: Vec<OwnerId>,
     pub authorized_waiver_issuers: Vec<OwnerId>,
     pub resource_limits: Vec<ResourceLimit>,
-}
-
-impl Serialize for OrganizationFloor {
-    fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
-        Self::serialize(self, serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for OrganizationFloor {
-    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        Self::deserialize(serde_with::with_prefix::WithPrefix {
-            delegate: deserializer,
-            prefix: "",
-        })
-    }
 }
 
 /// A floor rejection: a schema-layer defect, or the combined
@@ -90,19 +60,18 @@ pub const ORGANIZATION_POLICY_ENTRIES_LIMIT: u64 = 100_000;
 ///
 /// # Errors
 ///
-/// Fails on strict-JSON defects, schema-shape violations, unknown fields,
+/// Fails on JSON defects, schema-shape violations, unknown fields,
 /// invalid grammar values, per-resource bound violations, unsorted or
 /// duplicate set members, and a combined entry count over the built-in
 /// `organization-policy-entries` limit or a tighter self-declared one.
 pub fn parse_organization_floor(bytes: &[u8]) -> Result<OrganizationFloor, FloorDefect> {
-    de::JsonProfile::validate(bytes).map_err(FloorDefect::Schema)?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    deserializer.disable_recursion_limit();
     let floor: OrganizationFloor = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| FloorDefect::Schema(de::deserialize_error("$", &defect)))?;
     deserializer.end().map_err(|defect| {
         FloorDefect::Schema(Error::new("$", ErrorKind::Json(defect.to_string())))
     })?;
+
     floor.validate()?;
     Ok(floor)
 }

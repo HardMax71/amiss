@@ -29,6 +29,11 @@ relevant checks without unrelated Rust builds. Unknown paths take the full code 
   wildcard matches.
 - Comments are rare: one short line for a constraint the code cannot show, never a
   restatement of the code.
+- Serialization belongs to Serde derives and library adapters. Handwritten Serde
+  implementations, visitors, field codecs, JSON parsers, and forwarding encode/decode
+  helpers are forbidden, including macro-generated substitutes. Use library calls
+  directly and keep domain validation separate. Accept standard Serde JSON behavior;
+  do not restore object-only guards or a custom JSON profile.
 - The wire is one rolling contract. A report change moves the schema in `spec/`, both
   examples (with a recomputed payload digest), the writer, and the docs together.
 - Blocks between `amiss-doc-contract` markers in `docs/` copy a value a Rust source owns,

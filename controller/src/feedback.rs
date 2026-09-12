@@ -94,9 +94,6 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     let Some(bytes) = report else {
         return Vec::new();
     };
-    if amiss_wire::de::JsonProfile::validate(bytes).is_err() {
-        return Vec::new();
-    }
     let Ok(report) = serde_json::from_slice::<ReportFeedback>(bytes) else {
         return Vec::new();
     };

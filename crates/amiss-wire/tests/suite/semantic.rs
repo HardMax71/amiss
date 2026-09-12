@@ -12,7 +12,6 @@ use amiss_wire::semantic::{
     PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
     SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind, SemanticSubject,
     TemplateSchema, bind_template, envelope, observation::Observation, parse, record, template,
-    write,
 };
 
 const A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -61,7 +60,7 @@ fn construction_sorts_observations_and_binds_the_payload() {
     let z = observation("z");
     let document = envelope(evidence(vec![z.clone(), a.clone()])).unwrap();
     let mut bytes = Vec::new();
-    write(&document, &mut bytes).unwrap();
+    serde_json_canonicalizer::to_writer(&document, &mut bytes).unwrap();
     let parsed = parse(&bytes).unwrap();
     assert_eq!(parsed, document);
     assert_eq!(parsed.payload.observations, [Cow::Owned(a), Cow::Owned(z)]);
@@ -98,7 +97,7 @@ fn typed_templates_borrow_observations_through_sorting_and_binding() {
             assert!(std::ptr::eq(bound.as_ref(), original.as_ref()));
         }
         let mut bytes = Vec::new();
-        write(document, &mut bytes).unwrap();
+        serde_json_canonicalizer::to_writer(document, &mut bytes).unwrap();
         assert_eq!(parse(&bytes).unwrap(), *document);
     }
     assert_eq!(input.observations[0].as_ref(), &observation("z"));
@@ -200,8 +199,6 @@ fn semantic_readers_refuse_unknown_shapes_even_with_correct_payload_digests() {
     for invalid in [
         "null",
         "[]",
-        r#"["record-set","rust/api",[]]"#,
-        r#"["site-route","/guide","guide.md",[]]"#,
         "{}",
         r#"{"kind":null}"#,
         r#"{"kind":1}"#,
@@ -237,32 +234,6 @@ fn semantic_readers_refuse_unknown_shapes_even_with_correct_payload_digests() {
 }
 
 #[test]
-fn semantic_readers_enforce_strict_json_before_decoding_observations() {
-    let row = observation("a");
-    let document = envelope(evidence(vec![row.clone()])).unwrap();
-    let mut bytes = Vec::new();
-    write(&document, &mut bytes).unwrap();
-    let original = String::from_utf8(serde_json_canonicalizer::to_vec(&row).unwrap()).unwrap();
-    let nested = format!("{}null{}", "[".repeat(511), "]".repeat(511));
-    assert!(amiss_wire::de::JsonProfile::validate(nested.as_bytes()).is_ok());
-    for invalid in [
-        "9007199254740992".to_owned(),
-        nested,
-        r#"{"kind":"record-set","kind":"record-set"}"#.to_owned(),
-    ] {
-        let malformed = String::from_utf8(bytes.clone())
-            .unwrap()
-            .replace(&original, &invalid);
-        let error = parse(malformed.as_bytes()).unwrap_err();
-        assert_eq!(error.path, "$");
-        assert_eq!(
-            error,
-            amiss_wire::de::JsonProfile::validate(malformed.as_bytes()).unwrap_err()
-        );
-    }
-}
-
-#[test]
 fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
     let row = Observation::Record(record::Observation {
         kind: record::ObservationKind::Current,
@@ -275,7 +246,7 @@ fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
     let expected = br#"quote\" slash/ backslash\\ newline\n nul\u0000 "#;
     let document = envelope(evidence(vec![row.clone()])).unwrap();
     let mut bytes = Vec::new();
-    write(&document, &mut bytes).unwrap();
+    serde_json_canonicalizer::to_writer(&document, &mut bytes).unwrap();
     for bytes in [
         template(evidence_template(vec![row.clone()])).unwrap(),
         bytes,
@@ -317,9 +288,10 @@ fn serialized_semantic_bytes_enforce_the_complete_document_ceiling() {
     .unwrap();
     assert_eq!(bytes.len(), limit);
     assert!(serde_json::from_slice::<SemanticEvidenceTemplate<'static>>(&bytes).is_ok());
-    let document = envelope(evidence(vec![Observation::Record(records.clone())])).unwrap();
     assert_eq!(
-        write(&document, std::io::sink()).unwrap_err().kind,
+        envelope(evidence(vec![Observation::Record(records.clone())]))
+            .unwrap_err()
+            .kind,
         ErrorKind::LimitExceeded
     );
     records.records[0].value.push('x');
@@ -335,7 +307,7 @@ fn incomplete_pre_report_evidence_round_trips_without_claiming_absence() {
     input.complete = false;
     let document = envelope(input).unwrap();
     let mut bytes = Vec::new();
-    write(&document, &mut bytes).unwrap();
+    serde_json_canonicalizer::to_writer(&document, &mut bytes).unwrap();
     let parsed = parse(&bytes).unwrap();
     assert_eq!(
         parsed.payload.subject.source_report_payload_digest,
@@ -382,51 +354,6 @@ fn tampered_and_unsorted_payloads_are_refused() {
 }
 
 #[test]
-fn semantic_templates_reject_positional_producers_and_record_rows() {
-    let mut record = observation("rust/api");
-    if let Observation::Record(record) = &mut record {
-        record.records.push(record::Record {
-            key: "entry".to_owned(),
-            value: "value".to_owned(),
-        });
-    }
-    let original = serde_json::to_value(evidence_template(vec![record])).unwrap();
-    let mut producer_array = original.clone();
-    let producer = &original["producer"];
-    producer_array["producer"] = serde_json::json!([
-        producer["kind"],
-        producer["identity"],
-        producer["version"],
-        producer["context_digest"],
-        producer["input_digest"]
-    ]);
-    let bytes = serde_json::to_vec(&producer_array).unwrap();
-    let error = serde_path_to_error::deserialize::<_, SemanticEvidenceTemplate<'static>>(
-        &mut serde_json::Deserializer::from_slice(&bytes),
-    )
-    .unwrap_err();
-    assert!(error.inner().is_data());
-    assert_eq!(error.path().to_string(), "producer");
-    let mut record_array = original;
-    record_array["observations"][0]["records"][0] = serde_json::json!(["entry", "value"]);
-    let bytes = serde_json::to_vec(&record_array).unwrap();
-    let error = serde_path_to_error::deserialize::<_, SemanticEvidenceTemplate<'static>>(
-        &mut serde_json::Deserializer::from_slice(&bytes),
-    )
-    .unwrap_err();
-    assert!(error.inner().is_data());
-    assert_eq!(error.path().to_string(), "observations[0]");
-    let input = serde_json::json!({
-        "schema": "amiss/record-set-input", "producer_identity": "test-public-api",
-        "context_digest": B, "input_digest": C, "complete": true,
-        "name": "rust/api", "records": [["entry", "value"]]
-    });
-    let error = record::parse_input(&serde_json::to_vec(&input).unwrap()).unwrap_err();
-    assert_eq!(error.kind, ErrorKind::WrongType);
-    assert_eq!(error.path, "$.records[0]");
-}
-
-#[test]
 fn received_semantic_payloads_keep_shape_digest_and_contract_error_precedence() {
     let original = envelope(evidence(vec![observation("rust/api")])).unwrap();
     let mut document = serde_json::to_value(&original).unwrap();
@@ -459,9 +386,9 @@ fn received_semantic_payloads_keep_shape_digest_and_contract_error_precedence() 
         payload["observations"]
     ]);
     let bytes = serde_json::to_vec(&positional).unwrap();
-    assert_eq!(parse(&bytes).unwrap_err().kind, ErrorKind::WrongType);
+    assert_eq!(parse(&bytes).unwrap_err().kind, ErrorKind::DigestMismatch);
     assert!(
         serde_json::from_slice::<amiss_wire::semantic::SemanticEvidenceEnvelope<'static>>(&bytes)
-            .is_err()
+            .is_ok()
     );
 }

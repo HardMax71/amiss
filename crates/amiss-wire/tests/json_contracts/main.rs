@@ -6,7 +6,6 @@ use strum::IntoEnumIterator;
 #[path = "../support/relation.rs"]
 mod relation_fixture;
 
-mod canonical;
 mod control_inputs;
 mod control_tags;
 mod external_evidence;
@@ -261,7 +260,7 @@ fn semantic_examples_match_the_actual_typed_producers() {
         serde_json::from_slice(&semantic_evidence_bytes).unwrap();
     let generated = semantic::envelope(typed.payload.clone()).unwrap();
     let mut canonical = Vec::new();
-    semantic::write(&generated, &mut canonical).unwrap();
+    serde_json_canonicalizer::to_writer(&generated, &mut canonical).unwrap();
     assert_eq!(generated, typed);
     assert_eq!(
         canonical,
@@ -398,5 +397,3 @@ fn candidate_identity_examples_match_their_typed_source() {
         );
     }
 }
-
-mod object_shapes;

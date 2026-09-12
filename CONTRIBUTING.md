@@ -30,6 +30,11 @@ and async stack they carry.
 A change is acceptable when it keeps every gate green, adds tests for the
 behavior it adds or changes, and stays inside the boundaries described in
 [What Amiss is not](https://hardmax71.github.io/amiss/non-goals.html).
+Serialization uses Serde derives, declarative attributes, and library adapters.
+Do not add handwritten Serde implementations, visitors, JSON codecs, or forwarding
+serialization helpers. Keep domain validation separate from library serialization
+calls; the accepted JSON behavior is described in
+[Architecture](docs/src/architecture.md).
 Important tests are exercised against deliberately broken behavior before they
 are trusted. Documentation passes through the same gate as everything else:
 the scanner runs on its own repository, so a link that stops resolving fails

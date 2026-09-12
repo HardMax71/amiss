@@ -49,6 +49,11 @@ and Actions analysis. Rust, fixtures, schemas, build configuration, and unknown 
 full code lane. The required workflow always starts, and `gates` fails if classification fails;
 there are no workflow-level path filters. Weekly and manual CI runs force full code validation.
 
+The commit hooks also reject handwritten Serde implementations, callbacks, and custom JSON
+representation guards. Models use derives and library adapters; domain checks remain separate.
+See [Architecture](architecture.md) for the standard Serde input behavior and the canonical
+representation required by authenticated boundaries.
+
 Coverage executes the whole workspace with instrumentation and keeps the 85% line floor, but
 excludes the three fixture-only packages from the report. It does not replace uninstrumented
 platform tests or the release-mode eligibility checks. Rust caches remain separate across

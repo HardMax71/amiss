@@ -1,7 +1,4 @@
-use amiss_wire::{
-    de::ErrorKind,
-    external::{self, EvidenceDefect},
-};
+use amiss_wire::external;
 use serde_json::{Value, json};
 use sha2::Digest as _;
 
@@ -66,67 +63,4 @@ fn assessments_use_the_digest_of_all_evidence_fields() {
         assert_eq!(changed, typed);
         assert_ne!(changed_digest, digest);
     }
-}
-
-#[test]
-fn evidence_capture_keeps_strict_bounds_and_requires_an_object() {
-    let mut evidence: Value = serde_json::from_slice(EVIDENCE).unwrap();
-    let mut nested = Value::Null;
-    for _ in 0..511 {
-        nested = json!([nested]);
-    }
-    evidence["future"] = nested;
-    let bytes = serde_json::to_vec(&evidence).unwrap();
-    serde_json::from_slice::<external::ExternalEvidence>(&bytes).unwrap();
-    external::parse_evidence(&bytes).unwrap();
-    let nested = evidence["future"].take();
-    evidence["future"] = json!([nested]);
-    let bytes = serde_json::to_vec(&evidence).unwrap();
-    let Err(EvidenceDefect::Wire(defect)) = external::parse_evidence(&bytes) else {
-        panic!("the evidence depth must be bounded");
-    };
-    assert_eq!(
-        defect,
-        amiss_wire::de::JsonProfile::validate(&bytes).unwrap_err()
-    );
-    for invalid in [
-        br#"{"future":0,"\u0066uture":1}"#.as_slice(),
-        br#"{"future":-0}"#,
-        br#"{"future":0.5}"#,
-        br#"{"future":1e0}"#,
-        br#"{"future":9007199254740992}"#,
-        b"{} {}",
-        b"\xff",
-    ] {
-        assert!(matches!(
-            external::parse_evidence(invalid),
-            Err(EvidenceDefect::Wire(amiss_wire::de::Error {
-                kind: ErrorKind::Json(_),
-                ..
-            }))
-        ));
-    }
-    let positional = json!([
-        evidence["schema"],
-        evidence["plan_payload_digest"],
-        evidence["producer"],
-        evidence["rows"]
-    ]);
-    let Err(EvidenceDefect::Wire(defect)) =
-        external::parse_evidence(&serde_json::to_vec(&positional).unwrap())
-    else {
-        panic!("the evidence root must be an object");
-    };
-    assert_eq!(
-        (defect.path.as_str(), defect.kind),
-        ("$", ErrorKind::WrongType)
-    );
-    let oversized = vec![b' '; usize::try_from(external::EXTERNAL_DOCUMENT_BYTES + 1).unwrap()];
-    assert!(matches!(
-        external::parse_evidence(&oversized),
-        Err(EvidenceDefect::Wire(amiss_wire::de::Error {
-            kind: ErrorKind::LimitExceeded,
-            ..
-        }))
-    ));
 }

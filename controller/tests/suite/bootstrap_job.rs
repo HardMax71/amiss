@@ -355,7 +355,7 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
     let evidence = amiss_wire::semantic::bind_template(&template, candidate).unwrap();
     let evidence_digest = evidence.payload_digest;
     let mut evidence_bytes = Vec::new();
-    amiss_wire::semantic::write(&evidence, &mut evidence_bytes).unwrap();
+    serde_json_canonicalizer::to_writer(&evidence, &mut evidence_bytes).unwrap();
     let job = bootstrap(&run, std::slice::from_ref(&source)).unwrap();
     let replayed = bootstrap(&run, std::slice::from_ref(&source)).unwrap();
     assert_eq!(job.semantic_artifact, replayed.semantic_artifact);

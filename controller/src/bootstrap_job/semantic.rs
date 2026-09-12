@@ -73,8 +73,6 @@ pub fn bind_semantic_evidence(
         {
             return Err(BootstrapJobError::SemanticEvidence);
         }
-        amiss_wire::de::JsonProfile::validate(&source.bytes)
-            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
         let template: SemanticEvidenceTemplate<'static> = serde_json::from_slice(&source.bytes)
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
         template
@@ -126,7 +124,7 @@ fn bind_input(
     let envelope = amiss_wire::semantic::bind_template(template, candidate_identity_digest)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     let mut envelope_bytes = Vec::new();
-    amiss_wire::semantic::write(&envelope, &mut envelope_bytes)
+    serde_json_canonicalizer::to_writer(&envelope, &mut envelope_bytes)
         .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
     Ok(BoundInput {
         payload_digest: envelope.payload_digest,

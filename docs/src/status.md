@@ -133,7 +133,7 @@ a constant without the book fails CI. The same
 finds every public schema-backed example, validates it against its schema, and feeds it to
 its owning typed reader; a contract without a registered reader fails CI too.
 
-The examples execute. The report's readable form passes the strict JSON reader, and its
+The examples execute. The report's readable form passes the Serde JSON reader, and its
 canonical bytes clear the
 [wrapper acceptance law](https://github.com/HardMax71/amiss/blob/main/crates/amiss-bootstrap/tests/suite/acceptance.rs)
 end to end. The commit and staged-index identity preimages reproduce the production digest

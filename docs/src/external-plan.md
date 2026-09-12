@@ -48,7 +48,7 @@ and the composition with a checker that does fetch is one pipe, shown in
 [Amiss and link checkers](comparison.md).
 
 Exit 0 wrote the plan, human or JSON. Exit 2 means the input could not be trusted:
-unreadable, larger than a scanner report can be, not the scanner's strict JSON, not a
+unreadable, larger than a scanner report can be, not valid JSON, not a
 report envelope, a payload that fails its recorded digest, an incomplete report, or an
 eligible occurrence missing its destination, document, or required scheme. There is no exit 1,
 since a plan carries data and no verdict.
