@@ -1,3 +1,4 @@
+use crate::states::{JobSource, PipelineSource};
 use sha2::Digest as _;
 
 use amiss_controller::{
@@ -10,9 +11,6 @@ use serde::Deserialize;
 use crate::identity::{canonical_project_path, exact_sha1, repository_identity};
 
 use super::PolicyBinding;
-
-const POLICY_JOB_SOURCE: &str = "pipeline_execution_policy";
-const MERGE_REQUEST_PIPELINE: &str = "merge_request_event";
 
 pub(crate) struct AuthenticatedFacts {
     pub delivery: AuthenticatedDelivery,
@@ -44,8 +42,8 @@ pub(crate) fn authenticated_facts(
         || !claims.jti.bytes().all(|byte| byte.is_ascii_graphic())
         || claims.job_project_id != policy.project_id
         || project_path != policy.project_path
-        || claims.pipeline_source != MERGE_REQUEST_PIPELINE
-        || claims.job_source != POLICY_JOB_SOURCE
+        || claims.pipeline_source != PipelineSource::MergeRequestEvent
+        || claims.job_source != JobSource::PipelineExecutionPolicy
         || claims.job_config.url != policy.config_url
         || claims.job_config.sha != policy.config_commit.as_str()
         || claims.pipeline_id == 0
@@ -130,14 +128,14 @@ pub(crate) struct Claims {
     job_project_path: String,
     #[serde_as(as = "serde_with::PickFirst<(_, serde_with::DisplayFromStr)>")]
     pipeline_id: u64,
-    pipeline_source: String,
+    pipeline_source: PipelineSource,
     #[serde_as(as = "serde_with::PickFirst<(_, serde_with::DisplayFromStr)>")]
     job_id: u64,
     #[serde_as(as = "serde_with::PickFirst<(_, serde_with::DisplayFromStr)>")]
     runner_id: u64,
     runner_environment: String,
     sha: String,
-    job_source: String,
+    job_source: JobSource,
     job_config: JobConfig,
 }
 

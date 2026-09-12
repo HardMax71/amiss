@@ -24,15 +24,15 @@ static RSA_KEYS: LazyLock<RsaKeys> =
 fn api_authority_is_derived_from_the_provider_instance() {
     assert_eq!(
         validate_api_base("https://api.github.com", "github.com"),
-        Ok("https://api.github.com".to_owned())
+        Ok("https://api.github.com/".parse().unwrap())
     );
     assert_eq!(
         validate_api_base("https://github.example/api/v3", "github.example"),
-        Ok("https://github.example/api/v3".to_owned())
+        Ok("https://github.example/api/v3/".parse().unwrap())
     );
     assert_eq!(
         validate_api_base("https://github.example/api/v3/", "github.example"),
-        Ok("https://github.example/api/v3".to_owned())
+        Ok("https://github.example/api/v3/".parse().unwrap())
     );
 
     for (base, instance, reason) in [
@@ -179,7 +179,7 @@ fn an_expired_deadline_fails_before_any_transport_io() {
 fn offline_transport(minted: Option<MintedToken>) -> Transport {
     Transport {
         client: Client::new(),
-        api_base: "https://api.github.com".to_owned(),
+        api_base: "https://api.github.com/".parse().unwrap(),
         app: AppCredential {
             key: EncodingKey::from_rsa_pem(&RSA_KEYS.private_pem).unwrap(),
             app_id: 99,
@@ -292,16 +292,15 @@ fn only_the_success_range_settles() {
 fn a_route_is_one_absolute_unrepeated_path() {
     let transport = offline_transport(None);
     assert!(
-        transport
-            .url("/rate_limit")
+        amiss_controller::provider_api_url(&transport.api_base, "/rate_limit")
             .is_ok_and(|url| url.as_str().ends_with("/rate_limit"))
     );
     assert_eq!(
-        transport.url("rate_limit").err(),
+        amiss_controller::provider_api_url(&transport.api_base, "rate_limit").err(),
         Some(ProviderError::InvalidResponse)
     );
     assert_eq!(
-        transport.url("//attacker.invalid").err(),
+        amiss_controller::provider_api_url(&transport.api_base, "//attacker.invalid").err(),
         Some(ProviderError::InvalidResponse)
     );
 }

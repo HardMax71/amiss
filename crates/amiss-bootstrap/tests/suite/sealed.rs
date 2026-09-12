@@ -278,8 +278,8 @@ fn sealed_expectations(
     };
     let sealed = SealedExpectations {
         profile: amiss_wire::controls::Profile::Observe,
-        candidate_ref: CANDIDATE_REF.to_owned(),
-        target_ref: TARGET_REF.to_owned(),
+        candidate_ref: CANDIDATE_REF.parse().unwrap(),
+        target_ref: TARGET_REF.parse().unwrap(),
         repository: evaluation.repository.unwrap(),
         provider: PROVIDER.to_owned(),
         provider_run_id: RUN_ID.to_owned(),
@@ -345,13 +345,13 @@ fn a_complete_block_report_is_accepted_at_class_one() {
 fn the_sealed_identity_binds_refs_time_and_candidate() {
     assert_eq!(
         refused(Deviation::expect(|sealed| {
-            sealed.candidate_ref = "refs/heads/other".to_owned();
+            sealed.candidate_ref = "refs/heads/other".parse().unwrap();
         })),
         AcceptanceDefect::SealedIdentity
     );
     assert_eq!(
         refused(Deviation::expect(|sealed| {
-            sealed.target_ref = "refs/heads/other".to_owned();
+            sealed.target_ref = "refs/heads/other".parse().unwrap();
         })),
         AcceptanceDefect::SealedIdentity
     );

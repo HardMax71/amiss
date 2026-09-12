@@ -106,12 +106,12 @@ pub(super) fn capture_requests(
         profile: evaluation.profile,
         candidate_ref: evaluation
             .candidate_ref
-            .as_ref()
-            .map_or_else(String::new, |reference| reference.as_str().to_owned()),
+            .clone()
+            .ok_or_else(|| tampered("evaluation-request-invalid"))?,
         target_ref: evaluation
             .target_ref
-            .as_ref()
-            .map_or_else(String::new, |reference| reference.as_str().to_owned()),
+            .clone()
+            .ok_or_else(|| tampered("evaluation-request-invalid"))?,
         repository,
         provider: supplied_time.provider.clone(),
         provider_run_id: supplied_time.provider_run_id.clone(),

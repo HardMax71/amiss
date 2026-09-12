@@ -1,3 +1,7 @@
+use crate::states::{
+    JobSource, MergeMethod, MergeRequestState, PipelineSource, PipelineStatus, SquashOption,
+    TrainEnforcement, TrainStatus,
+};
 mod tests;
 
 use amiss_controller::{
@@ -9,39 +13,34 @@ use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
 use crate::identity::{branch_ref, canonical_project_path, exact_sha1, repository_url, train_ref};
 use crate::{GitLabRefresh, GitLabRefreshQuery, GitLabTrainCar, PolicyBinding};
 
-const MERGE_REQUEST_PIPELINE: &str = "merge_request_event";
-const POLICY_JOB_SOURCE: &str = "pipeline_execution_policy";
-const TRAIN_ENFORCEMENT: &str = "enforce_for_all_users";
-
 pub(crate) fn snapshot(
     delivery: &AuthenticatedDelivery,
     policy: &PolicyBinding,
     query: &GitLabRefreshQuery,
     refresh: &GitLabRefresh,
 ) -> Result<ChangeSnapshot, ProviderError> {
-    let gate = exact_oid(&refresh.gate.id)?;
-    let gate_tree = exact_oid(&refresh.gate.tree)?;
-    let base = exact_oid(&refresh.base.id)?;
-    let base_tree = exact_oid(&refresh.base.tree)?;
+    let gate = refresh.gate.id.clone();
+    let gate_tree = refresh.gate.tree.clone();
+    let base = refresh.base.id.clone();
+    let base_tree = refresh.base.tree.clone();
     let target = exact_oid(&refresh.target.commit)?;
     let source = exact_oid(&refresh.merge_request.sha)?;
     let [first_parent, second_parent] = refresh.gate.parents.as_slice() else {
         return Err(ProviderError::InvalidResponse);
     };
-    let first_parent = exact_oid(first_parent)?;
-    let second_parent = exact_oid(second_parent)?;
+    let first_parent = first_parent.clone();
+    let second_parent = second_parent.clone();
     let parents_valid = [&refresh.base, &refresh.gate]
         .into_iter()
-        .flat_map(|commit| &commit.parents)
-        .all(|parent| exact_oid(parent).is_ok());
+        .all(|commit| commit.has_format(ObjectFormat::Sha1));
     let records_valid = validate_project(delivery, policy, query, refresh)?
         && refresh.job.id == query.job_id
         && refresh.job.name == policy.job_name
         && refresh
             .job
             .source
-            .as_deref()
-            .is_none_or(|source| source == POLICY_JOB_SOURCE)
+            .as_ref()
+            .is_none_or(|source| *source == JobSource::PipelineExecutionPolicy)
         && refresh.job.pipeline_id == query.pipeline_id
         && refresh.job.commit == query.gate_commit.as_str()
         && refresh.job.runner_id == query.runner_id
@@ -49,7 +48,7 @@ pub(crate) fn snapshot(
         && refresh.pipeline.project_id == query.project_id
         && refresh.pipeline.sha == query.gate_commit.as_str()
         && refresh.pipeline.reference == train_ref(query.merge_request_iid)
-        && refresh.pipeline.source == MERGE_REQUEST_PIPELINE
+        && refresh.pipeline.source == PipelineSource::MergeRequestEvent
         && refresh.merge_request.iid == query.merge_request_iid
         && refresh.merge_request.project_id == query.project_id
         && refresh.merge_request.target_project_id == query.project_id
@@ -70,10 +69,10 @@ pub(crate) fn snapshot(
         .map(|train| train_matches(query, policy, train))
         .transpose()?
         .unwrap_or(false);
-    let open = match refresh.merge_request.state.as_str() {
-        "opened" => true,
-        "closed" | "locked" | "merged" => false,
-        _ => return Err(ProviderError::InvalidResponse),
+    let open = match refresh.merge_request.state {
+        MergeRequestState::Opened => true,
+        MergeRequestState::Closed | MergeRequestState::Locked | MergeRequestState::Merged => false,
+        MergeRequestState::Unknown(_) => return Err(ProviderError::InvalidResponse),
     };
     let refs = RunRefs {
         forge: ForgeDialect::Gitlab,
@@ -98,8 +97,8 @@ pub(crate) fn snapshot(
         },
     )
     .ok_or(ProviderError::InvalidResponse)?;
-    let live = refresh.job.status == "running"
-        && refresh.pipeline.status == "running"
+    let live = refresh.job.status == PipelineStatus::Running
+        && refresh.pipeline.status == PipelineStatus::Running
         && train_live
         && open
         && !refresh.merge_request.draft;
@@ -150,7 +149,7 @@ fn validate_project(
     Ok(refresh.project.id == query.project_id
         && project_path == policy.project_path
         && refresh.project.http_url_to_repo == project_url
-        && refresh.project.repository_object_format == "sha1"
+        && refresh.project.repository_object_format == ObjectFormat::Sha1
         && !refresh.project.default_branch.is_empty())
 }
 
@@ -159,30 +158,33 @@ fn train_matches(
     policy: &PolicyBinding,
     train: &GitLabTrainCar,
 ) -> Result<bool, ProviderError> {
-    let active = match train.status.as_str() {
-        "idle" | "fresh" => true,
-        "stale" | "merging" | "merged" | "skip_merged" => false,
-        _ => return Err(ProviderError::InvalidResponse),
+    let active = match train.status {
+        TrainStatus::Idle | TrainStatus::Fresh => true,
+        TrainStatus::Stale
+        | TrainStatus::Merging
+        | TrainStatus::Merged
+        | TrainStatus::SkipMerged => false,
+        TrainStatus::Unknown(_) => return Err(ProviderError::InvalidResponse),
     };
-    let open = match train.merge_request_state.as_str() {
-        "opened" => true,
-        "closed" | "locked" | "merged" => false,
-        _ => return Err(ProviderError::InvalidResponse),
+    let open = match train.merge_request_state {
+        MergeRequestState::Opened => true,
+        MergeRequestState::Closed | MergeRequestState::Locked | MergeRequestState::Merged => false,
+        MergeRequestState::Unknown(_) => return Err(ProviderError::InvalidResponse),
     };
-    let pipeline_running = match train.pipeline_status.as_str() {
-        "running" => true,
-        "canceled"
-        | "created"
-        | "failed"
-        | "manual"
-        | "pending"
-        | "preparing"
-        | "scheduled"
-        | "skipped"
-        | "success"
-        | "waiting_for_callback"
-        | "waiting_for_resource" => false,
-        _ => return Err(ProviderError::InvalidResponse),
+    let pipeline_running = match train.pipeline_status {
+        PipelineStatus::Running => true,
+        PipelineStatus::Canceled
+        | PipelineStatus::Created
+        | PipelineStatus::Failed
+        | PipelineStatus::Manual
+        | PipelineStatus::Pending
+        | PipelineStatus::Preparing
+        | PipelineStatus::Scheduled
+        | PipelineStatus::Skipped
+        | PipelineStatus::Success
+        | PipelineStatus::WaitingForCallback
+        | PipelineStatus::WaitingForResource => false,
+        PipelineStatus::Unknown(_) => return Err(ProviderError::InvalidResponse),
     };
     Ok(active
         && open
@@ -195,7 +197,7 @@ fn train_matches(
         && train.pipeline_project_id == query.project_id
         && train.pipeline_sha == query.gate_commit.as_str()
         && train.pipeline_ref == train_ref(query.merge_request_iid)
-        && train.pipeline_source == MERGE_REQUEST_PIPELINE)
+        && train.pipeline_source == PipelineSource::MergeRequestEvent)
 }
 
 fn policy_authorized(policy: &PolicyBinding, refresh: &GitLabRefresh) -> bool {
@@ -221,9 +223,9 @@ fn policy_authorized(policy: &PolicyBinding, refresh: &GitLabRefresh) -> bool {
         && refresh.project.checks.merged_results_enabled
         && refresh.project.train.enabled
         && !refresh.project.train.skip_allowed
-        && refresh.project.train.enforcement == TRAIN_ENFORCEMENT
-        && refresh.project.merge_method == "merge"
-        && refresh.project.squash_option == "never"
+        && refresh.project.train.enforcement == TrainEnforcement::EnforceForAllUsers
+        && refresh.project.merge_method == MergeMethod::Merge
+        && refresh.project.squash_option == SquashOption::Never
         && !refresh.merge_request.squash_on_merge
         && protected
 }

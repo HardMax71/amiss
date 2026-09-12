@@ -6,7 +6,7 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct RawConfig {
-    pub(super) listen: String,
+    pub(super) listen: std::net::SocketAddr,
     pub(super) evaluation_path: String,
     pub(super) max_concurrent_evaluations: usize,
     pub(super) gitlab: RawGitLab,

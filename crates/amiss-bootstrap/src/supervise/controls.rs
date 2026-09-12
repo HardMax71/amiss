@@ -90,7 +90,7 @@ pub(super) fn accept(
         || statement.provider_run_id != expected.provider_run_id
         || statement.provider_run_attempt != expected.provider_run_attempt
         || statement.repository != expected.repository
-        || statement.ref_name.as_str() != expected.target_ref
+        || statement.ref_name != expected.target_ref
         || statement.candidate_identity_digest != identity_digest
         || evaluation_instant != Some(statement.evaluation_instant.as_str())
         || controls.sandbox.assurance != SandboxAssurance::SelfAsserted

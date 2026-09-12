@@ -16,7 +16,7 @@ use crate::invocation::AuthorInvocation;
     reason = "the definition is the command's output and refusals are diagnostics"
 )]
 pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
-    let bytes = match fs::read(author.repo.join(&author.path)) {
+    let bytes = match fs::read(author.repo.join(author.path.as_str())) {
         Ok(bytes) => bytes,
         Err(_defect) => {
             eprintln!(

@@ -59,6 +59,41 @@ The published JSON Schemas describe the object representation. Canonical-byte co
 digest checks can still reject alternate representations at authenticated report and request
 boundaries; accepting a value through Serde does not establish its domain validity.
 
+Domain values keep their types after admission. CLI adoption retains digests, owners, and
+instants; release staging retains repository identities, object formats, OIDs, artifact IDs,
+and repository paths. Scanner forge context carries a repository identity and optional branch
+refs, so an absent ref has no empty-string spelling. `BranchRef` names only `refs/heads/`;
+provider pull-request/train refs and private acquisition refs have different domains. The Git
+transport uses gix's validated full-name type after enforcing its private ref namespace.
+
+The controller owns provider identities and opaque IDs. Its `AcquiredCommit` carries typed
+commit, tree, and parent OIDs for the object resolver and GitLab/Gitea adapters. Wire-owned
+`RequiredStatusName` supplies the same existing grammar to execution constraints, controller
+checks, relation destinations, and provider configuration. Unrelated remote check names stay
+text so their presence cannot invalidate a response. Provider states and webhook actions use
+each provider's own enums. Unknown strings remain representable; the consuming operation
+explicitly decides whether they are ignored, nonpassing, or invalid.
+
+Persistent records reuse domain models and typed schema markers, IDs, digests, refs, and
+verdicts. The inbox serializes the production delivery model, using Serde library adapters for
+base64 bytes and its bare hexadecimal content digest. Artifact and ledger digests retain their
+`sha256:` spelling. Record field order, omission rules, and hash domains remain part of stored
+identity: the ledger's repository projection deliberately retains its historical host/owner/name
+order. Generic sidecar audits carry the publication or relation verdict enum directly.
+
+A type name alone does not establish validity. `UtcInstant`, `OwnerId`, and structured repository
+identities still require their existing domain validators after ordinary derived deserialization.
+Limits, timestamp ordering, object-format agreement, authorization, and identity binding remain
+separate checks. Parsed transport API bases use `Url`; evidence URLs retain their exact spelling
+because normalization could change a bound identity.
+
+Open wire contracts are not narrowed to whichever values current producers happen to emit.
+External report modes and document strings, nonempty external `checked_at` evidence, rule IDs,
+site routes, locale page keys, and binary report paths retain their existing contracts. A stricter
+shared type for those fields requires agreement across their producers, schemas, and validators.
+Trusted-time run IDs also retain their wire grammar, which differs from controller opaque IDs.
+Source text, diagnostic prose, signatures, labels, versions, and rendering output remain text.
+
 `amiss-git` reads Git storage behind the never-follow-links boundary: loose objects, packs,
 deltas, and the index, each under a parser that rejects malformed input and a published
 resource ceiling. It repairs nothing.

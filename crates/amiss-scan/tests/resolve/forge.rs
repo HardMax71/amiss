@@ -344,7 +344,7 @@ fn repeated_historical_walks_share_the_tree_entry_budget() {
 fn a_ref_spelled_like_a_full_oid_is_ambiguous() {
     let raw = "0123456789012345678901234567890123456789";
     let mut context = forge_context(ForgeDialect::Github);
-    context.candidate_ref = format!("refs/heads/{raw}");
+    context.candidate_ref = Some(format!("refs/heads/{raw}").parse().unwrap());
     let (intent, resolution) = bed()
         .run_as(
             Adapter::Markdown,
@@ -482,7 +482,7 @@ fn bitbucket_cloud_recognizes_only_the_documented_source_contract() {
     ));
 
     let slashed = ForgeContext {
-        candidate_ref: "refs/heads/feature/x".to_owned(),
+        candidate_ref: Some("refs/heads/feature/x".parse().unwrap()),
         ..context
     };
     let (_intent, no_guessed_split) = bed
@@ -720,7 +720,12 @@ fn a_commit_selector_is_an_exact_oid() {
 fn nested_group_owners_match_segment_by_segment() {
     let mut bed = bed();
     let nested = ForgeContext {
-        owner: "group/sub".to_owned(),
+        repository: amiss_wire::model::RepositoryIdentity::new(
+            "gitlab.com".to_owned(),
+            "group/sub".to_owned(),
+            "widgets".to_owned(),
+        )
+        .unwrap(),
         ..forge_context(ForgeDialect::Gitlab)
     };
     let (intent, row) = bed

@@ -275,7 +275,7 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
         .status_destinations
         .push(RelationStatusDestination {
             subject_role: ArtifactId::new("source".to_owned()).unwrap(),
-            required_status_name: "Amiss source relation".to_owned(),
+            required_status_name: "Amiss source relation".parse().unwrap(),
         });
     let registry =
         relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()]).unwrap();

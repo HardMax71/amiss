@@ -1,3 +1,4 @@
+use amiss_controller::provider_api_url as api_url;
 mod tests;
 
 use std::time::Duration;
@@ -20,7 +21,7 @@ const GITEA_JSON: &str = "application/json";
 
 pub(super) struct Transport {
     client: Client,
-    api_base: String,
+    api_base: Url,
     authorization: SecretString,
     operation_timeout: Duration,
 }
@@ -58,7 +59,7 @@ impl Transport {
         route: &str,
         deadline: OperationDeadline,
     ) -> Result<T, ProviderError> {
-        self.execute(self.client.get(self.url(route)?), deadline)
+        self.execute(self.client.get(api_url(&self.api_base, route)?), deadline)
     }
 
     pub(super) fn post<T: DeserializeOwned>(
@@ -67,7 +68,8 @@ impl Transport {
         body: &impl Serialize,
         deadline: OperationDeadline,
     ) -> Result<T, ProviderError> {
-        self.execute(self.client.post(self.url(route)?).json(body), deadline)
+        let request = self.client.post(api_url(&self.api_base, route)?).json(body);
+        self.execute(request, deadline)
     }
 
     /// A verification GET whose negative answers are facts: the absence or
@@ -77,7 +79,7 @@ impl Transport {
         route: &str,
         deadline: OperationDeadline,
     ) -> Result<ForgeFact<T>, ProviderError> {
-        let request = self.client.get(self.url(route)?);
+        let request = self.client.get(api_url(&self.api_base, route)?);
         let response = self
             .authorized(request)?
             .timeout(deadline.remaining()?)
@@ -123,22 +125,14 @@ impl Transport {
             .header(ACCEPT, GITEA_JSON)
             .header(AUTHORIZATION, authorization))
     }
-
-    fn url(&self, route: &str) -> Result<Url, ProviderError> {
-        if !route.starts_with('/') || route.starts_with("//") {
-            return Err(ProviderError::InvalidResponse);
-        }
-        Url::parse(&format!("{}{route}", self.api_base))
-            .map_err(|_defect| ProviderError::InvalidResponse)
-    }
 }
 
-fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, GiteaClientError> {
+fn validate_api_base(raw: &str, provider_instance: &str) -> Result<Url, GiteaClientError> {
     let configuration = GiteaClientError::Configuration;
     if raw.is_empty() || raw.len() > MAX_API_BASE_BYTES {
         return Err(configuration("the API base length is out of bounds"));
     }
-    let url =
+    let mut url =
         Url::parse(raw).map_err(|_defect| configuration("the API base is not a valid URL"))?;
     if url.scheme() != "https" {
         return Err(configuration("the API base must use https"));
@@ -164,7 +158,8 @@ fn validate_api_base(raw: &str, provider_instance: &str) -> Result<String, Gitea
     if raw != canonical && raw != format!("{canonical}/") {
         return Err(configuration("the API base is not the canonical form"));
     }
-    Ok(canonical)
+    url.set_path("/api/v1/");
+    Ok(url)
 }
 
 fn map_error(error: &reqwest::Error) -> ProviderError {

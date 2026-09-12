@@ -22,7 +22,7 @@ pub use debt::{DebtItem, DebtSnapshot, DebtSnapshotSchema, parse_debt_snapshot};
 pub use execution_constraint::{
     ACTION_BOOTSTRAP_CONTRACT, ActionBootstrapContract, ConstraintPlatform,
     EXECUTION_CONSTRAINT_SCHEMA, ExecutionConstraintDescriptor, ExecutionConstraintSchema,
-    parse_execution_constraint, valid_required_status_name,
+    RequiredStatusName, parse_execution_constraint, valid_required_status_name,
 };
 pub use fact::{
     Fact, FactEvidence, FactEvidenceKind, FactSchema, FindingKeyInput, FindingKeyInputSchema,

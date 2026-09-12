@@ -1,4 +1,3 @@
-use amiss_wire::controls::valid_required_status_name;
 use amiss_wire::model::{ArtifactId, Oid};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
@@ -22,7 +21,7 @@ pub struct RelationStatusTarget {
     pub scope: PlanScope,
     pub credential: OpaqueId,
     pub candidate_commit: Oid,
-    pub required_status_name: String,
+    pub required_status_name: amiss_wire::controls::RequiredStatusName,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -86,7 +85,6 @@ pub fn relation_status_publication(
     if status.completed
         || !exact_target
         || !ordered_targets
-        || !valid_required_status_name(&target.required_status_name)
         || artifact.report_digest != audit.report_digest
         || artifact.semantic_digest.is_some()
         || artifact.assessment_digest.is_some()

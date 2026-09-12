@@ -16,8 +16,8 @@ const WORK_BINDING_DOMAIN: &str = "amiss/controller-relation-work-binding-v1";
 
 pub(super) struct CheckedWork {
     pub(super) transition: RelationTransition,
-    pub(super) relation: String,
-    pub(super) plan_binding: String,
+    pub(super) relation: ArtifactId,
+    pub(super) plan_binding: Digest,
     pub(super) binding: StoredBinding,
 }
 
@@ -40,7 +40,7 @@ struct BoundPlanSubject<'a> {
 #[derive(Serialize)]
 struct BoundPlan<'a> {
     identity: &'a str,
-    context_digest: String,
+    context_digest: Digest,
     projection: &'a str,
     subjects: [BoundPlanSubject<'a>; 2],
     aggregate_limits: RelationLimits,
@@ -50,7 +50,7 @@ struct BoundPlan<'a> {
 #[derive(Serialize)]
 struct BoundWorkSubject<'a> {
     role: &'a str,
-    object_format: String,
+    object_format: amiss_wire::model::ObjectFormat,
     base_commit: &'a str,
     candidate_commit: &'a str,
     base_tree: &'a str,
@@ -59,9 +59,9 @@ struct BoundWorkSubject<'a> {
 
 #[derive(Serialize)]
 struct BoundWork<'a> {
-    relation: &'a str,
-    plan_binding: &'a str,
-    coordination: &'a str,
+    relation: &'a ArtifactId,
+    plan_binding: &'a Digest,
+    coordination: &'a ArtifactId,
     subjects: [BoundWorkSubject<'a>; 2],
 }
 
@@ -76,14 +76,14 @@ pub(super) fn checked_work(
     .map_err(|_defect| {
         RelationScheduleStoreError::Schedule(RelationScheduleError::InvalidTransition)
     })?;
-    let plan_binding = plan_binding(transition.relation.plan.as_ref())?.to_string();
-    let relation = transition.relation.plan.identity.as_str().to_owned();
+    let plan_binding = plan_binding(transition.relation.plan.as_ref())?;
+    let relation = transition.relation.plan.identity.clone();
     let subjects = transition
         .subjects
         .each_ref()
         .map(|subject| BoundWorkSubject {
             role: subject.role.as_str(),
-            object_format: subject.commits.base.object_format().as_ref().to_owned(),
+            object_format: subject.commits.base.object_format(),
             base_commit: subject.commits.base.as_str(),
             candidate_commit: subject.commits.candidate.as_str(),
             base_tree: subject.trees.base.as_str(),
@@ -92,21 +92,20 @@ pub(super) fn checked_work(
     let bytes = serde_json::to_vec(&BoundWork {
         relation: &relation,
         plan_binding: &plan_binding,
-        coordination: transition.coordination.as_str(),
+        coordination: &transition.coordination,
         subjects,
     })
     .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
     let binding = StoredBinding {
-        coordination: transition.coordination.as_str().to_owned(),
+        coordination: transition.coordination.clone(),
         work_binding: Digest::from(
             sha2::Sha256::new_with_prefix(WORK_BINDING_DOMAIN)
                 .chain_update([0_u8])
                 .chain_update(&bytes)
                 .finalize()
                 .0,
-        )
-        .to_string(),
-        trigger_role: transition.relation.trigger_role.as_str().to_owned(),
+        ),
+        trigger_role: transition.relation.trigger_role.clone(),
         fence: 0,
     };
     Ok(CheckedWork {
@@ -123,15 +122,11 @@ pub(super) fn pending_from_binding(
 ) -> Result<PendingRelation, RelationScheduleStoreError> {
     let relation = TriggeredRelation {
         plan: transition.relation.plan,
-        trigger_role: ArtifactId::new(binding.trigger_role.clone())
-            .ok_or(RelationScheduleStoreError::Corrupt)?,
+        trigger_role: binding.trigger_role.clone(),
     };
-    let transition = relation_transition(
-        relation,
-        ArtifactId::new(binding.coordination.clone()).ok_or(RelationScheduleStoreError::Corrupt)?,
-        transition.subjects,
-    )
-    .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    let transition =
+        relation_transition(relation, binding.coordination.clone(), transition.subjects)
+            .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
     Ok(PendingRelation {
         transition,
         fence: LeaseFence::new(binding.fence).ok_or(RelationScheduleStoreError::Corrupt)?,
@@ -165,7 +160,7 @@ pub(super) fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationSchedu
     });
     let bytes = serde_json::to_vec(&BoundPlan {
         identity: plan.identity.as_str(),
-        context_digest: plan.context_digest.to_string(),
+        context_digest: plan.context_digest,
         projection: plan.projection.as_ref(),
         subjects: [left?, right?],
         aggregate_limits: plan.aggregate_limits,

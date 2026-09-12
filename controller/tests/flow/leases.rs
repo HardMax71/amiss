@@ -228,7 +228,7 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
         ..expected.clone()
     };
     let mut other_check = expected.check.clone();
-    other_check.required_status_name = "amiss / another check".to_owned();
+    other_check.required_status_name = "amiss / another check".parse().unwrap();
     let changed_check = DeliveryLease {
         check: other_check,
         ..expected.clone()
@@ -347,7 +347,7 @@ fn a_staged_row_must_echo_the_lease_and_publication_exactly() {
     ));
 
     let mut drifted_check = expected.clone();
-    drifted_check.check.required_status_name = "amiss / elsewhere".to_owned();
+    drifted_check.check.required_status_name = "amiss / elsewhere".parse().unwrap();
     let (adapter, mut ledger) = scripted(None, drifted_check.clone());
     ledger.renewals = renewal_script([
         LeaseRenewal::Renewed(drifted_check.clone()),

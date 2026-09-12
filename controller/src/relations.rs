@@ -7,9 +7,7 @@ mod store;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-use amiss_wire::controls::{
-    ProjectionKind, ProjectionSource, check_projection_source, valid_required_status_name,
-};
+use amiss_wire::controls::{ProjectionKind, ProjectionSource, check_projection_source};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat};
 use amiss_wire::relation::RelationPlanEnvelope;
@@ -61,7 +59,7 @@ pub struct RelationSubject {
 #[serde(deny_unknown_fields)]
 pub struct RelationStatusDestination {
     pub subject_role: ArtifactId,
-    pub required_status_name: String,
+    pub required_status_name: amiss_wire::controls::RequiredStatusName,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -295,11 +293,10 @@ fn validate_relation(plan: &RelationPlan) -> Result<(), RelationRegistryError> {
             .windows(2)
             .any(|pair| matches!(pair, [left, right] if left.subject_role == right.subject_role))
         || plan.status_destinations.iter().any(|destination| {
-            !valid_required_status_name(&destination.required_status_name)
-                || !plan
-                    .subjects
-                    .iter()
-                    .any(|subject| subject.role == destination.subject_role)
+            !plan
+                .subjects
+                .iter()
+                .any(|subject| subject.role == destination.subject_role)
         })
     {
         return Err(RelationRegistryError::InvalidDestination);

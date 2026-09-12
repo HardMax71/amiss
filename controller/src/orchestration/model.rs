@@ -17,7 +17,8 @@ pub enum ChangeState {
 }
 
 /// The refs one run resolves against.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RunRefs {
     pub forge: ForgeDialect,
     pub candidate: BranchRef,
@@ -26,7 +27,8 @@ pub struct RunRefs {
 }
 
 /// One base and candidate pair of object ids.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OidPair {
     pub base: Oid,
     pub candidate: Oid,
@@ -36,7 +38,7 @@ impl OidPair {
     fn well_formed(&self, object_format: ObjectFormat) -> bool {
         [&self.base, &self.candidate]
             .into_iter()
-            .all(|oid| Oid::new(object_format, oid.as_str().to_owned()).is_some())
+            .all(|oid| oid.object_format() == object_format)
     }
 }
 

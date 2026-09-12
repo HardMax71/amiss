@@ -346,15 +346,11 @@ fn forge_context(
         return None;
     };
     Some(amiss_scan::resolve::ForgeContext {
-        host: repository.host().to_owned(),
+        repository: repository.clone(),
         dialect,
         object_format,
-        owner: repository.owner().to_owned(),
-        repository: repository.name().to_owned(),
-        candidate_ref: candidate_ref
-            .map_or_else(String::new, |reference| reference.as_str().to_owned()),
-        default_ref: default_branch_ref
-            .map_or_else(String::new, |reference| reference.as_str().to_owned()),
+        candidate_ref: candidate_ref.cloned(),
+        default_ref: default_branch_ref.cloned(),
     })
 }
 

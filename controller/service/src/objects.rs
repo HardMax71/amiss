@@ -1,3 +1,4 @@
+pub use amiss_controller::AcquiredCommit;
 mod tests;
 
 use std::path::{Path, PathBuf};
@@ -13,13 +14,6 @@ use amiss_wire::model::{ObjectFormat, Oid};
 use secrecy::SecretString;
 
 const MAX_USERNAME_BYTES: usize = 256;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ResolvedCommit {
-    pub id: String,
-    pub tree: String,
-    pub parents: Vec<String>,
-}
 
 #[derive(Clone, Copy)]
 pub struct ResolveWant<'a> {
@@ -84,10 +78,9 @@ impl GitObjectSource {
         &self,
         wants: [ResolveWant<'_>; N],
         timeout: Duration,
-    ) -> Result<[ResolvedCommit; N], ProviderError> {
+    ) -> Result<[AcquiredCommit; N], ProviderError> {
         let exact = wants.iter().all(|want| {
-            Oid::new(ObjectFormat::Sha1, want.oid.as_str().to_owned()).as_ref() == Some(want.oid)
-                && !want.reference.is_empty()
+            want.oid.object_format() == ObjectFormat::Sha1 && !want.reference.is_empty()
         });
         if !exact || timeout.is_zero() {
             return Err(ProviderError::InvalidResponse);
@@ -130,7 +123,7 @@ fn read_commits<const N: usize>(
     root: &Path,
     wants: [ResolveWant<'_>; N],
     deadline: Instant,
-) -> Result<[ResolvedCommit; N], ProviderError> {
+) -> Result<[AcquiredCommit; N], ProviderError> {
     active(deadline)?;
     let repository = Repository::open(root, ObjectFormat::Sha1)
         .map_err(|_defect| ProviderError::InvalidResponse)?;
@@ -146,7 +139,7 @@ fn read_commits<const N: usize>(
     }
     active(deadline)?;
     read.try_into()
-        .map_err(|_defect: Vec<ResolvedCommit>| ProviderError::Unavailable)
+        .map_err(|_defect: Vec<AcquiredCommit>| ProviderError::Unavailable)
 }
 
 fn read_commit(
@@ -154,7 +147,7 @@ fn read_commit(
     resources: &mut GitResources,
     oid: &Oid,
     deadline: Instant,
-) -> Result<ResolvedCommit, ProviderError> {
+) -> Result<AcquiredCommit, ProviderError> {
     active(deadline)?;
     let object = repository
         .read_expected(resources, oid, ObjectKind::Commit)
@@ -163,14 +156,10 @@ fn read_commit(
     let commit = parse_commit(ObjectFormat::Sha1, &object.body)
         .map_err(|_defect| ProviderError::InvalidResponse)?;
     active(deadline)?;
-    Ok(ResolvedCommit {
-        id: oid.as_str().to_owned(),
-        tree: commit.tree.as_str().to_owned(),
-        parents: commit
-            .parents
-            .into_iter()
-            .map(|parent| parent.as_str().to_owned())
-            .collect(),
+    Ok(AcquiredCommit {
+        id: oid.clone(),
+        tree: commit.tree,
+        parents: commit.parents,
     })
 }
 

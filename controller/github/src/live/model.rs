@@ -18,7 +18,7 @@ pub(super) struct OwnerRecord {
 pub(super) struct PullRequestRecord {
     pub id: u64,
     pub number: u64,
-    pub state: String,
+    pub state: crate::states::PullRequestState,
     pub mergeable: Option<bool>,
     pub merge_commit_sha: Option<String>,
     pub head: PullRefRecord,
@@ -117,8 +117,8 @@ pub(super) struct CheckRunRecord {
     pub name: String,
     pub head_sha: String,
     pub external_id: Option<String>,
-    pub status: String,
-    pub conclusion: Option<String>,
+    pub status: crate::states::CheckStatus,
+    pub conclusion: Option<crate::states::CheckConclusion>,
     pub output: CheckRunOutputRecord,
     pub app: Option<CheckRunApp>,
 }
@@ -142,11 +142,11 @@ pub(super) struct CheckRunPage {
 
 #[derive(Clone, Serialize)]
 pub(super) struct CreateCheckRun {
-    pub name: String,
+    pub name: amiss_wire::controls::RequiredStatusName,
     pub head_sha: String,
     pub external_id: String,
-    pub status: &'static str,
-    pub conclusion: String,
+    pub status: crate::states::CheckStatus,
+    pub conclusion: crate::states::CheckConclusion,
     pub output: CreateCheckRunOutput,
 }
 

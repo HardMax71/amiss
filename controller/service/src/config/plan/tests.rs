@@ -29,7 +29,7 @@ fn policy_files_decode_at_ingress_and_do_not_follow_later_file_changes() {
         fs::write(directory.path().join(name), bytes).unwrap();
     }
     let files = CheckPlanFiles {
-        profile: "enforce".to_owned(),
+        profile: amiss_wire::controls::Profile::Enforce,
         external_policy: ExternalPolicy::Advisory,
         execution_constraint_file: directory.path().join("constraint"),
         organization_floor_file: Some(directory.path().join("floor")),

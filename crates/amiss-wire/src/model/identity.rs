@@ -101,6 +101,11 @@ impl BranchRef {
     }
 
     #[must_use]
+    pub fn name(&self) -> &str {
+        self.0.strip_prefix("refs/heads/").unwrap_or(&self.0)
+    }
+
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }

@@ -42,17 +42,17 @@ fn policy() -> PolicyBinding {
 fn car() -> GitLabTrainCar {
     GitLabTrainCar {
         id: 9,
-        status: "idle".to_owned(),
+        status: "idle".parse().unwrap(),
         target_branch: "main".to_owned(),
         merge_request_iid: 42,
         merge_request_project_id: 101,
-        merge_request_state: "opened".to_owned(),
+        merge_request_state: "opened".parse().unwrap(),
         pipeline_id: 202,
         pipeline_project_id: 101,
         pipeline_sha: oid('b').as_str().to_owned(),
         pipeline_ref: crate::identity::train_ref(42),
-        pipeline_source: "merge_request_event".to_owned(),
-        pipeline_status: "running".to_owned(),
+        pipeline_source: "merge_request_event".parse().unwrap(),
+        pipeline_status: "running".parse().unwrap(),
     }
 }
 
@@ -94,7 +94,7 @@ fn a_train_car_answers_for_every_closed_vocabulary() {
 
     for state in ["closed", "locked", "merged"] {
         let mut closed = car();
-        closed.merge_request_state = state.to_owned();
+        closed.merge_request_state = state.parse().unwrap();
         assert_eq!(
             train_matches(&query(), &policy(), &closed),
             Ok(false),
@@ -102,7 +102,7 @@ fn a_train_car_answers_for_every_closed_vocabulary() {
         );
     }
     let mut foreign = car();
-    foreign.merge_request_state = "reopened".to_owned();
+    foreign.merge_request_state = "reopened".parse().unwrap();
     assert_eq!(
         train_matches(&query(), &policy(), &foreign),
         Err(ProviderError::InvalidResponse),
@@ -123,7 +123,7 @@ fn a_train_car_answers_for_every_closed_vocabulary() {
         "waiting_for_resource",
     ] {
         let mut settled = car();
-        settled.pipeline_status = status.to_owned();
+        settled.pipeline_status = status.parse().unwrap();
         assert_eq!(
             train_matches(&query(), &policy(), &settled),
             Ok(false),
@@ -131,7 +131,7 @@ fn a_train_car_answers_for_every_closed_vocabulary() {
         );
     }
     let mut foreign = car();
-    foreign.pipeline_status = "dancing".to_owned();
+    foreign.pipeline_status = serde_json::from_str(r#""dancing""#).unwrap();
     assert_eq!(
         train_matches(&query(), &policy(), &foreign),
         Err(ProviderError::InvalidResponse),

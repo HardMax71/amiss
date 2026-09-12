@@ -523,14 +523,12 @@ fn identity_absent(staged: &Release) {
 fn invalid_supplied_controls(staged: &Release) {
     let mut constraint = sealed_run(staged);
     let controls = &mut constraint.requests.controls;
-    " bad".clone_into(
-        &mut controls
-            .execution_constraint
-            .as_mut()
-            .unwrap()
-            .value
-            .required_status_name,
-    );
+    controls
+        .execution_constraint
+        .as_mut()
+        .unwrap()
+        .value
+        .action_object_format = amiss_wire::model::ObjectFormat::Sha256;
     let mut provider = sealed_run(staged);
     let controls = &mut provider.requests.controls;
     "bad provider!".clone_into(&mut controls.trusted_time.as_mut().unwrap().value.provider);
@@ -541,7 +539,7 @@ fn invalid_supplied_controls(staged: &Release) {
     for (run, field, diagnostic) in [
         (
             constraint,
-            "required_status_name",
+            "action_commit_oid",
             "execution-constraint-invalid",
         ),
         (provider, "provider", "trusted-time-invalid"),

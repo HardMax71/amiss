@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
 use sha2::Digest as _;
+pub mod states;
+
 mod acquisition;
 mod live;
 mod workflow_artifact;
@@ -26,7 +28,6 @@ pub use live::{GitHubApp, GitHubClientError, GitHubTimeouts};
 pub use workflow_artifact::{GitHubArtifactError, decode_workflow_artifact};
 
 const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v1";
-const SUPPORTED_ACTIONS: [&str; 3] = ["opened", "reopened", "synchronize"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GitHubPullRequest<'a> {
@@ -290,7 +291,7 @@ impl PullRequestFacts {
         let Some((completion, run)) = configured_workflow(&payload, workflow_completion) else {
             return Ok(None);
         };
-        if run.conclusion.as_deref() != Some("success") {
+        if run.conclusion != Some(states::CheckConclusion::Success) {
             return Ok(None);
         }
         let (installation_id, repository_id, repository) =
@@ -400,7 +401,7 @@ fn configured_workflow<'a>(
     completion: Option<&'a WorkflowCompletion>,
 ) -> Option<(&'a WorkflowCompletion, &'a WorkflowRun)> {
     let run = payload.workflow_run.as_ref()?;
-    (payload.action.as_deref() == Some("completed")).then_some(())?;
+    (payload.action == Some(states::WebhookAction::Completed)).then_some(())?;
     let completion = completion?;
     (run.event == completion.event.as_str()).then_some(())?;
     let identity = completion.workflow_identity.as_str();
@@ -430,7 +431,7 @@ fn workflow_pull_request<'a>(
         .workflow
         .as_ref()
         .is_none_or(|workflow| positive(workflow.id) == Some(run.workflow_id));
-    (run.status == "completed"
+    (run.status == states::CheckStatus::Completed
         && positive(run.id).is_some()
         && positive(run.workflow_id).is_some()
         && positive(run.run_attempt).is_some()
@@ -469,14 +470,18 @@ fn workflow_pull_request<'a>(
 }
 
 fn supported_action(payload: &GitHubPayload) -> bool {
-    payload.action.as_deref().is_some_and(|action| {
-        SUPPORTED_ACTIONS.contains(&action)
-            || action == "edited"
-                && payload
-                    .changes
-                    .as_ref()
-                    .and_then(|changes| changes.base.as_ref())
-                    .is_some_and(|base| github_ref(&base.reference.from).is_some())
+    payload.action.as_ref().is_some_and(|action| {
+        matches!(
+            action,
+            states::WebhookAction::Opened
+                | states::WebhookAction::Reopened
+                | states::WebhookAction::Synchronize
+        ) || *action == states::WebhookAction::Edited
+            && payload
+                .changes
+                .as_ref()
+                .and_then(|changes| changes.base.as_ref())
+                .is_some_and(|base| github_ref(&base.reference.from).is_some())
     })
 }
 
@@ -620,7 +625,7 @@ fn github_ref(branch: &str) -> Option<BranchRef> {
 
 #[derive(Deserialize)]
 struct GitHubPayload {
-    action: Option<String>,
+    action: Option<states::WebhookAction>,
     changes: Option<PullRequestChanges>,
     installation: Option<Installation>,
     repository: Option<Repository>,
@@ -696,8 +701,8 @@ struct Workflow {
 struct WorkflowRun {
     id: u64,
     event: String,
-    status: String,
-    conclusion: Option<String>,
+    status: states::CheckStatus,
+    conclusion: Option<states::CheckConclusion>,
     workflow_id: u64,
     run_attempt: u64,
     head_sha: String,

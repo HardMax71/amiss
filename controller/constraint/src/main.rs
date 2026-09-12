@@ -9,7 +9,7 @@ use amiss_bootstrap::BOOTSTRAP_EXECUTABLE_BYTES;
 use amiss_bootstrap::constraint::derive_execution_constraint;
 use amiss_controller_files::read_bounded;
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::controls::valid_required_status_name;
+use amiss_wire::controls::RequiredStatusName;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 const GRAMMAR: &str = concat!(
@@ -58,7 +58,7 @@ struct Args {
     action_identity: RepositoryIdentity,
     action_commit_oid: Oid,
     bootstrap: PathBuf,
-    required_status_name: String,
+    required_status_name: RequiredStatusName,
     output: PathBuf,
 }
 
@@ -134,10 +134,7 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     {
         return None;
     }
-    let required_status_name = required_status_name?;
-    if !valid_required_status_name(&required_status_name) {
-        return None;
-    }
+    let required_status_name = required_status_name?.parse().ok()?;
     let action_commit_oid = Oid::new(ObjectFormat::Sha1, action_commit_oid?)?;
     Some(Args {
         action_repository,

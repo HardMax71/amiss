@@ -22,7 +22,7 @@ mod tests;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CheckPlanFiles {
-    profile: String,
+    profile: Profile,
     #[serde(default)]
     external_policy: ExternalPolicy,
     execution_constraint_file: PathBuf,
@@ -46,10 +46,10 @@ struct IntersphinxInventoryFile {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WorkflowArtifactFile {
-    workflow_identity: String,
-    event: String,
+    workflow_identity: OpaqueId,
+    event: OpaqueId,
     artifact_name: String,
-    payload_file: String,
+    payload_file: RepoPathText,
     archive_byte_limit: u64,
     file_byte_limit: u64,
     semantic: SemanticEvidenceFile,
@@ -58,11 +58,11 @@ struct WorkflowArtifactFile {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct SemanticEvidenceFile {
-    acquisition_identity: String,
+    acquisition_identity: ArtifactId,
     producer_kind: amiss_wire::semantic::SemanticProducerKind,
-    producer_identity: String,
+    producer_identity: ArtifactId,
     producer_version: String,
-    context_digest: String,
+    context_digest: Digest,
 }
 
 /// Loads and binds every trust input named by one service plan. A provider lane supplies its
@@ -75,10 +75,12 @@ pub fn load_plan(
     raw: &CheckPlanFiles,
     workflow_scope: Option<(&ProviderIdentity, &RepositoryIdentity)>,
 ) -> Result<CheckPlan, ConfigError> {
-    let profile = match raw.profile.as_str() {
-        "observe" => Profile::Observe,
-        "enforce" => Profile::Enforce,
-        _ => return Err(ConfigError::invalid("profile must be observe or enforce")),
+    let profile = match raw.profile {
+        Profile::Observe => Profile::Observe,
+        Profile::Enforce => Profile::Enforce,
+        Profile::EnforceIntroduced => {
+            return Err(ConfigError::invalid("profile must be observe or enforce"));
+        }
     };
     let execution_bytes = read_regular(&raw.execution_constraint_file, REQUEST_STREAM_BYTES)?;
     let execution = parse_execution_constraint(&execution_bytes)
@@ -129,28 +131,21 @@ fn load_workflow_artifacts(
     files
         .iter()
         .map(|file| {
-            let invalid = || ConfigError::invalid("workflow artifact configuration is invalid");
             Ok(WorkflowArtifactExpectation {
                 provider: provider.clone(),
                 repository: repository.clone(),
-                workflow_identity: OpaqueId::new(file.workflow_identity.clone())
-                    .ok_or_else(invalid)?,
-                event: OpaqueId::new(file.event.clone()).ok_or_else(invalid)?,
+                workflow_identity: file.workflow_identity.clone(),
+                event: file.event.clone(),
                 artifact_name: file.artifact_name.clone(),
-                payload_file: RepoPathText::new(file.payload_file.clone()).ok_or_else(invalid)?,
+                payload_file: file.payload_file.clone(),
                 archive_byte_limit: file.archive_byte_limit,
                 file_byte_limit: file.file_byte_limit,
                 semantic: SemanticEvidenceExpectation {
-                    acquisition_identity: ArtifactId::new(
-                        file.semantic.acquisition_identity.clone(),
-                    )
-                    .ok_or_else(invalid)?,
+                    acquisition_identity: file.semantic.acquisition_identity.clone(),
                     producer_kind: file.semantic.producer_kind,
-                    producer_identity: ArtifactId::new(file.semantic.producer_identity.clone())
-                        .ok_or_else(invalid)?,
+                    producer_identity: file.semantic.producer_identity.clone(),
                     producer_version: file.semantic.producer_version.clone(),
-                    context_digest: Digest::from_wire(&file.semantic.context_digest)
-                        .ok_or_else(invalid)?,
+                    context_digest: file.semantic.context_digest,
                 },
             })
         })

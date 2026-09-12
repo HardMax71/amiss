@@ -177,7 +177,10 @@ fn refs_are_created_only_over_objects_the_pack_delivered() {
     let repository = initialize(empty.path()).expect("initialize");
     let oid = gix::ObjectId::from_hex(b"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa").expect("oid");
     assert_eq!(
-        create_refs(&repository, &[(oid, "refs/amiss/heads/x".to_owned())]),
+        create_refs(
+            &repository,
+            &[(oid, "refs/amiss/heads/x".try_into().unwrap())]
+        ),
         Err(GitFetchError("the server omitted an exact wanted object"))
     );
 }

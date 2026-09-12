@@ -214,7 +214,7 @@ fn execution(
     .unwrap();
     constraint.action_commit_oid = oid(&action.candidate);
     constraint.action_tree_oid = tree(action, &action.candidate);
-    status.clone_into(&mut constraint.required_status_name);
+    constraint.required_status_name = status.parse().unwrap();
     constraint.bootstrap_digest = bootstrap_digest;
     constraint
 }

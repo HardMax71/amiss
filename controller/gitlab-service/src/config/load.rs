@@ -26,10 +26,7 @@ const POLICY_JOB_HEADERS: u64 = 32;
 const POLICY_JOB_HEADER_BYTES: u64 = 32 * 1_024;
 
 pub(super) fn load(raw: RawConfig) -> Result<ServiceConfig, ConfigError> {
-    let listen = raw
-        .listen
-        .parse()
-        .map_err(|defect| ConfigError::caused_by("listen must be one socket address", defect))?;
+    let listen = raw.listen;
     let provider = provider(raw.gitlab.instance)?;
     let policy = policy(raw.policy)?;
     let plan = Arc::new(load_plan(&raw.plan, None)?);

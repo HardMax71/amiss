@@ -1,3 +1,4 @@
+use crate::states::{CheckConclusion as GitHubConclusion, CheckStatus};
 use sha2::Digest as _;
 mod tests;
 
@@ -14,7 +15,6 @@ use super::publication::{CheckRunDecision, check_run_decision, validate_created}
 use super::rest::GitHubRest;
 
 const CHECK_RUN_DOMAIN: &str = "amiss/controller-github-relation-check-run-v1";
-const COMPLETED: &str = "completed";
 const TITLE: &str = "Amiss cross-repository relation";
 
 pub(super) trait GitHubRelationRest {
@@ -96,11 +96,11 @@ fn relation_check_run(
                 .0,
         )
         .to_string(),
-        status: COMPLETED,
+        status: CheckStatus::Completed,
         conclusion: if publication.passing {
-            "success".to_owned()
+            GitHubConclusion::Success
         } else {
-            "failure".to_owned()
+            GitHubConclusion::Failure
         },
         output: CreateCheckRunOutput {
             title: TITLE.to_owned(),

@@ -14,7 +14,7 @@ fn live_client_rejects_unsafe_transport_and_identity_configuration() {
             reviewer(),
             "a-secure-dedicated-token".to_owned(),
             api,
-            "amiss".to_owned(),
+            "amiss".parse().unwrap(),
             timeouts,
             objects(),
         )

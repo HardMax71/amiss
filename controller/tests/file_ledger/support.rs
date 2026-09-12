@@ -56,7 +56,7 @@ pub(super) fn check_binding() -> CheckBinding {
                 .finalize()
                 .0,
         ),
-        required_status_name: "amiss/enforce".to_owned(),
+        required_status_name: "amiss/enforce".parse().unwrap(),
         execution_constraint_digest: amiss_wire::model::Digest::from(
             Sha256::new_with_prefix("amiss/test-execution-constraint")
                 .chain_update([0_u8])

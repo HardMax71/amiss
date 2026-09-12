@@ -106,8 +106,11 @@ fn a_train_retains_its_nested_pipeline_identity() {
     assert_eq!(train.pipeline_project_id, 101);
     assert_eq!(train.pipeline_sha, "b".repeat(40));
     assert_eq!(train.pipeline_ref, "refs/merge-requests/42/train");
-    assert_eq!(train.pipeline_source, "merge_request_event");
-    assert_eq!(train.pipeline_status, "running");
+    assert_eq!(
+        train.pipeline_source,
+        "merge_request_event".parse().unwrap()
+    );
+    assert_eq!(train.pipeline_status, "running".parse().unwrap());
 }
 
 type QueryDeviation = fn(&mut crate::GitLabRefreshQuery);
@@ -158,11 +161,14 @@ fn rest_commit(id: &str, parents: &[&str]) -> CommitResponse {
     }
 }
 
-fn resolved(id: &str, parents: &[&str], tree: char) -> crate::GitLabCommit {
-    crate::GitLabCommit {
-        id: id.to_owned(),
-        tree: tree.to_string().repeat(40),
-        parents: parents.iter().map(|parent| (*parent).to_owned()).collect(),
+fn resolved(id: &str, parents: &[&str], tree: char) -> crate::AcquiredCommit {
+    crate::AcquiredCommit {
+        id: id.to_owned().parse().unwrap(),
+        tree: tree.to_string().repeat(40).parse().unwrap(),
+        parents: parents
+            .iter()
+            .map(|parent| parent.parse().unwrap())
+            .collect(),
     }
 }
 
@@ -211,8 +217,10 @@ fn resolved_objects_must_repeat_the_claim_exactly() {
     let base_hex = "a".repeat(40);
     let other_hex = "c".repeat(40);
     let claim = rest_commit(&gate_hex, &[&base_hex]);
-    let objects =
-        |gate: crate::GitLabCommit, base: crate::GitLabCommit| crate::GitLabObjects { gate, base };
+    let objects = |gate: crate::AcquiredCommit, base: crate::AcquiredCommit| crate::GitLabObjects {
+        gate,
+        base,
+    };
 
     assert_eq!(
         resolved_matches_claim(

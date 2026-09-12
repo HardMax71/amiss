@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use crate::delivery::StoredDelivery;
 use crate::limits::StoredLimits;
 use crate::record::{LeaseData, Record, State};
 use crate::store::{RootEntries, Store};
@@ -118,7 +117,7 @@ impl Inbox {
         &mut self,
         incoming: IncomingDelivery<'_>,
     ) -> Result<EnqueueOutcome, InboxError> {
-        let delivery = StoredDelivery::read(incoming, self.limits)?;
+        let delivery = Delivery::read(incoming, self.limits)?;
         let key = delivery.key()?;
         let record = Record::pending(delivery)?;
         let entries = self.store.scan()?;
@@ -164,11 +163,9 @@ impl Inbox {
                 }),
             );
         };
-        let delivery = record
-            .delivery
-            .as_ref()
-            .ok_or(InboxError::Corrupt)?
-            .materialize(self.limits)?;
+        let delivery = record.delivery.as_ref().ok_or(InboxError::Corrupt)?;
+        delivery.validate(self.limits)?;
+        let delivery = delivery.clone();
         let (record, lease) =
             record
                 .begin_attempt()?

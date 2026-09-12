@@ -127,7 +127,7 @@ fn registered_relation() -> Option<Arc<RelationPlan>> {
         },
         status_destinations: vec![RelationStatusDestination {
             subject_role: ArtifactId::new("documentation".to_owned())?,
-            required_status_name: "Amiss cross-repository".to_owned(),
+            required_status_name: "Amiss cross-repository".parse().ok()?,
         }],
     });
     Some(registered)

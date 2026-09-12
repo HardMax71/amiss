@@ -1,3 +1,15 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum RecordSchema {
+    #[serde(rename = "amiss/controller-artifact-record-v1")]
+    Current,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum RootSchema {
+    #[serde(rename = "amiss/controller-artifact-root-v1")]
+    Current,
+}
+
 use sha2::Digest as _;
 use std::time::Duration;
 
@@ -11,8 +23,8 @@ use serde::{Deserialize, Serialize};
 use super::{ArtifactError, ArtifactReference, ArtifactStoreConfig};
 use crate::{ControllerEvaluationId, ExternalTally};
 
-pub(super) const ROOT_SCHEMA: &str = "amiss/controller-artifact-root-v1";
-const RECORD_SCHEMA: &str = "amiss/controller-artifact-record-v1";
+pub(super) const ROOT_SCHEMA: RootSchema = RootSchema::Current;
+const RECORD_SCHEMA: RecordSchema = RecordSchema::Current;
 const ROOT_DOMAIN: &str = "amiss/controller-artifact-root-payload-v1";
 const RECORD_DOMAIN: &str = "amiss/controller-artifact-record-payload-v1";
 const ID_DOMAIN: &str = "amiss/controller-artifact-identity-v1";
@@ -23,7 +35,7 @@ pub(super) const MAX_RECORD_METADATA_BYTES: u64 = 16_384;
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Root {
-    pub(super) schema: String,
+    pub(super) schema: RootSchema,
     pub(super) base_url: String,
     pub(super) retention_millis: u64,
     pub(super) max_records: u64,
@@ -35,7 +47,7 @@ pub(super) struct Root {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Blob {
-    pub(super) digest: String,
+    pub(super) digest: Digest,
     pub(super) length: u64,
 }
 
@@ -52,29 +64,20 @@ impl Blob {
         if length > MACHINE_JSON_BYTES {
             return Err(ArtifactError::TooLarge);
         }
-        Ok(Self {
-            digest: digest.to_string(),
-            length,
-        })
-    }
-
-    pub(super) fn parsed_digest(&self) -> Result<Digest, ArtifactError> {
-        Digest::from_wire(&self.digest).ok_or(ArtifactError::Corrupt)
+        Ok(Self { digest, length })
     }
 
     fn valid(&self) -> bool {
-        self.length > 0
-            && self.length <= MACHINE_JSON_BYTES
-            && Digest::from_wire(&self.digest).is_some()
+        self.length > 0 && self.length <= MACHINE_JSON_BYTES
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Record {
-    schema: String,
+    schema: RecordSchema,
     pub(super) id: String,
-    pub(super) evaluation_id: String,
+    pub(super) evaluation_id: ControllerEvaluationId,
     pub(super) created_at_unix_millis: i64,
     pub(super) expires_at_unix_millis: i64,
     pub(super) report: Blob,
@@ -86,19 +89,19 @@ pub(super) struct Record {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) semantic: Option<Blob>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) publication_audit: Option<SidecarAudit>,
+    pub(super) publication_audit: Option<SidecarAudit<PublicationVerdict>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub(super) relation_audit: Option<SidecarAudit>,
+    pub(super) relation_audit: Option<SidecarAudit<RelationVerdict>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct SidecarAudit {
+pub(super) struct SidecarAudit<V> {
     pub(super) plan: Blob,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) evidence: Option<Blob>,
     pub(super) assessment: Blob,
-    pub(super) verdict: String,
+    pub(super) verdict: V,
 }
 
 pub(super) struct RecordInput {
@@ -109,8 +112,8 @@ pub(super) struct RecordInput {
     pub(super) external_tally: Option<ExternalTally>,
     pub(super) external_incomplete: bool,
     pub(super) semantic: Option<Blob>,
-    pub(super) publication_audit: Option<SidecarAudit>,
-    pub(super) relation_audit: Option<SidecarAudit>,
+    pub(super) publication_audit: Option<SidecarAudit<PublicationVerdict>>,
+    pub(super) relation_audit: Option<SidecarAudit<RelationVerdict>>,
 }
 
 impl Record {
@@ -126,9 +129,9 @@ impl Record {
             .checked_add(retention_millis)
             .ok_or(ArtifactError::Clock)?;
         let mut record = Self {
-            schema: RECORD_SCHEMA.to_owned(),
+            schema: RECORD_SCHEMA,
             id: String::new(),
-            evaluation_id: evaluation_id.as_str().to_owned(),
+            evaluation_id: evaluation_id.clone(),
             created_at_unix_millis,
             expires_at_unix_millis,
             report: input.report,
@@ -177,7 +180,6 @@ impl Record {
                 && !self.external_incomplete;
         if self.schema != RECORD_SCHEMA
             || !valid_id(&self.id)
-            || super::evaluation_id(&self.evaluation_id).is_err()
             || self.created_at_unix_millis < 0
             || self.created_at_unix_millis.checked_add(retention_millis)
                 != Some(self.expires_at_unix_millis)
@@ -206,17 +208,9 @@ impl Record {
             id: self.id.clone(),
             locator: format!("{}/{}/report", config.base_url, self.id),
             expires_at_unix_millis: self.expires_at_unix_millis,
-            report_digest: self.report.parsed_digest()?,
-            semantic_digest: self
-                .semantic
-                .as_ref()
-                .map(Blob::parsed_digest)
-                .transpose()?,
-            assessment_digest: self
-                .assessment
-                .as_ref()
-                .map(Blob::parsed_digest)
-                .transpose()?,
+            report_digest: self.report.digest,
+            semantic_digest: self.semantic.as_ref().map(|blob| blob.digest),
+            assessment_digest: self.assessment.as_ref().map(|blob| blob.digest),
             external_tally: self.external_tally,
             external_incomplete: self.external_incomplete,
         })
@@ -271,7 +265,7 @@ impl Record {
     fn expected_id(&self) -> Result<String, ArtifactError> {
         #[derive(Serialize)]
         struct Identity<'a> {
-            evaluation_id: &'a str,
+            evaluation_id: &'a ControllerEvaluationId,
             report: &'a Blob,
             plan: &'a Option<Blob>,
             evidence: &'a Option<Blob>,
@@ -281,9 +275,9 @@ impl Record {
             #[serde(skip_serializing_if = "Option::is_none")]
             semantic: &'a Option<Blob>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            publication_audit: &'a Option<SidecarAudit>,
+            publication_audit: &'a Option<SidecarAudit<PublicationVerdict>>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            relation_audit: &'a Option<SidecarAudit>,
+            relation_audit: &'a Option<SidecarAudit<RelationVerdict>>,
         }
         let identity = Identity {
             evaluation_id: &self.evaluation_id,
@@ -311,9 +305,9 @@ impl Record {
     }
 }
 
-fn valid_sidecar<V>(audit: &SidecarAudit, maximum: u64, unproven: &V) -> bool
+fn valid_sidecar<V>(audit: &SidecarAudit<V>, maximum: u64, unproven: &V) -> bool
 where
-    V: std::str::FromStr + PartialEq,
+    V: PartialEq,
 {
     audit.plan.valid()
         && audit.plan.length <= maximum
@@ -323,17 +317,14 @@ where
             .is_none_or(|blob| blob.valid() && blob.length <= maximum)
         && audit.assessment.valid()
         && audit.assessment.length <= maximum
-        && audit
-            .verdict
-            .parse::<V>()
-            .is_ok_and(|verdict| &verdict == unproven || audit.evidence.is_some())
+        && (&audit.verdict == unproven || audit.evidence.is_some())
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Envelope<T> {
     payload: T,
-    payload_digest: String,
+    payload_digest: Digest,
 }
 
 pub(super) fn encode_root(root: &Root) -> Result<Vec<u8>, ArtifactError> {
@@ -362,8 +353,7 @@ fn encode<T: Serialize>(value: &T, domain: &str, maximum: u64) -> Result<Vec<u8>
                 .chain_update(&payload)
                 .finalize()
                 .0,
-        )
-        .to_string(),
+        ),
     };
     let bytes = serde_json::to_vec(&envelope).map_err(|_defect| ArtifactError::Corrupt)?;
     (u64::try_from(bytes.len())
@@ -394,9 +384,7 @@ where
             .chain_update(&payload)
             .finalize()
             .0,
-    )
-    .to_string()
-        == envelope.payload_digest)
+    ) == envelope.payload_digest)
         .then_some(envelope.payload)
         .ok_or(ArtifactError::Corrupt)
 }

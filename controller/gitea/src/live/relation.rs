@@ -1,3 +1,4 @@
+use crate::states::CommitStatus;
 use amiss_controller::{
     IntegrationId, PlanScope, ProviderError, RelationStatusRecord, RelationStatusTarget,
     RelationSubject, RelationSubjectHead, relation_status_publication,
@@ -83,9 +84,9 @@ pub(super) fn relation_commit_status(
         .map_err(|_defect| ProviderError::InvalidResponse)?;
     Ok(CreateCommitStatus {
         state: if publication.passing {
-            "success".to_owned()
+            CommitStatus::Success
         } else {
-            "failure".to_owned()
+            CommitStatus::Failure
         },
         target_url: String::new(),
         description: format!(
@@ -109,7 +110,7 @@ pub(super) fn status_decision(
 ) -> Result<StatusDecision, ProviderError> {
     let Some(latest) = statuses
         .iter()
-        .find(|status| status.context == expected.context)
+        .find(|status| status.context == expected.context.as_str())
     else {
         return Ok(StatusDecision::Create(expected));
     };
@@ -142,14 +143,14 @@ fn matches_expected(
         && actual.status == expected.state
         && actual.target_url == expected.target_url
         && actual.description == expected.description
-        && actual.context == expected.context
+        && actual.context == expected.context.as_str()
 }
 
 fn owned_relation_status(config: &Config, status: &CommitStatusRecord) -> bool {
     owned_reviewer(config, status)
         && status.id > 0
         && status.target_url.is_empty()
-        && matches!(status.status.as_str(), "success" | "failure")
+        && matches!(status.status, CommitStatus::Success | CommitStatus::Failure)
         && status
             .description
             .strip_prefix(MARKER)

@@ -147,3 +147,16 @@ impl AdapterRegistry {
         self.adapters.get(namespace).map(AsRef::as_ref)
     }
 }
+
+/// Resolves a provider-relative route under an admitted API base.
+///
+/// # Errors
+///
+/// The route is not rooted inside the API or cannot form a URL.
+pub fn provider_api_url(base: &url::Url, route: &str) -> Result<url::Url, ProviderError> {
+    if !route.starts_with('/') || route.starts_with("//") {
+        return Err(ProviderError::InvalidResponse);
+    }
+    base.join(&format!(".{route}"))
+        .map_err(|_defect| ProviderError::InvalidResponse)
+}

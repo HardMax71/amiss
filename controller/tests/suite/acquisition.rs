@@ -164,7 +164,7 @@ fn rejects_an_action_commit_bound_to_another_tree() {
 fn rejects_a_plan_that_no_longer_matches_its_delivery_binding() {
     let (repository_pair, action) = fixtures();
     let mut request = request(&repository_pair, &action);
-    request.check.required_status_name = "amiss / another check".to_owned();
+    request.check.required_status_name = "amiss / another check".parse().unwrap();
 
     assert_eq!(
         verify_acquired(

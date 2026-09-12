@@ -7,7 +7,10 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use amiss_wire::controls::{Profile, ScannerPolicy};
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
+use amiss_wire::model::{
+    BranchRef, Digest, ForgeDialect, ObjectFormat, Oid, OwnerId, RepoPath, RepoPathText,
+    RepositoryIdentity, UtcInstant,
+};
 use strum::EnumString;
 
 /// The canonical analysis-error taxonomy used by invocation refusals.
@@ -102,7 +105,7 @@ pub(crate) struct ProviderIdentity {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct AuthorInvocation {
     pub(crate) repo: PathBuf,
-    pub(crate) path: String,
+    pub(crate) path: RepoPathText,
     pub(crate) line: u64,
     pub(crate) name: String,
 }
@@ -147,7 +150,7 @@ pub(crate) struct PolicyIncludePreview {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PolicyIncludeInvocation {
     pub(crate) policy: ScannerPolicy,
-    pub(crate) policy_digest: amiss_wire::model::Digest,
+    pub(crate) policy_digest: Digest,
     pub(crate) preview: Option<PolicyIncludePreview>,
 }
 
@@ -174,11 +177,11 @@ pub(crate) enum Command {
 /// debt, why, its instants, the floor it binds to, and where the file goes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Adoption {
-    pub(crate) floor_digest: String,
-    pub(crate) owner: String,
+    pub(crate) floor_digest: Digest,
+    pub(crate) owner: OwnerId,
     pub(crate) reason: String,
-    pub(crate) created_at: String,
-    pub(crate) expires_at: String,
+    pub(crate) created_at: UtcInstant,
+    pub(crate) expires_at: UtcInstant,
     pub(crate) output: PathBuf,
 }
 

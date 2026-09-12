@@ -12,7 +12,7 @@ use std::io::{self, Read as _, Seek as _, SeekFrom, Write as _};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use amiss_wire::model::Digest;
+use amiss_wire::model::{ArtifactId, Digest};
 use atomicwrites::{AllowOverwrite, AtomicFile};
 use serde::{Deserialize, Serialize};
 
@@ -69,19 +69,19 @@ pub struct FileRelationScheduleStore {
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct RootMetadata {
-    schema: String,
+    schema: journal::RootSchema,
     max_bindings: u64,
     binding_count: u64,
     entry_count: u64,
     journal_bytes: u64,
-    tail_digest: Option<String>,
+    tail_digest: Option<Digest>,
 }
 
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct JournalEntry {
-    schema: String,
-    previous_tail: Option<String>,
+    schema: journal::EntrySchema,
+    previous_tail: Option<Digest>,
     action: JournalAction,
 }
 
@@ -89,62 +89,62 @@ struct JournalEntry {
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 enum JournalAction {
     Schedule {
-        relation: String,
-        plan_binding: String,
+        relation: ArtifactId,
+        plan_binding: Digest,
         binding: StoredBinding,
     },
     Stage {
-        plan_binding: String,
-        work_binding: String,
+        plan_binding: Digest,
+        work_binding: Digest,
         status: Box<StoredStatus>,
     },
     Acknowledge {
-        relation: String,
-        coordination: String,
-        status_binding: String,
-        destination_binding: String,
+        relation: ArtifactId,
+        coordination: ArtifactId,
+        status_binding: Digest,
+        destination_binding: Digest,
     },
     Complete {
-        relation: String,
-        coordination: String,
-        status_binding: String,
+        relation: ArtifactId,
+        coordination: ArtifactId,
+        status_binding: Digest,
     },
 }
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct StoredBinding {
-    coordination: String,
-    work_binding: String,
-    trigger_role: String,
+    coordination: ArtifactId,
+    work_binding: Digest,
+    trigger_role: ArtifactId,
     fence: u64,
 }
 
 #[derive(Default)]
 struct State {
-    relations: BTreeMap<String, StoredRelation>,
-    statuses: BTreeMap<(String, String), StoredStatusState>,
+    relations: BTreeMap<ArtifactId, StoredRelation>,
+    statuses: BTreeMap<(ArtifactId, ArtifactId), StoredStatusState>,
     binding_count: u64,
     entry_count: u64,
     journal_bytes: u64,
-    tail_digest: Option<String>,
+    tail_digest: Option<Digest>,
 }
 
 enum StoredStatusState {
     Staged {
-        binding: String,
+        binding: Digest,
         status: Box<StoredStatus>,
-        acknowledged: BTreeSet<String>,
+        acknowledged: BTreeSet<Digest>,
     },
     Completed {
-        binding: String,
+        binding: Digest,
     },
 }
 
 struct StoredRelation {
-    plan_binding: String,
-    bindings: BTreeMap<String, StoredBinding>,
-    current_coordination: String,
+    plan_binding: Digest,
+    bindings: BTreeMap<ArtifactId, StoredBinding>,
+    current_coordination: ArtifactId,
 }
 
 impl FileRelationScheduleStore {
@@ -285,8 +285,8 @@ impl FileRelationScheduleStore {
         action: JournalAction,
     ) -> Result<(), RelationScheduleStoreError> {
         let entry = JournalEntry {
-            schema: ENTRY_SCHEMA.to_owned(),
-            previous_tail: state.tail_digest.clone(),
+            schema: ENTRY_SCHEMA,
+            previous_tail: state.tail_digest,
             action,
         };
         let chunk = encode_entry(&entry)?;
@@ -320,8 +320,7 @@ impl FileRelationScheduleStore {
                 .chain_update(&chunk)
                 .finalize()
                 .0,
-        )
-        .to_string();
+        );
         validate_append(state, &entry, chunk_length, self.max_bindings)?;
         if journal
             .seek(SeekFrom::End(0))
@@ -335,12 +334,12 @@ impl FileRelationScheduleStore {
             .and_then(|()| journal.sync_all())
             .map_err(RelationScheduleStoreError::Io)?;
         let next = RootMetadata {
-            schema: ROOT_SCHEMA.to_owned(),
+            schema: ROOT_SCHEMA,
             max_bindings: self.max_bindings,
             binding_count: next_count,
             entry_count: next_entry_count,
             journal_bytes: next_bytes,
-            tail_digest: Some(tail_digest.clone()),
+            tail_digest: Some(tail_digest),
         };
         save_metadata(&self.root, &next)?;
         apply_entry(state, entry, tail_digest, chunk_length, self.max_bindings)?;
@@ -365,9 +364,9 @@ impl FileRelationScheduleStore {
 
     fn try_delivery_lock(
         &self,
-        destination: &str,
+        destination: &Digest,
     ) -> Result<Option<File>, RelationScheduleStoreError> {
-        let digest = Digest::from_wire(destination).ok_or(RelationScheduleStoreError::Corrupt)?;
+        let digest = destination;
         let path = self.root.join(format!(
             "{DELIVERY_LOCK_PREFIX}{:02x}.lock",
             digest.as_bytes()[0]
@@ -543,8 +542,7 @@ fn read_entries(
                 .chain_update(&chunk)
                 .finalize()
                 .0,
-        )
-        .to_string();
+        );
         apply_entry(state, entry, tail_digest, chunk_length, max_bindings)?;
     }
     Ok(())
@@ -640,10 +638,10 @@ fn validate_append(
 
 fn validate_status_progress(
     state: &State,
-    relation: &str,
-    coordination: &str,
-    status_binding: &str,
-    destination: Option<&str>,
+    relation: &ArtifactId,
+    coordination: &ArtifactId,
+    status_binding: &Digest,
+    destination: Option<&Digest>,
 ) -> Result<(), RelationScheduleStoreError> {
     let Some(StoredStatusState::Staged {
         binding,
@@ -662,7 +660,7 @@ fn validate_status_progress(
         Some(destination) => {
             status
                 .destinations
-                .binary_search_by(|stored| stored.as_str().cmp(destination))
+                .binary_search_by(|stored| stored.cmp(destination))
                 .is_ok()
                 && !acknowledged.contains(destination)
         }
@@ -682,7 +680,7 @@ fn validate_status_progress(
 fn apply_entry(
     state: &mut State,
     entry: JournalEntry,
-    tail_digest: String,
+    tail_digest: Digest,
     chunk_length: u64,
     max_bindings: u64,
 ) -> Result<(), RelationScheduleStoreError> {
@@ -726,7 +724,7 @@ fn apply_entry(
         }
         JournalAction::Stage { status, .. } => {
             let key = (status.relation.clone(), status.coordination.clone());
-            let binding = status.status_binding.clone();
+            let binding = status.status_binding;
             state.statuses.insert(
                 key,
                 StoredStatusState::Staged {

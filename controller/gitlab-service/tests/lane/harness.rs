@@ -294,7 +294,7 @@ impl LaneCase {
         let mut third = first.clone();
         match self {
             Self::WrongTree => {
-                "dddddddddddddddddddddddddddddddddddddddd".clone_into(&mut second.gate.tree);
+                second.gate.tree = "dddddddddddddddddddddddddddddddddddddddd".parse().unwrap();
                 second.clone_into(&mut third);
                 [second.clone(), second, third]
             }

@@ -56,21 +56,21 @@ pub(super) fn staged_digest(
     evaluation_id: &ControllerEvaluationId,
     fence: u64,
     publication: &StoredPublication,
-) -> Result<String, FileLedgerError> {
+) -> Result<Digest, FileLedgerError> {
     let value = StagedDigest {
-        evaluation_id: evaluation_id.as_str(),
+        evaluation_id,
         fence,
         publication,
     };
     let mut writer =
         digest_io::IoWrapper(sha2::Sha256::new_with_prefix(STAGED_DOMAIN).chain_update([0_u8]));
     serde_json::to_writer(&mut writer, &value).map_err(|_defect| FileLedgerError::Corrupt)?;
-    Ok(Digest::from(writer.0.finalize().0).to_string())
+    Ok(Digest::from(writer.0.finalize().0))
 }
 
 #[derive(Serialize)]
 struct StagedDigest<'a> {
-    evaluation_id: &'a str,
+    evaluation_id: &'a ControllerEvaluationId,
     fence: u64,
     publication: &'a StoredPublication,
 }

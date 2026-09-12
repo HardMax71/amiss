@@ -13,7 +13,7 @@ pub(super) struct RepositoryRecord {
     pub full_name: String,
     pub owner: UserRecord,
     pub default_branch: String,
-    pub object_format_name: String,
+    pub object_format_name: amiss_wire::model::ObjectFormat,
     pub allow_manual_merge: Option<bool>,
 }
 
@@ -21,7 +21,7 @@ pub(super) struct RepositoryRecord {
 pub(super) struct PullRequestRecord {
     pub id: u64,
     pub number: u64,
-    pub state: String,
+    pub state: crate::states::PullRequestState,
     pub mergeable: bool,
     pub merged: bool,
     pub merge_base: String,
@@ -150,7 +150,7 @@ pub(super) struct CommitMetaRecord {
 pub(super) struct ReviewRecord {
     pub id: u64,
     pub user: Option<UserRecord>,
-    pub state: String,
+    pub state: crate::states::ReviewState,
     pub body: String,
     pub commit_id: String,
     pub stale: bool,
@@ -161,7 +161,7 @@ pub(super) struct ReviewRecord {
 pub(super) struct CommitStatusRecord {
     pub id: u64,
     pub creator: Option<UserRecord>,
-    pub status: String,
+    pub status: crate::states::CommitStatus,
     pub target_url: String,
     pub description: String,
     pub context: String,
@@ -182,7 +182,7 @@ pub(super) struct RefreshData {
 
 #[derive(Clone, Serialize)]
 pub(super) struct CreateReview {
-    pub event: String,
+    pub event: crate::states::ReviewState,
     pub body: String,
     pub commit_id: String,
     pub comments: Vec<CreateReviewComment>,
@@ -193,10 +193,10 @@ pub(super) struct CreateReviewComment {}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(super) struct CreateCommitStatus {
-    pub state: String,
+    pub state: crate::states::CommitStatus,
     pub target_url: String,
     pub description: String,
-    pub context: String,
+    pub context: amiss_wire::controls::RequiredStatusName,
 }
 
 #[derive(Deserialize)]

@@ -1,3 +1,4 @@
+use crate::states::{PullRequestState, ReviewState};
 use amiss_controller::{
     ChangeSnapshot, ChangeState, OidPair, ProviderError, Publication, RunIdentity, RunRefs,
 };
@@ -81,23 +82,27 @@ pub(super) fn snapshot(
         .as_ref()
         .ok_or(ProviderError::InvalidResponse)
         .and_then(|commit| exact_oid(&commit.id))?;
-    let candidate_tree = exact_oid(&objects.candidate.tree)?;
-    let base_tree = exact_oid(&objects.base.tree)?;
+    let candidate_tree = objects.candidate.tree.clone();
+    let base_tree = objects.base.tree.clone();
     let merge_base = exact_oid(&data.pull_request.merge_base)?;
-    if candidate != *pull_request.candidate_commit
+    if !objects.candidate.has_format(ObjectFormat::Sha1)
+        || !objects.base.has_format(ObjectFormat::Sha1)
+        || candidate != *pull_request.candidate_commit
         || current_head != fetched_head
         || data.pull_request.base.sha != data.target.sha
         || base != branch_base
-        || objects.candidate.id != candidate.as_str()
-        || objects.base.id != base.as_str()
+        || objects.candidate.id != candidate
+        || objects.base.id != base
     {
         return Err(ProviderError::InvalidResponse);
     }
 
-    let open = match data.pull_request.state.as_str() {
-        "open" if !data.pull_request.merged => true,
-        "closed" => false,
-        _ => return Err(ProviderError::InvalidResponse),
+    let open = match data.pull_request.state {
+        PullRequestState::Open if !data.pull_request.merged => true,
+        PullRequestState::Closed => false,
+        PullRequestState::Open | PullRequestState::Unknown(_) => {
+            return Err(ProviderError::InvalidResponse);
+        }
     };
     let refs = RunRefs {
         forge: ForgeDialect::Gitea,
@@ -198,14 +203,14 @@ fn validate_change(
     valid_response(
         repository.id == pull_request.repository_id
             && repository_identity == pull_request.change.repository
-            && repository.object_format_name == "sha1"
+            && repository.object_format_name == ObjectFormat::Sha1
             && base_repository.id == pull_request.repository_id
             && base_identity == pull_request.change.repository
             && authoritative.id == pull_request.pull_request_id
             && authoritative.number == pull_request.number
             && authoritative.base.repo_id == pull_request.repository_id
             && authoritative.head.repo_id > 0
-            && (head_identity.is_some() || authoritative.state == "closed"),
+            && (head_identity.is_some() || authoritative.state == PullRequestState::Closed),
     )
 }
 
@@ -224,8 +229,12 @@ fn validate_reviews(config: &Config, reviews: &[ReviewRecord]) -> Result<(), Pro
             || review.id == 0
             || exact_oid(&review.commit_id).is_err()
             || !matches!(
-                review.state.as_str(),
-                "APPROVED" | "PENDING" | "COMMENT" | "REQUEST_CHANGES" | "REQUEST_REVIEW"
+                review.state,
+                ReviewState::Approved
+                    | ReviewState::Pending
+                    | ReviewState::Comment
+                    | ReviewState::RequestChanges
+                    | ReviewState::RequestReview
             )
         {
             return Err(ProviderError::InvalidResponse);

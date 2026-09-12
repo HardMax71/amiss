@@ -1,3 +1,4 @@
+use crate::states::ReviewState;
 use amiss_controller::{ChangeState, CheckConclusion, IntegrationId, ProviderError, Publication};
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
 
@@ -7,8 +8,6 @@ use crate::identity::provider_run;
 use super::Config;
 use super::model::{CreateReview, ReviewRecord};
 
-const APPROVED: &str = "APPROVED";
-const REQUEST_CHANGES: &str = "REQUEST_CHANGES";
 const MARKER: &str = "amiss-evaluation: ";
 
 pub(super) enum PublicationDecision {
@@ -143,19 +142,19 @@ fn expected(publication: &Publication) -> Result<CreateReview, ProviderError> {
     )
     .ok_or(ProviderError::InvalidResponse)?;
     Ok(CreateReview {
-        event: event.to_owned(),
+        event,
         body,
         commit_id: publication.gate_commit.as_str().to_owned(),
         comments: Vec::new(),
     })
 }
 
-fn conclusion(conclusion: CheckConclusion) -> (&'static str, &'static str) {
+fn conclusion(conclusion: CheckConclusion) -> (&'static str, ReviewState) {
     match conclusion {
-        CheckConclusion::Pass => ("pass", APPROVED),
-        CheckConclusion::Block => ("block", REQUEST_CHANGES),
-        CheckConclusion::Superseded => ("superseded", REQUEST_CHANGES),
-        CheckConclusion::Unavailable(_) => ("unavailable", REQUEST_CHANGES),
+        CheckConclusion::Pass => ("pass", ReviewState::Approved),
+        CheckConclusion::Block => ("block", ReviewState::RequestChanges),
+        CheckConclusion::Superseded => ("superseded", ReviewState::RequestChanges),
+        CheckConclusion::Unavailable(_) => ("unavailable", ReviewState::RequestChanges),
     }
 }
 

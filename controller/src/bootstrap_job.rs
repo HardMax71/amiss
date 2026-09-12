@@ -120,10 +120,11 @@ pub struct CheckPlan {
     pub execution_digest: Digest,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CheckBinding {
     pub plan_digest: Digest,
-    pub required_status_name: String,
+    pub required_status_name: amiss_wire::controls::RequiredStatusName,
     pub execution_constraint_digest: Digest,
 }
 

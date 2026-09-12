@@ -10,6 +10,7 @@ use amiss_bootstrap::build::{
 };
 use amiss_wire::action::executable_platform;
 use amiss_wire::manifest::RuntimeRole;
+use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
 
 /// The release-side manifest builder: it reads the staged action tree,
 /// hashes the exact bytes, and writes the strict manifest plus its digest
@@ -79,13 +80,13 @@ fn run(args: &Args) -> Result<(), String> {
             .ok_or_else(|| format!("{path}: the executable header names no supported platform"))?;
         let files = vec![
             StagedFile {
-                path: path.clone(),
+                path: path.parse().map_err(str::to_owned)?,
                 role: RuntimeRole::Executable,
                 executable: true,
                 bytes,
             },
             StagedFile {
-                path: args.action.clone(),
+                path: args.action.parse().map_err(str::to_owned)?,
                 role: RuntimeRole::RuntimeData,
                 executable: false,
                 bytes: &action_bytes,
@@ -93,22 +94,27 @@ fn run(args: &Args) -> Result<(), String> {
         ];
         staged.push(StagedArtifact {
             platform,
-            artifact_name: format!("amiss-{}", platform.as_ref()),
+            artifact_name: format!("amiss-{}", platform.as_ref())
+                .parse()
+                .map_err(str::to_owned)?,
             files,
         });
     }
 
     let build = StagedBuild {
         engine_version: args.version.clone(),
-        host: args.host.clone(),
-        owner: args.owner.clone(),
-        repository: args.repository.clone(),
-        object_format: "sha1",
-        commit_oid: args.commit.clone(),
+        repository: RepositoryIdentity::new(
+            args.host.clone(),
+            args.owner.clone(),
+            args.repository.clone(),
+        )
+        .ok_or("invalid build repository")?,
+        object_format: ObjectFormat::Sha1,
+        commit_oid: args.commit.parse().map_err(str::to_owned)?,
         locks: lock_bytes
             .iter()
-            .map(|(path, bytes)| (path.clone(), bytes.as_slice()))
-            .collect(),
+            .map(|(path, bytes)| Ok((path.parse().map_err(str::to_owned)?, bytes.as_slice())))
+            .collect::<Result<_, String>>()?,
     };
     let (manifest, digest) = build_manifest(&build, &mut staged).map_err(str::to_owned)?;
     std::fs::write(args.tree.join(RELEASE_MANIFEST_PATH), &manifest)

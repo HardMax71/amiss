@@ -121,13 +121,17 @@ fn context(
     default_ref: &str,
 ) -> ForgeContext {
     ForgeContext {
-        host: host.to_owned(),
         dialect,
         object_format: ObjectFormat::Sha1,
-        owner: owner.to_owned(),
-        repository: name.to_owned(),
-        candidate_ref: candidate_ref.to_owned(),
-        default_ref: default_ref.to_owned(),
+
+        repository: amiss_wire::model::RepositoryIdentity::new(
+            host.to_owned(),
+            owner.to_owned(),
+            name.to_owned(),
+        )
+        .unwrap(),
+        candidate_ref: Some(candidate_ref.parse().unwrap()),
+        default_ref: Some(default_ref.parse().unwrap()),
     }
 }
 

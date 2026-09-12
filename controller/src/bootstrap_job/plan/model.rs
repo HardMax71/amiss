@@ -18,7 +18,7 @@ pub(super) struct PlanIdentity<'a> {
     pub(super) external_policy: ExternalPolicy,
     pub(super) organization_floor: Option<ControlIdentity>,
     pub(super) profile: Profile,
-    pub(super) required_status_name: &'a str,
+    pub(super) required_status_name: &'a amiss_wire::controls::RequiredStatusName,
     pub(super) schema: &'static str,
     pub(super) semantic_acquisitions: &'a [SemanticEvidenceExpectation],
     pub(super) semantic_evidence: Vec<SemanticIdentity<'a>>,

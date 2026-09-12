@@ -3,6 +3,7 @@
     reason = "fixed provider records and identities must fail loudly"
 )]
 
+use crate::support::identity::oid;
 use sha2::Digest as _;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
@@ -120,7 +121,7 @@ fn wrong_job_pipeline_and_commit_topology_are_invalid_provider_data() {
     let (source, delivery, valid) = fixture();
     let mut cases = Vec::new();
     let mut project_job = valid.clone();
-    project_job.job.source = Some("project".to_owned());
+    project_job.job.source = Some("project".parse().unwrap());
     cases.push(project_job);
     let mut wrong_pipeline = valid.clone();
     wrong_pipeline.pipeline.sha = "d".repeat(40);
@@ -129,10 +130,10 @@ fn wrong_job_pipeline_and_commit_topology_are_invalid_provider_data() {
     wrong_runner.job.runner_id = 88;
     cases.push(wrong_runner);
     let mut wrong_source_parent = valid.clone();
-    wrong_source_parent.gate.parents = vec!["a".repeat(40), "d".repeat(40)];
+    wrong_source_parent.gate.parents = vec![oid('a'), oid('d')];
     cases.push(wrong_source_parent);
     let mut extra_parent = valid.clone();
-    extra_parent.gate.parents.push("d".repeat(40));
+    extra_parent.gate.parents.push(oid('d'));
     cases.push(extra_parent);
     let mut wrong_project = valid;
     wrong_project.project.http_url_to_repo = "https://gitlab.example/acme/other.git".to_owned();
@@ -196,13 +197,13 @@ fn every_binding_clause_of_the_refresh_query_stands_alone() {
 fn stale_train_and_closed_change_do_not_run() {
     let (source, delivery, valid) = fixture();
     let mut stale = valid.clone();
-    stale.train.as_mut().unwrap().status = "stale".to_owned();
+    stale.train.as_mut().unwrap().status = "stale".parse().unwrap();
     let mut missing = valid.clone();
     missing.train = None;
     let mut draft = valid.clone();
     draft.merge_request.draft = true;
     let mut stopped = valid.clone();
-    stopped.pipeline.status = "failed".to_owned();
+    stopped.pipeline.status = "failed".parse().unwrap();
     for refresh in [stale, missing, draft, stopped] {
         let adapter = GitLabMergeTrainAdapter::new(Arc::clone(&source), FakeApi::new([refresh]));
         assert_eq!(
@@ -211,7 +212,7 @@ fn stale_train_and_closed_change_do_not_run() {
         );
     }
     let mut closed = valid;
-    closed.merge_request.state = "closed".to_owned();
+    closed.merge_request.state = "closed".parse().unwrap();
     let adapter = GitLabMergeTrainAdapter::new(source, FakeApi::new([closed]));
     assert_eq!(
         adapter.refresh(&delivery).unwrap().state,
@@ -225,11 +226,11 @@ fn every_merge_and_protection_bypass_revokes_authorization() {
     let mut cases = Vec::new();
     for method in ["ff", "rebase_merge"] {
         let mut refresh = valid.clone();
-        refresh.project.merge_method = method.to_owned();
+        refresh.project.merge_method = method.parse().unwrap();
         cases.push(refresh);
     }
     let mut bypass = valid.clone();
-    bypass.project.train.enforcement = "allow_bypass".to_owned();
+    bypass.project.train.enforcement = "allow_bypass".parse().unwrap();
     cases.push(bypass);
     let mut skip_train = valid.clone();
     skip_train.project.train.skip_allowed = true;
@@ -291,7 +292,7 @@ fn publication_performs_a_final_authoritative_refresh() {
     assert_eq!(exact.publish(&delivery, &pass), Ok(()));
 
     let mut stale = valid;
-    stale.train.as_mut().unwrap().status = "stale".to_owned();
+    stale.train.as_mut().unwrap().status = "stale".parse().unwrap();
     let drifted = GitLabMergeTrainAdapter::new(source, FakeApi::new([stale]));
     assert_eq!(
         drifted.publish(&delivery, &pass),
@@ -337,7 +338,7 @@ fn policy_job_resolves_only_its_ephemeral_relation_candidate() {
             subject: subject.clone(),
             candidate: RelationSnapshot {
                 commit: delivery.provider_run.candidate_commit.clone(),
-                tree: crate::support::identity::oid('e'),
+                tree: oid('e'),
             },
         })
     );
@@ -367,7 +368,7 @@ fn relation_result_is_the_exact_live_policy_job_decision() {
 
     let (status, target) = relation_status(&delivery, RelationVerdict::Aligned);
     let mut stopped = valid;
-    stopped.job.status = "failed".to_owned();
+    stopped.job.status = "failed".parse().unwrap();
     let adapter = GitLabMergeTrainAdapter::new(source, FakeApi::new([stopped]));
     assert_eq!(
         adapter.relation_policy_job_result(&delivery, &status, &target),
@@ -381,7 +382,7 @@ fn malformed_relation_bindings_are_rejected_before_provider_io() {
     let api = FakeApi::new([valid]);
     let adapter = GitLabMergeTrainAdapter::new(source, api.clone());
     let (status, mut target) = relation_status(&delivery, RelationVerdict::Aligned);
-    target.required_status_name = "another-job".to_owned();
+    target.required_status_name = "another-job".parse().unwrap();
     assert_eq!(
         adapter.relation_policy_job_result(&delivery, &status, &target),
         Err(ProviderError::InvalidResponse)
@@ -452,7 +453,7 @@ fn relation_status(
         },
         credential: OpaqueId::new("credential/gitlab".to_owned()).unwrap(),
         candidate_commit: delivery.provider_run.candidate_commit.clone(),
-        required_status_name: "amiss:policy".to_owned(),
+        required_status_name: "amiss:policy".parse().unwrap(),
     };
     (
         RelationStatusRecord {

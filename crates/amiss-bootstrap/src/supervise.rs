@@ -56,8 +56,8 @@ pub struct Expectations {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SealedExpectations {
     pub profile: Profile,
-    pub candidate_ref: String,
-    pub target_ref: String,
+    pub candidate_ref: amiss_wire::model::BranchRef,
+    pub target_ref: amiss_wire::model::BranchRef,
     pub repository: RepositoryIdentity,
     pub provider: String,
     pub provider_run_id: String,

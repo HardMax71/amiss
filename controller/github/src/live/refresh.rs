@@ -1,3 +1,4 @@
+use crate::states::PullRequestState;
 use amiss_controller::{
     ChangeSnapshot, ChangeState, OidPair, ProviderError, Publication, RunIdentity, RunRefs,
 };
@@ -76,10 +77,10 @@ pub(super) fn snapshot(
     {
         return Err(ProviderError::InvalidResponse);
     }
-    let open = match data.pull_request.state.as_str() {
-        "open" => true,
-        "closed" => false,
-        _ => return Err(ProviderError::InvalidResponse),
+    let open = match data.pull_request.state {
+        PullRequestState::Open => true,
+        PullRequestState::Closed => false,
+        PullRequestState::Unknown(_) => return Err(ProviderError::InvalidResponse),
     };
     let gate_ready = gate_ready(data, open, &base, &current_head, &current_head_tree)?;
 
@@ -126,9 +127,9 @@ pub(super) fn publication_target_is_current(
 ) -> Result<bool, ProviderError> {
     validate_request(config, pull_request)?;
     validate_pull_request(config, pull_request, authoritative)?;
-    match authoritative.state.as_str() {
-        "open" | "closed" => {}
-        _ => return Err(ProviderError::InvalidResponse),
+    match authoritative.state {
+        PullRequestState::Open | PullRequestState::Closed => {}
+        PullRequestState::Unknown(_) => return Err(ProviderError::InvalidResponse),
     }
     let gate = authoritative
         .merge_commit_sha
@@ -213,7 +214,7 @@ fn validate_pull_request(
             pull_repository_identity(config, repository)?;
             Ok(())
         }
-        None if authoritative.state == "closed" => Ok(()),
+        None if authoritative.state == PullRequestState::Closed => Ok(()),
         None => Err(ProviderError::InvalidResponse),
     }
 }
@@ -228,7 +229,7 @@ fn rules_authorize(config: &Config, rules: &[BranchRule]) -> bool {
         for required in parameters
             .required_status_checks
             .iter()
-            .filter(|required| required.context == config.required_status_name)
+            .filter(|required| required.context == config.required_status_name.as_str())
         {
             if required.integration_id != Some(config.app_id)
                 || !parameters.strict_required_status_checks_policy

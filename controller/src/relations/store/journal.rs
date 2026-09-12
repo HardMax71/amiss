@@ -1,6 +1,3 @@
-use amiss_wire::model::ArtifactId;
-use amiss_wire::model::Digest;
-
 use crate::file_ledger::{FileLedgerError, frame};
 
 use super::{
@@ -8,8 +5,20 @@ use super::{
     RootMetadata,
 };
 
-pub(super) const ROOT_SCHEMA: &str = "amiss/controller-relation-journal-root-v3";
-pub(super) const ENTRY_SCHEMA: &str = "amiss/controller-relation-journal-entry-v3";
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub(super) enum RootSchema {
+    #[serde(rename = "amiss/controller-relation-journal-root-v3")]
+    Current,
+}
+
+pub(super) const ROOT_SCHEMA: RootSchema = RootSchema::Current;
+#[derive(Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub(super) enum EntrySchema {
+    #[serde(rename = "amiss/controller-relation-journal-entry-v3")]
+    Current,
+}
+
+pub(super) const ENTRY_SCHEMA: EntrySchema = EntrySchema::Current;
 pub(super) const MAX_ROOT_BYTES: u64 = 4_096;
 pub(super) const MAX_ENTRY_BYTES: u64 = 16_384;
 const MAX_SMALL_ENTRY_BYTES: u64 = 4_096;
@@ -30,7 +39,7 @@ pub(super) const MAX_ACTIONS_PER_BINDING: u64 = 5;
 
 pub(super) fn empty_metadata(max_bindings: u64) -> RootMetadata {
     RootMetadata {
-        schema: ROOT_SCHEMA.to_owned(),
+        schema: ROOT_SCHEMA,
         max_bindings,
         binding_count: 0,
         entry_count: 0,
@@ -83,10 +92,6 @@ fn validate_metadata(metadata: &RootMetadata) -> Result<(), RelationScheduleStor
         || metadata.journal_bytes > journal_byte_limit
         || (metadata.journal_bytes == 0) != empty
         || metadata.tail_digest.is_none() != empty
-        || metadata
-            .tail_digest
-            .as_deref()
-            .is_some_and(|digest| Digest::from_wire(digest).is_none())
     {
         return Err(RelationScheduleStoreError::Corrupt);
     }
@@ -98,56 +103,12 @@ pub(super) const fn journal_byte_limit(max_bindings: u64) -> Option<u64> {
 }
 
 fn validate_entry(entry: &JournalEntry) -> Result<(), RelationScheduleStoreError> {
-    if entry.schema != ENTRY_SCHEMA
-        || entry
-            .previous_tail
-            .as_deref()
-            .is_some_and(|digest| Digest::from_wire(digest).is_none())
-    {
-        return Err(RelationScheduleStoreError::Corrupt);
-    }
     let valid = match &entry.action {
-        JournalAction::Schedule {
-            relation,
-            plan_binding,
-            binding,
-        } => {
-            ArtifactId::new(relation.clone()).is_some()
-                && Digest::from_wire(plan_binding).is_some()
-                && ArtifactId::new(binding.coordination.clone()).is_some()
-                && Digest::from_wire(&binding.work_binding).is_some()
-                && ArtifactId::new(binding.trigger_role.clone()).is_some()
-                && binding.fence != 0
+        JournalAction::Schedule { binding, .. } => binding.fence != 0,
+        JournalAction::Stage { status, .. } => {
+            super::status::validate_stored_status(status).is_ok()
         }
-        JournalAction::Stage {
-            plan_binding,
-            work_binding,
-            status,
-        } => {
-            Digest::from_wire(plan_binding).is_some()
-                && Digest::from_wire(work_binding).is_some()
-                && super::status::validate_stored_status(status).is_ok()
-        }
-        JournalAction::Acknowledge {
-            relation,
-            coordination,
-            status_binding,
-            destination_binding,
-        } => {
-            ArtifactId::new(relation.clone()).is_some()
-                && ArtifactId::new(coordination.clone()).is_some()
-                && Digest::from_wire(status_binding).is_some()
-                && Digest::from_wire(destination_binding).is_some()
-        }
-        JournalAction::Complete {
-            relation,
-            coordination,
-            status_binding,
-        } => {
-            ArtifactId::new(relation.clone()).is_some()
-                && ArtifactId::new(coordination.clone()).is_some()
-                && Digest::from_wire(status_binding).is_some()
-        }
+        JournalAction::Acknowledge { .. } | JournalAction::Complete { .. } => true,
     };
     valid
         .then_some(())

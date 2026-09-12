@@ -2,6 +2,7 @@ use amiss_git::{GitResources, Repository};
 use amiss_wire::action::executable_platform;
 use amiss_wire::controls::{
     ActionBootstrapContract, ExecutionConstraintDescriptor, ExecutionConstraintSchema, GitMode,
+    RequiredStatusName,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::model::{Oid, RepoPathText, RepositoryIdentity};
@@ -34,7 +35,7 @@ pub fn derive_execution_constraint(
     resources: &mut GitResources,
     action_repository: &RepositoryIdentity,
     action_commit_oid: &Oid,
-    required_status_name: &str,
+    required_status_name: &RequiredStatusName,
     bootstrap_bytes: &[u8],
 ) -> Result<ExecutionConstraintDescriptor, ConstraintError> {
     let platform = executable_platform(bootstrap_bytes).ok_or(ConstraintError {
@@ -76,7 +77,7 @@ pub fn derive_execution_constraint(
         manifest_path,
         release_manifest_digest: manifest_digest,
         selected_platform: platform,
-        required_status_name: required_status_name.to_owned(),
+        required_status_name: required_status_name.clone(),
         bootstrap_contract: ActionBootstrapContract::Current,
         bootstrap_digest: Digest::from(
             sha2::Sha256::new_with_prefix(BOOTSTRAP_DOMAIN)

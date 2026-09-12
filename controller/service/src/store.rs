@@ -1,3 +1,9 @@
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(super) enum RootSchema {
+    #[serde(rename = "amiss/controller-inbox-root-v1")]
+    Current,
+}
+
 mod entries;
 
 use std::fs::{self, File, OpenOptions, TryLockError};
@@ -18,7 +24,7 @@ use crate::record::Record;
 
 const LOCK_FILE: &str = ".amiss-inbox.lock";
 const METADATA_FILE: &str = ".amiss-inbox.state";
-const METADATA_SCHEMA: &str = "amiss/controller-inbox-root-v1";
+const METADATA_SCHEMA: RootSchema = RootSchema::Current;
 const METADATA_MAGIC: &[u8] = b"AMISS-INBOX-ROOT";
 const METADATA_DOMAIN: &str = "amiss/controller-inbox-root-frame-v1";
 const RECORD_MAGIC: &[u8] = b"AMISS-INBOX-ROW";
@@ -34,7 +40,7 @@ pub(crate) struct Store {
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 struct RootMetadata {
-    schema: String,
+    schema: RootSchema,
     limits: StoredLimits,
 }
 
@@ -169,7 +175,7 @@ fn load_or_create_metadata(root: &Path, limits: StoredLimits) -> Result<(), Inbo
         Err(InboxError::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
             prepare_new_root(root)?;
             let metadata = RootMetadata {
-                schema: METADATA_SCHEMA.to_owned(),
+                schema: METADATA_SCHEMA,
                 limits,
             };
             atomic_write(

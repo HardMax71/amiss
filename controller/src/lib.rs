@@ -17,6 +17,7 @@ mod identity;
 mod ingress;
 mod intersphinx;
 mod mdbook;
+mod model;
 mod orchestration;
 mod plans;
 mod provider;
@@ -71,6 +72,7 @@ pub use mdbook::{
     MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, SiteBuildContext,
     mdbook_site_evidence, mdbook_site_expectation,
 };
+pub use model::AcquiredCommit;
 pub use orchestration::{
     ChangeSnapshot, ChangeState, CheckConclusion, Controller, ControllerError, DeliveryClaim,
     DeliveryLease, DeliveryLedger, Evaluation, ExternalSink, ExternalTally, HandleOutcome,
@@ -81,7 +83,7 @@ pub use orchestration::{
 pub use plans::{PlanError, PlanRegistry, PlanScope, ResolvedPlan, register_plan, resolve_plan};
 pub use provider::{
     AdapterRegistry, AuthenticatedDelivery, ForgeFact, ForgeNegative, OperationDeadline,
-    ProviderAdapter, ProviderError, RegistryError,
+    ProviderAdapter, ProviderError, RegistryError, provider_api_url,
 };
 pub use publication_audit::{
     PublicationAuditBundle, PublicationAuditDigests, validate_publication_audit,
