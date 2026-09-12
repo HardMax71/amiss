@@ -37,16 +37,11 @@ pub fn controls(request: ControlsRequest) -> Result<ControlInputs, ErrorDetail> 
                 .value
                 .validate()
                 .map_err(|error| configuration_detail(&error))?;
-            let mut writer = digest_io::IoWrapper(
-                sha2::Sha256::new_with_prefix(amiss_wire::controls::DEBT_SNAPSHOT_SCHEMA)
-                    .chain_update([0_u8]),
-            );
-            serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
-                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
-            let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
-            if digest != supplied.expected_digest {
-                return Err(code(AnalysisErrorCode::DigestMismatch));
-            }
+            let digest = admitted(
+                &supplied.value,
+                amiss_wire::controls::DEBT_SNAPSHOT_SCHEMA,
+                supplied.expected_digest,
+            )?;
             Ok(DebtInput {
                 snapshot: supplied.value,
                 digest,
@@ -61,16 +56,11 @@ pub fn controls(request: ControlsRequest) -> Result<ControlInputs, ErrorDetail> 
                 .value
                 .validate()
                 .map_err(|error| configuration_detail(&error))?;
-            let mut writer = digest_io::IoWrapper(
-                sha2::Sha256::new_with_prefix(amiss_wire::controls::WAIVER_BUNDLE_SCHEMA)
-                    .chain_update([0_u8]),
-            );
-            serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
-                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
-            let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
-            if digest != supplied.expected_digest {
-                return Err(code(AnalysisErrorCode::DigestMismatch));
-            }
+            let digest = admitted(
+                &supplied.value,
+                amiss_wire::controls::WAIVER_BUNDLE_SCHEMA,
+                supplied.expected_digest,
+            )?;
             Ok(WaiverInput {
                 bundle: supplied.value,
                 digest,
@@ -86,16 +76,11 @@ pub fn controls(request: ControlsRequest) -> Result<ControlInputs, ErrorDetail> 
                 .value
                 .validate()
                 .map_err(|error| configuration_detail(&error))?;
-            let mut writer = digest_io::IoWrapper(
-                sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
-                    .chain_update([0_u8]),
-            );
-            serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
-                .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
-            let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
-            if digest != supplied.expected_digest {
-                return Err(code(AnalysisErrorCode::DigestMismatch));
-            }
+            admitted(
+                &supplied.value,
+                amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA,
+                supplied.expected_digest,
+            )?;
             Ok(ConstraintInput {
                 descriptor: supplied.value,
                 trust_source: supplied.trust_source,
@@ -118,20 +103,32 @@ pub fn controls(request: ControlsRequest) -> Result<ControlInputs, ErrorDetail> 
     })
 }
 
+/// The admission law: a supplied control is accepted only when its own
+/// canonical bytes recompute the digest the caller acquired independently.
+fn admitted<T: serde::Serialize>(
+    value: &T,
+    domain: &str,
+    expected: amiss_wire::model::Digest,
+) -> Result<amiss_wire::model::Digest, ErrorDetail> {
+    let mut writer =
+        digest_io::IoWrapper(sha2::Sha256::new_with_prefix(domain).chain_update([0_u8]));
+    serde_json_canonicalizer::to_writer(value, &mut writer)
+        .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
+    let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
+    (digest == expected)
+        .then_some(digest)
+        .ok_or_else(|| code(AnalysisErrorCode::DigestMismatch))
+}
+
 fn organization_floor(
     supplied: amiss_wire::requests::SuppliedControl<amiss_wire::controls::OrganizationFloor>,
 ) -> Result<FloorInput, ErrorDetail> {
     supplied.value.validate().map_err(floor_detail)?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::ORGANIZATION_FLOOR_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
-        .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
-    let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
-    if digest != supplied.expected_digest {
-        return Err(code(AnalysisErrorCode::DigestMismatch));
-    }
+    let digest = admitted(
+        &supplied.value,
+        amiss_wire::controls::ORGANIZATION_FLOOR_SCHEMA,
+        supplied.expected_digest,
+    )?;
     Ok(FloorInput {
         floor: supplied.value,
         digest,
@@ -144,16 +141,11 @@ fn trusted_time(supplied: amiss_wire::requests::SuppliedTime) -> Result<TimeInpu
         .value
         .validate()
         .map_err(|error| configuration_detail(&error))?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&supplied.value, &mut writer)
-        .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
-    let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
-    if digest != supplied.expected_digest {
-        return Err(code(AnalysisErrorCode::DigestMismatch));
-    }
+    admitted(
+        &supplied.value,
+        amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA,
+        supplied.expected_digest,
+    )?;
     Ok(TimeInput {
         statement: supplied.value,
         provider: supplied.provider,
