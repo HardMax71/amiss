@@ -31,7 +31,7 @@ pub enum State {
     Closed,
 }
 
-#[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(bound(deserialize = "Repository: Deserialize<'de>"))]
 pub struct PullRefRecord<Repository = Option<WorkflowRepositoryRecord>> {
     #[serde(rename = "ref")]

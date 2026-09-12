@@ -117,10 +117,7 @@ fn issue_metadata_retains_declared_shapes_without_unknown_or_missing_data() {
         (r#""closed_at":null,"#, ""),
         (r#""id":444500041"#, r#""id":444500041,"\u0069d":444500041"#),
         (r#""user":{"#, r#""user":{"unknown":true,"#),
-        (
-            r#""installation":{"id":1,"node_id":"MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uMQ=="}"#,
-            r#""installation":null"#,
-        ),
+        (r#""installation":{"id":1}"#, r#""installation":null"#),
     ] {
         assert!(wire.contains(old), "mutation absent: {old}");
         let candidate = wire.replacen(old, new, 1);

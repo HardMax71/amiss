@@ -58,7 +58,6 @@ impl SignedEvent {
             changes: None,
             installation: Some(Installation {
                 id: INSTALLATION_ID,
-                node_id: "installation-seven".to_owned(),
             }),
             repository: Some(root),
             number: Some(PULL_REQUEST_NUMBER),

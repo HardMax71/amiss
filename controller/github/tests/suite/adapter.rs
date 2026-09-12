@@ -26,7 +26,7 @@ use amiss_controller::{
 };
 use amiss_controller_github::check::CheckRunStatus;
 use amiss_controller_github::owner::OwnerRecord;
-use amiss_controller_github::pull::PullRequestRecord;
+use amiss_controller_github::pull::{PullRefRecord, PullRequestRecord};
 use amiss_controller_github::repository::WorkflowRepositoryRecord;
 use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::pull::request::SynchronizePullRequest;
@@ -35,9 +35,7 @@ use amiss_controller_github::webhook::{
     BaseChange, GitHubPayload, Installation, PreviousReference, PullRequestChanges, Workflow,
     WorkflowRun, WorkflowRunConclusion,
 };
-use amiss_controller_github::workflow::{
-    WorkflowPullRef, WorkflowPullRepository, WorkflowPullRequest,
-};
+use amiss_controller_github::workflow::{WorkflowPullRepository, WorkflowPullRequest};
 use amiss_controller_github::{
     GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
 };
@@ -70,10 +68,7 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
     serde_json::to_vec(&GitHubPayload {
         action: Some("opened".to_owned()),
         changes: None,
-        installation: Some(Installation {
-            id: 7,
-            node_id: "installation-seven".to_owned(),
-        }),
+        installation: Some(Installation { id: 7 }),
         repository: Some(repository),
         number: Some(42),
         issue: None,
@@ -632,7 +627,7 @@ fn pull_request_identity_excludes_root_metadata() {
 }
 
 #[test]
-fn signed_webhook_bindings_keep_required_typed_fields() {
+fn signed_workflow_bindings_keep_required_typed_fields() {
     let completion_source = GitHubPullRequestSource::new(
         provider(),
         webhook(),
@@ -645,13 +640,6 @@ fn signed_webhook_bindings_keep_required_typed_fields() {
         Ok(Some(_))
     ));
     for (old, new) in [
-        (
-            r#""node_id":"installation-seven""#,
-            r#""node_id":"installation-seven","unknown":true"#,
-        ),
-        (r#","node_id":"installation-seven""#, ""),
-        (r#""node_id":"installation-seven""#, r#""node_id":false"#),
-        (r#""id":7"#, r#""id":9007199254740992"#),
         (r#""id":321,"#, ""),
         (
             r#""path":".github/workflows/docs-evidence.yml""#,
@@ -660,77 +648,103 @@ fn signed_webhook_bindings_keep_required_typed_fields() {
         (r#","path":".github/workflows/docs-evidence.yml""#, ""),
         (r#""id":321"#, r#""id":9007199254740992"#),
     ] {
-        assert_eq!(body.matches(old).count(), 1, "{old}");
-        let changed = body.replacen(old, new, 1);
-        assert!(
-            matches!(
-                authenticate_target(&completion_source, changed.as_bytes(), &target),
-                Err(ProviderError::Authentication)
-            ),
-            "accepted {new}"
-        );
-    }
-    let body = std::str::from_utf8(&BODY).unwrap();
-    for (old, new) in [
-        (
-            r#""node_id":"installation-seven""#,
-            r#""node_id":"installation-seven","unknown":true"#,
-        ),
-        (r#","node_id":"installation-seven""#, ""),
-        (r#""id":7"#, r#""id":9007199254740992"#),
-    ] {
-        assert_eq!(body.matches(old).count(), 1, "{old}");
-        let changed = body.replacen(old, new, 1);
-        assert!(
-            matches!(
-                authenticate_target(&source(), changed.as_bytes(), &target),
-                Err(ProviderError::Authentication)
-            ),
-            "accepted {new}"
+        let changed = replaced_once(body.as_bytes(), old, new);
+        assert_eq!(
+            authenticate_target(&completion_source, &changed, &target),
+            Err(ProviderError::Authentication),
+            "{new}"
         );
     }
 }
 
 #[test]
-fn workflow_pr_references_reject_unknown_missing_and_malformed_metadata() {
+fn signed_installation_metadata_preserves_both_delivery_bindings() {
+    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    for (source, body) in [
+        (source(), BODY.clone()),
+        (
+            GitHubPullRequestSource::new(provider(), webhook(), &[workflow_artifact("321")]),
+            serde_json::to_vec(&workflow_payload()).unwrap(),
+        ),
+    ] {
+        let original = authenticate_target(&source, &body, &target)
+            .unwrap()
+            .unwrap();
+        let metadata = replaced_once(
+            &body,
+            r#""installation":{"#,
+            r#""installation":{"node_id":null,"account":false,"permissions":[],"unknown":{},"#,
+        );
+        assert_eq!(
+            authenticate_target(&source, &metadata, &target)
+                .unwrap()
+                .unwrap()
+                .delivery(),
+            original.delivery()
+        );
+        for installation in [
+            "{}",
+            "null",
+            "false",
+            r#"{"id":0}"#,
+            r#"{"id":null}"#,
+            r#"{"id":false}"#,
+            r#"{"id":-1}"#,
+            r#"{"id":9007199254740992}"#,
+            r#"{"id":7,"id":7}"#,
+        ] {
+            let changed = replaced_once(
+                &body,
+                r#""installation":{"id":7}"#,
+                &format!(r#""installation":{installation}"#),
+            );
+            assert_eq!(
+                authenticate_target(&source, &changed, &target),
+                Err(ProviderError::Authentication),
+                "{installation}"
+            );
+        }
+    }
+}
+
+#[test]
+fn workflow_pr_references_keep_signed_identity_without_unused_metadata() {
     let completion_source = GitHubPullRequestSource::new(
         provider(),
         webhook(),
         &[workflow_artifact("docs-evidence.yml")],
     );
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let body = serde_json::to_string(&workflow_payload()).unwrap();
-    assert!(matches!(
-        authenticate_target(&completion_source, body.as_bytes(), &target),
-        Ok(Some(_))
-    ));
+    let payload = workflow_payload();
+    let body = serde_json::to_string(&payload).unwrap();
+    let original = authenticate_target(&completion_source, body.as_bytes(), &target)
+        .unwrap()
+        .unwrap();
+    let reference = serde_json::to_string(&payload.workflow_run.pull_requests[0]).unwrap();
+    let metadata = reference
+        .replacen('{', r#"{"url":false,"unknown":null,"#, 1)
+        .replace(r#""head":{"#, r#""head":{"label":[],"unknown":true,"#)
+        .replace(r#""base":{"#, r#""base":{"user":false,"unknown":{},"#)
+        .replace(r#""repo":{"#, r#""repo":{"url":null,"unknown":[],"#);
+    let changed = replaced_once(body.as_bytes(), &reference, &metadata);
+    assert_eq!(
+        authenticate_target(&completion_source, &changed, &target)
+            .unwrap()
+            .unwrap()
+            .delivery(),
+        original.delivery()
+    );
     for (old, new) in [
-        (
-            r#""url":"https://api.github.com/repos/HardMax71/widget/pulls/42""#,
-            r#""url":"https://api.github.com/repos/HardMax71/widget/pulls/42","unknown":true"#,
-        ),
-        (
-            r#","url":"https://api.github.com/repos/HardMax71/widget/pulls/42""#,
-            "",
-        ),
-        (
-            r#""url":"https://api.github.com/repos/Contributor/widget""#,
-            r#""url":"https://api.github.com/repos/Contributor/widget","unknown":true"#,
-        ),
-        (
-            r#""url":"https://api.github.com/repos/Contributor/widget""#,
-            r#""url":false"#,
-        ),
+        (r#""id":4201,"#, ""),
         (r#""id":4201"#, r#""id":9007199254740992"#),
+        (r#""id":4201"#, r#""id":0"#),
+        (r#""number":42"#, r#""number":null"#),
     ] {
-        assert_eq!(body.matches(old).count(), 1, "{old}");
-        let changed = body.replacen(old, new, 1);
-        assert!(
-            matches!(
-                authenticate_target(&completion_source, changed.as_bytes(), &target),
-                Err(ProviderError::Authentication)
-            ),
-            "accepted {new}"
+        let changed = replaced_once(body.as_bytes(), old, new);
+        assert_eq!(
+            authenticate_target(&completion_source, &changed, &target),
+            Err(ProviderError::Authentication),
+            "{new}"
         );
     }
     for from in ['a', 'b'] {
@@ -1424,23 +1438,20 @@ fn workflow_payload() -> WorkflowRunEvent {
     run.pull_requests = vec![Some(WorkflowPullRequest {
         id: 4_201,
         number: 42,
-        url: "https://api.github.com/repos/HardMax71/widget/pulls/42".to_owned(),
-        head: WorkflowPullRef {
+        head: PullRefRecord {
             branch: "topic".to_owned(),
             sha: oid('b'),
             repo: WorkflowPullRepository {
                 id: 202,
                 name: "widget".to_owned(),
-                url: "https://api.github.com/repos/Contributor/widget".to_owned(),
             },
         },
-        base: WorkflowPullRef {
+        base: PullRefRecord {
             branch: "main".to_owned(),
             sha: oid('a'),
             repo: WorkflowPullRepository {
                 id: 101,
                 name: "widget".to_owned(),
-                url: "https://api.github.com/repos/HardMax71/widget".to_owned(),
             },
         },
     })];
@@ -1457,10 +1468,7 @@ fn workflow_payload() -> WorkflowRunEvent {
         sender: repository.owner.clone(),
         organization: None,
         enterprise: None,
-        installation: Some(Installation {
-            id: 7,
-            node_id: "installation-seven".to_owned(),
-        }),
+        installation: Some(Installation { id: 7 }),
         repository,
         workflow: Some(Workflow {
             id: 321,

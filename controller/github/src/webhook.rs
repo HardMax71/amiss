@@ -87,11 +87,9 @@ pub struct PreviousReference<T = String> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct Installation {
     #[serde(with = "As::<TryFromInto<UInt>>")]
     pub id: u64,
-    pub node_id: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

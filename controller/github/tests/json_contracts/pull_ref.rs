@@ -46,7 +46,10 @@ fn nullable_ref_repositories_do_not_make_reference_fields_optional() {
         .find(|reference| reference.repo.is_none())
         .unwrap();
     let input = serde_json::to_string(deleted).unwrap();
-    assert!(serde_json::from_str::<PullRefRecord>(&input).unwrap() == *deleted);
+    assert_eq!(
+        serde_json::from_str::<PullRefRecord>(&input).unwrap(),
+        *deleted
+    );
     for (field, value) in [
         ("ref", serde_json::to_string(&deleted.branch).unwrap()),
         ("sha", serde_json::to_string(&deleted.sha).unwrap()),
@@ -83,7 +86,10 @@ fn pull_ref_metadata_is_ignored_without_hiding_invalid_references() {
             r#"{"label":null,"user":false,"future":{"anything":[]},"#,
             1,
         );
-        assert!(serde_json::from_str::<PullRefRecord>(&metadata).unwrap() == reference);
+        assert_eq!(
+            serde_json::from_str::<PullRefRecord>(&metadata).unwrap(),
+            reference
+        );
         let sha = serde_json::to_string(&reference.sha).unwrap();
         amiss_fixtures::assert_json_rejections::<PullRefRecord>(
             &input,

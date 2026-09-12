@@ -4,6 +4,7 @@ use json_serde::deserialize_some;
 use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto};
 
+use crate::pull::PullRefRecord;
 use crate::repository::WorkflowRepositoryRecord;
 
 #[serde_with::apply(
@@ -56,29 +57,16 @@ pub struct WorkflowCommitUser {
 
 #[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct WorkflowPullRequest {
     pub id: u64,
     pub number: u64,
-    pub url: String,
-    pub head: WorkflowPullRef,
-    pub base: WorkflowPullRef,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct WorkflowPullRef {
-    #[serde(rename = "ref")]
-    pub branch: String,
-    pub sha: Oid,
-    pub repo: WorkflowPullRepository,
+    pub head: PullRefRecord<WorkflowPullRepository>,
+    pub base: PullRefRecord<WorkflowPullRepository>,
 }
 
 #[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct WorkflowPullRepository {
     pub id: u64,
     pub name: String,
-    pub url: String,
 }

@@ -377,10 +377,7 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
     let mut payload = GitHubPayload {
         action: Some("opened".to_owned()),
         changes: None,
-        installation: Some(Installation {
-            id: 22,
-            node_id: "installation-twenty-two".to_owned(),
-        }),
+        installation: Some(Installation { id: 22 }),
         repository: Some(root),
         number: Some(42),
         issue: None,

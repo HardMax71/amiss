@@ -30,12 +30,12 @@ fn webhook_ref_repository_type_preserves_nullable_heads_and_required_bases() {
     for repository in [None, reference.repo.clone()] {
         reference.repo = repository;
         let input = serde_json::to_string(reference).unwrap();
-        assert!(
+        assert_eq!(
             serde_json::from_str::<
                 PullRefRecord<Option<WorkflowRepositoryRecord<Option<OwnerRecord>>>>,
             >(&input)
-            .unwrap()
-                == *reference
+            .unwrap(),
+            *reference
         );
         assert_eq!(
             serde_json::from_str::<PullRefRecord<WorkflowRepositoryRecord<Option<OwnerRecord>>>>(
@@ -52,12 +52,12 @@ fn webhook_ref_repository_type_preserves_nullable_heads_and_required_bases() {
             PullRefRecord<Option<WorkflowRepositoryRecord<Option<OwnerRecord>>>>,
         >(&input, &[(&member, "")]);
         let metadata = input.replacen('{', r#"{"label":{},"user":null,"unknown":false,"#, 1);
-        assert!(
+        assert_eq!(
             serde_json::from_str::<
                 PullRefRecord<Option<WorkflowRepositoryRecord<Option<OwnerRecord>>>>,
             >(&metadata)
-            .unwrap()
-                == *reference
+            .unwrap(),
+            *reference
         );
     }
 }

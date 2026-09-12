@@ -24,6 +24,8 @@ fn signed_check_suites_keep_metadata_and_remain_no_work() {
             GitHubEvent::CheckSuite(_)
         ));
         assert_eq!(authenticate_target(&source, &input, &target), Ok(None));
+        let metadata = replaced_once(&input, r#""head":{"#, r#""head":{"unknown":true,"#);
+        assert_eq!(authenticate_target(&source, &metadata, &target), Ok(None));
         for (old, new) in [
             ("{", r#"{"unknown":true,"#),
             (r#""check_suite":{"#, r#""check_suite":{"unknown":true,"#),
@@ -41,7 +43,6 @@ fn signed_check_suites_keep_metadata_and_remain_no_work() {
                 r#""latest_check_runs_count":9007199254740992"#,
             ),
             (r#""head_commit":{"#, r#""head_commit":{"unknown":true,"#),
-            (r#""head":{"#, r#""head":{"unknown":true,"#),
         ] {
             let candidate = replaced_once(&input, old, new);
             assert!(candidate != input, "mutation absent: {old}");

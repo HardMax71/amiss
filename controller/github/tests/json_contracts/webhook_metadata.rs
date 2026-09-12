@@ -9,15 +9,16 @@ fn webhook_metadata_keeps_consumed_identity_from_published_examples() {
     let installation: Installation = serde_json::from_slice(INSTALLATION).unwrap();
     let workflow: Workflow = serde_json::from_slice(WORKFLOW).unwrap();
     assert_eq!(installation.id, 1);
-    assert_eq!(
-        installation.node_id,
-        "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uMQ=="
-    );
     assert_eq!(workflow.id, 2_823_525);
     assert_eq!(workflow.path, ".github/workflows/test.yml");
+    let metadata = serde_json::to_string(&installation).unwrap().replacen(
+        '{',
+        r#"{"node_id":null,"account":false,"permissions":[],"unknown":{},"#,
+        1,
+    );
     assert_eq!(
-        amiss_fixtures::canonical_json(INSTALLATION).unwrap(),
-        amiss_fixtures::canonical_json(&serde_json::to_vec(&installation).unwrap()).unwrap()
+        serde_json::from_str::<Installation>(&metadata).unwrap(),
+        installation
     );
     let metadata = serde_json::to_string(&workflow).unwrap().replacen(
         '{',
@@ -84,9 +85,8 @@ fn consumed_workflow_identity_is_required_and_nonnull() {
             );
         }
     }
-    for changed in [br#"{"id":1}"#.as_slice(), br#"{"node_id":"installation"}"#] {
+    for changed in [b"{}".as_slice(), br#"{"node_id":"installation"}"#] {
         assert!(serde_json::from_slice::<Installation>(changed).is_err());
-        assert!(amiss_wire::read_json::<Installation>(changed, u64::MAX).is_err());
     }
 }
 
@@ -126,7 +126,6 @@ fn metadata_uses_checked_integers_and_refuses_ambiguous_or_untyped_objects() {
     }
     let large = Installation {
         id: 9_007_199_254_740_991,
-        ..installation
     };
     let bytes = serde_json::to_vec(&large).unwrap();
     assert_eq!(
