@@ -66,7 +66,6 @@ fn check_suite_markers_cannot_downgrade_or_become_pr_work() {
         r#""check_suite":{}"#,
         serde_json::to_string(&event.check_suite).unwrap()
     );
-    payload.check_suite = Some(event.check_suite);
     for action in [
         "opened",
         "reopened",
@@ -78,7 +77,11 @@ fn check_suite_markers_cannot_downgrade_or_become_pr_work() {
         "rerequested",
     ] {
         payload.action = Some(action.to_owned());
-        let input = serde_json::to_vec(&payload).unwrap();
+        let input = replaced_once(
+            &serde_json::to_vec(&payload).unwrap(),
+            "{",
+            &format!("{{{marker},"),
+        );
         let null = replaced_once(&input, &marker, r#""check_suite":null"#);
         assert!(null != input, "suite marker must exist");
         for candidate in [&input, &null] {

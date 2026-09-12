@@ -11,6 +11,8 @@ use crate::owner::OwnerRecord;
 use crate::repository::WorkflowRepositoryRecord;
 use crate::workflow::WorkflowPullRequest;
 
+pub use json_serde::Absent;
+
 pub mod app;
 pub mod comment;
 pub mod event;
@@ -25,7 +27,10 @@ pub mod workflow;
 
 use crate::pull::PullRequestRecord;
 
-#[serde_with::apply(Option<_> => #[serde(skip_serializing_if = "Option::is_none")])]
+#[serde_with::apply(
+    Option<_> => #[serde(skip_serializing_if = "Option::is_none")],
+    Absent => #[serde(default, skip_serializing)]
+)]
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(bound(deserialize = "Pull: Deserialize<'de>, Action: Deserialize<'de>"))]
 pub struct GitHubPayload<Pull = PullRequestRecord, Action = String> {
@@ -38,25 +43,13 @@ pub struct GitHubPayload<Pull = PullRequestRecord, Action = String> {
     #[serde(default, deserialize_with = "deserialize_some")]
     pub issue: Option<issue::IssueRecord<issue::context::IssueActivityContext>>,
     pub pull_request: Option<Pull>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub review: Option<review::ReviewRecord>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub comment: Option<comment::Comment>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub thread: Option<thread::ReviewThread>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub check_suite: Option<suite::CheckSuiteRecord>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub check_run: Option<
-        crate::check::CheckRunRecord<
-            app::WebhookApp<Nullable<crate::check::AppOwner>>,
-            run::WebhookCheckRunConclusion,
-        >,
-    >,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub workflow: Option<Nullable<Workflow>>,
-    #[serde(default, deserialize_with = "deserialize_some")]
-    pub workflow_run: Option<WorkflowRun>,
+    pub review: Absent,
+    pub comment: Absent,
+    pub thread: Absent,
+    pub check_suite: Absent,
+    pub check_run: Absent,
+    pub workflow: Absent,
+    pub workflow_run: Absent,
 }
 
 #[serde_with::apply(Option<_> => #[serde(
@@ -65,25 +58,19 @@ pub struct GitHubPayload<Pull = PullRequestRecord, Action = String> {
     skip_serializing_if = "Option::is_none"
 )])]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct PullRequestChanges {
     pub base: Option<BaseChange>,
-    pub body: Option<PreviousReference>,
-    pub title: Option<PreviousReference>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
 pub struct BaseChange {
     #[serde(rename = "ref")]
     pub reference: PreviousReference,
-    pub sha: PreviousReference<Oid>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct PreviousReference<T = String> {
-    pub from: T,
+pub struct PreviousReference {
+    pub from: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]

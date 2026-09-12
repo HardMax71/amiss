@@ -1,6 +1,9 @@
 use amiss_controller::ProviderError;
 use amiss_controller_github::webhook::GitHubPayload;
-use amiss_controller_github::webhook::comment::{Comment, CommentPayload, ReviewCommentEvent};
+use amiss_controller_github::webhook::comment::issue::IssueCommentEvent;
+use amiss_controller_github::webhook::comment::{
+    CommentPayload, ReviewCommentEvent, ReviewCommentRecord,
+};
 use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::pull::review::CommentPullRequest;
 use amiss_controller_github::webhook::review::ReviewEvent;
@@ -98,8 +101,9 @@ fn issue_comments_remain_no_work_without_becoming_pr_deliveries() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let input = amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT;
-    let payload: GitHubPayload = serde_json::from_slice(input).unwrap();
-    assert!(matches!(payload.comment, Some(Comment::Issue(_))));
+    let IssueCommentEvent::Created { event } = serde_json::from_slice(input).unwrap() else {
+        panic!("the fixture is a created issue comment")
+    };
     for action in ["created", "edited", "deleted"] {
         let mut wire = replaced_once(
             input,
@@ -112,11 +116,16 @@ fn issue_comments_remain_no_work_without_becoming_pr_deliveries() {
         assert_eq!(authenticate_target(&source, &wire, &target), Ok(None));
     }
     let mut pull: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
-    pull.comment = payload.comment;
+    let comment = serde_json::to_string(&event.comment).unwrap();
     for action in ["opened", "edited", "synchronize", "closed"] {
         pull.action = Some(action.to_owned());
+        let wire = replaced_once(
+            &serde_json::to_vec(&pull).unwrap(),
+            "{",
+            &format!(r#"{{"comment":{comment},"#),
+        );
         assert_eq!(
-            authenticate_target(&source, &serde_json::to_vec(&pull).unwrap(), &target),
+            authenticate_target(&source, &wire, &target),
             Err(ProviderError::Authentication)
         );
     }
@@ -126,12 +135,10 @@ fn issue_comments_remain_no_work_without_becoming_pr_deliveries() {
 fn review_comments_cannot_fall_back_to_partial_or_active_prs() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let comment = Comment::Review(Box::new(
-        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW_COMMENT).unwrap(),
-    ));
+    let comment: ReviewCommentRecord =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW_COMMENT).unwrap();
     let comment_member = format!(r#""comment":{}"#, serde_json::to_string(&comment).unwrap());
     let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
-    payload.comment = Some(comment);
     for action in [
         "opened",
         "reopened",
@@ -142,7 +149,11 @@ fn review_comments_cannot_fall_back_to_partial_or_active_prs() {
         "deleted",
     ] {
         payload.action = Some(action.to_owned());
-        let wire = serde_json::to_vec(&payload).unwrap();
+        let wire = replaced_once(
+            &serde_json::to_vec(&payload).unwrap(),
+            "{",
+            &format!("{{{comment_member},"),
+        );
         let null = replaced_once(&wire, &comment_member, r#""comment":null"#);
         assert_ne!(null, wire);
         for candidate in [&wire, &null] {
@@ -153,7 +164,6 @@ fn review_comments_cannot_fall_back_to_partial_or_active_prs() {
             );
         }
     }
-    payload.comment = None;
     for action in ["created", "deleted"] {
         payload.action = Some(action.to_owned());
         assert_eq!(

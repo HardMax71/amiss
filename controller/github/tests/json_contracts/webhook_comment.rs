@@ -1,4 +1,5 @@
-use amiss_controller_github::webhook::comment::{Comment, ReviewCommentRecord};
+use amiss_controller_github::webhook::comment::ReviewCommentRecord;
+use amiss_controller_github::webhook::comment::issue::IssueCommentRecord;
 use amiss_controller_github::webhook::pull::review::CommentPullRequest;
 use amiss_wire::assessment::Nullable;
 use js_int::UInt;
@@ -6,8 +7,7 @@ use js_int::UInt;
 #[test]
 fn issue_comment_metadata_retains_its_distinct_closed_shape() {
     let input = amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT;
-    let record: Comment = amiss_wire::read_json(input, u64::MAX).unwrap();
-    assert!(matches!(record, Comment::Issue(_)));
+    let record: IssueCommentRecord = amiss_wire::read_json(input, u64::MAX).unwrap();
     let wire = serde_json::to_string(&record).unwrap();
     assert_eq!(
         amiss_fixtures::canonical_json(wire.as_bytes()).unwrap(),
@@ -34,12 +34,12 @@ fn issue_comment_metadata_retains_its_distinct_closed_shape() {
         assert!(wire.contains(old), "{old}");
         let candidate = wire.replacen(old, new, 1);
         assert_eq!(
-            serde_json::from_str::<Comment>(&candidate).is_ok(),
+            serde_json::from_str::<IssueCommentRecord>(&candidate).is_ok(),
             valid,
             "{new}"
         );
         assert_eq!(
-            amiss_wire::read_json::<Comment>(candidate.as_bytes(), u64::MAX).is_ok(),
+            amiss_wire::read_json::<IssueCommentRecord>(candidate.as_bytes(), u64::MAX).is_ok(),
             valid,
             "{new}"
         );
@@ -49,8 +49,8 @@ fn issue_comment_metadata_retains_its_distinct_closed_shape() {
 #[test]
 fn review_comment_members_keep_presence_nullability_and_closed_shapes() {
     let input = amiss_fixtures::GITHUB_WEBHOOK_REVIEW_COMMENT;
-    let comment: Comment = amiss_wire::read_json(input, u64::MAX).unwrap();
-    assert!(matches!(comment, Comment::Review(_)));
+    let comment: ReviewCommentRecord<Nullable<UInt>> =
+        amiss_wire::read_json(input, u64::MAX).unwrap();
     let encoded = serde_json::to_vec(&comment).unwrap();
     assert_eq!(
         amiss_fixtures::canonical_json(input).unwrap(),
@@ -92,7 +92,11 @@ fn review_comment_members_keep_presence_nullability_and_closed_shapes() {
             "{new}"
         );
         assert_eq!(
-            amiss_wire::read_json::<Comment>(candidate.as_bytes(), u64::MAX).is_ok(),
+            amiss_wire::read_json::<ReviewCommentRecord<Nullable<UInt>>>(
+                candidate.as_bytes(),
+                u64::MAX
+            )
+            .is_ok(),
             valid,
             "{new}"
         );

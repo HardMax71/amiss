@@ -32,10 +32,9 @@ fn malformed_reviews_cannot_downgrade_to_partial_or_active_prs() {
         panic!("the fixture is a submitted review")
     };
     let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
-    payload.review = Some(event.review);
     let review_member = format!(
         r#""review":{}"#,
-        serde_json::to_string(&payload.review).unwrap()
+        serde_json::to_string(&event.review).unwrap()
     );
     for action in [
         "opened",
@@ -47,7 +46,11 @@ fn malformed_reviews_cannot_downgrade_to_partial_or_active_prs() {
         "dismissed",
     ] {
         payload.action = Some(action.to_owned());
-        let wire = serde_json::to_vec(&payload).unwrap();
+        let wire = replaced_once(
+            &serde_json::to_vec(&payload).unwrap(),
+            "{",
+            &format!("{{{review_member},"),
+        );
         assert_eq!(
             authenticate_target(&source, &wire, &target),
             Err(ProviderError::Authentication),

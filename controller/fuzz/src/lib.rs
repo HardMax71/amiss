@@ -17,7 +17,7 @@ use amiss_controller_github::GitHubPullRequestSource;
 use amiss_controller_github::owner::OwnerRecord;
 use amiss_controller_github::pull::PullRequestRecord;
 use amiss_controller_github::repository::WorkflowRepositoryRecord;
-use amiss_controller_github::webhook::{GitHubPayload, Installation};
+use amiss_controller_github::webhook::{Absent, GitHubPayload, Installation};
 use amiss_controller_gitlab::claims::{Claims, RequestHint};
 use amiss_controller_gitlab::{GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust};
 use amiss_wire::digest::hb;
@@ -382,13 +382,13 @@ fn prepare_webhook(data: &[u8]) -> WebhookExercise<'_> {
         number: Some(42),
         issue: None,
         pull_request: Some(pull),
-        review: None,
-        comment: None,
-        thread: None,
-        check_suite: None,
-        check_run: None,
-        workflow: None,
-        workflow_run: None,
+        review: Absent,
+        comment: Absent,
+        thread: Absent,
+        check_suite: Absent,
+        check_run: Absent,
+        workflow: Absent,
+        workflow_run: Absent,
     };
     let changes: [(usize, Change); 6] = [
         (1, |p, _| p.action = Some("synchronize".to_owned())),

@@ -92,14 +92,11 @@ fn thread_markers_cannot_downgrade_or_become_active_pr_work() {
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
-    payload.thread = Some(ReviewThread {
+    let thread: ReviewThread = ReviewThread {
         node_id: "PRRT_kwDOFd42Pc4rQOUv".to_owned(),
         comments: Vec::new(),
-    });
-    let marker = format!(
-        r#""thread":{}"#,
-        serde_json::to_string(&payload.thread).unwrap()
-    );
+    };
+    let marker = format!(r#""thread":{}"#, serde_json::to_string(&thread).unwrap());
     for action in [
         "opened",
         "reopened",
@@ -110,7 +107,11 @@ fn thread_markers_cannot_downgrade_or_become_active_pr_work() {
         "unresolved",
     ] {
         payload.action = Some(action.to_owned());
-        let input = serde_json::to_vec(&payload).unwrap();
+        let input = replaced_once(
+            &serde_json::to_vec(&payload).unwrap(),
+            "{",
+            &format!("{{{marker},"),
+        );
         let null = replaced_once(&input, &marker, r#""thread":null"#);
         assert_ne!(null, input);
         for candidate in [&input, &null] {
@@ -121,7 +122,6 @@ fn thread_markers_cannot_downgrade_or_become_active_pr_work() {
             );
         }
     }
-    payload.thread = None;
     for action in ["resolved", "unresolved"] {
         payload.action = Some(action.to_owned());
         assert_eq!(

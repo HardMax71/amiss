@@ -9,7 +9,7 @@ use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_github::owner::OwnerRecord;
 use amiss_controller_github::repository::WorkflowRepositoryRecord;
 use amiss_controller_github::webhook::pull::request::SynchronizePullRequest;
-use amiss_controller_github::webhook::{GitHubPayload, Installation};
+use amiss_controller_github::webhook::{Absent, GitHubPayload, Installation};
 use amiss_controller_github::{GitHubApi, GitHubPullRequest, GitHubPullRequestSource};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
@@ -63,13 +63,13 @@ impl SignedEvent {
             number: Some(PULL_REQUEST_NUMBER),
             issue: None,
             pull_request: Some(pull),
-            review: None,
-            comment: None,
-            thread: None,
-            check_suite: None,
-            check_run: None,
-            workflow: None,
-            workflow_run: None,
+            review: Absent,
+            comment: Absent,
+            thread: Absent,
+            check_suite: Absent,
+            check_run: Absent,
+            workflow: Absent,
+            workflow_run: Absent,
         })
         .unwrap();
         Self::signed(body, secret)

@@ -344,15 +344,7 @@ impl PullRequestFacts {
 fn reject_mixed_events<Pull, Action>(
     payload: &GitHubPayload<Pull, Action>,
 ) -> Result<(), ProviderError> {
-    if payload.review.is_some()
-        || payload.thread.is_some()
-        || payload.check_suite.is_some()
-        || payload.check_run.is_some()
-        || payload.workflow.is_some()
-        || payload.workflow_run.is_some()
-        || payload.comment.is_some()
-        || (payload.pull_request.is_some() && payload.issue.is_some())
-    {
+    if payload.pull_request.is_some() && payload.issue.is_some() {
         return Err(ProviderError::Authentication);
     }
     Ok(())

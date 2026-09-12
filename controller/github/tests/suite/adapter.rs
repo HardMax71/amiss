@@ -28,12 +28,13 @@ use amiss_controller_github::check::CheckRunStatus;
 use amiss_controller_github::owner::OwnerRecord;
 use amiss_controller_github::pull::{PullRefRecord, PullRequestRecord};
 use amiss_controller_github::repository::WorkflowRepositoryRecord;
+use amiss_controller_github::webhook::comment::issue::IssueCommentEvent;
 use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::pull::request::SynchronizePullRequest;
 use amiss_controller_github::webhook::workflow::{WorkflowRunAction, WorkflowRunEvent};
 use amiss_controller_github::webhook::{
-    BaseChange, GitHubPayload, Installation, PreviousReference, PullRequestChanges, Workflow,
-    WorkflowRun, WorkflowRunConclusion,
+    Absent, BaseChange, GitHubPayload, Installation, PreviousReference, PullRequestChanges,
+    Workflow, WorkflowRun, WorkflowRunConclusion,
 };
 use amiss_controller_github::workflow::{WorkflowPullRepository, WorkflowPullRequest};
 use amiss_controller_github::{
@@ -73,13 +74,13 @@ static BODY: LazyLock<Vec<u8>> = LazyLock::new(|| {
         number: Some(42),
         issue: None,
         pull_request: Some(pull),
-        review: None,
-        comment: None,
-        thread: None,
-        check_suite: None,
-        check_run: None,
-        workflow: None,
-        workflow_run: None,
+        review: Absent,
+        comment: Absent,
+        thread: Absent,
+        check_suite: Absent,
+        check_run: Absent,
+        workflow: Absent,
+        workflow_run: Absent,
     })
     .unwrap()
 });
@@ -808,11 +809,15 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
     let check_suite = amiss_fixtures::GITHUB_WEBHOOK_CHECK_SUITE;
     assert_eq!(authenticate_target(&source, check_suite, &main), Ok(None));
 
-    let mut payload: GitHubPayload =
-        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap();
-    payload.action = Some("opened".to_owned());
-    payload.comment = None;
-    let issue = serde_json::to_string(&payload).unwrap();
+    let IssueCommentEvent::Created { event } =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap()
+    else {
+        panic!("the fixture is a created issue comment")
+    };
+    let issue = format!(
+        r#"{{"action":"opened","issue":{}}}"#,
+        serde_json::to_string(&event.issue).unwrap()
+    );
     assert_eq!(
         authenticate_target(&source, issue.as_bytes(), &main),
         Ok(None)
@@ -1009,123 +1014,89 @@ fn signed_nullable_refs_preserve_binding_and_missing_actions_stay_no_work() {
 }
 
 #[test]
-fn edited_requires_a_signed_base_change() {
-    let adapter = adapter(FakeApi::new(dummy_snapshot()));
+fn signed_edits_use_only_the_previous_base_branch() {
+    let source = source();
+    let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
     let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
     payload.action = Some("edited".to_owned());
     payload.changes = Some(PullRequestChanges {
         base: Some(BaseChange {
             reference: PreviousReference {
-                from: "main".to_owned(),
-            },
-            sha: PreviousReference {
-                from: Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
+                from: "previous-main".to_owned(),
             },
         }),
-        body: None,
-        title: None,
     });
-    let base_change = serde_json::to_vec(&payload).unwrap();
-    let accepted = authenticated(
-        &adapter,
-        &base_change,
-        &[],
-        SignedTimePolicy::ReplayOnly,
-        provider(),
-    )
-    .unwrap();
+    let minimal = serde_json::to_vec(&payload).unwrap();
+    let accepted = authenticate_target(&source, &minimal, &main)
+        .unwrap()
+        .unwrap();
     assert_eq!(
         accepted.delivery().provider_run.candidate_commit.as_str(),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     );
-
-    payload.changes = Some(PullRequestChanges {
-        base: None,
-        body: None,
-        title: Some(PreviousReference {
-            from: "old title".to_owned(),
-        }),
-    });
-    let title_change = serde_json::to_vec(&payload).unwrap();
+    let changes = serde_json::to_string(payload.changes.as_ref().unwrap()).unwrap();
+    for input in [
+        include_str!("../fixtures/webhook-pull-changes.json"),
+        r#"{"base":{"ref":{"from":"previous-main","extra":null},"sha":false,"extra":[]},"title":null,"body":{},"extra":true}"#,
+    ] {
+        let body = replaced_once(&minimal, &changes, input);
+        assert_eq!(
+            authenticate_target(&source, &body, &main)
+                .unwrap()
+                .unwrap()
+                .delivery(),
+            accepted.delivery()
+        );
+    }
+    for input in [
+        "null",
+        "{}",
+        r#"{"body":{"from":""}}"#,
+        r#"{"title":false,"body":null,"unknown":[]}"#,
+        r#"{"base":{"ref":{"from":""}}}"#,
+        r#"{"base":{"ref":{"from":"two words"}}}"#,
+        r#"{"base":{"ref":{"from":"topic..branch"}}}"#,
+    ] {
+        let body = replaced_once(&minimal, &changes, input);
+        assert_eq!(
+            authenticate_target(&source, &body, &main),
+            Ok(None),
+            "{input}"
+        );
+    }
+    payload.changes = None;
     assert_eq!(
-        authenticated(
-            &adapter,
-            &title_change,
-            &[],
-            SignedTimePolicy::ReplayOnly,
-            provider(),
-        ),
-        Err(ProviderError::Authentication)
+        authenticate_target(&source, &serde_json::to_vec(&payload).unwrap(), &main),
+        Ok(None)
     );
 }
 
 #[test]
-fn signed_edited_changes_refuse_partial_or_unknown_records() {
+fn signed_edits_reject_ambiguous_or_malformed_base_changes() {
     let source = source();
     let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let changes: PullRequestChanges =
-        serde_json::from_str(include_str!("../fixtures/webhook-pull-changes.json")).unwrap();
-    let wire = serde_json::to_string(&changes).unwrap();
-    let body = replaced_once(
-        &BODY,
-        r#""action":"opened","#,
-        &format!(r#""action":"edited","changes":{wire},"#),
-    );
-    assert!(
-        authenticate_target(&source, &body, &main)
-            .unwrap()
-            .is_some()
-    );
-    for (old, new) in [
-        (r#""base":{"#, r#""unknown":true,"base":{"#),
-        (r#""base":{"#, r#""base":{"unknown":true,"#),
-        (r#""ref":{"#, r#""ref":{"unknown":true,"#),
-        (r#""sha":{"#, r#""sha":{"unknown":true,"#),
-        (r#""body":{"#, r#""body":{"unknown":true,"#),
-        (r#""title":{"#, r#""title":{"unknown":true,"#),
-        (
-            r#""title":{"#,
-            r#""\u0074itle":{"from":"duplicate"},"title":{"#,
-        ),
-        (
-            r#""from":"previous-main""#,
-            r#""\u0066rom":"duplicate","from":"previous-main""#,
-        ),
-        (r#""ref":{"from":"previous-main"},"#, ""),
-        (
-            r#","sha":{"from":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}"#,
-            "",
-        ),
-        (r#""from":"previous-main""#, r#""from":null"#),
-        ("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "invalid-oid"),
-        (r#""from":"Previous documentation details.""#, ""),
-        (r#""from":"Previous pull request title""#, r#""from":null"#),
+    for changes in [
+        r#"{"base":null}"#,
+        r#"{"base":false}"#,
+        r#"{"base":{}}"#,
+        r#"{"base":{"ref":null}}"#,
+        r#"{"base":{"ref":{}}}"#,
+        r#"{"base":{"ref":{"from":null}}}"#,
+        r#"{"base":{"ref":{"from":false}}}"#,
+        r#"{"base":{"ref":{"from":"main"}},"\u0062ase":{"ref":{"from":"main"}}}"#,
+        r#"{"base":{"ref":{"from":"main"},"\u0072ef":{"from":"main"}}}"#,
+        r#"{"base":{"ref":{"from":"main","\u0066rom":"main"}}}"#,
     ] {
-        assert_eq!(wire.matches(old).count(), 1, "{old}");
-        let invalid = wire.replacen(old, new, 1);
         let body = replaced_once(
             &BODY,
             r#""action":"opened","#,
-            &format!(r#""action":"edited","changes":{invalid},"#),
+            &format!(r#""action":"edited","changes":{changes},"#),
         );
         assert_eq!(
             authenticate_target(&source, &body, &main),
             Err(ProviderError::Authentication),
-            "{invalid}"
+            "{changes}"
         );
-    }
-    for input in [
-        "{}",
-        r#"{"body":{"from":""}}"#,
-        r#"{"title":{"from":"Old title"}}"#,
-        r#"{"body":{"from":"Old body"},"title":{"from":"Old title"}}"#,
-    ] {
-        let body = replaced_once(
-            &BODY,
-            r#""action":"opened","#,
-            &format!(r#""action":"edited","changes":{input},"#),
-        );
-        assert_eq!(authenticate_target(&source, &body, &main), Ok(None));
     }
 }
 

@@ -2,6 +2,30 @@ use amiss_controller_github::repository::WorkflowRepositoryRecord;
 use amiss_controller_github::webhook::GitHubPayload;
 
 #[test]
+fn pull_payloads_reject_conflicting_event_markers_through_serde() {
+    assert!(
+        serde_json::from_str::<GitHubPayload>(r#"{"unknown":{"future":[null,false]}}"#).is_ok()
+    );
+    for field in [
+        "review",
+        "comment",
+        "thread",
+        "check_suite",
+        "check_run",
+        "workflow",
+        "workflow_run",
+    ] {
+        for value in ["null", "false", "0", "[]", "{}", r#"{"id":1}"#] {
+            let input = format!(r#"{{"{field}":{value}}}"#);
+            assert!(
+                serde_json::from_str::<GitHubPayload>(&input).is_err(),
+                "{input}"
+            );
+        }
+    }
+}
+
+#[test]
 fn webhook_root_keeps_repository_identity_without_metadata() {
     let input = amiss_fixtures::GITHUB_WEBHOOK_REPOSITORY;
     let record: WorkflowRepositoryRecord = serde_json::from_slice(input).unwrap();

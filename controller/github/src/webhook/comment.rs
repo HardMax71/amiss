@@ -18,13 +18,6 @@ use crate::repository::WorkflowRepositoryRecord;
 
 pub mod issue;
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(untagged)]
-pub enum Comment {
-    Review(Box<ReviewCommentRecord<Nullable<UInt>>>),
-    Issue(Box<issue::IssueCommentRecord>),
-}
-
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ReviewCommentEvent {

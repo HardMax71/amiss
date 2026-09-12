@@ -78,7 +78,6 @@ fn check_run_markers_cannot_downgrade_or_become_pr_work() {
         serde_json::to_string(&event.check_run).unwrap()
     );
     let mut payload: GitHubPayload = serde_json::from_slice(&BODY).unwrap();
-    payload.check_run = Some(event.check_run);
     for action in [
         "opened",
         "reopened",
@@ -90,7 +89,11 @@ fn check_run_markers_cannot_downgrade_or_become_pr_work() {
         "requested_action",
     ] {
         payload.action = Some(action.to_owned());
-        let input = serde_json::to_vec(&payload).unwrap();
+        let input = replaced_once(
+            &serde_json::to_vec(&payload).unwrap(),
+            "{",
+            &format!("{{{marker},"),
+        );
         let null = replaced_once(&input, &marker, r#""check_run":null"#);
         assert_ne!(null, input);
         for candidate in [&input, &null] {

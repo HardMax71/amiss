@@ -1,7 +1,6 @@
 use amiss_controller_github::owner::OwnerRecord;
-use amiss_controller_github::webhook::GitHubPayload;
 use amiss_controller_github::webhook::comment::issue::{
-    IssueCommentRecord, PinnedIssueCommentMetadata,
+    IssueCommentEvent, IssueCommentRecord, PinnedIssueCommentMetadata,
 };
 use amiss_controller_github::webhook::issue::IssueRecord;
 use amiss_controller_github::webhook::issue::context::IssueActivityContext;
@@ -10,13 +9,16 @@ use amiss_wire::assessment::Nullable;
 
 #[test]
 fn ordinary_issue_metadata_does_not_inherit_comment_requiredness() {
-    let payload: GitHubPayload =
-        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap();
-    let comment = serde_json::to_vec(&payload.comment.unwrap()).unwrap();
+    let IssueCommentEvent::Created { event } =
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT_EVENT).unwrap()
+    else {
+        panic!("the fixture is a created issue comment")
+    };
     let mut pinned: IssueCommentRecord<OwnerRecord, PinnedIssueCommentMetadata> =
-        serde_json::from_slice(&comment).unwrap();
+        serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_ISSUE_COMMENT).unwrap();
     pinned.metadata = PinnedIssueCommentMetadata::default();
-    let mut issue = payload.issue.unwrap();
+    let mut issue: IssueRecord<IssueActivityContext> =
+        serde_json::from_slice(&serde_json::to_vec(&event.issue).unwrap()).unwrap();
     issue.context.user = Nullable::Null;
     issue.context.assignee = None;
     issue.context.labels = None;
