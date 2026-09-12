@@ -40,11 +40,8 @@ fn exact_provider_records_select_and_retain_the_planned_template() {
         &config,
         &expectation,
         &candidate,
-        amiss_wire::read_json(
-            include_bytes!("../../../tests/fixtures/workflow-runs.json"),
-            u64::MAX,
-        )
-        .unwrap(),
+        serde_json::from_slice(include_bytes!("../../../tests/fixtures/workflow-runs.json"))
+            .unwrap(),
     )
     .unwrap();
     let payload = template(expectation.semantic.context_digest);
@@ -225,29 +222,20 @@ fn fixture() -> (Config, WorkflowArtifactExpectation, Oid) {
 }
 
 fn repository(id: u64, owner: &str, name: &str) -> WorkflowRepositoryRecord {
-    let record: WorkflowRepositoryRecord = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/workflow-repository.json"),
-        u64::MAX,
-    )
-    .unwrap();
+    let record: OwnerRecord =
+        serde_json::from_slice(include_bytes!("../../../tests/fixtures/owner-user.json")).unwrap();
     WorkflowRepositoryRecord {
         id,
         name: name.to_owned(),
         full_name: format!("{owner}/{name}"),
         owner: OwnerRecord {
             login: owner.to_owned(),
-            ..record.owner
+            ..record
         },
-        ..record
     }
 }
 
 fn run_page(candidate: &Oid) -> WorkflowRunPage {
-    let captured: WorkflowRunRecord = amiss_wire::read_json(
-        include_bytes!("../../../tests/fixtures/workflow-run.json"),
-        u64::MAX,
-    )
-    .unwrap();
     WorkflowRunPage {
         total_count: 1,
         workflow_runs: vec![WorkflowRunRecord {
@@ -260,9 +248,6 @@ fn run_page(candidate: &Oid) -> WorkflowRunPage {
             run_attempt: Some(UInt::from(2_u8)),
             repository: repository(101, "Acme", "Widget"),
             head_repository: repository(202, "Contributor", "Widget-Fork"),
-            head_commit: None,
-            pull_requests: Some(Vec::new()),
-            ..captured
         }],
     }
 }

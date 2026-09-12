@@ -1,223 +1,136 @@
-use std::io::Cursor;
-
-use amiss_controller::decode_bounded_json;
-use amiss_controller_github::workflow::{ReferencedWorkflow, WorkflowRunPage, WorkflowRunRecord};
-use amiss_wire::assessment::Nullable;
-use js_int::UInt;
+use amiss_controller::{ProviderError, decode_bounded_json};
+use amiss_controller_github::workflow::{WorkflowRunPage, WorkflowRunRecord};
 
 const RUN: &str = include_str!("../fixtures/workflow-run.json");
 const PAGE: &str = include_str!("../fixtures/workflow-runs.json");
 
 #[test]
-fn workflow_captures_retain_complete_run_and_query_responses() {
-    let run: WorkflowRunRecord = amiss_wire::read_json(RUN.as_bytes(), u64::MAX).unwrap();
-    let length = PAGE.len();
+fn workflow_captures_retain_artifact_selection_facts() {
+    let run: WorkflowRunRecord = serde_json::from_str(RUN).unwrap();
     let (page, consumed): (WorkflowRunPage, _) = decode_bounded_json(
-        Cursor::new(PAGE.as_bytes()),
-        Some(u64::try_from(length).unwrap()),
-        length,
-        |bytes| amiss_wire::read_json(bytes, u64::MAX),
+        PAGE.as_bytes(),
+        Some(u64::try_from(PAGE.len()).unwrap()),
+        PAGE.len(),
+        |bytes| serde_json::from_slice(bytes),
     )
     .unwrap();
-    assert_eq!(consumed, length);
+    assert_eq!(consumed, PAGE.len());
     assert_eq!(page.total_count, 1);
     assert_eq!(page.workflow_runs.len(), 1);
     assert_eq!(page.workflow_runs[0].id, run.id);
     assert_eq!(page.workflow_runs[0].head_sha, run.head_sha);
-    assert!(
-        page.workflow_runs[0]
-            .pull_requests
-            .as_ref()
-            .unwrap()
-            .is_empty()
-    );
-    assert_eq!(run.pull_requests.as_ref().unwrap()[0].number, 928);
-    let commit = run.head_commit.as_ref().unwrap();
-    assert_eq!(commit.id, run.head_sha);
-    assert_eq!(
-        commit.tree_id.as_str(),
-        "39ae7e54b6fd6f10aaa829549dc260d7c72742a9"
-    );
-    assert_eq!(run.actor.as_ref().unwrap().login, "HardMax71");
-    for (original, encoded) in [
-        (RUN, serde_json::to_vec(&run).unwrap()),
-        (PAGE, serde_json::to_vec(&page).unwrap()),
-    ] {
-        assert_eq!(
-            amiss_fixtures::canonical_json(&encoded).unwrap(),
-            amiss_fixtures::canonical_json(original.as_bytes()).unwrap(),
-        );
-    }
+    assert_eq!(run.id, 34_409_057_444);
+    assert_eq!(run.workflow_id, 313_127_792);
+    assert_eq!(run.run_attempt.map(u64::from), Some(1));
+    assert_eq!(run.event, "pull_request");
+    assert_eq!(run.status.as_deref(), Some("completed"));
+    assert_eq!(run.conclusion.as_deref(), Some("success"));
+    assert_eq!(run.repository.id, 1_298_463_903);
+    assert_eq!(run.head_repository.id, run.repository.id);
+    assert_eq!(run.repository.full_name, "HardMax71/amiss");
+
+    let encoded = serde_json::to_string(&page).unwrap();
+    let metadata = encoded
+        .replacen('{', r#"{"extra":true,"#, 1)
+        .replacen(r#""workflow_runs":[{"#, r#""workflow_runs":[{"head_commit":false,"pull_requests":{},"actor":[],"display_title":42,"referenced_workflows":null,"#, 1)
+        .replacen(r#""repository":{"#, r#""repository":{"private":null,"permissions":false,"#, 1)
+        .replacen(r#""head_repository":{"#, r#""head_repository":{"security_and_analysis":[],"#, 1);
+    assert!(serde_json::from_str::<WorkflowRunPage>(&metadata).unwrap() == page);
     let positional = serde_json::to_vec(&(page.total_count, &page.workflow_runs)).unwrap();
-    assert!(serde_json::from_slice::<WorkflowRunPage>(&positional).is_ok());
-    assert!(amiss_wire::read_json::<WorkflowRunPage>(&positional, u64::MAX).is_err());
-    assert!(amiss_wire::read_json::<WorkflowRunPage>(PAGE.as_bytes(), 0).is_err());
-    let trailing = format!("{PAGE} {{}}");
-    assert!(amiss_wire::read_json::<WorkflowRunPage>(trailing.as_bytes(), u64::MAX).is_err());
+    assert!(serde_json::from_slice::<WorkflowRunPage>(&positional).unwrap() == page);
+    assert!(matches!(
+        decode_bounded_json::<WorkflowRunPage, _>(PAGE.as_bytes(), None, PAGE.len() - 1, |bytes| {
+            serde_json::from_slice(bytes)
+        }),
+        Err(ProviderError::InvalidResponse)
+    ));
+    assert!(serde_json::from_str::<WorkflowRunPage>(&format!("{PAGE} {{}}")).is_err());
 }
 
 #[test]
-fn workflow_required_nulls_and_optional_presence_are_distinct() {
-    let mut run: WorkflowRunRecord = amiss_wire::read_json(RUN.as_bytes(), u64::MAX).unwrap();
-    run.head_branch = None;
+fn workflow_identity_and_nullable_outcome_remain_required() {
+    let mut run: WorkflowRunRecord = serde_json::from_str(RUN).unwrap();
     run.status = None;
     run.conclusion = None;
-    run.head_commit = None;
-    run.pull_requests = None;
-    run.actor = None;
-    run.triggering_actor = None;
-    run.check_suite_id = None;
-    run.check_suite_node_id = None;
-    run.head_repository_id = None;
     run.run_attempt = None;
-    run.run_started_at = None;
-    run.previous_attempt_url = Some(Nullable::Null);
-    run.referenced_workflows = Some(Nullable::Null);
-    for name in [
-        None,
-        Some(Nullable::Null),
-        Some(Nullable::Value("ci".to_owned())),
-    ] {
-        run.name = name;
-        let encoded = serde_json::to_string(&run).unwrap();
-        assert!(serde_json::from_str::<WorkflowRunRecord>(&encoded).unwrap() == run);
-        assert!(
-            amiss_wire::read_json::<WorkflowRunRecord>(encoded.as_bytes(), u64::MAX).unwrap()
-                == run
-        );
-    }
-    let encoded = serde_json::to_string(&run).unwrap();
-    for field in [
-        "head_branch",
-        "status",
-        "conclusion",
-        "head_commit",
-        "pull_requests",
-    ] {
-        let member = format!("\"{field}\":null,");
-        assert_eq!(encoded.matches(&member).count(), 1, "{field}");
-        let missing = encoded.replacen(&member, "", 1);
-        assert!(
-            serde_json::from_str::<WorkflowRunRecord>(&missing).is_err(),
-            "{field}"
-        );
-        assert!(amiss_wire::read_json::<WorkflowRunRecord>(missing.as_bytes(), u64::MAX).is_err());
-    }
-    for field in [
-        "actor",
-        "triggering_actor",
-        "check_suite_id",
-        "check_suite_node_id",
-        "head_repository_id",
-        "run_attempt",
-        "run_started_at",
-    ] {
-        assert!(!encoded.contains(&format!("\"{field}\":")));
-        let null = encoded.replacen('{', &format!("{{\"{field}\":null,"), 1);
-        assert!(
-            serde_json::from_str::<WorkflowRunRecord>(&null).is_err(),
-            "{field}"
-        );
-        assert!(amiss_wire::read_json::<WorkflowRunRecord>(null.as_bytes(), u64::MAX).is_err());
-    }
-}
-
-#[test]
-fn workflow_references_and_nullable_commit_users_keep_their_shapes() {
-    let mut run: WorkflowRunRecord = amiss_wire::read_json(RUN.as_bytes(), u64::MAX).unwrap();
-    let commit = run.head_commit.as_mut().unwrap();
-    commit.author = None;
-    commit.committer = None;
-    run.head_repository_id = Some(UInt::try_from(run.head_repository.id).unwrap());
-    run.referenced_workflows = Some(Nullable::Value(vec![
-        ReferencedWorkflow {
-            path: "example/workflows/build.yml".to_owned(),
-            sha: run.head_sha.clone(),
-            reference: None,
-        },
-        ReferencedWorkflow {
-            path: "example/workflows/check.yml".to_owned(),
-            sha: run.head_sha.clone(),
-            reference: Some("refs/heads/main".to_owned()),
-        },
-    ]));
     let encoded = serde_json::to_string(&run).unwrap();
     assert!(serde_json::from_str::<WorkflowRunRecord>(&encoded).unwrap() == run);
-    assert!(
-        amiss_wire::read_json::<WorkflowRunRecord>(encoded.as_bytes(), u64::MAX).unwrap() == run
-    );
-    for (old, new) in [
-        ("\"author\":null,", ""),
-        (",\"committer\":null", ""),
-        ("\"ref\":\"refs/heads/main\"", "\"ref\":null"),
+    assert!(!encoded.contains(r#""run_attempt":"#));
+    for (field, value) in [
+        ("id", run.id.to_string()),
+        ("workflow_id", run.workflow_id.to_string()),
+        ("head_sha", serde_json::to_string(&run.head_sha).unwrap()),
+        ("event", serde_json::to_string(&run.event).unwrap()),
         (
-            "\"path\":\"example/workflows/build.yml\"",
-            "\"future\":true,\"path\":\"example/workflows/build.yml\"",
+            "repository",
+            serde_json::to_string(&run.repository).unwrap(),
         ),
+        (
+            "head_repository",
+            serde_json::to_string(&run.head_repository).unwrap(),
+        ),
+        ("status", "null".to_owned()),
+        ("conclusion", "null".to_owned()),
     ] {
-        assert_eq!(encoded.matches(old).count(), 1, "{old}");
-        let changed = encoded.replacen(old, new, 1);
-        assert!(
-            serde_json::from_str::<WorkflowRunRecord>(&changed).is_err(),
-            "{old}"
-        );
-        assert!(amiss_wire::read_json::<WorkflowRunRecord>(changed.as_bytes(), u64::MAX).is_err());
+        let original = format!(r#""{field}":{value}"#);
+        for replacement in [
+            format!(r#""missing_{field}":{value}"#),
+            format!(r#""{field}":false"#),
+            format!(r#""{field}":{value},"{field}":{value}"#),
+        ] {
+            amiss_fixtures::assert_json_rejections::<WorkflowRunRecord>(
+                &encoded,
+                &[(&original, &replacement)],
+            );
+        }
     }
+    amiss_fixtures::assert_json_rejections::<WorkflowRunRecord>(
+        &encoded,
+        &[("{", r#"{"run_attempt":null,"#)],
+    );
 }
 
 #[test]
-fn workflow_models_reject_unknown_nested_data_and_invalid_identifiers() {
-    for (old, new) in [
-        ("\"display_title\":", "\"extra\":true,\"display_title\":"),
-        ("\"head_commit\":{", "\"head_commit\":{\"extra\":true,"),
-        (
-            "\"head_commit\":{\"author\":{",
-            "\"head_commit\":{\"author\":{\"extra\":true,",
-        ),
-        (
-            "\"pull_requests\":[{",
-            "\"pull_requests\":[{\"extra\":true,",
-        ),
-        ("\"base\":{\"ref\":", "\"base\":{\"extra\":true,\"ref\":"),
-        ("\"repo\":{\"id\":", "\"repo\":{\"extra\":true,\"id\":"),
-        ("\"head_sha\":", "\"\\u0068ead_sha\":null,\"head_sha\":"),
-        ("\"id\":34409057444", "\"id\":9007199254740992"),
-        ("\"id\":34409057444", "\"id\":1.5"),
-        ("\"id\":34409057444", "\"id\":-1"),
-        ("\"run_attempt\":1", "\"run_attempt\":9007199254740992"),
-        ("\"number\":928", "\"number\":9007199254740992"),
-        (
-            "\"repo\":{\"id\":1298463903",
-            "\"repo\":{\"id\":9007199254740992",
-        ),
-        (
-            "\"tree_id\":\"39ae7e54b6fd6f10aaa829549dc260d7c72742a9\"",
-            "\"tree_id\":\"bad\"",
-        ),
+fn workflow_consumed_identifiers_and_page_counts_are_exact() {
+    let run: WorkflowRunRecord = serde_json::from_str(RUN).unwrap();
+    let encoded = serde_json::to_string(&run).unwrap();
+    for (field, value) in [
+        ("id", run.id),
+        ("workflow_id", run.workflow_id),
+        ("run_attempt", u64::from(run.run_attempt.unwrap())),
     ] {
-        assert!(RUN.contains(old), "{old}");
-        let changed = RUN.replacen(old, new, 1);
-        assert!(
-            serde_json::from_str::<WorkflowRunRecord>(&changed).is_err(),
-            "{old}"
-        );
-        assert!(amiss_wire::read_json::<WorkflowRunRecord>(changed.as_bytes(), u64::MAX).is_err());
+        let original = format!(r#""{field}":{value}"#);
+        for invalid in ["9007199254740992", "-1", "1.5", "null", "true", r#""1""#] {
+            amiss_fixtures::assert_json_rejections::<WorkflowRunRecord>(
+                &encoded,
+                &[(&original, &format!(r#""{field}":{invalid}"#))],
+            );
+        }
     }
-    for (old, new) in [
-        ("\"total_count\":1", "\"extra\":true,\"total_count\":1"),
-        ("\"total_count\":1", "\"total_count\":9007199254740992"),
-        ("\"total_count\":1,", ""),
-        (
-            "\"total_count\":1",
-            "\"\\u0074otal_count\":1,\"total_count\":1",
-        ),
-    ] {
-        assert_eq!(PAGE.matches(old).count(), 1);
-        let changed = PAGE.replacen(old, new, 1);
-        assert!(
-            serde_json::from_str::<WorkflowRunPage>(&changed).is_err(),
-            "{new}"
-        );
-        assert!(amiss_wire::read_json::<WorkflowRunPage>(changed.as_bytes(), u64::MAX).is_err());
-    }
+    amiss_fixtures::assert_json_rejections::<WorkflowRunRecord>(
+        &encoded,
+        &[
+            (r#""head_sha":"#, r#""\u0068ead_sha":null,"head_sha":"#),
+            (
+                r#""head_sha":"316badb35996a3ff460b1e2d4b8460f92571c438""#,
+                r#""head_sha":"bad""#,
+            ),
+        ],
+    );
+    amiss_fixtures::assert_json_rejections::<WorkflowRunPage>(
+        PAGE,
+        &[
+            (r#""total_count":1"#, r#""total_count":9007199254740992"#),
+            (r#""total_count":1"#, r#""missing_total_count":1"#),
+            (
+                r#""total_count":1"#,
+                r#""\u0074otal_count":1,"total_count":1"#,
+            ),
+            (r#""workflow_runs":"#, r#""missing_workflow_runs":"#),
+            (
+                r#""workflow_runs":"#,
+                r#""workflow_runs":null,"workflow_runs":"#,
+            ),
+        ],
+    );
 }

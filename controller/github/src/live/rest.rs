@@ -171,7 +171,7 @@ impl HttpRest {
             .get(self.transport.url(&query_route(&run_route, &run_query)?)?);
         let run_page: WorkflowRunPage =
             decode_body(self.transport.execute(request, deadline)?, |bytes| {
-                amiss_wire::read_json(bytes, u64::MAX)
+                serde_json::from_slice(bytes)
             })?;
         let run = select_workflow_run(config, expectation, candidate, run_page)?;
 

@@ -1,9 +1,9 @@
 use amiss_controller::{ProviderError, decode_bounded_json};
-use amiss_controller_github::workflow::{WorkflowPullRequest, WorkflowRunRecord};
+use amiss_controller_github::workflow::WorkflowPullRequest;
 use amiss_wire::model::ObjectFormat;
 
 #[test]
-fn webhook_and_rest_workflow_references_share_the_complete_owned_model() {
+fn workflow_webhook_references_retain_their_bound_pull_request() {
     let input = include_bytes!("../fixtures/workflow-webhook-pr.json");
     let reference: WorkflowPullRequest = serde_json::from_slice(input).unwrap();
     assert_eq!(reference.id, 279_147_437);
@@ -25,27 +25,15 @@ fn webhook_and_rest_workflow_references_share_the_complete_owned_model() {
         .unwrap();
     assert_eq!(strict, reference);
     assert_eq!(length, input.len());
-    let rest: WorkflowRunRecord =
-        serde_json::from_slice(include_bytes!("../fixtures/workflow-run.json")).unwrap();
-    let refs = rest.pull_requests.unwrap();
-    assert_eq!(refs.len(), 1);
-    assert_eq!(refs[0].number, 928);
-    for reference in [reference, refs[0].clone()] {
-        let encoded = serde_json::to_vec(&reference).unwrap();
-        assert_eq!(
-            amiss_wire::read_json::<WorkflowPullRequest>(&encoded, u64::MAX).unwrap(),
-            reference
-        );
-        assert_eq!(
-            decode_bounded_json::<WorkflowPullRequest, _>(
-                encoded.as_slice(),
-                None,
-                encoded.len() - 1,
-                |bytes| amiss_wire::read_json(bytes, u64::MAX)
-            ),
-            Err(ProviderError::InvalidResponse)
-        );
-    }
+    assert_eq!(
+        decode_bounded_json::<WorkflowPullRequest, _>(
+            encoded.as_slice(),
+            None,
+            encoded.len() - 1,
+            |bytes| amiss_wire::read_json(bytes, u64::MAX)
+        ),
+        Err(ProviderError::InvalidResponse)
+    );
 }
 
 #[test]
