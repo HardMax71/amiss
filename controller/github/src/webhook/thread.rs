@@ -23,13 +23,7 @@ pub enum ReviewThreadEvent {
     },
     Unresolved {
         #[serde(flatten)]
-        event: ThreadPayload<
-            UInt,
-            WorkflowOwner,
-            PullRefRecord<Option<WorkflowOwner>, PullRepository>,
-            Team,
-            String,
-        >,
+        event: ThreadPayload<UInt, WorkflowOwner, PullRefRecord<PullRepository>, Team, String>,
     },
 }
 
@@ -48,7 +42,7 @@ pub enum ReviewThreadEvent {
 pub struct ThreadPayload<
     OriginalLine = Nullable<UInt>,
     Account = WorkflowOwner<PullRequestAccountKind>,
-    Head = PullRefRecord<Option<WorkflowOwner>, Option<PullRepository>, Nullable<String>>,
+    Head = PullRefRecord<Option<PullRepository>>,
     RequestedTeam = ReviewTeam,
     Title = Option<String>,
 > {

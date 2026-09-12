@@ -1086,13 +1086,8 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
             mergeable: Some(true),
             merge_commit_sha: Some(oid('e')),
             head: PullRefRecord {
-                label: "Contributor:topic".to_owned(),
                 sha: candidate.clone(),
                 branch: "topic".to_owned(),
-                user: OwnerRecord {
-                    login: "Contributor".to_owned(),
-                    ..owner.clone()
-                },
                 repo: Some(PullRepositoryRecord {
                     id: 202,
                     name: "widget-fork".to_owned(),
@@ -1105,10 +1100,8 @@ fn refresh_data(candidate: &Oid) -> RefreshData {
                 }),
             },
             base: PullRefRecord {
-                label: "Acme:main".to_owned(),
                 sha: oid('a'),
                 branch: "main".to_owned(),
-                user: base_repository.owner.clone(),
                 repo: Some(base_repository),
             },
         },

@@ -855,22 +855,21 @@ fn signed_pull_metadata_does_not_change_authenticated_identity() {
         );
         for metadata in [
             r#""future":{"anything":[null,false]}"#,
-            r#""user":null,"labels":false,"body":{}"#,
+            r#""user":null,"label":false,"labels":false,"body":{}"#,
             r#""allow_auto_merge":[],"merge_commit_message":{}"#,
         ] {
-            let input = body.replacen(
-                r#""pull_request":{"#,
-                &format!(r#""pull_request":{{{metadata},"#),
-                1,
-            );
-            assert_eq!(
-                authenticate_target(&source, input.as_bytes(), &target)
-                    .unwrap()
-                    .unwrap()
-                    .delivery(),
-                original.delivery(),
-                "{action}: {metadata}",
-            );
+            for member in [r#""pull_request":{"#, r#""head":{"#, r#""base":{"#] {
+                assert_eq!(body.matches(member).count(), 1);
+                let input = body.replacen(member, &format!("{member}{metadata},"), 1);
+                assert_eq!(
+                    authenticate_target(&source, input.as_bytes(), &target)
+                        .unwrap()
+                        .unwrap()
+                        .delivery(),
+                    original.delivery(),
+                    "{action}: {member}{metadata}",
+                );
+            }
         }
     }
 }
@@ -959,7 +958,6 @@ fn signed_nullable_refs_preserve_binding_and_missing_actions_stay_no_work() {
     synchronize.action = Some("synchronize".to_owned());
     let pull = synchronize.pull_request.as_mut().unwrap();
     pull.head.repo = None;
-    pull.head.user = None;
     let wire = serde_json::to_vec(&synchronize).unwrap();
     assert_eq!(
         authenticate_target(&source, &wire, &target)

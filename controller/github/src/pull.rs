@@ -6,7 +6,6 @@ use strum::{Display, EnumString};
 
 pub mod metadata;
 
-use crate::owner::OwnerRecord;
 use crate::repository::pull::PullRepositoryRecord;
 
 #[serde_with::apply(u64 => #[serde(with = "As::<TryFromInto<UInt>>")])]
@@ -33,24 +32,11 @@ pub enum State {
 }
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(
-    deny_unknown_fields,
-    bound(
-        deserialize = "User: Deserialize<'de>, Repository: Deserialize<'de>, Label: Deserialize<'de>"
-    )
-)]
-pub struct PullRefRecord<
-    User = OwnerRecord,
-    Repository = Option<PullRepositoryRecord>,
-    Label = String,
-> {
-    #[serde(deserialize_with = "Label::deserialize")]
-    pub label: Label,
+#[serde(bound(deserialize = "Repository: Deserialize<'de>"))]
+pub struct PullRefRecord<Repository = Option<PullRepositoryRecord>> {
     #[serde(rename = "ref")]
     pub branch: String,
     pub sha: Oid,
-    #[serde(deserialize_with = "User::deserialize")]
-    pub user: User,
     #[serde(deserialize_with = "Repository::deserialize")]
     pub repo: Repository,
 }

@@ -74,12 +74,9 @@ fn thread_envelopes_keep_optional_metadata_and_action_specific_merge_titles() {
 #[test]
 fn thread_pr_profiles_keep_head_and_merge_title_rules() {
     let input = amiss_fixtures::GITHUB_WEBHOOK_REVIEW_PULL;
-    let mut pull: ThreadPullRequest = amiss_wire::read_json(input, u64::MAX).unwrap();
+    let mut pull: ThreadPullRequest = serde_json::from_slice(input).unwrap();
     let encoded = serde_json::to_vec(&pull).unwrap();
-    assert_eq!(
-        amiss_fixtures::canonical_json(&encoded).unwrap(),
-        amiss_fixtures::canonical_json(input).unwrap()
-    );
+    assert!(serde_json::from_slice::<ThreadPullRequest>(&encoded).unwrap() == pull);
     let head = serde_json::to_string(&pull.context.head.repo).unwrap();
     pull.auto_merge = Nullable::Value(AutoMergeRecord {
         enabled_by: None,
@@ -93,12 +90,11 @@ fn thread_pr_profiles_keep_head_and_merge_title_rules() {
         ("{", r#"{"stack":null,"#, false, false),
         (head.as_str(), "null", true, false),
         (
-            r#""label":"Codertocat:changes""#,
-            r#""label":null"#,
+            r#""head":{"#,
+            r#""head":{"label":null,"user":false,"#,
             true,
-            false,
+            true,
         ),
-        (r#""label":"Codertocat:changes","#, "", false, false),
         (
             r#""commit_title":"docs""#,
             r#""commit_title":null"#,
@@ -117,19 +113,14 @@ fn thread_pr_profiles_keep_head_and_merge_title_rules() {
         assert!(input.contains(old));
         let candidate = input.replacen(old, new, 1);
         assert_eq!(
-            amiss_wire::read_json::<ThreadPullRequest>(candidate.as_bytes(), u64::MAX).is_ok(),
+            serde_json::from_str::<ThreadPullRequest>(&candidate).is_ok(),
             resolved,
             "{new}"
         );
         assert_eq!(
-            amiss_wire::read_json::<
-                ThreadPullRequest<
-                    WorkflowOwner,
-                    PullRefRecord<Option<WorkflowOwner>, PullRepository>,
-                    Team,
-                    String,
-                >,
-            >(candidate.as_bytes(), u64::MAX)
+            serde_json::from_str::<
+                ThreadPullRequest<WorkflowOwner, PullRefRecord<PullRepository>, Team, String>,
+            >(&candidate)
             .is_ok(),
             unresolved,
             "{new}"

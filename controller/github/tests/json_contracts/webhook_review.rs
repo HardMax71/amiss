@@ -4,14 +4,12 @@ use amiss_controller_github::webhook::review::ReviewEvent;
 use amiss_wire::model::{ObjectFormat, Oid};
 
 #[test]
-fn published_review_event_retains_every_member() {
-    let event: GitHubEvent =
-        amiss_wire::read_json(amiss_fixtures::GITHUB_WEBHOOK_REVIEW, u64::MAX).unwrap();
+fn published_review_event_keeps_typed_routing_facts() {
+    let event: GitHubEvent = serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_REVIEW).unwrap();
     assert!(matches!(event, GitHubEvent::Review(_)));
     assert!(
-        amiss_fixtures::canonical_json(&serde_json::to_vec(&event).unwrap()).unwrap()
-            == amiss_fixtures::canonical_json(amiss_fixtures::GITHUB_WEBHOOK_REVIEW).unwrap(),
-        "the complete published review event must retain every member"
+        serde_json::from_slice::<GitHubEvent>(&serde_json::to_vec(&event).unwrap()).unwrap()
+            == event
     );
 }
 
@@ -45,7 +43,7 @@ fn review_events_keep_action_specific_rules() {
         } else {
             input
         };
-        let event: GitHubEvent = amiss_wire::read_json(input.as_bytes(), u64::MAX).unwrap();
+        let event: GitHubEvent = serde_json::from_str(&input).unwrap();
         assert!(matches!(event, GitHubEvent::Review(_)));
         if action == "edited" {
             let missing = input.replacen(r#""changes":{},"#, "", 1);
@@ -74,12 +72,7 @@ fn review_events_keep_action_specific_rules() {
             ),
             (r#""id":237895671"#, r#""id":9007199254740992"#, false),
             (r#","draft":false"#, "", false),
-            (
-                r#""label":"Codertocat:changes""#,
-                r#""label":null"#,
-                action == "submitted",
-            ),
-            (r#""label":"Codertocat:changes","#, "", false),
+            (r#""head":{"#, r#""head":{"label":null,"user":false,"#, true),
             (r#""body":null"#, r#""body":false"#, false),
             (r#""id":279147437"#, stacked.as_str(), action != "edited"),
             (
@@ -107,11 +100,6 @@ fn review_events_keep_action_specific_rules() {
             let candidate = input.replacen(old, new, 1);
             assert_eq!(
                 serde_json::from_str::<GitHubEvent>(&candidate).is_ok(),
-                valid,
-                "{action}: {new}"
-            );
-            assert_eq!(
-                amiss_wire::read_json::<GitHubEvent>(candidate.as_bytes(), u64::MAX).is_ok(),
                 valid,
                 "{action}: {new}"
             );

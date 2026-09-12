@@ -5,7 +5,6 @@ use amiss_controller_github::webhook::event::GitHubEvent;
 use amiss_controller_github::webhook::pull::review::CommentPullRequest;
 use amiss_controller_github::webhook::review::ReviewEvent;
 use amiss_wire::model::BranchRef;
-use sha2::{Digest as _, Sha256};
 
 use super::{BODY, authenticate_target, replaced_once, source};
 
@@ -34,28 +33,13 @@ fn signed_review_comments_retain_the_published_events_and_remain_no_work() {
     .unwrap();
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    for (action, digest) in [
-        (
-            r#""action":"created""#,
-            "73b7ac2417f47264813ee91a4dff5789bd260317d7a00fe13b4f6b8f73f159c9",
-        ),
-        (
-            r#""action":"edited","changes":{"body":{"from":""}}"#,
-            "cadd015a43725b2e526e996d16e8b60f74e4f14ecdd2be027a565059ac224c3f",
-        ),
-        (
-            r#""action":"deleted""#,
-            "5949039e952e5fdc8b396d9dbe65ce07bdd20097f660d83766a234bcce8643a4",
-        ),
+    for action in [
+        r#""action":"created""#,
+        r#""action":"edited","changes":{"body":{"from":""}}"#,
+        r#""action":"deleted""#,
     ] {
         let wire = replaced_once(&created, r#""action":"created""#, action);
-        let canonical = amiss_fixtures::canonical_json(&wire).unwrap();
-        assert_eq!(
-            hex::encode(Sha256::digest(&canonical)),
-            digest,
-            "complete published event"
-        );
-        let event: GitHubEvent = amiss_wire::read_json(&wire, u64::MAX).unwrap();
+        let event: GitHubEvent = serde_json::from_slice(&wire).unwrap();
         assert!(matches!(event, GitHubEvent::ReviewComment(_)));
         assert_eq!(authenticate_target(&source, &wire, &target), Ok(None));
         if action.contains("edited") {

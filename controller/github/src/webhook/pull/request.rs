@@ -2,7 +2,6 @@ use js_int::UInt;
 use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto};
 
-use super::super::repository::WorkflowOwner;
 use super::super::repository::pull::PullRepository;
 use crate::pull::PullRefRecord;
 
@@ -11,6 +10,6 @@ use crate::pull::PullRefRecord;
 pub struct SynchronizePullRequest {
     pub id: u64,
     pub number: u64,
-    pub head: PullRefRecord<Option<WorkflowOwner>, Option<PullRepository>>,
-    pub base: PullRefRecord<Option<WorkflowOwner>, PullRepository>,
+    pub head: PullRefRecord<Option<PullRepository>>,
+    pub base: PullRefRecord<PullRepository>,
 }

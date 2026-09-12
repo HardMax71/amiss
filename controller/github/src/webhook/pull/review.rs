@@ -30,7 +30,7 @@ pub struct PullRequestContext<
     Requested = Reviewer,
     Creator = WorkflowOwner<PullRequestAccountKind>,
     User = WorkflowOwner<PullRequestAccountKind>,
-    Head = PullRefRecord<Option<WorkflowOwner>, Option<PullRepository>>,
+    Head = PullRefRecord<Option<PullRepository>>,
 > {
     pub id: u64,
     pub number: u64,
@@ -39,7 +39,7 @@ pub struct PullRequestContext<
         deserialize_with = "Head::deserialize"
     )]
     pub head: Head,
-    pub base: PullRefRecord<Option<WorkflowOwner>, PullRepository>,
+    pub base: PullRefRecord<PullRepository>,
     pub url: String,
     pub node_id: String,
     pub html_url: String,
@@ -75,9 +75,7 @@ pub struct PullRequestContext<
 
 #[derive(Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-pub struct ReviewActivityPullRequest<
-    Head = PullRefRecord<Option<WorkflowOwner>, Option<PullRepository>>,
-> {
+pub struct ReviewActivityPullRequest<Head = PullRefRecord<Option<PullRepository>>> {
     #[serde(flatten)]
     pub request: PullRequestContext<
         WorkflowOwner<PullRequestAccountKind>,

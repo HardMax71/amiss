@@ -28,7 +28,6 @@ fn webhook_pull_profiles_retain_the_same_published_binding_facts() {
 fn synchronize_refs_preserve_required_nullable_participants() {
     let mut pull: SynchronizePullRequest =
         serde_json::from_slice(amiss_fixtures::GITHUB_WEBHOOK_PULL).unwrap();
-    pull.head.user = None;
     pull.head.repo = None;
     pull.base.repo.owner = None;
     let input = serde_json::to_string(&pull).unwrap();
@@ -36,7 +35,6 @@ fn synchronize_refs_preserve_required_nullable_participants() {
     amiss_fixtures::assert_json_rejections::<SynchronizePullRequest>(
         &input,
         &[
-            (r#""user":null,"#, ""),
             (r#","repo":null"#, ""),
             (r#""owner":null,"#, ""),
             (r#""repo":null"#, r#""repo":false"#),

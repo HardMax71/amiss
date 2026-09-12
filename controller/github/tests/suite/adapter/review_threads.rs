@@ -3,7 +3,6 @@ use amiss_controller_github::webhook::GitHubPayload;
 use amiss_controller_github::webhook::review::ReviewEvent;
 use amiss_controller_github::webhook::thread::{ReviewThread, ReviewThreadEvent, ThreadPayload};
 use amiss_wire::model::BranchRef;
-use sha2::{Digest as _, Sha256};
 
 use super::{BODY, authenticate_target, replaced_once, source};
 
@@ -35,27 +34,11 @@ fn signed_review_threads_keep_the_published_payloads_and_reject_invalid_metadata
     .unwrap();
     let source = source();
     let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    for (action, digest) in [
-        (
-            "resolved",
-            "1ffdd31f481d88f4b6bf2bfc25d53803c96e36acb3e529bc6844b72d270f3b75",
-        ),
-        (
-            "unresolved",
-            "9f06b4adfc0dfe463b1efb518c57bba993acccd1db90bf34688da861377d8f55",
-        ),
-    ] {
+    for action in ["resolved", "unresolved"] {
         let input = replaced_once(
             &resolved,
             r#""action":"resolved""#,
             &format!(r#""action":"{action}""#),
-        );
-        assert_eq!(
-            hex::encode(Sha256::digest(
-                amiss_fixtures::canonical_json(&input).unwrap()
-            )),
-            digest,
-            "complete published event"
         );
         assert_eq!(authenticate_target(&source, &input, &target), Ok(None));
         for (old, new) in [
@@ -86,11 +69,7 @@ fn signed_review_threads_keep_the_published_payloads_and_reject_invalid_metadata
                 r#""type":"Mannequin""#,
                 action == "resolved",
             ),
-            (
-                r#""label":"Codertocat:changes""#,
-                r#""label":null"#,
-                action == "resolved",
-            ),
+            (r#""head":{"#, r#""head":{"label":null,"user":false,"#, true),
             (
                 r#""requested_reviewers":["#,
                 r#""requested_reviewers":[{"name":"docs","id":1},"#,

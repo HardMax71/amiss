@@ -18,7 +18,7 @@ use crate::webhook::repository::pull::PullRepository;
 )]
 pub struct ThreadPullRequest<
     Account = WorkflowOwner<PullRequestAccountKind>,
-    Head = PullRefRecord<Option<WorkflowOwner>, Option<PullRepository>, Nullable<String>>,
+    Head = PullRefRecord<Option<PullRepository>>,
     RequestedTeam = ReviewTeam,
     Title = Option<String>,
 > {
