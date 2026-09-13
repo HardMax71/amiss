@@ -5,6 +5,25 @@ use sha2::Digest as _;
 use crate::de::{self, Error, ErrorKind, fail};
 use crate::model::Digest;
 
+/// The domain-separated digest of one value's canonical bytes. Every digest in
+/// the system starts with the label naming its purpose, so a digest computed
+/// for one context cannot be replayed as a digest for another.
+#[must_use]
+pub fn document_digest<T: Serialize>(domain: &str, value: &T) -> Option<Digest> {
+    let mut writer =
+        digest_io::IoWrapper(sha2::Sha256::new_with_prefix(domain).chain_update([0_u8]));
+    serde_json_canonicalizer::to_writer(value, &mut writer).ok()?;
+    Some(Digest::from(writer.0.finalize().0))
+}
+
+/// The same digest over a document as received, canonicalized while it is read
+/// so a reordered or reformatted input cannot borrow another document's digest.
+#[must_use]
+pub fn transcoded_digest(domain: &str, json: &[u8]) -> Option<Digest> {
+    let mut input = serde_json::Deserializer::from_slice(json);
+    document_digest(domain, &serde_transcode::Transcoder::new(&mut input))
+}
+
 /// A document payload that is sealed under its own schema domain.
 pub trait Payload: Serialize + Sized {
     /// The closed tag the carrying document announces itself under.
@@ -30,11 +49,8 @@ pub trait Payload: Serialize + Sized {
     /// Refuses a payload that violates its grammar or does not serialize.
     fn digest(&self) -> Result<Digest, Error> {
         self.validate()?;
-        let mut writer =
-            digest_io::IoWrapper(sha2::Sha256::new_with_prefix(Self::DOMAIN).chain_update([0_u8]));
-        serde_json_canonicalizer::to_writer(self, &mut writer)
-            .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
-        Ok(Digest::from(writer.0.finalize().0))
+        document_digest(Self::DOMAIN, self)
+            .ok_or_else(|| Error::new("$.payload", ErrorKind::InvalidValue))
     }
 
     /// Seals this payload under its schema and encodes the canonical document.

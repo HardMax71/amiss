@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
-use sha2::Digest as _;
 use strum::{Display, EnumString};
 
 use crate::controls::{ConstraintPlatform, GitMode, sorted_set, validate_repository};
 use crate::de::{self, Error, ErrorKind, fail};
+use crate::envelope::document_digest;
 use crate::model::Digest;
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
@@ -161,12 +161,9 @@ impl ReleaseManifest {
             return fail("$.build_source.commit_oid", ErrorKind::InvalidValue);
         }
         validate_dependency_lock("$.dependency_lock", &self.dependency_lock)?;
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(DEPENDENCY_LOCK_DOMAIN).chain_update([0_u8]),
-        );
-        serde_json_canonicalizer::to_writer(&self.dependency_lock, &mut writer)
-            .map_err(|_defect| Error::new("$.dependency_lock", ErrorKind::InvalidValue))?;
-        if Digest::from(writer.0.finalize().0) != self.dependency_lock_digest {
+        let recomputed = document_digest(DEPENDENCY_LOCK_DOMAIN, &self.dependency_lock)
+            .ok_or_else(|| Error::new("$.dependency_lock", ErrorKind::InvalidValue))?;
+        if recomputed != self.dependency_lock_digest {
             return fail("$.dependency_lock_digest", ErrorKind::DigestMismatch);
         }
         if self.artifacts.is_empty() || self.artifacts.len() > 6 {

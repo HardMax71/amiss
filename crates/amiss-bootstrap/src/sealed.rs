@@ -1,4 +1,4 @@
-use sha2::Digest as _;
+use amiss_wire::envelope::document_digest;
 use std::fs::File;
 use std::io::Read as _;
 use std::path::Path;
@@ -48,13 +48,11 @@ pub(super) fn capture_requests(
     constraint
         .validate()
         .map_err(|_defect| tampered("execution-constraint-invalid"))?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&constraint, &mut writer)
-        .map_err(|_defect| tampered("execution-constraint-invalid"))?;
-    let constraint_digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
+    let constraint_digest = document_digest(
+        amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA,
+        &constraint,
+    )
+    .ok_or_else(|| tampered("execution-constraint-invalid"))?;
     let canonical_requests = serde_json_canonicalizer::to_vec(&evaluation)
         .ok()
         .as_deref()
@@ -88,13 +86,11 @@ pub(super) fn capture_requests(
     statement
         .validate()
         .map_err(|_defect| tampered("trusted-time-invalid"))?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&statement, &mut writer)
-        .map_err(|_defect| tampered("trusted-time-invalid"))?;
-    let statement_digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
+    let statement_digest = document_digest(
+        amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA,
+        &statement,
+    )
+    .ok_or_else(|| tampered("trusted-time-invalid"))?;
     if statement_digest != supplied_time.expected_digest
         || statement.provider != supplied_time.provider
         || statement.provider_run_id != supplied_time.provider_run_id

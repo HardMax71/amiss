@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
@@ -93,13 +94,8 @@ pub(super) fn render_context(
         .unwrap_or_else(|| PathBuf::from("src"));
     let HtmlOutput { html: _html } = HtmlOutput::deserialize(&config.output)
         .map_err(|_defect| MdBookEvidenceError::UnsupportedBuild)?;
-    let config_digest = {
-        let mut writer =
-            digest_io::IoWrapper(sha2::Sha256::new_with_prefix(CONFIG_DOMAIN).chain_update([0_u8]));
-        serde_json_canonicalizer::to_writer(&context.config, &mut writer)
-            .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
+    let config_digest =
+        document_digest(CONFIG_DOMAIN, &context.config).ok_or(MdBookEvidenceError::ContextShape)?;
     Ok((source_directory, &context.book.items, config_digest))
 }
 

@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
@@ -39,14 +40,8 @@ pub(super) fn site_build_inputs(
         let Observation::Site(observation) = observation.into_owned() else {
             return fail(&observation_path, ErrorKind::Inconsistent);
         };
-        let digest = {
-            let mut writer = digest_io::IoWrapper(
-                sha2::Sha256::new_with_prefix(SITE_CLAIM_DOMAIN).chain_update([0_u8]),
-            );
-            serde_json_canonicalizer::to_writer(&observation, &mut writer)
-                .map(|()| Digest::from(writer.0.finalize().0))
-        }
-        .map_err(|_defect| Error::new(&observation_path, ErrorKind::InvalidValue))?;
+        let digest = document_digest(SITE_CLAIM_DOMAIN, &observation)
+            .ok_or_else(|| Error::new(&observation_path, ErrorKind::InvalidValue))?;
         match observation {
             SiteBuildObservation::Navigation {
                 root,

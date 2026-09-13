@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
 use amiss_wire::controls::{GitMode, ResourceName};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{Oid, RepoPath, RepoPathText};
 use amiss_wire::report::{Disposition, FindingKind};
@@ -80,15 +81,9 @@ pub fn protected_state(
         path,
         raw_digest: raw,
     };
-    {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(PROTECTED_CONTROL_EVIDENCE_DOMAIN).chain_update([0_u8]),
-        );
-        serde_json_canonicalizer::to_writer(&descriptor, &mut writer)
-            .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map(ProtectedState::Present)
-    .map_err(|_defect| Error::Internal)
+    document_digest(PROTECTED_CONTROL_EVIDENCE_DOMAIN, &descriptor)
+        .map(ProtectedState::Present)
+        .ok_or(Error::Internal)
 }
 
 /// The floor inventory obligation over the candidate: every protected

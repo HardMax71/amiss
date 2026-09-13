@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap, parse_tree};
@@ -7,6 +6,7 @@ use amiss_wire::controls::{
     parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{Adapter, Oid, RepoPath};
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
@@ -295,13 +295,9 @@ pub fn acquire_entry(
         return Err(invalid(Vec::new()));
     }
     match parse_scanner_policy(&object.body).and_then(|policy| {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(amiss_wire::controls::SCANNER_POLICY_SCHEMA)
-                .chain_update([0_u8]),
-        );
-        serde_json_canonicalizer::to_writer(&policy, &mut writer)
-            .map_err(|_defect| amiss_wire::de::Error::new("$", ErrorKind::InvalidValue))?;
-        Ok((policy, Digest::from(writer.0.finalize().0)))
+        let digest = document_digest(amiss_wire::controls::SCANNER_POLICY_SCHEMA, &policy)
+            .ok_or_else(|| amiss_wire::de::Error::new("$", ErrorKind::InvalidValue))?;
+        Ok((policy, digest))
     }) {
         Ok((policy, digest)) => {
             let entries = [

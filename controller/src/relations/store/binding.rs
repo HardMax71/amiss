@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
 use serde::Serialize;
@@ -135,14 +136,8 @@ pub(super) fn pending_from_binding(
 
 pub(super) fn plan_binding(plan: &RelationPlan) -> Result<Digest, RelationScheduleStoreError> {
     let [left, right] = plan.subjects.each_ref().map(|subject| {
-        let source = {
-            let mut writer = digest_io::IoWrapper(
-                sha2::Sha256::new_with_prefix(SOURCE_BINDING_SCHEMA).chain_update([0_u8]),
-            );
-            serde_json_canonicalizer::to_writer(&subject.source, &mut writer)
-                .map(|()| Digest::from(writer.0.finalize().0))
-        }
-        .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+        let source = document_digest(SOURCE_BINDING_SCHEMA, &subject.source)
+            .ok_or(RelationScheduleStoreError::Corrupt)?;
         Ok::<_, RelationScheduleStoreError>(BoundPlanSubject {
             role: subject.role.as_str(),
             provider_namespace: subject.scope.provider.namespace.as_str(),

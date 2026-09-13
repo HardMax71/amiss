@@ -1,4 +1,4 @@
-use sha2::Digest as _;
+use amiss_wire::envelope::document_digest;
 
 use amiss_wire::model::Digest;
 use amiss_wire::report::model::{
@@ -60,13 +60,11 @@ pub(super) fn accept(
         .descriptor
         .validate()
         .map_err(|_defect| AcceptanceDefect::SealedControls)?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&constraint.descriptor, &mut writer)
-        .map_err(|_defect| AcceptanceDefect::SealedControls)?;
-    let descriptor_digest = Digest::from(writer.0.finalize().0);
+    let descriptor_digest = document_digest(
+        amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA,
+        &constraint.descriptor,
+    )
+    .ok_or(AcceptanceDefect::SealedControls)?;
     if constraint.descriptor_digest != expected.execution_constraint.digest
         || constraint.trust_source != expected.execution_constraint.trust_source
         || descriptor_digest != expected.execution_constraint.digest
@@ -77,13 +75,11 @@ pub(super) fn accept(
     statement
         .validate()
         .map_err(|_defect| AcceptanceDefect::SealedControls)?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&statement, &mut writer)
-        .map_err(|_defect| AcceptanceDefect::SealedControls)?;
-    let statement_digest = Digest::from(writer.0.finalize().0);
+    let statement_digest = document_digest(
+        amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA,
+        &statement,
+    )
+    .ok_or(AcceptanceDefect::SealedControls)?;
     if trusted.statement_digest != expected.trusted_time_digest
         || statement_digest != expected.trusted_time_digest
         || statement.provider != expected.provider
