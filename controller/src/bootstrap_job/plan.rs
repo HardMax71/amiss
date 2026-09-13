@@ -1,4 +1,5 @@
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::requests::{REQUEST_STREAM_BYTES, SuppliedControl};

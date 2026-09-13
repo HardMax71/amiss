@@ -1,3 +1,5 @@
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
@@ -8,7 +10,7 @@ use amiss_git::Repository;
 use amiss_scan::SetupShell;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{FloorInput, verify_floor};
-use amiss_wire::controls::{Profile, parse_organization_floor};
+use amiss_wire::controls::Profile;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::RequestTrust;
@@ -55,7 +57,7 @@ const EMPTY_ARRAYS: &str = r#"  "minimum_dispositions": [],
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn floor_input(extra: &str) -> FloorInput {
-    let floor = parse_organization_floor(floor_json(extra).as_bytes()).unwrap();
+    let floor = OrganizationFloor::parse(floor_json(extra).as_bytes()).unwrap();
     let digest = document_digest("amiss/organization-floor", &floor).unwrap();
     FloorInput {
         floor,
@@ -156,7 +158,7 @@ fn the_floor_binding_is_repository_ref_and_profile_ordering() {
     );
     assert!(verify_floor(&input, Some(&repository), None, Profile::Observe).is_err());
 
-    let strict_floor = parse_organization_floor(
+    let strict_floor = OrganizationFloor::parse(
         floor_json(EMPTY_ARRAYS)
             .replace("\"observe\"", "\"enforce\"")
             .as_bytes(),

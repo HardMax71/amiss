@@ -3,6 +3,9 @@
     reason = "integration fixtures construct known-valid wire identities"
 )]
 
+use amiss_wire::controls::DebtSnapshot;
+use amiss_wire::controls::WaiverBundle;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
@@ -18,10 +21,7 @@ use amiss_controller::{
     SemanticEvidenceExpectation, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
     bootstrap_job, check_binding, check_plan,
 };
-use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, OrganizationFloor, Profile, parse_debt_snapshot,
-    parse_execution_constraint, parse_organization_floor, parse_waiver_bundle,
-};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, OrganizationFloor, Profile};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
@@ -58,7 +58,7 @@ fn inventory_path(index: usize, length: usize) -> String {
 
 fn near_ceiling_floor() -> OrganizationFloor {
     let ceiling = usize::try_from(REQUEST_STREAM_BYTES).unwrap();
-    let mut floor = parse_organization_floor(&example("organization-floor.json")).unwrap();
+    let mut floor = OrganizationFloor::parse(&example("organization-floor.json")).unwrap();
     floor.protected_inventory = (0..LARGE_INVENTORY_ENTRIES)
         .map(|index| RepoPathText::new(inventory_path(index, MAX_PATH_BYTES)).unwrap())
         .collect();
@@ -142,7 +142,7 @@ fn run_request(policy: PolicyControls) -> RunRequest {
 }
 
 fn execution() -> ExecutionConstraintDescriptor {
-    parse_execution_constraint(&example("scanner-execution-constraint.json")).unwrap()
+    ExecutionConstraintDescriptor::parse(&example("scanner-execution-constraint.json")).unwrap()
 }
 
 fn instant(value: &str) -> UtcInstant {
@@ -153,15 +153,15 @@ fn policy() -> PolicyControls {
     PolicyControls {
         external_policy: ExternalPolicy::Advisory,
         organization_floor: Some(supplied(
-            parse_organization_floor(&example("organization-floor.json")).unwrap(),
+            OrganizationFloor::parse(&example("organization-floor.json")).unwrap(),
             "amiss/organization-floor",
         )),
         debt_snapshot: Some(supplied(
-            parse_debt_snapshot(&example("debt-snapshot.json")).unwrap(),
+            DebtSnapshot::parse(&example("debt-snapshot.json")).unwrap(),
             "amiss/debt-snapshot",
         )),
         waiver_bundle: Some(supplied(
-            parse_waiver_bundle(&example("waiver-bundle.json")).unwrap(),
+            WaiverBundle::parse(&example("waiver-bundle.json")).unwrap(),
             "amiss/waiver-bundle",
         )),
         semantic_evidence: super::intersphinx::evidence(),
@@ -649,7 +649,7 @@ fn job_construction_rejects_mismatched_run_control_and_time() {
         BootstrapJobError::RunIdentity
     );
 
-    let mut wrong_floor = parse_organization_floor(&example("organization-floor.json")).unwrap();
+    let mut wrong_floor = OrganizationFloor::parse(&example("organization-floor.json")).unwrap();
     wrong_floor.repository = RepositoryIdentity::new(
         "gitlab.example.internal".to_owned(),
         "platform/security".to_owned(),

@@ -1,3 +1,4 @@
+use crate::de::Document;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use sha2::Digest as _;

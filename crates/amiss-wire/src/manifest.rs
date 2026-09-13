@@ -3,7 +3,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::{ConstraintPlatform, GitMode, sorted_set, validate_repository};
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Document, Error, ErrorKind, fail};
 use crate::envelope::document_digest;
 use crate::model::Digest;
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
@@ -127,57 +127,6 @@ pub struct ReleaseManifest {
     pub schema: ReleaseManifestSchema,
 }
 
-/// Parses and validates one release manifest.
-///
-/// # Errors
-///
-/// Fails on JSON defects, schema-shape violations, invalid grammar
-/// values, inconsistent digests or closure rows, and unsorted or duplicate
-/// set members.
-pub fn parse_release_manifest(bytes: &[u8]) -> Result<ReleaseManifest, Error> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let manifest: ReleaseManifest = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
-
-    manifest.validate()?;
-    Ok(manifest)
-}
-
-impl ReleaseManifest {
-    /// Checks the build identity, dependency lock binding and runtime closure.
-    ///
-    /// # Errors
-    ///
-    /// A public field violates the contract enforced by [`parse_release_manifest`].
-    pub fn validate(&self) -> Result<(), Error> {
-        if !valid_version(&self.engine_version) {
-            return fail("$.engine_version", ErrorKind::InvalidValue);
-        }
-        validate_repository("$.build_source.repository", &self.build_source.repository)?;
-        if self.build_source.commit_oid.object_format() != self.build_source.object_format {
-            return fail("$.build_source.commit_oid", ErrorKind::InvalidValue);
-        }
-        validate_dependency_lock("$.dependency_lock", &self.dependency_lock)?;
-        let recomputed = document_digest(DEPENDENCY_LOCK_DOMAIN, &self.dependency_lock)
-            .ok_or_else(|| Error::new("$.dependency_lock", ErrorKind::InvalidValue))?;
-        if recomputed != self.dependency_lock_digest {
-            return fail("$.dependency_lock_digest", ErrorKind::DigestMismatch);
-        }
-        if self.artifacts.is_empty() || self.artifacts.len() > 6 {
-            return fail("$.artifacts", ErrorKind::LimitExceeded);
-        }
-        for (index, artifact) in self.artifacts.iter().enumerate() {
-            validate_release_artifact(&format!("$.artifacts[{index}]"), artifact)?;
-        }
-        sorted_set("$.artifacts", &self.artifacts, |left, right| {
-            left.platform.as_ref().cmp(right.platform.as_ref())
-        })
-    }
-}
-
 impl DependencyLockInput {
     /// Checks that the lock set is nonempty, bounded, sorted and unique.
     ///
@@ -259,4 +208,38 @@ fn valid_version(raw: &str) -> bool {
                         || byte == b'-'
                 })
         })
+}
+
+impl Document for ReleaseManifest {
+    type Defect = Error;
+
+    /// Checks the build identity, dependency lock binding and runtime closure.
+    ///
+    /// # Errors
+    ///
+    /// A public field violates the contract enforced by [`parse_release_manifest`].
+    fn validate(&self) -> Result<(), Error> {
+        if !valid_version(&self.engine_version) {
+            return fail("$.engine_version", ErrorKind::InvalidValue);
+        }
+        validate_repository("$.build_source.repository", &self.build_source.repository)?;
+        if self.build_source.commit_oid.object_format() != self.build_source.object_format {
+            return fail("$.build_source.commit_oid", ErrorKind::InvalidValue);
+        }
+        validate_dependency_lock("$.dependency_lock", &self.dependency_lock)?;
+        let recomputed = document_digest(DEPENDENCY_LOCK_DOMAIN, &self.dependency_lock)
+            .ok_or_else(|| Error::new("$.dependency_lock", ErrorKind::InvalidValue))?;
+        if recomputed != self.dependency_lock_digest {
+            return fail("$.dependency_lock_digest", ErrorKind::DigestMismatch);
+        }
+        if self.artifacts.is_empty() || self.artifacts.len() > 6 {
+            return fail("$.artifacts", ErrorKind::LimitExceeded);
+        }
+        for (index, artifact) in self.artifacts.iter().enumerate() {
+            validate_release_artifact(&format!("$.artifacts[{index}]"), artifact)?;
+        }
+        sorted_set("$.artifacts", &self.artifacts, |left, right| {
+            left.platform.as_ref().cmp(right.platform.as_ref())
+        })
+    }
 }

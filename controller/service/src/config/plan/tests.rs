@@ -1,5 +1,9 @@
 #![cfg(test)]
 
+use amiss_wire::controls::DebtSnapshot;
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::controls::WaiverBundle;
+use amiss_wire::de::Document as _;
 use std::fs;
 
 use super::{CheckPlanFiles, ExternalPolicy, load_plan};
@@ -42,16 +46,15 @@ fn policy_files_decode_at_ingress_and_do_not_follow_later_file_changes() {
     let binding = amiss_controller::check_binding(&plan).unwrap();
     assert_eq!(
         plan.policy.organization_floor.as_ref().unwrap().value,
-        super::parse_organization_floor(&fs::read(directory.path().join("floor")).unwrap())
-            .unwrap(),
+        OrganizationFloor::parse(&fs::read(directory.path().join("floor")).unwrap()).unwrap(),
     );
     assert_eq!(
         plan.policy.debt_snapshot.as_ref().unwrap().value,
-        super::parse_debt_snapshot(&fs::read(directory.path().join("debt")).unwrap()).unwrap(),
+        DebtSnapshot::parse(&fs::read(directory.path().join("debt")).unwrap()).unwrap(),
     );
     assert_eq!(
         plan.policy.waiver_bundle.as_ref().unwrap().value,
-        super::parse_waiver_bundle(&fs::read(directory.path().join("waiver")).unwrap()).unwrap(),
+        WaiverBundle::parse(&fs::read(directory.path().join("waiver")).unwrap()).unwrap(),
     );
 
     for name in ["floor", "debt", "waiver"] {

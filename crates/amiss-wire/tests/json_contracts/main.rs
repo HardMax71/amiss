@@ -1,9 +1,17 @@
+use amiss_wire::controls::DebtSnapshot;
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::controls::ScannerPolicy;
+use amiss_wire::controls::TrustedTimeStatement;
+use amiss_wire::controls::WaiverBundle;
+use amiss_wire::de::Document as _;
+use amiss_wire::semantic::record::Input;
 use std::{collections::BTreeSet, fs, path::Path};
 
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::locale::{LocaleCoverageAssessment, LocaleCoverageEvidence, LocaleCoveragePlan};
 use amiss_wire::publication::{PublicationAssessment, PublicationEvidence, PublicationPlan};
-use amiss_wire::{controls, locale, publication, report, requests, semantic};
+use amiss_wire::{locale, publication, report, requests, semantic};
 use strum::IntoEnumIterator;
 
 use super::relation_fixture;
@@ -241,7 +249,7 @@ fn sidecar_examples_match_their_typed_sources() {
 fn semantic_examples_match_the_actual_typed_producers() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let record_input_bytes = fs::read(examples.join("scanner-record-set-input.json")).unwrap();
-    let record_input = semantic::record::parse_input(&record_input_bytes).unwrap();
+    let record_input = Input::parse(&record_input_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&record_input).unwrap(),
         serde_json_canonicalizer::to_vec(
@@ -316,7 +324,7 @@ fn sealed_request_examples_match_their_typed_sources() {
         .unwrap()
     );
     let time_bytes = fs::read(examples.join("scanner-trusted-time-statement.json")).unwrap();
-    let statement = controls::parse_trusted_time(&time_bytes).unwrap();
+    let statement = TrustedTimeStatement::parse(&time_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&statement).unwrap(),
         serde_json_canonicalizer::to_vec(
@@ -325,7 +333,7 @@ fn sealed_request_examples_match_their_typed_sources() {
         .unwrap()
     );
     let constraint_bytes = fs::read(examples.join("scanner-execution-constraint.json")).unwrap();
-    let constraint = controls::parse_execution_constraint(&constraint_bytes).unwrap();
+    let constraint = ExecutionConstraintDescriptor::parse(&constraint_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&constraint).unwrap(),
         serde_json_canonicalizer::to_vec(
@@ -339,7 +347,7 @@ fn sealed_request_examples_match_their_typed_sources() {
 fn control_examples_match_their_typed_sources() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let policy_bytes = fs::read(examples.join("scanner-policy.json")).unwrap();
-    let policy = controls::parse_scanner_policy(&policy_bytes).unwrap();
+    let policy = ScannerPolicy::parse(&policy_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&policy).unwrap(),
         serde_json_canonicalizer::to_vec(
@@ -349,7 +357,7 @@ fn control_examples_match_their_typed_sources() {
     );
 
     let floor_bytes = fs::read(examples.join("organization-floor.json")).unwrap();
-    let floor = controls::parse_organization_floor(&floor_bytes).unwrap();
+    let floor = OrganizationFloor::parse(&floor_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&floor).unwrap(),
         serde_json_canonicalizer::to_vec(
@@ -359,7 +367,7 @@ fn control_examples_match_their_typed_sources() {
     );
 
     let debt_bytes = fs::read(examples.join("debt-snapshot.json")).unwrap();
-    let debt = controls::parse_debt_snapshot(&debt_bytes).unwrap();
+    let debt = DebtSnapshot::parse(&debt_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&debt).unwrap(),
         serde_json_canonicalizer::to_vec(
@@ -369,7 +377,7 @@ fn control_examples_match_their_typed_sources() {
     );
 
     let waiver_bytes = fs::read(examples.join("waiver-bundle.json")).unwrap();
-    let waiver = controls::parse_waiver_bundle(&waiver_bytes).unwrap();
+    let waiver = WaiverBundle::parse(&waiver_bytes).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&waiver).unwrap(),
         serde_json_canonicalizer::to_vec(

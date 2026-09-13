@@ -1,8 +1,10 @@
+use amiss_wire::controls::Fact;
+use amiss_wire::de::Document as _;
 use std::fs;
 use std::process::ExitCode;
 
 use amiss_scan::report::Built;
-use amiss_wire::controls::{DebtItem, DebtSnapshot, DebtSnapshotSchema, parse_fact};
+use amiss_wire::controls::{DebtItem, DebtSnapshot, DebtSnapshotSchema};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, TreeIdentity};
 use amiss_wire::report::model::{Evaluation, ReportPayload, Snapshot};
@@ -98,7 +100,7 @@ fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
         rows.push(DebtItem {
             debt_id: ArtifactId::new(format!("debt/{full}")).ok_or(())?,
             finding_key: row.finding_key,
-            accepted_fact: parse_fact(&serde_json::to_vec(fact).map_err(|_defect| ())?)
+            accepted_fact: Fact::parse(&serde_json::to_vec(fact).map_err(|_defect| ())?)
                 .map_err(|_defect| ())?,
             accepted_fact_digest: fact_digest,
             owner: adoption.owner.clone(),

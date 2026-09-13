@@ -1,10 +1,11 @@
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::manifest::ReleaseManifest;
 use std::ffi::OsStr;
 use std::path::PathBuf;
 use std::process::Command;
 
 use amiss_bootstrap::build::{RELEASE_MANIFEST_DIGEST_PATH, RELEASE_MANIFEST_PATH};
-use amiss_wire::manifest::parse_release_manifest;
 use tempfile::TempDir;
 
 #[test]
@@ -45,7 +46,7 @@ fn the_manifest_builder_publishes_its_digest_marker() {
     assert!(output.stderr.is_empty());
 
     let manifest =
-        parse_release_manifest(&std::fs::read(tree.path().join(RELEASE_MANIFEST_PATH)).unwrap())
+        ReleaseManifest::parse(&std::fs::read(tree.path().join(RELEASE_MANIFEST_PATH)).unwrap())
             .unwrap();
     let marker = std::fs::read_to_string(tree.path().join(RELEASE_MANIFEST_DIGEST_PATH)).unwrap();
     let digest = document_digest("amiss/scanner-release-manifest", &manifest).unwrap();

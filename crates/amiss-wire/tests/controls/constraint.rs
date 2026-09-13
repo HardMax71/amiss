@@ -1,9 +1,12 @@
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::controls::TrustedTimeStatement;
 use amiss_wire::controls::{
     ActionBootstrapContract, DebtSnapshot, DebtSnapshotSchema, ExecutionConstraintSchema,
     OrganizationFloorSchema, TrustedTimeController, TrustedTimeSchema, WaiverBundle,
-    WaiverBundleSchema, parse_debt_snapshot, parse_execution_constraint, parse_organization_floor,
-    parse_trusted_time, parse_waiver_bundle,
+    WaiverBundleSchema,
 };
+use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
 use sha2::Digest as _;
 
@@ -11,7 +14,7 @@ use super::support::{DEBT, FLOOR, TIME_STATEMENT, WAIVER};
 
 #[test]
 fn controls_accept_open_forge_identities() {
-    let floor = parse_organization_floor(FLOOR).unwrap();
+    let floor = OrganizationFloor::parse(FLOOR).unwrap();
     assert_eq!(floor.schema, OrganizationFloorSchema::Current);
     assert_eq!(floor.repository.host(), "gitlab.com");
     assert_eq!(floor.repository.owner(), "platform/security");
@@ -19,7 +22,7 @@ fn controls_accept_open_forge_identities() {
     let mut debt: DebtSnapshot = serde_json::from_slice(DEBT).unwrap();
     debt.repository = floor.repository.clone();
     assert_eq!(
-        parse_debt_snapshot(&serde_json::to_vec(&debt).unwrap()).unwrap(),
+        DebtSnapshot::parse(&serde_json::to_vec(&debt).unwrap()).unwrap(),
         debt
     );
     assert_eq!(debt.schema, DebtSnapshotSchema::Current);
@@ -28,13 +31,13 @@ fn controls_accept_open_forge_identities() {
     let mut waiver: WaiverBundle = serde_json::from_slice(WAIVER).unwrap();
     waiver.repository = floor.repository;
     assert_eq!(
-        parse_waiver_bundle(&serde_json::to_vec(&waiver).unwrap()).unwrap(),
+        WaiverBundle::parse(&serde_json::to_vec(&waiver).unwrap()).unwrap(),
         waiver
     );
     assert_eq!(waiver.schema, WaiverBundleSchema::Current);
     assert_eq!(waiver.repository.owner(), "platform/security");
 
-    let time = parse_trusted_time(TIME_STATEMENT.as_bytes()).unwrap();
+    let time = TrustedTimeStatement::parse(TIME_STATEMENT.as_bytes()).unwrap();
     assert_eq!(time.schema, TrustedTimeSchema::Current);
     assert_eq!(
         time.controller,
@@ -61,7 +64,7 @@ const CONSTRAINT: &str = r#"{
 
 #[test]
 fn parses_an_execution_constraint_descriptor() {
-    let descriptor = parse_execution_constraint(CONSTRAINT.as_bytes()).unwrap();
+    let descriptor = ExecutionConstraintDescriptor::parse(CONSTRAINT.as_bytes()).unwrap();
     assert_eq!(descriptor.schema, ExecutionConstraintSchema::Current);
     assert_eq!(
         descriptor.bootstrap_contract,
@@ -99,13 +102,13 @@ fn parses_an_execution_constraint_descriptor() {
         "\"host\": \"github.com\", \"owner\": \"acme\"",
         "\"host\": \"git.example.internal\", \"owner\": \"platform/security\"",
     );
-    let descriptor = parse_execution_constraint(open_repository.as_bytes()).unwrap();
+    let descriptor = ExecutionConstraintDescriptor::parse(open_repository.as_bytes()).unwrap();
     assert_eq!(descriptor.action_repository.host(), "git.example.internal");
     assert_eq!(descriptor.action_repository.owner(), "platform/security");
 
     let slash_host = CONSTRAINT.replace("github.com", "git.example/internal");
     assert_eq!(
-        parse_execution_constraint(slash_host.as_bytes())
+        ExecutionConstraintDescriptor::parse(slash_host.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
@@ -113,7 +116,7 @@ fn parses_an_execution_constraint_descriptor() {
     let malformed_owner =
         CONSTRAINT.replace("\"owner\": \"acme\"", "\"owner\": \"platform//security\"");
     assert_eq!(
-        parse_execution_constraint(malformed_owner.as_bytes())
+        ExecutionConstraintDescriptor::parse(malformed_owner.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
@@ -121,7 +124,7 @@ fn parses_an_execution_constraint_descriptor() {
 
     let trailing_space = CONSTRAINT.replace("assurance\"", "assurance \"");
     assert_eq!(
-        parse_execution_constraint(trailing_space.as_bytes())
+        ExecutionConstraintDescriptor::parse(trailing_space.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
@@ -131,7 +134,7 @@ fn parses_an_execution_constraint_descriptor() {
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     );
     assert_eq!(
-        parse_execution_constraint(short_oid.as_bytes())
+        ExecutionConstraintDescriptor::parse(short_oid.as_bytes())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue

@@ -3,6 +3,7 @@
     reason = "integration fixtures construct known-valid controller inputs"
 )]
 
+use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
@@ -18,7 +19,7 @@ use amiss_controller::{
     run_bootstrap,
 };
 use amiss_fixtures::{CommitPair, commit_pair, git};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, parse_execution_constraint};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{
     BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
@@ -208,7 +209,7 @@ fn execution(
     status: &str,
     bootstrap_digest: Digest,
 ) -> ExecutionConstraintDescriptor {
-    let mut constraint = parse_execution_constraint(include_bytes!(
+    let mut constraint = ExecutionConstraintDescriptor::parse(include_bytes!(
         "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();

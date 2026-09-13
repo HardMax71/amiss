@@ -1,4 +1,5 @@
-use amiss_wire::controls::{WaiverBundle, parse_waiver_bundle};
+use amiss_wire::controls::WaiverBundle;
+use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::model::UtcInstant;
 
@@ -38,7 +39,7 @@ fn waiver_reasons_must_explain_the_exception() {
 #[test]
 fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
     let original: WaiverBundle = serde_json::from_slice(WAIVER).unwrap();
-    assert_eq!(parse_waiver_bundle(WAIVER).unwrap(), original);
+    assert_eq!(WaiverBundle::parse(WAIVER).unwrap(), original);
     let mut same_owner = original.clone();
     same_owner.items[0].issuer = same_owner.items[0].owner.clone();
     assert!(same_owner.validate().is_ok());
@@ -64,7 +65,7 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
             &format!("\"residual_disposition\": \"{residual}\""),
         );
         assert_eq!(
-            parse_waiver_bundle(malformed.as_bytes()).unwrap_err().kind,
+            WaiverBundle::parse(malformed.as_bytes()).unwrap_err().kind,
             ErrorKind::InvalidValue
         );
     }

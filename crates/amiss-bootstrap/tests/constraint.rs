@@ -7,7 +7,8 @@
 use amiss_bootstrap::constraint::{ConstraintError, derive_execution_constraint};
 use amiss_bootstrap::{BOOTSTRAP_DOMAIN, validate};
 use amiss_git::{GitLimits, GitResources, Repository};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, parse_execution_constraint};
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::de::Document as _;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use sha2::Digest as _;
 
@@ -68,7 +69,10 @@ fn derivation_pins_and_validates_the_exact_release() {
     );
 
     let canonical = serde_json_canonicalizer::to_vec(&descriptor).unwrap();
-    assert_eq!(parse_execution_constraint(&canonical).unwrap(), descriptor);
+    assert_eq!(
+        ExecutionConstraintDescriptor::parse(&canonical).unwrap(),
+        descriptor
+    );
     assert_eq!(
         serde_json_canonicalizer::to_vec(&derive(&release, &bootstrap).unwrap()).unwrap(),
         canonical

@@ -3,6 +3,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;

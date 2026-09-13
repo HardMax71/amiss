@@ -1,3 +1,5 @@
+use amiss_wire::de::Document as _;
+use amiss_wire::semantic::record::Input;
 use std::process::ExitCode;
 
 use crate::input::ReadError;
@@ -16,7 +18,7 @@ pub(crate) fn run(invocation: &RecordSetInvocation) -> ExitCode {
         amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES,
     )
     .map_err(Failure::Read)
-    .and_then(|bytes| amiss_wire::semantic::record::parse_input(&bytes).map_err(Failure::Contract))
+    .and_then(|bytes| Input::parse(&bytes).map_err(Failure::Contract))
     .and_then(|input| amiss_wire::semantic::record::template(input).map_err(Failure::Contract))
     .and_then(|template| crate::output::write_json(&template).map_err(Failure::Write));
 

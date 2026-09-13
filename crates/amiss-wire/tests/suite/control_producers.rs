@@ -3,13 +3,14 @@
     reason = "tests build known-valid typed fixtures and inspect expected failures"
 )]
 
+use amiss_wire::de::Document as _;
 use std::fs;
 use std::path::Path;
 
 use amiss_wire::controls::{
     ActionBootstrapContract, ConstraintPlatform, ExecutionConstraintDescriptor,
     ExecutionConstraintSchema, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
-    parse_execution_constraint, parse_trusted_time, valid_required_status_name,
+    valid_required_status_name,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::model::Digest;
@@ -123,7 +124,7 @@ fn required_status_names_share_one_public_grammar() {
 #[test]
 fn producer_writers_preserve_the_published_contract_examples() {
     let trusted_time = example("scanner-trusted-time-statement.json");
-    let statement = parse_trusted_time(&trusted_time).unwrap();
+    let statement = TrustedTimeStatement::parse(&trusted_time).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&statement).unwrap(),
         serde_json_canonicalizer::to_vec(
@@ -133,7 +134,7 @@ fn producer_writers_preserve_the_published_contract_examples() {
     );
 
     let execution_constraint = example("scanner-execution-constraint.json");
-    let descriptor = parse_execution_constraint(&execution_constraint).unwrap();
+    let descriptor = ExecutionConstraintDescriptor::parse(&execution_constraint).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&descriptor).unwrap(),
         serde_json_canonicalizer::to_vec(

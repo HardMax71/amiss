@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use std::fs;
 use std::path::Path;

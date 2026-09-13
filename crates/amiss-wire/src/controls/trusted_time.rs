@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind};
+use crate::de::{Document, Error, ErrorKind};
 use crate::model::Digest;
 use crate::model::{ArtifactId, BranchRef, RepositoryIdentity, UtcInstant};
 use js_int::MAX_SAFE_INT as MAX_SAFE_INTEGER;
@@ -51,32 +51,15 @@ pub struct TrustedTimeStatement {
     pub valid_until: UtcInstant,
 }
 
-/// Parses and validates one trusted-time statement.
-///
-/// # Errors
-///
-/// Fails on JSON defects, schema-shape violations, invalid grammar
-/// values, or a lifetime outside `0 < valid_until - evaluation_instant <= 600`
-/// seconds.
-pub fn parse_trusted_time(bytes: &[u8]) -> Result<TrustedTimeStatement, Error> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let statement: TrustedTimeStatement = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+impl Document for TrustedTimeStatement {
+    type Defect = Error;
 
-    statement.validate()?;
-    Ok(statement)
-}
-
-impl TrustedTimeStatement {
     /// Checks this control's domain rules and resource limits.
     ///
     /// # Errors
     ///
     /// A public field violates the contract enforced by [`parse_trusted_time`].
-    pub fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Error> {
         validate_repository("$.repository", &self.repository)?;
         ArtifactId::new(self.provider.clone())
             .is_some()

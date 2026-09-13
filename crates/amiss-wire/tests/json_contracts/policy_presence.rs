@@ -1,7 +1,6 @@
+use amiss_wire::de::Document as _;
 use amiss_wire::{
-    controls::{
-        ProjectionKind, ProjectionSource, ScannerPolicy, TreePathSelection, parse_scanner_policy,
-    },
+    controls::{ProjectionKind, ProjectionSource, ScannerPolicy, TreePathSelection},
     de::ErrorKind,
 };
 use sha2::Digest as _;
@@ -15,7 +14,7 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
     document.projection_assertions = None;
     let absent = serde_json_canonicalizer::to_vec(&document).unwrap();
     let direct: ScannerPolicy = serde_json::from_slice(&absent).unwrap();
-    assert_eq!(parse_scanner_policy(&absent).unwrap(), direct);
+    assert_eq!(ScannerPolicy::parse(&absent).unwrap(), direct);
     assert_eq!(direct.projection_assertions, None);
     let canonical = serde_json_canonicalizer::to_vec(&direct).unwrap();
     let absent_digest = amiss_wire::model::Digest::from(
@@ -30,7 +29,7 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
     document.projection_assertions = Some(Vec::new());
     let present = serde_json_canonicalizer::to_vec(&document).unwrap();
     let direct: ScannerPolicy = serde_json::from_slice(&present).unwrap();
-    assert_eq!(parse_scanner_policy(&present).unwrap(), direct);
+    assert_eq!(ScannerPolicy::parse(&present).unwrap(), direct);
     assert_eq!(direct.projection_assertions, Some(Vec::new()));
     let canonical = serde_json_canonicalizer::to_vec(&direct).unwrap();
     let present_digest = amiss_wire::model::Digest::from(
@@ -51,7 +50,7 @@ fn policy_assertion_presence_is_owned_by_serde_and_preserved_by_the_writer() {
         );
         assert_ne!(altered, encoded);
         assert!(serde_json::from_str::<ScannerPolicy>(&altered).is_err());
-        let defect = parse_scanner_policy(altered.as_bytes()).unwrap_err();
+        let defect = ScannerPolicy::parse(altered.as_bytes()).unwrap_err();
         assert_eq!(defect.path, "$.projection_assertions");
         assert_eq!(defect.kind, ErrorKind::WrongType);
     }
@@ -86,7 +85,7 @@ fn projection_suffix_normalizes_null_to_absence() {
                 .finalize()
                 .0,
         );
-        assert_eq!(parse_scanner_policy(&bytes).unwrap(), policy);
+        assert_eq!(ScannerPolicy::parse(&bytes).unwrap(), policy);
         digests.push(digest);
     }
     assert_ne!(digests[0], digests[1]);
@@ -101,7 +100,7 @@ fn projection_suffix_normalizes_null_to_absence() {
         *source
     );
     assert_eq!(
-        parse_scanner_policy(null_policy.as_bytes()).unwrap(),
+        ScannerPolicy::parse(null_policy.as_bytes()).unwrap(),
         policy
     );
 }

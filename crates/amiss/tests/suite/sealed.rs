@@ -4,6 +4,8 @@
     reason = "black-box harness over asserted fixture shapes"
 )]
 
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::io::Write as _;
@@ -11,7 +13,7 @@ use std::process::{Command, Stdio};
 
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
-use amiss_wire::controls::{Profile, parse_organization_floor};
+use amiss_wire::controls::Profile;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity,
 };
@@ -219,7 +221,7 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
       "authorized_waiver_issuers":[],
       "resource_limits":[]
     }"#;
-    let floor = parse_organization_floor(floor_bytes).unwrap();
+    let floor = OrganizationFloor::parse(floor_bytes).unwrap();
     let controls = ControlsRequest {
         organization_floor: Some(SuppliedControl {
             expected_digest: document_digest("amiss/organization-floor", &floor).unwrap(),

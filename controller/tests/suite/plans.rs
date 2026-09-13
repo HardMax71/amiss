@@ -3,6 +3,8 @@
     reason = "integration fixtures construct known-valid controller identities"
 )]
 
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::de::Document as _;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
@@ -14,7 +16,7 @@ use amiss_controller::{
     ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
     ProviderRunIdentity, check_binding, check_plan, register_plan, resolve_plan,
 };
-use amiss_wire::controls::{Profile, parse_execution_constraint};
+use amiss_wire::controls::Profile;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 fn plan() -> CheckPlan {
@@ -26,7 +28,7 @@ fn plan() -> CheckPlan {
     check_plan(
         Profile::Enforce,
         PolicyControls::default(),
-        parse_execution_constraint(&bytes).unwrap(),
+        ExecutionConstraintDescriptor::parse(&bytes).unwrap(),
     )
     .unwrap()
 }

@@ -1,5 +1,9 @@
 #![expect(clippy::unwrap_used, reason = "test fixture plumbing")]
 
+use amiss_wire::controls::DebtSnapshot;
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::controls::TrustedTimeStatement;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
@@ -9,7 +13,6 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{DebtInput, FloorInput, TimeInput};
 use amiss_scan::report::{CandidateBlock, Setup, SnapshotIdentity, candidate_identity_digest};
-use amiss_wire::controls::{parse_debt_snapshot, parse_organization_floor, parse_trusted_time};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
@@ -40,7 +43,7 @@ struct Minted {
 }
 
 fn floor_digest() -> String {
-    let floor = parse_organization_floor(FLOOR.as_bytes()).unwrap();
+    let floor = OrganizationFloor::parse(FLOOR.as_bytes()).unwrap();
     document_digest("amiss/organization-floor", &floor)
         .unwrap()
         .to_string()
@@ -121,7 +124,7 @@ fn a_minted_snapshot_clears_its_own_reader_and_schema() {
     let (code, stdout, _stderr) = amiss(&shown);
     assert_eq!(code, 0, "{}", String::from_utf8(stdout).unwrap());
     let bytes = fs::read(&path).unwrap();
-    let snapshot = parse_debt_snapshot(&bytes).unwrap();
+    let snapshot = DebtSnapshot::parse(&bytes).unwrap();
     assert_eq!(snapshot.items.len(), 1);
     let schema: serde_json::Value = serde_json::from_slice(
         &fs::read(concat!(
@@ -151,7 +154,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
     let shown: Vec<&str> = args.iter().map(String::as_str).collect();
     let (code, _stdout, _stderr) = amiss(&shown);
     assert_eq!(code, 0);
-    let snapshot = parse_debt_snapshot(&fs::read(&path).unwrap()).unwrap();
+    let snapshot = DebtSnapshot::parse(&fs::read(&path).unwrap()).unwrap();
 
     let repo = Repository::open(minted.chain.root(), ObjectFormat::Sha1).unwrap();
     let base = Oid::new(ObjectFormat::Sha1, minted.base.clone()).unwrap();
@@ -218,7 +221,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
 }}"#,
         candidate_identity_digest(&time_setup).unwrap()
     );
-    let statement = parse_trusted_time(statement.as_bytes()).unwrap();
+    let statement = TrustedTimeStatement::parse(statement.as_bytes()).unwrap();
     let debt_digest = document_digest("amiss/debt-snapshot", &snapshot).unwrap();
     let shell = amiss_scan::pipeline::SetupShell {
         engine,
@@ -229,7 +232,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         target_ref: BranchRef::new("refs/heads/main".to_owned()),
         default_branch_ref: None,
         floor: Some({
-            let floor = parse_organization_floor(FLOOR.as_bytes()).unwrap();
+            let floor = OrganizationFloor::parse(FLOOR.as_bytes()).unwrap();
             let digest = document_digest("amiss/organization-floor", &floor).unwrap();
             FloorInput {
                 floor,
@@ -311,7 +314,7 @@ fn an_ineligible_blocking_finding_is_counted_not_recorded() {
         "{shown}"
     );
     assert!(shown.contains("0 eligible rows skipped"), "{shown}");
-    let snapshot = parse_debt_snapshot(&fs::read(&path).unwrap()).unwrap();
+    let snapshot = DebtSnapshot::parse(&fs::read(&path).unwrap()).unwrap();
     assert!(snapshot.items.is_empty());
 }
 

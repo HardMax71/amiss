@@ -1,7 +1,10 @@
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::controls::ScannerPolicy;
 use amiss_wire::controls::{
     EligibleFindingKind, FloorDefect, ORGANIZATION_POLICY_ENTRIES_LIMIT, OrganizationFloorSchema,
-    ResourceName, parse_organization_floor, parse_scanner_policy,
+    ResourceName,
 };
+use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
 use sha2::Digest as _;
 
@@ -15,7 +18,7 @@ fn a_floor_may_require_warn_where_the_fixture_requires_fail() {
         .unwrap()
         .replace(r#""disposition": "fail""#, r#""disposition": "warn""#);
     let floor =
-        parse_organization_floor(doc.as_bytes()).expect("warn is a disposition a floor may set");
+        OrganizationFloor::parse(doc.as_bytes()).expect("warn is a disposition a floor may set");
     assert_ne!(
         amiss_wire::model::Digest::from(
             sha2::Sha256::new_with_prefix("amiss/organization-floor")
@@ -28,7 +31,7 @@ fn a_floor_may_require_warn_where_the_fixture_requires_fail() {
             sha2::Sha256::new_with_prefix("amiss/organization-floor")
                 .chain_update([0_u8])
                 .chain_update(
-                    serde_json_canonicalizer::to_vec(&parse_organization_floor(FLOOR).unwrap())
+                    serde_json_canonicalizer::to_vec(&OrganizationFloor::parse(FLOOR).unwrap())
                         .unwrap()
                 )
                 .finalize()
@@ -39,7 +42,7 @@ fn a_floor_may_require_warn_where_the_fixture_requires_fail() {
 
 #[test]
 fn parses_the_floor_fixture() {
-    let floor = parse_organization_floor(FLOOR).unwrap();
+    let floor = OrganizationFloor::parse(FLOOR).unwrap();
     assert_eq!(floor.schema, OrganizationFloorSchema::Current);
     assert_eq!(
         amiss_wire::model::Digest::from(
@@ -97,7 +100,7 @@ fn parses_the_floor_fixture() {
             sha2::Sha256::new_with_prefix("amiss/scanner-policy")
                 .chain_update([0_u8])
                 .chain_update(
-                    serde_json_canonicalizer::to_vec(&parse_scanner_policy(POLICY).unwrap())
+                    serde_json_canonicalizer::to_vec(&ScannerPolicy::parse(POLICY).unwrap())
                         .unwrap()
                 )
                 .finalize()
@@ -144,7 +147,7 @@ fn parses_a_floor_declaring_every_resource() {
 }}"#,
         rows = rows.join(",")
     );
-    let floor = parse_organization_floor(doc.as_bytes()).unwrap();
+    let floor = OrganizationFloor::parse(doc.as_bytes()).unwrap();
     assert_eq!(floor.resource_limits.len(), ResourceName::all().len());
 }
 
@@ -161,13 +164,13 @@ fn rejects_floor_bound_defects() {
     let doc = String::from_utf8(FLOOR.to_vec()).unwrap();
     let wrong_ceiling = doc.replace("268435456", "268435455");
     assert_eq!(
-        floor_schema_kind(parse_organization_floor(wrong_ceiling.as_bytes()).unwrap_err()),
+        floor_schema_kind(OrganizationFloor::parse(wrong_ceiling.as_bytes()).unwrap_err()),
         ErrorKind::InvalidValue
     );
 
     let wrong_errors = doc.replace("\"maximum\": 64", "\"maximum\": 65");
     assert_eq!(
-        floor_schema_kind(parse_organization_floor(wrong_errors.as_bytes()).unwrap_err()),
+        floor_schema_kind(OrganizationFloor::parse(wrong_errors.as_bytes()).unwrap_err()),
         ErrorKind::InvalidValue
     );
 
@@ -176,14 +179,14 @@ fn rejects_floor_bound_defects() {
         "{ \"resource\": \"typed-analysis-errors-retained\", \"maximum\": 64 },\n    { \"resource\": \"machine-json-bytes\", \"maximum\": 268435456 }",
     );
     assert_eq!(
-        floor_schema_kind(parse_organization_floor(unsorted_limits.as_bytes()).unwrap_err()),
+        floor_schema_kind(OrganizationFloor::parse(unsorted_limits.as_bytes()).unwrap_err()),
         ErrorKind::UnsortedSet
     );
 }
 
 #[test]
 fn canonical_floor_rechecks_mutable_public_fields() {
-    let mut floor = parse_organization_floor(FLOOR).unwrap();
+    let mut floor = OrganizationFloor::parse(FLOOR).unwrap();
     floor
         .resource_limits
         .first_mut()
@@ -200,7 +203,7 @@ fn canonical_floor_rechecks_mutable_public_fields() {
 
 #[test]
 fn canonical_floor_keeps_resource_limits_inside_safe_integers() {
-    let mut floor = parse_organization_floor(FLOOR).unwrap();
+    let mut floor = OrganizationFloor::parse(FLOOR).unwrap();
     let limit = floor
         .resource_limits
         .first_mut()
@@ -250,7 +253,7 @@ fn rejects_floors_over_the_combined_entry_limit() {
         controls = paths(45_000, "ops/b"),
     );
     assert_eq!(
-        parse_organization_floor(doc.as_bytes()).unwrap_err(),
+        OrganizationFloor::parse(doc.as_bytes()).unwrap_err(),
         FloorDefect::Entries {
             configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
             observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT + 1,
@@ -284,7 +287,7 @@ fn accepts_a_floor_at_exactly_the_combined_entry_limit() {
         inventory = paths(60_000, "docs/a"),
         controls = paths(40_000, "ops/b"),
     );
-    let floor = parse_organization_floor(doc.as_bytes())
+    let floor = OrganizationFloor::parse(doc.as_bytes())
         .expect("a floor whose entries sum to the limit exactly is within it");
     assert_eq!(
         u64::try_from(floor.protected_inventory.len() + floor.protected_control_paths.len())
@@ -311,7 +314,7 @@ fn accepts_a_floor_meeting_its_own_declared_entry_limit_exactly() {
     { "resource": "organization-policy-entries", "maximum": 4 }
   ]
 }"#;
-    let floor = parse_organization_floor(doc)
+    let floor = OrganizationFloor::parse(doc)
         .expect("three paths and one limit row meet a declared maximum of four exactly");
     assert_eq!(floor.protected_inventory.len(), 3);
 }
@@ -335,7 +338,7 @@ fn rejects_floors_inconsistent_with_their_own_declared_entry_limit() {
   ]
 }"#;
     assert_eq!(
-        parse_organization_floor(doc).unwrap_err(),
+        OrganizationFloor::parse(doc).unwrap_err(),
         FloorDefect::Entries {
             configured_limit: 3,
             observed_lower_bound: 4,

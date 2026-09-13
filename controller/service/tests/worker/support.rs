@@ -1,3 +1,5 @@
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::de::Document as _;
 use std::collections::VecDeque;
 use std::fs;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -19,7 +21,7 @@ use amiss_controller_service::{
     DeliveryWorker, DeliveryWorkerInput, Inbox, InboxLimits, IncomingDelivery, IncomingHeader,
     Operations,
 };
-use amiss_wire::controls::{Profile, parse_execution_constraint};
+use amiss_wire::controls::Profile;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha256;
@@ -462,7 +464,7 @@ fn oid(byte: char) -> Oid {
 }
 
 fn plan() -> amiss_controller::CheckPlan {
-    let execution = parse_execution_constraint(include_bytes!(
+    let execution = ExecutionConstraintDescriptor::parse(include_bytes!(
         "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();

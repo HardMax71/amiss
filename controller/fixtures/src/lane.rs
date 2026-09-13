@@ -1,3 +1,4 @@
+use amiss_wire::de::Document as _;
 use std::collections::VecDeque;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -10,7 +11,7 @@ use amiss_controller::{
     AcquiredSemanticTemplate, Acquisition, AcquisitionTarget, OidPair, RunRequest,
 };
 use amiss_fixtures::{CommitPair, commit_pair};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, parse_execution_constraint};
+use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -107,7 +108,7 @@ pub fn execution_constraint(
     required_status_name: &str,
     bootstrap_digest: Digest,
 ) -> io::Result<ExecutionConstraintDescriptor> {
-    let mut descriptor = parse_execution_constraint(include_bytes!(
+    let mut descriptor = ExecutionConstraintDescriptor::parse(include_bytes!(
         "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .map_err(io::Error::other)?;

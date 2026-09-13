@@ -3,16 +3,21 @@
     reason = "integration assertions over repository-owned documentation and fixtures"
 )]
 
+use amiss_wire::controls::DebtSnapshot;
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::controls::ScannerPolicy;
+use amiss_wire::controls::TrustedTimeStatement;
+use amiss_wire::controls::WaiverBundle;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Payload as _;
+use amiss_wire::manifest::ReleaseManifest;
+use amiss_wire::semantic::record::Input;
 use sha2::Digest as _;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use amiss_wire::controls::{
-    DOCUMENT_SUFFIX_BYTES, SOURCE_MARKER_BYTES, parse_debt_snapshot, parse_execution_constraint,
-    parse_organization_floor, parse_trusted_time, parse_waiver_bundle,
-};
-use amiss_wire::manifest::parse_release_manifest;
+use amiss_wire::controls::{DOCUMENT_SUFFIX_BYTES, SOURCE_MARKER_BYTES};
 use amiss_wire::model::BranchRef;
 use amiss_wire::report::{AnalysisErrorCode, ENVELOPE_SCHEMA, FindingKind, PAYLOAD_SCHEMA};
 use amiss_wire::requests::{ControlsRequest, EvaluationRequest, SnapshotRequest};
@@ -63,7 +68,7 @@ fn parse_defect<T, E: std::fmt::Debug>(result: Result<T, E>) -> Option<String> {
 
 fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
     match contract_name {
-        "debt-snapshot" => parse_defect(parse_debt_snapshot(bytes)),
+        "debt-snapshot" => parse_defect(DebtSnapshot::parse(bytes)),
         "locale-coverage-assessment" => {
             parse_defect(amiss_wire::locale::LocaleCoverageAssessment::parse(bytes))
         }
@@ -73,7 +78,7 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "locale-coverage-plan" => {
             parse_defect(amiss_wire::locale::LocaleCoveragePlan::parse(bytes))
         }
-        "organization-floor" => parse_defect(parse_organization_floor(bytes)),
+        "organization-floor" => parse_defect(OrganizationFloor::parse(bytes)),
         "publication-assessment" => {
             parse_defect(amiss_wire::publication::PublicationAssessment::parse(bytes))
         }
@@ -88,16 +93,14 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "relation-plan" => parse_defect(amiss_wire::relation::RelationPlan::parse(bytes)),
         "scanner-controls-request" => parse_defect(ControlsRequest::parse(bytes)),
         "scanner-evaluation-request" => parse_defect(EvaluationRequest::parse(bytes)),
-        "scanner-execution-constraint" => parse_defect(parse_execution_constraint(bytes)),
+        "scanner-execution-constraint" => parse_defect(ExecutionConstraintDescriptor::parse(bytes)),
         "scanner-external-assessment" => {
             parse_defect(amiss_wire::external::parse_assessment(bytes))
         }
         "scanner-external-evidence" => parse_defect(amiss_wire::external::parse_evidence(bytes)),
         "scanner-external-plan" => parse_defect(amiss_wire::external::parse_plan(bytes)),
         "scanner-report" => parse_defect(amiss_wire::report::validate_envelope(bytes)),
-        "scanner-record-set-input" => {
-            parse_defect(amiss_wire::semantic::record::parse_input(bytes))
-        }
+        "scanner-record-set-input" => parse_defect(Input::parse(bytes)),
         "scanner-semantic-evidence" => parse_defect(amiss_wire::semantic::parse(bytes)),
         "scanner-semantic-template" => match serde_json::from_slice::<
             amiss_wire::semantic::SemanticEvidenceTemplate<'static>,
@@ -106,14 +109,14 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
             Ok(template) => parse_defect(template.validate()),
             Err(error) => Some(error.to_string()),
         },
-        "scanner-policy" => parse_defect(amiss_wire::controls::parse_scanner_policy(bytes)),
-        "scanner-release-manifest" => parse_defect(parse_release_manifest(bytes)),
+        "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
+        "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
         "scanner-snapshot-request" => match serde_json::from_slice::<SnapshotRequest>(bytes) {
             Ok(request) => parse_defect(request.validate()),
             Err(error) => Some(error.to_string()),
         },
-        "scanner-trusted-time-statement" => parse_defect(parse_trusted_time(bytes)),
-        "waiver-bundle" => parse_defect(parse_waiver_bundle(bytes)),
+        "scanner-trusted-time-statement" => parse_defect(TrustedTimeStatement::parse(bytes)),
+        "waiver-bundle" => parse_defect(WaiverBundle::parse(bytes)),
         _ => Some("no authoritative example reader is registered".to_owned()),
     }
 }
@@ -687,8 +690,8 @@ fn the_record_set_input_example_produces_the_semantic_template_example() {
     let root = repository_root();
     let input = fs::read(root.join("spec/examples/scanner-record-set-input.json"))
         .expect("the record-set input example is readable");
-    let input = amiss_wire::semantic::record::parse_input(&input)
-        .expect("the record-set input example clears the strict reader");
+    let input =
+        Input::parse(&input).expect("the record-set input example clears the strict reader");
     let written = amiss_wire::semantic::record::template(input)
         .expect("the record-set input example clears the checked writer");
     let template = fs::read(root.join("spec/examples/scanner-semantic-template.json"))

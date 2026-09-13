@@ -1,3 +1,4 @@
+use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::borrow::Cow;
 

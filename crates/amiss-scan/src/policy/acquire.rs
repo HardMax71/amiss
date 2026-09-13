@@ -1,9 +1,9 @@
+use amiss_wire::de::Document as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap, parse_tree};
 use amiss_wire::controls::{
     DOCUMENT_SUFFIX_BYTES, GitMode, IncludeKind, ResourceName, SCANNER_POLICY_PATH, ScannerPolicy,
-    parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::envelope::document_digest;
@@ -294,7 +294,7 @@ pub fn acquire_entry(
     if lfs::is_pointer(&object.body) {
         return Err(invalid(Vec::new()));
     }
-    match parse_scanner_policy(&object.body).and_then(|policy| {
+    match ScannerPolicy::parse(&object.body).and_then(|policy| {
         let digest = document_digest(amiss_wire::controls::SCANNER_POLICY_SCHEMA, &policy)
             .ok_or_else(|| amiss_wire::de::Error::new("$", ErrorKind::InvalidValue))?;
         Ok((policy, digest))

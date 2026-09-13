@@ -1,4 +1,5 @@
 use amiss_wire::controls::{ConstraintPlatform, GitMode};
+use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::model::Digest;
 use sha2::Digest as _;
@@ -6,7 +7,7 @@ use sha2::Digest as _;
 use amiss_wire::manifest::{
     BuildSource, DEPENDENCY_LOCK_DOMAIN, DependencyLockFile, DependencyLockInput,
     DependencyLockSchema, EnvironmentContract, ReleaseArtifact, ReleaseManifest,
-    ReleaseManifestSchema, RuntimeContract, RuntimeFile, RuntimeRole, parse_release_manifest,
+    ReleaseManifestSchema, RuntimeContract, RuntimeFile, RuntimeRole,
 };
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
@@ -193,14 +194,14 @@ fn public_manifest_fields_retain_their_domain_constraints() {
 fn typed_parsing_revalidates_embedded_repository_fields() {
     let raw = manifest_raw("sha1", &"a".repeat(40), LOCK, &one_artifact())
         .replace(r#""owner":"hardmax71""#, r#""owner":"HardMax71""#);
-    let defect = parse_release_manifest(raw.as_bytes()).expect_err("an invalid repository owner");
+    let defect = ReleaseManifest::parse(raw.as_bytes()).expect_err("an invalid repository owner");
     assert_eq!(defect.path, "$.build_source.repository");
 }
 
 /// Every runtime role in one parsed manifest, so every decoder arm is load-bearing.
 #[test]
 fn a_complete_manifest_parses_with_every_runtime_role() {
-    let manifest = parse_release_manifest(
+    let manifest = ReleaseManifest::parse(
         manifest_raw("sha1", &"a".repeat(40), LOCK, &one_artifact()).as_bytes(),
     )
     .expect("the closed manifest parses");
@@ -290,7 +291,7 @@ fn one_artifact() -> String {
 
 #[test]
 fn a_sha256_build_source_parses() {
-    let manifest = parse_release_manifest(
+    let manifest = ReleaseManifest::parse(
         manifest_raw("sha256", &"a".repeat(64), LOCK, &one_artifact()).as_bytes(),
     )
     .expect("a sha256 build source parses");
@@ -314,14 +315,14 @@ fn lock_with(count: usize) -> String {
 
 #[test]
 fn the_lock_holds_one_to_thirty_two_sorted_files() {
-    let full = parse_release_manifest(
+    let full = ReleaseManifest::parse(
         manifest_raw("sha1", &"a".repeat(40), &lock_with(32), &one_artifact()).as_bytes(),
     )
     .expect("thirty-two lock files are within the ceiling");
     assert_eq!(full.dependency_lock.files.len(), 32);
 
     for (reason, count) in [("an empty lock", 0), ("a lock past the ceiling", 33)] {
-        let defect = parse_release_manifest(
+        let defect = ReleaseManifest::parse(
             manifest_raw("sha1", &"a".repeat(40), &lock_with(count), &one_artifact()).as_bytes(),
         )
         .expect_err(reason);
@@ -329,7 +330,7 @@ fn the_lock_holds_one_to_thirty_two_sorted_files() {
     }
 
     let misordered = lock_with(2).replace("deps/f00", "deps/f09");
-    let defect = parse_release_manifest(
+    let defect = ReleaseManifest::parse(
         manifest_raw("sha1", &"a".repeat(40), &misordered, &one_artifact()).as_bytes(),
     )
     .expect_err("descending lock files");
@@ -350,7 +351,7 @@ fn artifacts_cover_at_most_the_closed_platform_set() {
         .iter()
         .map(|platform| artifact_json(platform, "amiss", &executable_row()))
         .collect();
-    let manifest = parse_release_manifest(
+    let manifest = ReleaseManifest::parse(
         manifest_raw("sha1", &"a".repeat(40), LOCK, &six.join(",")).as_bytes(),
     )
     .expect("every platform may ship");
@@ -358,11 +359,11 @@ fn artifacts_cover_at_most_the_closed_platform_set() {
 
     let seven = format!("{},{}", six.join(","), six[0]);
     let defect =
-        parse_release_manifest(manifest_raw("sha1", &"a".repeat(40), LOCK, &seven).as_bytes())
+        ReleaseManifest::parse(manifest_raw("sha1", &"a".repeat(40), LOCK, &seven).as_bytes())
             .expect_err("a seventh artifact");
     assert_eq!(defect.kind, ErrorKind::LimitExceeded);
 
-    let defect = parse_release_manifest(manifest_raw("sha1", &"a".repeat(40), LOCK, "").as_bytes())
+    let defect = ReleaseManifest::parse(manifest_raw("sha1", &"a".repeat(40), LOCK, "").as_bytes())
         .expect_err("no artifacts");
     assert_eq!(defect.kind, ErrorKind::LimitExceeded);
 }
@@ -379,7 +380,7 @@ fn runtime_files_hold_one_to_two_hundred_fifty_six_rows() {
         }));
         rows.join(",")
     };
-    let full = parse_release_manifest(
+    let full = ReleaseManifest::parse(
         manifest_raw(
             "sha1",
             &"a".repeat(40),
@@ -402,7 +403,7 @@ fn runtime_files_hold_one_to_two_hundred_fifty_six_rows() {
         ("no runtime files", String::new()),
         ("rows past the ceiling", files_with(257)),
     ] {
-        let defect = parse_release_manifest(
+        let defect = ReleaseManifest::parse(
             manifest_raw(
                 "sha1",
                 &"a".repeat(40),
@@ -446,7 +447,7 @@ fn version_strings_hold_the_release_shape() {
         "0.5.2-a-b.7",
         long_valid.as_str(),
     ] {
-        parse_release_manifest(encoded(good).as_bytes()).expect("a valid version");
+        ReleaseManifest::parse(encoded(good).as_bytes()).expect("a valid version");
     }
     for bad in [
         "1.2",
@@ -459,7 +460,7 @@ fn version_strings_hold_the_release_shape() {
         "1.2.3-RC",
         long_invalid.as_str(),
     ] {
-        let defect = parse_release_manifest(encoded(bad).as_bytes()).expect_err("invalid version");
+        let defect = ReleaseManifest::parse(encoded(bad).as_bytes()).expect_err("invalid version");
         assert_eq!(defect.path, "$.engine_version", "{bad}");
     }
 }

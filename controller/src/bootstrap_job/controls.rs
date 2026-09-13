@@ -2,6 +2,7 @@ use amiss_wire::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeController,
     TrustedTimeSchema, TrustedTimeStatement, WaiverBundle,
 };
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, RepositoryIdentity, UtcInstant};
