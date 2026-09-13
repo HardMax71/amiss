@@ -1,3 +1,4 @@
+use crate::envelope::document_digest;
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use sha2::Digest as _;
@@ -172,13 +173,8 @@ pub(super) fn fact_digests(path: &str, fact: &Fact) -> Result<(Digest, Digest), 
             .map(|()| Digest::from(writer.0.finalize().0))
     }
     .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
-    let digest = {
-        let mut writer =
-            digest_io::IoWrapper(sha2::Sha256::new_with_prefix(FACT_DOMAIN).chain_update([0_u8]));
-        serde_json_canonicalizer::to_writer(fact, &mut writer)
-            .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
+    let digest = document_digest(FACT_DOMAIN, fact)
+        .ok_or_else(|| Error::new(path, ErrorKind::InvalidValue))?;
     Ok((key, digest))
 }
 

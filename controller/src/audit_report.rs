@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 mod tests;
 
@@ -79,14 +80,8 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
         evaluation: &evaluation,
         schema: CandidateIdentitySchema::Current,
     };
-    let candidate_identity_digest = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN).chain_update([0_u8]),
-        );
-        serde_json_canonicalizer::to_writer(&preimage, &mut writer)
-            .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| ArtifactError::Corrupt)?;
+    let candidate_identity_digest =
+        document_digest(CANDIDATE_IDENTITY_DOMAIN, &preimage).ok_or(ArtifactError::Corrupt)?;
     let (BaseSnapshot::Git(base), Snapshot::Available(CandidateSnapshot::Git(candidate))) =
         (evaluation.base, evaluation.candidate)
     else {

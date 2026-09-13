@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::path::{Path, PathBuf};
 
 use amiss_controller::{
@@ -10,6 +9,7 @@ use amiss_wire::controls::{
     Profile, parse_debt_snapshot, parse_execution_constraint, parse_organization_floor,
     parse_waiver_bundle,
 };
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
 use amiss_wire::requests::{REQUEST_STREAM_BYTES, RequestTrust, SuppliedControl};
@@ -187,11 +187,8 @@ fn load_control<T: serde::Serialize, E>(
         let bytes = read_regular(path, REQUEST_STREAM_BYTES)?;
         let invalid = |_defect| ConfigError::caused_by("check plan is invalid", error);
         let value = parse(&bytes).map_err(invalid)?;
-        let mut writer =
-            digest_io::IoWrapper(sha2::Sha256::new_with_prefix(domain).chain_update([0_u8]));
-        serde_json_canonicalizer::to_writer(&value, &mut writer)
-            .map_err(|_defect| ConfigError::caused_by("check plan is invalid", error))?;
-        let expected_digest = Digest::from(writer.0.finalize().0);
+        let expected_digest = document_digest(domain, &value)
+            .ok_or_else(|| ConfigError::caused_by("check plan is invalid", error))?;
         Ok(SuppliedControl {
             value,
             expected_digest,

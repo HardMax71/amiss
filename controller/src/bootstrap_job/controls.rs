@@ -2,13 +2,13 @@ use amiss_wire::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeController,
     TrustedTimeSchema, TrustedTimeStatement, WaiverBundle,
 };
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, RepositoryIdentity, UtcInstant};
 use amiss_wire::requests::{
     ControlsRequest, ControlsRequestSchema, REQUEST_STREAM_BYTES, RequestTrust, SuppliedControl,
     SuppliedTime,
 };
-use sha2::Digest as _;
 
 use crate::RunIdentity;
 
@@ -93,13 +93,11 @@ fn maximal_trusted_time(
     statement
         .validate()
         .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&statement, &mut writer)
-        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
-    let expected_digest = Digest::from(writer.0.finalize().0);
+    let expected_digest = document_digest(
+        amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA,
+        &statement,
+    )
+    .ok_or(BootstrapJobError::RequestEncoding)?;
     Ok(SuppliedTime {
         value: statement,
         expected_digest,

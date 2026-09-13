@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 pub mod build;
 pub mod constraint;
@@ -205,12 +206,8 @@ pub(crate) fn load_release_manifest(
     }
     let manifest =
         parse_release_manifest(&bytes).map_err(|_defect| tampered("manifest-unreadable"))?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::manifest::MANIFEST_DOMAIN).chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&manifest, &mut writer)
-        .map_err(|_defect| tampered("manifest-unreadable"))?;
-    let digest = Digest::from(writer.0.finalize().0);
+    let digest = document_digest(amiss_wire::manifest::MANIFEST_DOMAIN, &manifest)
+        .ok_or_else(|| tampered("manifest-unreadable"))?;
     Ok((manifest, digest))
 }
 

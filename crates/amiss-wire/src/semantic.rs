@@ -7,6 +7,7 @@ use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
 use crate::de::{self, Error, ErrorKind, fail};
+use crate::envelope::transcoded_digest;
 use crate::model::ArtifactId;
 use crate::model::Digest;
 
@@ -143,18 +144,8 @@ pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope<'static>, Error> {
         .end()
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
 
-    let received_digest = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
-        );
-        let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
-        serde_json_canonicalizer::to_writer(
-            &serde_transcode::Transcoder::new(&mut payload),
-            &mut writer,
-        )
-        .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
+    let received_digest = transcoded_digest(PAYLOAD_SCHEMA, envelope.payload.get().as_bytes())
+        .ok_or_else(|| Error::new("$.payload", ErrorKind::InvalidValue))?;
     let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
     let document = SemanticEnvelope {
         schema: envelope.schema,

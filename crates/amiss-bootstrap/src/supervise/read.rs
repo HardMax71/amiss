@@ -1,7 +1,7 @@
+use amiss_wire::envelope::document_digest;
 use amiss_wire::report::model::{BaseSnapshot, Evaluation, ReportEnvelope, Snapshot};
 use amiss_wire::report::{PAYLOAD_SCHEMA, result_verdict};
 use amiss_wire::requests::CandidateSnapshot;
-use sha2::Digest as _;
 
 use super::{AcceptanceDefect, Expectations, identity};
 
@@ -24,14 +24,7 @@ pub fn accept(wire: &[u8], expectations: &Expectations) -> Result<i64, Acceptanc
         return Err(AcceptanceDefect::Noncanonical);
     }
     let payload = envelope.payload;
-    let digest = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
-        );
-        serde_json_canonicalizer::to_writer(&payload, &mut writer)
-            .map(|()| amiss_wire::model::Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| AcceptanceDefect::Shape)?;
+    let digest = document_digest(PAYLOAD_SCHEMA, &payload).ok_or(AcceptanceDefect::Shape)?;
     if digest != envelope.payload_digest {
         return Err(AcceptanceDefect::PayloadDigest);
     }

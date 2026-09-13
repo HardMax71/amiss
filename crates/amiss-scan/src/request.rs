@@ -1,8 +1,8 @@
 use amiss_wire::controls::{FloorDefect, ResourceName};
 use amiss_wire::de::{Error, ErrorKind};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};
 use amiss_wire::requests::ControlsRequest;
-use sha2::Digest as _;
 
 use crate::policy::{ConstraintInput, DebtInput, FloorInput, TimeInput, WaiverInput};
 
@@ -110,11 +110,8 @@ fn admitted<T: serde::Serialize>(
     domain: &str,
     expected: amiss_wire::model::Digest,
 ) -> Result<amiss_wire::model::Digest, ErrorDetail> {
-    let mut writer =
-        digest_io::IoWrapper(sha2::Sha256::new_with_prefix(domain).chain_update([0_u8]));
-    serde_json_canonicalizer::to_writer(value, &mut writer)
-        .map_err(|_defect| code(AnalysisErrorCode::ConfigurationInvalid))?;
-    let digest = amiss_wire::model::Digest::from(writer.0.finalize().0);
+    let digest = document_digest(domain, value)
+        .ok_or_else(|| code(AnalysisErrorCode::ConfigurationInvalid))?;
     (digest == expected)
         .then_some(digest)
         .ok_or_else(|| code(AnalysisErrorCode::DigestMismatch))

@@ -7,6 +7,7 @@ use strum::{Display, EnumString};
 use wary::Validate;
 
 use crate::de::{self, Error, ErrorKind};
+use crate::envelope::transcoded_digest;
 use crate::model::Digest;
 
 use super::evidence::{
@@ -186,18 +187,11 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, Asse
         .end()
         .map_err(|_defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
 
-    let payload_digest = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA).chain_update([0_u8]),
-        );
-        let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
-        serde_json_canonicalizer::to_writer(
-            &serde_transcode::Transcoder::new(&mut payload),
-            &mut writer,
-        )
-        .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::InvalidValue)))?;
+    let payload_digest =
+        transcoded_digest(ASSESSMENT_PAYLOAD_SCHEMA, envelope.payload.get().as_bytes())
+            .ok_or_else(|| {
+                AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::InvalidValue))
+            })?;
     let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
     let document: ExternalAssessmentEnvelope = ExternalAssessmentEnvelope {
         schema: envelope.schema,

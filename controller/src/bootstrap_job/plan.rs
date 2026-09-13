@@ -1,4 +1,5 @@
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::requests::{REQUEST_STREAM_BYTES, SuppliedControl};
 use sha2::Digest as _;
@@ -60,13 +61,11 @@ pub fn check_plan(
     execution
         .validate()
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&execution, &mut writer)
-        .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;
-    let execution_digest = Digest::from(writer.0.finalize().0);
+    let execution_digest = document_digest(
+        amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA,
+        &execution,
+    )
+    .ok_or(BootstrapJobError::ExecutionConstraint)?;
     controls::validate_request_size(&policy, execution_digest, &execution)?;
     let identity = PlanIdentity {
         debt_snapshot,

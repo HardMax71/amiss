@@ -1,4 +1,5 @@
 use amiss_wire::controls::{ConstraintPlatform, GitMode};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::manifest::{
     BuildSource, DependencyLockFile, DependencyLockInput, DependencyLockSchema,
     EnvironmentContract, ReleaseArtifact, ReleaseManifest, ReleaseManifestSchema, RuntimeContract,
@@ -73,13 +74,11 @@ pub fn build_manifest<'bytes>(
     dependency_lock
         .validate()
         .map_err(|_defect| "invalid dependency lock")?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::manifest::DEPENDENCY_LOCK_DOMAIN)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&dependency_lock, &mut writer)
-        .map_err(|_defect| "invalid dependency lock")?;
-    let dependency_lock_digest = Digest::from(writer.0.finalize().0);
+    let dependency_lock_digest = document_digest(
+        amiss_wire::manifest::DEPENDENCY_LOCK_DOMAIN,
+        &dependency_lock,
+    )
+    .ok_or("invalid dependency lock")?;
 
     let mut artifacts = artifacts
         .into_iter()

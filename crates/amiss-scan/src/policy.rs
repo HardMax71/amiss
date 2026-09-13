@@ -1,4 +1,4 @@
-use sha2::Digest as _;
+use amiss_wire::envelope::document_digest;
 mod acquire;
 mod effects;
 mod floor;
@@ -170,13 +170,11 @@ pub fn verify_time(
     statement
         .validate()
         .map_err(|_defect| trusted_time_invalid_row())?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&statement, &mut writer)
-        .map_err(|_defect| trusted_time_invalid_row())?;
-    let digest = Digest::from(writer.0.finalize().0);
+    let digest = document_digest(
+        amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA,
+        &statement,
+    )
+    .ok_or_else(trusted_time_invalid_row)?;
     Ok(TimeContext {
         statement: statement.clone(),
         digest,
@@ -197,13 +195,11 @@ pub(crate) fn verify_constraint(input: &ConstraintInput) -> Result<ConstraintCon
         resource: None,
     };
     input.descriptor.validate().map_err(|_defect| invalid())?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&input.descriptor, &mut writer)
-        .map_err(|_defect| invalid())?;
-    let digest = Digest::from(writer.0.finalize().0);
+    let digest = document_digest(
+        amiss_wire::controls::EXECUTION_CONSTRAINT_SCHEMA,
+        &input.descriptor,
+    )
+    .ok_or_else(invalid)?;
     Ok(ConstraintContext {
         descriptor: input.descriptor.clone(),
         digest,

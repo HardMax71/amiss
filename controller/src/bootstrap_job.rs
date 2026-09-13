@@ -1,4 +1,4 @@
-use sha2::Digest as _;
+use amiss_wire::envelope::document_digest;
 mod controls;
 mod plan;
 mod semantic;
@@ -192,13 +192,11 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
     statement
         .validate()
         .map_err(|_defect| BootstrapJobError::TrustedTime)?;
-    let mut writer = digest_io::IoWrapper(
-        sha2::Sha256::new_with_prefix(amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA)
-            .chain_update([0_u8]),
-    );
-    serde_json_canonicalizer::to_writer(&statement, &mut writer)
-        .map_err(|_defect| BootstrapJobError::TrustedTime)?;
-    let statement_digest = Digest::from(writer.0.finalize().0);
+    let statement_digest = document_digest(
+        amiss_wire::controls::TRUSTED_TIME_STATEMENT_SCHEMA,
+        &statement,
+    )
+    .ok_or(BootstrapJobError::TrustedTime)?;
 
     let constraint = serde_json_canonicalizer::to_vec(&checked_plan.execution)
         .map_err(|_defect| BootstrapJobError::ExecutionConstraint)?;

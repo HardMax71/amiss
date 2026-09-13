@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
@@ -7,6 +6,7 @@ use strum::{Display, EnumString};
 use wary::Validate;
 
 use crate::de::{self, Error, ErrorKind};
+use crate::envelope::transcoded_digest;
 use crate::model::Digest;
 
 use super::{EVIDENCE_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
@@ -198,18 +198,8 @@ pub fn parse_evidence(bytes: &[u8]) -> Result<(ExternalEvidence, Digest), Eviden
             ErrorKind::LimitExceeded,
         )));
     }
-    let digest = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(EVIDENCE_SCHEMA).chain_update([0_u8]),
-        );
-        let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-        serde_json_canonicalizer::to_writer(
-            &serde_transcode::Transcoder::new(&mut deserializer),
-            &mut writer,
-        )
-        .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
+    let digest = transcoded_digest(EVIDENCE_SCHEMA, bytes)
+        .ok_or_else(|| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
     let mut deserializer = serde_json::Deserializer::from_slice(bytes);
     let document: ExternalEvidence = serde_path_to_error::deserialize(&mut deserializer)
         .map_err(|defect| EvidenceDefect::Wire(de::deserialize_error("$", &defect)))?;

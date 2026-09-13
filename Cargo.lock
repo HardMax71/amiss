@@ -119,7 +119,6 @@ dependencies = [
  "amiss-fixtures",
  "amiss-git",
  "amiss-wire",
- "digest-io",
  "serde",
  "serde_json",
  "serde_json_canonicalizer",

@@ -1,4 +1,4 @@
-use sha2::Digest as _;
+use crate::envelope::{document_digest, transcoded_digest};
 
 use crate::ExitClass;
 use crate::model::Digest;
@@ -18,37 +18,14 @@ pub fn validate_envelope(bytes: &[u8]) -> Result<(ReportPayload, Digest, ExitCla
     }
     let envelope: ReportEnvelope =
         serde_json::from_slice(bytes).map_err(|_defect| ReportDefect::NotAReport)?;
-    let typed_digest = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(ENVELOPE_SCHEMA).chain_update([0_u8]),
-        );
-        serde_json_canonicalizer::to_writer(&envelope, &mut writer)
-            .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| ReportDefect::NotAReport)?;
-    let mut input = serde_json::Deserializer::from_slice(bytes);
-    let input_digest = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(ENVELOPE_SCHEMA).chain_update([0_u8]),
-        );
-        serde_json_canonicalizer::to_writer(
-            &serde_transcode::Transcoder::new(&mut input),
-            &mut writer,
-        )
-        .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| ReportDefect::NotAReport)?;
+    let typed_digest =
+        document_digest(ENVELOPE_SCHEMA, &envelope).ok_or(ReportDefect::NotAReport)?;
+    let input_digest = transcoded_digest(ENVELOPE_SCHEMA, bytes).ok_or(ReportDefect::NotAReport)?;
     if input_digest != typed_digest {
         return Err(ReportDefect::NotAReport);
     }
-    let digest = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
-        );
-        serde_json_canonicalizer::to_writer(&envelope.payload, &mut writer)
-            .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| ReportDefect::NotAReport)?;
+    let digest =
+        document_digest(PAYLOAD_SCHEMA, &envelope.payload).ok_or(ReportDefect::NotAReport)?;
     if digest != envelope.payload_digest {
         return Err(ReportDefect::DigestMismatch);
     }

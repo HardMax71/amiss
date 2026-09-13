@@ -9,7 +9,6 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-serde_json_canonicalizer.workspace = true
 digest-io.workspace = true
 amiss-bootstrap = { path = "../../crates/amiss-bootstrap" }
 amiss-controller = { path = ".." }
@@ -35,6 +34,7 @@ tokio = { workspace = true, features = ["net", "rt-multi-thread", "sync", "time"
 tower-http = { version = "0.7.0", features = ["limit"] }
 
 [dev-dependencies]
+serde_json_canonicalizer.workspace = true
 amiss-controller-fixtures.workspace = true
 amiss-fixtures = { path = "../../crates/amiss-fixtures" }
 cap-fs-ext.workspace = true
