@@ -1,6 +1,8 @@
 mod net;
 mod select;
 
+use amiss_wire::envelope::Envelope;
+use amiss_wire::envelope::Payload as _;
 use std::env;
 use std::fs;
 use std::io::{Read as _, Write as _};
@@ -9,7 +11,7 @@ use std::time::{Duration, Instant, SystemTime};
 
 use amiss_wire::external::{
     ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
-    ExternalPlanEnvelope, evidence, parse_plan,
+    ExternalPlan, evidence,
 };
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
@@ -138,7 +140,7 @@ fn main() -> ExitCode {
 
 /// One bounded read and strict parse of a digest-whole plan.
 #[expect(clippy::print_stderr, reason = "refusals are diagnostics")]
-fn strict_plan(path: &str) -> Option<ExternalPlanEnvelope> {
+fn strict_plan(path: &str) -> Option<Envelope<ExternalPlan>> {
     let Ok(file) = fs::File::open(path) else {
         eprintln!("amiss-probe: {path} is unreadable");
         return None;
@@ -151,7 +153,7 @@ fn strict_plan(path: &str) -> Option<ExternalPlanEnvelope> {
         eprintln!("amiss-probe: {path} is unreadable or larger than a plan can be");
         return None;
     }
-    let Ok(plan) = parse_plan(&bytes) else {
+    let Ok(plan) = ExternalPlan::parse(&bytes) else {
         eprintln!("amiss-probe: {path} is not a digest-whole external plan");
         return None;
     };

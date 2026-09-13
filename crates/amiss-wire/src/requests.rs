@@ -9,9 +9,10 @@ use crate::controls::{
     WaiverBundle, provider_run_id_valid,
 };
 use crate::de::{Document, Error, ErrorKind};
+use crate::envelope::Envelope;
 use crate::model::ArtifactId;
 use crate::model::Digest;
-use crate::semantic::SemanticEvidenceEnvelope;
+use crate::semantic::SemanticEvidence;
 
 mod candidate;
 mod evaluation;
@@ -175,7 +176,7 @@ pub struct SuppliedTime {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SuppliedSemanticEvidence {
-    pub value: SemanticEvidenceEnvelope<'static>,
+    pub value: Envelope<SemanticEvidence<'static>>,
     pub expected_context_digest: Digest,
 }
 

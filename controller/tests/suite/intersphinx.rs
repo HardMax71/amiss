@@ -3,6 +3,8 @@
     reason = "the fixture constructs known-valid bounded inventories"
 )]
 
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::semantic::SemanticEvidence;
 use sha2::Digest as _;
 use std::io::Write as _;
 
@@ -51,7 +53,7 @@ fn a_bounded_inventory_becomes_only_complete_label_evidence() {
             .0,
     );
     let bound = bind_semantic_evidence(&evidence, &[], &[], candidate).unwrap();
-    let parsed = amiss_wire::semantic::parse(
+    let parsed = SemanticEvidence::parse(
         &serde_json::to_vec(&bound.supplied.first().unwrap().value).unwrap(),
     )
     .unwrap();

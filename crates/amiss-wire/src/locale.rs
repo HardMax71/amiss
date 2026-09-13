@@ -111,6 +111,7 @@ pub enum LocalePageRequirement {
 
 impl Payload for LocaleCoveragePlan {
     type Schema = PlanEnvelopeSchema;
+    type Defect = Error;
     const DOMAIN: &'static str = PLAN_PAYLOAD_SCHEMA;
     const DOCUMENT_BYTES: u64 = LOCALE_DOCUMENT_BYTES;
 

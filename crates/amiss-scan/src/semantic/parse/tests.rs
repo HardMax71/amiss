@@ -1,9 +1,11 @@
 #![cfg(test)]
 
+use amiss_wire::envelope::Envelope;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::{
     assessment::Nullable,
-    semantic::{self, SemanticEvidenceEnvelope, observation::SiteBuildObservation},
+    semantic::{self, SemanticEvidence, observation::SiteBuildObservation},
 };
 use sha2::Digest as _;
 use std::borrow::Cow;
@@ -97,7 +99,7 @@ fn template_intake_enforces_the_bound_envelope_ceiling_not_only_the_source_size(
 
 #[test]
 fn typed_intake_retains_the_original_envelope_allocations() {
-    let value = semantic::parse(EXAMPLE).unwrap();
+    let value = SemanticEvidence::parse(EXAMPLE).unwrap();
     let observations = value.payload.observations.as_ptr();
     let version = value.payload.producer.version.as_ptr();
     let expected_context_digest = value.payload.producer.context_digest;
@@ -115,7 +117,7 @@ fn typed_intake_retains_the_original_envelope_allocations() {
 
 #[test]
 fn typed_intake_rechecks_digest_context_and_semantic_laws() {
-    let original = semantic::parse(EXAMPLE).unwrap();
+    let original = SemanticEvidence::parse(EXAMPLE).unwrap();
     let expected_context_digest = original.payload.producer.context_digest;
     let mut wrong_version = original.clone();
     "not a version".clone_into(&mut wrong_version.payload.producer.version);
@@ -184,7 +186,8 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
 
 #[test]
 fn in_process_intake_keeps_the_exact_encoded_byte_ceiling() {
-    let mut document: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(EXAMPLE).unwrap();
+    let mut document: Envelope<SemanticEvidence<'static>> =
+        serde_json::from_slice(EXAMPLE).unwrap();
     document.payload.observations = vec![Cow::Owned(Observation::Site(
         SiteBuildObservation::GeneratedRoute {
             route: "/é\"\\".to_owned(),

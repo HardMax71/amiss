@@ -156,6 +156,7 @@ struct AssessmentOutcome {
 
 impl Payload for LocaleCoverageAssessment {
     type Schema = AssessmentEnvelopeSchema;
+    type Defect = Error;
     const DOMAIN: &'static str = ASSESSMENT_PAYLOAD_SCHEMA;
     const DOCUMENT_BYTES: u64 = ASSESSMENT_DOCUMENT_BYTES;
 

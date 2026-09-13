@@ -1,6 +1,11 @@
 #![cfg(test)]
 
+use amiss_wire::de::Document as _;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::external::ExternalAssessment;
+use amiss_wire::external::ExternalEvidence;
+use amiss_wire::external::ExternalPlan;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
@@ -213,12 +218,11 @@ fn every_visibility_and_resolution_becomes_its_fact() {
             "https://github.com/acme/widgets/tree/feature/x/docs/ readable resolved".to_owned(),
         ],
     );
-    let (document, _digest) =
-        amiss_wire::external::parse_evidence(&evidence).expect("the evidence is valid");
+    let document = ExternalEvidence::parse(&evidence).expect("the evidence is valid");
     assert_eq!(document.producer.name, PRODUCER_NAME);
     assert_eq!(
         document.plan_payload_digest,
-        amiss_wire::external::parse_plan(&plan)
+        ExternalPlan::parse(&plan)
             .expect("the plan is valid")
             .payload_digest,
         "the evidence binds the exact plan"
@@ -341,8 +345,7 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
         document_digest("t", &Value::Null).unwrap(),
     )
     .expect("the engine judges the evidence");
-    let document =
-        amiss_wire::external::parse_assessment(&assessment).expect("the assessment is valid");
+    let document = ExternalAssessment::parse(&assessment).expect("the assessment is valid");
     let verdicts: Vec<_> = document
         .payload
         .verdicts

@@ -1,3 +1,5 @@
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::semantic::SemanticEvidence;
 use sha2::Digest as _;
 mod tests;
 
@@ -58,8 +60,8 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
         template
             .validate()
             .map_err(|_defect| ArtifactError::Corrupt)?;
-        let envelope = amiss_wire::semantic::parse(&envelope_bytes)
-            .map_err(|_defect| ArtifactError::Corrupt)?;
+        let envelope =
+            SemanticEvidence::parse(&envelope_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
         let candidate = envelope.payload.subject.candidate_identity_digest;
         if envelope.payload_digest != row.payload_digest
             || envelope.payload.subject.source_report_payload_digest != Nullable::Null

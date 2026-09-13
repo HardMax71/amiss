@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::{borrow::Cow, cmp::Ordering, sync::Arc};
 
 use serde::{Deserialize, Serialize};
@@ -6,8 +5,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
-use crate::de::{self, Error, ErrorKind, fail};
-use crate::envelope::transcoded_digest;
+use crate::de::{Error, ErrorKind, fail};
+use crate::envelope::{Envelope, Payload, Sealing};
 use crate::model::ArtifactId;
 use crate::model::Digest;
 
@@ -25,20 +24,20 @@ pub const PRODUCER_VERSION_BYTES: usize = 128;
 pub const RECORD_KEY_BYTES: usize = 4_096;
 pub const RECORD_VALUE_BYTES: usize = 65_536;
 
-pub type SemanticEvidenceEnvelope<'a> = SemanticEnvelope<SemanticEvidence<'a>>;
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct SemanticEnvelope<T> {
-    pub schema: EnvelopeSchema,
-    pub payload: T,
-    pub payload_digest: Digest,
-}
-
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Default,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum EnvelopeSchema {
+    #[default]
     #[strum(serialize = "amiss/semantic-evidence-envelope")]
     Current,
 }
@@ -108,6 +107,19 @@ pub struct SemanticEvidenceTemplate<'a> {
     pub observations: Arc<[Cow<'a, Observation>]>,
 }
 
+impl Payload for SemanticEvidence<'_> {
+    type Schema = EnvelopeSchema;
+    type Defect = Error;
+    const DOMAIN: &'static str = PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = SEMANTIC_EVIDENCE_BYTES;
+    const SEALING: Sealing = Sealing::Received;
+
+    fn validate(&self) -> Result<(), Error> {
+        validate_producer("$.payload.producer", &self.producer)?;
+        validate_observations("$.payload.observations", &self.observations)
+    }
+}
+
 impl SemanticEvidenceTemplate<'_> {
     /// Checks the producer and bounded canonical observation set after typed deserialization.
     /// Intake callers enforce the raw document byte ceiling and Serde decoding.
@@ -128,52 +140,6 @@ pub enum TemplateSchema {
     Current,
 }
 
-/// Parses one complete, digest-bound semantic evidence envelope.
-///
-/// # Errors
-///
-/// Fails on an oversized stream, JSON or shape defects, a payload digest mismatch,
-/// invalid producer identity, or observations outside the closed, bounded, sorted contract.
-pub fn parse(bytes: &[u8]) -> Result<SemanticEvidenceEnvelope<'static>, Error> {
-    validate_document_size(bytes.len())?;
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let envelope: SemanticEnvelope<&serde_json::value::RawValue> =
-        serde_path_to_error::deserialize(&mut deserializer)
-            .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-
-    let received_digest = transcoded_digest(PAYLOAD_SCHEMA, envelope.payload.get().as_bytes())
-        .ok_or_else(|| Error::new("$.payload", ErrorKind::InvalidValue))?;
-    let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
-    let document = SemanticEnvelope {
-        schema: envelope.schema,
-        payload: serde_path_to_error::deserialize(&mut payload)
-            .map_err(|defect| de::deserialize_error("$.payload", &defect))?,
-        payload_digest: envelope.payload_digest,
-    };
-    if received_digest != document.payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
-    }
-    validate(&document)?;
-    Ok(document)
-}
-
-/// Checks the digest and semantic laws of a decoded evidence envelope.
-/// Readers enforce byte limits and JSON syntax before domain validation.
-///
-/// # Errors
-///
-/// Fails on a digest mismatch, invalid producer identity, or invalid observation set.
-pub fn validate(document: &SemanticEvidenceEnvelope<'_>) -> Result<(), Error> {
-    if payload_digest(&document.payload)? != document.payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
-    }
-    validate_producer("$.payload.producer", &document.payload.producer)?;
-    validate_observations("$.payload.observations", &document.payload.observations)
-}
-
 /// Binds a template to one candidate without encoding the resulting envelope.
 ///
 /// # Errors
@@ -183,7 +149,7 @@ pub fn validate(document: &SemanticEvidenceEnvelope<'_>) -> Result<(), Error> {
 pub fn bind_template<'a>(
     template: &'a SemanticEvidenceTemplate<'_>,
     candidate_identity_digest: Digest,
-) -> Result<SemanticEvidenceEnvelope<'a>, Error> {
+) -> Result<Envelope<SemanticEvidence<'a>>, Error> {
     envelope(SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {
@@ -235,19 +201,18 @@ pub fn template(input: SemanticEvidenceTemplate<'_>) -> Result<Vec<u8>, Error> {
 ///
 /// Fails on invalid producer metadata, repeated observations or an oversized observation set.
 /// The resulting envelope must fit the encoded-byte ceiling.
-pub fn envelope(mut evidence: SemanticEvidence<'_>) -> Result<SemanticEvidenceEnvelope<'_>, Error> {
+pub fn envelope(
+    mut evidence: SemanticEvidence<'_>,
+) -> Result<Envelope<SemanticEvidence<'_>>, Error> {
     validate_producer("$.payload.producer", &evidence.producer)?;
     evidence.observations = ordered_observations("$.payload.observations", evidence.observations)?;
-    let payload_digest = payload_digest(&evidence)?;
-    let document = SemanticEvidenceEnvelope {
+    let payload_digest = evidence.digest()?;
+    let document = Envelope {
         schema: EnvelopeSchema::Current,
         payload: evidence,
         payload_digest,
     };
-    let mut size = countio::Counter::new(std::io::sink());
-    serde_json_canonicalizer::to_writer(&document, &mut size)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    validate_document_size(size.writer_bytes())?;
+    document.validate()?;
     Ok(document)
 }
 
@@ -309,17 +274,6 @@ fn ordered_observations<'a>(
         return fail(path, ErrorKind::DuplicateMember);
     }
     Ok(keyed.into_iter().map(|(_, value)| value).collect())
-}
-
-fn payload_digest(payload: &SemanticEvidence<'_>) -> Result<Digest, Error> {
-    {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
-        );
-        serde_json_canonicalizer::to_writer(payload, &mut writer)
-            .map(|()| Digest::from(writer.0.finalize().0))
-    }
-    .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_document_size(bytes: usize) -> Result<(), Error> {

@@ -1,6 +1,7 @@
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::external::ExternalAssessment;
+use amiss_wire::external::ExternalPlan;
 use std::process::ExitCode;
-
-use amiss_wire::external::{parse_assessment, parse_plan};
 
 use crate::invocation::{AssessInvocation, PlanInvocation};
 
@@ -11,7 +12,7 @@ pub(crate) fn run_plan(invocation: &PlanInvocation) -> ExitCode {
         || crate::input::report_bytes(&invocation.report),
         |report, version, digest| amiss_wire::external::plan(&report, version, digest),
         |bytes| {
-            parse_plan(bytes)
+            ExternalPlan::parse(bytes)
                 .map(|document| crate::human::plan(&document.payload))
                 .map_err(|defect| defect.to_string())
         },
@@ -32,7 +33,7 @@ pub(crate) fn run_assess(invocation: &AssessInvocation) -> ExitCode {
             amiss_wire::external::assess(&plan, &evidence, version, digest)
         },
         |bytes| {
-            parse_assessment(bytes)
+            ExternalAssessment::parse(bytes)
                 .map(|document| crate::human::assessment(&document.payload))
                 .map_err(|defect| defect.to_string())
         },

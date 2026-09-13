@@ -1,23 +1,19 @@
-use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
-use wary::Validate;
 
-use crate::de::{self, Error, ErrorKind};
-use crate::envelope::transcoded_digest;
+use crate::de::{Document, Error, ErrorKind};
+use crate::envelope::{Envelope, Payload, Sealing, transcoded_digest};
 use crate::model::Digest;
 
 use super::evidence::{
     EvidenceDefect, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
-    ForgeRepository, ForgeTail, ProbeMethod, parse_evidence,
+    ForgeRepository, ForgeTail, ProbeMethod,
 };
-use super::plan::{
-    ExternalDestination, ExternalEngine, ExternalPlanEnvelope, ExternalRepository, parse_plan,
-};
-use super::{ASSESSMENT_PAYLOAD_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
+use super::plan::{ExternalDestination, ExternalEngine, ExternalPlan, ExternalRepository};
+use super::{ASSESSMENT_PAYLOAD_SCHEMA, EVIDENCE_SCHEMA, EXTERNAL_DOCUMENT_BYTES};
 
 /// Why a plan and evidence could not yield an assessment.
 #[derive(Debug, thiserror::Error)]
@@ -34,17 +30,20 @@ pub enum AssessDefect {
     Assessment(#[from] AssessmentDefect),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalAssessmentEnvelope<P = ExternalAssessment> {
-    pub schema: ExternalAssessmentEnvelopeSchema,
-    pub payload: P,
-    pub payload_digest: Digest,
-}
-
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Default,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum ExternalAssessmentEnvelopeSchema {
+    #[default]
     #[strum(serialize = "amiss/external-assessment-envelope")]
     Current,
 }
@@ -166,51 +165,22 @@ pub enum AssessmentDefect {
     Contract(wary::Report),
 }
 
-/// Parses one digest-bound external assessment. Additive fields are inert.
-///
-/// # Errors
-///
-/// Fails on an oversized or malformed JSON document, a malformed known
-/// field, a schema law reported by the derived validator, or a digest mismatch.
-pub fn parse_assessment(bytes: &[u8]) -> Result<ExternalAssessmentEnvelope, AssessmentDefect> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return Err(AssessmentDefect::Wire(Error::new(
-            "$",
-            ErrorKind::LimitExceeded,
-        )));
+impl From<Error> for AssessmentDefect {
+    fn from(defect: Error) -> Self {
+        Self::Wire(defect)
     }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let envelope: ExternalAssessmentEnvelope<&serde_json::value::RawValue> =
-        serde_path_to_error::deserialize(&mut deserializer)
-            .map_err(|defect| AssessmentDefect::Wire(de::deserialize_error("$", &defect)))?;
-    deserializer
-        .end()
-        .map_err(|_defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
+}
 
-    let payload_digest =
-        transcoded_digest(ASSESSMENT_PAYLOAD_SCHEMA, envelope.payload.get().as_bytes())
-            .ok_or_else(|| {
-                AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::InvalidValue))
-            })?;
-    let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
-    let document: ExternalAssessmentEnvelope = ExternalAssessmentEnvelope {
-        schema: envelope.schema,
-        payload: serde_path_to_error::deserialize(&mut payload).map_err(|defect| {
-            AssessmentDefect::Wire(de::deserialize_error("$.payload", &defect))
-        })?,
-        payload_digest: envelope.payload_digest,
-    };
-    document
-        .payload
-        .validate(&())
-        .map_err(AssessmentDefect::Contract)?;
-    if payload_digest != document.payload_digest {
-        return Err(AssessmentDefect::Wire(Error::new(
-            "$.payload_digest",
-            ErrorKind::DigestMismatch,
-        )));
+impl Payload for ExternalAssessment {
+    type Schema = ExternalAssessmentEnvelopeSchema;
+    type Defect = AssessmentDefect;
+    const DOMAIN: &'static str = ASSESSMENT_PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = EXTERNAL_DOCUMENT_BYTES;
+    const SEALING: Sealing = Sealing::Received;
+
+    fn validate(&self) -> Result<(), AssessmentDefect> {
+        wary::Validate::validate(self, &()).map_err(AssessmentDefect::Contract)
     }
-    Ok(document)
 }
 
 /// Judges one complete external plan against one producer's evidence.
@@ -230,8 +200,10 @@ pub fn assess(
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, AssessDefect> {
-    let plan = parse_plan(plan)?;
-    let (evidence, evidence_digest) = parse_evidence(evidence_bytes)?;
+    let plan = ExternalPlan::parse(plan)?;
+    let evidence = ExternalEvidence::parse(evidence_bytes)?;
+    let evidence_digest = transcoded_digest(EVIDENCE_SCHEMA, evidence_bytes)
+        .ok_or_else(|| EvidenceDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
     if evidence.plan_payload_digest != plan.payload_digest {
         return Err(AssessDefect::UnboundEvidence);
     }
@@ -251,39 +223,11 @@ pub fn assess(
         producer: evidence.producer,
         verdicts,
     };
-    let payload_digest = assessment_payload_digest(&payload)?;
-    let document = ExternalAssessmentEnvelope {
-        schema: ExternalAssessmentEnvelopeSchema::Current,
-        payload,
-        payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| AssessmentDefect::Wire(Error::new("$", ErrorKind::InvalidValue)))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return Err(AssessmentDefect::Wire(Error::new("$", ErrorKind::LimitExceeded)).into());
-    }
-    Ok(canonical)
-}
-
-fn assessment_payload_digest(assessment: &ExternalAssessment) -> Result<Digest, AssessmentDefect> {
-    assessment
-        .validate(&())
-        .map_err(AssessmentDefect::Contract)?;
-    serde_json_canonicalizer::to_vec(assessment)
-        .map(|canonical| {
-            Digest::from(
-                sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical)
-                    .finalize()
-                    .0,
-            )
-        })
-        .map_err(|_defect| AssessmentDefect::Wire(Error::new("$.payload", ErrorKind::InvalidValue)))
+    payload.emit().map_err(AssessDefect::Assessment)
 }
 
 fn bound_rows<'e>(
-    plan: &ExternalPlanEnvelope,
+    plan: &Envelope<ExternalPlan>,
     evidence: &'e ExternalEvidence,
 ) -> Result<BTreeMap<&'e str, &'e ExternalEvidenceRow>, AssessDefect> {
     let introduced: BTreeMap<&str, &ExternalDestination> = plan
@@ -318,7 +262,7 @@ fn bound_rows<'e>(
 }
 
 fn verdict_rows(
-    plan: &ExternalPlanEnvelope,
+    plan: &Envelope<ExternalPlan>,
     observed: &BTreeMap<&str, &ExternalEvidenceRow>,
 ) -> Vec<ExternalVerdictRow> {
     plan.payload

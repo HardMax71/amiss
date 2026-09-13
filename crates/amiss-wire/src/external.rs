@@ -4,19 +4,17 @@ mod plan;
 
 pub use crate::report::ReportDefect as PlanDefect;
 pub use assessment::{
-    AssessDefect, AssessmentDefect, ExternalAssessment, ExternalAssessmentEnvelope,
-    ExternalAssessmentEnvelopeSchema, ExternalAssessmentPayloadSchema, ExternalAssessmentSubject,
-    ExternalReason, ExternalVerdict, ExternalVerdictRow, assess, parse_assessment,
+    AssessDefect, AssessmentDefect, ExternalAssessment, ExternalAssessmentEnvelopeSchema,
+    ExternalAssessmentPayloadSchema, ExternalAssessmentSubject, ExternalReason, ExternalVerdict,
+    ExternalVerdictRow, assess,
 };
 pub use evidence::{
     EvidenceDefect, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
     ExternalEvidenceSchema, ForgeRepository, ForgeTail, ProbeFailure, ProbeMethod, evidence,
-    parse_evidence,
 };
 pub use plan::{
-    ExternalDestination, ExternalEngine, ExternalPlan, ExternalPlanEnvelope,
-    ExternalPlanEnvelopeSchema, ExternalPlanPayloadSchema, ExternalPlanReport, ExternalRepository,
-    parse_plan, plan,
+    ExternalDestination, ExternalEngine, ExternalPlan, ExternalPlanEnvelopeSchema,
+    ExternalPlanPayloadSchema, ExternalPlanReport, ExternalRepository, plan,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/external-plan-envelope";

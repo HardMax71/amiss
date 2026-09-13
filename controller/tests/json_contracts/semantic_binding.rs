@@ -90,7 +90,7 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
         );
         assert_eq!(document.payload.observations.len(), 1);
         assert!(matches!(document.payload.observations[0], Cow::Owned(_)));
-        assert_eq!(amiss_wire::semantic::validate(document), Ok(()));
+        assert_eq!(document.validate(), Ok(()));
         assert!(previous.is_none_or(|digest| digest != document.payload_digest));
         previous = Some(document.payload_digest);
 

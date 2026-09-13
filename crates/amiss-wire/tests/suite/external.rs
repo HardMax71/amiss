@@ -3,13 +3,16 @@
     reason = "test assertions over constructed values"
 )]
 
+use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::external::ExternalAssessment;
+use amiss_wire::external::ExternalPlan;
 use amiss_wire::external::{
     ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, AssessmentDefect, EVIDENCE_SCHEMA, ExternalEvidence,
     ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema, ExternalVerdict,
-    PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod, assess, parse_assessment,
-    parse_evidence, parse_plan, plan,
+    PLAN_ENVELOPE_SCHEMA, PLAN_PAYLOAD_SCHEMA, PlanDefect, ProbeMethod, assess, plan,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::report::PAYLOAD_SCHEMA;
@@ -419,7 +422,7 @@ fn the_envelope_binds_the_source_digest_and_its_own() {
 fn the_plan_model_reads_the_checked_writer() {
     let written = planned(introduced("https://github.com/acme/widgets"));
     let bytes = serde_json_canonicalizer::to_vec(&written).unwrap();
-    let parsed = parse_plan(&bytes).expect("the written plan clears the typed reader");
+    let parsed = ExternalPlan::parse(&bytes).expect("the written plan clears the typed reader");
     assert_eq!(parsed.payload.introduced.len(), 1);
     assert_eq!(
         serde_json_canonicalizer::to_vec(&parsed).expect("the model is serializable"),
@@ -442,7 +445,7 @@ fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
             "future_kind": {"😀": "quoted \" \\ \n", "\u{e000}": [null, true, 42]}
         });
         let bytes = refresh_payload_digest(&mut extended, PLAN_PAYLOAD_SCHEMA);
-        let parsed = parse_plan(&bytes).expect("snapshot objects are an open contract");
+        let parsed = ExternalPlan::parse(&bytes).expect("snapshot objects are an open contract");
         assert_eq!(
             serde_json_canonicalizer::to_vec(&parsed).expect("canonical plan"),
             bytes
@@ -456,7 +459,7 @@ fn plan_snapshot_objects_stay_extensible_but_never_accept_scalars() {
         ] {
             extended["payload"]["report"][side] = value;
             let bytes = refresh_payload_digest(&mut extended, PLAN_PAYLOAD_SCHEMA);
-            let error = parse_plan(&bytes).expect_err("a snapshot must be an object");
+            let error = ExternalPlan::parse(&bytes).expect_err("a snapshot must be an object");
             assert_eq!(error.kind, ErrorKind::WrongType);
             assert_eq!(error.path, format!("$.payload.report.{side}"));
         }
@@ -472,7 +475,7 @@ fn additive_plan_fields_are_digest_bound_but_inert() {
         .and_then(Value::as_object_mut)
         .expect("the plan payload is an object")
         .insert("future_fact".to_owned(), Value::Bool(true));
-    let parsed = parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA))
+    let parsed = ExternalPlan::parse(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA))
         .expect("an additive field remains compatible");
     assert!(parsed.payload.introduced.is_empty());
 }
@@ -486,8 +489,8 @@ fn a_repository_tail_requires_a_present_form() {
         .and_then(Value::as_object_mut)
         .expect("the introduced destination has a repository shape");
     repository.insert("form".to_owned(), Value::Null);
-    let error =
-        parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA)).unwrap_err();
+    let error = ExternalPlan::parse(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA))
+        .unwrap_err();
     assert_eq!(error.kind, ErrorKind::Inconsistent);
     assert_eq!(error.path, "$.payload.introduced[0].repository");
 }
@@ -500,8 +503,8 @@ fn malformed_known_plan_fields_are_refused_after_binding() {
         .pointer_mut("/payload/introduced/0/destination")
         .expect("the introduced row holds a destination");
     *destination = Value::String(String::new());
-    let error =
-        parse_plan(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA)).unwrap_err();
+    let error = ExternalPlan::parse(&refresh_payload_digest(&mut document, PLAN_PAYLOAD_SCHEMA))
+        .unwrap_err();
     assert_eq!(error.kind, ErrorKind::InvalidValue);
     assert_eq!(error.path, "$.payload.introduced[0].destination");
 }
@@ -764,8 +767,10 @@ fn additive_evidence_fields_and_optional_nulls_are_inert() {
         .expect("the evidence is an object")
         .insert("future_fact".to_owned(), Value::Bool(true));
     assert!(
-        parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
-            .is_ok()
+        ExternalEvidence::parse(
+            &serde_json_canonicalizer::to_vec(&document).expect("canonical JSON")
+        )
+        .is_ok()
     );
     document
         .pointer_mut("/rows/0")
@@ -773,8 +778,10 @@ fn additive_evidence_fields_and_optional_nulls_are_inert() {
         .expect("the evidence has one row")
         .insert("failure".to_owned(), Value::Null);
     assert!(
-        parse_evidence(&serde_json_canonicalizer::to_vec(&document).expect("canonical JSON"))
-            .is_ok()
+        ExternalEvidence::parse(
+            &serde_json_canonicalizer::to_vec(&document).expect("canonical JSON")
+        )
+        .is_ok()
     );
 }
 
@@ -798,7 +805,7 @@ fn evidence_bytes_preserve_escaping_and_round_trip() {
         }],
     };
     let bytes = amiss_wire::external::evidence(&document).expect("the evidence encodes");
-    let (parsed, _digest) = parse_evidence(&bytes).expect("the evidence parses");
+    let parsed = ExternalEvidence::parse(&bytes).expect("the evidence parses");
     assert_eq!(parsed, document);
     assert_eq!(
         bytes,
@@ -846,7 +853,7 @@ fn assessment_evidence_bytes_bind_additive_fields_and_ignore_whitespace() {
         )
         .to_string(),
     );
-    let (typed, _digest) = parse_evidence(&canonical).expect("valid evidence");
+    let typed = ExternalEvidence::parse(&canonical).expect("valid evidence");
     assert_ne!(
         Digest::from(
             sha2::Sha256::new_with_prefix(EVIDENCE_SCHEMA)
@@ -915,7 +922,8 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
         .expect("the assessment payload is an object")
         .insert("future_fact".to_owned(), Value::Bool(true));
     let extended_bytes = refresh_payload_digest(&mut extended, ASSESSMENT_PAYLOAD_SCHEMA);
-    let parsed = parse_assessment(&extended_bytes).expect("an additive field remains compatible");
+    let parsed =
+        ExternalAssessment::parse(&extended_bytes).expect("an additive field remains compatible");
     assert_eq!(
         parsed.payload.verdicts.first().map(|row| row.verdict),
         Some(ExternalVerdict::Refuted)
@@ -926,7 +934,7 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
         .map(|value| *value = Value::Bool(false))
         .expect("the additive field is present");
     let tampered = serde_json_canonicalizer::to_vec(&extended).expect("canonical JSON");
-    let Err(AssessmentDefect::Wire(error)) = parse_assessment(&tampered) else {
+    let Err(AssessmentDefect::Wire(error)) = ExternalAssessment::parse(&tampered) else {
         panic!("changing an additive field must break its digest");
     };
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
@@ -938,7 +946,7 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
         .insert("reason".to_owned(), Value::Null);
     let bytes = refresh_payload_digest(&mut null, ASSESSMENT_PAYLOAD_SCHEMA);
     assert!(matches!(
-        parse_assessment(&bytes),
+        ExternalAssessment::parse(&bytes),
         Err(AssessmentDefect::Contract(_))
     ));
 
@@ -947,7 +955,7 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
         .pointer_mut("/payload/verdicts/0/verdict")
         .expect("the assessment has one verdict") = Value::String("reachable".to_owned());
     assert!(matches!(
-        parse_assessment(&refresh_payload_digest(
+        ExternalAssessment::parse(&refresh_payload_digest(
             &mut inconsistent,
             ASSESSMENT_PAYLOAD_SCHEMA
         )),
@@ -965,7 +973,7 @@ fn assessment_fields_are_digest_bound_and_derived_validation_is_complete() {
         .expect("the verdict has one document") = Value::String("docs/other.md".to_owned());
     verdicts.push(other);
     assert!(matches!(
-        parse_assessment(&refresh_payload_digest(
+        ExternalAssessment::parse(&refresh_payload_digest(
             &mut repeated,
             ASSESSMENT_PAYLOAD_SCHEMA
         )),

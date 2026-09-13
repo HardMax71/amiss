@@ -3,6 +3,8 @@
     reason = "integration assertions over values constructed in the same test"
 )]
 
+use amiss_wire::envelope::Envelope;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::borrow::Cow;
@@ -12,7 +14,7 @@ use amiss_wire::de::ErrorKind;
 use amiss_wire::semantic::{
     PAYLOAD_SCHEMA, PayloadSchema, SEMANTIC_EVIDENCE_BYTES, SemanticEvidence,
     SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind, SemanticSubject,
-    TemplateSchema, bind_template, envelope, observation::Observation, parse, record, template,
+    TemplateSchema, bind_template, envelope, observation::Observation, record, template,
 };
 
 const A: &str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -62,7 +64,7 @@ fn construction_sorts_observations_and_binds_the_payload() {
     let document = envelope(evidence(vec![z.clone(), a.clone()])).unwrap();
     let mut bytes = Vec::new();
     serde_json_canonicalizer::to_writer(&document, &mut bytes).unwrap();
-    let parsed = parse(&bytes).unwrap();
+    let parsed = SemanticEvidence::parse(&bytes).unwrap();
     assert_eq!(parsed, document);
     assert_eq!(parsed.payload.observations, [Cow::Owned(a), Cow::Owned(z)]);
     assert_eq!(
@@ -99,7 +101,7 @@ fn typed_templates_borrow_observations_through_sorting_and_binding() {
         }
         let mut bytes = Vec::new();
         serde_json_canonicalizer::to_writer(document, &mut bytes).unwrap();
-        assert_eq!(parse(&bytes).unwrap(), *document);
+        assert_eq!(SemanticEvidence::parse(&bytes).unwrap(), *document);
     }
     assert_eq!(input.observations[0].as_ref(), &observation("z"));
     assert_eq!(first.payload.observations, second.payload.observations);
@@ -222,7 +224,10 @@ fn semantic_readers_refuse_unknown_shapes_even_with_correct_payload_digests() {
         let envelope = format!(
             r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{payload},"payload_digest":"{digest}"}}"#
         );
-        assert!(parse(envelope.as_bytes()).is_err(), "{invalid}");
+        assert!(
+            SemanticEvidence::parse(envelope.as_bytes()).is_err(),
+            "{invalid}"
+        );
         let template = String::from_utf8(template(evidence_template(vec![row.clone()])).unwrap())
             .unwrap()
             .replace(&original, invalid);
@@ -309,7 +314,7 @@ fn incomplete_pre_report_evidence_round_trips_without_claiming_absence() {
     let document = envelope(input).unwrap();
     let mut bytes = Vec::new();
     serde_json_canonicalizer::to_writer(&document, &mut bytes).unwrap();
-    let parsed = parse(&bytes).unwrap();
+    let parsed = SemanticEvidence::parse(&bytes).unwrap();
     assert_eq!(
         parsed.payload.subject.source_report_payload_digest,
         Nullable::Null
@@ -324,7 +329,7 @@ fn producer_versions_and_input_bytes_are_bounded_before_parsing() {
     assert_eq!(envelope(input).unwrap_err().kind, ErrorKind::InvalidValue);
     let oversized = vec![b' '; usize::try_from(SEMANTIC_EVIDENCE_BYTES).unwrap() + 1];
     assert_eq!(
-        parse(&oversized).unwrap_err().kind,
+        SemanticEvidence::parse(&oversized).unwrap_err().kind,
         ErrorKind::LimitExceeded
     );
 }
@@ -334,14 +339,14 @@ fn tampered_and_unsorted_payloads_are_refused() {
     let mut document = envelope(evidence(vec![observation("a"), observation("z")])).unwrap();
     document.payload.observations.reverse();
     assert_eq!(
-        parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
+        SemanticEvidence::parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::DigestMismatch
     );
     document.payload_digest = document_digest(PAYLOAD_SCHEMA, &document.payload).unwrap();
     assert_eq!(
-        parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
+        SemanticEvidence::parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::UnsortedSet
@@ -354,16 +359,18 @@ fn received_semantic_payloads_keep_shape_digest_and_contract_error_precedence() 
     let mut document = serde_json::to_value(&original).unwrap();
     document["payload_digest"] = serde_json::json!(C);
     document["payload"]["producer"]["version"] = serde_json::json!(1);
-    let shape_error = parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+    let shape_error = SemanticEvidence::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(shape_error.path, "$.payload.producer.version");
     assert_eq!(shape_error.kind, ErrorKind::WrongType);
     document["payload"]["producer"]["version"] = serde_json::json!("");
-    let digest_error = parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+    let digest_error =
+        SemanticEvidence::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(digest_error.path, "$.payload_digest");
     assert_eq!(digest_error.kind, ErrorKind::DigestMismatch);
     document["payload_digest"] =
         serde_json::json!(document_digest(PAYLOAD_SCHEMA, &document["payload"]).unwrap());
-    let contract_error = parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+    let contract_error =
+        SemanticEvidence::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(contract_error.path, "$.payload.producer.version");
     assert_eq!(contract_error.kind, ErrorKind::InvalidValue);
     let mut positional = serde_json::to_value(original).unwrap();
@@ -376,9 +383,9 @@ fn received_semantic_payloads_keep_shape_digest_and_contract_error_precedence() 
         payload["observations"]
     ]);
     let bytes = serde_json::to_vec(&positional).unwrap();
-    assert_eq!(parse(&bytes).unwrap_err().kind, ErrorKind::DigestMismatch);
-    assert!(
-        serde_json::from_slice::<amiss_wire::semantic::SemanticEvidenceEnvelope<'static>>(&bytes)
-            .is_ok()
+    assert_eq!(
+        SemanticEvidence::parse(&bytes).unwrap_err().kind,
+        ErrorKind::DigestMismatch
     );
+    assert!(serde_json::from_slice::<Envelope<SemanticEvidence<'static>>>(&bytes).is_ok());
 }

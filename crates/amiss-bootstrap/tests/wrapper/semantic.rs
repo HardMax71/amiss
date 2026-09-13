@@ -1,4 +1,6 @@
 use amiss_bootstrap::result::BootstrapResult;
+use amiss_wire::envelope::Envelope;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::{
     assessment::Nullable,
@@ -8,7 +10,7 @@ use amiss_wire::{
     },
     requests::{ControlsRequest, SuppliedSemanticEvidence},
     semantic::{
-        self, SemanticEvidenceEnvelope,
+        self, SemanticEvidence,
         observation::{Observation, SiteBuildObservation},
     },
 };
@@ -18,7 +20,7 @@ use super::{Release, invoke, plant, sealed_run, settled, stderr_names};
 
 pub(super) fn capture(staged: &Release) {
     let mut run = sealed_run(staged);
-    let document = semantic::parse(include_bytes!(
+    let document = SemanticEvidence::parse(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();
@@ -137,8 +139,8 @@ fn malformed_controls(request: &ControlsRequest) -> Vec<Vec<u8>> {
 }
 
 fn semantic_defects(
-    document: &SemanticEvidenceEnvelope<'static>,
-) -> Vec<SemanticEvidenceEnvelope<'static>> {
+    document: &Envelope<SemanticEvidence<'static>>,
+) -> Vec<Envelope<SemanticEvidence<'static>>> {
     let mut wrong_version = document.clone();
     "not a version".clone_into(&mut wrong_version.payload.producer.version);
     let mut duplicate = document.clone();

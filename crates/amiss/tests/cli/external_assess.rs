@@ -1,3 +1,5 @@
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::external::ExternalAssessment;
 use std::fs;
 
 use crate::support;
@@ -90,7 +92,7 @@ fn external_assessment_uses_shared_artifact_refusals_and_bounded_file_reads() {
         "json",
     ]);
     assert_eq!((code, stderr.as_str()), (0, ""));
-    assert!(amiss_wire::external::parse_assessment(&stdout).is_ok());
+    assert!(ExternalAssessment::parse(&stdout).is_ok());
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]

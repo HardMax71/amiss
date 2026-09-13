@@ -4,6 +4,8 @@
 )]
 
 use amiss_wire::de::Document as _;
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::semantic::SemanticEvidence;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -452,7 +454,7 @@ fn a_control_from_an_unknown_authority_is_not_a_control() {
 
 #[test]
 fn semantic_evidence_is_a_bounded_set_of_envelopes() {
-    let value = amiss_wire::semantic::parse(include_bytes!(
+    let value = SemanticEvidence::parse(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();

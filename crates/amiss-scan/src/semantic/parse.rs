@@ -1,3 +1,4 @@
+use amiss_wire::envelope::Envelope;
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -10,7 +11,7 @@ use amiss_wire::requests::SuppliedSemanticEvidence;
 use amiss_wire::semantic::observation::{
     Observation, SITE_BUILD_VERSION, SPHINX_INVENTORY_VERSION, SphinxLabelObservation,
 };
-use amiss_wire::semantic::{SemanticEvidenceEnvelope, SemanticProducerKind};
+use amiss_wire::semantic::{SemanticEvidence, SemanticProducerKind};
 
 use super::record::insert_record_set;
 use super::site::site_build_inputs;
@@ -22,7 +23,7 @@ const LABEL_BYTES: usize = 4_096;
 const DESTINATION_BYTES: usize = 16_384;
 
 pub(crate) fn parse<'a>(
-    values: impl IntoIterator<Item = Result<SemanticEvidenceEnvelope<'a>, Error>>,
+    values: impl IntoIterator<Item = Result<Envelope<SemanticEvidence<'a>>, Error>>,
 ) -> Result<Inputs, Error> {
     let mut inputs = Inputs::default();
     let mut previous: Option<Digest> = None;
@@ -39,7 +40,7 @@ pub(crate) fn parse<'a>(
             Some(Ordering::Greater) => return fail("$.semantic_evidence", ErrorKind::UnsortedSet),
             None | Some(Ordering::Less) => previous = Some(envelope.payload_digest),
         }
-        let amiss_wire::semantic::SemanticEvidence {
+        let SemanticEvidence {
             schema: _schema,
             subject,
             producer,
@@ -114,7 +115,7 @@ pub(crate) fn parse<'a>(
 pub(crate) fn validated_envelope(
     supplied: SuppliedSemanticEvidence,
     path: &str,
-) -> Result<SemanticEvidenceEnvelope<'static>, Error> {
+) -> Result<Envelope<SemanticEvidence<'static>>, Error> {
     let mut counter = countio::Counter::new(std::io::sink());
     serde_json::to_writer(&mut counter, &supplied.value)
         .map_err(|_defect| Error::new(path, ErrorKind::InvalidValue))?;
@@ -124,7 +125,7 @@ pub(crate) fn validated_envelope(
         return fail("$", ErrorKind::LimitExceeded);
     }
     let envelope = supplied.value;
-    amiss_wire::semantic::validate(&envelope)?;
+    envelope.validate()?;
     if envelope.payload.producer.context_digest != supplied.expected_context_digest {
         return fail(
             &format!("{path}.expected_context_digest"),

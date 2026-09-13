@@ -1,8 +1,10 @@
 mod tests;
 
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::external::ExternalPlan;
 use amiss_wire::external::{
     ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema,
-    ExternalRepository, evidence, parse_plan,
+    ExternalRepository, evidence,
 };
 pub use amiss_wire::external::{ForgeRepository as ForgeVisibility, ForgeTail};
 use amiss_wire::model::ForgeDialect;
@@ -81,7 +83,7 @@ pub fn forge_evidence<S>(
     prepare: impl FnOnce() -> Result<S, ProviderError>,
     mut inspect: impl FnMut(&mut S, &ExternalRepository) -> Result<ForgeEvidence, ProviderError>,
 ) -> Result<Vec<u8>, ProviderError> {
-    let plan = parse_plan(plan).map_err(|_defect| ProviderError::InvalidResponse)?;
+    let plan = ExternalPlan::parse(plan).map_err(|_defect| ProviderError::InvalidResponse)?;
     let mut state = prepare()?;
     let mut rows = Vec::new();
     for row in &plan.payload.introduced {

@@ -123,6 +123,7 @@ pub(crate) enum PublicationUriKind {
 
 impl Payload for PublicationPlan {
     type Schema = PlanEnvelopeSchema;
+    type Defect = Error;
     const DOMAIN: &'static str = PLAN_PAYLOAD_SCHEMA;
     const DOCUMENT_BYTES: u64 = PUBLICATION_DOCUMENT_BYTES;
 

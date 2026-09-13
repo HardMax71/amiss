@@ -1,3 +1,5 @@
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::external::ExternalAssessment;
 use sha2::Digest as _;
 use std::time::Duration;
 
@@ -366,7 +368,7 @@ fn prepare_external(
         Ok(Some(evidence)) => {
             match amiss_wire::external::assess(&plan_bytes, &evidence, version, engine_digest) {
                 Ok(assessment) => {
-                    let Ok(parsed) = amiss_wire::external::parse_assessment(&assessment) else {
+                    let Ok(parsed) = ExternalAssessment::parse(&assessment) else {
                         return PreparedExternal {
                             plan: Some(plan_bytes),
                             evidence: Some(evidence),

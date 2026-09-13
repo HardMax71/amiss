@@ -1,4 +1,7 @@
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::external::ExternalAssessment;
+use amiss_wire::external::ExternalPlan;
 use amiss_wire::{
     de::ErrorKind,
     external::{self, AssessmentDefect},
@@ -12,8 +15,8 @@ const ASSESSMENT: &[u8] =
 #[test]
 fn external_envelopes_use_standard_serde_and_complete_payload_digests() {
     let readers: [fn(&[u8]) -> bool; 2] = [
-        |bytes| external::parse_plan(bytes).is_ok(),
-        |bytes| external::parse_assessment(bytes).is_ok(),
+        |bytes| ExternalPlan::parse(bytes).is_ok(),
+        |bytes| ExternalAssessment::parse(bytes).is_ok(),
     ];
     for ((bytes, domain), read) in [
         (PLAN, external::PLAN_PAYLOAD_SCHEMA),
@@ -62,8 +65,8 @@ fn external_envelopes_use_standard_serde_and_complete_payload_digests() {
             r#""future":0,"future":1,"#,
             r#""future":0,"\u0066uture":1,"#,
         ] {
-            let invalid = text.replacen('{', &format!("{{{member}"), 1);
-            assert!(read(invalid.as_bytes()), "{member}");
+            let extended = text.replacen('{', &format!("{{{member}"), 1);
+            assert!(!read(extended.as_bytes()), "{member}");
         }
         for suffix in ["null", "{}", "garbage"] {
             assert!(!read(format!("{text}{suffix}").as_bytes()));
@@ -83,12 +86,12 @@ fn external_envelopes_use_standard_serde_and_complete_payload_digests() {
 fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
     let mut plan: Value = serde_json::from_slice(PLAN).unwrap();
     plan["payload"]["engine"]["engine_version"] = json!(1);
-    let defect = external::parse_plan(&serde_json::to_vec(&plan).unwrap()).unwrap_err();
+    let defect = ExternalPlan::parse(&serde_json::to_vec(&plan).unwrap()).unwrap_err();
     assert_eq!(defect.path, "$.payload.engine.engine_version");
     assert_eq!(defect.kind, ErrorKind::WrongType);
     plan["payload"]["engine"]["engine_version"] = json!("");
     assert_eq!(
-        external::parse_plan(&serde_json::to_vec(&plan).unwrap())
+        ExternalPlan::parse(&serde_json::to_vec(&plan).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::DigestMismatch
@@ -96,7 +99,7 @@ fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
     plan["payload_digest"] =
         json!(document_digest(external::PLAN_PAYLOAD_SCHEMA, &plan["payload"]).unwrap());
     assert_eq!(
-        external::parse_plan(&serde_json::to_vec(&plan).unwrap())
+        ExternalPlan::parse(&serde_json::to_vec(&plan).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::InvalidValue
@@ -105,15 +108,18 @@ fn external_payloads_keep_structural_paths_and_semantic_validation_order() {
     let mut assessment: Value = serde_json::from_slice(ASSESSMENT).unwrap();
     assessment["payload"]["producer"]["version"] = json!(null);
     let Err(AssessmentDefect::Wire(defect)) =
-        external::parse_assessment(&serde_json::to_vec(&assessment).unwrap())
+        ExternalAssessment::parse(&serde_json::to_vec(&assessment).unwrap())
     else {
         panic!("the producer version must be a string");
     };
     assert_eq!(defect.path, "$.payload.producer.version");
     assert_eq!(defect.kind, ErrorKind::WrongType);
     assessment["payload"]["producer"]["version"] = json!("");
+    assessment["payload_digest"] = json!(
+        document_digest(external::ASSESSMENT_PAYLOAD_SCHEMA, &assessment["payload"]).unwrap()
+    );
     assert!(matches!(
-        external::parse_assessment(&serde_json::to_vec(&assessment).unwrap()),
+        ExternalAssessment::parse(&serde_json::to_vec(&assessment).unwrap()),
         Err(AssessmentDefect::Contract(_))
     ));
 }

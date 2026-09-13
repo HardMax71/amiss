@@ -1,7 +1,9 @@
+use amiss_wire::envelope::Envelope;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::{
     assessment::Nullable,
     semantic::{
-        self, SemanticEvidenceEnvelope, SemanticEvidenceTemplate, TemplateSchema,
+        self, SemanticEvidence, SemanticEvidenceTemplate, TemplateSchema,
         observation::{Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
         record,
     },
@@ -66,7 +68,7 @@ fn observations() -> Vec<(Observation, Vec<u8>)> {
 
 #[test]
 fn semantic_observations_reuse_closed_models_without_changing_their_json() {
-    let original: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(include_bytes!(
+    let original: Envelope<SemanticEvidence<'static>> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();
@@ -102,7 +104,7 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
         let mut envelope_bytes = Vec::new();
         serde_json_canonicalizer::to_writer(&document, &mut envelope_bytes).unwrap();
         assert_eq!(
-            semantic::parse(&envelope_bytes)
+            SemanticEvidence::parse(&envelope_bytes)
                 .unwrap()
                 .payload
                 .observations,
@@ -132,7 +134,7 @@ fn semantic_observations_reuse_closed_models_without_changing_their_json() {
             r#"{{"schema":"amiss/semantic-evidence-envelope","payload":{malformed_payload},"payload_digest":"{malformed_digest}"}}"#
         );
         assert_eq!(
-            semantic::parse(malformed_envelope.as_bytes())
+            SemanticEvidence::parse(malformed_envelope.as_bytes())
                 .unwrap_err()
                 .kind,
             amiss_wire::de::ErrorKind::InvalidValue

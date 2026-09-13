@@ -1,13 +1,12 @@
 use amiss_wire::de::Document as _;
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::semantic::SemanticEvidence;
 
-use amiss_wire::{
-    requests::{ControlsRequest, SuppliedSemanticEvidence},
-    semantic,
-};
+use amiss_wire::requests::{ControlsRequest, SuppliedSemanticEvidence};
 
 #[test]
 fn sealed_semantic_evidence_decodes_as_an_envelope_not_an_arbitrary_object() {
-    let document = semantic::parse(include_bytes!(
+    let document = SemanticEvidence::parse(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();

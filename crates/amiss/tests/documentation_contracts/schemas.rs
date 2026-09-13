@@ -11,7 +11,11 @@ use amiss_wire::controls::TrustedTimeStatement;
 use amiss_wire::controls::WaiverBundle;
 use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Payload as _;
+use amiss_wire::external::ExternalAssessment;
+use amiss_wire::external::ExternalEvidence;
+use amiss_wire::external::ExternalPlan;
 use amiss_wire::manifest::ReleaseManifest;
+use amiss_wire::semantic::SemanticEvidence;
 use amiss_wire::semantic::record::Input;
 use sha2::Digest as _;
 use std::fs;
@@ -94,14 +98,12 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "scanner-controls-request" => parse_defect(ControlsRequest::parse(bytes)),
         "scanner-evaluation-request" => parse_defect(EvaluationRequest::parse(bytes)),
         "scanner-execution-constraint" => parse_defect(ExecutionConstraintDescriptor::parse(bytes)),
-        "scanner-external-assessment" => {
-            parse_defect(amiss_wire::external::parse_assessment(bytes))
-        }
-        "scanner-external-evidence" => parse_defect(amiss_wire::external::parse_evidence(bytes)),
-        "scanner-external-plan" => parse_defect(amiss_wire::external::parse_plan(bytes)),
+        "scanner-external-assessment" => parse_defect(ExternalAssessment::parse(bytes)),
+        "scanner-external-evidence" => parse_defect(ExternalEvidence::parse(bytes)),
+        "scanner-external-plan" => parse_defect(ExternalPlan::parse(bytes)),
         "scanner-report" => parse_defect(amiss_wire::report::validate_envelope(bytes)),
         "scanner-record-set-input" => parse_defect(Input::parse(bytes)),
-        "scanner-semantic-evidence" => parse_defect(amiss_wire::semantic::parse(bytes)),
+        "scanner-semantic-evidence" => parse_defect(SemanticEvidence::parse(bytes)),
         "scanner-semantic-template" => match serde_json::from_slice::<
             amiss_wire::semantic::SemanticEvidenceTemplate<'static>,
         >(bytes)
@@ -669,7 +671,7 @@ fn the_semantic_evidence_example_matches_its_checked_writer() {
     let root = repository_root();
     let bytes = fs::read(root.join("spec/examples/scanner-semantic-evidence.json"))
         .expect("the semantic evidence example is readable");
-    let parsed = amiss_wire::semantic::parse(&bytes)
+    let parsed = SemanticEvidence::parse(&bytes)
         .expect("the semantic evidence example clears the strict reader");
     let document = amiss_wire::semantic::envelope(parsed.payload)
         .expect("the semantic evidence example clears typed construction");
