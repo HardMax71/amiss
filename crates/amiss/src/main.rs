@@ -7,8 +7,10 @@ mod human;
 mod input;
 mod invocation;
 mod junit;
+mod locale;
 mod output;
 mod policy_include;
+mod pure;
 mod record_set;
 mod references;
 mod render;
@@ -127,6 +129,7 @@ fn main() -> ExitCode {
             invocation::Command::Author(author) => author::run(&author),
             invocation::Command::Plan(plan) => external::run_plan(&plan),
             invocation::Command::Assess(assess) => external::run_assess(&assess),
+            invocation::Command::LocaleAssess(assess) => locale::run(&assess),
             invocation::Command::Render(render) => render::run(&render, &mut reserve),
             invocation::Command::Refs(refs) => references::run(&refs),
             invocation::Command::PolicyInclude(include) => policy_include::run(&include),

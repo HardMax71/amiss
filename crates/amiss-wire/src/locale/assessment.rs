@@ -202,100 +202,118 @@ pub fn assess(
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, Error> {
-    if plan_payload_digest(&plan.payload)? != plan.payload_digest {
-        return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
-    }
-    if let Some(evidence) = evidence
-        && evidence_payload_digest(&evidence.payload)? != evidence.payload_digest
-    {
-        return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
-    }
-
-    let unavailable = || LocaleCoverageResult {
-        complete: false,
-        source_missing: Vec::new(),
-        target_missing: Vec::new(),
-        target_orphaned: Vec::new(),
-        fallbacks: Vec::new(),
-        lineage: Vec::new(),
-    };
-    let outcome = match evidence {
-        None => AssessmentOutcome {
-            verdict: AssessmentVerdict::Unproven,
-            reasons: vec![LocaleCoverageReason::EvidenceAbsent],
-            coverage: unavailable(),
-            product: None,
-        },
-        Some(evidence) if evidence.payload.plan_payload_digest != plan.payload_digest => {
-            AssessmentOutcome {
-                verdict: AssessmentVerdict::Unproven,
-                reasons: vec![LocaleCoverageReason::EvidenceUnbound],
-                coverage: unavailable(),
-                product: None,
-            }
-        }
-        Some(evidence) if evidence.payload.producer != plan.payload.producer => AssessmentOutcome {
-            verdict: AssessmentVerdict::Unproven,
-            reasons: vec![LocaleCoverageReason::ProducerMismatch],
-            coverage: unavailable(),
-            product: None,
-        },
-        Some(evidence)
-            if evidence.payload.docs != plan.payload.docs
-                || evidence.payload.scope != plan.payload.scope =>
-        {
-            AssessmentOutcome {
-                verdict: AssessmentVerdict::Refuted,
-                reasons: [
-                    (
-                        evidence.payload.docs != plan.payload.docs,
-                        LocaleCoverageReason::DocsMismatch,
-                    ),
-                    (
-                        evidence.payload.scope != plan.payload.scope,
-                        LocaleCoverageReason::ScopeMismatch,
-                    ),
-                ]
-                .into_iter()
-                .filter_map(|(different, reason)| different.then_some(reason))
-                .collect(),
-                coverage: unavailable(),
-                product: None,
-            }
-        }
-        Some(evidence) => compare_coverage(&plan.payload, &evidence.payload),
-    };
-
-    let assessment = LocaleCoverageAssessment {
-        schema: AssessmentPayloadSchema::Current,
-        engine: AssessmentEngine {
-            engine_version: engine_version.to_owned(),
-            engine_digest,
-        },
-        subject: AssessmentSubject {
-            report_payload_digest: plan.payload.report_payload_digest,
-            plan_payload_digest: plan.payload_digest,
-            evidence_payload_digest: evidence.map_or(Nullable::Null, |evidence| {
-                Nullable::Value(evidence.payload_digest)
-            }),
-        },
-        verdict: outcome.verdict,
-        reasons: outcome.reasons,
-        coverage: outcome.coverage,
-        product: outcome.product.map_or(Nullable::Null, Nullable::Value),
-    };
-    let payload_digest = assessment_payload_digest(&assessment)?;
-    let document = LocaleCoverageAssessmentEnvelope {
-        schema: AssessmentEnvelopeSchema::Current,
-        payload: assessment,
-        payload_digest,
-    };
+    let document =
+        LocaleCoverageAssessment::evaluate(plan, evidence, engine_version, engine_digest)?;
     let canonical = serde_json_canonicalizer::to_vec(&document)
         .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
     if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
         return fail("$", ErrorKind::LimitExceeded);
     }
     Ok(canonical)
+}
+
+impl LocaleCoverageAssessment {
+    /// Judges a validated plan and optional evidence without encoding an artifact.
+    ///
+    /// # Errors
+    /// Refuses inconsistent input digests, invalid domain fields, or a result over its budget.
+    pub fn evaluate(
+        plan: &LocaleCoveragePlanEnvelope,
+        evidence: Option<&LocaleCoverageEvidenceEnvelope>,
+        engine_version: &str,
+        engine_digest: Digest,
+    ) -> Result<LocaleCoverageAssessmentEnvelope, Error> {
+        if plan_payload_digest(&plan.payload)? != plan.payload_digest {
+            return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
+        }
+        if let Some(evidence) = evidence
+            && evidence_payload_digest(&evidence.payload)? != evidence.payload_digest
+        {
+            return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
+        }
+
+        let unavailable = || LocaleCoverageResult {
+            complete: false,
+            source_missing: Vec::new(),
+            target_missing: Vec::new(),
+            target_orphaned: Vec::new(),
+            fallbacks: Vec::new(),
+            lineage: Vec::new(),
+        };
+        let outcome = match evidence {
+            None => AssessmentOutcome {
+                verdict: AssessmentVerdict::Unproven,
+                reasons: vec![LocaleCoverageReason::EvidenceAbsent],
+                coverage: unavailable(),
+                product: None,
+            },
+            Some(evidence) if evidence.payload.plan_payload_digest != plan.payload_digest => {
+                AssessmentOutcome {
+                    verdict: AssessmentVerdict::Unproven,
+                    reasons: vec![LocaleCoverageReason::EvidenceUnbound],
+                    coverage: unavailable(),
+                    product: None,
+                }
+            }
+            Some(evidence) if evidence.payload.producer != plan.payload.producer => {
+                AssessmentOutcome {
+                    verdict: AssessmentVerdict::Unproven,
+                    reasons: vec![LocaleCoverageReason::ProducerMismatch],
+                    coverage: unavailable(),
+                    product: None,
+                }
+            }
+            Some(evidence)
+                if evidence.payload.docs != plan.payload.docs
+                    || evidence.payload.scope != plan.payload.scope =>
+            {
+                AssessmentOutcome {
+                    verdict: AssessmentVerdict::Refuted,
+                    reasons: [
+                        (
+                            evidence.payload.docs != plan.payload.docs,
+                            LocaleCoverageReason::DocsMismatch,
+                        ),
+                        (
+                            evidence.payload.scope != plan.payload.scope,
+                            LocaleCoverageReason::ScopeMismatch,
+                        ),
+                    ]
+                    .into_iter()
+                    .filter_map(|(different, reason)| different.then_some(reason))
+                    .collect(),
+                    coverage: unavailable(),
+                    product: None,
+                }
+            }
+            Some(evidence) => compare_coverage(&plan.payload, &evidence.payload),
+        };
+
+        let assessment = LocaleCoverageAssessment {
+            schema: AssessmentPayloadSchema::Current,
+            engine: AssessmentEngine {
+                engine_version: engine_version.to_owned(),
+                engine_digest,
+            },
+            subject: AssessmentSubject {
+                report_payload_digest: plan.payload.report_payload_digest,
+                plan_payload_digest: plan.payload_digest,
+                evidence_payload_digest: evidence.map_or(Nullable::Null, |evidence| {
+                    Nullable::Value(evidence.payload_digest)
+                }),
+            },
+            verdict: outcome.verdict,
+            reasons: outcome.reasons,
+            coverage: outcome.coverage,
+            product: outcome.product.map_or(Nullable::Null, Nullable::Value),
+        };
+        let payload_digest = assessment_payload_digest(&assessment)?;
+        Ok(LocaleCoverageAssessmentEnvelope {
+            schema: AssessmentEnvelopeSchema::Current,
+            payload: assessment,
+            payload_digest,
+        })
+    }
 }
 
 fn compare_coverage(

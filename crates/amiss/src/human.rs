@@ -292,6 +292,35 @@ pub(crate) fn plan(payload: &amiss_wire::external::ExternalPlan) {
     }
 }
 
+pub(crate) fn coverage(payload: &amiss_wire::locale::LocaleCoverageAssessment) {
+    let mut out = Channel {
+        out: std::io::stdout(),
+        open: true,
+    };
+    let coverage = &payload.coverage;
+    line(
+        &mut out,
+        format_args!(
+            "amiss locale-assess: {} missing {} orphaned {} fallbacks {} lineage {}",
+            payload.verdict.as_ref(),
+            coverage.target_missing.len(),
+            coverage.target_orphaned.len(),
+            coverage.fallbacks.len(),
+            coverage.lineage.len(),
+        ),
+    );
+    for reason in payload.reasons.iter().take(10) {
+        line(&mut out, format_args!("reason {reason}"));
+    }
+    let overflow = payload.reasons.len().saturating_sub(10);
+    if overflow > 0 {
+        line(
+            &mut out,
+            format_args!("reason overflow: {overflow} more in the full assessment"),
+        );
+    }
+}
+
 pub(crate) fn assessment(payload: &amiss_wire::external::ExternalAssessment) {
     use amiss_wire::external::ExternalVerdict;
     let mut out = Channel {

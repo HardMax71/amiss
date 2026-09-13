@@ -53,6 +53,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --expires-at <utc-instant> --debt-output <path>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
+amiss locale-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss render --report <path>
              (--format human [--full] | --format <sarif|codequality|junit>)
 amiss refs --report <path>
@@ -287,6 +288,14 @@ digest and the evidence's binding to that exact plan; evidence naming a destinat
 plan did not introduce, repeating one, or binding another plan refuses the whole run.
 `--format` takes `human` or `json`. Exit 0 wrote the assessment, refuted rows included,
 since the artifact is advisory data. Exit 2 means an input could not be trusted.
+
+`amiss locale-assess` judges [a locale coverage plan](locale-coverage.md) against one
+producer's page inventories, writing the coverage assessment offline under the engine's fixed
+policy. It verifies both digests and the evidence's binding to that exact plan; evidence from
+another plan, producer, docs candidate, or locale scope refutes or leaves the audit unproven
+rather than refusing it. `--format` takes `human` or `json`. Exit 0 wrote the assessment,
+missing pages and refuted rows included, since the artifact is advisory data. Exit 2 means an
+input could not be read, parsed, or trusted.
 
 `amiss refs` asks a complete validated report which candidate occurrences refer to one
 repository path. It opens no repository and does not reinterpret prose: an occurrence matches
