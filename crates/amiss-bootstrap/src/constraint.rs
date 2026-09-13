@@ -4,6 +4,7 @@ use amiss_wire::controls::{
     ActionBootstrapContract, ExecutionConstraintDescriptor, ExecutionConstraintSchema, GitMode,
     RequiredStatusName,
 };
+use amiss_wire::de::Document as _;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{Oid, RepoPathText, RepositoryIdentity};
 use sha2::Digest as _;

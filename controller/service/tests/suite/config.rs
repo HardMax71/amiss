@@ -1,3 +1,5 @@
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::fs;
 use std::io::Write as _;
@@ -742,7 +744,7 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
         .organization_floor
         .as_ref()
         .expect("the named floor file lands in the plan");
-    let expected = amiss_wire::controls::parse_organization_floor(floor_bytes).unwrap();
+    let expected = OrganizationFloor::parse(floor_bytes).unwrap();
     assert_eq!(floor.value, expected);
     assert_eq!(
         floor.expected_digest,

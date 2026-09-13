@@ -1,6 +1,9 @@
 use amiss_git::Repository;
 use amiss_scan::policy::ConstraintInput;
-use amiss_wire::controls::{Profile, parse_execution_constraint, parse_organization_floor};
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::controls::Profile;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
@@ -27,7 +30,7 @@ fn valid_active_debt_is_tolerated_with_full_provenance() {
         "2026-08-01T00:00:00Z",
     )));
     setup.constraint = Some(ConstraintInput {
-        descriptor: parse_execution_constraint(
+        descriptor: ExecutionConstraintDescriptor::parse(
             br#"{
   "schema": "amiss/scanner-execution-constraint",
   "action_repository": { "host": "git.example.internal", "owner": "platform/security", "name": "amiss-action" },
@@ -377,7 +380,7 @@ fn a_debt_snapshot_over_the_tightened_ceiling_is_not_parsed() {
   "authorized_waiver_issuers": [],
   "resource_limits": [ { "resource": "debt-items", "maximum": 0 } ]
 }"#;
-    let floor = parse_organization_floor(doc.as_bytes()).unwrap();
+    let floor = OrganizationFloor::parse(doc.as_bytes()).unwrap();
     let digest = document_digest("amiss/organization-floor", &floor).unwrap();
     let floor_digest = digest.to_string();
     let mut setup = shell(Profile::Enforce);

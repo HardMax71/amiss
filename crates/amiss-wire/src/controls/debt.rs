@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Document, Error, ErrorKind, fail};
 use crate::model::Digest;
 use crate::model::{ArtifactId, BranchRef, OwnerId, RepositoryIdentity, TreeIdentity, UtcInstant};
 
@@ -49,32 +49,38 @@ pub struct DebtSnapshot {
     pub items: Vec<DebtItem>,
 }
 
-/// Parses and validates one adoption-debt snapshot.
-///
-/// # Errors
-///
-/// Fails on JSON defects, schema-shape violations, embedded key or
-/// fact digests that do not recompute, fact-kind/resolution inconsistencies,
-/// causal time-order violations, and unsorted or duplicate items or keys.
-pub fn parse_debt_snapshot(bytes: &[u8]) -> Result<DebtSnapshot, Error> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let snapshot: DebtSnapshot = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
-
-    snapshot.validate()?;
-    Ok(snapshot)
+fn validate_debt_item(path: &str, item: &DebtItem) -> Result<(), Error> {
+    let (finding_key, fact_digest) =
+        fact_digests(&format!("{path}.accepted_fact"), &item.accepted_fact)?;
+    if item.finding_key != finding_key {
+        return fail(&format!("{path}.finding_key"), ErrorKind::DigestMismatch);
+    }
+    if item.accepted_fact_digest != fact_digest {
+        return fail(
+            &format!("{path}.accepted_fact_digest"),
+            ErrorKind::DigestMismatch,
+        );
+    }
+    validate_owner(&format!("{path}.owner"), &item.owner)?;
+    if !valid_reason(&item.reason) {
+        return fail(&format!("{path}.reason"), ErrorKind::InvalidValue);
+    }
+    validate_instant(&format!("{path}.created_at"), &item.created_at)?;
+    validate_instant(&format!("{path}.expires_at"), &item.expires_at)?;
+    (item.created_at < item.expires_at)
+        .then_some(())
+        .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
 }
 
-impl DebtSnapshot {
+impl Document for DebtSnapshot {
+    type Defect = Error;
+
     /// Checks this control's domain rules and resource limits.
     ///
     /// # Errors
     ///
     /// A public field violates the contract enforced by [`parse_debt_snapshot`].
-    pub fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Error> {
         validate_repository("$.repository", &self.repository)?;
         validate_tree("$.adoption_tree", &self.adoption_tree)?;
         validate_instant("$.created_at", &self.created_at)?;
@@ -98,27 +104,4 @@ impl DebtSnapshot {
         }
         Ok(())
     }
-}
-
-fn validate_debt_item(path: &str, item: &DebtItem) -> Result<(), Error> {
-    let (finding_key, fact_digest) =
-        fact_digests(&format!("{path}.accepted_fact"), &item.accepted_fact)?;
-    if item.finding_key != finding_key {
-        return fail(&format!("{path}.finding_key"), ErrorKind::DigestMismatch);
-    }
-    if item.accepted_fact_digest != fact_digest {
-        return fail(
-            &format!("{path}.accepted_fact_digest"),
-            ErrorKind::DigestMismatch,
-        );
-    }
-    validate_owner(&format!("{path}.owner"), &item.owner)?;
-    if !valid_reason(&item.reason) {
-        return fail(&format!("{path}.reason"), ErrorKind::InvalidValue);
-    }
-    validate_instant(&format!("{path}.created_at"), &item.created_at)?;
-    validate_instant(&format!("{path}.expires_at"), &item.expires_at)?;
-    (item.created_at < item.expires_at)
-        .then_some(())
-        .ok_or_else(|| Error::new(path, ErrorKind::Inconsistent))
 }

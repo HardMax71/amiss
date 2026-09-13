@@ -1,3 +1,6 @@
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::{DebtSnapshot, OrganizationFloor, WaiverBundle};
+use amiss_wire::de::Document as _;
 use std::path::{Path, PathBuf};
 
 use amiss_controller::{
@@ -5,10 +8,7 @@ use amiss_controller::{
     IntersphinxInventory, OpaqueId, PolicyControls, ProviderIdentity, SemanticEvidenceExpectation,
     WorkflowArtifactExpectation, check_plan, intersphinx_evidence,
 };
-use amiss_wire::controls::{
-    Profile, parse_debt_snapshot, parse_execution_constraint, parse_organization_floor,
-    parse_waiver_bundle,
-};
+use amiss_wire::controls::Profile;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
@@ -83,7 +83,7 @@ pub fn load_plan(
         }
     };
     let execution_bytes = read_regular(&raw.execution_constraint_file, REQUEST_STREAM_BYTES)?;
-    let execution = parse_execution_constraint(&execution_bytes)
+    let execution = ExecutionConstraintDescriptor::parse(&execution_bytes)
         .map_err(|defect| ConfigError::caused_by("execution constraint is invalid", defect))?;
     let semantic_evidence = intersphinx_evidence(load_intersphinx(raw.intersphinx_inventories)?)
         .map_err(|defect| {
@@ -94,19 +94,19 @@ pub fn load_plan(
         external_policy: raw.external_policy,
         organization_floor: load_control(
             raw.organization_floor_file.as_deref(),
-            parse_organization_floor,
+            OrganizationFloor::parse,
             amiss_wire::controls::ORGANIZATION_FLOOR_SCHEMA,
             BootstrapJobError::OrganizationFloor,
         )?,
         debt_snapshot: load_control(
             raw.debt_snapshot_file.as_deref(),
-            parse_debt_snapshot,
+            DebtSnapshot::parse,
             amiss_wire::controls::DEBT_SNAPSHOT_SCHEMA,
             BootstrapJobError::DebtSnapshot,
         )?,
         waiver_bundle: load_control(
             raw.waiver_bundle_file.as_deref(),
-            parse_waiver_bundle,
+            WaiverBundle::parse,
             amiss_wire::controls::WAIVER_BUNDLE_SCHEMA,
             BootstrapJobError::WaiverBundle,
         )?,

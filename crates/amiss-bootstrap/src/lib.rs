@@ -1,3 +1,4 @@
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 pub mod build;
@@ -8,7 +9,7 @@ pub mod supervise;
 use amiss_git::{GitResources, ObjectKind, Repository};
 use amiss_wire::action::{executable_platform, host_platform};
 use amiss_wire::controls::{ConstraintPlatform, ExecutionConstraintDescriptor, GitMode};
-use amiss_wire::manifest::{ReleaseArtifact, ReleaseManifest, RuntimeRole, parse_release_manifest};
+use amiss_wire::manifest::{ReleaseArtifact, ReleaseManifest, RuntimeRole};
 use amiss_wire::model::{Digest, RAW_EVIDENCE_DOMAIN};
 use amiss_wire::model::{Oid, RepoPathText};
 
@@ -205,7 +206,7 @@ pub(crate) fn load_release_manifest(
         return Err(tampered("path-not-regular-blob"));
     }
     let manifest =
-        parse_release_manifest(&bytes).map_err(|_defect| tampered("manifest-unreadable"))?;
+        ReleaseManifest::parse(&bytes).map_err(|_defect| tampered("manifest-unreadable"))?;
     let digest = document_digest(amiss_wire::manifest::MANIFEST_DOMAIN, &manifest)
         .ok_or_else(|| tampered("manifest-unreadable"))?;
     Ok((manifest, digest))

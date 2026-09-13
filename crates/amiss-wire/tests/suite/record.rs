@@ -1,9 +1,11 @@
+use amiss_wire::de::Document as _;
+use amiss_wire::semantic::record::Input;
 use std::borrow::Cow;
 
 use amiss_wire::de::ErrorKind;
 use amiss_wire::semantic::SemanticEvidenceTemplate;
 use amiss_wire::semantic::observation::Observation;
-use amiss_wire::semantic::record::{parse_input, template, validate_records};
+use amiss_wire::semantic::record::{template, validate_records};
 use serde_json::Value;
 
 const B: &str = "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -26,7 +28,7 @@ fn input(records: &str) -> Vec<u8> {
 
 #[test]
 fn normalized_records_become_one_checked_candidate_free_observation() {
-    let source = parse_input(&input(
+    let source = Input::parse(&input(
         r#"[{"key":"amiss::Request","value":"pub struct Request"},{"key":"amiss::run","value":"pub fn run()"}]"#,
     ))
     .unwrap();
@@ -62,7 +64,7 @@ fn row_order_duplicates_and_closed_metadata_are_refused() {
             ErrorKind::DuplicateMember,
         ),
     ] {
-        assert_eq!(parse_input(&input(records)).unwrap_err().kind, kind);
+        assert_eq!(Input::parse(&input(records)).unwrap_err().kind, kind);
     }
 
     let value = serde_json::from_slice::<Value>(&input("[]")).unwrap();
@@ -73,7 +75,7 @@ fn row_order_duplicates_and_closed_metadata_are_refused() {
     members.insert("producer_version".to_owned(), Value::from("2"));
     let value = Value::from_iter(members);
     assert_eq!(
-        parse_input(&serde_json_canonicalizer::to_vec(&value).unwrap())
+        Input::parse(&serde_json_canonicalizer::to_vec(&value).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::UnknownField
@@ -82,7 +84,7 @@ fn row_order_duplicates_and_closed_metadata_are_refused() {
 
 #[test]
 fn directly_constructed_inputs_reuse_the_reader_laws() {
-    let mut source = parse_input(&input(
+    let mut source = Input::parse(&input(
         r#"[{"key":"a","value":"A"},{"key":"z","value":"Z"}]"#,
     ))
     .unwrap();
@@ -100,7 +102,7 @@ fn record_strings_use_the_scanner_consumer_bounds() {
         r#"[{"key":"key","value":"line\nfeed"}]"#,
     ] {
         assert_eq!(
-            parse_input(&input(records)).unwrap_err().kind,
+            Input::parse(&input(records)).unwrap_err().kind,
             ErrorKind::InvalidValue
         );
     }
@@ -108,7 +110,7 @@ fn record_strings_use_the_scanner_consumer_bounds() {
     let oversized = "k".repeat(amiss_wire::semantic::RECORD_KEY_BYTES.saturating_add(1));
     let records = format!(r#"[{{"key":"{oversized}","value":"value"}}]"#);
     assert_eq!(
-        parse_input(&input(&records)).unwrap_err().kind,
+        Input::parse(&input(&records)).unwrap_err().kind,
         ErrorKind::InvalidValue
     );
 }

@@ -5,6 +5,9 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::TrustedTimeStatement;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
@@ -16,7 +19,6 @@ use amiss_bootstrap::supervise::{
     AcceptanceDefect, Defect, Expectations, SealedControlExpectation, SealedExpectations,
     Supervised, accept, settle, supervise,
 };
-use amiss_wire::controls::{parse_execution_constraint, parse_trusted_time};
 
 use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::report::PAYLOAD_SCHEMA;
@@ -452,9 +454,10 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
     let descriptor =
         serde_json::from_slice::<Value>(&dossier_example("scanner-execution-constraint.json"))
             .unwrap();
-    let constraint =
-        parse_execution_constraint(&serde_json_canonicalizer::to_vec(&descriptor).unwrap())
-            .unwrap();
+    let constraint = ExecutionConstraintDescriptor::parse(
+        &serde_json_canonicalizer::to_vec(&descriptor).unwrap(),
+    )
+    .unwrap();
     let constraint_digest = document_digest("amiss/scanner-execution-constraint", &constraint)
         .unwrap()
         .to_string();
@@ -568,7 +571,8 @@ fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String
         ),
     ]);
     let parsed =
-        parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap()).unwrap();
+        TrustedTimeStatement::parse(&serde_json_canonicalizer::to_vec(&statement).unwrap())
+            .unwrap();
     let digest = document_digest("amiss/scanner-trusted-time-statement", &parsed)
         .unwrap()
         .to_string();

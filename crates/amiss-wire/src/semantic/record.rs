@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind};
+use crate::de::{self, Document, Error, ErrorKind};
 use crate::model::ArtifactId;
 use crate::model::Digest;
 
@@ -58,25 +58,6 @@ pub struct Observation {
 pub enum ObservationKind {
     #[strum(serialize = "record-set")]
     Current,
-}
-
-/// Parses one bounded normalized record-set input.
-///
-/// # Errors
-///
-/// Fails on oversized or malformed JSON, unknown fields, invalid identities or digests,
-/// and records that are not bounded, control-free, sorted, and unique by key.
-pub fn parse_input(bytes: &[u8]) -> Result<Input, Error> {
-    super::validate_document_size(bytes.len())?;
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let input: Input = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-
-    validate_records("$.records", &input.records)?;
-    Ok(input)
 }
 
 /// Produces canonical semantic template bytes for one validated record-set input.
@@ -140,4 +121,13 @@ pub fn validate_records(path: &str, records: &[Record]) -> Result<(), Error> {
         previous = Some(&record.key);
     }
     Ok(())
+}
+
+impl Document for Input {
+    type Defect = Error;
+    const BYTES: u64 = super::SEMANTIC_EVIDENCE_BYTES;
+
+    fn validate(&self) -> Result<(), Error> {
+        validate_records("$.records", &self.records)
+    }
 }

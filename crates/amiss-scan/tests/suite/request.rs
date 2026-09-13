@@ -3,6 +3,10 @@
     reason = "integration assertions over the external-control request gate"
 )]
 
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::controls::TrustedTimeStatement;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::borrow::Cow;
@@ -130,8 +134,7 @@ fn supplied_semantic(evidence: SemanticEvidence<'static>) -> SuppliedSemanticEvi
 
 #[test]
 fn a_verified_floor_lands_typed() {
-    let floor =
-        amiss_wire::controls::parse_organization_floor(FLOOR.as_bytes()).expect("fixture parses");
+    let floor = OrganizationFloor::parse(FLOOR.as_bytes()).expect("fixture parses");
     let digest = document_digest("amiss/organization-floor", &floor).unwrap();
     let mut request = empty();
     request.organization_floor = Some(supplied(FLOOR, digest));
@@ -153,8 +156,7 @@ fn a_verified_floor_lands_typed() {
 
 #[test]
 fn a_verified_time_statement_lands_with_its_run_context() {
-    let statement =
-        amiss_wire::controls::parse_trusted_time(TIME.as_bytes()).expect("fixture parses");
+    let statement = TrustedTimeStatement::parse(TIME.as_bytes()).expect("fixture parses");
     let digest = document_digest("amiss/scanner-trusted-time-statement", &statement).unwrap();
     let mut request = empty();
     request.trusted_time = Some(SuppliedTime {
@@ -176,14 +178,14 @@ fn a_verified_time_statement_lands_with_its_run_context() {
 
 #[test]
 fn typed_time_still_requires_semantic_validation() {
-    let valid = amiss_wire::controls::parse_trusted_time(TIME.as_bytes()).unwrap();
+    let valid = TrustedTimeStatement::parse(TIME.as_bytes()).unwrap();
     let expected_digest = document_digest("amiss/scanner-trusted-time-statement", &valid).unwrap();
     for value in [
-        amiss_wire::controls::TrustedTimeStatement {
+        TrustedTimeStatement {
             provider: "bad provider!".to_owned(),
             ..valid.clone()
         },
-        amiss_wire::controls::TrustedTimeStatement {
+        TrustedTimeStatement {
             valid_until: valid.evaluation_instant.clone(),
             ..valid
         },
@@ -205,8 +207,8 @@ fn typed_time_still_requires_semantic_validation() {
 
 #[test]
 fn a_verified_constraint_lands_through_the_shared_gate() {
-    let descriptor = amiss_wire::controls::parse_execution_constraint(CONSTRAINT.as_bytes())
-        .expect("fixture parses");
+    let descriptor =
+        ExecutionConstraintDescriptor::parse(CONSTRAINT.as_bytes()).expect("fixture parses");
     let digest = document_digest("amiss/scanner-execution-constraint", &descriptor).unwrap();
     let mut request = empty();
     request.execution_constraint = Some(supplied(CONSTRAINT, digest));

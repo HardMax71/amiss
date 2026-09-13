@@ -4,7 +4,9 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::manifest::ReleaseManifest;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -16,10 +18,8 @@ use amiss_bootstrap::{Refusal, validate};
 use amiss_fixtures::requests::{RequestPaths, SealedRequests, indent};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_wire::action::host_platform;
-use amiss_wire::controls::{
-    ConstraintPlatform, ExecutionConstraintDescriptor, parse_execution_constraint,
-};
-use amiss_wire::manifest::{RuntimeRole, parse_release_manifest};
+use amiss_wire::controls::{ConstraintPlatform, ExecutionConstraintDescriptor};
+use amiss_wire::manifest::RuntimeRole;
 use amiss_wire::model::Digest;
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::requests::SnapshotMaterialization;
@@ -71,7 +71,7 @@ fn constraint(release: &Release) -> ExecutionConstraintDescriptor {
             ),
         ),
     ]);
-    parse_execution_constraint(&serde_json_canonicalizer::to_vec(&value).unwrap())
+    ExecutionConstraintDescriptor::parse(&serde_json_canonicalizer::to_vec(&value).unwrap())
         .expect("the constraint parses")
 }
 
@@ -120,7 +120,7 @@ fn the_generated_manifest_reparses_to_its_pinned_digest() {
     let release = release(|_root| {});
     let bytes = fs::read(release.dir.path().join("release-manifest.json")).unwrap();
     assert_eq!(bytes.last(), Some(&b'\n'), "the manifest blob ends in LF");
-    let parsed = parse_release_manifest(&bytes).expect("the generated manifest parses");
+    let parsed = ReleaseManifest::parse(&bytes).expect("the generated manifest parses");
     assert_eq!(
         Digest::from(
             sha2::Sha256::new_with_prefix("amiss/scanner-release-manifest")
@@ -468,7 +468,8 @@ fn named_constraint(staged: &Release, status: &str) -> ExecutionConstraintDescri
         .as_bytes(),
     )
     .unwrap();
-    parse_execution_constraint(&serde_json_canonicalizer::to_vec(&value).unwrap()).unwrap()
+    ExecutionConstraintDescriptor::parse(&serde_json_canonicalizer::to_vec(&value).unwrap())
+        .unwrap()
 }
 
 /// Runs the wrapper over one request triple and reports what it settled to.

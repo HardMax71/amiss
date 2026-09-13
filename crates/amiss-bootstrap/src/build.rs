@@ -1,4 +1,5 @@
 use amiss_wire::controls::{ConstraintPlatform, GitMode};
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::manifest::{
     BuildSource, DependencyLockFile, DependencyLockInput, DependencyLockSchema,

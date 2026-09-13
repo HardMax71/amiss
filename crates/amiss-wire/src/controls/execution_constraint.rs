@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Document, Error, ErrorKind, fail};
 use crate::model::Digest;
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
@@ -123,32 +123,15 @@ pub fn valid_required_status_name(raw: &str) -> bool {
     }
 }
 
-/// Parses and validates one execution constraint.
-///
-/// # Errors
-///
-/// Fails on JSON defects, schema-shape violations, invalid grammar
-/// values, or object IDs inconsistent with the declared object format.
-pub fn parse_execution_constraint(bytes: &[u8]) -> Result<ExecutionConstraintDescriptor, Error> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let descriptor: ExecutionConstraintDescriptor =
-        serde_path_to_error::deserialize(&mut deserializer)
-            .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+impl Document for ExecutionConstraintDescriptor {
+    type Defect = Error;
 
-    descriptor.validate()?;
-    Ok(descriptor)
-}
-
-impl ExecutionConstraintDescriptor {
     /// Checks this control's domain rules and resource limits.
     ///
     /// # Errors
     ///
     /// A public field violates the contract enforced by [`parse_execution_constraint`].
-    pub fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Error> {
         validate_repository("$.action_repository", &self.action_repository)?;
         for (path, oid) in [
             ("$.action_commit_oid", &self.action_commit_oid),

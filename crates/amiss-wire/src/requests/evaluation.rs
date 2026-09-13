@@ -3,7 +3,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::controls::Profile;
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Document, Error, ErrorKind, fail};
 use crate::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::RequestMode;
@@ -38,22 +38,6 @@ pub struct EvaluationRequest {
 }
 
 impl EvaluationRequest {
-    /// # Errors
-    ///
-    /// Fails on JSON defects, schema-shape violations, invalid
-    /// grammar values, and a candidate commit inconsistent with the mode.
-    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-        let request: Self = serde_path_to_error::deserialize(&mut deserializer)
-            .map_err(|defect| de::deserialize_error("$", &defect))?;
-        deserializer
-            .end()
-            .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-
-        request.validate()?;
-        Ok(request)
-    }
-
     /// Builds an explicit-commit evaluation with no forge identity. Callers
     /// may then fill the public identity fields before serialization.
     #[must_use]
@@ -96,12 +80,16 @@ impl EvaluationRequest {
             candidate_commit,
         }
     }
+}
+
+impl Document for EvaluationRequest {
+    type Defect = Error;
 
     /// Checks the run's object format, mode, and complete forge identity.
     ///
     /// # Errors
     /// Refuses inconsistent commits, repository identity, or forge bindings.
-    pub fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Error> {
         if self.repository.as_ref().is_some_and(|repository| {
             RepositoryIdentity::new(
                 repository.host().to_owned(),

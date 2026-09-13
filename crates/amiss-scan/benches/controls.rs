@@ -3,6 +3,7 @@
     reason = "benchmark fixture paths are fixed and valid"
 )]
 
+use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 

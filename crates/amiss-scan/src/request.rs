@@ -1,4 +1,5 @@
 use amiss_wire::controls::{FloorDefect, ResourceName};
+use amiss_wire::de::Document as _;
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::envelope::document_digest;
 use amiss_wire::report::{AnalysisErrorCode, ErrorDetail};

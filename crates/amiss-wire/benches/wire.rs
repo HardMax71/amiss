@@ -1,6 +1,7 @@
 #![expect(clippy::panic, reason = "benchmark fixture setup fails loudly")]
 
-use amiss_wire::controls::parse_organization_floor;
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::de::Document as _;
 use amiss_wire::external::{
     EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
     ExternalEvidenceSchema, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess, evidence,
@@ -19,7 +20,7 @@ fn decode_organization_floor(bencher: Bencher<'_, '_>) {
     const FLOOR: &[u8] = include_bytes!("../tests/fixtures/organization-floor.json");
     bencher
         .counter(BytesCount::of_slice(FLOOR))
-        .bench_local(|| parse_organization_floor(black_box(FLOOR)));
+        .bench_local(|| OrganizationFloor::parse(black_box(FLOOR)));
 }
 
 #[divan::bench(sample_count = 3, sample_size = 1)]

@@ -1,3 +1,4 @@
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 mod controls;
 mod plan;

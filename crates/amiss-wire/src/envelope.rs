@@ -87,15 +87,7 @@ pub trait Payload: Serialize + Sized {
         Self: DeserializeOwned,
         Self::Schema: DeserializeOwned + Serialize,
     {
-        if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > Self::DOCUMENT_BYTES {
-            return fail("$", ErrorKind::LimitExceeded);
-        }
-        let mut input = serde_json::Deserializer::from_slice(bytes);
-        let document: Envelope<Self> = serde_path_to_error::deserialize(&mut input)
-            .map_err(|defect| de::deserialize_error("$", &defect))?;
-        input
-            .end()
-            .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+        let document: Envelope<Self> = de::read(bytes, Self::DOCUMENT_BYTES)?;
         document.validate()?;
         Ok(document)
     }

@@ -1,8 +1,9 @@
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{
     DebtSnapshot, FACT_DOMAIN, FINDING_KEY_DOMAIN, Fact, FactSchema, FindingKeyInput,
-    MissingResolution, StructuralResolution, parse_debt_snapshot, parse_fact,
+    MissingResolution, StructuralResolution,
 };
+use amiss_wire::de::Document as _;
 use amiss_wire::de::{Error, ErrorKind};
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
@@ -85,7 +86,7 @@ fn parse_debt_fact(
     item["accepted_fact"] = serde_json::to_value(fact).unwrap();
     item["finding_key"] = serde_json::json!(finding_key);
     item["accepted_fact_digest"] = serde_json::json!(fact_digest);
-    parse_debt_snapshot(&serde_json::to_vec(&document).unwrap())
+    DebtSnapshot::parse(&serde_json::to_vec(&document).unwrap())
 }
 
 #[test]
@@ -158,7 +159,7 @@ fn structural_facts_accept_an_optional_full_commit_identity() {
         &null,
         r#"{"kind":"missing","reason":"path-not-found","path":"docs/example.md","near":null}"#,
     );
-    let parsed = parse_fact(&serde_json::to_vec(&fact).unwrap()).unwrap();
+    let parsed = Fact::parse(&serde_json::to_vec(&fact).unwrap()).unwrap();
     assert_eq!(
         parsed.key_input.scope.normalized_target_intent.commit_oid,
         None
@@ -254,7 +255,7 @@ fn structural_resolution_facts_accept_both_missing_reasons() {
                 .0,
         );
         assert_eq!(digest, item.accepted_fact_digest);
-        assert_eq!(parse_fact(&bytes).unwrap(), item.accepted_fact);
+        assert_eq!(Fact::parse(&bytes).unwrap(), item.accepted_fact);
         assert!(
             digests.insert(digest),
             "absence, null and a path have distinct facts"

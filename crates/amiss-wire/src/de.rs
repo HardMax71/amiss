@@ -89,3 +89,52 @@ pub(crate) fn deserialize_error(
     }
     Error { path, kind }
 }
+
+/// One bounded JSON document read under the closed-shape law: the byte
+/// ceiling, then the typed shape with the failing path, then nothing may
+/// follow the value.
+///
+/// # Errors
+///
+/// The document is over its ceiling, is not the shape, or carries trailing
+/// bytes.
+pub(crate) fn read<T: serde::de::DeserializeOwned>(bytes: &[u8], limit: u64) -> Result<T, Error> {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > limit {
+        return fail("$", ErrorKind::LimitExceeded);
+    }
+    let mut input = serde_json::Deserializer::from_slice(bytes);
+    let document = serde_path_to_error::deserialize(&mut input)
+        .map_err(|defect| deserialize_error("$", &defect))?;
+    input
+        .end()
+        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
+    Ok(document)
+}
+
+/// A closed document without an envelope: the shape is its Serde derive, the
+/// grammar is `validate`, and `parse` reads one under both.
+pub trait Document: serde::de::DeserializeOwned + Sized {
+    /// What a rejected document reports; `Error` unless a document carries
+    /// more than a path and a kind.
+    type Defect: From<Error>;
+    /// The byte ceiling `parse` enforces; the caller's when unbounded here.
+    const BYTES: u64 = u64::MAX;
+
+    /// The document's own grammar beyond its shape.
+    ///
+    /// # Errors
+    ///
+    /// A field or set breaks the grammar.
+    fn validate(&self) -> Result<(), Self::Defect>;
+
+    /// Reads one document: ceiling, shape, trailing bytes, grammar.
+    ///
+    /// # Errors
+    ///
+    /// Any of those four refusals.
+    fn parse(bytes: &[u8]) -> Result<Self, Self::Defect> {
+        let document: Self = read(bytes, Self::BYTES)?;
+        document.validate()?;
+        Ok(document)
+    }
+}

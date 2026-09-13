@@ -1,4 +1,5 @@
 use amiss_scan::{ScanLimits, ScanResources};
+use amiss_wire::de::Document as _;
 use amiss_wire::model::{Adapter, ObjectFormat};
 
 /// Exercise report and semantic artifact admission on arbitrary input.
@@ -9,13 +10,13 @@ pub fn json(bytes: &[u8]) {
 
 /// Exercise each control's JSON admission and typed contract validation once.
 pub fn controls(bytes: &[u8]) {
-    let _ = amiss_wire::controls::parse_scanner_policy(bytes);
-    let _ = amiss_wire::controls::parse_organization_floor(bytes);
-    let _ = amiss_wire::controls::parse_debt_snapshot(bytes);
-    let _ = amiss_wire::controls::parse_waiver_bundle(bytes);
-    let _ = amiss_wire::controls::parse_trusted_time(bytes);
-    let _ = amiss_wire::controls::parse_execution_constraint(bytes);
-    let _ = amiss_wire::manifest::parse_release_manifest(bytes);
+    let _ = amiss_wire::controls::ScannerPolicy::parse(bytes);
+    let _ = amiss_wire::controls::OrganizationFloor::parse(bytes);
+    let _ = amiss_wire::controls::DebtSnapshot::parse(bytes);
+    let _ = amiss_wire::controls::WaiverBundle::parse(bytes);
+    let _ = amiss_wire::controls::TrustedTimeStatement::parse(bytes);
+    let _ = amiss_wire::controls::ExecutionConstraintDescriptor::parse(bytes);
+    let _ = amiss_wire::manifest::ReleaseManifest::parse(bytes);
 }
 
 /// Exercise the three request models and their admission constraints once.

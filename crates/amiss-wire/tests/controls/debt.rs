@@ -1,4 +1,5 @@
-use amiss_wire::controls::{DebtSnapshot, parse_debt_snapshot};
+use amiss_wire::controls::DebtSnapshot;
+use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::model::Digest;
 use amiss_wire::model::UtcInstant;
@@ -8,7 +9,7 @@ use super::support::DEBT;
 #[test]
 fn parses_a_valid_debt_snapshot() {
     let expected: DebtSnapshot = serde_json::from_slice(DEBT).unwrap();
-    assert_eq!(parse_debt_snapshot(DEBT).unwrap(), expected);
+    assert_eq!(DebtSnapshot::parse(DEBT).unwrap(), expected);
 }
 
 #[test]

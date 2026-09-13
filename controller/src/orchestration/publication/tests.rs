@@ -1,8 +1,10 @@
 #![cfg(test)]
 
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::de::Document as _;
 use std::sync::Arc;
 
-use amiss_wire::controls::{Profile, parse_execution_constraint};
+use amiss_wire::controls::Profile;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
@@ -60,7 +62,7 @@ fn run_identity(candidate: char) -> RunIdentity {
 }
 
 fn request() -> super::super::model::RunRequest {
-    let mut constraint = parse_execution_constraint(include_bytes!(
+    let mut constraint = ExecutionConstraintDescriptor::parse(include_bytes!(
         "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .expect("the published constraint");

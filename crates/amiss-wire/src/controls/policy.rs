@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Document, Error, ErrorKind, fail};
 use crate::extraction::governed_name_valid;
 
 use crate::model::{Adapter, ArtifactId, RepoPathText};
@@ -144,24 +144,6 @@ pub struct ScannerPolicy {
     pub finding_dispositions: Vec<FindingDisposition>,
 }
 
-/// Parses and validates one repository scanner policy.
-///
-/// # Errors
-///
-/// Fails on JSON defects, schema-shape violations, unknown fields,
-/// invalid grammar values, and unsorted or duplicate set members.
-pub fn parse_scanner_policy(bytes: &[u8]) -> Result<ScannerPolicy, Error> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let policy: ScannerPolicy = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
-
-    policy.validate()?;
-    Ok(policy)
-}
-
 /// Checks a directly constructed source through the same closed grammar and
 /// projection compatibility laws as a scanner-policy assertion.
 ///
@@ -174,57 +156,6 @@ pub fn check_projection_source(
     source: &ProjectionSource,
 ) -> Result<(), Error> {
     validate_projection_source("$", projection, source)
-}
-
-impl ScannerPolicy {
-    /// Checks this control's domain rules and resource limits.
-    ///
-    /// # Errors
-    ///
-    /// A public field violates the contract enforced by [`parse_scanner_policy`].
-    pub fn validate(&self) -> Result<(), Error> {
-        if self.document_includes.len() > 100_000 {
-            return fail("$.document_includes", ErrorKind::LimitExceeded);
-        }
-        for (index, include) in self.document_includes.iter().enumerate() {
-            validate_document_include(&format!("$.document_includes[{index}]"), include)?;
-        }
-        sorted_set(
-            "$.document_includes",
-            &self.document_includes,
-            |left, right| (left.path.as_str(), left.kind).cmp(&(right.path.as_str(), right.kind)),
-        )?;
-
-        let assertions = self.projection_assertions.as_deref().unwrap_or_default();
-        if assertions.len() > 100_000 {
-            return fail("$.projection_assertions", ErrorKind::LimitExceeded);
-        }
-        for (index, assertion) in assertions.iter().enumerate() {
-            validate_projection_assertion(&format!("$.projection_assertions[{index}]"), assertion)?;
-        }
-        sorted_set("$.projection_assertions", assertions, |left, right| {
-            (left.document.as_str(), left.name.as_str())
-                .cmp(&(right.document.as_str(), right.name.as_str()))
-        })?;
-
-        if self.protected_inventory.len() > 100_000 {
-            return fail("$.protected_inventory", ErrorKind::LimitExceeded);
-        }
-        sorted_set(
-            "$.protected_inventory",
-            &self.protected_inventory,
-            |left, right| left.as_str().cmp(right.as_str()),
-        )?;
-
-        if self.finding_dispositions.len() > 3 {
-            return fail("$.finding_dispositions", ErrorKind::LimitExceeded);
-        }
-        sorted_set(
-            "$.finding_dispositions",
-            &self.finding_dispositions,
-            |left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()),
-        )
-    }
 }
 
 fn validate_document_include(path: &str, include: &DocumentInclude) -> Result<(), Error> {
@@ -332,5 +263,58 @@ fn projection_source_compatible(projection: ProjectionKind, source: &ProjectionS
             projection,
             ProjectionKind::SortedRowsV1 | ProjectionKind::DecimalCountV1
         ),
+    }
+}
+
+impl Document for ScannerPolicy {
+    type Defect = Error;
+
+    /// Checks this control's domain rules and resource limits.
+    ///
+    /// # Errors
+    ///
+    /// A public field violates the contract enforced by [`parse_scanner_policy`].
+    fn validate(&self) -> Result<(), Error> {
+        if self.document_includes.len() > 100_000 {
+            return fail("$.document_includes", ErrorKind::LimitExceeded);
+        }
+        for (index, include) in self.document_includes.iter().enumerate() {
+            validate_document_include(&format!("$.document_includes[{index}]"), include)?;
+        }
+        sorted_set(
+            "$.document_includes",
+            &self.document_includes,
+            |left, right| (left.path.as_str(), left.kind).cmp(&(right.path.as_str(), right.kind)),
+        )?;
+
+        let assertions = self.projection_assertions.as_deref().unwrap_or_default();
+        if assertions.len() > 100_000 {
+            return fail("$.projection_assertions", ErrorKind::LimitExceeded);
+        }
+        for (index, assertion) in assertions.iter().enumerate() {
+            validate_projection_assertion(&format!("$.projection_assertions[{index}]"), assertion)?;
+        }
+        sorted_set("$.projection_assertions", assertions, |left, right| {
+            (left.document.as_str(), left.name.as_str())
+                .cmp(&(right.document.as_str(), right.name.as_str()))
+        })?;
+
+        if self.protected_inventory.len() > 100_000 {
+            return fail("$.protected_inventory", ErrorKind::LimitExceeded);
+        }
+        sorted_set(
+            "$.protected_inventory",
+            &self.protected_inventory,
+            |left, right| left.as_str().cmp(right.as_str()),
+        )?;
+
+        if self.finding_dispositions.len() > 3 {
+            return fail("$.finding_dispositions", ErrorKind::LimitExceeded);
+        }
+        sorted_set(
+            "$.finding_dispositions",
+            &self.finding_dispositions,
+            |left, right| left.finding_kind.as_ref().cmp(right.finding_kind.as_ref()),
+        )
     }
 }

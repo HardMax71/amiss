@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Document, Error, ErrorKind, fail};
 use crate::model::{ArtifactId, BranchRef, OwnerId, RepoPathText, RepositoryIdentity};
 
 use super::{
@@ -54,72 +54,13 @@ pub enum FloorDefect {
     },
 }
 
-pub const ORGANIZATION_POLICY_ENTRIES_LIMIT: u64 = 100_000;
-
-/// Parses and validates one organization floor.
-///
-/// # Errors
-///
-/// Fails on JSON defects, schema-shape violations, unknown fields,
-/// invalid grammar values, per-resource bound violations, unsorted or
-/// duplicate set members, and a combined entry count over the built-in
-/// `organization-policy-entries` limit or a tighter self-declared one.
-pub fn parse_organization_floor(bytes: &[u8]) -> Result<OrganizationFloor, FloorDefect> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let floor: OrganizationFloor = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| FloorDefect::Schema(de::deserialize_error("$", &defect)))?;
-    deserializer.end().map_err(|defect| {
-        FloorDefect::Schema(Error::new("$", ErrorKind::Json(defect.to_string())))
-    })?;
-
-    floor.validate()?;
-    Ok(floor)
-}
-
-impl OrganizationFloor {
-    /// Checks this control's domain rules and resource limits.
-    ///
-    /// # Errors
-    ///
-    /// A public field violates the contract enforced by [`parse_organization_floor`].
-    pub fn validate(&self) -> Result<(), FloorDefect> {
-        validate_repository("$.repository", &self.repository).map_err(FloorDefect::Schema)?;
-        let combined = [
-            self.minimum_dispositions.len(),
-            self.protected_inventory.len(),
-            self.protected_control_paths.len(),
-            self.waivable_finding_kinds.len(),
-            self.authorized_debt_owners.len(),
-            self.authorized_waiver_issuers.len(),
-            self.resource_limits.len(),
-        ]
-        .into_iter()
-        .map(|length| u64::try_from(length).unwrap_or(u64::MAX))
-        .fold(0_u64, u64::saturating_add);
-        if combined > ORGANIZATION_POLICY_ENTRIES_LIMIT {
-            return Err(FloorDefect::Entries {
-                configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
-                observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT.saturating_add(1),
-            });
-        }
-
-        validate_floor_shape(self).map_err(FloorDefect::Schema)?;
-        if let Some(declared) = self
-            .resource_limits
-            .iter()
-            .find(|row| row.resource == ResourceName::OrganizationPolicyEntries)
-        {
-            let declared = u64::try_from(declared.maximum).unwrap_or(u64::MAX);
-            if combined > declared {
-                return Err(FloorDefect::Entries {
-                    configured_limit: declared,
-                    observed_lower_bound: declared.saturating_add(1),
-                });
-            }
-        }
-        Ok(())
+impl From<Error> for FloorDefect {
+    fn from(defect: Error) -> Self {
+        Self::Schema(defect)
     }
 }
+
+pub const ORGANIZATION_POLICY_ENTRIES_LIMIT: u64 = 100_000;
 
 fn validate_floor_shape(floor: &OrganizationFloor) -> Result<(), Error> {
     if floor.minimum_dispositions.len() > 3 {
@@ -193,5 +134,52 @@ fn resource_maximum_valid(resource: ResourceName, maximum: i64) -> bool {
         u64::try_from(maximum).is_ok_and(|value| value == crate::report::MACHINE_JSON_BYTES)
     } else {
         (0..=js_int::MAX_SAFE_INT).contains(&maximum)
+    }
+}
+
+impl Document for OrganizationFloor {
+    type Defect = FloorDefect;
+
+    /// Checks this control's domain rules and resource limits.
+    ///
+    /// # Errors
+    ///
+    /// A public field violates the contract enforced by [`parse_organization_floor`].
+    fn validate(&self) -> Result<(), FloorDefect> {
+        validate_repository("$.repository", &self.repository).map_err(FloorDefect::Schema)?;
+        let combined = [
+            self.minimum_dispositions.len(),
+            self.protected_inventory.len(),
+            self.protected_control_paths.len(),
+            self.waivable_finding_kinds.len(),
+            self.authorized_debt_owners.len(),
+            self.authorized_waiver_issuers.len(),
+            self.resource_limits.len(),
+        ]
+        .into_iter()
+        .map(|length| u64::try_from(length).unwrap_or(u64::MAX))
+        .fold(0_u64, u64::saturating_add);
+        if combined > ORGANIZATION_POLICY_ENTRIES_LIMIT {
+            return Err(FloorDefect::Entries {
+                configured_limit: ORGANIZATION_POLICY_ENTRIES_LIMIT,
+                observed_lower_bound: ORGANIZATION_POLICY_ENTRIES_LIMIT.saturating_add(1),
+            });
+        }
+
+        validate_floor_shape(self).map_err(FloorDefect::Schema)?;
+        if let Some(declared) = self
+            .resource_limits
+            .iter()
+            .find(|row| row.resource == ResourceName::OrganizationPolicyEntries)
+        {
+            let declared = u64::try_from(declared.maximum).unwrap_or(u64::MAX);
+            if combined > declared {
+                return Err(FloorDefect::Entries {
+                    configured_limit: declared,
+                    observed_lower_bound: declared.saturating_add(1),
+                });
+            }
+        }
+        Ok(())
     }
 }

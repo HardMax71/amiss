@@ -5,6 +5,9 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::controls::OrganizationFloor;
+use amiss_wire::controls::TrustedTimeStatement;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
@@ -14,9 +17,7 @@ use amiss_git::Repository;
 use amiss_scan::policy::{DebtInput, FloorInput, TimeInput, WaiverInput};
 use amiss_scan::report::{CandidateBlock, candidate_identity_digest};
 use amiss_scan::{Effects, Setup, SetupShell, SnapshotIdentity, commit_pair};
-use amiss_wire::controls::{
-    Profile, parse_debt_snapshot, parse_organization_floor, parse_trusted_time, parse_waiver_bundle,
-};
+use amiss_wire::controls::{DebtSnapshot, Profile, WaiverBundle};
 use amiss_wire::de::Error;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
@@ -91,7 +92,7 @@ pub(crate) fn floor_input() -> FloorInput {
   "authorized_waiver_issuers": [ "team:release-engineering" ],
   "resource_limits": []
 }"#;
-    let floor = parse_organization_floor(doc.as_bytes()).unwrap();
+    let floor = OrganizationFloor::parse(doc.as_bytes()).unwrap();
     let digest = document_digest("amiss/organization-floor", &floor).unwrap();
     FloorInput {
         floor,
@@ -166,7 +167,7 @@ pub(crate) fn time_input(fx: &Fixture) -> TimeInput {
   "valid_until": "2026-07-12T10:09:00Z"
 }}"#
     );
-    let statement = parse_trusted_time(doc.as_bytes()).unwrap();
+    let statement = TrustedTimeStatement::parse(doc.as_bytes()).unwrap();
     TimeInput {
         statement,
         provider: "gitlab-ci".to_owned(),
@@ -238,7 +239,7 @@ pub(crate) fn debt_json(
 }
 
 pub(crate) fn debt_input(doc: &str) -> DebtInput {
-    let (snapshot, digest) = parsed_control(doc, parse_debt_snapshot, "amiss/debt-snapshot");
+    let (snapshot, digest) = parsed_control(doc, DebtSnapshot::parse, "amiss/debt-snapshot");
     DebtInput {
         snapshot,
         digest,
@@ -281,7 +282,7 @@ pub(crate) fn waiver_json(
 }
 
 pub(crate) fn waiver_input(doc: &str) -> WaiverInput {
-    let (bundle, digest) = parsed_control(doc, parse_waiver_bundle, "amiss/waiver-bundle");
+    let (bundle, digest) = parsed_control(doc, WaiverBundle::parse, "amiss/waiver-bundle");
     WaiverInput {
         bundle,
         digest,

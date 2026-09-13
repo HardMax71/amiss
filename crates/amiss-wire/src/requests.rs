@@ -8,7 +8,7 @@ use crate::controls::{
     DebtSnapshot, ExecutionConstraintDescriptor, OrganizationFloor, TrustedTimeStatement,
     WaiverBundle, provider_run_id_valid,
 };
-use crate::de::{self, Error, ErrorKind};
+use crate::de::{Document, Error, ErrorKind};
 use crate::model::ArtifactId;
 use crate::model::Digest;
 use crate::semantic::SemanticEvidenceEnvelope;
@@ -211,30 +211,90 @@ pub struct ControlsRequest {
     pub semantic_evidence: Vec<SuppliedSemanticEvidence>,
 }
 
-impl ControlsRequest {
+/// The three exact streams carried through the bootstrap-to-engine pipe.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RequestStreams {
+    pub evaluation: Vec<u8>,
+    pub snapshot: Vec<u8>,
+    pub controls: Vec<u8>,
+}
+
+impl RequestStreams {
+    /// Writes the closed frame: magic, then three big-endian lengths and
+    /// their exact request bytes in evaluation/snapshot/controls order.
+    ///
     /// # Errors
     ///
-    /// Fails on JSON defects, schema-shape violations, and invalid
-    /// grammar values. Controls and semantic evidence decode under their closed schemas.
-    /// Consumers verify semantic constraints and independent digests.
-    pub fn parse(bytes: &[u8]) -> Result<Self, Error> {
-        let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-        let request: Self = serde_path_to_error::deserialize(&mut deserializer)
-            .map_err(|defect| de::deserialize_error("$", &defect))?;
-        deserializer
-            .end()
-            .map_err(|defect| Error::new("$", ErrorKind::Json(defect.to_string())))?;
-
-        request.validate()?;
-        Ok(request)
+    /// A stream exceeds the request ceiling or the destination cannot be
+    /// written completely.
+    pub fn write_to(&self, writer: &mut impl Write) -> std::io::Result<()> {
+        writer.write_all(SEALED_FRAME_MAGIC)?;
+        for bytes in [&self.evaluation, &self.snapshot, &self.controls] {
+            let length = u64::try_from(bytes.len())
+                .map_err(|_defect| invalid_frame("request length is not representable"))?;
+            if length > REQUEST_STREAM_BYTES {
+                return Err(invalid_frame("request exceeds the stream ceiling"));
+            }
+            writer.write_all(&length.to_be_bytes())?;
+            writer.write_all(bytes)?;
+        }
+        Ok(())
     }
+
+    /// Reads one complete closed request frame and refuses trailing bytes.
+    ///
+    /// # Errors
+    ///
+    /// The source is truncated, malformed, oversized, has trailing bytes,
+    /// or otherwise cannot be read completely.
+    pub fn read_from(reader: &mut impl Read) -> std::io::Result<Self> {
+        let mut magic = [0_u8; 8];
+        reader.read_exact(&mut magic)?;
+        if &magic != SEALED_FRAME_MAGIC {
+            return Err(invalid_frame("wrong sealed request frame"));
+        }
+        let evaluation = read_stream(reader)?;
+        let snapshot = read_stream(reader)?;
+        let controls = read_stream(reader)?;
+        let mut trailing = [0_u8; 1];
+        if reader.read(&mut trailing)? != 0 {
+            return Err(invalid_frame("trailing sealed request bytes"));
+        }
+        Ok(Self {
+            evaluation,
+            snapshot,
+            controls,
+        })
+    }
+}
+
+fn read_stream(reader: &mut impl Read) -> std::io::Result<Vec<u8>> {
+    let mut encoded = [0_u8; 8];
+    reader.read_exact(&mut encoded)?;
+    let length = u64::from_be_bytes(encoded);
+    if length > REQUEST_STREAM_BYTES {
+        return Err(invalid_frame("request exceeds the stream ceiling"));
+    }
+    let capacity = usize::try_from(length)
+        .map_err(|_defect| invalid_frame("request length is not representable"))?;
+    let mut bytes = vec![0_u8; capacity];
+    reader.read_exact(&mut bytes)?;
+    Ok(bytes)
+}
+
+fn invalid_frame(message: &'static str) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::InvalidData, message)
+}
+
+impl Document for ControlsRequest {
+    type Defect = Error;
 
     /// Checks request grammar, numeric bounds, and the semantic evidence count.
     /// Nested control meaning and independent digests remain checks for the consumer.
     ///
     /// # Errors
     /// Refuses malformed provider context, unsafe integers, or too many evidence envelopes.
-    pub fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Error> {
         if let Some(time) = &self.trusted_time {
             ArtifactId::new(time.provider.clone())
                 .is_some()
@@ -314,79 +374,4 @@ impl ControlsRequest {
         }
         Ok(())
     }
-}
-
-/// The three exact streams carried through the bootstrap-to-engine pipe.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct RequestStreams {
-    pub evaluation: Vec<u8>,
-    pub snapshot: Vec<u8>,
-    pub controls: Vec<u8>,
-}
-
-impl RequestStreams {
-    /// Writes the closed frame: magic, then three big-endian lengths and
-    /// their exact request bytes in evaluation/snapshot/controls order.
-    ///
-    /// # Errors
-    ///
-    /// A stream exceeds the request ceiling or the destination cannot be
-    /// written completely.
-    pub fn write_to(&self, writer: &mut impl Write) -> std::io::Result<()> {
-        writer.write_all(SEALED_FRAME_MAGIC)?;
-        for bytes in [&self.evaluation, &self.snapshot, &self.controls] {
-            let length = u64::try_from(bytes.len())
-                .map_err(|_defect| invalid_frame("request length is not representable"))?;
-            if length > REQUEST_STREAM_BYTES {
-                return Err(invalid_frame("request exceeds the stream ceiling"));
-            }
-            writer.write_all(&length.to_be_bytes())?;
-            writer.write_all(bytes)?;
-        }
-        Ok(())
-    }
-
-    /// Reads one complete closed request frame and refuses trailing bytes.
-    ///
-    /// # Errors
-    ///
-    /// The source is truncated, malformed, oversized, has trailing bytes,
-    /// or otherwise cannot be read completely.
-    pub fn read_from(reader: &mut impl Read) -> std::io::Result<Self> {
-        let mut magic = [0_u8; 8];
-        reader.read_exact(&mut magic)?;
-        if &magic != SEALED_FRAME_MAGIC {
-            return Err(invalid_frame("wrong sealed request frame"));
-        }
-        let evaluation = read_stream(reader)?;
-        let snapshot = read_stream(reader)?;
-        let controls = read_stream(reader)?;
-        let mut trailing = [0_u8; 1];
-        if reader.read(&mut trailing)? != 0 {
-            return Err(invalid_frame("trailing sealed request bytes"));
-        }
-        Ok(Self {
-            evaluation,
-            snapshot,
-            controls,
-        })
-    }
-}
-
-fn read_stream(reader: &mut impl Read) -> std::io::Result<Vec<u8>> {
-    let mut encoded = [0_u8; 8];
-    reader.read_exact(&mut encoded)?;
-    let length = u64::from_be_bytes(encoded);
-    if length > REQUEST_STREAM_BYTES {
-        return Err(invalid_frame("request exceeds the stream ceiling"));
-    }
-    let capacity = usize::try_from(length)
-        .map_err(|_defect| invalid_frame("request length is not representable"))?;
-    let mut bytes = vec![0_u8; capacity];
-    reader.read_exact(&mut bytes)?;
-    Ok(bytes)
-}
-
-fn invalid_frame(message: &'static str) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::InvalidData, message)
 }

@@ -3,6 +3,7 @@
     reason = "a fixture that cannot build its own inputs has no useful failure to return"
 )]
 
+use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::fs;
 use std::path::{Path, PathBuf};

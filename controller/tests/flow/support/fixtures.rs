@@ -1,4 +1,6 @@
 use amiss_controller_fixtures::clock::TestClock;
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::de::Document as _;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -10,7 +12,7 @@ use amiss_controller::{
     ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs, RunnerOutcome, check_binding,
     check_plan, register_plan,
 };
-use amiss_wire::controls::{Profile, parse_execution_constraint};
+use amiss_wire::controls::Profile;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::{FakeAdapter, FakeRunner, MemoryLedger};
@@ -129,7 +131,7 @@ pub(crate) fn complete(run: &RunIdentity) -> RunnerOutcome {
 }
 
 pub(crate) fn plan() -> CheckPlan {
-    let execution = parse_execution_constraint(include_bytes!(
+    let execution = ExecutionConstraintDescriptor::parse(include_bytes!(
         "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();

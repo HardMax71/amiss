@@ -1,5 +1,7 @@
 #![cfg(test)]
 
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::de::Document as _;
 use std::path::Path;
 
 use super::{PathRequirements, canonical_path, resolve_execution_paths, separate_roots};
@@ -74,9 +76,9 @@ fn roots_are_separate_in_both_directions() {
 
 fn plan_over(constraint: &[u8]) -> amiss_controller::CheckPlan {
     use amiss_controller::{PolicyControls, check_plan};
-    use amiss_wire::controls::{Profile, parse_execution_constraint};
+    use amiss_wire::controls::Profile;
 
-    let descriptor = parse_execution_constraint(constraint).expect("a constraint");
+    let descriptor = ExecutionConstraintDescriptor::parse(constraint).expect("a constraint");
     check_plan(Profile::Enforce, PolicyControls::default(), descriptor).expect("a check plan")
 }
 

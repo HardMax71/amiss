@@ -1,3 +1,5 @@
+use amiss_wire::controls::ExecutionConstraintDescriptor;
+use amiss_wire::de::Document as _;
 use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::OpenOptions;
@@ -7,7 +9,6 @@ use std::process::{Command, ExitCode, Stdio};
 use std::time::{Duration, Instant};
 
 use amiss_bootstrap::result::{BootstrapResult, result_bytes, result_exit_code};
-use amiss_wire::controls::parse_execution_constraint;
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 const MALFORMED_RESULT: &[u8] = b"not-an-amiss-bootstrap-result\n";
@@ -147,7 +148,7 @@ fn output(path: &Path, directory: &Path, name: &str) -> bool {
 
 fn read_mode(path: &Path) -> Option<Mode> {
     let bytes = std::fs::read(path).ok()?;
-    let constraint = parse_execution_constraint(&bytes).ok()?;
+    let constraint = ExecutionConstraintDescriptor::parse(&bytes).ok()?;
     match constraint.required_status_name.as_str() {
         "runner-pass" => Some(Mode::Pass),
         "runner-block" => Some(Mode::Block),

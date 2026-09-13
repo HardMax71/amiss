@@ -3,6 +3,7 @@
     reason = "integration fixtures construct known-valid identities"
 )]
 
+use amiss_wire::de::Document as _;
 use std::sync::Arc;
 
 use amiss_controller::{
@@ -12,7 +13,7 @@ use amiss_controller::{
     RunRefs, RunRequest, check_binding, check_plan, verify_acquired,
 };
 use amiss_fixtures::{CommitPair, commit_pair, git};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, parse_execution_constraint};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 fn oid(value: &str) -> Oid {
@@ -34,7 +35,7 @@ fn repository() -> RepositoryIdentity {
 }
 
 fn action_execution(action: &CommitPair, action_tree: Oid) -> ExecutionConstraintDescriptor {
-    let mut descriptor = parse_execution_constraint(include_bytes!(
+    let mut descriptor = ExecutionConstraintDescriptor::parse(include_bytes!(
         "../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();

@@ -5,7 +5,7 @@ use sha2::Digest as _;
 use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Document, Error, ErrorKind, fail};
 use crate::model::Digest;
 use crate::model::{Oid, RepoPathText};
 use crate::resolution::Target;
@@ -144,24 +144,6 @@ pub struct Fact<K = FindingKeyInput, E = FactEvidence, F = EligibleFindingKind> 
     pub schema: FactSchema,
 }
 
-/// Parses and validates one structural finding fact.
-///
-/// # Errors
-///
-/// Fails on JSON defects, schema-shape violations, or inconsistent
-/// finding, key, resolution, and multiplicity values.
-pub fn parse_fact(bytes: &[u8]) -> Result<Fact, Error> {
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let fact: Fact = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-
-    fact.validate()?;
-    Ok(fact)
-}
-
 pub(super) fn fact_digests(path: &str, fact: &Fact) -> Result<(Digest, Digest), Error> {
     fact.validate()
         .map_err(|error| Error::new(path, error.kind))?;
@@ -178,13 +160,15 @@ pub(super) fn fact_digests(path: &str, fact: &Fact) -> Result<(Digest, Digest), 
     Ok((key, digest))
 }
 
-impl Fact {
+impl Document for Fact {
+    type Defect = Error;
+
     /// Checks that the finding kind, resolution, key and multiplicity agree.
     ///
     /// # Errors
     ///
     /// The public fields describe different structural findings or multiple occurrences.
-    pub fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Error> {
         let resolution_kind = match &self.evidence.resolution {
             StructuralResolution::Missing(_) => EligibleFindingKind::ExplicitTargetMissing,
             StructuralResolution::TypeMismatch { .. } => {

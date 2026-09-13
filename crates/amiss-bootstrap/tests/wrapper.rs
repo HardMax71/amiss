@@ -5,6 +5,8 @@
     reason = "end-to-end harness over asserted fixture shapes"
 )]
 
+use amiss_wire::controls::TrustedTimeStatement;
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 #[path = "wrapper/semantic.rs"]
@@ -20,9 +22,7 @@ use std::process::{Command, ExitCode, Output};
 use amiss_bootstrap::result::{BootstrapResult, parse_result};
 use amiss_fixtures::CommitChain;
 use amiss_fixtures::requests::SealedRequests;
-use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, parse_execution_constraint, parse_trusted_time,
-};
+use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::model::{Oid, RepoPathText};
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::report::model::ReportStatus;
@@ -120,7 +120,7 @@ fn wrapper_constraint(staged: &Release) -> ExecutionConstraintDescriptor {
                 .0
         ),
     );
-    parse_execution_constraint(raw.as_bytes()).unwrap()
+    ExecutionConstraintDescriptor::parse(raw.as_bytes()).unwrap()
 }
 
 /// One run the wrapper can settle end to end: a pre-acquired repository, a
@@ -192,8 +192,9 @@ fn bind_statement(
         Value::from(i64::try_from(time.provider_run_attempt).unwrap());
     (&mut statement)["evaluation_instant"] = Value::from(INSTANT);
     (&mut statement)["valid_until"] = Value::from(VALID_UNTIL);
-    let parsed = parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap())
-        .expect("a valid statement fixture");
+    let parsed =
+        TrustedTimeStatement::parse(&serde_json_canonicalizer::to_vec(&statement).unwrap())
+            .expect("a valid statement fixture");
     let digest = document_digest("amiss/scanner-trusted-time-statement", &parsed).unwrap();
     time.expected_digest = digest;
     time.value = parsed;

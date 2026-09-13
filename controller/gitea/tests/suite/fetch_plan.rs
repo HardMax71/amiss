@@ -3,6 +3,7 @@
     reason = "fixed provider identities and constraints must fail loudly"
 )]
 
+use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::sync::Arc;
 
@@ -13,7 +14,7 @@ use amiss_controller::{
     check_binding, check_plan,
 };
 use amiss_controller_gitea::{GiteaPlanError, gitea_fetch_plan};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, parse_execution_constraint};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 const RUN_DOMAIN: &str = "amiss/controller-gitea-family-pull-request-v1";
@@ -149,7 +150,7 @@ fn request(namespace: &str) -> RunRequest {
 }
 
 fn execution() -> ExecutionConstraintDescriptor {
-    let mut descriptor = parse_execution_constraint(include_bytes!(
+    let mut descriptor = ExecutionConstraintDescriptor::parse(include_bytes!(
         "../../../../spec/examples/scanner-execution-constraint.json"
     ))
     .unwrap();
