@@ -1,9 +1,9 @@
 use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::Digest;
-use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
-use amiss_wire::publication::{DocsCandidate, PublicationEvidence, PublicationPlan, assess};
+use amiss_wire::publication::{PublicationEvidence, PublicationPlan, assess};
 
-const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
+use crate::audit::report_binding;
+
 const PLAN: &[u8] = include_bytes!("../../../spec/examples/publication-plan.json");
 const EVIDENCE: &[u8] = include_bytes!("../../../spec/examples/publication-evidence.json");
 
@@ -17,29 +17,10 @@ pub struct PublicationAuditFixture {
 /// Builds one exact report-bound publication audit for controller tests.
 #[must_use]
 pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture> {
-    let report = REPORT.to_vec();
-    let (_, report_payload_digest, _) = amiss_wire::report::validate_envelope(&report).ok()?;
+    let binding = report_binding()?;
     let mut plan_envelope = PublicationPlan::parse(PLAN).ok()?;
-    plan_envelope.payload.report_payload_digest = report_payload_digest;
-    plan_envelope.payload.docs = DocsCandidate {
-        repository: RepositoryIdentity::new(
-            "git.example.internal".to_owned(),
-            "group/subgroup".to_owned(),
-            "widget".to_owned(),
-        )?,
-        object_format: ObjectFormat::Sha1,
-        commit: Oid::new(
-            ObjectFormat::Sha1,
-            "d1a175a1986230e4ba44b6f6ed67c8dbccb29aaf".to_owned(),
-        )?,
-        tree: Oid::new(
-            ObjectFormat::Sha1,
-            "7eed0bc378155f11543b2261997a1f363557e8cd".to_owned(),
-        )?,
-        candidate_identity_digest: Digest::from_wire(
-            "sha256:8c8f4c8087edf216675ffbfc5a75a6c67dc48103be696b74174758a3e5db187a",
-        )?,
-    };
+    plan_envelope.payload.report_payload_digest = binding.payload_digest;
+    plan_envelope.payload.docs = binding.docs;
     let plan_bytes = plan_envelope.payload.emit().ok()?;
     let plan_envelope = PublicationPlan::parse(&plan_bytes).ok()?;
     let evidence_envelope = if with_evidence {
@@ -60,7 +41,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
         .transpose()
         .ok()?;
     Some(PublicationAuditFixture {
-        report,
+        report: binding.report,
         plan: plan_bytes,
         evidence,
         assessment,

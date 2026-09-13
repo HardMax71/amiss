@@ -131,7 +131,10 @@ resource verdicts. `coverage.complete` remains strictly about the page compariso
 assessment can be unproven solely because a product receipt is missing while coverage is complete.
 Missing, unbound, wrong-producer, or otherwise insufficient evidence is unproven rather than clean.
 `amiss locale-assess --plan <path> --evidence <path>` judges one pair offline and writes the
-assessment; see [the invocation chapter](invocation.md). The controller intake is not built yet.
+assessment; see [the invocation chapter](invocation.md). The controller validates a complete
+report-bound chain before retention and stores its four components under the record's own
+ceilings, 64 KiB for the plan and 16 MiB for the evidence and assessment. No lane acquires or
+stages a page inventory yet, so the evidence still comes from outside.
 
 The checked public contracts are
 [`locale-coverage-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-plan.schema.json),

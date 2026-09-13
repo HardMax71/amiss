@@ -2,21 +2,22 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use amiss_controller::{
-    ArtifactAuditBundle, ArtifactAuditDigests, ArtifactBundle, ArtifactComponent, ArtifactError,
-    ArtifactStoreConfig, ControllerClock, ControllerEvaluationId, ExternalTally, FileArtifactStore,
-    PublicationAuditBundle, RelationAuditBundle, validate_publication_audit,
+    ArtifactAuditBundle, ArtifactAuditDigests, ArtifactAuditReference, ArtifactBundle,
+    ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock, ControllerEvaluationId,
+    ExternalTally, FileArtifactStore, LocaleAuditBundle, PublicationAuditBundle,
+    RelationAuditBundle, validate_locale_audit, validate_publication_audit,
     validate_relation_audit,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::relation::relation_audit;
-use amiss_fixtures::publication_audit;
+use amiss_fixtures::{locale_audit, publication_audit};
 
 fn config() -> ArtifactStoreConfig {
     ArtifactStoreConfig {
         base_url: "https://amiss.example/artifacts".to_owned(),
         retention: Duration::from_secs(1),
-        max_records: 4,
-        max_bytes: 1_048_576,
+        max_records: 6,
+        max_bytes: 2_097_152,
         max_record_bytes: 524_288,
     }
 }
@@ -80,6 +81,49 @@ fn exact_components_survive_restart_under_one_stable_locator() {
     assert_eq!(reopened.find(&evaluation).unwrap(), Some(retained));
 }
 
+/// One sidecar's three stored components in the order the record holds them.
+fn parts<'a>(
+    plan: &'a [u8],
+    evidence: Option<&'a [u8]>,
+    assessment: &'a [u8],
+    names: [ArtifactComponent; 3],
+) -> [(ArtifactComponent, Option<&'a [u8]>); 3] {
+    let [plan_name, evidence_name, assessment_name] = names;
+    [
+        (plan_name, Some(plan)),
+        (evidence_name, evidence),
+        (assessment_name, Some(assessment)),
+    ]
+}
+
+/// Retains one audit twice, proving the second is the same record, and reads
+/// back every component the sidecar should hold.
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn retained_once(
+    store: &FileArtifactStore,
+    evaluation: ControllerEvaluationId,
+    bundle: ArtifactAuditBundle<'_>,
+    expected: ArtifactAuditDigests,
+    components: [(ArtifactComponent, Option<&[u8]>); 3],
+) -> (ControllerEvaluationId, ArtifactAuditReference) {
+    let reference = store.retain_audit(&evaluation, bundle).unwrap();
+    assert_eq!(reference.audit, expected);
+    assert_eq!(store.retain_audit(&evaluation, bundle).unwrap(), reference);
+    for (component, expected) in components {
+        match expected {
+            Some(expected) => assert_eq!(
+                store.read(&reference.artifact.id, component).unwrap(),
+                expected
+            ),
+            None => assert!(matches!(
+                store.read(&reference.artifact.id, component),
+                Err(ArtifactError::NotFound)
+            )),
+        }
+    }
+    (evaluation, reference)
+}
+
 #[test]
 fn audits_survive_restart_with_optional_evidence_exact() {
     let root = tempfile::tempdir().unwrap();
@@ -98,6 +142,13 @@ fn audits_survive_restart_with_optional_evidence_exact() {
             evidence: publication.evidence.as_deref(),
             assessment: &publication.assessment,
         };
+        let locale = locale_audit(with_evidence).unwrap();
+        let locale_bundle = LocaleAuditBundle {
+            report: &locale.report,
+            plan: &locale.plan,
+            evidence: locale.evidence.as_deref(),
+            assessment: &locale.assessment,
+        };
         let relation = relation_audit(with_evidence).unwrap();
         let relation_bundle = RelationAuditBundle {
             transition: &relation.transition,
@@ -114,60 +165,53 @@ fn audits_survive_restart_with_optional_evidence_exact() {
                 ArtifactAuditDigests::Publication(
                     validate_publication_audit(publication_bundle).unwrap(),
                 ),
-                [
-                    (
+                parts(
+                    &publication.plan,
+                    publication.evidence.as_deref(),
+                    &publication.assessment,
+                    [
                         ArtifactComponent::PublicationPlan,
-                        Some(publication.plan.as_slice()),
-                    ),
-                    (
                         ArtifactComponent::PublicationEvidence,
-                        publication.evidence.as_deref(),
-                    ),
-                    (
                         ArtifactComponent::PublicationAssessment,
-                        Some(publication.assessment.as_slice()),
-                    ),
-                ],
+                    ],
+                ),
+            ),
+            (
+                "locale",
+                ArtifactAuditBundle::Locale(locale_bundle),
+                ArtifactAuditDigests::Locale(validate_locale_audit(locale_bundle).unwrap()),
+                parts(
+                    &locale.plan,
+                    locale.evidence.as_deref(),
+                    &locale.assessment,
+                    [
+                        ArtifactComponent::LocalePlan,
+                        ArtifactComponent::LocaleEvidence,
+                        ArtifactComponent::LocaleAssessment,
+                    ],
+                ),
             ),
             (
                 "relation",
                 ArtifactAuditBundle::Relation(relation_bundle),
                 ArtifactAuditDigests::Relation(validate_relation_audit(relation_bundle).unwrap()),
-                [
-                    (
+                parts(
+                    &relation.plan,
+                    relation.evidence.as_deref(),
+                    &relation.assessment,
+                    [
                         ArtifactComponent::RelationPlan,
-                        Some(relation.plan.as_slice()),
-                    ),
-                    (
                         ArtifactComponent::RelationEvidence,
-                        relation.evidence.as_deref(),
-                    ),
-                    (
                         ArtifactComponent::RelationAssessment,
-                        Some(relation.assessment.as_slice()),
-                    ),
-                ],
+                    ],
+                ),
             ),
         ] {
             let evaluation =
                 ControllerEvaluationId::new(format!("evaluation/{kind}/{mode}")).unwrap();
-            let reference = store.retain_audit(&evaluation, bundle).unwrap();
-
-            assert_eq!(reference.audit, expected);
-            assert_eq!(store.retain_audit(&evaluation, bundle).unwrap(), reference);
-            for (component, expected) in components {
-                match expected {
-                    Some(expected) => assert_eq!(
-                        store.read(&reference.artifact.id, component).unwrap(),
-                        expected
-                    ),
-                    None => assert!(matches!(
-                        store.read(&reference.artifact.id, component),
-                        Err(ArtifactError::NotFound)
-                    )),
-                }
-            }
-            retained.push((evaluation, reference));
+            retained.push(retained_once(
+                &store, evaluation, bundle, expected, components,
+            ));
         }
     }
     drop(store);

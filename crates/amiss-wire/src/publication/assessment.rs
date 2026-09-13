@@ -104,13 +104,7 @@ pub fn assess(
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, Error> {
-    let document = PublicationAssessment::evaluate(plan, evidence, engine_version, engine_digest)?;
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    Ok(canonical)
+    PublicationAssessment::evaluate(plan, evidence, engine_version, engine_digest)?.emit()
 }
 
 impl PublicationAssessment {
@@ -123,7 +117,7 @@ impl PublicationAssessment {
         evidence: Option<&Envelope<PublicationEvidence>>,
         engine_version: &str,
         engine_digest: Digest,
-    ) -> Result<Envelope<PublicationAssessment>, Error> {
+    ) -> Result<PublicationAssessment, Error> {
         if plan.payload.digest()? != plan.payload_digest {
             return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
         }
@@ -192,13 +186,7 @@ impl PublicationAssessment {
             verdict,
             reasons,
         };
-        let payload_digest = assessment.digest()?;
-        let document = Envelope {
-            schema: AssessmentEnvelopeSchema::Current,
-            payload: assessment,
-            payload_digest,
-        };
-        Ok(document)
+        Ok(assessment)
     }
 }
 

@@ -13,6 +13,10 @@ pub(super) enum RootSchema {
 use sha2::Digest as _;
 use std::time::Duration;
 
+use amiss_wire::locale::{
+    ASSESSMENT_DOCUMENT_BYTES as LOCALE_AUDIT_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES,
+    LocaleCoverageVerdict,
+};
 use amiss_wire::model::Digest;
 use amiss_wire::publication::{PUBLICATION_DOCUMENT_BYTES, PublicationVerdict};
 use amiss_wire::relation::{RELATION_DOCUMENT_BYTES, RelationVerdict};
@@ -92,6 +96,8 @@ pub(super) struct Record {
     pub(super) publication_audit: Option<SidecarAudit<PublicationVerdict>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub(super) relation_audit: Option<SidecarAudit<RelationVerdict>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(super) locale_audit: Option<SidecarAudit<LocaleCoverageVerdict>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,6 +120,7 @@ pub(super) struct RecordInput {
     pub(super) semantic: Option<Blob>,
     pub(super) publication_audit: Option<SidecarAudit<PublicationVerdict>>,
     pub(super) relation_audit: Option<SidecarAudit<RelationVerdict>>,
+    pub(super) locale_audit: Option<SidecarAudit<LocaleCoverageVerdict>>,
 }
 
 impl Record {
@@ -143,6 +150,7 @@ impl Record {
             semantic: input.semantic,
             publication_audit: input.publication_audit,
             relation_audit: input.relation_audit,
+            locale_audit: input.locale_audit,
         };
         record.id = record.expected_id()?;
         record.validate(retention)?;
@@ -158,19 +166,35 @@ impl Record {
                 .assessment
                 .as_ref()
                 .is_none_or(|_assessment| self.plan.is_some() && self.evidence.is_some());
-        let sidecar_valid = match (&self.publication_audit, &self.relation_audit) {
-            (None, None) => true,
-            (Some(audit), None) => valid_sidecar(
-                audit,
-                PUBLICATION_DOCUMENT_BYTES,
-                &PublicationVerdict::Unproven,
-            ),
-            (None, Some(audit)) => {
-                valid_sidecar(audit, RELATION_DOCUMENT_BYTES, &RelationVerdict::Unproven)
-            }
-            (Some(_publication), Some(_relation)) => false,
-        };
-        let has_sidecar = self.publication_audit.is_some() || self.relation_audit.is_some();
+        let sidecars = [
+            self.publication_audit.as_ref().map(|audit| {
+                valid_sidecar(
+                    audit,
+                    PUBLICATION_DOCUMENT_BYTES,
+                    PUBLICATION_DOCUMENT_BYTES,
+                    &PublicationVerdict::Unproven,
+                )
+            }),
+            self.relation_audit.as_ref().map(|audit| {
+                valid_sidecar(
+                    audit,
+                    RELATION_DOCUMENT_BYTES,
+                    RELATION_DOCUMENT_BYTES,
+                    &RelationVerdict::Unproven,
+                )
+            }),
+            self.locale_audit.as_ref().map(|audit| {
+                valid_sidecar(
+                    audit,
+                    LOCALE_DOCUMENT_BYTES,
+                    LOCALE_AUDIT_DOCUMENT_BYTES,
+                    &LocaleCoverageVerdict::Unproven,
+                )
+            }),
+        ];
+        let has_sidecar = sidecars.iter().flatten().count() > 0;
+        let sidecar_valid =
+            sidecars.iter().flatten().count() <= 1 && sidecars.iter().flatten().all(|valid| *valid);
         let sidecar_isolated = !has_sidecar
             || self.semantic.is_none()
                 && self.plan.is_none()
@@ -227,38 +251,32 @@ impl Record {
                 self.assessment.as_ref(),
             ),
             (super::ArtifactComponent::Semantic, self.semantic.as_ref()),
-            (
-                super::ArtifactComponent::PublicationPlan,
-                self.publication_audit.as_ref().map(|audit| &audit.plan),
-            ),
-            (
-                super::ArtifactComponent::PublicationEvidence,
-                self.publication_audit
-                    .as_ref()
-                    .and_then(|audit| audit.evidence.as_ref()),
-            ),
-            (
-                super::ArtifactComponent::PublicationAssessment,
-                self.publication_audit
-                    .as_ref()
-                    .map(|audit| &audit.assessment),
-            ),
-            (
-                super::ArtifactComponent::RelationPlan,
-                self.relation_audit.as_ref().map(|audit| &audit.plan),
-            ),
-            (
-                super::ArtifactComponent::RelationEvidence,
-                self.relation_audit
-                    .as_ref()
-                    .and_then(|audit| audit.evidence.as_ref()),
-            ),
-            (
-                super::ArtifactComponent::RelationAssessment,
-                self.relation_audit.as_ref().map(|audit| &audit.assessment),
-            ),
         ]
         .into_iter()
+        .chain(sidecar_blobs(
+            self.publication_audit.as_ref(),
+            [
+                super::ArtifactComponent::PublicationPlan,
+                super::ArtifactComponent::PublicationEvidence,
+                super::ArtifactComponent::PublicationAssessment,
+            ],
+        ))
+        .chain(sidecar_blobs(
+            self.relation_audit.as_ref(),
+            [
+                super::ArtifactComponent::RelationPlan,
+                super::ArtifactComponent::RelationEvidence,
+                super::ArtifactComponent::RelationAssessment,
+            ],
+        ))
+        .chain(sidecar_blobs(
+            self.locale_audit.as_ref(),
+            [
+                super::ArtifactComponent::LocalePlan,
+                super::ArtifactComponent::LocaleEvidence,
+                super::ArtifactComponent::LocaleAssessment,
+            ],
+        ))
         .filter_map(|(component, blob)| blob.map(|blob| (component, blob)))
     }
 
@@ -278,6 +296,8 @@ impl Record {
             publication_audit: &'a Option<SidecarAudit<PublicationVerdict>>,
             #[serde(skip_serializing_if = "Option::is_none")]
             relation_audit: &'a Option<SidecarAudit<RelationVerdict>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            locale_audit: &'a Option<SidecarAudit<LocaleCoverageVerdict>>,
         }
         let identity = Identity {
             evaluation_id: &self.evaluation_id,
@@ -290,6 +310,7 @@ impl Record {
             semantic: &self.semantic,
             publication_audit: &self.publication_audit,
             relation_audit: &self.relation_audit,
+            locale_audit: &self.locale_audit,
         };
         let bytes = serde_json::to_vec(&identity).map_err(|_defect| ArtifactError::Corrupt)?;
         Ok(hex::encode(
@@ -305,18 +326,31 @@ impl Record {
     }
 }
 
-fn valid_sidecar<V>(audit: &SidecarAudit<V>, maximum: u64, unproven: &V) -> bool
+/// One audit sidecar's three components in their stored order.
+fn sidecar_blobs<V>(
+    audit: Option<&SidecarAudit<V>>,
+    components: [super::ArtifactComponent; 3],
+) -> [(super::ArtifactComponent, Option<&Blob>); 3] {
+    let [plan, evidence, assessment] = components;
+    [
+        (plan, audit.map(|audit| &audit.plan)),
+        (evidence, audit.and_then(|audit| audit.evidence.as_ref())),
+        (assessment, audit.map(|audit| &audit.assessment)),
+    ]
+}
+
+fn valid_sidecar<V>(audit: &SidecarAudit<V>, plan: u64, document: u64, unproven: &V) -> bool
 where
     V: PartialEq,
 {
     audit.plan.valid()
-        && audit.plan.length <= maximum
+        && audit.plan.length <= plan
         && audit
             .evidence
             .as_ref()
-            .is_none_or(|blob| blob.valid() && blob.length <= maximum)
+            .is_none_or(|blob| blob.valid() && blob.length <= document)
         && audit.assessment.valid()
-        && audit.assessment.length <= maximum
+        && audit.assessment.length <= document
         && (&audit.verdict == unproven || audit.evidence.is_some())
 }
 
