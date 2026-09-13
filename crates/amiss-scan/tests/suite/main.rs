@@ -15,6 +15,7 @@ mod governed;
 mod identity;
 mod index_identity;
 mod lfs;
+mod locale;
 mod pipeline;
 mod policy;
 mod record_projection;
