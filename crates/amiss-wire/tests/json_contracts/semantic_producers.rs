@@ -1,9 +1,10 @@
+use amiss_wire::envelope::Envelope;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::{
     de::ErrorKind,
     report::model::SemanticEvidenceProducer,
     semantic::{
-        self, SemanticEvidenceEnvelope, SemanticEvidenceTemplate, SemanticProducer,
-        SemanticProducerKind,
+        self, SemanticEvidence, SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind,
     },
 };
 use sha2::Digest as _;
@@ -54,7 +55,7 @@ fn semantic_producer_kinds_are_closed_string_tags_through_provenance() {
 
 #[test]
 fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
-    let document: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(include_bytes!(
+    let document: Envelope<SemanticEvidence<'static>> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();
@@ -78,7 +79,9 @@ fn unknown_semantic_producers_fail_even_with_a_matching_payload_digest() {
         .replace(&payload, &unknown)
         .replace(&document.payload_digest.to_string(), &digest.to_string());
     assert_eq!(
-        semantic::parse(encoded.as_bytes()).unwrap_err().kind,
+        SemanticEvidence::parse(encoded.as_bytes())
+            .unwrap_err()
+            .kind,
         ErrorKind::InvalidValue
     );
 

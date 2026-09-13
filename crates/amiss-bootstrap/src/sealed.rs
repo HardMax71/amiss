@@ -156,7 +156,8 @@ fn semantic_expectations(
         .iter()
         .map(|supplied| {
             let envelope = &supplied.value;
-            amiss_wire::semantic::validate(envelope)
+            envelope
+                .validate()
                 .map_err(|_defect| tampered("semantic-evidence-invalid"))?;
             if envelope.payload.producer.context_digest != supplied.expected_context_digest {
                 return Err(tampered("semantic-evidence-invalid"));

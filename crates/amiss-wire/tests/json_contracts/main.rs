@@ -5,6 +5,8 @@ use amiss_wire::controls::ScannerPolicy;
 use amiss_wire::controls::TrustedTimeStatement;
 use amiss_wire::controls::WaiverBundle;
 use amiss_wire::de::Document as _;
+use amiss_wire::envelope::Envelope;
+use amiss_wire::semantic::SemanticEvidence;
 use amiss_wire::semantic::record::Input;
 use std::{collections::BTreeSet, fs, path::Path};
 
@@ -260,8 +262,8 @@ fn semantic_examples_match_the_actual_typed_producers() {
 
     let semantic_evidence_bytes =
         fs::read(examples.join("scanner-semantic-evidence.json")).unwrap();
-    semantic::parse(&semantic_evidence_bytes).unwrap();
-    let typed: semantic::SemanticEvidenceEnvelope<'static> =
+    SemanticEvidence::parse(&semantic_evidence_bytes).unwrap();
+    let typed: Envelope<SemanticEvidence<'static>> =
         serde_json::from_slice(&semantic_evidence_bytes).unwrap();
     let generated = semantic::envelope(typed.payload.clone()).unwrap();
     let mut canonical = Vec::new();

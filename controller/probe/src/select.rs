@@ -1,11 +1,12 @@
 mod tests;
 
-use amiss_wire::external::ExternalPlanEnvelope;
+use amiss_wire::envelope::Envelope;
+use amiss_wire::external::ExternalPlan;
 
 /// The probeable introduced destinations: https, not shaped as a forge
 /// repository since the API verifiers own those, capped at the run budget.
 /// Returns the selection and how many probeable rows fell past the cap.
-pub(crate) fn targets(plan: &ExternalPlanEnvelope, cap: usize) -> (Vec<&str>, usize) {
+pub(crate) fn targets(plan: &Envelope<ExternalPlan>, cap: usize) -> (Vec<&str>, usize) {
     let probeable: Vec<&str> = plan
         .payload
         .introduced

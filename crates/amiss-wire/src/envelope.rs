@@ -2,7 +2,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{self, Error, ErrorKind};
 use crate::model::Digest;
 
 /// The domain-separated digest of one value's canonical bytes. Every digest in
@@ -28,17 +28,22 @@ pub fn transcoded_digest(domain: &str, json: &[u8]) -> Option<Digest> {
 pub trait Payload: Serialize + Sized {
     /// The closed tag the carrying document announces itself under.
     type Schema;
+    /// What a rejected document reports; `Error` unless a payload carries
+    /// more than a path and a kind.
+    type Defect: From<Error>;
     /// The domain the payload digest is taken under.
     const DOMAIN: &'static str;
     /// The ceiling on the encoded document that carries this payload.
     const DOCUMENT_BYTES: u64;
+    /// What the payload digest covers.
+    const SEALING: Sealing = Sealing::Typed;
 
     /// Checks the payload's closed grammar.
     ///
     /// # Errors
     ///
     /// A public field violates the grammar the document's reader enforces.
-    fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Self::Defect> {
         Ok(())
     }
 
@@ -47,10 +52,10 @@ pub trait Payload: Serialize + Sized {
     /// # Errors
     ///
     /// Refuses a payload that violates its grammar or does not serialize.
-    fn digest(&self) -> Result<Digest, Error> {
+    fn digest(&self) -> Result<Digest, Self::Defect> {
         self.validate()?;
         document_digest(Self::DOMAIN, self)
-            .ok_or_else(|| Error::new("$.payload", ErrorKind::InvalidValue))
+            .ok_or_else(|| Error::new("$.payload", ErrorKind::InvalidValue).into())
     }
 
     /// Seals this payload under its schema and encodes the canonical document.
@@ -58,7 +63,7 @@ pub trait Payload: Serialize + Sized {
     /// # Errors
     ///
     /// Refuses a payload that violates its grammar, or a document over its ceiling.
-    fn emit(&self) -> Result<Vec<u8>, Error>
+    fn emit(&self) -> Result<Vec<u8>, Self::Defect>
     where
         Self::Schema: Default + Serialize,
     {
@@ -70,7 +75,7 @@ pub trait Payload: Serialize + Sized {
         let canonical = serde_json_canonicalizer::to_vec(&sealed)
             .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
         if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > Self::DOCUMENT_BYTES {
-            return fail("$", ErrorKind::LimitExceeded);
+            return Err(Error::new("$", ErrorKind::LimitExceeded).into());
         }
         Ok(canonical)
     }
@@ -80,25 +85,75 @@ pub trait Payload: Serialize + Sized {
     /// # Errors
     ///
     /// Refuses an oversized or malformed document, an unknown or malformed
-    /// field, a payload that violates its grammar, and a payload digest that
-    /// does not recompute.
-    fn parse(bytes: &[u8]) -> Result<Envelope<Self>, Error>
+    /// field, a payload digest that does not recompute, and a payload that
+    /// violates its grammar.
+    fn parse(bytes: &[u8]) -> Result<Envelope<Self>, Self::Defect>
     where
         Self: DeserializeOwned,
         Self::Schema: DeserializeOwned + Serialize,
     {
-        let document: Envelope<Self> = de::read(bytes, Self::DOCUMENT_BYTES)?;
-        document.validate()?;
-        Ok(document)
+        match Self::SEALING {
+            Sealing::Typed => {
+                let document: Envelope<Self> = de::read(bytes, Self::DOCUMENT_BYTES)?;
+                document.validate()?;
+                Ok(document)
+            }
+            Sealing::Received => {
+                de::read::<Received<'_, Self::Schema>>(bytes, Self::DOCUMENT_BYTES)?.open()
+            }
+        }
+    }
+}
+
+/// What a payload digest covers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sealing {
+    /// The canonical spelling of the typed payload. A closed document is
+    /// exactly what its model spells, and its consumers recompute the digest
+    /// from the typed value, so no other spelling is that document.
+    Typed,
+    /// The payload bytes as received, so additive fields the model does not
+    /// carry stay under the seal.
+    Received,
+}
+
+/// A sealed document with its payload still as the bytes it arrived in.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Received<'a, S> {
+    schema: S,
+    #[serde(borrow)]
+    payload: &'a serde_json::value::RawValue,
+    payload_digest: Digest,
+}
+
+impl<S> Received<'_, S> {
+    /// Checks the seal over the received payload bytes, then types the payload.
+    fn open<T: Payload<Schema = S> + DeserializeOwned>(self) -> Result<Envelope<T>, T::Defect> {
+        let sealed = transcoded_digest(T::DOMAIN, self.payload.get().as_bytes())
+            .ok_or_else(|| Error::new("$.payload", ErrorKind::InvalidValue))?;
+        let mut input = serde_json::Deserializer::from_str(self.payload.get());
+        let payload: T = serde_path_to_error::deserialize(&mut input)
+            .map_err(|defect| de::deserialize_error("$.payload", &defect))?;
+        if sealed != self.payload_digest {
+            return Err(Error::new("$.payload_digest", ErrorKind::DigestMismatch).into());
+        }
+        payload.validate()?;
+        Ok(Envelope {
+            schema: self.schema,
+            payload,
+            payload_digest: self.payload_digest,
+        })
     }
 }
 
 impl<T: Payload> Payload for &T {
     type Schema = T::Schema;
+    type Defect = T::Defect;
     const DOMAIN: &'static str = T::DOMAIN;
     const DOCUMENT_BYTES: u64 = T::DOCUMENT_BYTES;
 
-    fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Self::Defect> {
         T::validate(self)
     }
 }
@@ -120,7 +175,7 @@ impl<T: Payload> Envelope<T> {
     ///
     /// Refuses an invalid payload, an oversized document, or a payload digest
     /// that does not recompute.
-    pub fn validate(&self) -> Result<(), Error>
+    pub fn validate(&self) -> Result<(), T::Defect>
     where
         T::Schema: Serialize,
     {
@@ -129,10 +184,10 @@ impl<T: Payload> Envelope<T> {
         serde_json_canonicalizer::to_writer(self, &mut measured)
             .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
         if u64::try_from(measured.writer_bytes()).unwrap_or(u64::MAX) > T::DOCUMENT_BYTES {
-            return fail("$", ErrorKind::LimitExceeded);
+            return Err(Error::new("$", ErrorKind::LimitExceeded).into());
         }
         if digest != self.payload_digest {
-            return fail("$.payload_digest", ErrorKind::DigestMismatch);
+            return Err(Error::new("$.payload_digest", ErrorKind::DigestMismatch).into());
         }
         Ok(())
     }

@@ -1,3 +1,5 @@
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::external::ExternalPlan;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
@@ -47,9 +49,7 @@ fn scripted_evidence(repository: ForgeRepository, tail: Option<ForgeTail>) -> Ve
         amiss_wire::external::plan(&report, &engine.engine_version, engine.engine_digest).unwrap();
     evidence(&ExternalEvidence {
         schema: ExternalEvidenceSchema::Current,
-        plan_payload_digest: amiss_wire::external::parse_plan(&plan)
-            .unwrap()
-            .payload_digest,
+        plan_payload_digest: ExternalPlan::parse(&plan).unwrap().payload_digest,
         producer: ExternalEvidenceProducer {
             name: "scripted".to_owned(),
             version: "0".to_owned(),

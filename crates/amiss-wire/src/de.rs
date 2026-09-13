@@ -98,7 +98,10 @@ pub(crate) fn deserialize_error(
 ///
 /// The document is over its ceiling, is not the shape, or carries trailing
 /// bytes.
-pub(crate) fn read<T: serde::de::DeserializeOwned>(bytes: &[u8], limit: u64) -> Result<T, Error> {
+pub(crate) fn read<'de, T: serde::Deserialize<'de>>(
+    bytes: &'de [u8],
+    limit: u64,
+) -> Result<T, Error> {
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > limit {
         return fail("$", ErrorKind::LimitExceeded);
     }

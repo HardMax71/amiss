@@ -2,6 +2,9 @@
 
 use amiss_wire::controls::OrganizationFloor;
 use amiss_wire::de::Document as _;
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::external::ExternalAssessment;
+use amiss_wire::external::ExternalPlan;
 use amiss_wire::external::{
     EVIDENCE_SCHEMA, ExternalEvidence, ExternalEvidenceProducer, ExternalEvidenceRow,
     ExternalEvidenceSchema, PLAN_PAYLOAD_SCHEMA, ProbeMethod, assess, evidence,
@@ -35,7 +38,7 @@ fn dense_external_assessment(bencher: Bencher<'_, '_>) {
     );
     let validation = assess(&plan, &evidence, "0.0.0", engine_digest)
         .unwrap_or_else(|defect| panic!("dense assessment fixture: {defect:?}"));
-    let document = amiss_wire::external::parse_assessment(&validation)
+    let document = ExternalAssessment::parse(&validation)
         .unwrap_or_else(|defect| panic!("dense assessment output: {defect}"));
     assert_eq!(document.payload.verdicts.len(), 16_384);
 
@@ -54,7 +57,7 @@ fn assessment_fixture(count: usize) -> (Vec<u8>, Vec<u8>) {
     let destinations: Vec<String> = (0..count)
         .map(|index| format!("https://example.com/resource-{index:05}"))
         .collect();
-    let mut document = amiss_wire::external::parse_plan(include_bytes!(
+    let mut document = ExternalPlan::parse(include_bytes!(
         "../../../spec/examples/scanner-external-plan.json"
     ))
     .unwrap_or_else(|defect| panic!("benchmark plan example: {defect}"));

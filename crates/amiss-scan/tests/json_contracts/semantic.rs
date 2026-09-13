@@ -1,4 +1,5 @@
 use amiss_wire::de::Document as _;
+use amiss_wire::envelope::Envelope;
 use sha2::Digest as _;
 use std::borrow::Cow;
 
@@ -15,8 +16,8 @@ use amiss_wire::{
         commit_candidate_identity_digest,
     },
     semantic::{
-        self, SemanticEvidenceEnvelope, SemanticEvidenceTemplate, SemanticProducer,
-        SemanticProducerKind, TemplateSchema, bind_template,
+        self, SemanticEvidence, SemanticEvidenceTemplate, SemanticProducer, SemanticProducerKind,
+        TemplateSchema, bind_template,
         observation::{Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation},
         record,
     },
@@ -125,7 +126,7 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
 
 #[test]
 fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digests() {
-    let original: SemanticEvidenceEnvelope<'static> = serde_json::from_slice(include_bytes!(
+    let original: Envelope<SemanticEvidence<'static>> = serde_json::from_slice(include_bytes!(
         "../../../../spec/examples/scanner-semantic-evidence.json"
     ))
     .unwrap();

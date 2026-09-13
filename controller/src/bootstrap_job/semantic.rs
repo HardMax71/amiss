@@ -1,3 +1,4 @@
+use amiss_wire::envelope::Envelope;
 use sha2::Digest as _;
 mod tests;
 
@@ -8,7 +9,7 @@ use std::sync::Arc;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
 use amiss_wire::requests::SuppliedSemanticEvidence;
-use amiss_wire::semantic::{SemanticEvidence, SemanticEvidenceEnvelope};
+use amiss_wire::semantic::SemanticEvidence;
 use base64::Engine as _;
 
 use super::plan::normalized_expectations;
@@ -129,7 +130,7 @@ fn bind_input(
     Ok(BoundInput {
         payload_digest: envelope.payload_digest,
         supplied: SuppliedSemanticEvidence {
-            value: SemanticEvidenceEnvelope {
+            value: Envelope {
                 payload: SemanticEvidence {
                     observations: envelope
                         .payload

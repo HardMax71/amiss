@@ -3,6 +3,8 @@
     reason = "the fixture constructs known-valid renderer contexts and output trees"
 )]
 
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::semantic::SemanticEvidence;
 use sha2::Digest as _;
 use std::{borrow::Cow, fs};
 
@@ -103,7 +105,7 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
     let site = site("docs/book.toml", "/manual/");
 
     let evidence = mdbook_site_evidence(candidate, &site, &context, &output(&root)).unwrap();
-    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
+    let parsed = SemanticEvidence::parse(&evidence).unwrap();
 
     assert_eq!(parsed.payload.subject.candidate_identity_digest, candidate);
     assert_eq!(
@@ -183,7 +185,7 @@ fn generated_chapters_need_no_repository_attribution() {
         &output(&root),
     )
     .unwrap();
-    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
+    let parsed = SemanticEvidence::parse(&evidence).unwrap();
     assert_eq!(parsed.payload.observations.len(), 3);
     for expected in [
         site_observation(
@@ -252,7 +254,7 @@ fn completed_links_not_chapter_membership_define_navigation() {
         &output(&root),
     )
     .unwrap();
-    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
+    let parsed = SemanticEvidence::parse(&evidence).unwrap();
     assert!(
         parsed
             .payload
@@ -335,8 +337,8 @@ fn resolved_renderer_configuration_is_part_of_the_input_identity() {
     let site = site("book.toml", "/");
     let first = mdbook_site_evidence(candidate, &site, &original, &output(&root)).unwrap();
     let second = mdbook_site_evidence(candidate, &site, &changed, &output(&root)).unwrap();
-    let first = amiss_wire::semantic::parse(&first).unwrap();
-    let second = amiss_wire::semantic::parse(&second).unwrap();
+    let first = SemanticEvidence::parse(&first).unwrap();
+    let second = SemanticEvidence::parse(&second).unwrap();
 
     assert_eq!(
         first.payload.producer.context_digest,
@@ -419,7 +421,7 @@ fn renderer_shapes_preserve_required_nullable_paths_and_default_source_directory
         .insert(0, json!({ "PartTitle": "Part one" }));
     let bytes = serde_json::to_vec(&defaulted).unwrap();
     let evidence = mdbook_site_evidence(candidate, &site, &bytes, &output(&root)).unwrap();
-    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
+    let parsed = SemanticEvidence::parse(&evidence).unwrap();
     assert!(
         parsed.payload.observations.contains(&Cow::Owned(
             site_observation(
@@ -451,7 +453,7 @@ fn opaque_renderer_configuration_keeps_canonical_identity_and_the_serde_depth_li
     );
     let site = site("book.toml", "/");
     let baseline = mdbook_site_evidence(candidate, &site, &ordinary, &output(&root)).unwrap();
-    let baseline = amiss_wire::semantic::parse(&baseline).unwrap();
+    let baseline = SemanticEvidence::parse(&baseline).unwrap();
     let mut nested = json!({ "\u{1f600}": 1, "\u{e000}": 2 });
     for _ in 0..64 {
         nested = json!([nested]);
@@ -465,7 +467,7 @@ fn opaque_renderer_configuration_keeps_canonical_identity_and_the_serde_depth_li
         evidence,
         mdbook_site_evidence(candidate, &site, &pretty, &output(&root)).unwrap()
     );
-    let parsed = amiss_wire::semantic::parse(&evidence).unwrap();
+    let parsed = SemanticEvidence::parse(&evidence).unwrap();
     assert_eq!(baseline.payload.observations, parsed.payload.observations);
     assert_ne!(
         baseline.payload.producer.input_digest,

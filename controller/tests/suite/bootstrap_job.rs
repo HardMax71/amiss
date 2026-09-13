@@ -6,7 +6,9 @@
 use amiss_wire::controls::DebtSnapshot;
 use amiss_wire::controls::WaiverBundle;
 use amiss_wire::de::Document as _;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::semantic::SemanticEvidence;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -316,7 +318,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
     assert!(controls.organization_floor.is_some());
     assert!(controls.debt_snapshot.is_some());
     assert!(controls.waiver_bundle.is_some());
-    let semantic = amiss_wire::semantic::parse(
+    let semantic = SemanticEvidence::parse(
         &serde_json::to_vec(&controls.semantic_evidence.first().unwrap().value).unwrap(),
     )
     .unwrap();
@@ -359,7 +361,7 @@ fn acquired_semantic_templates_join_the_candidate_and_retain_their_source_bytes(
         .semantic_evidence
         .iter()
         .map(|supplied| {
-            amiss_wire::semantic::parse(&serde_json::to_vec(&supplied.value).unwrap())
+            SemanticEvidence::parse(&serde_json::to_vec(&supplied.value).unwrap())
                 .unwrap()
                 .payload_digest
         })

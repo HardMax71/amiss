@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -6,8 +5,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind, fail};
-use crate::envelope::transcoded_digest;
+use crate::de::{Error, ErrorKind, fail};
+use crate::envelope::{Payload, Sealing};
 use crate::model::Digest;
 use crate::model::ForgeDialect;
 use crate::report::model::{
@@ -18,26 +17,29 @@ use crate::resolution::VersionScope;
 
 use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalPlanEnvelope<P = ExternalPlan> {
-    pub schema: ExternalPlanEnvelopeSchema,
-    pub payload: P,
-    pub payload_digest: Digest,
-}
-
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Default,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum ExternalPlanEnvelopeSchema {
+    #[default]
     #[strum(serialize = "amiss/external-plan-envelope")]
     Current,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalPlan<B = BTreeMap<String, serde_json::Value>, C = B> {
+pub struct ExternalPlan {
     pub schema: ExternalPlanPayloadSchema,
     pub engine: ExternalEngine,
-    pub report: ExternalPlanReport<B, C>,
+    pub report: ExternalPlanReport,
     pub introduced: Vec<ExternalDestination>,
     pub removed: Vec<ExternalDestination>,
     pub retained_count: u64,
@@ -59,10 +61,10 @@ pub struct ExternalEngine {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExternalPlanReport<B = BTreeMap<String, serde_json::Value>, C = B> {
+pub struct ExternalPlanReport {
     pub payload_digest: Digest,
-    pub base: B,
-    pub candidate: C,
+    pub base: BTreeMap<String, serde_json::Value>,
+    pub candidate: BTreeMap<String, serde_json::Value>,
     pub mode: String,
 }
 
@@ -139,81 +141,40 @@ pub fn plan(
         },
         report: ExternalPlanReport {
             payload_digest: recorded,
-            base: &evaluation.base,
-            candidate: &evaluation.candidate,
+            base: object(&evaluation.base)?,
+            candidate: object(&evaluation.candidate)?,
             mode: evaluation.mode.as_ref().to_owned(),
         },
         introduced: rows(&candidate, &base, declared),
         removed: rows(&base, &candidate, declared),
         retained_count: u64::try_from(retained).unwrap_or(u64::MAX),
     };
-    let payload_digest =
-        plan_payload_digest(&payload).map_err(|_defect| PlanDefect::MalformedExternal)?;
-    let document = ExternalPlanEnvelope {
-        schema: ExternalPlanEnvelopeSchema::Current,
-        payload,
-        payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| PlanDefect::MalformedExternal)?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return Err(PlanDefect::MalformedExternal);
-    }
-    Ok(canonical)
+    payload
+        .emit()
+        .map_err(|_defect| PlanDefect::MalformedExternal)
 }
 
-/// Parses one digest-bound external plan while ignoring additive fields.
-///
-/// # Errors
-///
-/// Fails on oversized or malformed JSON, a malformed known field, a
-/// violated plan law, or a payload digest mismatch.
-pub fn parse_plan(bytes: &[u8]) -> Result<ExternalPlanEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > EXTERNAL_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let envelope: ExternalPlanEnvelope<&serde_json::value::RawValue> =
-        serde_path_to_error::deserialize(&mut deserializer)
-            .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+impl Payload for ExternalPlan {
+    type Schema = ExternalPlanEnvelopeSchema;
+    type Defect = Error;
+    const DOMAIN: &'static str = PLAN_PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = EXTERNAL_DOCUMENT_BYTES;
+    const SEALING: Sealing = Sealing::Received;
 
-    let payload_digest = transcoded_digest(PLAN_PAYLOAD_SCHEMA, envelope.payload.get().as_bytes())
-        .ok_or_else(|| Error::new("$.payload", ErrorKind::InvalidValue))?;
-    let mut payload = serde_json::Deserializer::from_str(envelope.payload.get());
-    let document = ExternalPlanEnvelope {
-        schema: envelope.schema,
-        payload: serde_path_to_error::deserialize(&mut payload)
-            .map_err(|defect| de::deserialize_error("$.payload", &defect))?,
-        payload_digest: envelope.payload_digest,
-    };
-    if payload_digest != document.payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    fn validate(&self) -> Result<(), Error> {
+        validate_plan(self)
     }
-    validate_plan(&document.payload)?;
-    Ok(document)
 }
 
-fn plan_payload_digest<B: Serialize, C: Serialize>(
-    plan: &ExternalPlan<B, C>,
-) -> Result<Digest, Error> {
-    validate_plan(plan)?;
-    serde_json_canonicalizer::to_vec(plan)
-        .map(|canonical| {
-            Digest::from(
-                sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical)
-                    .finalize()
-                    .0,
-            )
-        })
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
+/// A report block as the plan carries it: the object its type serializes to.
+fn object<T: Serialize>(block: &T) -> Result<BTreeMap<String, serde_json::Value>, PlanDefect> {
+    serde_json::to_value(block)
+        .ok()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .ok_or(PlanDefect::MalformedExternal)
 }
 
-fn validate_plan<B, C>(plan: &ExternalPlan<B, C>) -> Result<(), Error> {
+fn validate_plan(plan: &ExternalPlan) -> Result<(), Error> {
     if plan.engine.engine_version.is_empty() {
         return fail("$.payload.engine.engine_version", ErrorKind::InvalidValue);
     }

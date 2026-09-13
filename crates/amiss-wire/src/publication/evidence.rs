@@ -73,6 +73,7 @@ pub enum PublicationOutcome {
 
 impl Payload for PublicationEvidence {
     type Schema = EvidenceEnvelopeSchema;
+    type Defect = Error;
     const DOMAIN: &'static str = EVIDENCE_PAYLOAD_SCHEMA;
     const DOCUMENT_BYTES: u64 = PUBLICATION_DOCUMENT_BYTES;
 

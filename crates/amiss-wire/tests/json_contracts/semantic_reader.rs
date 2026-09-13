@@ -1,4 +1,7 @@
+use amiss_wire::envelope::Envelope;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::semantic::SemanticEvidence;
 use sha2::Digest as _;
 use std::borrow::Cow;
 
@@ -14,7 +17,7 @@ fn decoded_semantic_models_own_observations_after_the_input_bytes_are_dropped() 
         let template_bytes =
             include_bytes!("../../../../spec/examples/scanner-semantic-template.json").to_vec();
         (
-            semantic::parse(&envelope_bytes).unwrap(),
+            SemanticEvidence::parse(&envelope_bytes).unwrap(),
             serde_json::from_slice::<semantic::SemanticEvidenceTemplate<'static>>(&template_bytes)
                 .unwrap(),
         )
@@ -26,7 +29,7 @@ fn decoded_semantic_models_own_observations_after_the_input_bytes_are_dropped() 
         assert!(!observations.is_empty());
         assert!(observations.iter().all(|row| matches!(row, Cow::Owned(_))));
     }
-    assert_eq!(semantic::validate(&document), Ok(()));
+    assert_eq!(document.validate(), Ok(()));
     assert_eq!(
         semantic::envelope(document.payload.clone()).unwrap(),
         document
@@ -42,9 +45,9 @@ fn decoded_semantic_models_own_observations_after_the_input_bytes_are_dropped() 
 
 #[test]
 fn generated_semantic_digests_keep_the_exact_payload_preimage() {
-    let original: semantic::SemanticEvidenceEnvelope<'static> = serde_json::from_slice(
-        include_bytes!("../../../../spec/examples/scanner-semantic-evidence.json"),
-    )
+    let original: Envelope<SemanticEvidence<'static>> = serde_json::from_slice(include_bytes!(
+        "../../../../spec/examples/scanner-semantic-evidence.json"
+    ))
     .unwrap();
     for observations in [
         vec![],
@@ -63,7 +66,7 @@ fn generated_semantic_digests_keep_the_exact_payload_preimage() {
             })
             .to_vec(),
     ] {
-        let document = semantic::envelope(semantic::SemanticEvidence {
+        let document = semantic::envelope(SemanticEvidence {
             observations: observations.into_iter().map(Cow::Owned).collect(),
             ..original.payload.clone()
         })
@@ -79,24 +82,23 @@ fn generated_semantic_digests_keep_the_exact_payload_preimage() {
                     .0
             )
         );
-        assert_eq!(semantic::validate(&document), Ok(()));
+        assert_eq!(document.validate(), Ok(()));
         let mut bytes = Vec::new();
         serde_json_canonicalizer::to_writer(&document, &mut bytes).unwrap();
-        assert_eq!(semantic::parse(&bytes).unwrap(), document);
+        assert_eq!(SemanticEvidence::parse(&bytes).unwrap(), document);
     }
 }
 
 #[test]
 fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
     let bytes = include_bytes!("../../../../spec/examples/scanner-semantic-evidence.json");
-    let original: semantic::SemanticEvidenceEnvelope<'static> =
-        serde_json::from_slice(bytes).unwrap();
-    assert_eq!(semantic::validate(&original), Ok(()));
+    let original: Envelope<SemanticEvidence<'static>> = serde_json::from_slice(bytes).unwrap();
+    assert_eq!(original.validate(), Ok(()));
 
     let mut tampered = original.clone();
     tampered.payload.complete = !tampered.payload.complete;
     assert_eq!(
-        semantic::validate(&tampered).unwrap_err().kind,
+        tampered.validate().unwrap_err().kind,
         ErrorKind::DigestMismatch
     );
 
@@ -130,10 +132,10 @@ fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
         document.payload.observations = observations;
         document.payload_digest =
             document_digest(semantic::PAYLOAD_SCHEMA, &document.payload).unwrap();
-        let defect = semantic::validate(&document).unwrap_err();
+        let defect = document.validate().unwrap_err();
         assert_eq!(defect.kind, kind);
         assert_eq!(
-            semantic::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err(),
+            SemanticEvidence::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err(),
             defect
         );
     }
@@ -141,11 +143,11 @@ fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
     let mut document = original;
     document.payload.producer.version = "not a version".to_owned();
     document.payload_digest = document_digest(semantic::PAYLOAD_SCHEMA, &document.payload).unwrap();
-    let defect = semantic::validate(&document).unwrap_err();
+    let defect = document.validate().unwrap_err();
     assert_eq!(defect.kind, ErrorKind::InvalidValue);
     assert_eq!(defect.path, "$.payload.producer.version");
     assert_eq!(
-        semantic::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err(),
+        SemanticEvidence::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err(),
         defect
     );
 }
