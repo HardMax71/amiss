@@ -54,6 +54,8 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss locale-assess --plan <path> --evidence <path> [--format <human|json>]
+amiss locale-inventory --repo <path> --plan <path> --context <path>
+                       [--format <human|json>]
 amiss render --report <path>
              (--format human [--full] | --format <sarif|codequality|junit>)
 amiss refs --report <path>
@@ -97,6 +99,7 @@ trust them when the short form reads ambiguous.
 | `--report` | path | the report file the plan, render, or refs form reads; foreign to every other form |
 | `--plan` | path | the plan file the assessment form judges; foreign to every other form |
 | `--evidence` | path | the external observations `external-assess` judges, or the normalized specialist input `record-set` turns into a semantic template; foreign to every other form |
+| `--context` | path | the locale layout `locale-inventory` reads a tree under: each locale's root, claimed locale, optional filename suffix, and the document suffixes that count as pages; foreign to every other form |
 | `--target` | repo-relative path | the text path whose candidate references `refs` returns |
 | `--target-bytes-hex` | lowercase even-length hex | the raw-byte path whose candidate references `refs` returns; exclusive with `--target` |
 | `--help` | none | prints the canonical closed grammar; stands alone, with no verb or other flag |
@@ -296,6 +299,16 @@ another plan, producer, docs candidate, or locale scope refutes or leaves the au
 rather than refusing it. `--format` takes `human` or `json`. Exit 0 wrote the assessment,
 missing pages and refuted rows included, since the artifact is advisory data. Exit 2 means an
 input could not be read, parsed, or trusted.
+
+`amiss locale-inventory` reads the locale page inventory pair straight out of a checkout,
+writing [locale coverage evidence](locale-coverage.md) for the plan given to it. The plan
+names the object format, the commit, and the tree, so the verb takes no `--candidate` and no
+`--object-format`: it walks exactly the snapshot the plan binds and refuses when the checkout
+does not hold it. `--context` carries the layout, since a repository holds no record of which
+subtree is which locale. `--format` takes `human` or `json`. No file content is read, only the
+tree, so a page's digest is the blob its path resolves to. Exit 0 wrote the evidence, missing
+and untranslated pages included, since the artifact is advisory data. Exit 2 means an input
+could not be read, parsed, or trusted.
 
 `amiss refs` asks a complete validated report which candidate occurrences refer to one
 repository path. It opens no repository and does not reinterpret prose: an occurrence matches

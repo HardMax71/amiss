@@ -32,7 +32,10 @@ pub use discovery::{
 };
 pub use document::{Classification, classify, excluded_by_built_in};
 pub use evaluate::{Attribution, DocumentInput, DocumentSide, Finding, evaluate};
-pub use locale::{InventoryError, LocaleSide, LocaleTreeContext, tree_inventory, tree_producer};
+pub use locale::{
+    InventoryError, LOCALE_CONTEXT_BYTES, LocaleSide, LocaleTreeContext, tree_inventory,
+    tree_producer,
+};
 pub use pipeline::{SetupShell, commit_pair};
 pub use policy::{Effects, Includes, PolicySide};
 pub use projection::{

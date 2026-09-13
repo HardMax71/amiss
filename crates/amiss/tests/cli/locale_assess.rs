@@ -67,6 +67,15 @@ fn the_grammar_closes_the_coverage_form() {
             "--repo",
             ".",
         ],
+        &[
+            "locale-assess",
+            "--plan",
+            PLAN,
+            "--evidence",
+            EVIDENCE,
+            "--context",
+            PLAN,
+        ],
     ] {
         let (code, _stdout, stderr) = support::amiss(argv);
         assert_eq!(code, 2, "{argv:?} must be refused");

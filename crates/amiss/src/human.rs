@@ -321,6 +321,46 @@ pub(crate) fn coverage(payload: &amiss_wire::locale::LocaleCoverageAssessment) {
     }
 }
 
+pub(crate) fn inventory(payload: &amiss_wire::locale::LocaleCoverageEvidence) {
+    let mut out = Channel {
+        out: std::io::stdout(),
+        open: true,
+    };
+    let identical = payload
+        .target
+        .pages
+        .iter()
+        .filter(|page| {
+            matches!(
+                page.origin,
+                amiss_wire::locale::LocaleTargetOrigin::Fallback { .. }
+            )
+        })
+        .count();
+    for (locale, pages, complete) in [
+        (
+            &payload.scope.source_locale,
+            payload.source.pages.len(),
+            payload.source.complete,
+        ),
+        (
+            &payload.scope.target_locale,
+            payload.target.pages.len(),
+            payload.target.complete,
+        ),
+    ] {
+        let completeness = if complete { "complete" } else { "partial" };
+        line(
+            &mut out,
+            format_args!("amiss locale-inventory: {locale} {pages} pages {completeness}"),
+        );
+    }
+    line(
+        &mut out,
+        format_args!("target pages still carrying the source bytes: {identical}"),
+    );
+}
+
 pub(crate) fn assessment(payload: &amiss_wire::external::ExternalAssessment) {
     use amiss_wire::external::ExternalVerdict;
     let mut out = Channel {
