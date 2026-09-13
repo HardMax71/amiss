@@ -5,6 +5,7 @@ use std::fs::File;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use amiss_wire::locale::LocaleCoverageVerdict;
 use amiss_wire::model::Digest;
 use amiss_wire::publication::PublicationVerdict;
 use amiss_wire::relation::RelationVerdict;
@@ -58,6 +59,7 @@ struct AuditDigests {
 enum AuditKind {
     Publication(PublicationVerdict),
     Relation(RelationVerdict),
+    Locale(LocaleCoverageVerdict),
 }
 
 impl FileArtifactStore {
@@ -134,6 +136,25 @@ impl FileArtifactStore {
                     ArtifactAuditDigests::Relation(digests),
                 )
             }
+            ArtifactAuditBundle::Locale(bundle) => {
+                let digests = crate::validate_locale_audit(bundle)?;
+                (
+                    AuditPayload {
+                        report: bundle.report,
+                        plan: bundle.plan,
+                        evidence: bundle.evidence,
+                        assessment: bundle.assessment,
+                    },
+                    AuditDigests {
+                        report: digests.report_digest,
+                        plan: digests.plan_digest,
+                        evidence: digests.evidence_digest,
+                        assessment: digests.assessment_digest,
+                    },
+                    AuditKind::Locale(digests.verdict),
+                    ArtifactAuditDigests::Locale(digests),
+                )
+            }
         };
         let artifact = self.retain_validated_audit(evaluation_id, payload, digests, kind)?;
         Ok(ArtifactAuditReference { artifact, audit })
@@ -153,32 +174,48 @@ impl FileArtifactStore {
             .map(|(bytes, digest)| Blob::from_digest(bytes, digest))
             .transpose()?;
         let assessment = Blob::from_digest(payload.assessment, digests.assessment)?;
-        let (publication_audit, relation_audit, plan, evidence, assessment) = match kind {
-            AuditKind::Publication(verdict) => (
-                Some(SidecarAudit {
-                    plan,
-                    evidence,
-                    assessment,
-                    verdict,
-                }),
-                None,
-                ArtifactComponent::PublicationPlan,
-                ArtifactComponent::PublicationEvidence,
-                ArtifactComponent::PublicationAssessment,
-            ),
-            AuditKind::Relation(verdict) => (
-                None,
-                Some(SidecarAudit {
-                    plan,
-                    evidence,
-                    assessment,
-                    verdict,
-                }),
-                ArtifactComponent::RelationPlan,
-                ArtifactComponent::RelationEvidence,
-                ArtifactComponent::RelationAssessment,
-            ),
-        };
+        let (publication_audit, relation_audit, locale_audit, plan, evidence, assessment) =
+            match kind {
+                AuditKind::Publication(verdict) => (
+                    Some(SidecarAudit {
+                        plan,
+                        evidence,
+                        assessment,
+                        verdict,
+                    }),
+                    None,
+                    None,
+                    ArtifactComponent::PublicationPlan,
+                    ArtifactComponent::PublicationEvidence,
+                    ArtifactComponent::PublicationAssessment,
+                ),
+                AuditKind::Relation(verdict) => (
+                    None,
+                    Some(SidecarAudit {
+                        plan,
+                        evidence,
+                        assessment,
+                        verdict,
+                    }),
+                    None,
+                    ArtifactComponent::RelationPlan,
+                    ArtifactComponent::RelationEvidence,
+                    ArtifactComponent::RelationAssessment,
+                ),
+                AuditKind::Locale(verdict) => (
+                    None,
+                    None,
+                    Some(SidecarAudit {
+                        plan,
+                        evidence,
+                        assessment,
+                        verdict,
+                    }),
+                    ArtifactComponent::LocalePlan,
+                    ArtifactComponent::LocaleEvidence,
+                    ArtifactComponent::LocaleAssessment,
+                ),
+            };
         let input = RecordInput {
             report: Blob::from_digest(payload.report, digests.report)?,
             semantic: None,
@@ -189,6 +226,7 @@ impl FileArtifactStore {
             external_incomplete: false,
             publication_audit,
             relation_audit,
+            locale_audit,
         };
         self.retain_record(
             evaluation_id,
@@ -495,5 +533,6 @@ fn record_input(bundle: ArtifactBundle<'_>) -> Result<RecordInput, ArtifactError
         external_incomplete: bundle.external_incomplete,
         publication_audit: None,
         relation_audit: None,
+        locale_audit: None,
     })
 }

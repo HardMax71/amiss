@@ -25,7 +25,7 @@ fn evidence_envelope(evidence_value: &PublicationEvidence) -> Envelope<Publicati
 fn assessed(
     plan: &Envelope<PublicationPlan>,
     evidence: Option<&Envelope<PublicationEvidence>>,
-) -> Envelope<PublicationAssessment> {
+) -> PublicationAssessment {
     PublicationAssessment::evaluate(plan, evidence, "0.26.0", digest('a')).unwrap()
 }
 
@@ -35,18 +35,15 @@ fn exact_provider_facts_match_the_publication_plan() {
     let evidence = evidence_envelope(&publication_evidence());
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.payload.verdict, PublicationVerdict::Matched);
-    assert_eq!(assessment.payload.reasons, Vec::new());
+    assert_eq!(assessment.verdict, PublicationVerdict::Matched);
+    assert_eq!(assessment.reasons, Vec::new());
     assert_eq!(
-        assessment.payload.subject.report_payload_digest,
+        assessment.subject.report_payload_digest,
         plan.payload.report_payload_digest
     );
+    assert_eq!(assessment.subject.plan_payload_digest, plan.payload_digest);
     assert_eq!(
-        assessment.payload.subject.plan_payload_digest,
-        plan.payload_digest
-    );
-    assert_eq!(
-        assessment.payload.subject.evidence_payload_digest,
+        assessment.subject.evidence_payload_digest,
         Nullable::Value(evidence.payload_digest)
     );
 }
@@ -55,22 +52,16 @@ fn exact_provider_facts_match_the_publication_plan() {
 fn absent_unbound_and_foreign_producers_stay_unproven() {
     let plan = plan_envelope();
     let absent = assessed(&plan, None);
-    assert_eq!(absent.payload.verdict, PublicationVerdict::Unproven);
-    assert_eq!(
-        absent.payload.reasons,
-        vec![PublicationReason::EvidenceAbsent]
-    );
-    assert_eq!(
-        absent.payload.subject.evidence_payload_digest,
-        Nullable::Null
-    );
+    assert_eq!(absent.verdict, PublicationVerdict::Unproven);
+    assert_eq!(absent.reasons, vec![PublicationReason::EvidenceAbsent]);
+    assert_eq!(absent.subject.evidence_payload_digest, Nullable::Null);
 
     let mut unbound = publication_evidence();
     unbound.plan_payload_digest = digest('f');
     let unbound = evidence_envelope(&unbound);
     let unbound_assessment = assessed(&plan, Some(&unbound));
     assert_eq!(
-        unbound_assessment.payload.reasons,
+        unbound_assessment.reasons,
         vec![PublicationReason::EvidenceUnbound]
     );
 
@@ -80,7 +71,7 @@ fn absent_unbound_and_foreign_producers_stay_unproven() {
     let foreign = evidence_envelope(&foreign);
     let foreign_assessment = assessed(&plan, Some(&foreign));
     assert_eq!(
-        foreign_assessment.payload.reasons,
+        foreign_assessment.reasons,
         vec![PublicationReason::ProducerMismatch]
     );
 }
@@ -96,9 +87,9 @@ fn bound_disagreements_are_one_sorted_refutation() {
     let evidence = evidence_envelope(&mismatched);
     let assessment = assessed(&plan, Some(&evidence));
 
-    assert_eq!(assessment.payload.verdict, PublicationVerdict::Refuted);
+    assert_eq!(assessment.verdict, PublicationVerdict::Refuted);
     assert_eq!(
-        assessment.payload.reasons,
+        assessment.reasons,
         vec![
             PublicationReason::DocsMismatch,
             PublicationReason::TargetMismatch,

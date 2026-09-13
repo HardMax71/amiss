@@ -3,6 +3,7 @@ mod tests;
 
 use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, Oid, RepositoryIdentity};
+use amiss_wire::publication::DocsCandidate;
 use amiss_wire::report::model::{
     BaseSnapshot, Evaluation, IdentityPreimage, ReportPayload, Snapshot,
 };
@@ -26,6 +27,31 @@ pub(crate) struct AcceptedReport {
 pub(crate) struct AcceptedSnapshot {
     pub(crate) commit: Oid,
     pub(crate) tree: Oid,
+}
+
+/// The docs candidate an audit plan must name, derived from the accepted
+/// report rather than from the plan.
+pub(crate) fn accepted_docs(report: &AcceptedReport) -> DocsCandidate {
+    DocsCandidate {
+        repository: report.repository.clone(),
+        object_format: report.candidate.commit.object_format(),
+        commit: report.candidate.commit.clone(),
+        tree: report.candidate.tree.clone(),
+        candidate_identity_digest: report.candidate_identity_digest,
+    }
+}
+
+/// The exact bytes each retained audit component is stored under.
+pub(crate) fn component_digests(
+    plan: &[u8],
+    evidence: Option<&[u8]>,
+    assessment: &[u8],
+) -> (Digest, Option<Digest>, Digest) {
+    (
+        Digest::from(sha2::Sha256::digest(plan).0),
+        evidence.map(|bytes| Digest::from(sha2::Sha256::digest(bytes).0)),
+        Digest::from(sha2::Sha256::digest(assessment).0),
+    )
 }
 
 pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactError> {

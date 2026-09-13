@@ -9,8 +9,8 @@ use amiss_wire::model::Digest;
 use url::Url;
 
 use crate::{
-    ExternalTally, PublicationAuditBundle, PublicationAuditDigests, RelationAuditBundle,
-    RelationAuditDigests,
+    ExternalTally, LocaleAuditBundle, LocaleAuditDigests, PublicationAuditBundle,
+    PublicationAuditDigests, RelationAuditBundle, RelationAuditDigests,
 };
 
 pub(crate) use format::valid_id as valid_artifact_id;
@@ -62,12 +62,14 @@ pub struct ArtifactReference {
 pub enum ArtifactAuditBundle<'a> {
     Publication(PublicationAuditBundle<'a>),
     Relation(RelationAuditBundle<'a>),
+    Locale(LocaleAuditBundle<'a>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ArtifactAuditDigests {
     Publication(PublicationAuditDigests),
     Relation(RelationAuditDigests),
+    Locale(LocaleAuditDigests),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -109,6 +111,9 @@ pub enum ArtifactComponent {
     RelationPlan,
     RelationEvidence,
     RelationAssessment,
+    LocalePlan,
+    LocaleEvidence,
+    LocaleAssessment,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
