@@ -5,26 +5,25 @@ use std::{fs, path::Path};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::relation::{
-    ASSESSMENT_PAYLOAD_SCHEMA, RelationAssessmentEnvelope, RelationEvidence,
-    RelationEvidenceEnvelope, RelationPlanEnvelope, RelationProjectionSlot, RelationReason,
-    RelationVerdict, assess, evidence, parse_assessment, parse_evidence, parse_plan, plan,
+    ASSESSMENT_PAYLOAD_SCHEMA, RelationAssessment, RelationEvidence, RelationPlan,
+    RelationProjectionSlot, RelationReason, RelationVerdict, assess,
 };
 
-fn plan_envelope() -> RelationPlanEnvelope {
-    parse_plan(&plan(&relation_contract().plan).unwrap()).unwrap()
+fn plan_envelope() -> Envelope<RelationPlan> {
+    RelationPlan::parse(&relation_contract().plan.emit().unwrap()).unwrap()
 }
 
-fn evidence_envelope(input: &RelationEvidence) -> RelationEvidenceEnvelope {
-    parse_evidence(&evidence(input).unwrap()).unwrap()
+fn evidence_envelope(input: &RelationEvidence) -> Envelope<RelationEvidence> {
+    RelationEvidence::parse(&input.emit().unwrap()).unwrap()
 }
 
 fn assessed(
-    plan: &RelationPlanEnvelope,
-    evidence: Option<&RelationEvidenceEnvelope>,
-) -> RelationAssessmentEnvelope {
-    amiss_wire::relation::RelationAssessment::evaluate(plan, evidence, "0.26.0", digest('a'))
-        .unwrap()
+    plan: &Envelope<RelationPlan>,
+    evidence: Option<&Envelope<RelationEvidence>>,
+) -> RelationAssessment {
+    RelationAssessment::evaluate(plan, evidence, "0.26.0", digest('a')).unwrap()
 }
 
 #[test]
@@ -50,10 +49,10 @@ fn complete_projection_pairs_classify_all_four_equality_transitions() {
     ] {
         let evidence = evidence_envelope(&input);
         let assessment = assessed(&plan, Some(&evidence));
-        assert_eq!(assessment.payload.verdict, expected);
-        assert_eq!(assessment.payload.reason, Nullable::Null);
+        assert_eq!(assessment.verdict, expected);
+        assert_eq!(assessment.reason, Nullable::Null);
         assert_eq!(
-            assessment.payload.subject.evidence_payload_digest,
+            assessment.subject.evidence_payload_digest,
             Nullable::Value(evidence.payload_digest)
         );
     }
@@ -71,7 +70,7 @@ fn digest_and_length_jointly_define_projected_value_equality() {
 
     let evidence = evidence_envelope(&input);
     assert_eq!(
-        assessed(&plan, Some(&evidence)).payload.verdict,
+        assessed(&plan, Some(&evidence)).verdict,
         RelationVerdict::IntroducedDrift
     );
 }
@@ -101,10 +100,10 @@ fn absent_unbound_misrouted_and_partial_evidence_stays_unproven() {
         (Some(partial), RelationReason::ProjectionUnproven),
     ] {
         let assessment = assessed(&plan, evidence.as_ref());
-        assert_eq!(assessment.payload.verdict, RelationVerdict::Unproven);
-        assert_eq!(assessment.payload.reason, Nullable::Value(expected));
+        assert_eq!(assessment.verdict, RelationVerdict::Unproven);
+        assert_eq!(assessment.reason, Nullable::Value(expected));
         assert_eq!(
-            assessment.payload.subject.evidence_payload_digest,
+            assessment.subject.evidence_payload_digest,
             evidence.as_ref().map_or(Nullable::Null, |value| {
                 Nullable::Value(value.payload_digest)
             })
@@ -155,7 +154,7 @@ fn assessment_rejects_mutated_inputs_and_inconsistent_output() {
         )
         .to_string(),
     );
-    let error = parse_assessment(rebound.as_bytes()).unwrap_err();
+    let error = RelationAssessment::parse(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 }
@@ -184,7 +183,7 @@ fn nullable_assessment_fields_are_required() {
         .to_string()
     );
     assert_eq!(
-        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_reason).unwrap())
+        RelationAssessment::parse(&serde_json_canonicalizer::to_vec(&missing_reason).unwrap())
             .unwrap_err()
             .kind,
         ErrorKind::MissingField
@@ -210,9 +209,11 @@ fn nullable_assessment_fields_are_required() {
         .to_string()
     );
     assert_eq!(
-        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_evidence_digest).unwrap())
-            .unwrap_err()
-            .kind,
+        RelationAssessment::parse(
+            &serde_json_canonicalizer::to_vec(&missing_evidence_digest).unwrap()
+        )
+        .unwrap_err()
+        .kind,
         ErrorKind::MissingField
     );
 }
@@ -220,11 +221,13 @@ fn nullable_assessment_fields_are_required() {
 #[test]
 fn the_published_assessment_replays_from_its_plan_and_evidence() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
-    let plan = parse_plan(&fs::read(examples.join("relation-plan.json")).unwrap()).unwrap();
+    let plan =
+        RelationPlan::parse(&fs::read(examples.join("relation-plan.json")).unwrap()).unwrap();
     let evidence =
-        parse_evidence(&fs::read(examples.join("relation-evidence.json")).unwrap()).unwrap();
+        RelationEvidence::parse(&fs::read(examples.join("relation-evidence.json")).unwrap())
+            .unwrap();
     let published_bytes = fs::read(examples.join("relation-assessment.json")).unwrap();
-    let published = parse_assessment(&published_bytes).unwrap();
+    let published = RelationAssessment::parse(&published_bytes).unwrap();
     let replayed = assess(
         &plan,
         Some(&evidence),

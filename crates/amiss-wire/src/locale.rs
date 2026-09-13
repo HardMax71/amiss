@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
@@ -6,7 +5,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Error, ErrorKind, fail};
+use crate::envelope::Payload;
 use crate::model::ArtifactId;
 use crate::model::Digest;
 use crate::publication::{
@@ -22,15 +22,14 @@ pub use crate::assessment::AssessmentVerdict as LocaleCoverageVerdict;
 pub use assessment::{
     ASSESSMENT_DOCUMENT_BYTES, ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAGE_ITEMS_LIMIT,
     ASSESSMENT_PAYLOAD_SCHEMA, AssessmentEnvelopeSchema, AssessmentPayloadSchema,
-    LocaleCoverageAssessment, LocaleCoverageAssessmentEnvelope, LocaleCoverageReason,
-    LocaleCoverageResult, LocaleFallbackResult, LocaleFallbackStatus, LocaleLineageResult,
-    LocaleLineageStatus, LocaleProductResult, assess, parse_assessment,
+    LocaleCoverageAssessment, LocaleCoverageReason, LocaleCoverageResult, LocaleFallbackResult,
+    LocaleFallbackStatus, LocaleLineageResult, LocaleLineageStatus, LocaleProductResult, assess,
 };
 pub use evidence::{
     EVIDENCE_DOCUMENT_BYTES, EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA,
-    EvidenceEnvelopeSchema, EvidencePayloadSchema, LocaleCoverageEvidence,
-    LocaleCoverageEvidenceEnvelope, LocalePageInventory, LocaleSourcePage, LocaleTargetInventory,
-    LocaleTargetOrigin, LocaleTargetPage, PAGE_ITEMS_LIMIT, evidence, parse_evidence,
+    EvidenceEnvelopeSchema, EvidencePayloadSchema, LocaleCoverageEvidence, LocalePageInventory,
+    LocaleSourcePage, LocaleTargetInventory, LocaleTargetOrigin, LocaleTargetPage,
+    PAGE_ITEMS_LIMIT,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/locale-coverage-plan-envelope";
@@ -38,18 +37,20 @@ pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/locale-coverage-plan-payload";
 pub const LOCALE_DOCUMENT_BYTES: u64 = 65_536;
 pub const PAGE_KEY_BYTES: usize = crate::semantic::RECORD_KEY_BYTES;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct LocaleCoveragePlanEnvelope<T = LocaleCoveragePlan> {
-    pub schema: PlanEnvelopeSchema,
-    pub payload: T,
-    pub payload_digest: Digest,
-}
-
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Default,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum PlanEnvelopeSchema {
+    #[default]
     #[strum(serialize = "amiss/locale-coverage-plan-envelope")]
     Current,
 }
@@ -108,63 +109,14 @@ pub enum LocalePageRequirement {
     Named { keys: Vec<String> },
 }
 
-/// Parses one closed, report-bound locale coverage plan.
-///
-/// # Errors
-///
-/// Fails on oversized or malformed JSON, unknown fields, invalid identities, an ambiguous
-/// locale pair, unsorted or repeated named page keys, or a payload digest mismatch.
-pub fn parse_plan(bytes: &[u8]) -> Result<LocaleCoveragePlanEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > LOCALE_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let document: LocaleCoveragePlanEnvelope = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+impl Payload for LocaleCoveragePlan {
+    type Schema = PlanEnvelopeSchema;
+    const DOMAIN: &'static str = PLAN_PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = LOCALE_DOCUMENT_BYTES;
 
-    if plan_payload_digest(&document.payload)? != document.payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    fn validate(&self) -> Result<(), Error> {
+        validate_plan(self)
     }
-    Ok(document)
-}
-
-/// Builds the unique digest-bound value for one locale coverage plan.
-///
-/// # Errors
-///
-/// Fails when a field violates the same closed grammar [`parse_plan`] enforces or the encoded
-/// document exceeds its byte ceiling.
-pub fn plan(input: &LocaleCoveragePlan) -> Result<Vec<u8>, Error> {
-    let payload_digest = plan_payload_digest(input)?;
-    let document = LocaleCoveragePlanEnvelope {
-        schema: PlanEnvelopeSchema::Current,
-        payload: input,
-        payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > LOCALE_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    Ok(canonical)
-}
-
-fn plan_payload_digest(input: &LocaleCoveragePlan) -> Result<Digest, Error> {
-    validate_plan(input)?;
-    serde_json_canonicalizer::to_vec(input)
-        .map(|canonical| {
-            Digest::from(
-                sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical)
-                    .finalize()
-                    .0,
-            )
-        })
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_plan(plan: &LocaleCoveragePlan) -> Result<(), Error> {

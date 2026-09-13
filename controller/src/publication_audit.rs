@@ -1,10 +1,11 @@
 use sha2::Digest as _;
 mod tests;
 
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::Digest;
 use amiss_wire::publication::{
-    DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationAssessment, PublicationVerdict,
-    parse_assessment, parse_evidence, parse_plan,
+    DocsCandidate, PUBLICATION_DOCUMENT_BYTES, PublicationAssessment, PublicationEvidence,
+    PublicationPlan, PublicationVerdict,
 };
 
 use crate::ArtifactError;
@@ -56,7 +57,7 @@ pub fn validate_publication_audit(
         tree: report.candidate.tree,
         candidate_identity_digest: report.candidate_identity_digest,
     };
-    let plan = parse_plan(bundle.plan).map_err(|_defect| ArtifactError::Corrupt)?;
+    let plan = PublicationPlan::parse(bundle.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     if plan.payload.report_payload_digest != report.payload_digest
         || plan.payload.docs != report_docs
     {
@@ -64,11 +65,11 @@ pub fn validate_publication_audit(
     }
     let evidence = bundle
         .evidence
-        .map(parse_evidence)
+        .map(PublicationEvidence::parse)
         .transpose()
         .map_err(|_defect| ArtifactError::Corrupt)?;
-    let assessment =
-        parse_assessment(bundle.assessment).map_err(|_defect| ArtifactError::Corrupt)?;
+    let assessment = PublicationAssessment::parse(bundle.assessment)
+        .map_err(|_defect| ArtifactError::Corrupt)?;
     let replayed = PublicationAssessment::evaluate(
         &plan,
         evidence.as_ref(),

@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
-use sha2::Digest as _;
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Error, ErrorKind, fail};
+use crate::envelope::Payload;
 use crate::model::Digest;
 use crate::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -13,13 +13,11 @@ mod evidence;
 pub use crate::assessment::AssessmentVerdict as PublicationVerdict;
 pub use assessment::{
     ASSESSMENT_ENVELOPE_SCHEMA, ASSESSMENT_PAYLOAD_SCHEMA, AssessmentEnvelopeSchema,
-    AssessmentPayloadSchema, PublicationAssessment, PublicationAssessmentEnvelope,
-    PublicationReason, assess, parse_assessment,
+    AssessmentPayloadSchema, PublicationAssessment, PublicationReason, assess,
 };
 pub use evidence::{
     EVIDENCE_ENVELOPE_SCHEMA, EVIDENCE_PAYLOAD_SCHEMA, EvidenceEnvelopeSchema,
-    EvidencePayloadSchema, PublicationDeployment, PublicationEvidence, PublicationEvidenceEnvelope,
-    PublicationOutcome, evidence, parse_evidence,
+    EvidencePayloadSchema, PublicationDeployment, PublicationEvidence, PublicationOutcome,
 };
 
 pub const PLAN_ENVELOPE_SCHEMA: &str = "amiss/publication-plan-envelope";
@@ -27,18 +25,20 @@ pub const PLAN_PAYLOAD_SCHEMA: &str = "amiss/publication-plan-payload";
 pub const PUBLICATION_DOCUMENT_BYTES: u64 = 65_536;
 pub const PUBLICATION_URI_BYTES: usize = 16_384;
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PublicationPlanEnvelope<T = PublicationPlan> {
-    pub schema: PlanEnvelopeSchema,
-    pub payload: T,
-    pub payload_digest: Digest,
-}
-
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Default,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum PlanEnvelopeSchema {
+    #[default]
     #[strum(serialize = "amiss/publication-plan-envelope")]
     Current,
 }
@@ -115,76 +115,27 @@ pub struct PublicationRelation {
     pub context_digest: Digest,
 }
 
-/// Parses one closed, digest-bound publication plan.
-///
-/// # Errors
-///
-/// Fails on oversized or malformed JSON, an unknown field, an invalid
-/// identity or URI, inconsistent Git object formats, or a payload digest mismatch.
-pub fn parse_plan(bytes: &[u8]) -> Result<PublicationPlanEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let document: PublicationPlanEnvelope = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-
-    if plan_payload_digest(&document.payload)? != document.payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
-    }
-    Ok(document)
-}
-
-/// Builds the unique digest-bound value for one publication plan.
-///
-/// # Errors
-///
-/// Fails when a public field violates the same closed grammar [`parse_plan`]
-/// enforces or the encoded document exceeds its byte ceiling.
-pub fn plan(input: &PublicationPlan) -> Result<Vec<u8>, Error> {
-    let payload_digest = plan_payload_digest(input)?;
-    let document = PublicationPlanEnvelope {
-        schema: PlanEnvelopeSchema::Current,
-        payload: input,
-        payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    Ok(canonical)
-}
-
-pub(super) fn plan_payload_digest(input: &PublicationPlan) -> Result<Digest, Error> {
-    validate_facts(
-        "$.payload",
-        &input.docs,
-        &input.target,
-        &input.site,
-        &input.product,
-        &input.producer,
-    )?;
-    serde_json_canonicalizer::to_vec(input)
-        .map(|canonical| {
-            Digest::from(
-                sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical)
-                    .finalize()
-                    .0,
-            )
-        })
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
-}
-
 #[derive(Clone, Copy)]
 pub(crate) enum PublicationUriKind {
     CanonicalUrl,
     Resource,
+}
+
+impl Payload for PublicationPlan {
+    type Schema = PlanEnvelopeSchema;
+    const DOMAIN: &'static str = PLAN_PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = PUBLICATION_DOCUMENT_BYTES;
+
+    fn validate(&self) -> Result<(), Error> {
+        validate_facts(
+            "$.payload",
+            &self.docs,
+            &self.target,
+            &self.site,
+            &self.product,
+            &self.producer,
+        )
+    }
 }
 
 pub(crate) fn validate_publication_uri(

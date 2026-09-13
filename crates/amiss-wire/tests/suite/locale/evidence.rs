@@ -9,11 +9,12 @@ use std::{fs, path::Path};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::Payload as _;
 
 use amiss_wire::locale::{
-    EVIDENCE_PAYLOAD_SCHEMA, EvidencePayloadSchema, LocaleCoverageEvidence, LocalePageInventory,
-    LocaleSourcePage, LocaleTargetInventory, LocaleTargetOrigin, LocaleTargetPage, evidence,
-    parse_evidence, parse_plan, plan,
+    EVIDENCE_PAYLOAD_SCHEMA, EvidencePayloadSchema, LocaleCoverageEvidence, LocaleCoveragePlan,
+    LocalePageInventory, LocaleSourcePage, LocaleTargetInventory, LocaleTargetOrigin,
+    LocaleTargetPage,
 };
 use serde_json::Value;
 
@@ -71,10 +72,12 @@ pub(super) fn set_target_page(pages: &mut Vec<LocaleTargetPage>, page: LocaleTar
 
 pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
     let planned = locale_plan();
-    let plan_value = plan(&planned).unwrap();
+    let plan_value = planned.emit().unwrap();
     LocaleCoverageEvidence {
         schema: EvidencePayloadSchema::Current,
-        plan_payload_digest: parse_plan(&plan_value).unwrap().payload_digest,
+        plan_payload_digest: LocaleCoveragePlan::parse(&plan_value)
+            .unwrap()
+            .payload_digest,
         docs: planned.docs,
         scope: planned.scope,
         producer: planned.producer,
@@ -104,9 +107,9 @@ pub(super) fn locale_evidence() -> LocaleCoverageEvidence {
 #[test]
 fn locale_evidence_round_trips_with_independent_inventories_and_example() {
     let expected = locale_evidence();
-    let bytes = evidence(&expected).unwrap();
+    let bytes = expected.emit().unwrap();
     let value = serde_json::from_slice::<Value>(&bytes).unwrap();
-    let parsed = parse_evidence(&bytes).unwrap();
+    let parsed = LocaleCoverageEvidence::parse(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
     assert_eq!(
@@ -139,15 +142,16 @@ fn locale_evidence_round_trips_with_independent_inventories_and_example() {
         example_value.get("payload_digest").and_then(Value::as_str),
         Some(expected_digest.as_str())
     );
-    let example = parse_evidence(&example_bytes).unwrap();
+    let example = LocaleCoverageEvidence::parse(&example_bytes).unwrap();
     let planned =
-        parse_plan(&fs::read(examples.join("locale-coverage-plan.json")).unwrap()).unwrap();
+        LocaleCoveragePlan::parse(&fs::read(examples.join("locale-coverage-plan.json")).unwrap())
+            .unwrap();
     assert_eq!(example.payload.plan_payload_digest, planned.payload_digest);
     assert_eq!(example.payload.docs, planned.payload.docs);
     assert_eq!(example.payload.scope, planned.payload.scope);
     assert_eq!(example.payload.producer, planned.payload.producer);
     assert_eq!(
-        evidence(&example.payload).unwrap(),
+        example.payload.emit().unwrap(),
         serde_json_canonicalizer::to_vec(&example_value).unwrap()
     );
 }
@@ -158,7 +162,7 @@ fn source_and_target_completeness_remain_independent() {
     partial_source.source.complete = false;
     partial_source.target.complete = true;
     partial_source.source.pages.clear();
-    let parsed = parse_evidence(&evidence(&partial_source).unwrap()).unwrap();
+    let parsed = LocaleCoverageEvidence::parse(&partial_source.emit().unwrap()).unwrap();
 
     assert!(!parsed.payload.source.complete);
     assert!(parsed.payload.target.complete);
@@ -171,8 +175,8 @@ fn source_and_target_product_receipts_remain_independent() {
     input.source.product = Nullable::Value(product_resource('b'));
     input.target.product = Nullable::Value(product_resource('c'));
 
-    let bytes = evidence(&input).unwrap();
-    let parsed = parse_evidence(&bytes).unwrap();
+    let bytes = input.emit().unwrap();
+    let parsed = LocaleCoverageEvidence::parse(&bytes).unwrap();
     assert_eq!(parsed.payload.source.product, input.source.product);
     assert_eq!(parsed.payload.target.product, input.target.product);
 }
@@ -188,10 +192,10 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
         &mut input.target.pages,
         fallback_page("reference/api", 'a', "source-copy", '7'),
     );
-    let parsed = parse_evidence(&evidence(&input).unwrap()).unwrap();
+    let parsed = LocaleCoverageEvidence::parse(&input.emit().unwrap()).unwrap();
     assert_eq!(parsed.payload, input);
 
-    let value = serde_json::from_slice::<Value>(&evidence(&input).unwrap()).unwrap();
+    let value = serde_json::from_slice::<Value>(&input.emit().unwrap()).unwrap();
     let mut unknown = value.clone();
     let target = ((unknown).get_mut("payload").unwrap())
         .get_mut("target")
@@ -202,12 +206,12 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
     let fallback = pages.last_mut().unwrap();
     let origin = (fallback).get_mut("origin").unwrap();
     *(origin).get_mut("kind").unwrap() = Value::from("generated");
-    let error = parse_evidence(&sealed(unknown)).unwrap_err();
+    let error = LocaleCoverageEvidence::parse(&sealed(unknown)).unwrap_err();
     assert_eq!(error.path, "$.payload.target.pages[1].origin.kind");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let mut missing_origin =
-        serde_json::from_slice::<Value>(&evidence(&locale_evidence()).unwrap()).unwrap();
+        serde_json::from_slice::<Value>(&locale_evidence().emit().unwrap()).unwrap();
     let target = ((missing_origin).get_mut("payload").unwrap())
         .get_mut("target")
         .unwrap();
@@ -215,7 +219,7 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
         panic!("the checked writer produced a non-array target page set");
     };
     *(pages.first_mut().unwrap()).get_mut("origin").unwrap() = Value::Null;
-    let error = parse_evidence(&sealed(missing_origin)).unwrap_err();
+    let error = LocaleCoverageEvidence::parse(&sealed(missing_origin)).unwrap_err();
     assert_eq!(error.path, "$.payload.target.pages[0].origin");
     assert_eq!(error.kind, ErrorKind::WrongType);
 
@@ -228,7 +232,7 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
     };
     let origin = (pages.first_mut().unwrap()).get_mut("origin").unwrap();
     *(origin).get_mut("based_on_source_digest").unwrap() = Value::from("source-v1");
-    let error = parse_evidence(&sealed(invalid_lineage)).unwrap_err();
+    let error = LocaleCoverageEvidence::parse(&sealed(invalid_lineage)).unwrap_err();
     assert_eq!(error.path, "$.payload.target.pages[0].origin");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
@@ -244,7 +248,7 @@ fn every_target_page_carries_a_closed_origin_and_exact_fallback_source() {
         panic!("the checked writer produced a non-object origin");
     };
     members.remove("based_on_source_digest");
-    let error = parse_evidence(&sealed(missing_lineage)).unwrap_err();
+    let error = LocaleCoverageEvidence::parse(&sealed(missing_lineage)).unwrap_err();
     assert_eq!(
         error.path,
         "$.payload.target.pages[0].origin.based_on_source_digest"
@@ -262,27 +266,27 @@ fn locale_evidence_refuses_invalid_page_keys_and_tampering() {
             resource_digest: digest('a'),
         },
     );
-    let error = evidence(&invalid_key).unwrap_err();
+    let error = invalid_key.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.source.pages[1].key");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
-    let bytes = evidence(&locale_evidence()).unwrap();
-    let parsed = parse_evidence(&bytes).unwrap();
+    let bytes = locale_evidence().emit().unwrap();
+    let parsed = LocaleCoverageEvidence::parse(&bytes).unwrap();
     let tampered = String::from_utf8(bytes)
         .unwrap()
         .replace(&parsed.payload_digest.to_string(), &digest('f').to_string());
-    let error = parse_evidence(tampered.as_bytes()).unwrap_err();
+    let error = LocaleCoverageEvidence::parse(tampered.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload_digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 }
 
 #[test]
 fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
-    let bytes = evidence(&locale_evidence()).unwrap();
+    let bytes = locale_evidence().emit().unwrap();
     let value = serde_json::from_slice::<Value>(&bytes).unwrap();
     let mut unsorted = value.clone();
     pages_mut(&mut unsorted).reverse();
-    let error = parse_evidence(&sealed(unsorted)).unwrap_err();
+    let error = LocaleCoverageEvidence::parse(&sealed(unsorted)).unwrap_err();
     assert_eq!(error.path, "$.payload.source.pages");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 
@@ -290,7 +294,7 @@ fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
     let pages = pages_mut(&mut duplicate);
     let first = pages.first().unwrap().clone();
     *pages.last_mut().unwrap() = first;
-    let error = parse_evidence(&sealed(duplicate)).unwrap_err();
+    let error = LocaleCoverageEvidence::parse(&sealed(duplicate)).unwrap_err();
     assert_eq!(error.path, "$.payload.source.pages");
     assert_eq!(error.kind, ErrorKind::DuplicateMember);
 
@@ -298,7 +302,7 @@ fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
     let payload = (mistyped).get_mut("payload").unwrap();
     let source = (payload).get_mut("source").unwrap();
     *(source).get_mut("complete").unwrap() = Value::from("true");
-    let error = parse_evidence(&sealed(mistyped)).unwrap_err();
+    let error = LocaleCoverageEvidence::parse(&sealed(mistyped)).unwrap_err();
     assert_eq!(error.path, "$.payload.source.complete");
     assert_eq!(error.kind, ErrorKind::WrongType);
 
@@ -310,7 +314,7 @@ fn locale_evidence_refuses_unsorted_duplicate_and_mistyped_inventories() {
             panic!("the checked writer produced a non-object inventory");
         };
         members.remove("product");
-        let error = parse_evidence(&sealed(missing_product)).unwrap_err();
+        let error = LocaleCoverageEvidence::parse(&sealed(missing_product)).unwrap_err();
         assert_eq!(error.path, format!("$.payload.{inventory}.product"));
         assert_eq!(error.kind, ErrorKind::MissingField);
     }

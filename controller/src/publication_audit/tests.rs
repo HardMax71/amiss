@@ -1,11 +1,9 @@
 #![cfg(test)]
 
 use amiss_fixtures::{PublicationAuditFixture, publication_audit};
+use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::Digest;
-use amiss_wire::publication::{
-    PublicationPlanEnvelope, PublicationVerdict, assess, parse_evidence, parse_plan,
-    plan as write_plan,
-};
+use amiss_wire::publication::{PublicationEvidence, PublicationPlan, PublicationVerdict, assess};
 use serde_json::Value;
 use sha2::Digest as _;
 
@@ -121,7 +119,8 @@ fn absent_evidence_remains_a_replayable_unproven_audit() -> Result<(), ArtifactE
 #[test]
 fn report_plan_and_assessment_rebindings_are_refused() -> Result<(), ArtifactError> {
     let mut wrong_report = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
-    let mut plan = parse_plan(&wrong_report.plan).map_err(|_defect| ArtifactError::Corrupt)?;
+    let mut plan =
+        PublicationPlan::parse(&wrong_report.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     plan.payload.report_payload_digest = Digest::from_wire(
         "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
     )
@@ -133,7 +132,8 @@ fn report_plan_and_assessment_rebindings_are_refused() -> Result<(), ArtifactErr
     ));
 
     let mut wrong_docs = publication_audit(true).ok_or(ArtifactError::Corrupt)?;
-    let mut plan = parse_plan(&wrong_docs.plan).map_err(|_defect| ArtifactError::Corrupt)?;
+    let mut plan =
+        PublicationPlan::parse(&wrong_docs.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     plan.payload.docs.commit = plan.payload.docs.tree.clone();
     wrong_docs = rebuilt(&wrong_docs, &plan, wrong_docs.evidence.as_deref())?;
     assert!(matches!(
@@ -217,15 +217,18 @@ fn incomplete_reports_and_oversized_publication_documents_are_refused() -> Resul
 
 fn rebuilt(
     fixture: &PublicationAuditFixture,
-    plan: &PublicationPlanEnvelope,
+    plan: &Envelope<PublicationPlan>,
     evidence_bytes: Option<&[u8]>,
 ) -> Result<PublicationAuditFixture, ArtifactError> {
-    let plan_bytes = write_plan(&plan.payload).map_err(|_defect| ArtifactError::Corrupt)?;
-    let plan = parse_plan(&plan_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
+    let plan_bytes = plan
+        .payload
+        .emit()
+        .map_err(|_defect| ArtifactError::Corrupt)?;
+    let plan = PublicationPlan::parse(&plan_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
     let evidence = evidence_bytes.map(<[u8]>::to_vec);
     let parsed_evidence = evidence
         .as_deref()
-        .map(parse_evidence)
+        .map(PublicationEvidence::parse)
         .transpose()
         .map_err(|_defect| ArtifactError::Corrupt)?;
     let assessment = assess(

@@ -8,10 +8,11 @@ use std::{fs, path::Path};
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::locale::{
     LOCALE_DOCUMENT_BYTES, LocaleCoveragePlan, LocaleCoveragePolicy, LocaleCoverageScope,
     LocaleFallbackRule, LocalePageRequirement, PAGE_KEY_BYTES, PLAN_PAYLOAD_SCHEMA,
-    PlanPayloadSchema, parse_plan, plan,
+    PlanPayloadSchema,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
@@ -86,9 +87,9 @@ fn locale_plan() -> LocaleCoveragePlan {
 #[test]
 fn locale_plan_round_trips_with_its_payload_digest_and_example() {
     let expected = locale_plan();
-    let bytes = plan(&expected).unwrap();
+    let bytes = expected.emit().unwrap();
     let value = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
-    let parsed = parse_plan(&bytes).unwrap();
+    let parsed = LocaleCoveragePlan::parse(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
     assert_eq!(
@@ -132,9 +133,9 @@ fn locale_plan_round_trips_with_its_payload_digest_and_example() {
             .and_then(serde_json::Value::as_str),
         Some(expected_digest.as_str())
     );
-    let example = parse_plan(&example_bytes).unwrap();
+    let example = LocaleCoveragePlan::parse(&example_bytes).unwrap();
     assert_eq!(
-        plan(&example.payload).unwrap(),
+        example.payload.emit().unwrap(),
         serde_json_canonicalizer::to_vec(
             &serde_json::from_slice::<serde_json::Value>(&example_bytes).unwrap()
         )
@@ -149,7 +150,7 @@ fn locale_plan_keeps_all_source_and_named_policies_distinct() {
     all_source.policy.required = LocalePageRequirement::AllSource {};
     all_source.policy.require_target_lineage = true;
 
-    let parsed = parse_plan(&plan(&all_source).unwrap()).unwrap();
+    let parsed = LocaleCoveragePlan::parse(&all_source.emit().unwrap()).unwrap();
     assert_eq!(parsed.payload, all_source);
 }
 
@@ -158,7 +159,7 @@ fn product_alignment_uses_the_existing_exact_publication_resource() {
     let mut aligned = locale_plan();
     aligned.product = Nullable::Value(product_resource('c'));
 
-    let parsed = parse_plan(&plan(&aligned).unwrap()).unwrap();
+    let parsed = LocaleCoveragePlan::parse(&aligned.emit().unwrap()).unwrap();
     assert_eq!(parsed.payload, aligned);
 }
 
@@ -169,12 +170,12 @@ fn fallback_authorizations_are_class_sorted_and_page_scoped() {
         class: identity("vendor-copy"),
         pages: LocalePageRequirement::AllSource {},
     });
-    let parsed = parse_plan(&plan(&valid).unwrap()).unwrap();
+    let parsed = LocaleCoveragePlan::parse(&valid.emit().unwrap()).unwrap();
     assert_eq!(parsed.payload, valid);
 
     let mut unsorted = valid.clone();
     unsorted.policy.fallbacks.reverse();
-    let error = plan(&unsorted).unwrap_err();
+    let error = unsorted.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.policy.fallbacks");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 
@@ -183,7 +184,7 @@ fn fallback_authorizations_are_class_sorted_and_page_scoped() {
         class: identity("source-copy"),
         pages: LocalePageRequirement::AllSource {},
     });
-    let error = plan(&duplicate).unwrap_err();
+    let error = duplicate.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.policy.fallbacks");
     assert_eq!(error.kind, ErrorKind::DuplicateMember);
 }
@@ -192,25 +193,25 @@ fn fallback_authorizations_are_class_sorted_and_page_scoped() {
 fn locale_plan_refuses_ambiguous_scope_and_invalid_open_identities() {
     let mut same_locale = locale_plan();
     same_locale.scope.target_locale = same_locale.scope.source_locale.clone();
-    let error = plan(&same_locale).unwrap_err();
+    let error = same_locale.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.scope");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
     let mut invalid_locale = locale_plan();
     invalid_locale.scope.target_locale = "de/DE".to_owned();
-    let error = plan(&invalid_locale).unwrap_err();
+    let error = invalid_locale.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.scope.target_locale");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let mut invalid_scope_version = locale_plan();
     invalid_scope_version.scope.version = Nullable::Value(String::new());
-    let error = plan(&invalid_scope_version).unwrap_err();
+    let error = invalid_scope_version.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.scope.version");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let mut invalid_producer_version = locale_plan();
     invalid_producer_version.producer.version = "v 1".to_owned();
-    let error = plan(&invalid_producer_version).unwrap_err();
+    let error = invalid_producer_version.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.producer.version");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
@@ -219,7 +220,7 @@ fn locale_plan_refuses_ambiguous_scope_and_invalid_open_identities() {
         uri: "registry.example.com/widget:latest".to_owned(),
         digest: digest('c'),
     });
-    let error = plan(&invalid_product).unwrap_err();
+    let error = invalid_product.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.product.uri");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
@@ -255,7 +256,7 @@ fn locale_plan_requires_one_sorted_unique_bounded_named_set() {
     ] {
         let mut candidate = locale_plan();
         candidate.policy.required = LocalePageRequirement::Named { keys };
-        let error = plan(&candidate).unwrap_err();
+        let error = candidate.emit().unwrap_err();
         assert_eq!(error.path, path);
         assert_eq!(error.kind, kind);
     }
@@ -264,22 +265,25 @@ fn locale_plan_requires_one_sorted_unique_bounded_named_set() {
     boundary.policy.required = LocalePageRequirement::Named {
         keys: vec!["x".repeat(PAGE_KEY_BYTES)],
     };
-    assert!(plan(&boundary).is_ok());
+    assert!(boundary.emit().is_ok());
 }
 
 #[test]
 fn locale_plan_refuses_tampering_open_shapes_and_oversized_documents() {
-    let bytes = plan(&locale_plan()).unwrap();
-    let parsed = parse_plan(&bytes).unwrap();
+    let bytes = locale_plan().emit().unwrap();
+    let parsed = LocaleCoveragePlan::parse(&bytes).unwrap();
     let tampered = String::from_utf8(bytes)
         .unwrap()
         .replace(&parsed.payload_digest.to_string(), &digest('f').to_string());
-    let error = parse_plan(tampered.as_bytes()).unwrap_err();
+    let error = LocaleCoveragePlan::parse(tampered.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload_digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
-    let value = plan(&locale_plan()).unwrap();
-    let recorded = parse_plan(&value).unwrap().payload_digest.to_string();
+    let value = locale_plan().emit().unwrap();
+    let recorded = LocaleCoveragePlan::parse(&value)
+        .unwrap()
+        .payload_digest
+        .to_string();
     let open = String::from_utf8(value).unwrap().replacen(
         "\"report_payload_digest\":",
         "\"unknown\":true,\"report_payload_digest\":",
@@ -299,29 +303,29 @@ fn locale_plan_refuses_tampering_open_shapes_and_oversized_documents() {
         )
         .to_string(),
     );
-    let error = parse_plan(rebound.as_bytes()).unwrap_err();
+    let error = LocaleCoveragePlan::parse(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.unknown");
     assert_eq!(error.kind, ErrorKind::UnknownField);
 
-    let canonical = String::from_utf8(plan(&locale_plan()).unwrap()).unwrap();
+    let canonical = String::from_utf8(locale_plan().emit().unwrap()).unwrap();
     for (member, path) in [
         ("\"product\":null,", "$.payload.product"),
         (",\"version\":\"1.2\"", "$.payload.scope.version"),
     ] {
         let missing = canonical.replacen(member, "", 1);
         assert_ne!(missing, canonical);
-        let error = parse_plan(missing.as_bytes()).unwrap_err();
+        let error = LocaleCoveragePlan::parse(missing.as_bytes()).unwrap_err();
         assert_eq!(error.path, path);
         assert_eq!(error.kind, ErrorKind::MissingField);
     }
 
     let unknown_mode = canonical.replacen("\"mode\":\"named\"", "\"mode\":\"unknown\"", 1);
-    let error = parse_plan(unknown_mode.as_bytes()).unwrap_err();
+    let error = LocaleCoveragePlan::parse(unknown_mode.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.policy.fallbacks[0].pages.mode");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let oversized = vec![b' '; usize::try_from(LOCALE_DOCUMENT_BYTES).unwrap() + 1];
-    let error = parse_plan(&oversized).unwrap_err();
+    let error = LocaleCoveragePlan::parse(&oversized).unwrap_err();
     assert_eq!(error.path, "$");
     assert_eq!(error.kind, ErrorKind::LimitExceeded);
 }
@@ -330,7 +334,8 @@ fn locale_plan_refuses_tampering_open_shapes_and_oversized_documents() {
 fn all_source_policies_reject_unknown_members_with_a_matching_received_digest() {
     let mut input = locale_plan();
     input.policy.required = LocalePageRequirement::AllSource {};
-    let mut document = serde_json::to_value(parse_plan(&plan(&input).unwrap()).unwrap()).unwrap();
+    let mut document =
+        serde_json::to_value(LocaleCoveragePlan::parse(&input.emit().unwrap()).unwrap()).unwrap();
     document["payload"]["policy"]["required"]["keys"] = serde_json::json!(["extra"]);
     let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
     document["payload_digest"] = serde_json::json!(Digest::from(
@@ -340,7 +345,7 @@ fn all_source_policies_reject_unknown_members_with_a_matching_received_digest() 
             .finalize()
             .0
     ));
-    let error = parse_plan(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+    let error = LocaleCoveragePlan::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.kind, ErrorKind::UnknownField);
     assert_eq!(error.path, "$.payload.policy.required.keys");
 }

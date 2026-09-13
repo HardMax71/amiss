@@ -3,6 +3,7 @@
     reason = "integration assertions over repository-owned documentation and fixtures"
 )]
 
+use amiss_wire::envelope::Payload as _;
 use sha2::Digest as _;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -63,16 +64,28 @@ fn parse_defect<T, E: std::fmt::Debug>(result: Result<T, E>) -> Option<String> {
 fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
     match contract_name {
         "debt-snapshot" => parse_defect(parse_debt_snapshot(bytes)),
-        "locale-coverage-assessment" => parse_defect(amiss_wire::locale::parse_assessment(bytes)),
-        "locale-coverage-evidence" => parse_defect(amiss_wire::locale::parse_evidence(bytes)),
-        "locale-coverage-plan" => parse_defect(amiss_wire::locale::parse_plan(bytes)),
+        "locale-coverage-assessment" => {
+            parse_defect(amiss_wire::locale::LocaleCoverageAssessment::parse(bytes))
+        }
+        "locale-coverage-evidence" => {
+            parse_defect(amiss_wire::locale::LocaleCoverageEvidence::parse(bytes))
+        }
+        "locale-coverage-plan" => {
+            parse_defect(amiss_wire::locale::LocaleCoveragePlan::parse(bytes))
+        }
         "organization-floor" => parse_defect(parse_organization_floor(bytes)),
-        "publication-assessment" => parse_defect(amiss_wire::publication::parse_assessment(bytes)),
-        "publication-evidence" => parse_defect(amiss_wire::publication::parse_evidence(bytes)),
-        "publication-plan" => parse_defect(amiss_wire::publication::parse_plan(bytes)),
-        "relation-assessment" => parse_defect(amiss_wire::relation::parse_assessment(bytes)),
-        "relation-evidence" => parse_defect(amiss_wire::relation::parse_evidence(bytes)),
-        "relation-plan" => parse_defect(amiss_wire::relation::parse_plan(bytes)),
+        "publication-assessment" => {
+            parse_defect(amiss_wire::publication::PublicationAssessment::parse(bytes))
+        }
+        "publication-evidence" => {
+            parse_defect(amiss_wire::publication::PublicationEvidence::parse(bytes))
+        }
+        "publication-plan" => parse_defect(amiss_wire::publication::PublicationPlan::parse(bytes)),
+        "relation-assessment" => {
+            parse_defect(amiss_wire::relation::RelationAssessment::parse(bytes))
+        }
+        "relation-evidence" => parse_defect(amiss_wire::relation::RelationEvidence::parse(bytes)),
+        "relation-plan" => parse_defect(amiss_wire::relation::RelationPlan::parse(bytes)),
         "scanner-controls-request" => parse_defect(ControlsRequest::parse(bytes)),
         "scanner-evaluation-request" => parse_defect(EvaluationRequest::parse(bytes)),
         "scanner-execution-constraint" => parse_defect(parse_execution_constraint(bytes)),

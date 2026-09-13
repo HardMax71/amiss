@@ -10,31 +10,31 @@ use super::evidence::{fallback_page, locale_evidence, page_map, set_target_page,
 use super::{digest, locale_plan, oid, product_resource};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::{Envelope, Payload as _};
 
 use amiss_wire::locale::{
-    ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessmentEnvelope, LocaleCoverageEvidence,
-    LocaleCoverageEvidenceEnvelope, LocaleCoverageReason, LocaleCoverageVerdict,
-    LocaleFallbackStatus, LocaleLineageStatus, LocalePageRequirement, LocaleSourcePage, assess,
-    evidence, parse_assessment, parse_evidence, parse_plan, plan,
+    ASSESSMENT_PAYLOAD_SCHEMA, LocaleCoverageAssessment, LocaleCoverageEvidence,
+    LocaleCoveragePlan, LocaleCoverageReason, LocaleCoverageVerdict, LocaleFallbackStatus,
+    LocaleLineageStatus, LocalePageRequirement, LocaleSourcePage, assess,
 };
 use serde_json::Value;
 
-fn plan_envelope() -> amiss_wire::locale::LocaleCoveragePlanEnvelope {
-    let value = plan(&locale_plan()).unwrap();
-    parse_plan(&value).unwrap()
+fn plan_envelope() -> Envelope<LocaleCoveragePlan> {
+    let value = locale_plan().emit().unwrap();
+    LocaleCoveragePlan::parse(&value).unwrap()
 }
 
-fn evidence_envelope(input: &LocaleCoverageEvidence) -> LocaleCoverageEvidenceEnvelope {
-    let value = evidence(input).unwrap();
-    parse_evidence(&value).unwrap()
+fn evidence_envelope(input: &LocaleCoverageEvidence) -> Envelope<LocaleCoverageEvidence> {
+    let value = input.emit().unwrap();
+    LocaleCoverageEvidence::parse(&value).unwrap()
 }
 
 fn assessed(
-    plan: &amiss_wire::locale::LocaleCoveragePlanEnvelope,
-    evidence: Option<&LocaleCoverageEvidenceEnvelope>,
-) -> LocaleCoverageAssessmentEnvelope {
+    plan: &Envelope<LocaleCoveragePlan>,
+    evidence: Option<&Envelope<LocaleCoverageEvidence>>,
+) -> Envelope<LocaleCoverageAssessment> {
     let value = assess(plan, evidence, "0.26.0", digest('a')).unwrap();
-    parse_assessment(&value).unwrap()
+    LocaleCoverageAssessment::parse(&value).unwrap()
 }
 
 #[test]
@@ -84,8 +84,8 @@ fn complete_inventories_report_exact_missing_and_orphan_pages() {
 fn partial_inventories_only_report_absences_the_other_side_proves() {
     let mut all_source = locale_plan();
     all_source.policy.required = LocalePageRequirement::AllSource {};
-    let value = plan(&all_source).unwrap();
-    let all_source = parse_plan(&value).unwrap();
+    let value = all_source.emit().unwrap();
+    let all_source = LocaleCoveragePlan::parse(&value).unwrap();
 
     let mut partial_source = locale_evidence();
     partial_source.plan_payload_digest = all_source.payload_digest;
@@ -257,8 +257,8 @@ fn fallback_source_absence_in_a_partial_inventory_stays_unproven() {
 fn all_source_fallback_rules_authorize_each_observed_source_page() {
     let mut input_plan = locale_plan();
     input_plan.policy.fallbacks[0].pages = LocalePageRequirement::AllSource {};
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let value = input_plan.emit().unwrap();
+    let plan = LocaleCoveragePlan::parse(&value).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
     set_target_page(
@@ -287,8 +287,8 @@ fn all_source_fallback_rules_authorize_each_observed_source_page() {
 fn required_target_lineage_distinguishes_current_stale_and_unproven() {
     let mut input_plan = locale_plan();
     input_plan.policy.require_target_lineage = true;
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let value = input_plan.emit().unwrap();
+    let plan = LocaleCoveragePlan::parse(&value).unwrap();
 
     let mut current = locale_evidence();
     current.plan_payload_digest = plan.payload_digest;
@@ -365,8 +365,8 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
 
     let mut input_plan = locale_plan();
     input_plan.policy.require_target_lineage = true;
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let value = input_plan.emit().unwrap();
+    let plan = LocaleCoveragePlan::parse(&value).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
     let source_page = LocaleSourcePage {
@@ -404,8 +404,8 @@ fn lineage_policy_is_explicit_and_applies_outside_the_required_page_set() {
 fn lineage_is_not_inferred_without_an_observed_current_source() {
     let mut input_plan = locale_plan();
     input_plan.policy.require_target_lineage = true;
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let value = input_plan.emit().unwrap();
+    let plan = LocaleCoveragePlan::parse(&value).unwrap();
     let mut input = locale_evidence();
     input.plan_payload_digest = plan.payload_digest;
     input.source.complete = false;
@@ -440,8 +440,8 @@ fn lineage_is_not_inferred_without_an_observed_current_source() {
 fn product_alignment_compares_each_locale_to_one_exact_planned_resource() {
     let mut input_plan = locale_plan();
     input_plan.product = Nullable::Value(product_resource('c'));
-    let value = plan(&input_plan).unwrap();
-    let plan = parse_plan(&value).unwrap();
+    let value = input_plan.emit().unwrap();
+    let plan = LocaleCoveragePlan::parse(&value).unwrap();
     let mut aligned = locale_evidence();
     aligned.plan_payload_digest = plan.payload_digest;
     aligned.source.product = Nullable::Value(product_resource('c'));
@@ -519,8 +519,8 @@ fn coverage_only_policy_ignores_unselected_product_receipts() {
 fn all_source_and_named_source_absence_remain_distinct() {
     let mut all_source_plan = locale_plan();
     all_source_plan.policy.required = LocalePageRequirement::AllSource {};
-    let value = plan(&all_source_plan).unwrap();
-    let all_source_plan = parse_plan(&value).unwrap();
+    let value = all_source_plan.emit().unwrap();
+    let all_source_plan = LocaleCoveragePlan::parse(&value).unwrap();
     let mut all_source_evidence = locale_evidence();
     all_source_evidence.plan_payload_digest = all_source_plan.payload_digest;
     all_source_evidence.target.pages = page_map(
@@ -653,7 +653,7 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
         )
         .to_string(),
     );
-    let error = parse_assessment(rebound.as_bytes()).unwrap_err();
+    let error = LocaleCoverageAssessment::parse(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
@@ -664,7 +664,7 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
         ("source".to_owned(), Value::from("refuted")),
         ("target".to_owned(), Value::from("matched")),
     ]);
-    let error = parse_assessment(&sealed(inconsistent_product)).unwrap_err();
+    let error = LocaleCoverageAssessment::parse(&sealed(inconsistent_product)).unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
@@ -674,7 +674,7 @@ fn assessment_refuses_mutated_envelopes_and_inconsistent_or_unsorted_results() {
         .unwrap();
     *(target_missing).get_mut("target_missing").unwrap() =
         Value::Array(vec![Value::from("reference/z"), Value::from("reference/a")]);
-    let error = parse_assessment(&sealed(unsorted)).unwrap_err();
+    let error = LocaleCoverageAssessment::parse(&sealed(unsorted)).unwrap_err();
     assert_eq!(error.path, "$.payload.coverage.target_missing");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 }
@@ -691,8 +691,10 @@ fn nullable_assessment_fields_are_required() {
             .remove("product")
             .is_some()
     );
-    let error =
-        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_product).unwrap()).unwrap_err();
+    let error = LocaleCoverageAssessment::parse(
+        &serde_json_canonicalizer::to_vec(&missing_product).unwrap(),
+    )
+    .unwrap_err();
     assert_eq!(error.path, "$.payload.product");
     assert_eq!(error.kind, ErrorKind::MissingField);
 
@@ -704,9 +706,10 @@ fn nullable_assessment_fields_are_required() {
             .remove("evidence_payload_digest")
             .is_some()
     );
-    let error =
-        parse_assessment(&serde_json_canonicalizer::to_vec(&missing_evidence_digest).unwrap())
-            .unwrap_err();
+    let error = LocaleCoverageAssessment::parse(
+        &serde_json_canonicalizer::to_vec(&missing_evidence_digest).unwrap(),
+    )
+    .unwrap_err();
     assert_eq!(error.path, "$.payload.subject.evidence_payload_digest");
     assert_eq!(error.kind, ErrorKind::MissingField);
 }
@@ -714,11 +717,15 @@ fn nullable_assessment_fields_are_required() {
 #[test]
 fn the_published_assessment_replays_from_its_plan_and_evidence() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
-    let plan = parse_plan(&fs::read(examples.join("locale-coverage-plan.json")).unwrap()).unwrap();
-    let evidence =
-        parse_evidence(&fs::read(examples.join("locale-coverage-evidence.json")).unwrap()).unwrap();
+    let plan =
+        LocaleCoveragePlan::parse(&fs::read(examples.join("locale-coverage-plan.json")).unwrap())
+            .unwrap();
+    let evidence = LocaleCoverageEvidence::parse(
+        &fs::read(examples.join("locale-coverage-evidence.json")).unwrap(),
+    )
+    .unwrap();
     let published_bytes = fs::read(examples.join("locale-coverage-assessment.json")).unwrap();
-    let published = parse_assessment(&published_bytes).unwrap();
+    let published = LocaleCoverageAssessment::parse(&published_bytes).unwrap();
     let replayed = assess(
         &plan,
         Some(&evidence),

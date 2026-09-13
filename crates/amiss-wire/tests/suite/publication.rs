@@ -7,12 +7,12 @@ use sha2::Digest as _;
 use std::{fs, path::Path};
 
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{
     CompletedSite, DocsCandidate, PLAN_PAYLOAD_SCHEMA, PlanPayloadSchema, PublicationPlan,
-    PublicationProducer, PublicationRelation, PublicationResource, PublicationTarget, parse_plan,
-    plan,
+    PublicationProducer, PublicationRelation, PublicationResource, PublicationTarget,
 };
 
 mod assessment;
@@ -78,9 +78,9 @@ fn publication_plan() -> PublicationPlan {
 #[test]
 fn publication_plan_round_trips_with_its_payload_digest() {
     let expected = publication_plan();
-    let bytes = plan(&expected).unwrap();
+    let bytes = expected.emit().unwrap();
     let value = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
-    let parsed = parse_plan(&bytes).unwrap();
+    let parsed = PublicationPlan::parse(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
     assert_eq!(
@@ -107,8 +107,8 @@ fn publication_plan_round_trips_with_its_payload_digest() {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/publication-plan.json"),
     )
     .unwrap();
-    let example = parse_plan(&example_bytes).unwrap();
-    let written = plan(&example.payload).unwrap();
+    let example = PublicationPlan::parse(&example_bytes).unwrap();
+    let written = example.payload.emit().unwrap();
     assert_eq!(
         written,
         serde_json_canonicalizer::to_vec(
@@ -122,13 +122,13 @@ fn publication_plan_round_trips_with_its_payload_digest() {
 fn publication_plan_refuses_ambiguous_resources_and_git_objects() {
     let mut mismatched_git = publication_plan();
     mismatched_git.docs.tree = oid('b', ObjectFormat::Sha256);
-    let error = plan(&mismatched_git).unwrap_err();
+    let error = mismatched_git.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.docs.tree_oid");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let mut fragment = publication_plan();
     fragment.target.canonical_url = "https://docs.example.com/#candidate".to_owned();
-    let error = plan(&fragment).unwrap_err();
+    let error = fragment.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.target.canonical_url");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
@@ -139,21 +139,21 @@ fn publication_plan_refuses_ambiguous_resources_and_git_objects() {
     ] {
         let mut invalid_authority = publication_plan();
         invalid_authority.target.canonical_url = invalid.to_owned();
-        let error = plan(&invalid_authority).unwrap_err();
+        let error = invalid_authority.emit().unwrap_err();
         assert_eq!(error.path, "$.payload.target.canonical_url");
         assert_eq!(error.kind, ErrorKind::InvalidValue);
     }
 
     let mut relative_resource = publication_plan();
     relative_resource.product.uri = "registry.example.com/widget:latest".to_owned();
-    let error = plan(&relative_resource).unwrap_err();
+    let error = relative_resource.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.product.uri");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
 #[test]
 fn publication_plan_refuses_repository_values_that_bypass_construction() {
-    let value = plan(&publication_plan()).unwrap();
+    let value = publication_plan().emit().unwrap();
     let mut document: serde_json::Value = serde_json::from_slice(&value).unwrap();
     document["payload"]["docs"]["repository"]["host"] = serde_json::json!("invalid/host");
     let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
@@ -168,14 +168,15 @@ fn publication_plan_refuses_repository_values_that_bypass_construction() {
         .to_string()
     );
 
-    let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+    let error =
+        PublicationPlan::parse(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload.docs.repository");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
 
 #[test]
 fn publication_plan_reports_derived_shape_errors_at_their_fields() {
-    let bytes = plan(&publication_plan()).unwrap();
+    let bytes = publication_plan().emit().unwrap();
     for (pointer, replacement, expected_path, expected_kind) in [
         (
             "/payload/report_payload_digest",
@@ -222,7 +223,8 @@ fn publication_plan_reports_derived_shape_errors_at_their_fields() {
             .to_string()
         );
 
-        let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+        let error = PublicationPlan::parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
+            .unwrap_err();
         assert_eq!(error.path, expected_path);
         assert_eq!(error.kind, expected_kind);
     }
@@ -243,19 +245,20 @@ fn publication_plan_reports_derived_shape_errors_at_their_fields() {
         )
         .to_string()
     );
-    let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+    let error =
+        PublicationPlan::parse(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload.schema");
     assert_eq!(error.kind, ErrorKind::MissingField);
 }
 
 #[test]
 fn publication_plan_refuses_tampering_and_open_shapes() {
-    let bytes = plan(&publication_plan()).unwrap();
-    let parsed = parse_plan(&bytes).unwrap();
+    let bytes = publication_plan().emit().unwrap();
+    let parsed = PublicationPlan::parse(&bytes).unwrap();
     let recorded = parsed.payload_digest.to_string();
     let document = String::from_utf8(bytes).unwrap();
     let tampered = document.replace(&recorded, &digest('f').to_string());
-    let error = parse_plan(tampered.as_bytes()).unwrap_err();
+    let error = PublicationPlan::parse(tampered.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload_digest");
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
 
@@ -278,7 +281,7 @@ fn publication_plan_refuses_tampering_and_open_shapes() {
         )
         .to_string(),
     );
-    let error = parse_plan(rebound.as_bytes()).unwrap_err();
+    let error = PublicationPlan::parse(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.unknown");
     assert_eq!(error.kind, ErrorKind::UnknownField);
 }

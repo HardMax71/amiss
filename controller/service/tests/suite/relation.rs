@@ -22,8 +22,9 @@ use amiss_controller_service::{
     RelationOutboxError, drain_relation_outbox, execute_relation_audit, freeze_relation_transition,
 };
 use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText};
-use amiss_wire::relation::{RelationSnapshot, RelationVerdict, parse_assessment};
+use amiss_wire::relation::{RelationAssessment, RelationSnapshot, RelationVerdict};
 
 struct RelationWorkFixture {
     documentation: amiss_fixtures::CommitPair,
@@ -194,7 +195,7 @@ fn current_relation_work_projects_assesses_retains_and_stages_exactly()
         ArtifactComponent::RelationAssessment,
     )?;
     assert_eq!(
-        parse_assessment(&assessment)?.payload.verdict,
+        RelationAssessment::parse(&assessment)?.payload.verdict,
         RelationVerdict::IntroducedDrift
     );
     assert!(

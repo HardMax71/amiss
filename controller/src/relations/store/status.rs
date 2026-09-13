@@ -1,6 +1,7 @@
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
-use amiss_wire::relation::{RelationSnapshot, parse_plan};
+use amiss_wire::relation::{RelationPlan, RelationSnapshot};
 use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 
@@ -165,8 +166,8 @@ pub(super) fn reopen_status(
     let retained = artifacts
         .reopen_relation_audit(&stored.artifact_id)
         .map_err(RelationScheduleStoreError::Artifact)?;
-    let parsed =
-        parse_plan(&retained.plan).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    let parsed = RelationPlan::parse(&retained.plan)
+        .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
     if parsed.payload.relation.identity != *relation
         || parsed.payload.coordination != stored.coordination
         || parsed.payload.trigger_role != stored.trigger_role

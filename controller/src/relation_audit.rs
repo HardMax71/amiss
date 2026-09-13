@@ -1,7 +1,8 @@
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::Digest;
 use amiss_wire::relation::{
-    self, RELATION_DOCUMENT_BYTES, RelationAssessment, RelationVerdict, parse_assessment,
-    parse_evidence, parse_plan,
+    self, PlanPayloadSchema, RELATION_DOCUMENT_BYTES, RelationAssessment, RelationEvidence,
+    RelationPlan, RelationVerdict,
 };
 use sha2::Digest as _;
 
@@ -37,7 +38,7 @@ pub fn relation_audit_plan(
     report: &[u8],
 ) -> Result<Vec<u8>, ArtifactError> {
     let plan = checked_relation_plan(transition, report)?.0;
-    relation::plan(&plan).map_err(|_defect| ArtifactError::Corrupt)
+    plan.emit().map_err(|_defect| ArtifactError::Corrupt)
 }
 
 /// Validates one complete relation audit against its accepted trigger report
@@ -61,17 +62,17 @@ pub fn validate_relation_audit(
         return Err(ArtifactError::TooLarge);
     }
     let (expected, report_digest) = checked_relation_plan(bundle.transition, bundle.report)?;
-    let plan = parse_plan(bundle.plan).map_err(|_defect| ArtifactError::Corrupt)?;
+    let plan = RelationPlan::parse(bundle.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     (plan.payload == expected)
         .then_some(())
         .ok_or(ArtifactError::Corrupt)?;
     let evidence = bundle
         .evidence
-        .map(parse_evidence)
+        .map(RelationEvidence::parse)
         .transpose()
         .map_err(|_defect| ArtifactError::Corrupt)?;
     let assessment =
-        parse_assessment(bundle.assessment).map_err(|_defect| ArtifactError::Corrupt)?;
+        RelationAssessment::parse(bundle.assessment).map_err(|_defect| ArtifactError::Corrupt)?;
     let replayed = RelationAssessment::evaluate(
         &plan,
         evidence.as_ref(),
@@ -79,7 +80,7 @@ pub fn validate_relation_audit(
         assessment.payload.engine.engine_digest,
     )
     .map_err(|_defect| ArtifactError::Corrupt)?;
-    if replayed.payload_digest != assessment.payload_digest {
+    if replayed != assessment.payload {
         return Err(ArtifactError::Corrupt);
     }
     Ok(RelationAuditDigests {
@@ -96,7 +97,7 @@ pub fn validate_relation_audit(
 fn checked_relation_plan(
     transition: &RelationTransition,
     report: &[u8],
-) -> Result<(relation::RelationPlan, Digest), ArtifactError> {
+) -> Result<(RelationPlan, Digest), ArtifactError> {
     let transition = relation_transition(
         transition.relation.clone(),
         transition.coordination.clone(),
@@ -142,8 +143,8 @@ fn checked_relation_plan(
         })
         .ok_or(ArtifactError::Corrupt)?;
     Ok((
-        relation::RelationPlan {
-            schema: relation::PlanPayloadSchema::Current,
+        RelationPlan {
+            schema: PlanPayloadSchema::Current,
             report_payload_digest: report.payload_digest,
             relation: relation::RelationIdentity {
                 identity: registered.identity.clone(),

@@ -1,6 +1,9 @@
 use std::{collections::BTreeSet, fs, path::Path};
 
-use amiss_wire::{controls, locale, publication, relation, report, requests, semantic};
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::locale::{LocaleCoverageAssessment, LocaleCoverageEvidence, LocaleCoveragePlan};
+use amiss_wire::publication::{PublicationAssessment, PublicationEvidence, PublicationPlan};
+use amiss_wire::{controls, locale, publication, report, requests, semantic};
 use strum::IntoEnumIterator;
 
 use super::relation_fixture;
@@ -166,40 +169,35 @@ fn sidecar_examples_match_their_typed_sources() {
     let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples");
     let contract = relation_fixture::relation_contract();
     let publication_plan =
-        publication::parse_plan(&fs::read(examples.join("publication-plan.json")).unwrap())
-            .unwrap();
+        PublicationPlan::parse(&fs::read(examples.join("publication-plan.json")).unwrap()).unwrap();
     let publication_evidence =
-        publication::parse_evidence(&fs::read(examples.join("publication-evidence.json")).unwrap())
+        PublicationEvidence::parse(&fs::read(examples.join("publication-evidence.json")).unwrap())
             .unwrap();
-    let publication_assessment = publication::parse_assessment(
+    let publication_assessment = PublicationAssessment::parse(
         &fs::read(examples.join("publication-assessment.json")).unwrap(),
     )
     .unwrap();
     let locale_plan =
-        locale::parse_plan(&fs::read(examples.join("locale-coverage-plan.json")).unwrap()).unwrap();
-    let locale_evidence =
-        locale::parse_evidence(&fs::read(examples.join("locale-coverage-evidence.json")).unwrap())
+        LocaleCoveragePlan::parse(&fs::read(examples.join("locale-coverage-plan.json")).unwrap())
             .unwrap();
-    let locale_assessment = locale::parse_assessment(
+    let locale_evidence = LocaleCoverageEvidence::parse(
+        &fs::read(examples.join("locale-coverage-evidence.json")).unwrap(),
+    )
+    .unwrap();
+    let locale_assessment = LocaleCoverageAssessment::parse(
         &fs::read(examples.join("locale-coverage-assessment.json")).unwrap(),
     )
     .unwrap();
     for (name, generated) in [
-        (
-            "relation-plan.json",
-            relation::plan(&contract.plan).unwrap(),
-        ),
-        (
-            "relation-evidence.json",
-            relation::evidence(&contract.evidence).unwrap(),
-        ),
+        ("relation-plan.json", contract.plan.emit().unwrap()),
+        ("relation-evidence.json", contract.evidence.emit().unwrap()),
         (
             "publication-plan.json",
-            publication::plan(&publication_plan.payload).unwrap(),
+            publication_plan.payload.emit().unwrap(),
         ),
         (
             "publication-evidence.json",
-            publication::evidence(&publication_evidence.payload).unwrap(),
+            publication_evidence.payload.emit().unwrap(),
         ),
         (
             "publication-assessment.json",
@@ -213,11 +211,11 @@ fn sidecar_examples_match_their_typed_sources() {
         ),
         (
             "locale-coverage-plan.json",
-            locale::plan(&locale_plan.payload).unwrap(),
+            locale_plan.payload.emit().unwrap(),
         ),
         (
             "locale-coverage-evidence.json",
-            locale::evidence(&locale_evidence.payload).unwrap(),
+            locale_evidence.payload.emit().unwrap(),
         ),
         (
             "locale-coverage-assessment.json",
