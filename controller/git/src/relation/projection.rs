@@ -6,15 +6,15 @@ use amiss_controller::{
 };
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::{RepositoryProjectionLimits, RepositoryProjectionRequest, project_repository};
+use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationPlanEnvelope, RelationProjectionSlot,
-    evidence,
+    RelationEvidence, RelationEvidenceSubject, RelationPlan, RelationProjectionSlot,
 };
 
 #[derive(Clone, Copy)]
 pub struct RelationProjectionRequest<'a> {
     pub transition: &'a RelationTransition,
-    pub plan: &'a RelationPlanEnvelope,
+    pub plan: &'a Envelope<RelationPlan>,
     pub roots: [RelationAcquiredRoot<'a>; 2],
 }
 
@@ -113,12 +113,13 @@ pub fn project_relation_evidence(
         });
     }
 
-    evidence(&RelationEvidence {
+    RelationEvidence {
         schema: amiss_wire::relation::EvidencePayloadSchema::Current,
         plan_payload_digest: request.plan.payload_digest,
         subjects: subjects
             .try_into()
             .map_err(|_subjects: Vec<_>| RelationProjectionError::InvalidPlan)?,
-    })
+    }
+    .emit()
     .map_err(|_defect| RelationProjectionError::Unproven)
 }

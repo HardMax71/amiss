@@ -4,31 +4,29 @@ use sha2::Digest as _;
 
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::{Envelope, Payload as _};
 
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::publication::{
-    ASSESSMENT_PAYLOAD_SCHEMA, PublicationReason, PublicationVerdict, assess, evidence,
-    parse_assessment, parse_evidence, parse_plan, plan,
+    ASSESSMENT_PAYLOAD_SCHEMA, PublicationAssessment, PublicationEvidence, PublicationPlan,
+    PublicationReason, PublicationVerdict, assess,
 };
 
-fn plan_envelope() -> amiss_wire::publication::PublicationPlanEnvelope {
-    let value = plan(&publication_plan()).unwrap();
-    parse_plan(&value).unwrap()
+fn plan_envelope() -> Envelope<PublicationPlan> {
+    let value = publication_plan().emit().unwrap();
+    PublicationPlan::parse(&value).unwrap()
 }
 
-fn evidence_envelope(
-    evidence_value: &amiss_wire::publication::PublicationEvidence,
-) -> amiss_wire::publication::PublicationEvidenceEnvelope {
-    let value = evidence(evidence_value).unwrap();
-    parse_evidence(&value).unwrap()
+fn evidence_envelope(evidence_value: &PublicationEvidence) -> Envelope<PublicationEvidence> {
+    let value = evidence_value.emit().unwrap();
+    PublicationEvidence::parse(&value).unwrap()
 }
 
 fn assessed(
-    plan: &amiss_wire::publication::PublicationPlanEnvelope,
-    evidence: Option<&amiss_wire::publication::PublicationEvidenceEnvelope>,
-) -> amiss_wire::publication::PublicationAssessmentEnvelope {
-    amiss_wire::publication::PublicationAssessment::evaluate(plan, evidence, "0.26.0", digest('a'))
-        .unwrap()
+    plan: &Envelope<PublicationPlan>,
+    evidence: Option<&Envelope<PublicationEvidence>>,
+) -> Envelope<PublicationAssessment> {
+    PublicationAssessment::evaluate(plan, evidence, "0.26.0", digest('a')).unwrap()
 }
 
 #[test]
@@ -120,7 +118,10 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
 
     let valid_plan = plan_envelope();
     let value = assess(&valid_plan, None, "0.26.0", digest('a')).unwrap();
-    let recorded = parse_assessment(&value).unwrap().payload_digest.to_string();
+    let recorded = PublicationAssessment::parse(&value)
+        .unwrap()
+        .payload_digest
+        .to_string();
     let inconsistent = String::from_utf8(value)
         .unwrap()
         .replace("\"unproven\"", "\"matched\"");
@@ -140,7 +141,7 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
         )
         .to_string(),
     );
-    let error = parse_assessment(rebound.as_bytes()).unwrap_err();
+    let error = PublicationAssessment::parse(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
@@ -149,7 +150,10 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
     mismatched.target.canonical_url = "https://preview.example.com/widget/".to_owned();
     let evidence = evidence_envelope(&mismatched);
     let value = assess(&valid_plan, Some(&evidence), "0.26.0", digest('a')).unwrap();
-    let recorded = parse_assessment(&value).unwrap().payload_digest.to_string();
+    let recorded = PublicationAssessment::parse(&value)
+        .unwrap()
+        .payload_digest
+        .to_string();
     let unsorted = String::from_utf8(value).unwrap().replace(
         "[\"docs-mismatch\",\"target-mismatch\"]",
         "[\"target-mismatch\",\"docs-mismatch\"]",
@@ -169,7 +173,7 @@ fn assessment_rejects_mutated_envelopes_and_inconsistent_verdicts() {
         )
         .to_string(),
     );
-    let error = parse_assessment(rebound.as_bytes()).unwrap_err();
+    let error = PublicationAssessment::parse(rebound.as_bytes()).unwrap_err();
     assert_eq!(error.path, "$.payload.reasons");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 }

@@ -10,9 +10,10 @@ use amiss_controller::{
 use amiss_controller_git::{
     RelationProjectionError, RelationProjectionRequest, project_relation_evidence,
 };
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
-use amiss_wire::relation::{assess, parse_evidence, parse_plan};
+use amiss_wire::relation::{RelationEvidence, RelationPlan, assess};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CoordinatedRelation {
@@ -142,13 +143,13 @@ pub fn execute_relation_audit(
         .then_some(())
         .ok_or(RelationAuditExecutionError::Superseded)?;
     let plan_bytes = relation_audit_plan(&request.pending.transition, request.report)?;
-    let plan = parse_plan(&plan_bytes)?;
+    let plan = RelationPlan::parse(&plan_bytes)?;
     let evidence_bytes = project_relation_evidence(RelationProjectionRequest {
         transition: &request.pending.transition,
         plan: &plan,
         roots: request.roots,
     })?;
-    let evidence = parse_evidence(&evidence_bytes)?;
+    let evidence = RelationEvidence::parse(&evidence_bytes)?;
     let assessment_bytes = assess(
         &plan,
         Some(&evidence),

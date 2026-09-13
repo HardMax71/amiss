@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
@@ -6,19 +5,14 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Error, ErrorKind, fail};
+use crate::envelope::{Envelope, Payload};
 use crate::model::ArtifactId;
 use crate::model::Digest;
 use crate::semantic::producer_version_valid;
 
-use super::evidence::{
-    EVIDENCE_DOCUMENT_BYTES, LocaleCoverageEvidence, LocaleCoverageEvidenceEnvelope,
-    LocaleTargetOrigin, evidence_payload_digest,
-};
-use super::{
-    LocaleCoveragePlan, LocaleCoveragePlanEnvelope, LocalePageRequirement, plan_payload_digest,
-    validate_page_keys,
-};
+use super::evidence::{EVIDENCE_DOCUMENT_BYTES, LocaleCoverageEvidence, LocaleTargetOrigin};
+use super::{LocaleCoveragePlan, LocalePageRequirement, validate_page_keys};
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/locale-coverage-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/locale-coverage-assessment-payload";
@@ -82,18 +76,20 @@ pub enum LocaleLineageStatus {
     Unproven,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct LocaleCoverageAssessmentEnvelope {
-    pub schema: AssessmentEnvelopeSchema,
-    pub payload: LocaleCoverageAssessment,
-    pub payload_digest: Digest,
-}
-
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Default,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum AssessmentEnvelopeSchema {
+    #[default]
     #[strum(serialize = "amiss/locale-coverage-assessment-envelope")]
     Current,
 }
@@ -158,28 +154,14 @@ struct AssessmentOutcome {
     product: Option<LocaleProductResult>,
 }
 
-/// Parses one closed, digest-bound offline locale coverage assessment.
-///
-/// # Errors
-///
-/// Fails on oversized or malformed JSON, an unknown field, an invalid engine identity,
-/// unsorted or repeated rows, an inconsistent verdict, or a payload digest mismatch.
-pub fn parse_assessment(bytes: &[u8]) -> Result<LocaleCoverageAssessmentEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let document: LocaleCoverageAssessmentEnvelope =
-        serde_path_to_error::deserialize(&mut deserializer)
-            .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+impl Payload for LocaleCoverageAssessment {
+    type Schema = AssessmentEnvelopeSchema;
+    const DOMAIN: &'static str = ASSESSMENT_PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = ASSESSMENT_DOCUMENT_BYTES;
 
-    if assessment_payload_digest(&document.payload)? != document.payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    fn validate(&self) -> Result<(), Error> {
+        validate_assessment(self)
     }
-    Ok(document)
 }
 
 /// Judges one locale coverage plan against optional producer-normalized page inventories.
@@ -197,19 +179,12 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<LocaleCoverageAssessmentEnvelope
 /// Fails when either typed envelope no longer reproduces its own digest, a public field violates
 /// its source contract, the result exceeds its resource budget, or the engine version is invalid.
 pub fn assess(
-    plan: &LocaleCoveragePlanEnvelope,
-    evidence: Option<&LocaleCoverageEvidenceEnvelope>,
+    plan: &Envelope<LocaleCoveragePlan>,
+    evidence: Option<&Envelope<LocaleCoverageEvidence>>,
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, Error> {
-    let document =
-        LocaleCoverageAssessment::evaluate(plan, evidence, engine_version, engine_digest)?;
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > ASSESSMENT_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    Ok(canonical)
+    LocaleCoverageAssessment::evaluate(plan, evidence, engine_version, engine_digest)?.emit()
 }
 
 impl LocaleCoverageAssessment {
@@ -218,16 +193,16 @@ impl LocaleCoverageAssessment {
     /// # Errors
     /// Refuses inconsistent input digests, invalid domain fields, or a result over its budget.
     pub fn evaluate(
-        plan: &LocaleCoveragePlanEnvelope,
-        evidence: Option<&LocaleCoverageEvidenceEnvelope>,
+        plan: &Envelope<LocaleCoveragePlan>,
+        evidence: Option<&Envelope<LocaleCoverageEvidence>>,
         engine_version: &str,
         engine_digest: Digest,
-    ) -> Result<LocaleCoverageAssessmentEnvelope, Error> {
-        if plan_payload_digest(&plan.payload)? != plan.payload_digest {
+    ) -> Result<LocaleCoverageAssessment, Error> {
+        if plan.payload.digest()? != plan.payload_digest {
             return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
         }
         if let Some(evidence) = evidence
-            && evidence_payload_digest(&evidence.payload)? != evidence.payload_digest
+            && evidence.payload.digest()? != evidence.payload_digest
         {
             return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
         }
@@ -307,12 +282,8 @@ impl LocaleCoverageAssessment {
             coverage: outcome.coverage,
             product: outcome.product.map_or(Nullable::Null, Nullable::Value),
         };
-        let payload_digest = assessment_payload_digest(&assessment)?;
-        Ok(LocaleCoverageAssessmentEnvelope {
-            schema: AssessmentEnvelopeSchema::Current,
-            payload: assessment,
-            payload_digest,
-        })
+        validate_assessment(&assessment)?;
+        Ok(assessment)
     }
 }
 
@@ -649,21 +620,6 @@ fn classify_coverage(
     }
 }
 
-fn assessment_payload_digest(assessment: &LocaleCoverageAssessment) -> Result<Digest, Error> {
-    validate_assessment(assessment)?;
-    serde_json_canonicalizer::to_vec(assessment)
-        .map(|canonical| {
-            Digest::from(
-                sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical)
-                    .finalize()
-                    .0,
-            )
-        })
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
-}
-
 fn validate_assessment(assessment: &LocaleCoverageAssessment) -> Result<(), Error> {
     producer_version_valid(&assessment.engine.engine_version)
         .then_some(())
@@ -717,6 +673,10 @@ fn validate_assessment(assessment: &LocaleCoverageAssessment) -> Result<(), Erro
         .filter(|total| *total <= ASSESSMENT_PAGE_ITEMS_LIMIT)
         .ok_or_else(|| Error::new("$.payload.coverage", ErrorKind::LimitExceeded))?;
 
+    let _evidence_payload_digest = match assessment.subject.evidence_payload_digest {
+        Nullable::Value(digest) => Some(digest),
+        Nullable::Null => None,
+    };
     let evidence_payload_digest = match assessment.subject.evidence_payload_digest {
         Nullable::Value(digest) => Some(digest),
         Nullable::Null => None,

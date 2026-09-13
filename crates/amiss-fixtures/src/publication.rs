@@ -1,8 +1,7 @@
+use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
-use amiss_wire::publication::{
-    DocsCandidate, PublicationEvidenceEnvelope, assess, evidence, parse_evidence, parse_plan, plan,
-};
+use amiss_wire::publication::{DocsCandidate, PublicationEvidence, PublicationPlan, assess};
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
 const PLAN: &[u8] = include_bytes!("../../../spec/examples/publication-plan.json");
@@ -20,7 +19,7 @@ pub struct PublicationAuditFixture {
 pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture> {
     let report = REPORT.to_vec();
     let (_, report_payload_digest, _) = amiss_wire::report::validate_envelope(&report).ok()?;
-    let mut plan_envelope = parse_plan(PLAN).ok()?;
+    let mut plan_envelope = PublicationPlan::parse(PLAN).ok()?;
     plan_envelope.payload.report_payload_digest = report_payload_digest;
     plan_envelope.payload.docs = DocsCandidate {
         repository: RepositoryIdentity::new(
@@ -41,8 +40,8 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
             "sha256:8c8f4c8087edf216675ffbfc5a75a6c67dc48103be696b74174758a3e5db187a",
         )?,
     };
-    let plan_bytes = plan(&plan_envelope.payload).ok()?;
-    let plan_envelope = parse_plan(&plan_bytes).ok()?;
+    let plan_bytes = plan_envelope.payload.emit().ok()?;
+    let plan_envelope = PublicationPlan::parse(&plan_bytes).ok()?;
     let evidence_envelope = if with_evidence {
         Some(publication_evidence(&plan_envelope)?)
     } else {
@@ -57,7 +56,7 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
     .ok()?;
     let evidence = evidence_envelope
         .as_ref()
-        .map(|envelope| evidence(&envelope.payload))
+        .map(|envelope| envelope.payload.emit())
         .transpose()
         .ok()?;
     Some(PublicationAuditFixture {
@@ -68,16 +67,14 @@ pub fn publication_audit(with_evidence: bool) -> Option<PublicationAuditFixture>
     })
 }
 
-fn publication_evidence(
-    plan: &amiss_wire::publication::PublicationPlanEnvelope,
-) -> Option<PublicationEvidenceEnvelope> {
-    let mut evidence_envelope = parse_evidence(EVIDENCE).ok()?;
+fn publication_evidence(plan: &Envelope<PublicationPlan>) -> Option<Envelope<PublicationEvidence>> {
+    let mut evidence_envelope = PublicationEvidence::parse(EVIDENCE).ok()?;
     evidence_envelope.payload.plan_payload_digest = plan.payload_digest;
     evidence_envelope.payload.producer = plan.payload.producer.clone();
     evidence_envelope.payload.docs = plan.payload.docs.clone();
     evidence_envelope.payload.target = plan.payload.target.clone();
     evidence_envelope.payload.site = plan.payload.site.clone();
     evidence_envelope.payload.product = plan.payload.product.clone();
-    let value = evidence(&evidence_envelope.payload).ok()?;
-    parse_evidence(&value).ok()
+    let value = evidence_envelope.payload.emit().ok()?;
+    PublicationEvidence::parse(&value).ok()
 }

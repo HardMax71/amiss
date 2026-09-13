@@ -10,12 +10,13 @@ use amiss_controller::{
     TriggeredRelation, relation_transition,
 };
 use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
+use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::{
     ArtifactId, BranchRef, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
 };
 use amiss_wire::relation::{
-    RelationIdentity, RelationPlanEnvelope, RelationSnapshot, RelationSubject as PlannedSubject,
-    RelationVerdict, assess, parse_assessment, parse_evidence, parse_plan, plan,
+    RelationAssessment, RelationEvidence, RelationIdentity, RelationPlan as PlanPayload,
+    RelationSnapshot, RelationSubject as PlannedSubject, RelationVerdict, assess,
 };
 
 use super::{RelationProjectionError, RelationProjectionRequest, project_relation_evidence};
@@ -24,7 +25,7 @@ struct Fixture {
     source: amiss_fixtures::CommitPair,
     documentation: amiss_fixtures::CommitPair,
     transition: RelationTransition,
-    plan: RelationPlanEnvelope,
+    plan: Envelope<PlanPayload>,
 }
 
 fn artifact(raw: &str) -> ArtifactId {
@@ -147,7 +148,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
             },
         }
     });
-    let value = plan(&amiss_wire::relation::RelationPlan {
+    let value = amiss_wire::relation::RelationPlan {
         schema: amiss_wire::relation::PlanPayloadSchema::Current,
         report_payload_digest: amiss_wire::model::Digest::from(
             sha2::Sha256::digest(b"accepted report payload").0,
@@ -160,9 +161,10 @@ fn fixture(aggregate_records: u64) -> Fixture {
         trigger_role: transition.relation.trigger_role.clone(),
         projection: registered.projection,
         subjects,
-    })
+    }
+    .emit()
     .expect("relation plan");
-    let plan = parse_plan(&value).expect("parsed relation plan");
+    let plan = PlanPayload::parse(&value).expect("parsed relation plan");
     Fixture {
         source,
         documentation,
@@ -194,7 +196,7 @@ fn four_exact_repository_projections_produce_the_plan_bound_transition() {
         roots: roots(&fixture),
     })
     .expect("complete projection evidence");
-    let evidence = parse_evidence(&value).expect("parsed evidence");
+    let evidence = RelationEvidence::parse(&value).expect("parsed evidence");
     let [documentation, source] = &evidence.payload.subjects;
 
     assert_eq!(documentation.base, documentation.candidate);
@@ -214,7 +216,7 @@ fn four_exact_repository_projections_produce_the_plan_bound_transition() {
     )
     .expect("transition assessment");
     assert_eq!(
-        parse_assessment(&assessment)
+        RelationAssessment::parse(&assessment)
             .expect("parsed assessment")
             .payload
             .verdict,
@@ -231,8 +233,8 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
         first_line: 1,
         last_line: 1,
     });
-    let changed = plan(&changed).expect("rewritten plan");
-    let changed = parse_plan(&changed).expect("parsed rewritten plan");
+    let changed = changed.emit().expect("rewritten plan");
+    let changed = PlanPayload::parse(&changed).expect("parsed rewritten plan");
     assert_eq!(
         project_relation_evidence(RelationProjectionRequest {
             transition: &fixture.transition,
@@ -247,8 +249,8 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
     changed.relation.context_digest = amiss_wire::model::Digest::from(
         sha2::Sha256::digest(b"substituted operator relation context").0,
     );
-    let changed = plan(&changed).expect("rewritten plan");
-    let changed = parse_plan(&changed).expect("parsed rewritten plan");
+    let changed = changed.emit().expect("rewritten plan");
+    let changed = PlanPayload::parse(&changed).expect("parsed rewritten plan");
     assert_eq!(
         project_relation_evidence(RelationProjectionRequest {
             transition: &fixture.transition,

@@ -2,6 +2,7 @@ pub mod action;
 pub mod assessment;
 pub mod controls;
 pub mod de;
+pub mod envelope;
 pub mod external;
 pub mod extraction;
 pub mod human;

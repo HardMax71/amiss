@@ -2,8 +2,9 @@ use amiss_controller::{
     ArtifactError, RelationAuditBundle, relation_audit_plan, validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::ArtifactId;
-use amiss_wire::relation::{RelationVerdict, assess, parse_assessment, parse_plan, plan};
+use amiss_wire::relation::{RelationAssessment, RelationPlan, RelationVerdict, assess};
 use sha2::Digest as _;
 
 #[test]
@@ -143,7 +144,7 @@ fn with_null_report_target(
     mut fixture: RelationAuditFixture,
 ) -> Result<RelationAuditFixture, ArtifactError> {
     let recorded =
-        parse_assessment(&fixture.assessment).map_err(|_defect| ArtifactError::Corrupt)?;
+        RelationAssessment::parse(&fixture.assessment).map_err(|_defect| ArtifactError::Corrupt)?;
     let mut report: amiss_wire::report::model::ReportEnvelope =
         serde_json::from_slice(&fixture.report).map_err(|_defect| ArtifactError::Corrupt)?;
     let amiss_wire::report::model::Evaluation::Resolved(evaluation) =
@@ -166,10 +167,14 @@ fn with_null_report_target(
     fixture.report =
         serde_json_canonicalizer::to_vec(&report).map_err(|_defect| ArtifactError::Corrupt)?;
 
-    let mut rebound = parse_plan(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
+    let mut rebound =
+        RelationPlan::parse(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     rebound.payload.report_payload_digest = report_payload_digest;
-    fixture.plan = plan(&rebound.payload).map_err(|_defect| ArtifactError::Corrupt)?;
-    let rebound = parse_plan(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
+    fixture.plan = rebound
+        .payload
+        .emit()
+        .map_err(|_defect| ArtifactError::Corrupt)?;
+    let rebound = RelationPlan::parse(&fixture.plan).map_err(|_defect| ArtifactError::Corrupt)?;
     fixture.assessment = assess(
         &rebound,
         None,

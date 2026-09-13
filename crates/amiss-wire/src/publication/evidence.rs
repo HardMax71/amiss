@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
-use sha2::Digest as _;
 use strum::{Display, EnumString};
 
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Error, ErrorKind, fail};
+use crate::envelope::Payload;
 use crate::model::Digest;
 
 use super::{
@@ -15,18 +15,20 @@ use super::{
 pub const EVIDENCE_ENVELOPE_SCHEMA: &str = "amiss/publication-evidence-envelope";
 pub const EVIDENCE_PAYLOAD_SCHEMA: &str = "amiss/publication-evidence-payload";
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PublicationEvidenceEnvelope<T = PublicationEvidence> {
-    pub schema: EvidenceEnvelopeSchema,
-    pub payload: T,
-    pub payload_digest: Digest,
-}
-
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Default,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum EvidenceEnvelopeSchema {
+    #[default]
     #[strum(serialize = "amiss/publication-evidence-envelope")]
     Current,
 }
@@ -69,64 +71,14 @@ pub enum PublicationOutcome {
     Succeeded,
 }
 
-/// Parses one closed, digest-bound successful-publication receipt.
-///
-/// # Errors
-///
-/// Fails on oversized or malformed JSON, an unknown field, an invalid
-/// identity or resource, a non-success outcome, an unsafe run attempt, or a
-/// payload digest mismatch.
-pub fn parse_evidence(bytes: &[u8]) -> Result<PublicationEvidenceEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let document: PublicationEvidenceEnvelope = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+impl Payload for PublicationEvidence {
+    type Schema = EvidenceEnvelopeSchema;
+    const DOMAIN: &'static str = EVIDENCE_PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = PUBLICATION_DOCUMENT_BYTES;
 
-    if evidence_payload_digest(&document.payload)? != document.payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    fn validate(&self) -> Result<(), Error> {
+        validate_evidence(self)
     }
-    Ok(document)
-}
-
-/// Builds the unique digest-bound value for one successful-publication receipt.
-///
-/// # Errors
-///
-/// Fails when a public field violates the same closed grammar [`parse_evidence`]
-/// enforces or the encoded document exceeds its byte ceiling.
-pub fn evidence(input: &PublicationEvidence) -> Result<Vec<u8>, Error> {
-    let payload_digest = evidence_payload_digest(input)?;
-    let document = PublicationEvidenceEnvelope {
-        schema: EvidenceEnvelopeSchema::Current,
-        payload: input,
-        payload_digest,
-    };
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    Ok(canonical)
-}
-
-pub(super) fn evidence_payload_digest(input: &PublicationEvidence) -> Result<Digest, Error> {
-    validate_evidence(input)?;
-    serde_json_canonicalizer::to_vec(input)
-        .map(|canonical| {
-            Digest::from(
-                sha2::Sha256::new_with_prefix(EVIDENCE_PAYLOAD_SCHEMA)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical)
-                    .finalize()
-                    .0,
-            )
-        })
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_evidence(evidence: &PublicationEvidence) -> Result<(), Error> {

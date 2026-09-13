@@ -1,15 +1,15 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
-use sha2::Digest as _;
 use strum::{AsRefStr, Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, Nullable};
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Error, ErrorKind, fail};
+use crate::envelope::{Envelope, Payload};
 use crate::model::Digest;
 use crate::semantic::producer_version_valid;
 
-use super::evidence::{RelationEvidenceEnvelope, RelationProjectionSlot, evidence_payload_digest};
-use super::{RELATION_DOCUMENT_BYTES, RelationPlanEnvelope, plan_payload_digest};
+use super::evidence::{RelationEvidence, RelationProjectionSlot};
+use super::{RELATION_DOCUMENT_BYTES, RelationPlan};
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/relation-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/relation-assessment-payload";
@@ -57,14 +57,6 @@ pub enum RelationReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct RelationAssessmentEnvelope<T = RelationAssessment> {
-    pub schema: AssessmentEnvelopeSchema,
-    pub payload: T,
-    pub payload_digest: Digest,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct RelationAssessment {
     pub schema: AssessmentPayloadSchema,
     pub engine: AssessmentEngine,
@@ -74,9 +66,19 @@ pub struct RelationAssessment {
 }
 
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum AssessmentEnvelopeSchema {
+    #[default]
     #[strum(serialize = "amiss/relation-assessment-envelope")]
     Current,
 }
@@ -89,38 +91,14 @@ pub enum AssessmentPayloadSchema {
     Current,
 }
 
-/// Parses one closed, digest-bound relation transition assessment.
-///
-/// # Errors
-///
-/// Fails on oversized or malformed JSON, an unknown field, an invalid
-/// engine identity, an inconsistent verdict/reason pair, or a payload digest
-/// mismatch.
-pub fn parse_assessment(bytes: &[u8]) -> Result<RelationAssessmentEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let document: RelationAssessmentEnvelope = serde_path_to_error::deserialize(&mut deserializer)
-        .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+impl Payload for RelationAssessment {
+    type Schema = AssessmentEnvelopeSchema;
+    const DOMAIN: &'static str = ASSESSMENT_PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = RELATION_DOCUMENT_BYTES;
 
-    validate_assessment(&document.payload)?;
-    let canonical = serde_json_canonicalizer::to_vec(&document.payload)
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
-    if Digest::from(
-        sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(&canonical)
-            .finalize()
-            .0,
-    ) != document.payload_digest
-    {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    fn validate(&self) -> Result<(), Error> {
+        validate_assessment(self)
     }
-    Ok(document)
 }
 
 /// Judges the equality transition of two relation subjects.
@@ -135,18 +113,12 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<RelationAssessmentEnvelope, Erro
 /// public field violates its source contract, or the engine version is not a
 /// bounded producer version.
 pub fn assess(
-    plan: &RelationPlanEnvelope,
-    evidence: Option<&RelationEvidenceEnvelope>,
+    plan: &Envelope<RelationPlan>,
+    evidence: Option<&Envelope<RelationEvidence>>,
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, Error> {
-    let document = RelationAssessment::evaluate(plan, evidence, engine_version, engine_digest)?;
-    let canonical = serde_json_canonicalizer::to_vec(&document)
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
-    if u64::try_from(canonical.len()).unwrap_or(u64::MAX) > RELATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    Ok(canonical)
+    RelationAssessment::evaluate(plan, evidence, engine_version, engine_digest)?.emit()
 }
 
 impl RelationAssessment {
@@ -155,16 +127,16 @@ impl RelationAssessment {
     /// # Errors
     /// Refuses inconsistent input digests, invalid domain fields, or an invalid engine version.
     pub fn evaluate(
-        plan: &RelationPlanEnvelope,
-        evidence: Option<&RelationEvidenceEnvelope>,
+        plan: &Envelope<RelationPlan>,
+        evidence: Option<&Envelope<RelationEvidence>>,
         engine_version: &str,
         engine_digest: Digest,
-    ) -> Result<RelationAssessmentEnvelope, Error> {
-        if plan_payload_digest(&plan.payload)? != plan.payload_digest {
+    ) -> Result<RelationAssessment, Error> {
+        if plan.payload.digest()? != plan.payload_digest {
             return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
         }
         if let Some(evidence) = evidence
-            && evidence_payload_digest(&evidence.payload)? != evidence.payload_digest
+            && evidence.payload.digest()? != evidence.payload_digest
         {
             return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
         }
@@ -224,20 +196,7 @@ impl RelationAssessment {
             reason: reason.map_or(Nullable::Null, Nullable::Value),
         };
         validate_assessment(&assessment)?;
-        let canonical_payload = serde_json_canonicalizer::to_vec(&assessment)
-            .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))?;
-        let document = RelationAssessmentEnvelope {
-            schema: AssessmentEnvelopeSchema::Current,
-            payload: assessment,
-            payload_digest: Digest::from(
-                sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical_payload)
-                    .finalize()
-                    .0,
-            ),
-        };
-        Ok(document)
+        Ok(assessment)
     }
 }
 

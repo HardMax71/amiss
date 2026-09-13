@@ -8,10 +8,11 @@ use amiss_controller::{
     relation_transition,
 };
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
+use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
-    RelationEvidence, RelationEvidenceSubject, RelationProjectedValue, RelationProjectionSlot,
-    assess, evidence, parse_evidence, parse_plan,
+    RelationEvidence, RelationEvidenceSubject, RelationPlan as PlanPayload, RelationProjectedValue,
+    RelationProjectionSlot, assess,
 };
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
@@ -39,13 +40,17 @@ pub fn relation_audit_with_coordination(
     let report = report()?;
     let transition = transition(coordination)?;
     let plan = relation_audit_plan(&transition, &report).ok()?;
-    let parsed_plan = parse_plan(&plan).ok()?;
+    let parsed_plan = PlanPayload::parse(&plan).ok()?;
     let evidence = if with_evidence {
         Some(relation_evidence(&parsed_plan)?)
     } else {
         None
     };
-    let parsed_evidence = evidence.as_deref().map(parse_evidence).transpose().ok()?;
+    let parsed_evidence = evidence
+        .as_deref()
+        .map(RelationEvidence::parse)
+        .transpose()
+        .ok()?;
     let assessment = assess(
         &parsed_plan,
         parsed_evidence.as_ref(),
@@ -204,7 +209,7 @@ fn frozen(
     })
 }
 
-fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Option<Vec<u8>> {
+fn relation_evidence(plan: &Envelope<PlanPayload>) -> Option<Vec<u8>> {
     let aligned = RelationProjectedValue {
         value_digest: amiss_wire::model::Digest::from([30; 32]),
         value_bytes: 12,
@@ -213,7 +218,7 @@ fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Optio
         value_digest: amiss_wire::model::Digest::from([31; 32]),
         value_bytes: 13,
     };
-    evidence(&RelationEvidence {
+    RelationEvidence {
         schema: amiss_wire::relation::EvidencePayloadSchema::Current,
         plan_payload_digest: plan.payload_digest,
         subjects: [
@@ -228,6 +233,7 @@ fn relation_evidence(plan: &amiss_wire::relation::RelationPlanEnvelope) -> Optio
                 candidate: RelationProjectionSlot::Projected(changed),
             },
         ],
-    })
+    }
+    .emit()
     .ok()
 }

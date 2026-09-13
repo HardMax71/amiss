@@ -11,10 +11,11 @@ use amiss_wire::controls::{
     RecordValueSelection, TreePathSelection,
 };
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::{ObjectFormat, RepoPathText};
 use amiss_wire::relation::{
-    EVIDENCE_PAYLOAD_SCHEMA, PLAN_PAYLOAD_SCHEMA, RELATION_DOCUMENT_BYTES, RelationProjectionSlot,
-    evidence, parse_evidence, parse_plan, plan,
+    EVIDENCE_PAYLOAD_SCHEMA, PLAN_PAYLOAD_SCHEMA, RELATION_DOCUMENT_BYTES, RelationEvidence,
+    RelationPlan, RelationProjectionSlot,
 };
 
 use crate::relation_fixture::{digest, identity, oid, projected, relation_contract};
@@ -24,9 +25,9 @@ mod assessment;
 #[test]
 fn relation_plan_round_trips_all_four_exact_snapshots_and_example() {
     let expected = relation_contract().plan;
-    let bytes = plan(&expected).unwrap();
+    let bytes = expected.emit().unwrap();
     let value = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
-    let parsed = parse_plan(&bytes).unwrap();
+    let parsed = RelationPlan::parse(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
     assert_eq!(parsed.validate(), Ok(()));
@@ -54,9 +55,9 @@ fn relation_plan_round_trips_all_four_exact_snapshots_and_example() {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../spec/examples/relation-plan.json"),
     )
     .unwrap();
-    let example = parse_plan(&example_bytes).unwrap();
+    let example = RelationPlan::parse(&example_bytes).unwrap();
     assert_eq!(
-        plan(&example.payload).unwrap(),
+        example.payload.emit().unwrap(),
         serde_json_canonicalizer::to_vec(
             &serde_json::from_slice::<serde_json::Value>(&example_bytes).unwrap()
         )
@@ -68,25 +69,25 @@ fn relation_plan_round_trips_all_four_exact_snapshots_and_example() {
 fn relation_plan_requires_two_sorted_distinct_subjects_and_a_known_trigger() {
     let mut unsorted = relation_contract().plan;
     unsorted.subjects.reverse();
-    let error = plan(&unsorted).unwrap_err();
+    let error = unsorted.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 
     let mut repeated_role = relation_contract().plan;
     repeated_role.subjects[1].role = repeated_role.subjects[0].role.clone();
-    let error = plan(&repeated_role).unwrap_err();
+    let error = repeated_role.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
     assert_eq!(error.kind, ErrorKind::DuplicateMember);
 
     let mut repeated_repository = relation_contract().plan;
     repeated_repository.subjects[1].repository = repeated_repository.subjects[0].repository.clone();
-    let error = plan(&repeated_repository).unwrap_err();
+    let error = repeated_repository.emit().unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 
     let mut foreign_trigger = relation_contract().plan;
     foreign_trigger.trigger_role = identity("release");
-    let error = plan(&foreign_trigger).unwrap_err();
+    let error = foreign_trigger.emit().unwrap_err();
     assert_eq!(error.path, "$.payload");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 }
@@ -95,13 +96,13 @@ fn relation_plan_requires_two_sorted_distinct_subjects_and_a_known_trigger() {
 fn relation_plan_refuses_mixed_objects_and_incompatible_sources() {
     let mut mixed = relation_contract().plan;
     mixed.subjects[0].candidate.tree = oid('f', ObjectFormat::Sha256);
-    let error = plan(&mixed).unwrap_err();
+    let error = mixed.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].candidate.tree_oid");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 
     let mut incompatible = relation_contract().plan;
     incompatible.projection = ProjectionKind::CodeTextV1;
-    let error = plan(&incompatible).unwrap_err();
+    let error = incompatible.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].source");
     assert_eq!(error.kind, ErrorKind::Inconsistent);
 }
@@ -155,13 +156,16 @@ fn relation_plan_preserves_every_projection_source_shape() {
         for subject in &mut input.subjects {
             subject.source = source.clone();
         }
-        assert_eq!(parse_plan(&plan(&input).unwrap()).unwrap().payload, input);
+        assert_eq!(
+            RelationPlan::parse(&input.emit().unwrap()).unwrap().payload,
+            input
+        );
     }
 }
 
 #[test]
 fn relation_plan_refuses_repository_values_that_bypass_construction() {
-    let value = plan(&relation_contract().plan).unwrap();
+    let value = relation_contract().plan.emit().unwrap();
     let mut document: serde_json::Value = serde_json::from_slice(&value).unwrap();
     document["payload"]["subjects"][0]["repository"]["host"] = serde_json::json!("invalid/host");
     let payload = serde_json_canonicalizer::to_vec(&document["payload"]).unwrap();
@@ -176,7 +180,8 @@ fn relation_plan_refuses_repository_values_that_bypass_construction() {
         .to_string()
     );
 
-    let error = parse_plan(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
+    let error =
+        RelationPlan::parse(&serde_json_canonicalizer::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].repository");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
@@ -184,9 +189,9 @@ fn relation_plan_refuses_repository_values_that_bypass_construction() {
 #[test]
 fn relation_evidence_round_trips_four_independent_slots() {
     let expected = relation_contract().evidence;
-    let bytes = evidence(&expected).unwrap();
+    let bytes = expected.emit().unwrap();
     let value = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
-    let parsed = parse_evidence(&bytes).unwrap();
+    let parsed = RelationEvidence::parse(&bytes).unwrap();
 
     assert_eq!(parsed.payload, expected);
     assert_eq!(
@@ -210,7 +215,7 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
     partial.subjects[1].candidate = RelationProjectionSlot::Unproven;
     partial.subjects[1].base = RelationProjectionSlot::Projected(projected('a', 0));
 
-    let parsed = parse_evidence(&evidence(&partial).unwrap()).unwrap();
+    let parsed = RelationEvidence::parse(&partial.emit().unwrap()).unwrap();
     assert_eq!(parsed.payload, partial);
 
     for subject in &mut partial.subjects {
@@ -218,7 +223,7 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
         subject.candidate = RelationProjectionSlot::Unproven;
     }
     assert_eq!(
-        parse_evidence(&evidence(&partial).unwrap())
+        RelationEvidence::parse(&partial.emit().unwrap())
             .unwrap()
             .payload,
         partial
@@ -227,7 +232,7 @@ fn every_relation_projection_slot_can_remain_unproven_independently() {
 
 #[test]
 fn nullable_projection_slots_are_still_required_fields() {
-    let bytes = evidence(&relation_contract().evidence).unwrap();
+    let bytes = relation_contract().evidence.emit().unwrap();
     let mut document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     assert!(
         document
@@ -239,7 +244,7 @@ fn nullable_projection_slots_are_still_required_fields() {
             .is_some()
     );
 
-    let error = parse_evidence(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+    let error = RelationEvidence::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.kind, ErrorKind::MissingField);
     assert_eq!(error.path, "$.payload.subjects[0].base");
 }
@@ -248,19 +253,19 @@ fn nullable_projection_slots_are_still_required_fields() {
 fn relation_evidence_refuses_role_and_value_shape_drift() {
     let mut unsorted = relation_contract().evidence;
     unsorted.subjects.reverse();
-    let error = evidence(&unsorted).unwrap_err();
+    let error = unsorted.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
     assert_eq!(error.kind, ErrorKind::UnsortedSet);
 
     let mut repeated = relation_contract().evidence;
     repeated.subjects[1].role = repeated.subjects[0].role.clone();
-    let error = evidence(&repeated).unwrap_err();
+    let error = repeated.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.subjects");
     assert_eq!(error.kind, ErrorKind::DuplicateMember);
 
     let mut unsafe_bytes = relation_contract().evidence;
     unsafe_bytes.subjects[0].base = RelationProjectionSlot::Projected(projected('a', u64::MAX));
-    let error = evidence(&unsafe_bytes).unwrap_err();
+    let error = unsafe_bytes.emit().unwrap_err();
     assert_eq!(error.path, "$.payload.subjects[0].base.value_bytes");
     assert_eq!(error.kind, ErrorKind::InvalidValue);
 }
@@ -277,17 +282,17 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
 
     let documents = [
         Document {
-            bytes: plan(&relation_contract().plan).unwrap(),
+            bytes: relation_contract().plan.emit().unwrap(),
             payload_schema: PLAN_PAYLOAD_SCHEMA,
             first_payload_field: "report_payload_digest",
-            parse: |bytes| parse_plan(bytes).map(|_envelope| ()),
+            parse: |bytes| RelationPlan::parse(bytes).map(|_envelope| ()),
             open_error: ("$.payload.unknown", ErrorKind::UnknownField),
         },
         Document {
-            bytes: evidence(&relation_contract().evidence).unwrap(),
+            bytes: relation_contract().evidence.emit().unwrap(),
             payload_schema: EVIDENCE_PAYLOAD_SCHEMA,
             first_payload_field: "plan_payload_digest",
-            parse: |bytes| parse_evidence(bytes).map(|_envelope| ()),
+            parse: |bytes| RelationEvidence::parse(bytes).map(|_envelope| ()),
             open_error: ("$.payload.unknown", ErrorKind::UnknownField),
         },
     ];
@@ -345,7 +350,7 @@ fn relation_documents_refuse_tampering_open_shapes_and_oversized_input() {
 #[test]
 fn projection_slots_must_match_the_canonical_typed_payload_digest() {
     let mut document = serde_json::to_value(
-        parse_evidence(&evidence(&relation_contract().evidence).unwrap()).unwrap(),
+        RelationEvidence::parse(&relation_contract().evidence.emit().unwrap()).unwrap(),
     )
     .unwrap();
     let projected = &document["payload"]["subjects"][0]["base"];
@@ -359,14 +364,14 @@ fn projection_slots_must_match_the_canonical_typed_payload_digest() {
             .finalize()
             .0
     ));
-    let error = parse_evidence(&serde_json::to_vec(&document).unwrap()).unwrap_err();
+    let error = RelationEvidence::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.kind, ErrorKind::DigestMismatch);
     assert_eq!(error.path, "$.payload_digest");
 }
 
 #[test]
 fn typed_plan_validation_preserves_binding_and_domain_checks() {
-    let original = parse_plan(&plan(&relation_contract().plan).unwrap()).unwrap();
+    let original = RelationPlan::parse(&relation_contract().plan.emit().unwrap()).unwrap();
     let mut tampered = original.clone();
     tampered.payload_digest = digest('f');
     let error = tampered.validate().unwrap_err();

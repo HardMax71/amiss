@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::cmp::Ordering;
 
 use serde::{Deserialize, Serialize};
@@ -6,12 +5,13 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{AsRefStr, Display, EnumString};
 
 use crate::assessment::{AssessmentEngine, AssessmentSubject, AssessmentVerdict, Nullable};
-use crate::de::{self, Error, ErrorKind, fail};
+use crate::de::{Error, ErrorKind, fail};
+use crate::envelope::{Envelope, Payload};
 use crate::model::Digest;
 use crate::semantic::producer_version_valid;
 
-use super::evidence::{PublicationEvidenceEnvelope, evidence_payload_digest};
-use super::{PUBLICATION_DOCUMENT_BYTES, PublicationPlanEnvelope, plan_payload_digest};
+use super::evidence::PublicationEvidence;
+use super::{PUBLICATION_DOCUMENT_BYTES, PublicationPlan};
 
 pub const ASSESSMENT_ENVELOPE_SCHEMA: &str = "amiss/publication-assessment-envelope";
 pub const ASSESSMENT_PAYLOAD_SCHEMA: &str = "amiss/publication-assessment-payload";
@@ -41,18 +41,20 @@ pub enum PublicationReason {
     ProductMismatch,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct PublicationAssessmentEnvelope {
-    pub schema: AssessmentEnvelopeSchema,
-    pub payload: PublicationAssessment,
-    pub payload_digest: Digest,
-}
-
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
+    Default,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Display,
+    EnumString,
+    SerializeDisplay,
+    DeserializeFromStr,
 )]
 pub enum AssessmentEnvelopeSchema {
+    #[default]
     #[strum(serialize = "amiss/publication-assessment-envelope")]
     Current,
 }
@@ -75,29 +77,14 @@ pub enum AssessmentPayloadSchema {
     Current,
 }
 
-/// Parses one closed, digest-bound offline publication assessment.
-///
-/// # Errors
-///
-/// Fails on oversized or malformed JSON, an unknown field, an invalid
-/// engine identity, unsorted reasons, an inconsistent verdict, or a payload
-/// digest mismatch.
-pub fn parse_assessment(bytes: &[u8]) -> Result<PublicationAssessmentEnvelope, Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > PUBLICATION_DOCUMENT_BYTES {
-        return fail("$", ErrorKind::LimitExceeded);
-    }
-    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
-    let document: PublicationAssessmentEnvelope =
-        serde_path_to_error::deserialize(&mut deserializer)
-            .map_err(|defect| de::deserialize_error("$", &defect))?;
-    deserializer
-        .end()
-        .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
+impl Payload for PublicationAssessment {
+    type Schema = AssessmentEnvelopeSchema;
+    const DOMAIN: &'static str = ASSESSMENT_PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = PUBLICATION_DOCUMENT_BYTES;
 
-    if assessment_payload_digest(&document.payload)? != document.payload_digest {
-        return fail("$.payload_digest", ErrorKind::DigestMismatch);
+    fn validate(&self) -> Result<(), Error> {
+        validate_assessment(self)
     }
-    Ok(document)
 }
 
 /// Judges one publication plan against optional provider-normalized evidence.
@@ -112,8 +99,8 @@ pub fn parse_assessment(bytes: &[u8]) -> Result<PublicationAssessmentEnvelope, E
 /// public field violates its source contract, or when the engine version is not
 /// a bounded producer version.
 pub fn assess(
-    plan: &PublicationPlanEnvelope,
-    evidence: Option<&PublicationEvidenceEnvelope>,
+    plan: &Envelope<PublicationPlan>,
+    evidence: Option<&Envelope<PublicationEvidence>>,
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, Error> {
@@ -132,16 +119,16 @@ impl PublicationAssessment {
     /// # Errors
     /// Refuses inconsistent input digests, invalid domain fields, or an invalid engine version.
     pub fn evaluate(
-        plan: &PublicationPlanEnvelope,
-        evidence: Option<&PublicationEvidenceEnvelope>,
+        plan: &Envelope<PublicationPlan>,
+        evidence: Option<&Envelope<PublicationEvidence>>,
         engine_version: &str,
         engine_digest: Digest,
-    ) -> Result<PublicationAssessmentEnvelope, Error> {
-        if plan_payload_digest(&plan.payload)? != plan.payload_digest {
+    ) -> Result<Envelope<PublicationAssessment>, Error> {
+        if plan.payload.digest()? != plan.payload_digest {
             return fail("$.plan.payload_digest", ErrorKind::DigestMismatch);
         }
         if let Some(evidence) = evidence
-            && evidence_payload_digest(&evidence.payload)? != evidence.payload_digest
+            && evidence.payload.digest()? != evidence.payload_digest
         {
             return fail("$.evidence.payload_digest", ErrorKind::DigestMismatch);
         }
@@ -205,29 +192,14 @@ impl PublicationAssessment {
             verdict,
             reasons,
         };
-        let payload_digest = assessment_payload_digest(&assessment)?;
-        let document = PublicationAssessmentEnvelope {
+        let payload_digest = assessment.digest()?;
+        let document = Envelope {
             schema: AssessmentEnvelopeSchema::Current,
             payload: assessment,
             payload_digest,
         };
         Ok(document)
     }
-}
-
-fn assessment_payload_digest(assessment: &PublicationAssessment) -> Result<Digest, Error> {
-    validate_assessment(assessment)?;
-    serde_json_canonicalizer::to_vec(assessment)
-        .map(|canonical| {
-            Digest::from(
-                sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical)
-                    .finalize()
-                    .0,
-            )
-        })
-        .map_err(|_defect| Error::new("$.payload", ErrorKind::InvalidValue))
 }
 
 fn validate_assessment(assessment: &PublicationAssessment) -> Result<(), Error> {

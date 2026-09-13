@@ -1,9 +1,10 @@
 use std::path::Path;
 use std::process::ExitCode;
 
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::locale::{
-    EVIDENCE_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES, assess, parse_assessment, parse_evidence,
-    parse_plan,
+    EVIDENCE_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES, LocaleCoverageAssessment,
+    LocaleCoverageEvidence, LocaleCoveragePlan, assess,
 };
 
 use crate::input::{ReadError, bounded_bytes};
@@ -24,12 +25,12 @@ pub(crate) fn run(invocation: &AssessInvocation) -> ExitCode {
             ))
         },
         |(plan, evidence), version, digest| {
-            let plan = parse_plan(&plan)?;
-            let evidence = parse_evidence(&evidence)?;
+            let plan = LocaleCoveragePlan::parse(&plan)?;
+            let evidence = LocaleCoverageEvidence::parse(&evidence)?;
             assess(&plan, Some(&evidence), version, digest)
         },
         |bytes| {
-            parse_assessment(bytes)
+            LocaleCoverageAssessment::parse(bytes)
                 .map(|document| crate::human::coverage(&document.payload))
                 .map_err(|defect| defect.to_string())
         },

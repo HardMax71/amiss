@@ -8,9 +8,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, check_projection_source};
+use amiss_wire::envelope::Envelope;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat};
-use amiss_wire::relation::RelationPlanEnvelope;
+use amiss_wire::relation::RelationPlan as PlanPayload;
 
 use crate::{AuthenticatedDelivery, IntegrationId, OpaqueId, PlanScope, ProviderIdentity};
 
@@ -80,7 +81,7 @@ pub struct RelationPlan {
 /// The envelope digest or any operator, trigger, subject, or snapshot field
 /// differs from the frozen transition.
 pub fn verify_relation_plan(
-    plan: &RelationPlanEnvelope,
+    plan: &Envelope<PlanPayload>,
     transition: &RelationTransition,
 ) -> Result<(), RelationAcquisitionError> {
     plan.validate()
