@@ -4,6 +4,7 @@
     reason = "black-box harness over asserted fixture shapes"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::io::Write as _;
 use std::process::{Command, Stdio};
@@ -221,13 +222,7 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
     let floor = parse_organization_floor(floor_bytes).unwrap();
     let controls = ControlsRequest {
         organization_floor: Some(SuppliedControl {
-            expected_digest: amiss_wire::model::Digest::from(
-                sha2::Sha256::new_with_prefix("amiss/organization-floor")
-                    .chain_update([0_u8])
-                    .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
-                    .finalize()
-                    .0,
-            ),
+            expected_digest: document_digest("amiss/organization-floor", &floor).unwrap(),
             value: floor,
             trust_source: RequestTrust::OrganizationPolicy,
         }),

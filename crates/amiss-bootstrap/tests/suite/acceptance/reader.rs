@@ -1,4 +1,5 @@
 use amiss_bootstrap::supervise::{AcceptanceDefect, accept};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use serde_json::{Value, json};
 use sha2::Digest as _;
@@ -139,13 +140,7 @@ fn report_readers_agree_on_complete_status_and_exit_code() {
                 report.payload.result.complete = complete;
                 report.payload.result.status = status;
                 report.payload.result.exit_code = exit_code;
-                report.payload_digest = amiss_wire::model::Digest::from(
-                    sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-                        .chain_update([0_u8])
-                        .chain_update(serde_json_canonicalizer::to_vec(&report.payload).unwrap())
-                        .finalize()
-                        .0,
-                );
+                report.payload_digest = document_digest(PAYLOAD_SCHEMA, &report.payload).unwrap();
                 let mut bytes = serde_json_canonicalizer::to_vec(&report).unwrap();
                 bytes.push(b'\n');
                 let (normal, sealed) = if valid.contains(&(complete, status, exit_code)) {

@@ -1,8 +1,8 @@
+use amiss_wire::envelope::document_digest;
 use amiss_wire::{
     controls::{FACT_DOMAIN, ProjectionKind, ProjectionSource, check_projection_source},
     report::model::{FindingFactEvidence, ReportEnvelope},
 };
-use sha2::Digest as _;
 
 #[expect(
     clippy::unwrap_used,
@@ -60,13 +60,7 @@ pub(super) fn reports() -> Vec<ReportEnvelope> {
         };
         *projection = kind;
         *source = producer;
-        finding.candidate_fact_digest = Some(amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix(FACT_DOMAIN)
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(fact).unwrap())
-                .finalize()
-                .0,
-        ));
+        finding.candidate_fact_digest = Some(document_digest(FACT_DOMAIN, fact).unwrap());
         report
     })
     .collect()

@@ -3,6 +3,7 @@
     reason = "integration assertions over the external-control request gate"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::borrow::Cow;
 
@@ -131,13 +132,7 @@ fn supplied_semantic(evidence: SemanticEvidence<'static>) -> SuppliedSemanticEvi
 fn a_verified_floor_lands_typed() {
     let floor =
         amiss_wire::controls::parse_organization_floor(FLOOR.as_bytes()).expect("fixture parses");
-    let digest = Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/organization-floor")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest("amiss/organization-floor", &floor).unwrap();
     let mut request = empty();
     request.organization_floor = Some(supplied(FLOOR, digest));
     let original_allocation = request
@@ -160,13 +155,7 @@ fn a_verified_floor_lands_typed() {
 fn a_verified_time_statement_lands_with_its_run_context() {
     let statement =
         amiss_wire::controls::parse_trusted_time(TIME.as_bytes()).expect("fixture parses");
-    let digest = Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&statement).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest("amiss/scanner-trusted-time-statement", &statement).unwrap();
     let mut request = empty();
     request.trusted_time = Some(SuppliedTime {
         value: statement.clone(),
@@ -188,13 +177,7 @@ fn a_verified_time_statement_lands_with_its_run_context() {
 #[test]
 fn typed_time_still_requires_semantic_validation() {
     let valid = amiss_wire::controls::parse_trusted_time(TIME.as_bytes()).unwrap();
-    let expected_digest = Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&valid).unwrap())
-            .finalize()
-            .0,
-    );
+    let expected_digest = document_digest("amiss/scanner-trusted-time-statement", &valid).unwrap();
     for value in [
         amiss_wire::controls::TrustedTimeStatement {
             provider: "bad provider!".to_owned(),
@@ -224,13 +207,7 @@ fn typed_time_still_requires_semantic_validation() {
 fn a_verified_constraint_lands_through_the_shared_gate() {
     let descriptor = amiss_wire::controls::parse_execution_constraint(CONSTRAINT.as_bytes())
         .expect("fixture parses");
-    let digest = Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&descriptor).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest("amiss/scanner-execution-constraint", &descriptor).unwrap();
     let mut request = empty();
     request.execution_constraint = Some(supplied(CONSTRAINT, digest));
     let inputs = controls(request).expect("a matching digest passes the gate");

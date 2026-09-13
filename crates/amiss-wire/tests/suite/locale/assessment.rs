@@ -3,6 +3,7 @@
     reason = "tests replay checked locale contracts and mutate their canonical JSON"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::{fs, path::Path};
 
@@ -744,13 +745,7 @@ fn the_published_assessment_replays_from_its_plan_and_evidence() {
 }
 
 fn sealed(mut value: Value) -> Vec<u8> {
-    let digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(ASSESSMENT_PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(value.get("payload").unwrap()).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest(ASSESSMENT_PAYLOAD_SCHEMA, value.get("payload").unwrap()).unwrap();
     *(value).get_mut("payload_digest").unwrap() = Value::from(digest.to_string());
     serde_json_canonicalizer::to_vec(&value).unwrap()
 }

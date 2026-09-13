@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use amiss_wire::report::{
     Disposition, FixKind,
     model::{
@@ -5,7 +6,6 @@ use amiss_wire::report::{
         WaiverApplication,
     },
 };
-use sha2::Digest as _;
 
 #[expect(
     clippy::unwrap_used,
@@ -25,20 +25,8 @@ pub(super) fn reports() -> [ReportEnvelope; 2] {
         "../../../../spec/examples/waiver-bundle.json"
     ))
     .unwrap();
-    let debt_snapshot_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&snapshot).unwrap())
-            .finalize()
-            .0,
-    );
-    let waiver_bundle_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&bundle).unwrap())
-            .finalize()
-            .0,
-    );
+    let debt_snapshot_digest = document_digest("amiss/debt-snapshot", &snapshot).unwrap();
+    let waiver_bundle_digest = document_digest("amiss/waiver-bundle", &bundle).unwrap();
     let mut waiver = debt.clone();
     let finding = &mut debt.payload.findings[0];
     let item = snapshot.items.into_iter().next().unwrap();

@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -23,13 +24,7 @@ fn path(raw: &str) -> RepoPath {
 
 #[expect(clippy::expect_used, reason = "test fixture policy is valid")]
 fn policy_side(policy: ScannerPolicy) -> PolicySide {
-    let digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-policy")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&policy).expect("valid policy fixture"))
-            .finalize()
-            .0,
-    );
+    let digest = document_digest("amiss/scanner-policy", &policy).expect("valid policy fixture");
     PolicySide {
         digest: Some(digest),
         policy: Some(policy),

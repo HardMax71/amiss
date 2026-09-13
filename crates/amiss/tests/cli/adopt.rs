@@ -1,5 +1,6 @@
 #![expect(clippy::unwrap_used, reason = "test fixture plumbing")]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
 
@@ -40,14 +41,9 @@ struct Minted {
 
 fn floor_digest() -> String {
     let floor = parse_organization_floor(FLOOR.as_bytes()).unwrap();
-    amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/organization-floor")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string()
+    document_digest("amiss/organization-floor", &floor)
+        .unwrap()
+        .to_string()
 }
 
 fn adopt_args(minted: &Minted, output: &str) -> Vec<String> {
@@ -223,13 +219,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         candidate_identity_digest(&time_setup).unwrap()
     );
     let statement = parse_trusted_time(statement.as_bytes()).unwrap();
-    let debt_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&snapshot).unwrap())
-            .finalize()
-            .0,
-    );
+    let debt_digest = document_digest("amiss/debt-snapshot", &snapshot).unwrap();
     let shell = amiss_scan::pipeline::SetupShell {
         engine,
         profile: amiss_wire::controls::Profile::Enforce,
@@ -240,13 +230,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         default_branch_ref: None,
         floor: Some({
             let floor = parse_organization_floor(FLOOR.as_bytes()).unwrap();
-            let digest = amiss_wire::model::Digest::from(
-                sha2::Sha256::new_with_prefix("amiss/organization-floor")
-                    .chain_update([0_u8])
-                    .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
-                    .finalize()
-                    .0,
-            );
+            let digest = document_digest("amiss/organization-floor", &floor).unwrap();
             FloorInput {
                 floor,
                 digest,

@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -582,14 +583,9 @@ fn an_observation_row_hashes_the_identity_input_it_renders() {
     let row = &envelope["payload"]["observations"][0]["candidate"];
     let input_bytes = serde_json::to_vec(&row["observation_id_input"]).unwrap();
     let input = serde_json::from_slice::<serde_json::Value>(&input_bytes).unwrap();
-    let expected = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(OBSERVATION_ID_DOMAIN)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&input).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string();
+    let expected = document_digest(OBSERVATION_ID_DOMAIN, &input)
+        .unwrap()
+        .to_string();
 
     assert_ne!(row["observation_id"], wrong.to_string());
     assert_eq!(row["observation_id"], expected);

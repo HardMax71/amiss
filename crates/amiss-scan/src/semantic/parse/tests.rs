@@ -1,5 +1,6 @@
 #![cfg(test)]
 
+use amiss_wire::envelope::document_digest;
 use amiss_wire::{
     assessment::Nullable,
     semantic::{self, SemanticEvidenceEnvelope, observation::SiteBuildObservation},
@@ -140,13 +141,7 @@ fn typed_intake_rechecks_digest_context_and_semantic_laws() {
         (unsorted, ErrorKind::UnsortedSet),
         (too_many, ErrorKind::LimitExceeded),
     ] {
-        value.payload_digest = amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&value.payload).unwrap())
-                .finalize()
-                .0,
-        );
+        value.payload_digest = document_digest(semantic::PAYLOAD_SCHEMA, &value.payload).unwrap();
         assert_eq!(
             validated_envelope(
                 SuppliedSemanticEvidence {
@@ -207,13 +202,8 @@ fn in_process_intake_keeps_the_exact_encoded_byte_ceiling() {
     route.extend(std::iter::repeat_n('a', limit - initial - 1));
 
     for length in [limit - 1, limit, limit + 1] {
-        document.payload_digest = amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
-                .finalize()
-                .0,
-        );
+        document.payload_digest =
+            document_digest(semantic::PAYLOAD_SCHEMA, &document.payload).unwrap();
         let encoded = serde_json::to_vec(&document).unwrap();
         assert_eq!(encoded.len(), length);
         let supplied = SuppliedSemanticEvidence {

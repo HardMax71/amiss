@@ -5,6 +5,7 @@
     reason = "end-to-end harness over asserted fixture shapes"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 #[path = "wrapper/semantic.rs"]
 mod semantic;
@@ -193,13 +194,7 @@ fn bind_statement(
     (&mut statement)["valid_until"] = Value::from(VALID_UNTIL);
     let parsed = parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap())
         .expect("a valid statement fixture");
-    let digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&parsed).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest("amiss/scanner-trusted-time-statement", &parsed).unwrap();
     time.expected_digest = digest;
     time.value = parsed;
     (statement, digest.to_string())
@@ -321,14 +316,10 @@ fn patch_controls(
         &serde_json::to_vec(&supplied.value).expect("constraint JSON"),
     )
     .expect("a constraint value");
-    let constraint_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&requests.constraint).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string();
+    let constraint_digest =
+        document_digest("amiss/scanner-execution-constraint", &requests.constraint)
+            .unwrap()
+            .to_string();
 
     let controls = (payload)
         .get_mut("controls")
@@ -626,13 +617,7 @@ fn inflate_controls(staged: &Release, run: &mut Run, target: u64) {
             .unwrap()
         })
         .collect();
-    floor.expected_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/organization-floor")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&floor.value).unwrap())
-            .finalize()
-            .0,
-    );
+    floor.expected_digest = document_digest("amiss/organization-floor", &floor.value).unwrap();
     run.wire = bind_envelope(staged, &mut run.requests, &chain_trees(&run.repository), 0);
     let sized =
         serde_json_canonicalizer::to_vec(&run.requests.controls).expect("controls serialize");

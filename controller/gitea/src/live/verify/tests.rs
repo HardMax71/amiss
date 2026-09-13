@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use sha2::Digest as _;
+use amiss_wire::envelope::document_digest;
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
@@ -252,13 +252,7 @@ fn the_evidence_reaches_verdicts_through_the_engine() {
         &plan,
         &evidence,
         "0.0.0",
-        amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix("t")
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&Value::Null).unwrap())
-                .finalize()
-                .0,
-        ),
+        document_digest("t", &Value::Null).unwrap(),
     )
     .expect("the engine judges the evidence");
     let document =

@@ -1,4 +1,5 @@
 use amiss_bootstrap::supervise::{AcceptanceDefect, Expectations, accept};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::{
     report::{
         PAYLOAD_SCHEMA, emit_report,
@@ -6,7 +7,6 @@ use amiss_wire::{
     },
     semantic::SemanticProducerKind,
 };
-use sha2::Digest as _;
 
 use super::{Deviation, FLOOR_DIGEST, FOREIGN_DIGEST, golden};
 
@@ -46,13 +46,7 @@ fn semantic_evidence_binds_each_producer_fact() {
             panic!("resolved controls");
         };
         controls.semantic_evidence = Some(vec![row]);
-        report.payload_digest = amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&report.payload).unwrap())
-                .finalize()
-                .0,
-        );
+        report.payload_digest = document_digest(PAYLOAD_SCHEMA, &report.payload).unwrap();
         let mut wire = Vec::new();
         emit_report(&report, &mut wire).unwrap();
         let expected = (index == 0)
@@ -72,13 +66,7 @@ fn semantic_evidence_binds_each_producer_fact() {
 #[test]
 fn semantic_metadata_shape_is_checked_before_bindings() {
     let (mut report, expectations) = semantic_report();
-    report.payload_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&report.payload).unwrap())
-            .finalize()
-            .0,
-    );
+    report.payload_digest = document_digest(PAYLOAD_SCHEMA, &report.payload).unwrap();
     let mut wire = Vec::new();
     emit_report(&report, &mut wire).unwrap();
     let wire = String::from_utf8(wire).unwrap();

@@ -4,6 +4,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -197,13 +198,7 @@ fn with_rewritten_manifest(transform: impl Fn(&mut Value), also: impl FnOnce(&Pa
         )
         .expect("the manifest parses");
         transform(&mut value);
-        digested = Some(Digest::from(
-            sha2::Sha256::new_with_prefix(amiss_wire::manifest::MANIFEST_DOMAIN)
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&value).unwrap())
-                .finalize()
-                .0,
-        ));
+        digested = Some(document_digest(amiss_wire::manifest::MANIFEST_DOMAIN, &value).unwrap());
         let mut out = serde_json_canonicalizer::to_vec(&value).unwrap();
         out.push(b'\n');
         fs::write(&path, out).unwrap();

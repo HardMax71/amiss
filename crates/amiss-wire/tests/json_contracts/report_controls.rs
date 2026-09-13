@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use amiss_wire::{
     report::{
         PAYLOAD_SCHEMA, ReportDefect,
@@ -35,26 +36,16 @@ fn reports() -> Vec<ReportEnvelope> {
         include_bytes!("../../../../spec/examples/scanner-execution-constraint.json"),
     )
     .unwrap();
-    let descriptor_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&descriptor).unwrap())
-            .finalize()
-            .0,
-    );
+    let descriptor_digest =
+        document_digest("amiss/scanner-execution-constraint", &descriptor).unwrap();
     report.payload.engine.action_provenance =
         ActionProvenance::ForgeAction(Box::new(forge_action(&descriptor)));
     let statement: amiss_wire::controls::TrustedTimeStatement = serde_json::from_slice(
         include_bytes!("../../../../spec/examples/scanner-trusted-time-statement.json"),
     )
     .unwrap();
-    let statement_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&statement).unwrap())
-            .finalize()
-            .0,
-    );
+    let statement_digest =
+        document_digest("amiss/scanner-trusted-time-statement", &statement).unwrap();
     controls.sandbox.assurance = SandboxAssurance::ProviderVerified;
     controls.sandbox.enforcement_source = SandboxEnforcementSource::ExternalRequiredCheck;
     controls.sandbox.verification = Some(SandboxVerification {
@@ -112,13 +103,8 @@ fn forge_action(
         include_bytes!("../../../../spec/examples/scanner-release-manifest.json"),
     )
     .unwrap();
-    let release_manifest_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-release-manifest")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&release_manifest).unwrap())
-            .finalize()
-            .0,
-    );
+    let release_manifest_digest =
+        document_digest("amiss/scanner-release-manifest", &release_manifest).unwrap();
     let artifact = release_manifest
         .artifacts
         .iter()

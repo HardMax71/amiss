@@ -1,4 +1,5 @@
 use amiss_scan::policy::DebtContext;
+use amiss_wire::envelope::document_digest;
 use amiss_wire::{
     report::model::{DebtApplication, PolicySource, WaiverApplication},
     requests::RequestTrust,
@@ -27,13 +28,7 @@ fn policy() -> (Vec<Comparison>, Effects) {
             .finalize()
             .0,
     );
-    let fact_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-fact")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&fact).unwrap())
-            .finalize()
-            .0,
-    );
+    let fact_digest = document_digest("amiss/scanner-fact", &fact).unwrap();
     assert_eq!(fact_digest, finding.candidate_fact.unwrap().digest);
     let mut snapshot: amiss_wire::controls::DebtSnapshot = serde_json::from_slice(include_bytes!(
         "../../../../../spec/examples/debt-snapshot.json"
@@ -53,33 +48,15 @@ fn policy() -> (Vec<Comparison>, Effects) {
     waiver.authorized_fact = fact;
     let issuer = waiver.issuer.clone();
     let candidate_tree = waiver.candidate_tree.clone();
-    let debt_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&snapshot).unwrap())
-            .finalize()
-            .0,
-    );
-    let waiver_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&bundle).unwrap())
-            .finalize()
-            .0,
-    );
+    let debt_digest = document_digest("amiss/debt-snapshot", &snapshot).unwrap();
+    let waiver_digest = document_digest("amiss/waiver-bundle", &bundle).unwrap();
     let mut statement: amiss_wire::controls::TrustedTimeStatement = serde_json::from_slice(
         include_bytes!("../../../../../spec/examples/scanner-trusted-time-statement.json"),
     )
     .unwrap();
     statement.evaluation_instant = moment("2026-07-11T00:00:00Z");
     statement.valid_until = moment("2026-07-11T00:10:00Z");
-    let digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&statement).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest("amiss/scanner-trusted-time-statement", &statement).unwrap();
     (
         comparisons,
         Effects {
