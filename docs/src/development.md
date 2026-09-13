@@ -79,6 +79,12 @@ step and runs them in another: a slow run says which half it was. A restored dep
 still leaves every workspace crate to compile. To see where that time goes, add `--timings` to
 `cargo nextest run --workspace --locked` locally and read Cargo's report next to nextest's summary.
 
+Platform CI also builds without debug information. The test profile strips it at link time, so
+generating it only hands the linker bytes it discards, and most of a Windows build is that final
+link: the last crate starts compiling at four minutes and the job takes seven. Local builds keep
+their line tables, since the setting is an environment variable on the CI job rather than a profile
+change. `CARGO_PROFILE_TEST_DEBUG` and `CARGO_PROFILE_DEV_DEBUG` turn it back on anywhere.
+
 The wire integration tests share one executable, so the Serde code they instantiate compiles once
 instead of four times. That crate sets `autotests = false` and names its own target, so a new file
 under `crates/amiss-wire/tests` runs nothing until a module declares it; add cases to the modules
