@@ -117,12 +117,19 @@ fn the_human_projection_counts_each_locale() {
         &shown(scratch.path(), "context.json"),
     ]);
 
+    let producer = tree_producer(&context()).unwrap();
     assert_eq!(code, 0, "{stderr}");
     assert_eq!(
         String::from_utf8_lossy(&stdout),
-        "amiss locale-inventory: en 2 pages complete\n\
-         amiss locale-inventory: de-DE 1 pages complete\n\
-         target pages still carrying the source bytes: 0\n"
+        format!(
+            "amiss locale-inventory: en 2 pages complete\n\
+             amiss locale-inventory: de-DE 1 pages complete\n\
+             target pages still carrying the source bytes: 0\n\
+             producer {} {} context {}\n",
+            producer.identity.as_str(),
+            producer.version,
+            producer.context_digest,
+        )
     );
 }
 

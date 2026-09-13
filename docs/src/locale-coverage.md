@@ -166,6 +166,68 @@ Pages the walk cannot inventory, a symlink or a name outside UTF-8, drop their s
 completeness bit rather than disappearing. Neither side carries a product receipt or target
 lineage: a tree records neither, so a plan that requires lineage stays unproven.
 
+Two contexts cover nearly every repository. A site that gives each locale its own directory names
+both roots, and leaves the suffix null. This is the Docusaurus shape, where the German tree sits
+under its own plugin path:
+
+```json
+{
+  "source": { "root": "docs", "locale": "en", "suffix": null },
+  "target": {
+    "root": "i18n/de-DE/docusaurus-plugin-content-docs/current",
+    "locale": "de-DE",
+    "suffix": null
+  },
+  "documents": [".md", ".mdx"]
+}
+```
+
+`docs/guide/start.md` and `i18n/de-DE/docusaurus-plugin-content-docs/current/guide/start.md` both
+key as `guide/start.md`. VitePress, Starlight and Hugo's directory mode differ only in the two
+roots: `docs` beside `docs/de-DE`, `src/content/docs/en` beside `src/content/docs/de-DE`,
+`content/en` beside `content/de-DE`.
+
+A site that marks the locale in the filename gives both sides the same root and names the token.
+This is the MkDocs i18n default and Hugo's filename mode:
+
+```json
+{
+  "source": { "root": "docs", "locale": "en", "suffix": null },
+  "target": { "root": "docs", "locale": "de-DE", "suffix": "de-DE" },
+  "documents": [".md"]
+}
+```
+
+Here `docs/guide/start.md` and `docs/guide/start.de-DE.md` both key as `guide/start.md`. A null
+suffix means the filename carries no locale token at all, so `start.de-DE.md` is not an English
+page and `start.md` is not a German one. When one root sits inside the other the deeper one wins,
+which is what lets a locale directory live under the source root.
+
+`documents` is byte-sorted, and every entry starts with a dot. A file whose name ends in none of
+them is not a page, so images, partials, and configuration never turn into missing translations.
+
+Running it takes two commands:
+
+```sh
+amiss locale-inventory --repo . --plan coverage-plan.json --context locales.json \
+  --format json > coverage-evidence.json
+amiss locale-assess --plan coverage-plan.json --evidence coverage-evidence.json
+```
+
+The plan has to name the producer whose evidence it will accept, and the context digest is part of
+that identity, so the first run against a new context is what tells you the line to write into the
+plan. Human output ends with it:
+
+```text
+amiss locale-inventory: en 42 pages complete
+amiss locale-inventory: de-DE 39 pages complete
+target pages still carrying the source bytes: 7
+producer amiss-locale-tree 1.0.0 context sha256:0f3c...
+```
+
+Those seven pages are the point of the audit. Either the plan authorizes `source-identical` for
+them, or the coverage stays refuted until somebody translates them.
+
 The checked public contracts are
 [`locale-coverage-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-plan.schema.json),
 with the matching
