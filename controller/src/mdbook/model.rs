@@ -45,6 +45,7 @@ pub(super) enum BookItem {
 
 #[derive(Deserialize)]
 pub(super) struct Chapter {
+    pub(super) content: String,
     #[serde(deserialize_with = "Option::deserialize")]
     pub(super) path: Option<String>,
     #[serde(deserialize_with = "Option::deserialize")]

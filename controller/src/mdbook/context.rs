@@ -1,5 +1,4 @@
 use amiss_wire::envelope::document_digest;
-use sha2::Digest as _;
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
@@ -10,7 +9,7 @@ use amiss_wire::semantic::observation::SITE_BUILD_VERSION;
 use serde::Deserialize as _;
 use url::Url;
 
-use super::model::{BookItem, Config, HtmlOutput, RenderContext};
+use super::model::{BookItem, Chapter, Config, HtmlOutput, RenderContext};
 use super::{MDBOOK_VERSION, MdBookEvidenceError, SiteBuildContext};
 
 const ROUTE_BYTES: usize = 16_384;
@@ -51,17 +50,8 @@ pub(super) fn site_build_context(
         return Err(MdBookEvidenceError::ContextIdentity);
     }
     let base = route_base(&site.route_prefix)?;
-    let context_digest = serde_json_canonicalizer::to_vec(site)
-        .map(|canonical| {
-            Digest::from(
-                sha2::Sha256::new_with_prefix(CONTEXT_DOMAIN)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical)
-                    .finalize()
-                    .0,
-            )
-        })
-        .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
+    let context_digest =
+        document_digest(CONTEXT_DOMAIN, site).ok_or(MdBookEvidenceError::ContextShape)?;
     let producer_identity = ArtifactId::new("amiss-controller-mdbook-html".to_owned())
         .ok_or(MdBookEvidenceError::Evidence)?;
     Ok((
@@ -99,6 +89,24 @@ pub(super) fn render_context(
     Ok((source_directory, &context.book.items, config_digest))
 }
 
+/// Every chapter in renderer order, descending into sub-chapters, with the
+/// structural items that carry no page skipped.
+pub(super) fn chapters(items: &[BookItem]) -> impl Iterator<Item = &Chapter> {
+    let mut pending: Vec<&BookItem> = items.iter().rev().collect();
+    std::iter::from_fn(move || {
+        loop {
+            match pending.pop()? {
+                BookItem::Chapter(chapter) => {
+                    pending.extend(chapter.sub_items.iter().rev());
+                    return Some(chapter);
+                }
+                BookItem::Separator => {}
+                BookItem::PartTitle(_title) => {}
+            }
+        }
+    })
+}
+
 pub(super) fn pages(
     items: &[BookItem],
     source_directory: &Path,
@@ -108,16 +116,9 @@ pub(super) fn pages(
     let source_root = repository_path(repository_book_root, source_directory)?;
     let manifest = repository_path(source_root.as_deref(), Path::new("SUMMARY.md"))?
         .ok_or(MdBookEvidenceError::Path)?;
-    let mut pending: Vec<&BookItem> = items.iter().rev().collect();
     let mut pages = BTreeMap::new();
     let mut entrypoint = None;
-    while let Some(item) = pending.pop() {
-        let chapter = match item {
-            BookItem::Chapter(chapter) => chapter,
-            BookItem::Separator => continue,
-            BookItem::PartTitle(_title) => continue,
-        };
-        pending.extend(chapter.sub_items.iter().rev());
+    for chapter in chapters(items) {
         let path = chapter.path.as_deref();
         let source_path = chapter.source_path.as_deref();
         let Some(path) = path else {
@@ -180,7 +181,10 @@ fn insert_page(
     }
 }
 
-fn relative_path(raw: &str, empty_allowed: bool) -> Result<PathBuf, MdBookEvidenceError> {
+pub(super) fn relative_path(
+    raw: &str,
+    empty_allowed: bool,
+) -> Result<PathBuf, MdBookEvidenceError> {
     if raw == "." && empty_allowed {
         return Ok(PathBuf::new());
     }
@@ -217,7 +221,7 @@ fn relative_path(raw: &str, empty_allowed: bool) -> Result<PathBuf, MdBookEviden
     }
 }
 
-fn repository_path(
+pub(super) fn repository_path(
     prefix: Option<&str>,
     path: &Path,
 ) -> Result<Option<String>, MdBookEvidenceError> {

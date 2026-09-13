@@ -133,8 +133,18 @@ Missing, unbound, wrong-producer, or otherwise insufficient evidence is unproven
 `amiss locale-assess --plan <path> --evidence <path>` judges one pair offline and writes the
 assessment; see [the invocation chapter](invocation.md). The controller validates a complete
 report-bound chain before retention and stores its four components under the record's own
-ceilings, 64 KiB for the plan and 16 MiB for the evidence and assessment. No lane acquires or
-stages a page inventory yet, so the evidence still comes from outside.
+ceilings, 64 KiB for the plan and 16 MiB for the evidence and assessment.
+
+One generator has a lane. The controller projects two pinned mdBook renderer contexts, one per
+locale, into a single plan-bound inventory pair. The page key is the chapter source path relative
+to the book's source directory, because that is what a translated book keeps equal while routes and
+titles move, and the resource digest covers the chapter Markdown the renderer received. Both sides
+are complete, since a renderer context enumerates the whole book. Neither side carries a product
+receipt or target lineage: mdBook records nothing that would prove either, so a plan that requires
+lineage gets `unproven` instead of a guess. The producer identity, version, and context digest come
+from the two claimed configuration paths and the locale pair, so a plan names the exact build whose
+evidence it will accept, and contexts supplied in the wrong locale order refuse before a page is
+read. Every other generator's evidence still comes from outside.
 
 The checked public contracts are
 [`locale-coverage-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-plan.schema.json),

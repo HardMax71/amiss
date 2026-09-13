@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 
 use amiss_controller_files::read_bounded_at;
 use amiss_wire::assessment::Nullable;
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::RepoPathText;
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
@@ -11,10 +12,15 @@ use cap_std::fs::Dir;
 
 mod context;
 mod html;
+mod locale;
 mod model;
 
 use context::{BuildPages, pages, render_context, site_build_context};
 use html::{page_facts, reachable_sources};
+pub use locale::{
+    LocaleBuild, LocaleBuildContext, MDBOOK_LOCALE_PRODUCER, MDBOOK_LOCALE_VERSION,
+    mdbook_locale_evidence, mdbook_locale_producer,
+};
 
 pub const MDBOOK_RENDER_CONTEXT_BYTES: u64 = 16_777_216;
 pub const MDBOOK_HTML_BYTES: u64 = 16_777_216;
@@ -75,6 +81,8 @@ pub enum MdBookEvidenceError {
     Navigation,
     #[error("the mdBook evidence exceeds the semantic wire contract")]
     Evidence,
+    #[error("the locale coverage plan is unreadable or does not bind this build")]
+    Plan,
 }
 
 /// Produces one complete candidate-bound route, anchor, and navigation table
@@ -129,23 +137,17 @@ pub fn mdbook_site_evidence(
     let navigation = navigation_observation(&build, reachable)?;
     observations.push(navigation.clone());
 
-    let input_digest = serde_json_canonicalizer::to_vec(&SiteInput {
-        mdbook_version: MDBOOK_VERSION,
-        context_digest: expectation.context_digest,
-        config_digest,
-        navigation: &navigation,
-        pages: &inputs,
-    })
-    .map(|canonical| {
-        Digest::from(
-            sha2::Sha256::new_with_prefix(INPUT_DOMAIN)
-                .chain_update([0_u8])
-                .chain_update(&canonical)
-                .finalize()
-                .0,
-        )
-    })
-    .map_err(|_defect| MdBookEvidenceError::Evidence)?;
+    let input_digest = document_digest(
+        INPUT_DOMAIN,
+        &SiteInput {
+            mdbook_version: MDBOOK_VERSION,
+            context_digest: expectation.context_digest,
+            config_digest,
+            navigation: &navigation,
+            pages: &inputs,
+        },
+    )
+    .ok_or(MdBookEvidenceError::Evidence)?;
     let document = amiss_wire::semantic::envelope(amiss_wire::semantic::SemanticEvidence {
         schema: PayloadSchema::Current,
         subject: SemanticSubject {

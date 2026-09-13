@@ -4,6 +4,7 @@ mod bootstrap_result;
 mod identity;
 mod intersphinx;
 mod mdbook;
+mod mdbook_locale;
 mod naming;
 mod plans;
 mod relations;

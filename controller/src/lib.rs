@@ -71,8 +71,9 @@ pub use intersphinx::{
 };
 pub use locale_audit::{LocaleAuditBundle, LocaleAuditDigests, validate_locale_audit};
 pub use mdbook::{
-    MDBOOK_HTML_BYTES, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, SiteBuildContext,
-    mdbook_site_evidence, mdbook_site_expectation,
+    LocaleBuild, LocaleBuildContext, MDBOOK_HTML_BYTES, MDBOOK_LOCALE_PRODUCER,
+    MDBOOK_LOCALE_VERSION, MDBOOK_RENDER_CONTEXT_BYTES, MdBookEvidenceError, SiteBuildContext,
+    mdbook_locale_evidence, mdbook_locale_producer, mdbook_site_evidence, mdbook_site_expectation,
 };
 pub use model::AcquiredCommit;
 pub use orchestration::{
