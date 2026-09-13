@@ -1,6 +1,7 @@
 mod audit;
 mod external;
 mod locale;
+mod native;
 mod publication;
 mod semantic;
 
@@ -374,17 +375,27 @@ pub fn commit_object(
 ///
 /// Any filesystem failure or malformed object ID, as plain I/O errors.
 pub fn index_file(root: &Path, entries: &[(&[u8], &str)]) -> std::io::Result<()> {
+    let rows: Vec<(&[u8], u32, &str)> = entries
+        .iter()
+        .map(|(path, oid)| (*path, 0o100_644, *oid))
+        .collect();
+    index_with_modes(root, &rows)
+}
+
+pub(crate) type Entries = BTreeMap<String, (String, String)>;
+
+pub(crate) fn index_with_modes(root: &Path, entries: &[(&[u8], u32, &str)]) -> std::io::Result<()> {
     let mut rows = entries.to_vec();
-    rows.sort_by_key(|(path, _oid)| path.to_vec());
+    rows.sort_by_key(|(path, _mode, _oid)| path.to_vec());
     let mut content = Vec::new();
     content.extend_from_slice(b"DIRC");
     content.extend_from_slice(&2_u32.to_be_bytes());
     let count = u32::try_from(rows.len()).map_err(std::io::Error::other)?;
     content.extend_from_slice(&count.to_be_bytes());
-    for (path, oid) in rows {
+    for (path, mode, oid) in rows {
         let start = content.len();
         content.extend_from_slice(&[0_u8; 24]);
-        content.extend_from_slice(&0o100_644_u32.to_be_bytes());
+        content.extend_from_slice(&mode.to_be_bytes());
         content.extend_from_slice(&[0_u8; 12]);
         let mut raw_oid = [0_u8; 20];
         hex::decode_to_slice(oid, &mut raw_oid).map_err(std::io::Error::other)?;
@@ -488,11 +499,7 @@ fn head_commit(root: &Path) -> std::io::Result<Option<String>> {
     }
 }
 
-fn stage_directory(
-    root: &Path,
-    directory: &Path,
-    staged: &mut BTreeMap<String, (String, String)>,
-) -> std::io::Result<()> {
+fn stage_directory(root: &Path, directory: &Path, staged: &mut Entries) -> std::io::Result<()> {
     for entry in std::fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
@@ -519,7 +526,12 @@ fn stage_directory(
             let target = std::fs::read_link(&path)?;
             ("120000", path_arg(&target).into_bytes())
         } else if kind.is_file() {
-            ("100644", std::fs::read(&path)?)
+            let mode = if executable(&entry.metadata()?) {
+                "100755"
+            } else {
+                "100644"
+            };
+            (mode, std::fs::read(&path)?)
         } else {
             return Err(std::io::Error::other("fixture trees hold files and links"));
         };
@@ -715,7 +727,18 @@ fn commit_state(
     Ok((commit, tree))
 }
 
-fn tree_from(root: &Path, files: &BTreeMap<String, (String, String)>) -> std::io::Result<String> {
+#[cfg(unix)]
+fn executable(metadata: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::PermissionsExt as _;
+    metadata.permissions().mode() & 0o111 != 0
+}
+
+#[cfg(not(unix))]
+fn executable(_metadata: &std::fs::Metadata) -> bool {
+    false
+}
+
+fn tree_from(root: &Path, files: &Entries) -> std::io::Result<String> {
     let mut blobs = Vec::new();
     let mut directories: BTreeMap<String, BTreeMap<String, (String, String)>> = BTreeMap::new();
     for (path, entry) in files {
@@ -787,6 +810,16 @@ pub fn path_arg(path: &Path) -> String {
 ///
 /// Spawn failures and nonzero exits, as plain I/O errors.
 pub fn git(dir: &Path, args: &[&str]) -> std::io::Result<String> {
+    native::answer(dir, args).unwrap_or_else(|| real_git(dir, args))
+}
+
+/// One hermetic git invocation, always a git process, for a fixture that
+/// must observe git itself.
+///
+/// # Errors
+///
+/// Git could not be spawned, exited unsuccessfully, or printed non-UTF-8.
+pub fn real_git(dir: &Path, args: &[&str]) -> std::io::Result<String> {
     let output = git_output(dir, args)?;
     if !output.status.success() {
         let mut detail = std::io::stderr().lock();
