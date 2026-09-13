@@ -424,6 +424,23 @@ jobs:
         name: Stop Defender scanning the build
         shell: pwsh
         run: Set-MpPreference -DisableRealtimeMonitoring $true
+      # Every test fixture lands in the user profile's temp directory, which
+      # is the runner's slow OS disk. A ReFS Dev Drive is the remedy GitHub
+      # points to, so the fixtures go there instead.
+      - if: runner.os == 'Windows'
+        name: Put the test fixtures on a Dev Drive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $drive = New-VHD -Path "$env:RUNNER_TEMP\fixtures.vhdx" -SizeBytes 8GB -Dynamic |
+            Mount-VHD -PassThru |
+            Initialize-Disk -PassThru |
+            New-Partition -AssignDriveLetter -UseMaximumSize
+          $drive | Format-Volume -DevDrive -Confirm:$false -Force | Out-Null
+          $temp = "$($drive.DriveLetter):\temp"
+          New-Item -ItemType Directory -Path $temp | Out-Null
+          "TEMP=$temp" >> $env:GITHUB_ENV
+          "TMP=$temp" >> $env:GITHUB_ENV
       - id: bench
         shell: bash
         run: |
