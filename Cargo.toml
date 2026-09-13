@@ -145,6 +145,15 @@ panic = "unwind"
 inherits = "test"
 debug = "none"
 
+[profile.mutants.package.amiss-wire]
+opt-level = 2
+
+[profile.mutants.package.amiss-scan]
+opt-level = 2
+
+[profile.mutants.package.amiss-md]
+opt-level = 2
+
 [profile.release.package.amiss-controller-fuzz]
 debug = 1
 
@@ -158,15 +167,6 @@ strip = "debuginfo"
 
 # Debug builds keep debug assertions but optimize the library crates, so the
 # large-envelope goldens and parser-heavy tests run in seconds, not minutes.
-[profile.dev.package.amiss-wire]
-opt-level = 2
-
-[profile.dev.package.amiss-scan]
-opt-level = 2
-
-[profile.dev.package.amiss-md]
-opt-level = 2
-
 [profile.dev.package.markdown]
 opt-level = 2
 
