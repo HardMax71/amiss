@@ -165,25 +165,10 @@ debug = "line-tables-only"
 [profile.test]
 strip = "debuginfo"
 
-# Debug builds keep debug assertions but optimize the library crates, so the
-# large-envelope goldens and parser-heavy tests run in seconds, not minutes.
-[profile.dev.package.markdown]
-opt-level = 2
-
-[profile.dev.package.sha2]
-opt-level = 2
-
-# The fixtures and the real Git reader hash and inflate the same large objects.
-[profile.dev.package.sha1-checked]
-opt-level = 2
-
-[profile.dev.package.sha1]
-opt-level = 2
-
-[profile.dev.package.miniz_oxide]
-opt-level = 2
-
-[profile.dev.package.adler2]
+# Dependencies build optimized in every dev-derived profile: they are cached
+# and their code runs in most tests. Workspace crates stay unoptimized, since a
+# package override reaches its test binaries and those set the build's wall.
+[profile.dev.package."*"]
 opt-level = 2
 
 # Gate-tool pins: exposed by cargo metadata and checked by the tools contract.

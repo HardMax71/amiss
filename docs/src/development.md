@@ -70,9 +70,10 @@ toolchain before restoring them so runner image updates cannot invalidate the pi
 
 The test profile strips debug information from executable fixtures, which are repeatedly copied
 and verified. Symbols and assertions remain; source-line backtraces can be restored locally with
-`CARGO_PROFILE_TEST_STRIP=none`. Git collision detection and decompression are optimized in
-development and test builds too, so the fixtures and the real Git reader run the same fast code.
-Debug assertions and overflow checks stay on, and release settings are unchanged.
+`CARGO_PROFILE_TEST_STRIP=none`. Every dependency is optimized in development and test builds,
+since dependencies are cached and most tests spend their time in them. The workspace crates are
+not: a package override reaches the package's test binaries too, and those are what a build waits
+on. Debug assertions and overflow checks stay on, and release settings are unchanged.
 
 Compiling the tests costs far more than running them, so platform CI builds the binaries in one
 step and runs them in another: a slow run says which half it was. A restored dependency cache
@@ -80,10 +81,9 @@ still leaves every workspace crate to compile. To see where that time goes, add 
 `cargo nextest run --workspace --locked` locally and read Cargo's report next to nextest's summary.
 
 Platform CI also builds without debug information. The test profile strips it at link time, so
-generating it only hands the linker bytes it discards, and most of a Windows build is that final
-link: the last crate starts compiling at four minutes and the job takes seven. Local builds keep
-their line tables, since the setting is an environment variable on the CI job rather than a profile
-change. `CARGO_PROFILE_TEST_DEBUG` and `CARGO_PROFILE_DEV_DEBUG` turn it back on anywhere.
+generating it only hands the linker bytes it discards. Local builds keep their line tables, since
+the setting is an environment variable on the CI job rather than a profile change.
+`CARGO_PROFILE_TEST_DEBUG` and `CARGO_PROFILE_DEV_DEBUG` turn it back on anywhere.
 
 The wire integration tests share one executable, so the Serde code they instantiate compiles once
 instead of four times. That crate sets `autotests = false` and names its own target, so a new file
