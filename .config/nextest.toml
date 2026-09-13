@@ -13,3 +13,9 @@ slow-timeout = { period = "30s", terminate-after = 1 }
 [[profile.mutants.scripts]]
 platform = { host = "cfg(unix)" }
 run-wrapper = "confine"
+
+# The four maximal-document tests hold the critical path at four threads;
+# starting them first lets the rest fill in behind them.
+[[profile.default.overrides]]
+filter = 'test(=report::an_over_cap_envelope_projects_to_output_limit_exceeded) | test(~template_intake_enforces_the_bound_envelope) | test(~in_process_intake_keeps_the_exact_encoded) | test(=wrapper)'
+priority = 100
