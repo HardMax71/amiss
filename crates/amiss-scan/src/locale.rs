@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::Error;
 use crate::discovery::{WalkMode, discover_walk};
 
+pub const LOCALE_CONTEXT_BYTES: u64 = 65_536;
 pub const PRODUCER_IDENTITY: &str = "amiss-locale-tree";
 pub const PRODUCER_VERSION: &str = "1.0.0";
 /// The fallback class a target page carries when its bytes are the source's.

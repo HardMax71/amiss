@@ -12,6 +12,7 @@ mod human;
 mod input;
 mod junit;
 mod locale_assess;
+mod locale_inventory;
 mod policy;
 mod profiles;
 mod refs;

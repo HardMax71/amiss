@@ -10,9 +10,11 @@ use super::{
 };
 
 mod authoring;
+mod inventory;
 mod report;
 
 use authoring::{classify_claim, classify_policy_include};
+use inventory::classify_locale_inventory;
 use report::classify_report_command;
 
 /// The refusals a line earns before its verb is known.
@@ -34,6 +36,9 @@ pub(super) fn command(
     let mut codes = lexical(gathered, format);
     match gathered.verb {
         Some(Verb::Claim) => return classify_claim(codes, gathered).map(Command::Author),
+        Some(Verb::LocaleInventory) => {
+            return classify_locale_inventory(codes, gathered, format);
+        }
         Some(Verb::PolicyInclude) => {
             return classify_policy_include(codes, gathered).map(Command::PolicyInclude);
         }
@@ -76,20 +81,7 @@ pub(super) fn command(
     let adoption = record(&mut codes, classify_adoption(gathered));
     let identity = record(&mut codes, classify_identity(gathered));
     let forge = record(&mut codes, classify_forge(gathered, &identity));
-    let semantic_template = record(
-        &mut codes,
-        match gathered.semantic_template.occurrences {
-            0 => Ok(None),
-            1 => gathered
-                .semantic_template
-                .unique_value()
-                .filter(|path| !path.is_empty())
-                .map(PathBuf::from)
-                .map(Some)
-                .ok_or(Code::InvalidInvocation),
-            _ => Err(Code::InvalidInvocation),
-        },
-    );
+    let semantic_template = record(&mut codes, classify_semantic_template(gathered));
 
     if !codes.is_empty() {
         return Err(codes);
@@ -135,6 +127,20 @@ pub(super) fn command(
     })))
 }
 
+fn classify_semantic_template(gathered: &Gathered) -> Validation<Option<PathBuf>> {
+    match gathered.semantic_template.occurrences {
+        0 => Ok(None),
+        1 => gathered
+            .semantic_template
+            .unique_value()
+            .filter(|path| !path.is_empty())
+            .map(PathBuf::from)
+            .map(Some)
+            .ok_or(Code::InvalidInvocation),
+        _ => Err(Code::InvalidInvocation),
+    }
+}
+
 fn classify_target(gathered: &Gathered) -> Validation<(PathBuf, ObjectFormat)> {
     let repo = gathered
         .repo
@@ -172,6 +178,7 @@ fn verb_rules(codes: &mut BTreeSet<Code>, gathered: &Gathered) {
         &gathered.report,
         &gathered.plan,
         &gathered.evidence,
+        &gathered.context,
         &gathered.target,
         &gathered.target_bytes_hex,
     ]

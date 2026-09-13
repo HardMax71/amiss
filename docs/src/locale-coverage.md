@@ -133,8 +133,38 @@ Missing, unbound, wrong-producer, or otherwise insufficient evidence is unproven
 `amiss locale-assess --plan <path> --evidence <path>` judges one pair offline and writes the
 assessment; see [the invocation chapter](invocation.md). The controller validates a complete
 report-bound chain before retention and stores its four components under the record's own
-ceilings, 64 KiB for the plan and 16 MiB for the evidence and assessment. No lane acquires or
-stages a page inventory yet, so the evidence still comes from outside.
+ceilings, 64 KiB for the plan and 16 MiB for the evidence and assessment.
+
+`amiss locale-inventory` stages that evidence from the candidate tree. Translated documentation
+is laid out three ways, not one way per generator: a directory per locale, which Docusaurus,
+VitePress, Starlight and Hugo use; the locale in the filename, which Hugo and the MkDocs i18n
+plugin use; and gettext catalogs, which Sphinx and the mdBook helpers use. The first two are one
+walk with two key rules and are what this verb reads. Gettext has no reader yet, and a reader for
+it would report message coverage rather than page presence.
+
+The page key is the path under the locale's own root, which is not a spelling Amiss invents. A
+Docusaurus doc id is the path under the docs folder without its extension, a Sphinx docname is
+the path under the source directory, an MkDocs `src_uri` is the path under `docs_dir`, and Hugo
+and Starlight both define a translation as the file at the matching relative path. Taking that
+key from the tree needs no build and no generator configuration, which keeps executable build
+semantics out of the trust boundary. It also cannot see the two escapes that move a page's
+identity off its path, a Docusaurus `id` and a Hugo `translationKey`; a page using either is
+reported as a missing and orphaned pair.
+
+The context names each side's root, the locale it claims, an optional filename suffix, and the
+file suffixes that count as pages. The plan names the object format, commit, and tree, so the
+verb walks exactly that snapshot or refuses. A resource digest names the blob a path resolves
+to, so no file content is read and equal digests mean byte-identical files at that commit.
+
+That last property carries the useful case. A target page whose blob is still the source's blob
+is not a translation, it is the source sitting in a translation slot, so it goes out as a
+`source-identical` fallback rather than a target resource. The Docusaurus i18n tutorial tells
+operators to copy the whole default-locale tree and translate afterwards, so an inventory that
+compared page keys alone would call an untranslated copy a clean pass; an empty fallback set in
+the plan refuses it instead, and a plan that authorizes the class accepts it deliberately.
+Pages the walk cannot inventory, a symlink or a name outside UTF-8, drop their side's
+completeness bit rather than disappearing. Neither side carries a product receipt or target
+lineage: a tree records neither, so a plan that requires lineage stays unproven.
 
 The checked public contracts are
 [`locale-coverage-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-plan.schema.json),

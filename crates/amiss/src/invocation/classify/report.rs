@@ -16,19 +16,8 @@ pub(super) fn classify_report_command(
 ) -> Result<Command, BTreeSet<Code>> {
     match gathered.verb {
         Some(Verb::ExternalPlan) => {
-            let [report] = classify_pure(
-                codes,
-                gathered,
-                format,
-                &[OutputFormat::Human, OutputFormat::Json],
-                [&gathered.report],
-                &[
-                    &gathered.plan,
-                    &gathered.evidence,
-                    &gathered.target,
-                    &gathered.target_bytes_hex,
-                ],
-            )?;
+            let formats = [OutputFormat::Human, OutputFormat::Json];
+            let report = report_path(codes, gathered, format, &formats, &pure_foreign(gathered))?;
             Ok(Command::Plan(PlanInvocation { report, format }))
         }
         Some(Verb::LocaleAssess) => {
@@ -51,65 +40,95 @@ pub(super) fn classify_report_command(
             if gathered.format.occurrences == 0 {
                 codes.insert(Code::InvalidInvocation);
             }
-            let [report] = classify_pure(
-                codes,
-                gathered,
-                format,
-                &[
-                    OutputFormat::Human,
-                    OutputFormat::Sarif,
-                    OutputFormat::CodeQuality,
-                    OutputFormat::Junit,
-                ],
-                [&gathered.report],
-                &[
-                    &gathered.plan,
-                    &gathered.evidence,
-                    &gathered.target,
-                    &gathered.target_bytes_hex,
-                ],
-            )?;
+            let formats = [
+                OutputFormat::Human,
+                OutputFormat::Sarif,
+                OutputFormat::CodeQuality,
+                OutputFormat::Junit,
+            ];
+            let report = report_path(codes, gathered, format, &formats, &pure_foreign(gathered))?;
             Ok(Command::Render(RenderInvocation {
                 report,
                 format,
                 full: gathered.full == 1,
             }))
         }
-        Some(Verb::Refs) => {
-            let [report] = classify_pure(
-                codes,
-                gathered,
-                format,
-                &[OutputFormat::Human, OutputFormat::Json],
-                [&gathered.report],
-                &[&gathered.plan, &gathered.evidence],
-            )?;
-            let target = match (
-                gathered.target.unique_value(),
-                gathered.target_bytes_hex.unique_value(),
-            ) {
-                (Some(target), None) => RepoPath::new(target.to_owned()),
-                (None, Some(hex)) if hex.len() <= 8192 && hex.len() % 2 == 0 => hex
-                    .bytes()
-                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-                    .then(|| hex::decode(hex).ok())
-                    .flatten()
-                    .and_then(RepoPath::from_bytes),
-                (Some(_) | None, Some(_)) | (None, None) => None,
-            }
-            .ok_or_else(|| BTreeSet::from([Code::InvalidInvocation]))?;
-            Ok(Command::Refs(RefsInvocation {
-                report,
-                target,
-                format,
-            }))
-        }
+        Some(Verb::Refs) => classify_refs(codes, gathered, format),
         Some(Verb::RecordSet) => classify_record_set(codes, gathered, format),
-        Some(Verb::Check | Verb::Fix | Verb::Adopt | Verb::Claim | Verb::PolicyInclude) | None => {
+        Some(
+            Verb::Check
+            | Verb::Fix
+            | Verb::Adopt
+            | Verb::Claim
+            | Verb::PolicyInclude
+            | Verb::LocaleInventory,
+        )
+        | None => {
             codes.insert(Code::InvalidInvocation);
             Err(codes)
         }
     }
+}
+
+/// The report-bound forms: one report path, projected through one of the
+/// formats that form admits.
+fn report_path(
+    codes: BTreeSet<Code>,
+    gathered: &Gathered,
+    format: OutputFormat,
+    formats: &[OutputFormat],
+    foreign_pure: &[&Slot],
+) -> Result<PathBuf, BTreeSet<Code>> {
+    let [report] = classify_pure(
+        codes,
+        gathered,
+        format,
+        formats,
+        [&gathered.report],
+        foreign_pure,
+    )?;
+    Ok(report)
+}
+
+/// The paths every report-bound form but `refs` treats as foreign.
+fn pure_foreign(gathered: &Gathered) -> [&Slot; 4] {
+    [
+        &gathered.plan,
+        &gathered.evidence,
+        &gathered.target,
+        &gathered.target_bytes_hex,
+    ]
+}
+
+/// The reference form: one report and exactly one spelling of the target
+/// path, text or raw bytes.
+fn classify_refs(
+    codes: BTreeSet<Code>,
+    gathered: &Gathered,
+    format: OutputFormat,
+) -> Result<Command, BTreeSet<Code>> {
+    let formats = [OutputFormat::Human, OutputFormat::Json];
+    let foreign: [&Slot; 2] = [&gathered.plan, &gathered.evidence];
+    let report = report_path(codes, gathered, format, &formats, &foreign)?;
+    let target = match (
+        gathered.target.unique_value(),
+        gathered.target_bytes_hex.unique_value(),
+    ) {
+        (Some(target), None) => RepoPath::new(target.to_owned()),
+        (None, Some(hex)) if hex.len() <= 8192 && hex.len() % 2 == 0 => hex
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            .then(|| hex::decode(hex).ok())
+            .flatten()
+            .and_then(RepoPath::from_bytes),
+        (Some(_) | None, Some(_)) | (None, None) => None,
+    }
+    .ok_or_else(|| BTreeSet::from([Code::InvalidInvocation]))?;
+    Ok(Command::Refs(RefsInvocation {
+        report,
+        target,
+        format,
+    }))
 }
 
 /// The shared pair form: one plan and one evidence document, judged offline.
@@ -189,6 +208,7 @@ fn classify_pure<const N: usize>(
         &gathered.claim_name,
         &gathered.suffix,
         &gathered.adapter,
+        &gathered.context,
         &gathered.semantic_template,
     ];
     if foreign

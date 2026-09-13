@@ -53,6 +53,8 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss locale-assess --plan <path> --evidence <path> [--format <human|json>]
+amiss locale-inventory --repo <path> --plan <path> --context <path>
+                       [--format <human|json>]
 amiss render --report <path>
              (--format human [--full] | --format <sarif|codequality|junit>)
 amiss refs --report <path>
@@ -74,6 +76,7 @@ pub(crate) enum Verb {
     ExternalPlan,
     ExternalAssess,
     LocaleAssess,
+    LocaleInventory,
     Render,
     Refs,
     PolicyInclude,
@@ -110,6 +113,16 @@ pub(crate) struct AuthorInvocation {
     pub(crate) path: RepoPathText,
     pub(crate) line: u64,
     pub(crate) name: String,
+}
+
+/// The inventory form's shape: the checkout to read, the plan that binds its
+/// commit, and the locale layout to read the tree under.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct InventoryInvocation {
+    pub(crate) repo: PathBuf,
+    pub(crate) plan: PathBuf,
+    pub(crate) context: PathBuf,
+    pub(crate) format: OutputFormat,
 }
 
 /// The plan form's shape: the report it reads and the projection it prints.
@@ -170,6 +183,7 @@ pub(crate) enum Command {
     Plan(PlanInvocation),
     Assess(AssessInvocation),
     LocaleAssess(AssessInvocation),
+    LocaleInventory(InventoryInvocation),
     Render(RenderInvocation),
     Refs(RefsInvocation),
     PolicyInclude(PolicyIncludeInvocation),
