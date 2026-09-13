@@ -15,10 +15,8 @@ mod report;
 use authoring::{classify_claim, classify_policy_include};
 use report::classify_report_command;
 
-pub(super) fn command(
-    gathered: &Gathered,
-    format: OutputFormat,
-) -> Result<Command, BTreeSet<Code>> {
+/// The refusals a line earns before its verb is known.
+fn lexical(gathered: &Gathered, format: OutputFormat) -> BTreeSet<Code> {
     let mut codes = BTreeSet::new();
     if gathered.lexical_defect || duplicated(gathered) {
         codes.insert(Code::InvalidInvocation);
@@ -26,13 +24,26 @@ pub(super) fn command(
     if gathered.full > 0 && (gathered.verb != Some(Verb::Render) || format != OutputFormat::Human) {
         codes.insert(Code::InvalidInvocation);
     }
+    codes
+}
+
+pub(super) fn command(
+    gathered: &Gathered,
+    format: OutputFormat,
+) -> Result<Command, BTreeSet<Code>> {
+    let mut codes = lexical(gathered, format);
     match gathered.verb {
         Some(Verb::Claim) => return classify_claim(codes, gathered).map(Command::Author),
         Some(Verb::PolicyInclude) => {
             return classify_policy_include(codes, gathered).map(Command::PolicyInclude);
         }
         Some(
-            Verb::ExternalPlan | Verb::ExternalAssess | Verb::Render | Verb::Refs | Verb::RecordSet,
+            Verb::ExternalPlan
+            | Verb::ExternalAssess
+            | Verb::LocaleAssess
+            | Verb::Render
+            | Verb::Refs
+            | Verb::RecordSet,
         ) => {
             return classify_report_command(codes, gathered, format);
         }

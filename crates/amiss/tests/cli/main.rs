@@ -11,6 +11,7 @@ mod grammar;
 mod human;
 mod input;
 mod junit;
+mod locale_assess;
 mod policy;
 mod profiles;
 mod refs;

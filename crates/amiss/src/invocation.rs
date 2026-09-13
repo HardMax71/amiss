@@ -52,6 +52,7 @@ amiss adopt --repo <path> --object-format <sha1|sha256>
             --expires-at <utc-instant> --debt-output <path>
 amiss external-plan --report <path> [--format <human|json>]
 amiss external-assess --plan <path> --evidence <path> [--format <human|json>]
+amiss locale-assess --plan <path> --evidence <path> [--format <human|json>]
 amiss render --report <path>
              (--format human [--full] | --format <sarif|codequality|junit>)
 amiss refs --report <path>
@@ -72,6 +73,7 @@ pub(crate) enum Verb {
     Claim,
     ExternalPlan,
     ExternalAssess,
+    LocaleAssess,
     Render,
     Refs,
     PolicyInclude,
@@ -167,6 +169,7 @@ pub(crate) enum Command {
     Author(AuthorInvocation),
     Plan(PlanInvocation),
     Assess(AssessInvocation),
+    LocaleAssess(AssessInvocation),
     Render(RenderInvocation),
     Refs(RefsInvocation),
     PolicyInclude(PolicyIncludeInvocation),

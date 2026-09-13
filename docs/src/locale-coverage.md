@@ -130,7 +130,8 @@ fallback, and a fifth records every assessed target lineage. The document is bou
 resource verdicts. `coverage.complete` remains strictly about the page comparison, so the overall
 assessment can be unproven solely because a product receipt is missing while coverage is complete.
 Missing, unbound, wrong-producer, or otherwise insufficient evidence is unproven rather than clean.
-The command and controller intake are not built yet.
+`amiss locale-assess --plan <path> --evidence <path>` judges one pair offline and writes the
+assessment; see [the invocation chapter](invocation.md). The controller intake is not built yet.
 
 The checked public contracts are
 [`locale-coverage-plan.schema.json`](https://github.com/HardMax71/amiss/blob/main/spec/locale-coverage-plan.schema.json),

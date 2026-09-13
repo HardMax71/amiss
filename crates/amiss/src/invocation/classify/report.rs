@@ -31,19 +31,16 @@ pub(super) fn classify_report_command(
             )?;
             Ok(Command::Plan(PlanInvocation { report, format }))
         }
-        Some(Verb::ExternalAssess) => {
-            let [plan, evidence] = classify_pure(
-                codes,
-                gathered,
+        Some(Verb::LocaleAssess) => {
+            let [plan, evidence] = assess_pair(codes, gathered, format)?;
+            Ok(Command::LocaleAssess(AssessInvocation {
+                plan,
+                evidence,
                 format,
-                &[OutputFormat::Human, OutputFormat::Json],
-                [&gathered.plan, &gathered.evidence],
-                &[
-                    &gathered.report,
-                    &gathered.target,
-                    &gathered.target_bytes_hex,
-                ],
-            )?;
+            }))
+        }
+        Some(Verb::ExternalAssess) => {
+            let [plan, evidence] = assess_pair(codes, gathered, format)?;
             Ok(Command::Assess(AssessInvocation {
                 plan,
                 evidence,
@@ -113,6 +110,26 @@ pub(super) fn classify_report_command(
             Err(codes)
         }
     }
+}
+
+/// The shared pair form: one plan and one evidence document, judged offline.
+fn assess_pair(
+    codes: BTreeSet<Code>,
+    gathered: &Gathered,
+    format: OutputFormat,
+) -> Result<[PathBuf; 2], BTreeSet<Code>> {
+    classify_pure(
+        codes,
+        gathered,
+        format,
+        &[OutputFormat::Human, OutputFormat::Json],
+        [&gathered.plan, &gathered.evidence],
+        &[
+            &gathered.report,
+            &gathered.target,
+            &gathered.target_bytes_hex,
+        ],
+    )
 }
 
 fn classify_record_set(
