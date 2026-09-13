@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -91,13 +92,7 @@ pub(crate) fn floor_input() -> FloorInput {
   "resource_limits": []
 }"#;
     let floor = parse_organization_floor(doc.as_bytes()).unwrap();
-    let digest = Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/organization-floor")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest("amiss/organization-floor", &floor).unwrap();
     FloorInput {
         floor,
         digest,
@@ -302,13 +297,7 @@ fn parsed_control<T: serde::Serialize>(
     let value = parse(doc.as_bytes())
         .map_err(|defect| format!("{defect:?}"))
         .unwrap();
-    let digest = Digest::from(
-        sha2::Sha256::new_with_prefix(domain)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&value).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest(domain, &value).unwrap();
     (value, digest)
 }
 

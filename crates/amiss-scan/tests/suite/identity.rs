@@ -11,6 +11,7 @@ use amiss_scan::report::{
 };
 use amiss_scan::resolve::Intent;
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{
     Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
@@ -95,13 +96,7 @@ fn fixture_digest(name: &str, definition: &str, domain: &str) -> Digest {
     ReportSchemaFragment::new(definition).assert_value(&schema_value, name);
     let value: Value =
         serde_json::from_slice::<Value>(&bytes).expect("the identity fixture is strict JSON");
-    Digest::from(
-        sha2::Sha256::new_with_prefix(domain)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&value).unwrap())
-            .finalize()
-            .0,
-    )
+    document_digest(domain, &value).unwrap()
 }
 
 fn snapshot(commit: char, tree: char) -> SnapshotIdentity {

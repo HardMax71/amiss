@@ -4,6 +4,7 @@
 )]
 
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::document_digest;
 use amiss_wire::external::{
     ASSESSMENT_PAYLOAD_SCHEMA, AssessDefect, AssessmentDefect, EVIDENCE_SCHEMA, ExternalEvidence,
     ExternalEvidenceProducer, ExternalEvidenceRow, ExternalEvidenceSchema, ExternalVerdict,
@@ -397,14 +398,9 @@ fn the_envelope_binds_the_source_digest_and_its_own() {
         &Value::from(PLAN_ENVELOPE_SCHEMA)
     );
     let payload = (derived).get("payload").expect("fixture field");
-    let recomputed = Digest::from(
-        sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(payload).expect("fixture JSON"))
-            .finalize()
-            .0,
-    )
-    .to_string();
+    let recomputed = document_digest(PLAN_PAYLOAD_SCHEMA, payload)
+        .expect("fixture JSON")
+        .to_string();
     assert_eq!(
         (derived).get("payload_digest").expect("fixture field"),
         &Value::from(recomputed),
@@ -1335,13 +1331,7 @@ fn the_judge_is_no_laxer_than_its_contracts() {
         ("removed", Value::Array(Vec::new())),
         ("retained_count", Value::from(0)),
     ]);
-    let digest = Digest::from(
-        sha2::Sha256::new_with_prefix(PLAN_PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&payload).expect("fixture JSON"))
-            .finalize()
-            .0,
-    );
+    let digest = document_digest(PLAN_PAYLOAD_SCHEMA, &payload).expect("fixture JSON");
     let handcrafted = Value::from_iter(vec![
         ("schema", Value::from(PLAN_ENVELOPE_SCHEMA)),
         ("payload", payload),

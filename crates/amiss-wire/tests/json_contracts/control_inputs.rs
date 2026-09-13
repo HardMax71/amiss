@@ -1,6 +1,6 @@
+use amiss_wire::envelope::document_digest;
 use amiss_wire::requests::{ControlsRequest, RequestTrust, SuppliedControl};
 use serde::de::DeserializeOwned;
-use sha2::Digest as _;
 
 #[expect(
     clippy::expect_used,
@@ -11,13 +11,7 @@ fn supplied<T: DeserializeOwned + serde::Serialize>(
     domain: &str,
 ) -> SuppliedControl<T> {
     let value = serde_json::from_slice(bytes).expect("the published control parses");
-    let expected_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(domain)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&value).expect("the fixture serializes"))
-            .finalize()
-            .0,
-    );
+    let expected_digest = document_digest(domain, &value).expect("the fixture serializes");
     SuppliedControl {
         value,
         expected_digest,

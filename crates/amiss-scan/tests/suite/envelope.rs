@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use amiss_wire::report::model::{ReportEnvelope, ReportPayload};
 use amiss_wire::report::{
     AnalysisErrorCode, EngineProvenance, FATAL_SCRATCH_BYTES, MACHINE_JSON_BYTES, PAYLOAD_SCHEMA,
@@ -246,13 +247,7 @@ fn the_maximal_fatal_envelope_fits_the_wire_reservation() {
     *((payload).get_mut("result").expect("fixture member exists"))
         .get_mut("error_count")
         .expect("fixture member exists") = Value::from(64);
-    let payload_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(payload).unwrap())
-            .finalize()
-            .0,
-    );
+    let payload_digest = document_digest(PAYLOAD_SCHEMA, payload).unwrap();
 
     let mut maximal = Value::Object(envelope_members);
     *maximal

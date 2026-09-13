@@ -3,6 +3,7 @@
     reason = "integration fixtures construct known-valid wire identities"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -171,13 +172,7 @@ fn policy() -> PolicyControls {
 
 fn supplied<T: serde::Serialize>(value: T, domain: &str) -> SuppliedControl<T> {
     SuppliedControl {
-        expected_digest: Digest::from(
-            sha2::Sha256::new_with_prefix(domain)
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&value).unwrap())
-                .finalize()
-                .0,
-        ),
+        expected_digest: document_digest(domain, &value).unwrap(),
         value,
         trust_source: RequestTrust::OrganizationPolicy,
     }
@@ -761,29 +756,11 @@ fn typed_policy_controls_remain_bound_to_the_target_and_the_supplied_floor() {
         let mut policy = policy();
         mutate(&mut policy);
         let floor = policy.organization_floor.as_mut().unwrap();
-        floor.expected_digest = Digest::from(
-            sha2::Sha256::new_with_prefix("amiss/organization-floor")
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&floor.value).unwrap())
-                .finalize()
-                .0,
-        );
+        floor.expected_digest = document_digest("amiss/organization-floor", &floor.value).unwrap();
         let debt = policy.debt_snapshot.as_mut().unwrap();
-        debt.expected_digest = Digest::from(
-            sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&debt.value).unwrap())
-                .finalize()
-                .0,
-        );
+        debt.expected_digest = document_digest("amiss/debt-snapshot", &debt.value).unwrap();
         let waiver = policy.waiver_bundle.as_mut().unwrap();
-        waiver.expected_digest = Digest::from(
-            sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&waiver.value).unwrap())
-                .finalize()
-                .0,
-        );
+        waiver.expected_digest = document_digest("amiss/waiver-bundle", &waiver.value).unwrap();
         assert_eq!(
             bootstrap(&run_request(policy), &[]).unwrap_err(),
             BootstrapJobError::ControlBinding,

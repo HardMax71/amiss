@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -454,14 +455,9 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
     let constraint =
         parse_execution_constraint(&serde_json_canonicalizer::to_vec(&descriptor).unwrap())
             .unwrap();
-    let constraint_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&constraint).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string();
+    let constraint_digest = document_digest("amiss/scanner-execution-constraint", &constraint)
+        .unwrap()
+        .to_string();
     let mut envelope = serde_json::from_slice::<Value>(&wire).unwrap();
     let payload = envelope.get_mut("payload").expect("fixture member exists");
     let evaluation = (payload)
@@ -535,14 +531,9 @@ fn seal_evaluation(evaluation: &mut Value) -> String {
         "schema".to_owned(),
         Value::from(CANDIDATE_IDENTITY_DOMAIN.to_owned()),
     ));
-    amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&Value::from_iter(identity)).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string()
+    document_digest(CANDIDATE_IDENTITY_DOMAIN, &Value::from_iter(identity))
+        .unwrap()
+        .to_string()
 }
 
 fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String) {
@@ -578,14 +569,9 @@ fn sealed_statement(evaluation: &Value, identity_digest: &str) -> (Value, String
     ]);
     let parsed =
         parse_trusted_time(&serde_json_canonicalizer::to_vec(&statement).unwrap()).unwrap();
-    let digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&parsed).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string();
+    let digest = document_digest("amiss/scanner-trusted-time-statement", &parsed)
+        .unwrap()
+        .to_string();
     (statement, digest)
 }
 

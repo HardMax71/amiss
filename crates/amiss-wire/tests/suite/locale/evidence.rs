@@ -4,6 +4,7 @@
     reason = "tests mutate values produced by the checked locale evidence writer"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::{fs, path::Path};
 
@@ -330,13 +331,7 @@ fn pages_mut(value: &mut Value) -> &mut [Value] {
 }
 
 fn sealed(mut value: Value) -> Vec<u8> {
-    let digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(EVIDENCE_PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(value.get("payload").unwrap()).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest(EVIDENCE_PAYLOAD_SCHEMA, value.get("payload").unwrap()).unwrap();
     *(value).get_mut("payload_digest").unwrap() = Value::from(digest.to_string());
     serde_json_canonicalizer::to_vec(&value).unwrap()
 }

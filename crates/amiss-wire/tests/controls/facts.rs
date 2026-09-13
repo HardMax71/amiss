@@ -4,6 +4,7 @@ use amiss_wire::controls::{
     MissingResolution, StructuralResolution, parse_debt_snapshot, parse_fact,
 };
 use amiss_wire::de::{Error, ErrorKind};
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 
 use amiss_wire::report::model::{FindingFactEvidence, RepoPath};
@@ -76,20 +77,8 @@ fn parse_debt_fact(
     resolution: &str,
 ) -> Result<DebtSnapshot, Error> {
     let fact = fact(fact_finding_kind, key_input, resolution);
-    let finding_key = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&fact.key_input).unwrap())
-            .finalize()
-            .0,
-    );
-    let fact_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(FACT_DOMAIN)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&fact).unwrap())
-            .finalize()
-            .0,
-    );
+    let finding_key = document_digest(FINDING_KEY_DOMAIN, &fact.key_input).unwrap();
+    let fact_digest = document_digest(FACT_DOMAIN, &fact).unwrap();
     let template: DebtSnapshot = serde_json::from_slice(DEBT).unwrap();
     let mut document = serde_json::to_value(template).unwrap();
     let item = &mut document["items"][0];

@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::borrow::Cow;
 
@@ -127,13 +128,8 @@ fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
     ] {
         let mut document = original.clone();
         document.payload.observations = observations;
-        document.payload_digest = amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
-                .finalize()
-                .0,
-        );
+        document.payload_digest =
+            document_digest(semantic::PAYLOAD_SCHEMA, &document.payload).unwrap();
         let defect = semantic::validate(&document).unwrap_err();
         assert_eq!(defect.kind, kind);
         assert_eq!(
@@ -144,13 +140,7 @@ fn decoded_evidence_keeps_the_byte_readers_digest_and_semantic_checks() {
 
     let mut document = original;
     document.payload.producer.version = "not a version".to_owned();
-    document.payload_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
-            .finalize()
-            .0,
-    );
+    document.payload_digest = document_digest(semantic::PAYLOAD_SCHEMA, &document.payload).unwrap();
     let defect = semantic::validate(&document).unwrap_err();
     assert_eq!(defect.kind, ErrorKind::InvalidValue);
     assert_eq!(defect.path, "$.payload.producer.version");

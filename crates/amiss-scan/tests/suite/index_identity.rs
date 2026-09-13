@@ -1,5 +1,6 @@
 use amiss_scan::report::{INDEX_PROJECTION_SCHEMA, SNAPSHOT_SCHEMA, synthetic_candidate};
 use amiss_wire::controls::GitMode;
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use sha2::Digest as _;
 
@@ -45,13 +46,8 @@ fn typed_index_identities_hash_every_entry_field_without_changing_the_wire() {
                          "object_oid": "a".repeat(width), "skip_worktree": !skip}
                     ]
                 });
-                let projection_digest = amiss_wire::model::Digest::from(
-                    sha2::Sha256::new_with_prefix(INDEX_PROJECTION_SCHEMA)
-                        .chain_update([0_u8])
-                        .chain_update(serde_json_canonicalizer::to_vec(&projection).unwrap())
-                        .finalize()
-                        .0,
-                );
+                let projection_digest =
+                    document_digest(INDEX_PROJECTION_SCHEMA, &projection).unwrap();
                 let snapshot = serde_json::json!({
                     "schema": "amiss/scanner-snapshot", "kind": "index",
                     "identity_scope": "complete-logical-index", "base_object_format": name,

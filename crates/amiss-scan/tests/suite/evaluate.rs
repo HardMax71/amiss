@@ -11,6 +11,7 @@ use amiss_scan::policy::{Effects, TimeContext, WaiverContext};
 use amiss_scan::resolve::{Intent, Resolution};
 use amiss_scan::scan::{ScannedOccurrence, SpanDisplay};
 use amiss_wire::controls::{Profile, SourceConstruct, TargetKind};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::ControlStateSource;
 use amiss_wire::report::{
@@ -831,13 +832,8 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
         evaluation_instant: instant,
         valid_until: moment("2026-07-02T00:10:00Z"),
     };
-    let time_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&statement).expect("trusted time"))
-            .finalize()
-            .0,
-    );
+    let time_digest =
+        document_digest("amiss/scanner-trusted-time-statement", &statement).expect("trusted time");
     let policy = Effects {
         waiver: Some(WaiverContext {
             digest: amiss_wire::model::Digest::from(

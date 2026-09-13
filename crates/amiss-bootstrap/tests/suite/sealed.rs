@@ -5,7 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
-use sha2::Digest as _;
+use amiss_wire::envelope::document_digest;
 use std::fs;
 use std::path::Path;
 use std::process::ExitStatus;
@@ -101,14 +101,9 @@ fn identity_digest(evaluation: &Value) -> String {
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect();
     identity.push(("schema".to_owned(), Value::from(CANDIDATE_IDENTITY_DOMAIN)));
-    amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(CANDIDATE_IDENTITY_DOMAIN)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&Value::from_iter(identity)).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string()
+    document_digest(CANDIDATE_IDENTITY_DOMAIN, &Value::from_iter(identity))
+        .unwrap()
+        .to_string()
 }
 
 fn statement_value(repository: &Value, ties: &StatementTies, identity: &str) -> Value {
@@ -182,27 +177,18 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
     let parsed_statement: TrustedTimeStatement =
         serde::Deserialize::deserialize(&statement).expect("a valid statement fixture");
     parsed_statement.validate().unwrap();
-    let statement_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-trusted-time-statement")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&parsed_statement).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string();
+    let statement_digest =
+        document_digest("amiss/scanner-trusted-time-statement", &parsed_statement)
+            .unwrap()
+            .to_string();
 
     let descriptor = example("scanner-execution-constraint.json");
     let constraint: ExecutionConstraintDescriptor =
         serde::Deserialize::deserialize(&descriptor).expect("a valid constraint fixture");
     constraint.validate().unwrap();
-    let constraint_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&constraint).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string();
+    let constraint_digest = document_digest("amiss/scanner-execution-constraint", &constraint)
+        .unwrap()
+        .to_string();
 
     seal_controls(
         payload,
@@ -215,14 +201,9 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
         patch(payload);
     }
 
-    let digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(payload).unwrap())
-            .finalize()
-            .0,
-    )
-    .to_string();
+    let digest = document_digest(PAYLOAD_SCHEMA, payload)
+        .unwrap()
+        .to_string();
     (&mut envelope)["payload_digest"] = Value::from((digest).as_str());
     let mut wire = serde_json_canonicalizer::to_vec(&envelope).unwrap();
     wire.push(b'\n');

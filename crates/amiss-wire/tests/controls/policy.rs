@@ -3,6 +3,7 @@ use amiss_wire::controls::{
     SOURCE_MARKER_BYTES, check_projection_source, parse_scanner_policy,
 };
 use amiss_wire::de::ErrorKind;
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 
 use amiss_wire::model::RepoPathText;
@@ -40,13 +41,7 @@ fn parses_the_policy_fixture() {
     assert_eq!(source.path.as_str(), "examples/generated.txt");
     assert_eq!(source.start_marker, "// amiss:generated:start");
     assert_eq!(source.end_marker, "// amiss:generated:end");
-    let digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/scanner-policy")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&policy).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest("amiss/scanner-policy", &policy).unwrap();
     let reparsed = parse_scanner_policy(POLICY).unwrap();
     assert_eq!(
         digest,

@@ -1,4 +1,5 @@
 use amiss_bootstrap::result::BootstrapResult;
+use amiss_wire::envelope::document_digest;
 use amiss_wire::{
     assessment::Nullable,
     report::{
@@ -35,13 +36,7 @@ pub(super) fn capture(staged: &Release) {
             version: producer.version.clone(),
         },
     }]);
-    report.payload_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&report.payload).unwrap())
-            .finalize()
-            .0,
-    );
+    report.payload_digest = document_digest(PAYLOAD_SCHEMA, &report.payload).unwrap();
     run.wire = serde_json_canonicalizer::to_vec(&report).unwrap();
     run.wire.push(b'\n');
     run.requests.controls.semantic_evidence = vec![SuppliedSemanticEvidence {
@@ -181,13 +176,8 @@ fn semantic_defects(
     .into_iter()
     .map(|(mut invalid, rebind)| {
         if rebind {
-            invalid.payload_digest = amiss_wire::model::Digest::from(
-                sha2::Sha256::new_with_prefix(semantic::PAYLOAD_SCHEMA)
-                    .chain_update([0_u8])
-                    .chain_update(serde_json_canonicalizer::to_vec(&invalid.payload).unwrap())
-                    .finalize()
-                    .0,
-            );
+            invalid.payload_digest =
+                document_digest(semantic::PAYLOAD_SCHEMA, &invalid.payload).unwrap();
         }
         invalid
     })

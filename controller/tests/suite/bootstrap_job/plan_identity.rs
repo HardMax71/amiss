@@ -3,6 +3,7 @@ use amiss_controller::{
     SemanticEvidenceTemplate, WorkflowArtifactExpectation, check_binding, check_plan,
 };
 use amiss_wire::controls::Profile;
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
 use amiss_wire::requests::RequestTrust;
@@ -112,13 +113,8 @@ fn changing_a_typed_control_and_its_digest_cannot_preserve_a_frozen_plan() {
         |policy| {
             let floor = policy.organization_floor.as_mut().unwrap();
             floor.value.floor_id = ArtifactId::new("other-floor".to_owned()).unwrap();
-            floor.expected_digest = Digest::from(
-                sha2::Sha256::new_with_prefix("amiss/organization-floor")
-                    .chain_update([0_u8])
-                    .chain_update(serde_json_canonicalizer::to_vec(&floor.value).unwrap())
-                    .finalize()
-                    .0,
-            );
+            floor.expected_digest =
+                document_digest("amiss/organization-floor", &floor.value).unwrap();
         },
         |policy| {
             let debt = policy.debt_snapshot.as_mut().unwrap();
@@ -129,13 +125,7 @@ fn changing_a_typed_control_and_its_digest_cannot_preserve_a_frozen_plan() {
                     .finalize()
                     .0,
             );
-            debt.expected_digest = Digest::from(
-                sha2::Sha256::new_with_prefix("amiss/debt-snapshot")
-                    .chain_update([0_u8])
-                    .chain_update(serde_json_canonicalizer::to_vec(&debt.value).unwrap())
-                    .finalize()
-                    .0,
-            );
+            debt.expected_digest = document_digest("amiss/debt-snapshot", &debt.value).unwrap();
         },
         |policy| {
             let waiver = policy.waiver_bundle.as_mut().unwrap();
@@ -146,13 +136,7 @@ fn changing_a_typed_control_and_its_digest_cannot_preserve_a_frozen_plan() {
                     .finalize()
                     .0,
             );
-            waiver.expected_digest = Digest::from(
-                sha2::Sha256::new_with_prefix("amiss/waiver-bundle")
-                    .chain_update([0_u8])
-                    .chain_update(serde_json_canonicalizer::to_vec(&waiver.value).unwrap())
-                    .finalize()
-                    .0,
-            );
+            waiver.expected_digest = document_digest("amiss/waiver-bundle", &waiver.value).unwrap();
         },
         |policy| {
             policy.organization_floor.as_mut().unwrap().trust_source =

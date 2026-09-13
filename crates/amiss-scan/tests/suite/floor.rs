@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -55,13 +56,7 @@ const EMPTY_ARRAYS: &str = r#"  "minimum_dispositions": [],
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 fn floor_input(extra: &str) -> FloorInput {
     let floor = parse_organization_floor(floor_json(extra).as_bytes()).unwrap();
-    let digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix("amiss/organization-floor")
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&floor).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest("amiss/organization-floor", &floor).unwrap();
     FloorInput {
         floor,
         digest,
@@ -169,13 +164,7 @@ fn the_floor_binding_is_repository_ref_and_profile_ordering() {
     .map_err(|defect| format!("{defect:?}"))
     .unwrap();
     let strict = FloorInput {
-        digest: amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix("amiss/organization-floor")
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&strict_floor).unwrap())
-                .finalize()
-                .0,
-        ),
+        digest: document_digest("amiss/organization-floor", &strict_floor).unwrap(),
         floor: strict_floor,
         trust_source: RequestTrust::OrganizationPolicy,
     };

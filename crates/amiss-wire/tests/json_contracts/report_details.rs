@@ -1,3 +1,4 @@
+use amiss_wire::envelope::document_digest;
 use amiss_wire::{
     controls::{FACT_DOMAIN, FINDING_KEY_DOMAIN, ProjectionKind},
     report::{
@@ -76,13 +77,7 @@ pub(super) fn reports() -> Vec<ReportEnvelope> {
             control_path: None,
             rule_id: kind.as_ref().to_owned(),
         };
-        finding.finding_key = amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix(FINDING_KEY_DOMAIN)
-                .chain_update([0_u8])
-                .chain_update(serde_json_canonicalizer::to_vec(&finding.key_input).unwrap())
-                .finalize()
-                .0,
-        );
+        finding.finding_key = document_digest(FINDING_KEY_DOMAIN, &finding.key_input).unwrap();
         let fact = finding.candidate_fact.as_mut().unwrap();
         fact.finding_kind = kind;
         fact.key_input = finding.key_input.clone();

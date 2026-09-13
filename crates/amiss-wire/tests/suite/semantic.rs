@@ -3,6 +3,7 @@
     reason = "integration assertions over values constructed in the same test"
 )]
 
+use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::borrow::Cow;
 
@@ -338,13 +339,7 @@ fn tampered_and_unsorted_payloads_are_refused() {
             .kind,
         ErrorKind::DigestMismatch
     );
-    document.payload_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&document.payload).unwrap())
-            .finalize()
-            .0,
-    );
+    document.payload_digest = document_digest(PAYLOAD_SCHEMA, &document.payload).unwrap();
     assert_eq!(
         parse(&serde_json_canonicalizer::to_vec(&document).unwrap())
             .unwrap_err()
@@ -366,13 +361,8 @@ fn received_semantic_payloads_keep_shape_digest_and_contract_error_precedence() 
     let digest_error = parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(digest_error.path, "$.payload_digest");
     assert_eq!(digest_error.kind, ErrorKind::DigestMismatch);
-    document["payload_digest"] = serde_json::json!(amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(&document["payload"]).unwrap())
-            .finalize()
-            .0
-    ));
+    document["payload_digest"] =
+        serde_json::json!(document_digest(PAYLOAD_SCHEMA, &document["payload"]).unwrap());
     let contract_error = parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(contract_error.path, "$.payload.producer.version");
     assert_eq!(contract_error.kind, ErrorKind::InvalidValue);

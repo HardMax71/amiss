@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use amiss_fixtures::{PublicationAuditFixture, publication_audit};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::Digest;
 use amiss_wire::publication::{PublicationEvidence, PublicationPlan, PublicationVerdict, assess};
@@ -87,13 +88,7 @@ fn null_target_is_distinct_from_an_absent_target_key() -> Result<(), ArtifactErr
         return Err(ArtifactError::Corrupt);
     };
     members.remove("target_ref").ok_or(ArtifactError::Corrupt)?;
-    let payload_digest = Digest::from(
-        sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(payload).unwrap())
-            .finalize()
-            .0,
-    );
+    let payload_digest = document_digest(amiss_wire::report::PAYLOAD_SCHEMA, payload).unwrap();
     *envelope
         .iter_mut()
         .find_map(|(key, value)| (key == "payload_digest").then_some(value))
@@ -178,13 +173,7 @@ fn incomplete_reports_and_oversized_publication_documents_are_refused() -> Resul
         ("exit_code".to_owned(), Value::from(2)),
         ("status".to_owned(), Value::from("incomplete".to_owned())),
     ]);
-    let digest = Digest::from(
-        sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(serde_json_canonicalizer::to_vec(payload).unwrap())
-            .finalize()
-            .0,
-    );
+    let digest = document_digest(amiss_wire::report::PAYLOAD_SCHEMA, payload).unwrap();
     let digest_value = envelope
         .iter_mut()
         .find_map(|(key, value)| (key == "payload_digest").then_some(value))
