@@ -95,6 +95,15 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+      # The scanner fuzz crate is its own manifest, so the workspace lints
+      # never see it; CI runs this exact command.
+      - id: fuzz-clippy
+        name: cargo clippy on the scanner fuzz crate
+        entry: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
+        language: system
+        types_or: [rust, toml]
+        pass_filenames: false
+        stages: [pre-push]
       - id: deny
         name: cargo deny
         entry: cargo deny check
