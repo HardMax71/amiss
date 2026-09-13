@@ -44,7 +44,8 @@ both inventories, so a locale version label cannot impersonate a release identit
 
 ## The offline boundary is part of the result
 
-No command or controller lane currently acquires locale evidence. Publication has controller
+No controller lane acquires locale evidence; the command that stages it from a checkout,
+`amiss locale-inventory`, came after this phase. Publication has controller
 validation and durable retention, but no provider lane authenticates deployment completion or
 publishes a post-deployment audit. GitHub, GitLab, and Gitea-family deployment integration remains
 operator gated because their environment, artifact, credential, completion, and public-destination

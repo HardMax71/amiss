@@ -359,6 +359,16 @@ pub(crate) fn inventory(payload: &amiss_wire::locale::LocaleCoverageEvidence) {
         &mut out,
         format_args!("target pages still carrying the source bytes: {identical}"),
     );
+    let producer = &payload.producer;
+    line(
+        &mut out,
+        format_args!(
+            "producer {} {} context {}",
+            producer.identity.as_str(),
+            producer.version,
+            producer.context_digest,
+        ),
+    );
 }
 
 pub(crate) fn assessment(payload: &amiss_wire::external::ExternalAssessment) {

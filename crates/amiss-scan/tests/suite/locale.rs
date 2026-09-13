@@ -1,5 +1,6 @@
 #![expect(
     clippy::unwrap_used,
+    clippy::expect_used,
     reason = "the fixture builds known-valid repositories and coverage plans"
 )]
 
@@ -20,6 +21,7 @@ use amiss_wire::locale::{
 use amiss_wire::model::{ArtifactId, Digest, ObjectFormat, RepoPathText};
 
 const PLAN: &[u8] = include_bytes!("../../../../spec/examples/locale-coverage-plan.json");
+const CHAPTER: &str = include_str!("../../../../docs/src/locale-coverage.md");
 
 fn side(root: &str, locale: &str, suffix: Option<&str>) -> LocaleSide {
     LocaleSide {
@@ -251,4 +253,53 @@ fn a_context_the_plan_does_not_name_refuses() {
         produce(&chain, &swapped, &plan),
         Err(InventoryError::Context)
     );
+}
+
+/// Every context the locale chapter prints, in the order it prints them.
+fn documented() -> Vec<LocaleTreeContext> {
+    CHAPTER
+        .split("```json")
+        .skip(1)
+        .filter_map(|block| block.split("```").next())
+        .map(|block| {
+            serde_json::from_str(block)
+                .expect("every JSON block in the locale chapter is a locale context")
+        })
+        .collect()
+}
+
+#[test]
+fn the_documented_contexts_key_the_layouts_they_claim() {
+    let directories = staged_repository(&[
+        ("docs/guide/start.md", Staged::File(b"# Start\n")),
+        ("docs/index.mdx", Staged::File(b"# Widget\n")),
+        ("docs/logo.png", Staged::File(b"\x89PNG")),
+        (
+            "i18n/de-DE/docusaurus-plugin-content-docs/current/guide/start.md",
+            Staged::File(b"# Anfang\n"),
+        ),
+    ])
+    .unwrap();
+    let filenames = staged_repository(&[
+        ("docs/guide/start.md", Staged::File(b"# Start\n")),
+        ("docs/guide/start.de-DE.md", Staged::File(b"# Anfang\n")),
+    ])
+    .unwrap();
+    let claimed = [
+        (vec!["guide/start.md", "index.mdx"], vec!["guide/start.md"]),
+        (vec!["guide/start.md"], vec!["guide/start.md"]),
+    ];
+
+    for ((context, chain), (source, target)) in documented()
+        .into_iter()
+        .zip([directories, filenames])
+        .zip(claimed)
+    {
+        let plan = plan(&chain, &context, |_plan| {});
+        let owned = |keys: Vec<&str>| keys.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        assert_eq!(
+            keys(&inventory(&chain, &context, &plan)),
+            (owned(source), owned(target))
+        );
+    }
 }

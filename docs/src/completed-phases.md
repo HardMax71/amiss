@@ -57,7 +57,7 @@ projection contract.
 [Offline audit sidecars](completed/offline-audit-sidecars.md) separated publication and locale facts
 from the scanner report without weakening either. Closed plan, evidence, and assessment contracts,
 exact report and product bindings, durable publication replay, page coverage, fallback provenance,
-and source lineage—with live deployment and locale intake still stated as operator-gated work.
+and source lineage, with live deployment still stated as operator-gated work.
 
 [Cross-repository relation core](completed/cross-repository-relation-core.md) proved that one
 operator-owned relation can bind four exact snapshots, survive supersession and restart, and stage
