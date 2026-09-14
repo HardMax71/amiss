@@ -5,12 +5,12 @@ use std::sync::Arc;
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckConclusion, GiteaWebhook,
     IngressCheck, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace, Publication,
-    VerifiedDelivery,
+    PullRequestChange, VerifiedDelivery,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-use crate::identity::{parse_change_id, positive, provider_run};
+use crate::identity::{positive, provider_run};
 use crate::{DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestSource};
 
 pub struct GiteaPullRequestAdapter<A> {
@@ -100,7 +100,12 @@ fn validate_delivery<'a>(
         .parse::<u64>()
         .ok()
         .and_then(positive);
-    let change = parse_change_id(delivery.change.change.as_str());
+    let change = delivery
+        .change
+        .change
+        .as_str()
+        .parse::<PullRequestChange>()
+        .ok();
     let run_digest = delivery
         .provider_run
         .run_id
@@ -134,7 +139,11 @@ fn validate_delivery<'a>(
     let reviewer_id = reviewer_id
         .filter(|id| *id == reviewer.id)
         .ok_or(ProviderError::InvalidResponse)?;
-    let (repository_id, pull_request_id, number) = change.ok_or(ProviderError::InvalidResponse)?;
+    let PullRequestChange {
+        repository_id,
+        pull_request_id,
+        number,
+    } = change.ok_or(ProviderError::InvalidResponse)?;
     Ok(GiteaPullRequest {
         change: &delivery.change,
         reviewer_id,

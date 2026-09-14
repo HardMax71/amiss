@@ -1,7 +1,7 @@
-use amiss_controller::{RunIdentity, RunRequest};
+use amiss_controller::{PullRequestChange, RunIdentity, RunRequest};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-use crate::identity::{canonical_host, parse_change_id, positive, provider_run};
+use crate::identity::{canonical_host, positive, provider_run};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum GiteaPlanError {
@@ -39,8 +39,11 @@ pub fn gitea_fetch_plan(request: &RunRequest) -> Result<GiteaFetchPlan, GiteaPla
         .ok()
         .and_then(positive)
         .ok_or(GiteaPlanError::InvalidRequest)?;
-    let _change =
-        parse_change_id(run.change.change.as_str()).ok_or(GiteaPlanError::InvalidRequest)?;
+    run.change
+        .change
+        .as_str()
+        .parse::<PullRequestChange>()
+        .map_err(|_defect| GiteaPlanError::InvalidRequest)?;
     let expected_run = provider_run(
         &request.delivery.integration,
         &run.change,

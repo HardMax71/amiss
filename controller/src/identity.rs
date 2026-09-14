@@ -5,6 +5,8 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
+mod tests;
+
 fn bounded(raw: String, maximum: usize, valid: impl Fn(u8) -> bool) -> Option<String> {
     let bytes = raw.as_bytes();
     (!bytes.is_empty() && bytes.len() <= maximum && bytes.iter().all(|byte| valid(*byte)))
@@ -168,6 +170,32 @@ pub struct ChangeLocator {
     pub provider: ProviderIdentity,
     pub repository: RepositoryIdentity,
     pub change: ChangeId,
+}
+
+/// Where a pull request sits in a GitHub-family API: the repository and the
+/// pull request by id, and the pull request by number. Its change id spells
+/// all three, so a stored locator can be held against a refreshed one.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, parse_display::Display, parse_display::FromStr)]
+#[display("repository/{repository_id}/pull/{pull_request_id}/number/{number}")]
+pub struct PullRequestChange {
+    #[from_str(regex = "[1-9][0-9]*")]
+    pub repository_id: u64,
+    #[from_str(regex = "[1-9][0-9]*")]
+    pub pull_request_id: u64,
+    #[from_str(regex = "[1-9][0-9]*")]
+    pub number: u64,
+}
+
+impl PullRequestChange {
+    /// Every id is positive, as the providers issue them.
+    #[must_use]
+    pub fn new(repository_id: u64, pull_request_id: u64, number: u64) -> Option<Self> {
+        (repository_id > 0 && pull_request_id > 0 && number > 0).then_some(Self {
+            repository_id,
+            pull_request_id,
+            number,
+        })
+    }
 }
 
 impl FromStr for ProviderNamespace {

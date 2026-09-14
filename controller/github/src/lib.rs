@@ -13,8 +13,8 @@ use amiss_controller::{
     AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion,
     DeliveryId, DeliveryIdentity, GitHubWebhook, IngressCheck, IntegrationId, OpaqueId,
     ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace, ProviderRunAttempt,
-    ProviderRunId, ProviderRunIdentity, Publication, SignedTimePolicy, VerifiedDelivery,
-    WebhookProof, WorkflowArtifactExpectation,
+    ProviderRunId, ProviderRunIdentity, Publication, PullRequestChange, SignedTimePolicy,
+    VerifiedDelivery, WebhookProof, WorkflowArtifactExpectation,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
@@ -362,12 +362,12 @@ fn bind_pull_request(
 ) -> Result<PullRequestFacts, ProviderError> {
     use ProviderError::Authentication;
 
-    let pull_request_id = positive(binding.pull_request_id).ok_or(Authentication)?;
-    let number = positive(binding.number).ok_or(Authentication)?;
+    let change = PullRequestChange::new(repository_id, binding.pull_request_id, binding.number)
+        .ok_or(Authentication)?;
     let change = ChangeLocator {
         provider: provider.clone(),
         repository,
-        change: change_id(repository_id, pull_request_id, number).ok_or(Authentication)?,
+        change: ChangeId::new(change.to_string()).ok_or(Authentication)?,
     };
     let integration = IntegrationId::new(installation_id.to_string()).ok_or(Authentication)?;
     let candidate =
@@ -497,7 +497,12 @@ fn validate_delivery<'a>(
         .parse::<u64>()
         .ok()
         .and_then(positive);
-    let change = parse_change_id(delivery.change.change.as_str());
+    let change = delivery
+        .change
+        .change
+        .as_str()
+        .parse::<PullRequestChange>()
+        .ok();
     let run_digest = delivery
         .provider_run
         .run_id
@@ -527,7 +532,11 @@ fn validate_delivery<'a>(
         return Err(ProviderError::InvalidResponse);
     }
     let installation_id = installation_id.ok_or(ProviderError::InvalidResponse)?;
-    let (repository_id, pull_request_id, number) = change.ok_or(ProviderError::InvalidResponse)?;
+    let PullRequestChange {
+        repository_id,
+        pull_request_id,
+        number,
+    } = change.ok_or(ProviderError::InvalidResponse)?;
     Ok(GitHubPullRequest {
         change: &delivery.change,
         installation_id,
@@ -597,26 +606,6 @@ fn provider_run(
 
 fn positive(value: u64) -> Option<u64> {
     (value > 0).then_some(value)
-}
-
-fn change_id(repository_id: u64, pull_request_id: u64, number: u64) -> Option<ChangeId> {
-    ChangeId::new(format!(
-        "repository/{repository_id}/pull/{pull_request_id}/number/{number}"
-    ))
-}
-
-fn parse_change_id(raw: &str) -> Option<(u64, u64, u64)> {
-    let mut fields = raw.split('/');
-    (fields.next()? == "repository").then_some(())?;
-    let repository_id = fields.next()?.parse().ok().and_then(positive)?;
-    (fields.next()? == "pull").then_some(())?;
-    let pull_request_id = fields.next()?.parse().ok().and_then(positive)?;
-    (fields.next()? == "number").then_some(())?;
-    let number = fields.next()?.parse().ok().and_then(positive)?;
-    fields
-        .next()
-        .is_none()
-        .then_some((repository_id, pull_request_id, number))
 }
 
 fn github_ref(branch: &str) -> Option<BranchRef> {

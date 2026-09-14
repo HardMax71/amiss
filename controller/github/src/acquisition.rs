@@ -2,6 +2,7 @@ mod tests;
 
 use std::sync::atomic::Ordering;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AcquiredSemanticTemplate, Acquisition, AcquisitionTarget, ProviderError, RunRequest,
     WorkflowArtifactExpectation,
@@ -93,8 +94,11 @@ pub fn github_fetch_plan(request: &RunRequest) -> Result<GitHubFetchPlan, GitHub
         .ok()
         .filter(|value| *value > 0)
         .ok_or(GitHubAcquireError::InvalidRequest)?;
-    let _change = crate::parse_change_id(run.change.change.as_str())
-        .ok_or(GitHubAcquireError::InvalidRequest)?;
+    run.change
+        .change
+        .as_str()
+        .parse::<PullRequestChange>()
+        .map_err(|_defect| GitHubAcquireError::InvalidRequest)?;
     let expected_run = crate::provider_run(
         &request.delivery.integration,
         &run.change,

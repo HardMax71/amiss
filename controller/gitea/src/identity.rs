@@ -1,5 +1,5 @@
 use amiss_controller::{
-    ChangeId, ChangeLocator, IntegrationId, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    ChangeLocator, IntegrationId, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use sha2::Digest as _;
@@ -44,26 +44,6 @@ pub(crate) fn provider_run(
 
 pub(crate) fn positive(value: u64) -> Option<u64> {
     (value > 0).then_some(value)
-}
-
-pub(crate) fn change_id(repository_id: u64, pull_request_id: u64, number: u64) -> Option<ChangeId> {
-    ChangeId::new(format!(
-        "repository/{repository_id}/pull/{pull_request_id}/number/{number}"
-    ))
-}
-
-pub(crate) fn parse_change_id(raw: &str) -> Option<(u64, u64, u64)> {
-    let mut fields = raw.split('/');
-    (fields.next()? == "repository").then_some(())?;
-    let repository_id = fields.next()?.parse().ok().and_then(positive)?;
-    (fields.next()? == "pull").then_some(())?;
-    let pull_request_id = fields.next()?.parse().ok().and_then(positive)?;
-    (fields.next()? == "number").then_some(())?;
-    let number = fields.next()?.parse().ok().and_then(positive)?;
-    fields
-        .next()
-        .is_none()
-        .then_some((repository_id, pull_request_id, number))
 }
 
 pub(crate) fn branch_ref(branch: &str) -> Option<BranchRef> {

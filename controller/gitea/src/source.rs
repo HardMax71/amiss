@@ -1,17 +1,15 @@
 use crate::states::WebhookAction;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeLocator, DeliveryId, DeliveryIdentity, GiteaWebhook, IngressCheck,
-    IntegrationId, ProviderError, ProviderIdentity, SignedTimePolicy, VerifiedDelivery,
-    WebhookProof,
+    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, GiteaWebhook,
+    IngressCheck, IntegrationId, ProviderError, ProviderIdentity, PullRequestChange,
+    SignedTimePolicy, VerifiedDelivery, WebhookProof,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use serde::Deserialize;
 use sha2::Digest as _;
 
 use crate::DedicatedReviewer;
-use crate::identity::{
-    branch_ref, canonical_host, canonical_segment, change_id, positive, provider_run,
-};
+use crate::identity::{branch_ref, canonical_host, canonical_segment, provider_run};
 
 const DELIVERY_DOMAIN: &str = "amiss/controller-gitea-family-delivery-v1";
 
@@ -100,9 +98,11 @@ impl PullRequestFacts {
         if !supported_action(&payload) {
             return None;
         }
-        let repository_id = positive(payload.repository.id)?;
-        let pull_request_id = positive(payload.pull_request.id)?;
-        let number = positive(payload.number)?;
+        let change = PullRequestChange::new(
+            payload.repository.id,
+            payload.pull_request.id,
+            payload.number,
+        )?;
         if payload.pull_request.number != payload.number
             || payload.pull_request.base.repo_id != payload.repository.id
             || payload.repository != payload.pull_request.base.repo
@@ -118,7 +118,7 @@ impl PullRequestFacts {
         let change = ChangeLocator {
             provider: provider.clone(),
             repository,
-            change: change_id(repository_id, pull_request_id, number)?,
+            change: ChangeId::new(change.to_string())?,
         };
         let integration = IntegrationId::new(reviewer.id.to_string())?;
         let candidate = Oid::new(ObjectFormat::Sha1, payload.pull_request.head.sha)?;
