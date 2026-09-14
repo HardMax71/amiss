@@ -104,6 +104,13 @@ repos:
         types_or: [rust, toml]
         pass_filenames: false
         stages: [pre-push]
+      - id: fuzz-shear
+        name: cargo shear on the scanner fuzz crate
+        entry: cargo shear --locked fuzz
+        language: system
+        types_or: [rust, toml]
+        pass_filenames: false
+        stages: [pre-push]
       - id: deny
         name: cargo deny
         entry: cargo deny check
