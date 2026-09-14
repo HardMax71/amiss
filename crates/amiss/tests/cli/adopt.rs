@@ -225,6 +225,7 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
     let statement = TrustedTimeStatement::parse(statement.as_bytes()).unwrap();
     let debt_digest = document_digest("amiss/debt-snapshot", &snapshot).unwrap();
     let shell = amiss_scan::pipeline::SetupShell {
+        scan_cache: None,
         engine,
         profile: amiss_wire::controls::Profile::Enforce,
         repository: Some(identity),

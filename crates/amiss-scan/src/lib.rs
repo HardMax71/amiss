@@ -1,5 +1,6 @@
 pub mod adoption;
 pub mod anchor;
+pub mod cache;
 pub mod claim;
 pub mod correlate;
 pub mod declared;
@@ -25,6 +26,7 @@ use amiss_md::Fault;
 use amiss_wire::controls::ResourceName;
 use amiss_wire::report::AnalysisErrorCode;
 
+pub use cache::ScanCache;
 pub use correlate::{Comparison, Impact, Observation, Outcome, Side, correlate};
 pub use discovery::{
     DocumentRecord, DocumentStatus, LabelState, SnapshotDiscovery, UnsupportedKind, discover,

@@ -26,6 +26,11 @@ fn lexical(gathered: &Gathered, format: OutputFormat) -> BTreeSet<Code> {
     if gathered.full > 0 && (gathered.verb != Some(Verb::Render) || format != OutputFormat::Human) {
         codes.insert(Code::InvalidInvocation);
     }
+    if gathered.scan_cache.occurrences > 0
+        && !matches!(gathered.verb, Some(Verb::Check | Verb::Fix))
+    {
+        codes.insert(Code::InvalidInvocation);
+    }
     codes
 }
 
@@ -81,7 +86,8 @@ pub(super) fn command(
     let adoption = record(&mut codes, classify_adoption(gathered));
     let identity = record(&mut codes, classify_identity(gathered));
     let forge = record(&mut codes, classify_forge(gathered, &identity));
-    let semantic_template = record(&mut codes, classify_semantic_template(gathered));
+    let semantic_template = record(&mut codes, classify_path(&gathered.semantic_template));
+    let scan_cache = record(&mut codes, classify_path(&gathered.scan_cache));
 
     if !codes.is_empty() {
         return Err(codes);
@@ -96,6 +102,7 @@ pub(super) fn command(
         Ok(identity),
         Ok(forge),
         Ok(semantic_template),
+        Ok(scan_cache),
     ) = (
         gathered.verb,
         target,
@@ -106,6 +113,7 @@ pub(super) fn command(
         identity,
         forge,
         semantic_template,
+        scan_cache,
     )
     else {
         return Err(BTreeSet::from([Code::InvalidInvocation]));
@@ -124,14 +132,14 @@ pub(super) fn command(
         explain_scope: gathered.explain_scope == 1,
         format,
         semantic_template,
+        scan_cache,
     })))
 }
 
-fn classify_semantic_template(gathered: &Gathered) -> Validation<Option<PathBuf>> {
-    match gathered.semantic_template.occurrences {
+fn classify_path(slot: &Slot) -> Validation<Option<PathBuf>> {
+    match slot.occurrences {
         0 => Ok(None),
-        1 => gathered
-            .semantic_template
+        1 => slot
             .unique_value()
             .filter(|path| !path.is_empty())
             .map(PathBuf::from)

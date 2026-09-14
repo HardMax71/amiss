@@ -1,4 +1,5 @@
 mod anchor;
+mod cache;
 mod claim;
 mod classify;
 mod code_fragments;

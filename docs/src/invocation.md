@@ -29,7 +29,7 @@ amiss check --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
-            [--semantic-template <path>]
+            [--semantic-template <path>] [--scan-cache <path>]
             [--explain-scope] [--format <human|json|sarif|codequality>]
 amiss fix   --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --index
@@ -38,6 +38,7 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
+            [--scan-cache <path>]
 amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
 amiss policy-include --path <repo-path> --suffix <suffix> --adapter <adapter>
                      [--repo <path> --object-format <sha1|sha256> --index]
@@ -82,6 +83,7 @@ trust them when the short form reads ambiguous.
 | `--forge` | `github`, `gitlab`, `gitea`, `bitbucket-cloud`, or `bitbucket-data-center` | URL dialect; an explicit flag beats the host table |
 | `--profile` | `observe`, `enforce-introduced`, or `enforce` | report only, block introduced findings while carrying the backlog, or let every blocking finding gate; see [Profiles and findings](profiles.md) |
 | `--semantic-template` | path | one strict, bounded, candidate-free semantic template for `check`; the scanner binds it to the exact commit or staged-index identity and the run remains self-asserted |
+| `--scan-cache` | path | a directory where `check` and `fix` keep this engine build's scans between runs; a missing or damaged row costs one parse, never a different report |
 | `--explain-scope` | none | adds deterministic scope lines to human output |
 | `--full` | none | prints every feedback item when replaying a report as human output; foreign to every other form and format |
 | `--format` | `human`, `json`, `sarif`, `codequality`, or render-only `junit` | grouped human items, the exact report in [The report](report.md), or one of its CI projections; human output is bounded unless replayed with `--full` |
@@ -150,6 +152,8 @@ complete `record-set@1` inventory. The file follows the
 is capped at 16 MiB, and cannot name a candidate or source report. The scanner waits until it has
 resolved the exact commit tree or pinned staged-index projection, binds the template to that
 candidate identity, and then applies the same compiled consumers and limits as sealed evidence.
+
+`--scan-cache` names a directory where the scanner keeps what it made of each blob under each grammar: one sealed row per blob, filed under the engine build's own digest, so another build never reads it and a damaged row is refused and parsed again. A row never changes a report, since the same build parsing the same bytes makes the same scan; it only skips the parse, which is most of a run on a repository whose documents rarely change. MDX documents are not stored, because their parse depends on the embedded-code allowance left by the documents before them. In CI, restore and save the directory the way any build cache is kept.
 Malformed, oversized, or consumer-invalid input ends the run incomplete. The path is admitted only
 by `check`: `fix`, `adopt`, authoring, and report-only commands refuse it. Because the caller chose
 the file, the report still says `sandbox.assurance: self-asserted`; this flag never enters the

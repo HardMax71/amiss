@@ -138,10 +138,6 @@ pub fn claim(bytes: &[u8]) {
     }
 }
 
-#[expect(
-    clippy::expect_used,
-    reason = "a claim outside its own grammar is a fuzz finding"
-)]
 fn claim_under(adapter: Adapter, bytes: &[u8]) {
     let mut resources = ScanResources::new(ScanLimits::CONTRACT);
     let Ok(scanned) = amiss_scan::scan_document(&mut resources, adapter, bytes) else {
@@ -175,10 +171,10 @@ fn claim_under(adapter: Adapter, bytes: &[u8]) {
                 .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-')),
             "a claim name stays inside its charset"
         );
-        let text = String::from_utf8(claim.path.as_bytes().to_vec()).expect("a claim path is text");
-        assert!(
-            amiss_wire::model::RepoPath::new(text).is_some(),
-            "a claim path revalidates"
+        assert_eq!(
+            amiss_wire::model::RepoPath::from(&claim.path).as_str(),
+            Some(claim.path.as_str()),
+            "a claim path is text"
         );
         let ceiling = u64::try_from(js_int::MAX_SAFE_INT).unwrap_or(u64::MAX);
         assert!(

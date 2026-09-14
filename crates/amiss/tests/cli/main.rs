@@ -1,5 +1,6 @@
 mod adopt;
 mod author;
+mod cache;
 mod claims;
 mod codequality;
 mod external_assess;

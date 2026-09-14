@@ -863,6 +863,7 @@ fn the_findings_counter_fires_before_the_wire_cap() {
     )
     .unwrap();
     let shell = amiss_scan::pipeline::SetupShell {
+        scan_cache: None,
         engine: engine(),
         profile: amiss_wire::controls::Profile::Observe,
         repository: None,
@@ -1091,6 +1092,7 @@ fn the_evaluation_echoes_a_self_hosted_forge_host() {
 
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let shell = amiss_scan::pipeline::SetupShell {
+        scan_cache: None,
         engine: engine(),
         profile: amiss_wire::controls::Profile::Observe,
         repository: amiss_wire::model::RepositoryIdentity::new(

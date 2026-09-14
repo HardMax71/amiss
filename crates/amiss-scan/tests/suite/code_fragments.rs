@@ -92,6 +92,7 @@ fn run(
         default_ref: Some(branch_ref!("refs/heads/main")),
     };
     let shell = SetupShell {
+        scan_cache: None,
         engine: engine(),
         profile: amiss_wire::controls::Profile::Observe,
         repository: Some(

@@ -1,11 +1,13 @@
 use crate::controls::SourceConstruct;
 use crate::report::AnalysisErrorCode;
+use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 /// The frozen node resources of `parser-work-accounting`: `nodes` is the
 /// logical node count of one document and `nesting` its maximum node depth.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Work {
     pub nodes: u64,
     pub nesting: u64,
@@ -81,21 +83,24 @@ pub enum BlockKind {
 
 /// What an include contributes to the document stream when its syntax is
 /// closed enough for the scanner to reproduce it.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum TransclusionKind {
     Parsed,
     Literal,
 }
 
 /// Why an include cannot participate in the local expansion graph.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum TransclusionRefusal {
     Context,
     DynamicTarget,
     Options,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Transclusion {
     pub target: String,
     pub span: (usize, usize),
@@ -111,7 +116,8 @@ pub struct Transclusion {
 /// post-frontmatter root to the syntax node itself; a destination mined out
 /// of a block node, raw HTML or an orphaned definition, appends its ordinal
 /// within the node.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Occurrence {
     pub construct: SourceConstruct,
     pub raw_destination: String,
@@ -133,7 +139,8 @@ pub struct Occurrence {
 /// The opaque partition of one document: the frontmatter region's byte count,
 /// then MDX intervals, then raw-HTML intervals on the remaining surface. The
 /// three never overlap.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Opaque {
     pub frontmatter_bytes: usize,
     pub mdx: Vec<(usize, usize)>,
@@ -143,7 +150,8 @@ pub struct Opaque {
 /// The trailing attribute syntax a heading may carry. Renderers disagree about
 /// it, so `suffix` keeps the exact bytes removed from the text: one group
 /// publishes `id`, the other reads the text and the suffix together.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HeadingAttribute {
     pub id: String,
     pub suffix: String,
@@ -151,8 +159,11 @@ pub struct HeadingAttribute {
 
 /// Where a heading was written. Only some renderers build an identity from one
 /// written as raw HTML, so the two are kept apart in one ordered list.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::IntoStaticStr)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::IntoStaticStr, Serialize, Deserialize,
+)]
 #[strum(serialize_all = "kebab-case")]
+#[serde(rename_all = "kebab-case")]
 pub enum HeadingSource {
     Markdown,
     #[strum(serialize = "asciidoc")]
@@ -162,7 +173,8 @@ pub enum HeadingSource {
 }
 
 /// One heading's rendered text content, in document order with its siblings.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Heading {
     pub text: String,
     pub attribute: Option<HeadingAttribute>,

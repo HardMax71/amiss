@@ -38,6 +38,7 @@ default `enforce` profile the job fails on exit classes 1 and 2. The outputs `ex
 | `object-format` | `sha1` | or `sha256` |
 | `annotations` | `true` | displayed Fixes and scan errors become file annotations |
 | `watchdog-seconds` | `120` | wall-clock window before the scan is ended |
+| `scan-cache` | empty | a directory restored and saved between runs; the engine keeps its sealed scan rows there and skips the parse of every unchanged document |
 
 When `base` and `candidate` stay empty, the event supplies them:
 

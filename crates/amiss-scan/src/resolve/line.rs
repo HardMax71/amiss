@@ -29,10 +29,11 @@ impl Resolver<'_> {
     ) -> Result<crate::claim::ClaimVerdict, Error> {
         use crate::claim::{ClaimMissingReason, ClaimVerdict};
 
+        let claim_path = RepoPath::from(&claim.path);
         let Some((mode, oid)) = self
             .snapshot
             .entries
-            .get(claim.path.as_bytes())
+            .get(claim_path.as_bytes())
             .map(|(mode, oid)| (*mode, oid.clone()))
         else {
             return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::Absent));
@@ -43,11 +44,11 @@ impl Resolver<'_> {
             }
             GitMode::RegularFile | GitMode::ExecutableFile => {}
         }
-        let evidence = read_target(self, &claim.path, mode, &oid)?;
+        let evidence = read_target(self, &claim_path, mode, &oid)?;
         if matches!(evidence, BlobContent::LfsPointer { .. }) {
             return Ok(ClaimVerdict::TargetMissing(ClaimMissingReason::LfsPointer));
         }
-        let Some(cached) = content_cache(self.cache, self.commit_oid.as_ref()).get_mut(&claim.path)
+        let Some(cached) = content_cache(self.cache, self.commit_oid.as_ref()).get_mut(&claim_path)
         else {
             return Err(Error::Internal);
         };

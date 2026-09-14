@@ -411,8 +411,8 @@ fn staged_index_result(
         &index,
         skip_count,
     )?;
-    let mut base_scan = ScanResources::new(scan_limits);
-    let mut candidate_scan = ScanResources::new(scan_limits);
+    let mut base_scan = setup_shell.scan_resources(scan_limits);
+    let mut candidate_scan = setup_shell.scan_resources(scan_limits);
     let (base_policy, candidate_policy, includes) = staged_policy(
         repo,
         &mut git_resources,

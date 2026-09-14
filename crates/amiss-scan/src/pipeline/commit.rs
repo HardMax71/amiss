@@ -184,8 +184,8 @@ fn commit_pair_result(
         &candidate_tree,
     )?;
 
-    let mut base_scan = ScanResources::new(scan_limits);
-    let mut candidate_scan = ScanResources::new(scan_limits);
+    let mut base_scan = setup_shell.scan_resources(scan_limits);
+    let mut candidate_scan = setup_shell.scan_resources(scan_limits);
     let (base_policy, candidate_policy) = pair_policies(
         repo,
         &mut git_resources,

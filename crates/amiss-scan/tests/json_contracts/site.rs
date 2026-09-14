@@ -41,6 +41,7 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
         .unwrap(),
     ];
     let setup = SetupShell {
+        scan_cache: None,
         engine: engine.clone(),
         profile: Profile::Observe,
         repository: None,

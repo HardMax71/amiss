@@ -140,6 +140,7 @@ fn run(
         requests: RequestDigests::default(),
     };
     let shell = SetupShell {
+        scan_cache: None,
         engine: engine(),
         profile: Profile::Observe,
         repository: None,

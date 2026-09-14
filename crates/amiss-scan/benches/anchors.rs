@@ -183,6 +183,7 @@ fn engine() -> EngineProvenance {
 
 fn shell() -> SetupShell {
     SetupShell {
+        scan_cache: None,
         engine: engine(),
         profile: amiss_wire::controls::Profile::Observe,
         repository: None,

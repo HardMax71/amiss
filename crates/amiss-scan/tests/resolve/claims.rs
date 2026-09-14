@@ -2,14 +2,14 @@
 
 use amiss_scan::claim::{ClaimMissingReason, ClaimVerdict, ValueClaim};
 use amiss_scan::{Error, ScanLimits};
-use amiss_wire::model::RepoPath;
+use amiss_wire::model::RepoPathText;
 
 use crate::support::{MIXED_LINES, bed, bed_with};
 
 fn claim(path: &str, line: u64, expected: &str) -> ValueClaim {
     ValueClaim {
         name: "case".to_owned(),
-        path: RepoPath::new(path.to_owned()).expect("a claim path"),
+        path: RepoPathText::try_from(path.to_owned()).expect("a claim path"),
         line,
         expected: expected.to_owned(),
     }

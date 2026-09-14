@@ -294,7 +294,7 @@ fn document_claims(
             span: governed.span,
             display: governed.display,
             source_digest: governed.digest,
-            path: claim.path.clone(),
+            path: RepoPath::from(&claim.path),
             line: claim.line,
             expected_digest: amiss_wire::model::Digest::from(
                 sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
@@ -658,9 +658,22 @@ pub struct SetupShell {
     /// pipeline re-shells with the effective value so every fatal
     /// projection honors it.
     pub errors_retained: u64,
+    /// Where scans of this engine build persist between runs; none keeps
+    /// every parse in the run.
+    pub scan_cache: Option<std::path::PathBuf>,
 }
 
 impl SetupShell {
+    /// Scan resources under `limits`, reading and writing this run's cache.
+    #[must_use]
+    pub fn scan_resources(&self, limits: ScanLimits) -> ScanResources {
+        let stored = self
+            .scan_cache
+            .as_ref()
+            .map(|root| crate::cache::ScanCache::open(root.clone(), self.engine.digest));
+        ScanResources::new(limits).with_scan_cache(stored)
+    }
+
     fn with(&self, base: SnapshotIdentity, candidate: CandidateBlock) -> Setup {
         Setup {
             engine: self.engine.clone(),

@@ -104,6 +104,7 @@ pub(crate) fn floor_input() -> FloorInput {
 
 pub(crate) fn shell(profile: Profile) -> SetupShell {
     SetupShell {
+        scan_cache: None,
         engine: engine(),
         profile,
         repository: Some(

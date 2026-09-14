@@ -74,6 +74,7 @@ fn identity(owner: &str, name: &str) -> RepositoryIdentity {
 
 fn shell(floor: Option<FloorInput>) -> SetupShell {
     SetupShell {
+        scan_cache: None,
         engine: engine(),
         profile: Profile::Observe,
         repository: Some(identity("acme", "docs")),

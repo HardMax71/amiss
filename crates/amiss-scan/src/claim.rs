@@ -1,13 +1,15 @@
 use amiss_md::extract::RESERVED_LABEL_PREFIX;
 use amiss_wire::extraction::GovernedDefinition;
 use amiss_wire::model::Digest;
-use amiss_wire::model::RepoPath;
+use amiss_wire::model::{RepoPath, RepoPathText};
+use serde::{Deserialize, Serialize};
 
 use crate::scan::SpanDisplay;
 
 /// What a reserved governed definition spells: the one claim kind this
 /// engine evaluates, or a capability it does not implement.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum GovernedForm {
     Value(ValueClaim),
     Projection { name: String },
@@ -16,10 +18,11 @@ pub enum GovernedForm {
 
 /// One value claim: the document asserts that line `line` of the repository
 /// file at `path`, without its terminator, is exactly `expected`.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ValueClaim {
     pub name: String,
-    pub path: RepoPath,
+    pub path: RepoPathText,
     pub line: u64,
     pub expected: String,
 }
@@ -63,7 +66,7 @@ fn value_claim(definition: &GovernedDefinition) -> Option<ValueClaim> {
     if path_text.is_empty() || path_text.contains(['?', '#']) {
         return None;
     }
-    let path = RepoPath::new(path_text.to_owned())?;
+    let path = RepoPathText::try_from(path_text.to_owned()).ok()?;
     let expected = definition.title.clone()?;
     Some(ValueClaim {
         name: name.to_owned(),
@@ -180,7 +183,7 @@ pub fn rewrite(
     match &source.form {
         GovernedForm::Value(claim)
             if claim.name == name
-                && claim.path == *path
+                && RepoPath::from(&claim.path) == *path
                 && claim.line == line
                 && claim.expected == observed =>
         {

@@ -30,6 +30,9 @@ inputs:
   watchdog-seconds:
     description: wall-clock seconds the scan may take before it is ended with no result
     default: "120"
+  scan-cache:
+    description: directory kept between runs for the engine's sealed scan rows; empty keeps every parse in the run
+    default: ""
 
 outputs:
   exit-class:
@@ -177,6 +180,7 @@ runs:
         PROFILE: ${{ inputs.profile }}
         OBJECT_FORMAT: ${{ inputs.object-format }}
         WATCHDOG_SECONDS: ${{ inputs.watchdog-seconds }}
+        SCAN_CACHE: ${{ inputs.scan-cache }}
       run: |
         set -uo pipefail
         if [[ ! "$WATCHDOG_SECONDS" =~ ^[0-9]*[1-9][0-9]*$ ]]; then
@@ -192,6 +196,9 @@ runs:
         if [ -n "${IDENTITY:-}" ]; then
           args+=(--repository "$IDENTITY" --ref "$REF" --default-branch-ref "$DEFAULT_REF"
                 --forge github)
+        fi
+        if [ -n "${SCAN_CACHE:-}" ]; then
+          args+=(--scan-cache "$SCAN_CACHE")
         fi
         status=0
         "$BINARY" "${args[@]}" > "$report" &

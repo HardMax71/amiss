@@ -87,6 +87,7 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
     let mut reports = Vec::new();
     for semantic in [Input::Template(template), Input::Bound(inputs.semantic)] {
         let setup = SetupShell {
+            scan_cache: None,
             engine: engine.clone(),
             profile: Profile::Observe,
             repository: None,

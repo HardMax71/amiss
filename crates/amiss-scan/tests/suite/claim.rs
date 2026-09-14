@@ -2,6 +2,7 @@ use amiss_scan::claim;
 use amiss_scan::claim::{GovernedForm, ValueClaim, classify};
 use amiss_wire::extraction::GovernedDefinition;
 use amiss_wire::model::RepoPath;
+use amiss_wire::repo_path_text;
 
 fn definition(label: &str, url: &str, title: Option<&str>, angled: bool) -> GovernedDefinition {
     GovernedDefinition {
@@ -31,7 +32,7 @@ fn the_canonical_value_claim_parses_to_its_words() {
         classify(&canonical()),
         GovernedForm::Value(ValueClaim {
             name: "pkg-version".to_owned(),
-            path: RepoPath::new("Cargo.toml".to_owned()).expect("a path"),
+            path: repo_path_text!("Cargo.toml"),
             line: 3,
             expected: "version = 0.16.0".to_owned(),
         })

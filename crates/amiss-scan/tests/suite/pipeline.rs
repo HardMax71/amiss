@@ -32,6 +32,7 @@ fn engine() -> EngineProvenance {
 
 fn shell() -> SetupShell {
     SetupShell {
+        scan_cache: None,
         engine: engine(),
         profile: Profile::Observe,
         repository: None,

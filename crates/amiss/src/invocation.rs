@@ -28,7 +28,7 @@ pub(crate) const GRAMMAR: &str = "amiss check --repo <path> --object-format <sha
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
-            [--semantic-template <path>]
+            [--semantic-template <path>] [--scan-cache <path>]
             [--explain-scope] [--format <human|json|sarif|codequality>]
 amiss fix   --repo <path> --object-format <sha1|sha256>
             --base <full-oid> --index
@@ -37,6 +37,7 @@ amiss fix   --repo <path> --object-format <sha1|sha256>
              --default-branch-ref refs/heads/<name>
              [--forge <github|gitlab|gitea|bitbucket-cloud|bitbucket-data-center>]]
             --profile <observe|enforce-introduced|enforce>
+            [--scan-cache <path>]
 amiss claim --repo <path> --path <repo-path> --line <n> --name <name>
 amiss policy-include --path <repo-path> --suffix <suffix> --adapter <adapter>
                      [--repo <path> --object-format <sha1|sha256> --index]
@@ -216,6 +217,7 @@ pub(crate) struct Invocation {
     pub(crate) format: OutputFormat,
     pub(crate) adoption: Option<Adoption>,
     pub(crate) semantic_template: Option<PathBuf>,
+    pub(crate) scan_cache: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

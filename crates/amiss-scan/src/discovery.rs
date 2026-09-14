@@ -565,13 +565,28 @@ fn side_status(
         adapter,
         embedded_code_allowance: (adapter == Adapter::Mdx).then(|| scan.embedded_code_allowance()),
     };
-    let scanned = match scan.scans.get(&identity).cloned() {
-        Some(scanned) => replay_scan_charges(scan, &scanned).map(|()| scanned),
-        None => scan_bytes(scan, adapter, &object.body)
-            .map(Arc::new)
-            .inspect(|scanned| {
-                scan.scans.insert(identity, Arc::clone(scanned));
-            }),
+    let storable = identity.embedded_code_allowance.is_none();
+    let scanned = if let Some(scanned) = scan.scans.get(&identity).cloned() {
+        replay_scan_charges(scan, &scanned).map(|()| scanned)
+    } else {
+        let stored = storable
+            .then(|| scan.scan_cache())
+            .flatten()
+            .and_then(|cache| cache.read(adapter, &entry.oid));
+        let fresh = if let Some(scanned) = stored {
+            replay_scan_charges(scan, &scanned).map(|()| scanned)
+        } else {
+            let parsed = scan_bytes(scan, adapter, &object.body).map(Arc::new);
+            if let (Ok(scanned), Some(cache)) =
+                (&parsed, storable.then(|| scan.scan_cache()).flatten())
+            {
+                cache.write(adapter, &entry.oid, scanned);
+            }
+            parsed
+        };
+        fresh.inspect(|scanned| {
+            scan.scans.insert(identity, Arc::clone(scanned));
+        })
     };
     match scanned {
         Ok(scanned) => Ok((DocumentStatus::Scanned(scanned), byte_count, Some(raw))),

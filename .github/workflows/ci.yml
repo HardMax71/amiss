@@ -216,10 +216,17 @@ jobs:
             --lock Cargo.lock \
             --action action.yml \
             --artifact dist/amiss-linux-x86_64
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .amiss-scan-cache
+          key: scan-cache-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            scan-cache-${{ hashFiles('Cargo.lock') }}-
       - id: action
         uses: ./action-tree
         with:
           profile: enforce
+          scan-cache: .amiss-scan-cache
       - if: always() && steps.action.outputs.report != ''
         shell: bash
         env:
@@ -240,7 +247,12 @@ jobs:
           set -eu
           ./target/release/amiss check --repo . --object-format sha1 \
             --base "$(git rev-parse HEAD^)" --index \
-            --profile observe --format json > /dev/null
+            --profile observe --format json --scan-cache .amiss-scan-cache > /dev/null
+      - if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .amiss-scan-cache
+          key: scan-cache-${{ hashFiles('Cargo.lock') }}-${{ github.sha }}
 
   # The external rail on this repository's own changes, advisory: the chain
   # runs check, external-plan, amiss-probe, and external-assess against the

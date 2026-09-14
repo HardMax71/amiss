@@ -61,6 +61,7 @@ fn spec_to_rest() -> ForgeContext {
 
 fn shell(profile: Profile) -> SetupShell {
     SetupShell {
+        scan_cache: None,
         engine: engine(),
         profile,
         repository: Some(

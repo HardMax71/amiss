@@ -30,6 +30,9 @@ inputs:
   watchdog-seconds:
     description: wall-clock seconds the scan may take before it is ended with no result
     default: "120"
+  scan-cache:
+    description: directory kept between runs for the engine's sealed scan rows; empty keeps every parse in the run
+    default: ""
 
 outputs:
   exit-class:
@@ -52,3 +55,4 @@ runs:
         object-format: ${{ inputs.object-format }}
         annotations: ${{ inputs.annotations }}
         watchdog-seconds: ${{ inputs.watchdog-seconds }}
+        scan-cache: ${{ inputs.scan-cache }}

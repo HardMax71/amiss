@@ -1,3 +1,4 @@
+use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
 use std::borrow::Cow;
 
@@ -13,7 +14,8 @@ use crate::{Error, RAW_DESTINATION_DOMAIN, SOURCE_PROJECTION_DOMAIN};
 /// One-based Unicode-scalar display positions for a machine byte span, after
 /// the same CRLF and bare-CR to LF conversion the projection applies. A tab is
 /// one scalar and no display-width expansion occurs.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SpanDisplay {
     pub start_line: u64,
     pub start_column: u64,
@@ -25,7 +27,8 @@ pub struct SpanDisplay {
 /// corpus goldens: display positions, the containing block's projection
 /// digest, and the raw destination digest, where an empty destination hashes
 /// zero bytes.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ScannedOccurrence {
     pub occurrence: Occurrence,
     pub display: SpanDisplay,
@@ -36,7 +39,8 @@ pub struct ScannedOccurrence {
 /// One reserved governed definition with its raw span, display positions,
 /// the digest of its exact contributing source bytes, and the claim form
 /// its words spell.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GovernedSource {
     pub span: (usize, usize),
     pub display: SpanDisplay,
@@ -48,7 +52,8 @@ pub struct GovernedSource {
 pub const GOVERNED_SOURCE_DOMAIN: &str = "amiss/scanner-governed-definition-source";
 pub const PROJECTION_SINK_DOMAIN: &str = "amiss/scanner-projection-sink";
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SemanticCodeSink {
     pub span: (usize, usize),
     pub display: SpanDisplay,
@@ -56,7 +61,8 @@ pub struct SemanticCodeSink {
     pub value: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Scanned {
     pub adapter: Adapter,
     pub work: Work,
@@ -71,7 +77,8 @@ pub struct Scanned {
 /// The raw anchor inputs a scanned document retains so the resolve lane never
 /// parses an in-set target twice; slugging stays lazy, paid only for targets
 /// a fragment actually asks.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AnchorSource {
     pub headings: Vec<amiss_wire::extraction::Heading>,
     pub html_anchors: Vec<String>,

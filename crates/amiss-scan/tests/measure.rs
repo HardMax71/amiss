@@ -31,6 +31,7 @@ fn representative_repository_latency_and_memory() {
     let repo = Repository::open(dir.path(), ObjectFormat::Sha1)
         .unwrap_or_else(|defect| panic!("open: {defect:?}"));
     let shell = SetupShell {
+        scan_cache: None,
         engine: EngineProvenance {
             version: "0.0.0-measure".to_owned(),
             digest: amiss_wire::model::Digest::from(

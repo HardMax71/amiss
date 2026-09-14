@@ -5,6 +5,7 @@ use amiss_wire::controls::ResourceName;
 use amiss_wire::model::{Adapter, Oid};
 
 use crate::Error;
+use crate::cache::ScanCache;
 use crate::scan::Scanned;
 
 /// The built-in discovery and parse ceilings. A future organization floor may
@@ -108,6 +109,7 @@ pub(crate) struct ScanIdentity {
 #[derive(Debug)]
 pub struct ScanResources {
     cache_scope: Arc<()>,
+    stored: Option<Arc<ScanCache>>,
     pub(crate) scans: BTreeMap<ScanIdentity, Arc<Scanned>>,
     limits: ScanLimits,
     documents: u64,
@@ -133,6 +135,7 @@ impl Clone for ScanResources {
     fn clone(&self) -> Self {
         Self {
             cache_scope: Arc::new(()),
+            stored: self.stored.clone(),
             scans: BTreeMap::new(),
             limits: self.limits,
             documents: self.documents,
@@ -188,6 +191,7 @@ impl ScanResources {
     pub fn new(limits: ScanLimits) -> Self {
         Self {
             cache_scope: Arc::new(()),
+            stored: None,
             scans: BTreeMap::new(),
             limits,
             documents: 0,
@@ -237,6 +241,17 @@ impl ScanResources {
     #[must_use]
     pub const fn limits(&self) -> &ScanLimits {
         &self.limits
+    }
+
+    /// Reads and writes scans through an on-disk cache of this engine build.
+    #[must_use]
+    pub fn with_scan_cache(mut self, stored: Option<Arc<ScanCache>>) -> Self {
+        self.stored = stored;
+        self
+    }
+
+    pub(crate) fn scan_cache(&self) -> Option<&ScanCache> {
+        self.stored.as_deref()
     }
 
     pub(crate) const fn cache_scope(&self) -> &Arc<()> {

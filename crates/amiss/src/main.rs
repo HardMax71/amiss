@@ -306,6 +306,7 @@ fn scan_sealed(
         controls: Some(controls_digest),
     };
     let shell = SetupShell {
+        scan_cache: None,
         engine,
         profile: evaluation.profile,
         repository: evaluation.repository.clone(),
@@ -417,6 +418,7 @@ fn run(invocation: &Invocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
     );
     let staged_snapshot = pinned_index(invocation, &repo);
     let shell = SetupShell {
+        scan_cache: invocation.scan_cache.clone(),
         engine,
         profile: invocation.profile,
         repository: identity.map(|identity| identity.repository.clone()),

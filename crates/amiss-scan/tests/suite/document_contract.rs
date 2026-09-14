@@ -41,6 +41,7 @@ fn unparsed_documents_survive_the_report_contract() {
         ),
     };
     let setup = SetupShell {
+        scan_cache: None,
         engine: engine.clone(),
         profile: Profile::Observe,
         repository: None,
