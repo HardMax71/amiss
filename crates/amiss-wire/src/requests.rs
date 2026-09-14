@@ -114,12 +114,17 @@ impl SnapshotRequest {
             pre_acquired: true,
         }
     }
+}
+
+impl Document for SnapshotRequest {
+    type Defect = Error;
+    const BYTES: u64 = REQUEST_STREAM_BYTES;
 
     /// Checks the fixed handle and prior repository acquisition required by the launcher.
     ///
     /// # Errors
     /// Refuses a different repository handle or a request to acquire the repository.
-    pub fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Error> {
         (self.repository_handle == REPOSITORY_HANDLE_ORDINAL)
             .then_some(())
             .ok_or_else(|| Error::new("$.repository_handle", ErrorKind::InvalidValue))?;

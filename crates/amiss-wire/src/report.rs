@@ -71,8 +71,9 @@ mod failure;
 mod finding;
 pub mod model;
 mod output;
-mod read;
 mod sandbox;
+
+use crate::ExitClass;
 
 pub use error::{AnalysisErrorCode, ErrorDetail, error_row};
 pub use failure::{
@@ -81,7 +82,6 @@ pub use failure::{
 };
 pub use finding::{Disposition, FindingKind, FindingMetadata, FindingScope, FixKind, IntentKind};
 pub use output::emit_report;
-pub use read::{result_verdict, validate_envelope};
 pub use sandbox::sandbox_descriptor;
 
 pub const ENGINE_CONTRACT: &str = "amiss/scanner";
@@ -118,6 +118,8 @@ pub const SANDBOX_SCHEMA: &str = "amiss/scanner-sandbox-profile";
 pub enum ReportDefect {
     #[error("the input is not a scanner report envelope")]
     NotAReport,
+    #[error("the report is not the canonical spelling of its model")]
+    Noncanonical,
     #[error("the report payload does not match its recorded digest")]
     DigestMismatch,
     #[error("the report carries an invalid result tuple")]
@@ -126,4 +128,35 @@ pub enum ReportDefect {
     Incomplete,
     #[error("a delegated occurrence is missing its destination, document, or required scheme")]
     MalformedExternal,
+}
+
+impl From<crate::de::Error> for ReportDefect {
+    fn from(error: crate::de::Error) -> Self {
+        match error.kind {
+            crate::de::ErrorKind::Noncanonical => Self::Noncanonical,
+            crate::de::ErrorKind::DigestMismatch => Self::DigestMismatch,
+            crate::de::ErrorKind::Json(_)
+            | crate::de::ErrorKind::MissingField
+            | crate::de::ErrorKind::UnknownField
+            | crate::de::ErrorKind::WrongType
+            | crate::de::ErrorKind::InvalidValue
+            | crate::de::ErrorKind::UnsortedSet
+            | crate::de::ErrorKind::DuplicateMember
+            | crate::de::ErrorKind::LimitExceeded
+            | crate::de::ErrorKind::Inconsistent => Self::NotAReport,
+        }
+    }
+}
+
+/// Checks the recorded completeness, status and exit code as one verdict.
+///
+/// # Errors
+/// Refuses inconsistent or unsupported result tuples.
+pub fn result_verdict(result: &model::ReportResult) -> Result<ExitClass, ReportDefect> {
+    match (result.complete, result.status, result.exit_code) {
+        (true, model::ReportStatus::Pass, 0) => Ok(ExitClass::Success),
+        (true, model::ReportStatus::Fail, 1) => Ok(ExitClass::BlockingFindings),
+        (false, model::ReportStatus::Incomplete, 2) => Ok(ExitClass::Failure),
+        (_, _, _) => Err(ReportDefect::InvalidResult),
+    }
 }

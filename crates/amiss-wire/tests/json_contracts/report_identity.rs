@@ -1,3 +1,4 @@
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::report::model::{
     BaseSnapshot, Evaluation, IdentityPreimage, ResolvedEvaluation, Snapshot,
     UnavailableEvaluation, UnavailableSnapshot, UnavailableSnapshotKind, UnavailableStatus,
@@ -66,10 +67,11 @@ fn report_identity_projections_keep_the_candidate_contract() -> serde_json::Resu
 
 #[test]
 fn report_evaluations_and_snapshots_are_closed_objects() {
-    let (payload, _, _) = amiss_wire::report::validate_envelope(include_bytes!(
+    let payload = <amiss_wire::report::model::ReportPayload>::parse(include_bytes!(
         "../../../../spec/examples/scanner-report.canonical.json"
     ))
-    .unwrap();
+    .unwrap()
+    .payload;
     let Evaluation::Resolved(mut evaluation) = payload.evaluation else {
         panic!("the report example has a resolved evaluation");
     };

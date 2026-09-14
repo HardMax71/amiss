@@ -3,6 +3,7 @@ use std::process::ExitCode;
 
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::{LOCALE_CONTEXT_BYTES, LocaleTreeContext, tree_inventory};
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::locale::{
     EVIDENCE_DOCUMENT_BYTES, LOCALE_DOCUMENT_BYTES, LocaleCoverageAssessment,
@@ -93,8 +94,8 @@ fn produce(
     plan: &[u8],
     context: &[u8],
 ) -> Result<Vec<u8>, String> {
-    let context: LocaleTreeContext =
-        serde_json::from_slice(context).map_err(|defect| format!("the context is {defect}"))?;
+    let context = LocaleTreeContext::parse(context)
+        .map_err(|defect| format!("the context is invalid: {defect}"))?;
     let object_format = LocaleCoveragePlan::parse(plan)
         .map_err(|defect| defect.to_string())?
         .payload

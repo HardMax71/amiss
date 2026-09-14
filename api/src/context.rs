@@ -1,8 +1,8 @@
+use amiss_wire::de::{self, Document, ErrorKind};
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
 use serde::{Deserialize, Serialize};
-use sha2::Digest as _;
-use wary::Validate as _;
 
 pub(crate) const BYTES: u64 = 65_536;
 const DIGEST_DOMAIN: &str = "amiss/rust-public-api-context-v1";
@@ -57,29 +57,41 @@ pub(crate) enum Error {
     #[error("the producer context exceeds its byte ceiling")]
     Bytes,
     #[error("the producer context is invalid")]
-    Shape(#[source] serde_json::Error),
+    Shape(#[source] de::Error),
     #[error("the producer context is invalid")]
     Contract(#[source] wary::Report),
 }
 
-pub(crate) fn parse(bytes: &[u8]) -> Result<(Context, Digest), Error> {
-    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > BYTES {
-        return Err(Error::Bytes);
+impl From<de::Error> for Error {
+    fn from(error: de::Error) -> Self {
+        match error.kind {
+            ErrorKind::LimitExceeded => Self::Bytes,
+            ErrorKind::Json(_)
+            | ErrorKind::MissingField
+            | ErrorKind::UnknownField
+            | ErrorKind::WrongType
+            | ErrorKind::InvalidValue
+            | ErrorKind::UnsortedSet
+            | ErrorKind::DuplicateMember
+            | ErrorKind::DigestMismatch
+            | ErrorKind::Inconsistent
+            | ErrorKind::Noncanonical => Self::Shape(error),
+        }
     }
-    let context: Context = serde_json::from_slice(bytes).map_err(Error::Shape)?;
-    context.validate(&()).map_err(Error::Contract)?;
-    let digest = serde_json::to_vec(&context)
-        .map(|canonical| {
-            Digest::from(
-                sha2::Sha256::new_with_prefix(DIGEST_DOMAIN)
-                    .chain_update([0_u8])
-                    .chain_update(&canonical)
-                    .finalize()
-                    .0,
-            )
-        })
-        .map_err(Error::Shape)?;
-    Ok((context, digest))
+}
+
+impl Document for Context {
+    type Defect = Error;
+    const BYTES: u64 = BYTES;
+
+    fn validate(&self) -> Result<(), Error> {
+        wary::Validate::validate(self, &()).map_err(Error::Contract)
+    }
+}
+
+pub(crate) fn digest(context: &Context) -> Result<Digest, Error> {
+    document_digest(DIGEST_DOMAIN, context)
+        .ok_or_else(|| Error::Shape(de::Error::new("$", ErrorKind::InvalidValue)))
 }
 
 mod tests;

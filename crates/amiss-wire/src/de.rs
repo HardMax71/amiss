@@ -27,6 +27,8 @@ pub enum ErrorKind {
     DigestMismatch,
     #[error("values are inconsistent")]
     Inconsistent,
+    #[error("spelling is not canonical")]
+    Noncanonical,
 }
 
 impl Error {

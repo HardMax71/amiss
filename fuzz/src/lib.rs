@@ -5,7 +5,7 @@ use amiss_wire::model::{Adapter, ObjectFormat};
 
 /// Exercise report and semantic artifact admission on arbitrary input.
 pub fn json(bytes: &[u8]) {
-    let _ = amiss_wire::report::validate_envelope(bytes);
+    let _ = <amiss_wire::report::model::ReportPayload>::parse(bytes);
     let _ = amiss_wire::semantic::SemanticEvidence::parse(bytes);
 }
 
@@ -23,9 +23,7 @@ pub fn controls(bytes: &[u8]) {
 /// Exercise the three request models and their admission constraints once.
 pub fn requests(bytes: &[u8]) {
     let _ = amiss_wire::requests::EvaluationRequest::parse(bytes);
-    if let Ok(snapshot) = serde_json::from_slice::<amiss_wire::requests::SnapshotRequest>(bytes) {
-        let _ = snapshot.validate();
-    }
+    let _ = amiss_wire::requests::SnapshotRequest::parse(bytes);
     let _ = amiss_wire::requests::ControlsRequest::parse(bytes);
 }
 

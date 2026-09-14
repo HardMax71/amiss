@@ -227,18 +227,17 @@ fn run_sealed(reserve: &mut BufWriter<Stdout>) -> ExitCode {
     };
     let parsed = (
         EvaluationRequest::parse(&streams.evaluation),
-        serde_json::from_slice::<SnapshotRequest>(&streams.snapshot),
+        SnapshotRequest::parse(&streams.snapshot),
         ControlsRequest::parse(&streams.controls),
     );
     let (Ok(evaluation), Ok(snapshot), Ok(controls)) = parsed else {
         eprintln!("amiss: {}", AnalysisErrorCode::InvalidInvocation.as_ref());
         return failure;
     };
-    let canonical = snapshot.validate().is_ok()
-        && serde_json_canonicalizer::to_vec(&evaluation)
-            .ok()
-            .as_deref()
-            == Some(&streams.evaluation)
+    let canonical = serde_json_canonicalizer::to_vec(&evaluation)
+        .ok()
+        .as_deref()
+        == Some(&streams.evaluation)
         && serde_json_canonicalizer::to_vec(&snapshot).ok().as_deref() == Some(&streams.snapshot)
         && serde_json_canonicalizer::to_vec(&controls).ok().as_deref() == Some(&streams.controls);
     let modes_match = matches!(
@@ -490,19 +489,7 @@ fn semantic_input(
             resource: None,
         },
     )?;
-    let template: amiss_wire::semantic::SemanticEvidenceTemplate<'static> =
-        serde_json::from_slice(&bytes).map_err(|error| ErrorDetail {
-            code: if error.to_string().starts_with("unknown field") {
-                AnalysisErrorCode::UnknownField
-            } else {
-                AnalysisErrorCode::ConfigurationInvalid
-            },
-            path: None,
-            path_bytes: None,
-            resource: None,
-        })?;
-    template
-        .validate()
+    let template = amiss_wire::semantic::SemanticEvidenceTemplate::parse(&bytes)
         .map_err(|error| amiss_scan::request::configuration_detail(&error))?;
     Ok(amiss_scan::semantic::Input::Template(template))
 }

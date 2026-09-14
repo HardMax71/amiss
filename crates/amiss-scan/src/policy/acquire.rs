@@ -161,7 +161,8 @@ fn specific_code(kind: &ErrorKind) -> AnalysisErrorCode {
         | ErrorKind::WrongType
         | ErrorKind::InvalidValue
         | ErrorKind::LimitExceeded
-        | ErrorKind::Inconsistent => AnalysisErrorCode::ConfigurationInvalid,
+        | ErrorKind::Inconsistent
+        | ErrorKind::Noncanonical => AnalysisErrorCode::ConfigurationInvalid,
     }
 }
 

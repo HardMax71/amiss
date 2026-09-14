@@ -1,11 +1,12 @@
 use std::process::ExitCode;
 
 use amiss_wire::ExitClass;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::RepoPath;
+use amiss_wire::report::ReportDefect;
 use amiss_wire::report::model::{
-    MissingResolution, Occurrence, Resolution, UnsupportedSemanticsResolution,
+    MissingResolution, Occurrence, ReportPayload, Resolution, UnsupportedSemanticsResolution,
 };
-use amiss_wire::report::{ReportDefect, validate_envelope};
 use amiss_wire::resolution::{BlobTarget, TaggedBlobTarget, Target, VersionScope};
 
 use crate::invocation::{OutputFormat, RefsInvocation};
@@ -38,8 +39,9 @@ pub(crate) fn run(invocation: &RefsInvocation) -> ExitCode {
 }
 
 fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrence>, String> {
-    let (payload, _digest, _verdict) =
-        validate_envelope(bytes).map_err(|error| error.to_string())?;
+    let payload = <ReportPayload>::parse(bytes)
+        .map_err(|error| error.to_string())?
+        .payload;
     if !payload.result.complete {
         return Err(ReportDefect::Incomplete.to_string());
     }

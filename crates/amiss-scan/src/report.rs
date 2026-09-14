@@ -72,7 +72,7 @@ pub struct Setup {
 /// a binary streams the envelope through its reserved output buffer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Built<
-    P = model::ReportPayload<
+    P: amiss_wire::envelope::Payload<Schema = model::ReportEnvelopeSchema> = model::ReportPayload<
         RepoPath,
         Resolution<RepoPath>,
         GitMode,

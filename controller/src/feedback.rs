@@ -1,10 +1,9 @@
 use sha2::Digest as _;
 mod tests;
 
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::human::{atom, atom_bytes};
-
-use amiss_wire::report::model::{AvailableFeedback, FeedbackAction, FeedbackItem, RepoPath};
-use serde::Deserialize;
+use amiss_wire::report::model::{Feedback, FeedbackAction, FeedbackItem, RepoPath, ReportPayload};
 
 use crate::ArtifactReference;
 
@@ -16,18 +15,6 @@ const OPTIONAL_PROJECTION_PREFIXES: [&str; 4] = [
     "assessment-artifact: ",
     "external-assessment: ",
 ];
-
-#[derive(Deserialize)]
-#[cfg_attr(test, derive(serde::Serialize))]
-struct ReportFeedback {
-    payload: FeedbackPayload,
-}
-
-#[derive(Deserialize)]
-#[cfg_attr(test, derive(serde::Serialize))]
-struct FeedbackPayload {
-    feedback: AvailableFeedback,
-}
 
 /// Every repository-derived value passes the human-atom law before it
 /// reaches provider markdown.
@@ -94,10 +81,12 @@ fn feedback_lines(report: Option<&[u8]>, retained: bool) -> Vec<String> {
     let Some(bytes) = report else {
         return Vec::new();
     };
-    let Ok(report) = serde_json::from_slice::<ReportFeedback>(bytes) else {
+    let Ok(report) = <ReportPayload>::parse(bytes) else {
         return Vec::new();
     };
-    let feedback = report.payload.feedback;
+    let Feedback::Available(feedback) = report.payload.feedback else {
+        return Vec::new();
+    };
     let items = &feedback.items;
     if items.iter().any(|item| {
         let Some(RepoPath::Bytes(encoded)) = &item.target else {

@@ -1,5 +1,7 @@
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Payload as _;
-use amiss_wire::semantic::SemanticEvidence;
+use amiss_wire::report::model::ReportPayload;
+use amiss_wire::semantic::{SemanticEvidence, SemanticEvidenceTemplate};
 use sha2::Digest as _;
 mod tests;
 
@@ -50,15 +52,7 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
             return Err(ArtifactError::Corrupt);
         }
 
-        if u64::try_from(template_bytes.len()).unwrap_or(u64::MAX)
-            > amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES
-        {
-            return Err(ArtifactError::Corrupt);
-        }
-        let template: amiss_wire::semantic::SemanticEvidenceTemplate<'static> =
-            serde_json::from_slice(&template_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
-        template
-            .validate()
+        let template = SemanticEvidenceTemplate::parse(&template_bytes)
             .map_err(|_defect| ArtifactError::Corrupt)?;
         let envelope =
             SemanticEvidence::parse(&envelope_bytes).map_err(|_defect| ArtifactError::Corrupt)?;
@@ -91,8 +85,9 @@ pub(super) fn validate(report: &[u8], artifact: &[u8]) -> Result<(), ArtifactErr
 }
 
 fn report_digests(report: &[u8]) -> Result<Vec<Digest>, ArtifactError> {
-    let (payload, _digest, _verdict) =
-        amiss_wire::report::validate_envelope(report).map_err(|_defect| ArtifactError::Corrupt)?;
+    let payload = <ReportPayload>::parse(report)
+        .map_err(|_defect| ArtifactError::Corrupt)?
+        .payload;
     let amiss_wire::report::model::Controls::Resolved(controls) = payload.controls else {
         return Ok(Vec::new());
     };

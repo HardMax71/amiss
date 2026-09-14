@@ -1,3 +1,4 @@
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Envelope;
 use sha2::Digest as _;
 mod tests;
@@ -69,15 +70,7 @@ pub fn bind_semantic_evidence(
         )?);
     }
     for source in acquired {
-        if u64::try_from(source.bytes.len()).unwrap_or(u64::MAX)
-            > amiss_wire::semantic::SEMANTIC_EVIDENCE_BYTES
-        {
-            return Err(BootstrapJobError::SemanticEvidence);
-        }
-        let template: SemanticEvidenceTemplate<'static> = serde_json::from_slice(&source.bytes)
-            .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
-        template
-            .validate()
+        let template = SemanticEvidenceTemplate::parse(&source.bytes)
             .map_err(|_defect| BootstrapJobError::SemanticEvidence)?;
         let actual = SemanticEvidenceExpectation {
             acquisition_identity: source.acquisition_identity.clone(),

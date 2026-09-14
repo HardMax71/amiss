@@ -1,4 +1,5 @@
-use amiss_wire::envelope::document_digest;
+use amiss_wire::envelope::{Payload as _, document_digest};
+use amiss_wire::report::result_verdict;
 use sha2::Digest as _;
 mod tests;
 
@@ -59,8 +60,11 @@ pub(crate) fn accepted_report(bytes: &[u8]) -> Result<AcceptedReport, ArtifactEr
     if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > amiss_wire::report::MACHINE_JSON_BYTES {
         return Err(ArtifactError::TooLarge);
     }
-    let (ReportPayload { evaluation, .. }, payload_digest, verdict) =
-        amiss_wire::report::validate_envelope(bytes).map_err(|_defect| ArtifactError::Corrupt)?;
+    let envelope = <ReportPayload>::parse(bytes).map_err(|_defect| ArtifactError::Corrupt)?;
+    let verdict =
+        result_verdict(&envelope.payload.result).map_err(|_defect| ArtifactError::Corrupt)?;
+    let payload_digest = envelope.payload_digest;
+    let ReportPayload { evaluation, .. } = envelope.payload;
     if verdict == amiss_wire::ExitClass::Failure {
         return Err(ArtifactError::Corrupt);
     }

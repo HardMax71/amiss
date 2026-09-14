@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto, apply};
 
 use crate::controls::ProjectionSource;
-use crate::model::Digest;
+use crate::envelope::{Envelope, Payload, Sealing};
+use crate::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect, result_verdict};
 
 use super::{
     AnalysisError, Controls, DocumentGitMode, DocumentResult, DocumentSide, Engine, Evaluation,
@@ -59,12 +60,21 @@ pub enum ReportCompatibility {
     One,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct ReportEnvelope<P = ReportPayload> {
-    pub payload: P,
-    pub payload_digest: Digest,
-    pub schema: ReportEnvelopeSchema,
+pub type ReportEnvelope<P = ReportPayload> = Envelope<P>;
+
+impl<P, R, M, E> Payload for ReportPayload<P, R, M, E>
+where
+    Self: Serialize,
+{
+    type Schema = ReportEnvelopeSchema;
+    type Defect = ReportDefect;
+    const DOMAIN: &'static str = PAYLOAD_SCHEMA;
+    const DOCUMENT_BYTES: u64 = MACHINE_JSON_BYTES;
+    const SEALING: Sealing = Sealing::Exact;
+
+    fn validate(&self) -> Result<(), ReportDefect> {
+        result_verdict(&self.result).map(drop)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

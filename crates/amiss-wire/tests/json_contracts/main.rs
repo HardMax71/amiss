@@ -133,13 +133,8 @@ fn report_examples_match_their_typed_source() {
         let _: report::model::ReportEnvelope =
             serde_json::from_slice(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
         let value = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
-        let (payload, payload_digest, _verdict) =
-            report::validate_envelope(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
-        let envelope = report::model::ReportEnvelope {
-            payload,
-            payload_digest,
-            schema: report::model::ReportEnvelopeSchema::Current,
-        };
+        let envelope = <report::model::ReportPayload>::parse(&bytes)
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
         assert_eq!(
             serde_json_canonicalizer::to_vec(&envelope).unwrap(),
             serde_json_canonicalizer::to_vec(&value).unwrap(),
@@ -152,7 +147,8 @@ fn report_examples_match_their_typed_source() {
         "scanner-report.last-released.json",
     ] {
         let bytes = fs::read(examples.join(name)).unwrap();
-        report::validate_envelope(&bytes).unwrap_or_else(|error| panic!("{name}: {error}"));
+        <report::model::ReportPayload>::parse(&bytes)
+            .unwrap_or_else(|error| panic!("{name}: {error}"));
     }
 }
 

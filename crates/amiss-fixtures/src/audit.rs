@@ -1,6 +1,8 @@
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::DocsCandidate;
+use amiss_wire::report::model::ReportPayload;
 
 pub(crate) const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
 
@@ -14,7 +16,7 @@ pub(crate) struct ReportBinding {
 
 pub(crate) fn report_binding() -> Option<ReportBinding> {
     let report = REPORT.to_vec();
-    let (_, payload_digest, _) = amiss_wire::report::validate_envelope(&report).ok()?;
+    let payload_digest = <ReportPayload>::parse(&report).ok()?.payload_digest;
     Some(ReportBinding {
         report,
         payload_digest,

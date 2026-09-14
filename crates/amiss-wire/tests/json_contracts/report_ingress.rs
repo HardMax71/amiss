@@ -1,8 +1,7 @@
-use amiss_wire::envelope::document_digest;
+use amiss_wire::envelope::{Payload as _, document_digest};
 use amiss_wire::report::{
     PAYLOAD_SCHEMA, ReportDefect,
-    model::{ReportEnvelope, ReportStatus},
-    validate_envelope,
+    model::{ReportEnvelope, ReportPayload, ReportStatus},
 };
 use sha2::Digest as _;
 
@@ -43,16 +42,16 @@ fn normalized_fields_are_rejected_with_original_and_rebound_digests() {
                     .payload,
                 report.payload
             );
-            validate_envelope(input.as_bytes()).map(drop)
+            <ReportPayload>::parse(input.as_bytes()).map(drop)
         });
-        assert_eq!(refused, [Err(ReportDefect::NotAReport); 2]);
+        assert_eq!(refused, [Err(ReportDefect::Noncanonical); 2]);
     }
 }
 
 #[test]
 fn formatting_and_escaped_members_preserve_report_identity() {
     let report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
-    let expected = validate_envelope(REPORT).unwrap();
+    let expected = <ReportPayload>::parse(REPORT).unwrap();
     let payload =
         String::from_utf8(serde_json_canonicalizer::to_vec(&report.payload).unwrap()).unwrap();
     let reordered = format!(
@@ -70,7 +69,7 @@ fn formatting_and_escaped_members_preserve_report_identity() {
         reordered,
         format!(" \r\n\t{escaped}\n\r "),
     ] {
-        assert_eq!(validate_envelope(input.as_bytes()).unwrap(), expected);
+        assert_eq!(<ReportPayload>::parse(input.as_bytes()).unwrap(), expected);
     }
 }
 
@@ -94,7 +93,7 @@ fn known_fields_cannot_hide_non_strict_json_tokens() {
             .unwrap()
             .replace(&object, &changed);
         assert_eq!(
-            validate_envelope(wire.as_bytes()).map(drop),
+            <ReportPayload>::parse(wire.as_bytes()).map(drop),
             Err(ReportDefect::NotAReport),
             "{invalid}"
         );
@@ -113,14 +112,14 @@ fn typed_counts_keep_the_safe_integer_boundary() {
         serde_json::from_slice::<ReportEnvelope>(&input).unwrap(),
         report
     );
-    assert!(validate_envelope(&input).is_ok());
+    assert!(<ReportPayload>::parse(&input).is_ok());
 
     let invalid = String::from_utf8(input)
         .unwrap()
         .replace(&safe.to_string(), &(safe + 1).to_string());
     assert!(serde_json::from_str::<ReportEnvelope>(&invalid).is_err());
     assert_eq!(
-        validate_envelope(invalid.as_bytes()).map(drop),
+        <ReportPayload>::parse(invalid.as_bytes()).map(drop),
         Err(ReportDefect::NotAReport)
     );
     report.payload.summary.findings.warn = safe + 1;
@@ -133,12 +132,12 @@ fn payload_digest_precedes_the_semantic_verdict() {
     let mut report: ReportEnvelope = serde_json::from_slice(REPORT).unwrap();
     report.payload.result.status = ReportStatus::Fail;
     assert_eq!(
-        validate_envelope(&serde_json_canonicalizer::to_vec(&report).unwrap()).map(drop),
+        <ReportPayload>::parse(&serde_json_canonicalizer::to_vec(&report).unwrap()).map(drop),
         Err(ReportDefect::DigestMismatch)
     );
     report.payload_digest = document_digest(PAYLOAD_SCHEMA, &report.payload).unwrap();
     assert_eq!(
-        validate_envelope(&serde_json_canonicalizer::to_vec(&report).unwrap()).map(drop),
+        <ReportPayload>::parse(&serde_json_canonicalizer::to_vec(&report).unwrap()).map(drop),
         Err(ReportDefect::InvalidResult)
     );
 }

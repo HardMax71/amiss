@@ -117,10 +117,11 @@ fn typed_counts_still_obey_the_strict_json_integer_limit() {
 
 #[test]
 fn report_readers_agree_on_complete_status_and_exit_code() {
+    use amiss_wire::envelope::Payload as _;
     use amiss_wire::report::{
         ReportDefect,
-        model::{ReportEnvelope, ReportStatus},
-        validate_envelope,
+        model::{ReportEnvelope, ReportPayload, ReportStatus},
+        result_verdict,
     };
 
     let (wire, expectations) = accepted_report();
@@ -152,7 +153,9 @@ fn report_readers_agree_on_complete_status_and_exit_code() {
                     )
                 };
                 assert_eq!(
-                    validate_envelope(&bytes).map(|(_, _, verdict)| verdict.code()),
+                    <ReportPayload>::parse(&bytes)
+                        .and_then(|envelope| result_verdict(&envelope.payload.result))
+                        .map(amiss_wire::ExitClass::code),
                     normal,
                     "{complete} {status:?} {exit_code}"
                 );
@@ -168,7 +171,11 @@ fn report_readers_agree_on_complete_status_and_exit_code() {
 
 #[test]
 fn report_result_members_are_required_and_typed_in_both_readers() {
-    use amiss_wire::report::{ReportDefect, model::ReportEnvelope, validate_envelope};
+    use amiss_wire::envelope::Payload as _;
+    use amiss_wire::report::{
+        ReportDefect,
+        model::{ReportEnvelope, ReportPayload},
+    };
 
     let (wire, expectations) = accepted_report();
     let report: ReportEnvelope = serde_json::from_slice(&wire).unwrap();
@@ -211,7 +218,7 @@ fn report_result_members_are_required_and_typed_in_both_readers() {
             .to_string(),
         );
         assert_eq!(
-            validate_envelope(altered.as_bytes()).map(drop),
+            <ReportPayload>::parse(altered.as_bytes()).map(drop),
             Err(ReportDefect::NotAReport),
             "{invalid}"
         );
@@ -229,6 +236,11 @@ fn core_defects_keep_their_order_when_later_fields_are_also_wrong() {
     let original: Value = serde_json::from_slice(&wire).unwrap();
     let cases = [
         (
+            "/payload/result/complete",
+            json!(false),
+            AcceptanceDefect::Completeness,
+        ),
+        (
             "/payload/engine/engine_digest",
             json!(format!("sha256:{}", "0".repeat(64))),
             AcceptanceDefect::Engine,
@@ -242,11 +254,6 @@ fn core_defects_keep_their_order_when_later_fields_are_also_wrong() {
             "/payload/evaluation/candidate/commit_oid",
             json!("b".repeat(40)),
             AcceptanceDefect::CandidateIdentity,
-        ),
-        (
-            "/payload/result/complete",
-            json!(false),
-            AcceptanceDefect::Completeness,
         ),
         (
             "/payload/result/finding_count",

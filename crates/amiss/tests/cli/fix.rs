@@ -43,7 +43,9 @@ fn run_fix(root: &Path, base: &str) -> (i32, String) {
 
 #[test]
 fn byte_named_documents_keep_findings_without_invalid_fixes() {
-    use amiss_wire::report::{FindingKind, validate_envelope};
+    use amiss_wire::envelope::Payload as _;
+    use amiss_wire::report::FindingKind;
+    use amiss_wire::report::model::ReportPayload;
 
     for (input, expected, kind) in [
         (
@@ -80,7 +82,7 @@ fn byte_named_documents_keep_findings_without_invalid_fixes() {
         args.extend(["--format", "json"]);
         let (code, bytes, stderr) = amiss(&args);
         assert_eq!((code, stderr.as_str()), (1, ""));
-        let (payload, _, _) = validate_envelope(&bytes).unwrap();
+        let payload = <ReportPayload>::parse(&bytes).unwrap().payload;
         let rows: Vec<_> = payload
             .findings
             .iter()

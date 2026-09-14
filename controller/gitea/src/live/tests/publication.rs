@@ -2,6 +2,10 @@ use amiss_controller::{
     ArtifactReference, ChangeId, CheckConclusion, ProviderError, ProviderRunAttempt, RunFailure,
 };
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
+use amiss_wire::report::model::{
+    AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
+};
+use amiss_wire::report::{Disposition, FindingKind};
 use sha2::Digest as _;
 
 use super::super::Config;
@@ -14,24 +18,18 @@ fn review_bodies_carry_the_report_feedback_lines() {
     let fixture = Fixture::new("gitea");
     let snapshot = fixture.client.refresh(fixture.pull_request()).unwrap();
     let mut publication = fixture.publication(snapshot, "evaluation-1", CheckConclusion::Block);
-    publication.report = Some(
-        serde_json::to_vec(&serde_json::json!({
-            "payload": { "feedback": {
-                "existing_count": 0,
-                "items": [{
-                    "action": "check",
-                    "annotation": null,
-                    "effective_disposition": "warn",
-                    "finding_kinds": ["dependency-changed-subject-unchanged"],
-                    "location_count": 3,
-                    "target": "docs/guide.md"
-                }],
-                "status": "available"
-            } },
-            "schema": "amiss/scanner-report-envelope"
-        }))
-        .unwrap(),
-    );
+    publication.report = amiss_fixtures::feedback_report(Feedback::Available(AvailableFeedback {
+        existing_count: 0,
+        items: vec![FeedbackItem {
+            action: FeedbackAction::Check,
+            annotation: None,
+            effective_disposition: Disposition::Warn,
+            finding_kinds: vec![FindingKind::DependencyChangedSubjectUnchanged],
+            location_count: std::num::NonZeroU64::new(3).unwrap(),
+            target: Some(RepoPath::Text("docs/guide.md".parse().unwrap())),
+        }],
+        status: AvailableFeedbackStatus::Available,
+    }));
     let artifact_id = "b".repeat(64);
     publication.artifact = Some(ArtifactReference {
         id: artifact_id.clone(),

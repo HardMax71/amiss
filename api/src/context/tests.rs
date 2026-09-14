@@ -1,7 +1,16 @@
 #![cfg(test)]
 
-use super::{Error, parse};
+use amiss_wire::de::Document as _;
+use amiss_wire::model::Digest;
 use sha2::Digest as _;
+
+use super::{Context, Error};
+
+fn parse(bytes: &[u8]) -> Result<(Context, Digest), Error> {
+    let context = Context::parse(bytes)?;
+    let digest = super::digest(&context)?;
+    Ok((context, digest))
+}
 
 fn context(features: &str, target_triple: &str) -> Vec<u8> {
     format!(
@@ -62,7 +71,7 @@ fn typed_context_preserves_canonical_bytes_and_every_digest_input() {
     );
     assert_eq!(
         digest,
-        amiss_wire::model::Digest::from(
+        Digest::from(
             sha2::Sha256::new_with_prefix(super::DIGEST_DOMAIN)
                 .chain_update([0_u8])
                 .chain_update(serde_json_canonicalizer::to_vec(&strict).unwrap())
@@ -103,7 +112,7 @@ fn typed_context_preserves_canonical_bytes_and_every_digest_input() {
         let strict = serde_json::from_slice::<serde_json::Value>(&bytes).unwrap();
         assert_eq!(
             changed_digest,
-            amiss_wire::model::Digest::from(
+            Digest::from(
                 sha2::Sha256::new_with_prefix(super::DIGEST_DOMAIN)
                     .chain_update([0_u8])
                     .chain_update(serde_json_canonicalizer::to_vec(&strict).unwrap())
