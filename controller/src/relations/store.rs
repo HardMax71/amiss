@@ -59,6 +59,12 @@ pub enum RelationScheduleStoreError {
     Io(#[source] io::Error),
 }
 
+impl From<crate::frame::Corrupt> for RelationScheduleStoreError {
+    fn from(_defect: crate::frame::Corrupt) -> Self {
+        Self::Corrupt
+    }
+}
+
 #[derive(Clone)]
 pub struct FileRelationScheduleStore {
     root: PathBuf,

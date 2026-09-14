@@ -22,6 +22,12 @@ pub enum InboxError {
     Io(#[from] io::Error),
 }
 
+impl From<amiss_controller::frame::Corrupt> for InboxError {
+    fn from(_defect: amiss_controller::frame::Corrupt) -> Self {
+        Self::Corrupt
+    }
+}
+
 impl From<amiss_controller::atomic_write_recovery::AtomicWriteDirectoryError> for InboxError {
     fn from(error: amiss_controller::atomic_write_recovery::AtomicWriteDirectoryError) -> Self {
         match error {

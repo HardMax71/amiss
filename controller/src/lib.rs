@@ -13,6 +13,8 @@ mod clock;
 mod external;
 pub mod feedback;
 mod file_ledger;
+#[doc(hidden)]
+pub mod frame;
 mod identity;
 mod ingress;
 mod intersphinx;

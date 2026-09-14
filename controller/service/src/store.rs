@@ -13,23 +13,30 @@ use std::path::{Path, PathBuf};
 use amiss_controller::atomic_write_recovery::{
     ATOMIC_WRITE_DIRECTORY_PREFIX, AtomicWriteDirectory,
 };
+use amiss_controller::frame;
 use atomicwrites::{AllowOverwrite, AtomicFile};
 use serde::{Deserialize, Serialize};
 
 pub(crate) use self::entries::RootEntries;
 use crate::InboxError;
-use crate::frame;
 use crate::limits::StoredLimits;
 use crate::record::Record;
 
 const LOCK_FILE: &str = ".amiss-inbox.lock";
 const METADATA_FILE: &str = ".amiss-inbox.state";
 const METADATA_SCHEMA: RootSchema = RootSchema::Current;
-const METADATA_MAGIC: &[u8] = b"AMISS-INBOX-ROOT";
-const METADATA_DOMAIN: &str = "amiss/controller-inbox-root-frame-v1";
-const RECORD_MAGIC: &[u8] = b"AMISS-INBOX-ROW";
-const RECORD_DOMAIN: &str = "amiss/controller-inbox-row-frame-v1";
 const MAX_METADATA_BYTES: u64 = 4_096;
+const METADATA_FRAME: frame::FrameFormat = frame::define(
+    b"AMISS-INBOX-ROOT",
+    "amiss/controller-inbox-root-frame-v1",
+    MAX_METADATA_BYTES,
+);
+// Rows are accounted against the reservation by the store, with its own verdict.
+const RECORD_FRAME: frame::FrameFormat = frame::define(
+    b"AMISS-INBOX-ROW",
+    "amiss/controller-inbox-row-frame-v1",
+    u64::MAX,
+);
 
 pub(crate) struct Store {
     root: PathBuf,
@@ -141,11 +148,11 @@ impl Store {
 }
 
 pub(crate) fn encode_record(record: &Record) -> Result<Vec<u8>, InboxError> {
-    frame::encode(RECORD_MAGIC, RECORD_DOMAIN, record)
+    frame::encode(RECORD_FRAME, record, |_record| Ok(()))
 }
 
 pub(crate) fn decode_record(bytes: &[u8]) -> Result<Record, InboxError> {
-    frame::decode(RECORD_MAGIC, RECORD_DOMAIN, bytes)
+    frame::decode(RECORD_FRAME, bytes, |_record| Ok(()))
 }
 
 pub(crate) fn read_bounded(path: &Path, maximum: u64) -> Result<Vec<u8>, InboxError> {
@@ -169,7 +176,7 @@ pub(crate) fn read_bounded(path: &Path, maximum: u64) -> Result<Vec<u8>, InboxEr
 fn load_or_create_metadata(root: &Path, limits: StoredLimits) -> Result<(), InboxError> {
     let path = root.join(METADATA_FILE);
     let metadata = match read_bounded(&path, MAX_METADATA_BYTES) {
-        Ok(bytes) => frame::decode(METADATA_MAGIC, METADATA_DOMAIN, &bytes)?,
+        Ok(bytes) => frame::decode(METADATA_FRAME, &bytes, |_metadata| Ok::<(), InboxError>(()))?,
         Err(InboxError::Io(error)) if error.kind() == io::ErrorKind::NotFound => {
             prepare_new_root(root)?;
             let metadata = RootMetadata {
@@ -178,7 +185,9 @@ fn load_or_create_metadata(root: &Path, limits: StoredLimits) -> Result<(), Inbo
             };
             atomic_write(
                 &path,
-                &frame::encode(METADATA_MAGIC, METADATA_DOMAIN, &metadata)?,
+                &frame::encode(METADATA_FRAME, &metadata, |_metadata| {
+                    Ok::<(), InboxError>(())
+                })?,
             )?;
             metadata
         }
