@@ -66,7 +66,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/tools
         with:
-          tools: ${{ needs.changes.outputs.code == 'true' && 'prek typos zizmor cargo-deny cargo-shear similarity-rs' || 'prek typos zizmor' }}
+          tools: ${{ needs.changes.outputs.code == 'true' && 'prek typos zizmor ast-grep cargo-deny cargo-shear similarity-rs' || 'prek typos zizmor ast-grep' }}
       # Branch runs only restore; main saves the pruned caches, so lock bumps
       # on branches cannot crowd the shared budget and evict small entries.
       - if: needs.changes.outputs.code == 'true'

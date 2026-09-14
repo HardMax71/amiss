@@ -1,0 +1,17 @@
+id: no-spelling-impls
+language: rust
+severity: error
+message: a handwritten FromStr, Display, TryFrom or primitive From spells or reads a value; derive it, or keep the domain type and format at the boundary
+rule:
+  kind: impl_item
+  any:
+    - has: { field: trait, regex: '^((std|core)::str::)?FromStr$' }
+    - has: { field: trait, regex: '^((std|core)::fmt::|fmt::)?Display$' }
+    - has: { field: trait, regex: '^((std|core)::convert::)?TryFrom<\s*&?\s*(\[u8\]|Vec<u8>|String|str|u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64|bool)\s*>$' }
+    - all:
+        - has: { field: trait, regex: '^((std|core)::convert::)?From<' }
+        - has: { field: type, regex: '^(String|u8|u16|u32|u64|u128|usize|i8|i16|i32|i64|i128|isize|f32|f64|bool)$' }
+  not:
+    any:
+      - has: { field: type, regex: '^(RepoPathText|Oid|ArtifactId|BranchRef|Digest|RequiredStatusName|OpaqueId|ProviderNamespace|ProviderRunAttempt)$' }
+      - has: { field: trait, regex: '^From<ProviderRunAttempt>$' }
