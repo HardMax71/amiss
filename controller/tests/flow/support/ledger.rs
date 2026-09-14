@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, VecDeque};
-use std::fmt;
 
 use amiss_controller::{
     AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, DeliveryClaim,
@@ -7,16 +6,9 @@ use amiss_controller::{
     Publication, StageOutcome, StagedPublication,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("test ledger error")]
 pub(crate) struct LedgerError;
-
-impl fmt::Display for LedgerError {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str("test ledger error")
-    }
-}
-
-impl std::error::Error for LedgerError {}
 
 #[derive(Clone)]
 struct LedgerRow {

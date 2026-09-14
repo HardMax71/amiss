@@ -32,9 +32,11 @@ repos:
         language: system
         files: ^(api|crates/[^/]+|controller(/[^/]+)?)/src/.*\.rs$
         exclude: /tests(\.rs$|/)
+      # The rules live in .ast-grep/rules; the validated newtypes that still
+      # spell themselves by hand are named in the spelling rule and only leave it.
       - id: no-custom-serde
-        name: serialization belongs to Serde derives and libraries
-        entry: python3 scripts/check-serde.py
+        name: serialization and spelling belong to derives and libraries
+        entry: ast-grep scan
         language: system
         types: [rust]
       # The inner gate keeps the module out of non-test builds and tells
