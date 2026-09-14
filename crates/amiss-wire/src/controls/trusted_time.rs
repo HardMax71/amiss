@@ -61,8 +61,8 @@ impl Document for TrustedTimeStatement {
     /// A public field violates the contract enforced by [`parse_trusted_time`].
     fn validate(&self) -> Result<(), Error> {
         validate_repository("$.repository", &self.repository)?;
-        ArtifactId::new(self.provider.clone())
-            .is_some()
+        ArtifactId::try_from(self.provider.clone())
+            .is_ok()
             .then_some(())
             .ok_or_else(|| Error::new("$.provider", ErrorKind::InvalidValue))?;
         provider_run_id_valid(&self.provider_run_id)

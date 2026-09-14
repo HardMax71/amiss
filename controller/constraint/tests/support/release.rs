@@ -1,5 +1,5 @@
-use amiss_wire::model::ArtifactId;
 use amiss_wire::model::RepoPathText;
+use amiss_wire::repo_path_text;
 use std::fs;
 use std::path::Path;
 
@@ -30,7 +30,7 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
     let binary_path = format!("dist/amiss-{}", platform.as_ref());
     let artifacts = [StagedArtifact {
         platform,
-        artifact_name: ArtifactId::try_from(format!("amiss-{}", platform.as_ref())).unwrap(),
+        artifact_name: platform.artifact_name(),
         files: vec![
             StagedFile {
                 path: RepoPathText::try_from(binary_path.clone()).unwrap(),
@@ -39,7 +39,7 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
                 bytes: &binary,
             },
             StagedFile {
-                path: RepoPathText::try_from("action.yml".to_owned()).unwrap(),
+                path: repo_path_text!("action.yml"),
                 role: RuntimeRole::RuntimeData,
                 executable: false,
                 bytes: ACTION,
@@ -56,18 +56,15 @@ pub(crate) fn release(mutate: impl FnOnce(&Path)) -> Release {
         .unwrap(),
         object_format: amiss_wire::model::ObjectFormat::Sha1,
         commit_oid: "a".repeat(40).parse().unwrap(),
-        locks: vec![(
-            RepoPathText::try_from("Cargo.lock".to_owned()).unwrap(),
-            lock,
-        )],
+        locks: vec![(repo_path_text!("Cargo.lock"), lock)],
     };
     let (manifest, digest) = build_manifest(build, artifacts).unwrap();
 
     fs::create_dir_all(root.join("dist")).unwrap();
     fs::write(root.join("action.yml"), ACTION).unwrap();
-    fs::write(root.join(RELEASE_MANIFEST_PATH), manifest).unwrap();
+    fs::write(root.join(RELEASE_MANIFEST_PATH.as_str()), manifest).unwrap();
     fs::write(
-        root.join(RELEASE_MANIFEST_DIGEST_PATH),
+        root.join(RELEASE_MANIFEST_DIGEST_PATH.as_str()),
         format!("{digest}\n"),
     )
     .unwrap();

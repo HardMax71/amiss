@@ -611,7 +611,7 @@ fn inflate_controls(staged: &Release, run: &mut Run, target: u64) {
             let length = path_length
                 .checked_add(usize::from(index < longer_paths))
                 .unwrap();
-            RepoPathText::new(format!(
+            RepoPathText::try_from(format!(
                 "{index:06}{}",
                 "x".repeat(length.checked_sub(6).unwrap())
             ))

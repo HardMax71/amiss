@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
+use amiss_wire::artifact_id;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{DOCUMENT_SUFFIX_BYTES, GitMode};
 use amiss_wire::de::Document;
@@ -18,10 +19,10 @@ use crate::Error;
 use crate::discovery::{WalkMode, discover_walk};
 
 pub const LOCALE_CONTEXT_BYTES: u64 = 65_536;
-pub const PRODUCER_IDENTITY: &str = "amiss-locale-tree";
+pub const PRODUCER_IDENTITY: ArtifactId = artifact_id!("amiss-locale-tree");
 pub const PRODUCER_VERSION: &str = "1.0.0";
 /// The fallback class a target page carries when its bytes are the source's.
-pub const SOURCE_IDENTICAL_CLASS: &str = "source-identical";
+pub const SOURCE_IDENTICAL_CLASS: ArtifactId = artifact_id!("source-identical");
 const CONTEXT_DOMAIN: &str = "amiss/locale-tree-context-v1";
 const RESOURCE_DOMAIN: &str = "amiss/locale-tree-resource-v1";
 const INPUT_DOMAIN: &str = "amiss/locale-tree-input-v1";
@@ -95,7 +96,7 @@ struct Pages {
 /// The context cannot be encoded.
 pub fn tree_producer(context: &LocaleTreeContext) -> Result<PublicationProducer, InventoryError> {
     Ok(PublicationProducer {
-        identity: ArtifactId::new(PRODUCER_IDENTITY.to_owned()).ok_or(InventoryError::Evidence)?,
+        identity: PRODUCER_IDENTITY,
         version: PRODUCER_VERSION.to_owned(),
         context_digest: document_digest(CONTEXT_DOMAIN, context).ok_or(InventoryError::Context)?,
     })
@@ -137,8 +138,7 @@ pub fn tree_inventory(
     }
     let (source, target) = walk(repo, git, context, &tree)?;
     let producer = tree_producer(context)?;
-    let identical =
-        ArtifactId::new(SOURCE_IDENTICAL_CLASS.to_owned()).ok_or(InventoryError::Evidence)?;
+    let identical = SOURCE_IDENTICAL_CLASS;
     let evidence = LocaleCoverageEvidence {
         schema: EvidencePayloadSchema::Current,
         plan_payload_digest: plan.payload_digest,

@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use std::sync::LazyLock;
 use std::time::{Duration, SystemTime};
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
     AcceptedDelivery, DeliveryHeader, DeliveryRoute, GitHubWebhook, GiteaWebhook, IngressLimits,
     IngressPolicy, OpaqueId, ProviderIdentity, ReplayWindow, SignedTimePolicy, UntrustedDelivery,
@@ -14,6 +15,7 @@ use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitea::{DedicatedReviewer, GiteaPullRequestSource};
 use amiss_controller_github::GitHubPullRequestSource;
 use amiss_controller_gitlab::{GitLabOidc, OidcPublicKey, PolicyBinding, RunnerTrust};
+use amiss_wire::branch_ref;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
@@ -34,13 +36,7 @@ const SHA1: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 static RSA_KEYS: LazyLock<RsaKeys> =
     LazyLock::new(|| rsa_keys().expect("the RSA fixture is valid"));
 
-#[expect(
-    clippy::expect_used,
-    reason = "the fixed provider target must remain valid"
-)]
-static TARGET_BRANCH: LazyLock<BranchRef> = LazyLock::new(|| {
-    BranchRef::new("refs/heads/main".to_owned()).expect("the fixed target is valid")
-});
+static TARGET_BRANCH: LazyLock<BranchRef> = LazyLock::new(|| branch_ref!("refs/heads/main"));
 
 #[expect(
     clippy::expect_used,
@@ -49,11 +45,11 @@ static TARGET_BRANCH: LazyLock<BranchRef> = LazyLock::new(|| {
 static GITLAB_OIDC: LazyLock<GitLabOidc> = LazyLock::new(|| {
     GitLabOidc::new(
         provider("gitlab", GITLAB_HOST),
-        opaque("gitlab-oidc"),
+        opaque_id!("gitlab-oidc"),
         format!("https://{GITLAB_HOST}"),
         GITLAB_AUDIENCE.to_owned(),
         PolicyBinding {
-            integration: opaque("policy/1"),
+            integration: opaque_id!("policy/1"),
             project_id: 101,
             project_path: "acme/widget".to_owned(),
             target_branch: "main".to_owned(),
@@ -68,7 +64,7 @@ static GITLAB_OIDC: LazyLock<GitLabOidc> = LazyLock::new(|| {
         vec![
             OidcPublicKey::from_rsa_pem(
                 GITLAB_KID.to_owned(),
-                opaque("gitlab-key/current"),
+                opaque_id!("gitlab-key/current"),
                 &RSA_KEYS.public_pem,
             )
             .expect("the fixed public key is valid"),
@@ -119,7 +115,7 @@ pub fn provider_webhooks(data: &[u8]) {
         });
         let exercise = prepare_webhook(body, data, false, "GitHub");
         let provider = provider("github", "github.example.test");
-        let trust_set = opaque("github-webhooks");
+        let trust_set = opaque_id!("github-webhooks");
         let source = GitHubPullRequestSource::new(
             provider.clone(),
             GitHubWebhook::new(keyring(trust_set.clone())),
@@ -162,7 +158,7 @@ pub fn provider_webhooks(data: &[u8]) {
         });
         let exercise = prepare_webhook(body, data, true, "Gitea-family");
         let provider = provider("gitea", "gitea.example.test");
-        let trust_set = opaque("gitea-webhooks");
+        let trust_set = opaque_id!("gitea-webhooks");
         let source = GiteaPullRequestSource::new(
             provider.clone(),
             DedicatedReviewer::new(44, "amiss-reviewer".to_owned())
@@ -251,7 +247,7 @@ pub fn gitlab_oidc(data: &[u8]) {
         return;
     };
     let provider = provider("gitlab", GITLAB_HOST);
-    let trust_set = opaque("gitlab-oidc");
+    let trust_set = opaque_id!("gitlab-oidc");
     let route = DeliveryRoute {
         provider: provider.clone(),
         trust_set,
@@ -530,7 +526,7 @@ fn keyring(trust_set: OpaqueId) -> WebhookKeyring {
     WebhookKeyring::new(
         trust_set,
         vec![
-            WebhookKey::new(opaque("current"), WEBHOOK_SECRET.to_vec(), 0, None)
+            WebhookKey::new(opaque_id!("current"), WEBHOOK_SECRET.to_vec(), 0, None)
                 .expect("the fixed webhook key is valid"),
         ],
     )
@@ -552,14 +548,6 @@ fn signature(body: &[u8]) -> String {
 fn provider(namespace: &str, host: &str) -> ProviderIdentity {
     ProviderIdentity::new(namespace.to_owned(), host.to_owned())
         .expect("the fixed provider identity is valid")
-}
-
-#[expect(
-    clippy::expect_used,
-    reason = "fixed fuzz-fixture identifiers must remain valid"
-)]
-fn opaque(value: &str) -> OpaqueId {
-    OpaqueId::new(value.to_owned()).expect("the fixed opaque ID is valid")
 }
 
 #[expect(

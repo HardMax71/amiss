@@ -13,6 +13,7 @@ use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::{CandidateBlock, RequestDigests, Setup, SnapshotIdentity};
 use amiss_scan::request::controls;
 use amiss_scan::{Effects, semantic};
+use amiss_wire::artifact_id;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::Profile;
 use amiss_wire::model::Digest;
@@ -82,7 +83,7 @@ fn semantic_inputs(
         },
         producer: SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
-            identity: ArtifactId::new("test-rust-public-api".to_owned()).unwrap(),
+            identity: artifact_id!("test-rust-public-api"),
             version: "1".to_owned(),
             context_digest,
             input_digest: Digest::from(

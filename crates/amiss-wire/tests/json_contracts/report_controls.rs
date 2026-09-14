@@ -1,3 +1,4 @@
+use amiss_wire::artifact_id;
 use amiss_wire::envelope::{Payload as _, document_digest};
 use amiss_wire::model::ArtifactId;
 use amiss_wire::{
@@ -76,7 +77,7 @@ fn reports() -> Vec<ReportEnvelope> {
     controls.semantic_evidence = Some(vec![SemanticEvidenceProvenance {
         payload_digest: amiss_wire::model::Digest::from([23; 32]),
         producer: SemanticEvidenceProducer {
-            identity: ArtifactId::try_from("producer".to_owned()).unwrap(),
+            identity: artifact_id!("producer"),
             input_digest: amiss_wire::model::Digest::from([21; 32]),
             kind: SemanticProducerKind::RecordSet,
             version: "1".to_owned(),

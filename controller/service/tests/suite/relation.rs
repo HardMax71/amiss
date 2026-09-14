@@ -7,8 +7,8 @@ use sha2::Digest as _;
 use std::sync::Arc;
 use std::time::Duration;
 
-use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
+use amiss_controller::opaque_id;
 use amiss_controller::{
     ArtifactComponent, ArtifactStoreConfig, AuthenticatedDelivery, Change, ChangeLocator,
     ControllerClock, ControllerEvaluationId, Delivery, DeliveryIdentity, FileArtifactStore,
@@ -23,12 +23,12 @@ use amiss_controller_service::{
     CoordinatedRelation, CoordinatedTransition, RelationAuditExecutionError, RelationAuditRequest,
     RelationOutboxError, drain_relation_outbox, execute_relation_audit, freeze_relation_transition,
 };
-use amiss_wire::controls::{
-    BlobLineSelection, ProjectionKind, ProjectionSource, RequiredStatusName,
-};
+use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
 use amiss_wire::envelope::Payload as _;
-use amiss_wire::model::{ArtifactId, Digest, ObjectFormat, Oid, RepoPathText};
+use amiss_wire::model::{ArtifactId, Digest, ObjectFormat, Oid};
 use amiss_wire::relation::{RelationAssessment, RelationSnapshot, RelationVerdict};
+use amiss_wire::repo_path_text;
+use amiss_wire::{artifact_id, required_status_name};
 
 struct RelationWorkFixture {
     documentation: amiss_fixtures::CommitPair,
@@ -63,7 +63,7 @@ fn delivery(transition: &RelationTransition) -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: subject.scope.provider.clone(),
             integration: subject.scope.integration.clone(),
-            delivery: Delivery::Provided(OpaqueId::new("delivery/relation".to_owned()).unwrap()),
+            delivery: Delivery::Provided(opaque_id!("delivery/relation")),
         },
         change: ChangeLocator {
             provider: subject.scope.provider.clone(),
@@ -72,7 +72,7 @@ fn delivery(transition: &RelationTransition) -> AuthenticatedDelivery {
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRun::PullRequest(Digest::from([247; 32])),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::FIRST,
             subject.object_format,
             frozen.commits.candidate.clone(),
         )
@@ -102,7 +102,7 @@ fn either_authenticated_trigger_freezes_the_same_coordinated_revisions() {
     );
 
     let mut documentation = source;
-    documentation.relation.trigger_role = ArtifactId::new("documentation".to_owned()).unwrap();
+    documentation.relation.trigger_role = artifact_id!("documentation");
     let documentation_delivery = delivery(&documentation);
     assert_eq!(
         freeze_relation_transition(
@@ -154,7 +154,7 @@ fn a_direct_stage_value_cannot_bypass_delivery_admission() {
     let registry = relation_registry(vec![transition.relation.plan.as_ref().clone()]).unwrap();
     let delivery = delivery(&transition);
     let mut forged = transition.relation.plan.as_ref().clone();
-    forged.identity = ArtifactId::new("relation/unregistered".to_owned()).unwrap();
+    forged.identity = artifact_id!("relation/unregistered");
 
     assert_eq!(
         freeze_relation_transition(
@@ -183,7 +183,7 @@ fn current_relation_work_projects_assesses_retains_and_stages_exactly()
     else {
         return Err(std::io::Error::other("new relation work was not scheduled").into());
     };
-    let evaluation_id = ControllerEvaluationId::new("evaluation/relation-service".to_owned())
+    let evaluation_id = Some(opaque_id!("evaluation/relation-service"))
         .ok_or_else(|| std::io::Error::other("invalid evaluation identity"))?;
     let staged = execute_relation_audit(
         &stores.artifacts,
@@ -233,13 +233,13 @@ fn superseded_relation_work_spends_no_projection_or_artifact_capacity()
         return Err(std::io::Error::other("new relation work was not scheduled").into());
     };
     let mut next = fixture.transition.clone();
-    next.coordination = ArtifactId::new("workflow/release-next".to_owned())
+    next.coordination = Some(artifact_id!("workflow/release-next"))
         .ok_or_else(|| std::io::Error::other("invalid coordination identity"))?;
     assert!(matches!(
         stores.schedules.schedule(next)?,
         RelationAdmission::Scheduled(_)
     ));
-    let evaluation_id = ControllerEvaluationId::new("evaluation/relation-stale".to_owned())
+    let evaluation_id = Some(opaque_id!("evaluation/relation-stale"))
         .ok_or_else(|| std::io::Error::other("invalid evaluation identity"))?;
 
     assert!(matches!(
@@ -260,8 +260,8 @@ fn relation_outbox_retries_after_restart_and_acknowledges_only_success()
     let mut fixture = relation_work()?;
     let mut plan = fixture.transition.relation.plan.as_ref().clone();
     plan.status_destinations.push(RelationStatusDestination {
-        subject_role: ArtifactId::new("source".to_owned()).unwrap(),
-        required_status_name: RequiredStatusName::try_from("Amiss source relation".to_owned())?,
+        subject_role: artifact_id!("source"),
+        required_status_name: required_status_name!("Amiss source relation"),
     });
     fixture.transition.relation.plan = Arc::new(plan);
     let RelationStores {
@@ -276,7 +276,7 @@ fn relation_outbox_retries_after_restart_and_acknowledges_only_success()
     else {
         return Err(std::io::Error::other("new relation work was not scheduled").into());
     };
-    let evaluation_id = ControllerEvaluationId::new("evaluation/relation-outbox".to_owned())
+    let evaluation_id = Some(opaque_id!("evaluation/relation-outbox"))
         .ok_or_else(|| std::io::Error::other("invalid evaluation identity"))?;
     let staged = execute_relation_audit(
         &artifacts,
@@ -371,7 +371,7 @@ fn relation_work() -> Result<RelationWorkFixture, Box<dyn std::error::Error>> {
         relation_audit(false).ok_or_else(|| std::io::Error::other("invalid relation fixture"))?;
     let mut plan = original.transition.relation.plan.as_ref().clone();
     plan.projection = ProjectionKind::CodeTextV1;
-    let path = RepoPathText::new("projection.txt".to_owned())
+    let path = Some(repo_path_text!("projection.txt"))
         .ok_or_else(|| std::io::Error::other("invalid projection path"))?;
     for subject in &mut plan.subjects {
         subject.source = ProjectionSource::BlobLines(BlobLineSelection {
@@ -402,7 +402,7 @@ fn relation_work() -> Result<RelationWorkFixture, Box<dyn std::error::Error>> {
 
 fn frozen(role: &str, pair: &amiss_fixtures::CommitPair) -> RelationSubjectTransition {
     RelationSubjectTransition {
-        role: ArtifactId::new(role.to_owned()).unwrap(),
+        role: ArtifactId::try_from(role.to_owned()).unwrap(),
         commits: amiss_controller::OidPair {
             base: Oid::new(ObjectFormat::Sha1, pair.base.clone()).unwrap(),
             candidate: Oid::new(ObjectFormat::Sha1, pair.candidate.clone()).unwrap(),

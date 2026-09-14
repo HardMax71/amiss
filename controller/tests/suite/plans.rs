@@ -11,13 +11,14 @@ use std::path::Path;
 use std::sync::Arc;
 
 use amiss_controller::MergeRequestChange;
+use amiss_controller::PipelineJob;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, CheckPlan, Delivery, DeliveryIdentity,
     ExternalPolicy, IntegrationId, PlanError, PlanRegistry, PlanScope, PolicyControls,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun, ProviderRunAttempt,
-    ProviderRunIdentity, check_binding, check_plan, register_plan, resolve_plan,
+    ProviderIdentity, ProviderRun, ProviderRunAttempt, ProviderRunIdentity, check_binding,
+    check_plan, register_plan, resolve_plan,
 };
-use amiss_controller::{OpaqueId, PipelineJob};
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -37,8 +38,8 @@ fn plan() -> CheckPlan {
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example.internal".to_owned()).unwrap(),
+        namespace: provider_namespace!("gitlab"),
+        instance: opaque_id!("gitlab.example.internal"),
     }
 }
 
@@ -52,7 +53,7 @@ fn repository() -> RepositoryIdentity {
 }
 
 fn integration() -> IntegrationId {
-    IntegrationId::new("project-hook/7".to_owned()).unwrap()
+    opaque_id!("project-hook/7")
 }
 
 fn delivery() -> AuthenticatedDelivery {
@@ -61,7 +62,7 @@ fn delivery() -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
             integration: integration(),
-            delivery: Delivery::Provided(OpaqueId::new("webhook/9".to_owned()).unwrap()),
+            delivery: Delivery::Provided(opaque_id!("webhook/9")),
         },
         change: ChangeLocator {
             provider,
@@ -70,7 +71,7 @@ fn delivery() -> AuthenticatedDelivery {
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRun::Job(PipelineJob::new(11, 1).unwrap()),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::FIRST,
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
         )
@@ -100,7 +101,7 @@ fn plans_resolve_only_from_the_complete_authenticated_scope() {
     );
 
     let mut other = delivery();
-    other.identity.integration = IntegrationId::new("project-hook/8".to_owned()).unwrap();
+    other.identity.integration = opaque_id!("project-hook/8");
     assert_eq!(
         resolve_plan(&registry, &other).unwrap_err(),
         PlanError::Missing

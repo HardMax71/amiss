@@ -7,15 +7,15 @@ use amiss_controller::{
     RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_audit_plan,
     relation_transition,
 };
-use amiss_wire::controls::{
-    ProjectionKind, ProjectionSource, RecordSetSelection, RequiredStatusName,
-};
+use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
 use amiss_wire::envelope::{Envelope, Payload as _};
-use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
     RelationEvidence, RelationEvidenceSubject, RelationPlan as PlanPayload, RelationProjectedValue,
     RelationProjectionSlot, assess,
 };
+use amiss_wire::required_status_name;
+use amiss_wire::{artifact_id, branch_ref};
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.json");
 
@@ -74,9 +74,9 @@ fn transition(coordination: &str) -> Option<RelationTransition> {
     relation_transition(
         TriggeredRelation {
             plan: Arc::clone(&registered),
-            trigger_role: ArtifactId::new("source".to_owned())?,
+            trigger_role: artifact_id!("source"),
         },
-        ArtifactId::new(coordination.to_owned())?,
+        ArtifactId::try_from(coordination.to_owned()).ok()?,
         [
             frozen(
                 "documentation",
@@ -99,7 +99,7 @@ fn transition(coordination: &str) -> Option<RelationTransition> {
 
 fn registered_relation() -> Option<Arc<RelationPlan>> {
     let registered = Arc::new(RelationPlan {
-        identity: ArtifactId::new("relation/public-api".to_owned())?,
+        identity: artifact_id!("relation/public-api"),
         context_digest: amiss_wire::model::Digest::from([
             0xf3, 0x56, 0xae, 0x83, 0xe3, 0x5d, 0xa8, 0xec, 0x17, 0xf6, 0xaf, 0x65, 0xba, 0xf3,
             0x16, 0x67, 0xcd, 0x1b, 0xe0, 0x32, 0x88, 0xa7, 0xc1, 0x4b, 0x7e, 0xa8, 0x0e, 0x7d,
@@ -133,9 +133,8 @@ fn registered_relation() -> Option<Arc<RelationPlan>> {
             projection_bytes: 1_572_864,
         },
         status_destinations: vec![RelationStatusDestination {
-            subject_role: ArtifactId::new("documentation".to_owned())?,
-            required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
-                .ok()?,
+            subject_role: artifact_id!("documentation"),
+            required_status_name: required_status_name!("Amiss cross-repository"),
         }],
     });
     Some(registered)
@@ -149,7 +148,7 @@ fn report() -> Option<Vec<u8>> {
     else {
         return None;
     };
-    evaluation.target_ref = Some(BranchRef::try_from("refs/heads/main".to_owned()).ok()?);
+    evaluation.target_ref = Some(branch_ref!("refs/heads/main"));
     report.payload_digest = amiss_wire::model::Digest::from(
         sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
             .chain_update([0_u8])
@@ -168,20 +167,20 @@ fn subject(
     set: &str,
 ) -> Option<RelationSubject> {
     Some(RelationSubject {
-        role: ArtifactId::new(role.to_owned())?,
+        role: ArtifactId::try_from(role.to_owned()).ok()?,
         scope: PlanScope {
             provider: ProviderIdentity {
-                namespace: ProviderNamespace::new(provider.to_owned())?,
-                instance: ProviderInstance::new(instance.to_owned())?,
+                namespace: ProviderNamespace::try_from(provider.to_owned()).ok()?,
+                instance: ProviderInstance::try_from(instance.to_owned()).ok()?,
             },
-            integration: IntegrationId::new(format!("integration/{role}"))?,
+            integration: IntegrationId::try_from(format!("integration/{role}")).ok()?,
             repository,
         },
-        target: BranchRef::new("refs/heads/main".to_owned())?,
+        target: branch_ref!("refs/heads/main"),
         object_format: ObjectFormat::Sha1,
-        credential: OpaqueId::new(format!("credential/{role}"))?,
+        credential: OpaqueId::try_from(format!("credential/{role}")).ok()?,
         source: ProjectionSource::RecordSet(RecordSetSelection {
-            set: ArtifactId::new(set.to_owned())?,
+            set: ArtifactId::try_from(set.to_owned()).ok()?,
         }),
         limits: RelationLimits {
             acquisition_objects: 100,
@@ -200,7 +199,7 @@ fn frozen(
     candidate_tree: &str,
 ) -> Option<RelationSubjectTransition> {
     Some(RelationSubjectTransition {
-        role: ArtifactId::new(role.to_owned())?,
+        role: ArtifactId::try_from(role.to_owned()).ok()?,
         commits: OidPair {
             base: Oid::new(ObjectFormat::Sha1, base_commit.to_owned())?,
             candidate: Oid::new(ObjectFormat::Sha1, candidate_commit.to_owned())?,
@@ -226,12 +225,12 @@ fn relation_evidence(plan: &Envelope<PlanPayload>) -> Option<Vec<u8>> {
         plan_payload_digest: plan.payload_digest,
         subjects: [
             RelationEvidenceSubject {
-                role: ArtifactId::new("documentation".to_owned())?,
+                role: artifact_id!("documentation"),
                 base: RelationProjectionSlot::Projected(aligned),
                 candidate: RelationProjectionSlot::Projected(aligned),
             },
             RelationEvidenceSubject {
-                role: ArtifactId::new("source".to_owned())?,
+                role: artifact_id!("source"),
                 base: RelationProjectionSlot::Projected(aligned),
                 candidate: RelationProjectionSlot::Projected(changed),
             },

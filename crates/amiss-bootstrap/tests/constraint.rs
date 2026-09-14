@@ -3,7 +3,7 @@
     clippy::expect_used,
     reason = "integration harness over asserted fixture shapes"
 )]
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::required_status_name;
 
 use amiss_bootstrap::constraint::{ConstraintError, derive_execution_constraint};
 use amiss_bootstrap::{BOOTSTRAP_DOMAIN, validate};
@@ -40,7 +40,7 @@ fn derive(
         &mut resources,
         &identity(),
         &commit,
-        &RequiredStatusName::try_from("amiss / assure".to_owned()).unwrap(),
+        &required_status_name!("amiss / assure"),
         bootstrap,
     )
 }

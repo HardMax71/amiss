@@ -45,12 +45,12 @@ pub(super) fn evaluation_id(
     identity: &DeliveryIdentity,
     nonce: &[u8; 16],
 ) -> Result<ControllerEvaluationId, FileLedgerError> {
-    ControllerEvaluationId::new(format!(
+    ControllerEvaluationId::try_from(format!(
         "eval:{}:{}",
         delivery_key(identity)?,
         hex::encode(nonce)
     ))
-    .ok_or(FileLedgerError::Corrupt)
+    .map_err(|_defect| FileLedgerError::Corrupt)
 }
 
 pub(super) fn staged_digest(

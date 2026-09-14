@@ -45,10 +45,12 @@ fn the_manifest_builder_publishes_its_digest_marker() {
     assert!(output.status.success(), "{output:?}");
     assert!(output.stderr.is_empty());
 
-    let manifest =
-        ReleaseManifest::parse(&std::fs::read(tree.path().join(RELEASE_MANIFEST_PATH)).unwrap())
-            .unwrap();
-    let marker = std::fs::read_to_string(tree.path().join(RELEASE_MANIFEST_DIGEST_PATH)).unwrap();
+    let manifest = ReleaseManifest::parse(
+        &std::fs::read(tree.path().join(RELEASE_MANIFEST_PATH.as_str())).unwrap(),
+    )
+    .unwrap();
+    let marker =
+        std::fs::read_to_string(tree.path().join(RELEASE_MANIFEST_DIGEST_PATH.as_str())).unwrap();
     let digest = document_digest("amiss/scanner-release-manifest", &manifest).unwrap();
     assert_eq!(marker, format!("{digest}\n"));
     assert_eq!(String::from_utf8(output.stdout).unwrap(), marker);

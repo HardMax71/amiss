@@ -1,10 +1,11 @@
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, DeliveryHeader, DeliveryRoute,
-    IngressPolicy, OidPair, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    Publication, RunIdentity, RunRefs, UntrustedDelivery,
+    IngressPolicy, OidPair, ProviderError, ProviderIdentity, ProviderNamespace, Publication,
+    RunIdentity, RunRefs, UntrustedDelivery,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_gitea::{
@@ -233,8 +234,8 @@ pub(super) fn snapshot(
 
 pub(super) fn provider(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new(namespace.to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
+        instance: opaque_id!("forge.example"),
     }
 }
 
@@ -243,5 +244,5 @@ pub(super) fn reviewer() -> DedicatedReviewer {
 }
 
 fn branch(name: &str) -> BranchRef {
-    BranchRef::new(format!("refs/heads/{name}")).unwrap()
+    BranchRef::try_from(format!("refs/heads/{name}")).unwrap()
 }

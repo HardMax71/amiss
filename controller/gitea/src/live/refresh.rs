@@ -382,5 +382,6 @@ fn valid_response(valid: bool) -> Result<(), ProviderError> {
 }
 
 fn branch_ref(branch: &str) -> Result<BranchRef, ProviderError> {
-    BranchRef::new(format!("refs/heads/{branch}")).ok_or(ProviderError::InvalidResponse)
+    BranchRef::try_from(format!("refs/heads/{branch}"))
+        .map_err(|_defect| ProviderError::InvalidResponse)
 }

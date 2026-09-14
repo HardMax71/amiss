@@ -1,6 +1,6 @@
 use amiss_bootstrap::supervise::{AcceptanceDefect, Expectations, accept};
+use amiss_wire::artifact_id;
 use amiss_wire::envelope::document_digest;
-use amiss_wire::model::ArtifactId;
 use amiss_wire::{
     report::{
         PAYLOAD_SCHEMA, emit_report,
@@ -20,7 +20,7 @@ fn semantic_report() -> (ReportEnvelope, Expectations) {
     let expected = SemanticEvidenceProvenance {
         payload_digest: FLOOR_DIGEST.parse().unwrap(),
         producer: SemanticEvidenceProducer {
-            identity: ArtifactId::try_from("producer".to_owned()).unwrap(),
+            identity: artifact_id!("producer"),
             input_digest: FLOOR_DIGEST.parse().unwrap(),
             kind: SemanticProducerKind::RecordSet,
             version: "1".to_owned(),
@@ -38,7 +38,7 @@ fn semantic_evidence_binds_each_producer_fact() {
     let mut cases: [_; 6] = std::array::from_fn(|_| source.clone());
     cases[1].payload_digest = FOREIGN_DIGEST.parse().unwrap();
     cases[2].producer.input_digest = FOREIGN_DIGEST.parse().unwrap();
-    cases[3].producer.identity = ArtifactId::try_from("other".to_owned()).unwrap();
+    cases[3].producer.identity = artifact_id!("other");
     cases[4].producer.kind = SemanticProducerKind::SiteBuild;
     cases[5].producer.version = "2".to_owned();
     for (index, row) in cases.into_iter().enumerate() {

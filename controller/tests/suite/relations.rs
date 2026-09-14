@@ -9,30 +9,33 @@ use std::sync::Arc;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, IntegrationId,
-    LeaseFence, OidPair, OpaqueId, PendingRelation, PlanScope, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
-    RELATION_REGISTRY_LIMIT, RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission,
-    RelationCredentialError, RelationCredentialRoute, RelationLimits, RelationPlan,
-    RelationRegistryError, RelationScheduleError, RelationStatusDestination, RelationStatusError,
-    RelationSubject, RelationSubjectHead, RelationSubjectTransition, RelationTransition,
-    relation_authority, relation_credential_router, relation_registry, relation_status_targets,
-    relation_transition, relations_for_delivery, schedule_relation, verify_relation_acquired,
+    LeaseFence, OidPair, OpaqueId, PendingRelation, PlanScope, ProviderIdentity, ProviderRun,
+    ProviderRunAttempt, ProviderRunIdentity, RELATION_REGISTRY_LIMIT, RelationAcquiredRoot,
+    RelationAcquisitionError, RelationAdmission, RelationCredentialError, RelationCredentialRoute,
+    RelationLimits, RelationPlan, RelationRegistryError, RelationScheduleError,
+    RelationStatusDestination, RelationStatusError, RelationSubject, RelationSubjectHead,
+    RelationSubjectTransition, RelationTransition, relation_authority, relation_credential_router,
+    relation_registry, relation_status_targets, relation_transition, relations_for_delivery,
+    schedule_relation, verify_relation_acquired,
 };
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_fixtures::{CommitPair, commit_pair, git};
+use amiss_wire::artifact_id;
 use amiss_wire::controls::{
-    ProjectionKind, ProjectionSource, RecordSetSelection, RecordValueSelection, RequiredStatusName,
+    ProjectionKind, ProjectionSource, RecordSetSelection, RecordValueSelection,
 };
-use amiss_wire::model::{ArtifactId, BranchRef, Digest, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ArtifactId, Digest, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::RelationSnapshot;
+use amiss_wire::{branch_ref, required_status_name};
 
 fn artifact(raw: &str) -> ArtifactId {
-    ArtifactId::new(raw.to_owned()).unwrap()
+    ArtifactId::try_from(raw.to_owned()).unwrap()
 }
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        namespace: provider_namespace!("github"),
+        instance: opaque_id!("github.com"),
     }
 }
 
@@ -43,7 +46,7 @@ fn repository(name: &str) -> RepositoryIdentity {
 fn scope(name: &str) -> PlanScope {
     PlanScope {
         provider: provider(),
-        integration: IntegrationId::new(format!("installation/{name}")).unwrap(),
+        integration: IntegrationId::try_from(format!("installation/{name}")).unwrap(),
         repository: repository(name),
     }
 }
@@ -61,9 +64,9 @@ fn subject(role: &str, repository: &str, set: &str) -> RelationSubject {
     RelationSubject {
         role: artifact(role),
         scope: scope(repository),
-        target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+        target: branch_ref!("refs/heads/main"),
         object_format: ObjectFormat::Sha1,
-        credential: OpaqueId::new(format!("git/{repository}")).unwrap(),
+        credential: OpaqueId::try_from(format!("git/{repository}")).unwrap(),
         source: ProjectionSource::RecordSet(RecordSetSelection { set: artifact(set) }),
         limits: limits(100, 1_048_576),
     }
@@ -80,9 +83,8 @@ fn plan(identity: &str, source: &str, documentation: &str) -> RelationPlan {
         ],
         aggregate_limits: limits(150, 1_572_864),
         status_destinations: vec![RelationStatusDestination {
-            subject_role: artifact("documentation"),
-            required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
-                .unwrap(),
+            subject_role: artifact_id!("documentation"),
+            required_status_name: required_status_name!("Amiss cross-repository"),
         }],
     }
 }
@@ -107,7 +109,7 @@ fn delivery(repository: &str, object_format: ObjectFormat) -> AuthenticatedDeliv
         identity: DeliveryIdentity {
             provider: scope.provider.clone(),
             integration: scope.integration,
-            delivery: Delivery::Provided(OpaqueId::new("delivery/1".to_owned()).unwrap()),
+            delivery: Delivery::Provided(opaque_id!("delivery/1")),
         },
         change: ChangeLocator {
             provider: scope.provider,
@@ -116,7 +118,7 @@ fn delivery(repository: &str, object_format: ObjectFormat) -> AuthenticatedDeliv
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRun::PullRequest(Digest::from([195; 32])),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::FIRST,
             object_format,
             Oid::new(object_format, hex).unwrap(),
         )
@@ -158,7 +160,7 @@ fn frozen_transition(source: &CommitPair, documentation: &CommitPair) -> Relatio
         .unwrap();
     relation_transition(
         relation,
-        artifact("workflow/release-42"),
+        artifact_id!("workflow/release-42"),
         [
             transition_subject("source", source),
             transition_subject("documentation", documentation),
@@ -188,11 +190,10 @@ fn current_heads(transition: &RelationTransition) -> [RelationSubjectHead; 2] {
 #[test]
 fn either_authenticated_subject_selects_every_owned_relation_in_identity_order() {
     let mut zeta = plan("relation/zeta", "sdk", "handbook");
-    zeta.status_destinations[0].required_status_name =
-        RequiredStatusName::try_from("Amiss zeta relation".to_owned()).unwrap();
+    zeta.status_destinations[0].required_status_name = required_status_name!("Amiss zeta relation");
     let mut alpha = plan("relation/alpha", "service", "handbook");
     alpha.status_destinations[0].required_status_name =
-        RequiredStatusName::try_from("Amiss alpha relation".to_owned()).unwrap();
+        required_status_name!("Amiss alpha relation");
     let registry = relation_registry(vec![zeta, alpha]).unwrap();
 
     let handbook =
@@ -237,8 +238,7 @@ fn unregistered_scope_or_object_format_is_authenticated_no_work() {
 fn an_inconsistent_authenticated_identity_never_selects_a_relation() {
     let registry = relation_registry(vec![plan("relation/api", "service", "handbook")]).unwrap();
     let mut inconsistent = delivery("service", ObjectFormat::Sha1);
-    inconsistent.change.provider.instance =
-        ProviderInstance::new("elsewhere.test".to_owned()).unwrap();
+    inconsistent.change.provider.instance = opaque_id!("elsewhere.test");
     assert!(relations_for_delivery(&registry, &inconsistent).is_err());
 }
 
@@ -297,13 +297,13 @@ fn credential_router_freezes_one_authority_for_every_required_identity() {
     );
 
     let mut missing = source.clone();
-    missing.credential = OpaqueId::new("git/unknown".to_owned()).unwrap();
+    missing.credential = opaque_id!("git/unknown");
     assert_eq!(
         relation_authority(&router, &missing.credential, &missing.scope).err(),
         Some(RelationCredentialError::Missing)
     );
     let mut rebound = source;
-    rebound.scope.integration = IntegrationId::new("installation/other".to_owned()).unwrap();
+    rebound.scope.integration = opaque_id!("installation/other");
     assert_eq!(
         relation_authority(&router, &rebound.credential, &rebound.scope).err(),
         Some(RelationCredentialError::Rebound)
@@ -322,7 +322,7 @@ fn credential_router_rejects_missing_unused_and_repeated_rows() {
     );
 
     let mut unused = credential_route(&source, "unused");
-    unused.identity = OpaqueId::new("git/unused".to_owned()).unwrap();
+    unused.identity = opaque_id!("git/unused");
     assert_eq!(
         relation_credential_router(
             &registry,
@@ -372,7 +372,7 @@ fn one_credential_identity_has_one_provider_authority_scope() {
 fn selectors_and_budgets_must_be_closed_and_jointly_reachable() {
     let mut incompatible = plan("relation/api", "service", "handbook");
     incompatible.subjects[0].source = ProjectionSource::RecordValue(RecordValueSelection {
-        set: artifact("rust/public-api"),
+        set: artifact_id!("rust/public-api"),
         key: "amiss::check".to_owned(),
     });
     assert_eq!(
@@ -398,7 +398,7 @@ fn selectors_and_budgets_must_be_closed_and_jointly_reachable() {
 #[test]
 fn status_destinations_are_exact_valid_subjects() {
     let mut unknown = plan("relation/api", "service", "handbook");
-    unknown.status_destinations[0].subject_role = artifact("unknown");
+    unknown.status_destinations[0].subject_role = artifact_id!("unknown");
     assert_eq!(
         relation_registry(vec![unknown]).err(),
         Some(RelationRegistryError::InvalidDestination)
@@ -425,15 +425,15 @@ fn one_provider_repository_status_key_has_one_relation_owner() {
         .iter_mut()
         .find(|subject| subject.role.as_str() == "documentation")
         .unwrap();
-    documentation.scope.integration = IntegrationId::new("installation/other".to_owned()).unwrap();
-    documentation.credential = OpaqueId::new("git/other".to_owned()).unwrap();
+    documentation.scope.integration = opaque_id!("installation/other");
+    documentation.credential = opaque_id!("git/other");
     assert_eq!(
         relation_registry(vec![first.clone(), second.clone()]).err(),
         Some(RelationRegistryError::DuplicateDestination)
     );
 
     second.status_destinations[0].required_status_name =
-        RequiredStatusName::try_from("Amiss schema relation".to_owned()).unwrap();
+        required_status_name!("Amiss schema relation");
     assert!(relation_registry(vec![first, second]).is_ok());
 }
 
@@ -457,8 +457,8 @@ fn acquired_relation_roots_prove_each_subjects_commits_and_trees() {
     let source = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
     let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
     let transition = frozen_transition(&source, &documentation);
-    let source_role = artifact("source");
-    let documentation_role = artifact("documentation");
+    let source_role = artifact_id!("source");
+    let documentation_role = artifact_id!("documentation");
 
     assert!(
         verify_relation_acquired(
@@ -499,8 +499,8 @@ fn acquired_relation_roots_prove_each_subjects_commits_and_trees() {
 fn identical_object_ids_still_require_independent_subject_roots() {
     let shared = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
     let transition = frozen_transition(&shared, &shared);
-    let source_role = artifact("source");
-    let documentation_role = artifact("documentation");
+    let source_role = artifact_id!("source");
+    let documentation_role = artifact_id!("documentation");
 
     assert_eq!(
         verify_relation_acquired(
@@ -533,7 +533,7 @@ fn exact_relation_work_is_pending_once_and_duplicate_from_either_trigger() {
     assert_eq!(first.fence.get(), 1);
 
     let mut opposite_trigger = transition;
-    opposite_trigger.relation.trigger_role = artifact("documentation");
+    opposite_trigger.relation.trigger_role = artifact_id!("documentation");
     let RelationAdmission::Duplicate(repeated) =
         schedule_relation(Some(first.clone()), opposite_trigger).unwrap()
     else {
@@ -547,7 +547,7 @@ fn current_subject_heads_freeze_only_operator_status_destinations() {
     let source = commit_pair(&[("api", "v1")], &[("api", "v2")]).unwrap();
     let documentation = commit_pair(&[("api", "v1")], &[("api", "v1")]).unwrap();
     let mut transition = frozen_transition(&source, &documentation);
-    transition.relation.trigger_role = artifact("documentation");
+    transition.relation.trigger_role = artifact_id!("documentation");
     let RelationAdmission::Scheduled(pending) = schedule_relation(None, transition).unwrap() else {
         panic!("exact work schedules");
     };
@@ -622,14 +622,14 @@ fn status_targets_fail_closed_on_moved_or_malformed_finality() {
     );
 
     let mut rebound = heads.clone();
-    rebound[0].subject.credential = OpaqueId::new("git/other".to_owned()).unwrap();
+    rebound[0].subject.credential = opaque_id!("git/other");
     assert_eq!(
         relation_status_targets(&pending, rebound).unwrap_err(),
         RelationStatusError::InvalidHeads
     );
 
     let mut invalid = pending;
-    invalid.transition.relation.trigger_role = artifact("unknown");
+    invalid.transition.relation.trigger_role = artifact_id!("unknown");
     assert_eq!(
         relation_status_targets(&invalid, heads).unwrap_err(),
         RelationStatusError::InvalidTransition
@@ -654,7 +654,7 @@ fn a_coordination_identity_cannot_be_rebound_but_a_new_one_supersedes() {
     );
 
     let mut next = transition;
-    next.coordination = artifact("workflow/release-43");
+    next.coordination = artifact_id!("workflow/release-43");
     let RelationAdmission::Scheduled(next) = schedule_relation(Some(first), next).unwrap() else {
         panic!("a different declared coordination schedules new work");
     };
@@ -685,7 +685,7 @@ fn scheduling_refuses_configuration_rebinding_and_fence_overflow() {
         fence: LeaseFence::new(u64::MAX).unwrap(),
     };
     let mut next = transition;
-    next.coordination = artifact("workflow/release-43");
+    next.coordination = artifact_id!("workflow/release-43");
     assert_eq!(
         schedule_relation(Some(exhausted), next).unwrap_err(),
         RelationScheduleError::GenerationExhausted

@@ -1,3 +1,4 @@
+use amiss_wire::controls::ConstraintPlatform;
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::controls::OrganizationFloor;
 use amiss_wire::controls::TrustedTimeStatement;
@@ -139,4 +140,21 @@ fn parses_an_execution_constraint_descriptor() {
             .kind,
         ErrorKind::InvalidValue
     );
+}
+
+#[test]
+fn platform_artifact_names_follow_the_platform_spelling() {
+    for platform in [
+        ConstraintPlatform::LinuxX8664,
+        ConstraintPlatform::LinuxAarch64,
+        ConstraintPlatform::MacosX8664,
+        ConstraintPlatform::MacosAarch64,
+        ConstraintPlatform::WindowsX8664,
+        ConstraintPlatform::WindowsAarch64,
+    ] {
+        assert_eq!(
+            platform.artifact_name().as_str(),
+            format!("amiss-{}", platform.as_ref())
+        );
+    }
 }

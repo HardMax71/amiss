@@ -5,6 +5,7 @@
     reason = "fixed provider fixtures must fail loudly"
 )]
 use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::{branch_ref, repo_path_text, required_status_name};
 
 use sha2::Digest as _;
 use std::sync::Mutex;
@@ -12,11 +13,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amiss_controller::{
     ArtifactReference, Change, ChangeLocator, ChangeState, CheckBinding, CheckConclusion,
-    ControllerEvaluationId, IntegrationId, ProviderError, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, Publication, RunFailure,
+    IntegrationId, ProviderError, ProviderIdentity, Publication, RunFailure,
 };
 use amiss_controller::{ProviderRun, PullRequestChange};
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
+use amiss_controller::{opaque_id, provider_namespace};
+use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::model::{
     AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
 };
@@ -370,14 +371,14 @@ fn a_token_answers_only_for_its_own_installation() {
 
     let app = GitHubApp::new(
         ProviderIdentity {
-            namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-            instance: ProviderInstance::new("ghes.invalid".to_owned()).unwrap(),
+            namespace: provider_namespace!("github"),
+            instance: opaque_id!("ghes.invalid"),
         },
         APP_ID,
         INSTALLATION_ID,
         rsa_keys().unwrap().private_pem,
         "https://ghes.invalid",
-        RequiredStatusName::try_from("amiss / documentation assurance".to_owned()).unwrap(),
+        required_status_name!("amiss / documentation assurance"),
         GitHubTimeouts::new(Duration::from_millis(1), Duration::from_millis(2)).unwrap(),
     )
     .unwrap();
@@ -492,9 +493,7 @@ fn publication_summary_carries_the_report_feedback_lines() {
             effective_disposition: Disposition::Fail,
             finding_kinds: vec![FindingKind::ExplicitTargetMissing],
             location_count: std::num::NonZeroU64::new(2).unwrap(),
-            target: Some(RepoPath::Text(
-                RepoPathText::try_from("docs/new.md".to_owned()).unwrap(),
-            )),
+            target: Some(RepoPath::Text(repo_path_text!("docs/new.md"))),
         }],
         status: AvailableFeedbackStatus::Available,
     }));
@@ -664,7 +663,7 @@ fn publication_is_bound_before_provider_io() {
 #[test]
 fn authoritative_ref_drift_retires_a_cancelled_publication() {
     let fixture = Fixture::new();
-    let target = BranchRef::new("refs/heads/release".to_owned()).unwrap();
+    let target = branch_ref!("refs/heads/release");
 
     let mut passing = fixture.publication(CheckConclusion::Pass);
     passing.run.refs.target = target.clone();
@@ -751,8 +750,7 @@ impl Fixture {
                 provider,
                 app_id: APP_ID,
                 installation_id: INSTALLATION_ID,
-                required_status_name: RequiredStatusName::try_from("amiss/provider".to_owned())
-                    .unwrap(),
+                required_status_name: required_status_name!("amiss/provider"),
             },
             change,
             candidate: candidate.clone(),
@@ -780,7 +778,7 @@ impl Fixture {
                 .finalize()
                 .0,
         );
-        let integration = IntegrationId::new(INSTALLATION_ID.to_string()).unwrap();
+        let integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
         let provider_run = crate::provider_run(
             &integration,
             &self.change,
@@ -792,7 +790,7 @@ impl Fixture {
         let gate_commit = snapshot.gate_commit.clone();
         Publication {
             provider_run,
-            evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),
+            evaluation_id: opaque_id!("evaluation-1"),
             check: CheckBinding {
                 plan_digest: digest,
                 required_status_name: self.config.required_status_name.clone(),
@@ -1042,8 +1040,8 @@ fn decision_error(
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        namespace: provider_namespace!("github"),
+        instance: opaque_id!("github.com"),
     }
 }
 
@@ -1062,8 +1060,8 @@ fn refresh_rejects_a_request_wrong_in_one_field() {
 
     let elsewhere = ChangeLocator {
         provider: ProviderIdentity {
-            namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-            instance: ProviderInstance::new("github.example".to_owned()).unwrap(),
+            namespace: provider_namespace!("github"),
+            instance: opaque_id!("github.example"),
         },
         repository: fixture.change.repository.clone(),
         change: change_id(),

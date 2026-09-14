@@ -33,7 +33,7 @@ pub(crate) fn provider_run(
                 .finalize()
                 .0,
         )),
-        ProviderRunAttempt::new(1)?,
+        ProviderRunAttempt::FIRST,
         ObjectFormat::Sha1,
         candidate.clone(),
     )
@@ -44,7 +44,7 @@ pub(crate) fn positive(value: u64) -> Option<u64> {
 }
 
 pub(crate) fn branch_ref(branch: &str) -> Option<BranchRef> {
-    BranchRef::new(format!("refs/heads/{branch}"))
+    BranchRef::try_from(format!("refs/heads/{branch}")).ok()
 }
 
 pub(crate) fn canonical_segment(raw: &str) -> Option<String> {

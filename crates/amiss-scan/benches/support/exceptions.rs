@@ -1,3 +1,4 @@
+use amiss_wire::branch_ref;
 use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::collections::BTreeMap;
@@ -17,8 +18,8 @@ use amiss_wire::controls::{
     TargetIntentKind, TargetKind, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
 };
 use amiss_wire::model::{
-    Adapter, ArtifactId, BranchRef, ObjectFormat, OwnerId, RepoPath, RepoPathText,
-    RepositoryIdentity, TreeIdentity, UtcInstant,
+    Adapter, ArtifactId, ObjectFormat, OwnerId, RepoPath, RepoPathText, RepositoryIdentity,
+    TreeIdentity, UtcInstant,
 };
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{Missing, Resolution};
@@ -99,8 +100,7 @@ fn trusted_time() -> TimeContext {
         controller: TrustedTimeController::ExternalRequiredCheckClock,
         repository: RepositoryIdentity::github("bench".to_owned(), "docs".to_owned())
             .unwrap_or_else(|| panic!("benchmark repository identity")),
-        ref_name: BranchRef::new("refs/heads/main".to_owned())
-            .unwrap_or_else(|| panic!("benchmark branch")),
+        ref_name: branch_ref!("refs/heads/main"),
         candidate_identity_digest: amiss_wire::model::Digest::from(
             sha2::Sha256::new_with_prefix("amiss/bench-candidate-identity")
                 .chain_update([0_u8])
@@ -238,11 +238,11 @@ fn repo_path(raw: String) -> RepoPath {
 }
 
 fn repo_path_text(raw: String) -> RepoPathText {
-    RepoPathText::new(raw).unwrap_or_else(|| panic!("benchmark text repository path"))
+    RepoPathText::try_from(raw).unwrap_or_else(|_defect| panic!("benchmark text repository path"))
 }
 
 fn artifact_id(raw: String) -> ArtifactId {
-    ArtifactId::new(raw).unwrap_or_else(|| panic!("benchmark artifact id"))
+    ArtifactId::try_from(raw).unwrap_or_else(|_defect| panic!("benchmark artifact id"))
 }
 
 fn owner_id(raw: &str) -> OwnerId {

@@ -12,7 +12,8 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::RequestDigests;
 use amiss_scan::resolve::ForgeContext;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::branch_ref;
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
 use tempfile::TempDir;
 
@@ -87,8 +88,8 @@ fn run(
             "widgets".to_owned(),
         )
         .unwrap(),
-        candidate_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
-        default_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
+        candidate_ref: Some(branch_ref!("refs/heads/main")),
+        default_ref: Some(branch_ref!("refs/heads/main")),
     };
     let shell = SetupShell {
         engine: engine(),
@@ -98,9 +99,9 @@ fn run(
                 .unwrap(),
         ),
         forge: Some(dialect),
-        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
+        candidate_ref: Some(branch_ref!("refs/heads/main")),
         target_ref: None,
-        default_branch_ref: BranchRef::new("refs/heads/main".to_owned()),
+        default_branch_ref: Some(branch_ref!("refs/heads/main")),
         floor: None,
         debt: None,
         waiver: None,

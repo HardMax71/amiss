@@ -4,6 +4,7 @@
 )]
 
 use amiss_wire::de::Document as _;
+use amiss_wire::{artifact_id, repo_path_text};
 use sha2::Digest as _;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -11,21 +12,19 @@ use std::time::Duration;
 
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AcquiredSemanticTemplate, Acquisition as _, AcquisitionTarget, Change, ChangeLocator,
-    ControllerEvaluationId, Delivery, DeliveryIdentity, IntegrationId,
-    MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair, OpaqueId,
-    PolicyControls, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    AcquiredSemanticTemplate, Acquisition as _, AcquisitionTarget, Change, ChangeLocator, Delivery,
+    DeliveryIdentity, IntegrationId, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
+    MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair, PolicyControls, ProviderError, ProviderIdentity,
     ProviderRun, ProviderRunAttempt, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
     SemanticEvidenceExpectation, WorkflowArtifactExpectation, check_binding, check_plan,
 };
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_github::{
     GitFetchBounds, GitHubAcquireError, GitHubAcquisition, GitHubAcquisitionSource,
     github_fetch_plan,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
-use amiss_wire::model::{
-    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
-};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use secrecy::SecretString;
 
 const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v2";
@@ -67,7 +66,7 @@ fn rejects_wrong_host_identity_change_and_object_format() {
     );
 
     let mut zero_integration = request();
-    let zero = IntegrationId::new("0".to_owned()).unwrap();
+    let zero = opaque_id!("0");
     zero_integration.provider_run = provider_run(
         &zero,
         &zero_integration.run.change,
@@ -222,16 +221,16 @@ fn workflow_artifact(request: &RunRequest) -> WorkflowArtifactExpectation {
     WorkflowArtifactExpectation {
         provider: request.delivery.provider.clone(),
         repository: request.run.change.repository.clone(),
-        workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
-        event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+        workflow_identity: opaque_id!("docs-evidence.yml"),
+        event: opaque_id!("pull_request"),
         artifact_name: "amiss-semantic-evidence".to_owned(),
-        payload_file: RepoPathText::new("amiss/semantic-template.json".to_owned()).unwrap(),
+        payload_file: repo_path_text!("amiss/semantic-template.json"),
         archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
         file_byte_limit: MAX_WORKFLOW_ARTIFACT_FILE_BYTES,
         semantic: SemanticEvidenceExpectation {
-            acquisition_identity: ArtifactId::new("github-docs-evidence".to_owned()).unwrap(),
+            acquisition_identity: artifact_id!("github-docs-evidence"),
             producer_kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
-            producer_identity: ArtifactId::new("docs-site".to_owned()).unwrap(),
+            producer_identity: artifact_id!("docs-site"),
             producer_version: "0.5.1".to_owned(),
             context_digest: amiss_wire::model::Digest::from(
                 sha2::Sha256::new_with_prefix("amiss/test-workflow-context")
@@ -263,8 +262,8 @@ fn set_workflow_artifacts(
 
 fn request() -> RunRequest {
     let provider = ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        namespace: provider_namespace!("github"),
+        instance: opaque_id!("github.com"),
     };
     let repository = RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap();
     let change = ChangeLocator {
@@ -272,7 +271,7 @@ fn request() -> RunRequest {
         repository,
         change: Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap()),
     };
-    let integration = IntegrationId::new("7".to_owned()).unwrap();
+    let integration = opaque_id!("7");
     let refs = RunRefs {
         forge: ForgeDialect::Github,
         candidate: branch("topic"),
@@ -293,10 +292,10 @@ fn request() -> RunRequest {
         delivery: DeliveryIdentity {
             provider,
             integration,
-            delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
+            delivery: Delivery::Provided(opaque_id!("signed-body")),
         },
         provider_run,
-        evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation/1"),
         check: check_binding(&plan).unwrap(),
         plan,
         run: RunIdentity::new(
@@ -359,7 +358,7 @@ fn provider_run(
                 .finalize()
                 .0,
         )),
-        ProviderRunAttempt::new(1).unwrap(),
+        ProviderRunAttempt::FIRST,
         ObjectFormat::Sha1,
         candidate.clone(),
     )
@@ -367,7 +366,7 @@ fn provider_run(
 }
 
 fn branch(name: &str) -> BranchRef {
-    BranchRef::new(format!("refs/heads/{name}")).unwrap()
+    BranchRef::try_from(format!("refs/heads/{name}")).unwrap()
 }
 
 fn oid(value: char) -> Oid {

@@ -9,14 +9,14 @@ use amiss_wire::controls::Profile;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
-use crate::OpaqueId;
 use crate::PullRequestChange;
 use crate::{
     Change, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion, Delivery,
-    DeliveryIdentity, Evaluation, IntegrationId, OidPair, PolicyControls, ProviderIdentity,
-    ProviderRun, ProviderRunAttempt, ProviderRunIdentity, RunFailure, RunIdentity, RunRefs,
-    RunnerOutcome, check_binding, check_plan,
+    DeliveryIdentity, Evaluation, OidPair, PolicyControls, ProviderIdentity, ProviderRun,
+    ProviderRunAttempt, ProviderRunIdentity, RunFailure, RunIdentity, RunRefs, RunnerOutcome,
+    check_binding, check_plan,
 };
+use crate::{opaque_id, provider_namespace};
 
 use super::{finalize_publication, publication, runner_conclusion};
 
@@ -25,13 +25,13 @@ fn oid(value: char) -> Oid {
 }
 
 fn branch(name: &str) -> BranchRef {
-    BranchRef::new(format!("refs/heads/{name}")).expect("a branch ref")
+    BranchRef::try_from(format!("refs/heads/{name}")).expect("a branch ref")
 }
 
 fn run_identity(candidate: char) -> RunIdentity {
     let provider = ProviderIdentity {
-        namespace: crate::ProviderNamespace::new("gitea".to_owned()).expect("a namespace"),
-        instance: crate::ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
+        namespace: provider_namespace!("gitea"),
+        instance: opaque_id!("forge.example"),
     };
     let change = ChangeLocator {
         provider,
@@ -78,22 +78,20 @@ fn request() -> super::super::model::RunRequest {
     super::super::model::RunRequest {
         delivery: DeliveryIdentity {
             provider: ProviderIdentity {
-                namespace: crate::ProviderNamespace::new("gitea".to_owned()).expect("a namespace"),
-                instance: crate::ProviderInstance::new("forge.example".to_owned())
-                    .expect("an instance"),
+                namespace: provider_namespace!("gitea"),
+                instance: opaque_id!("forge.example"),
             },
-            integration: IntegrationId::new("77".to_owned()).expect("an integration"),
-            delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
+            integration: opaque_id!("77"),
+            delivery: Delivery::Provided(opaque_id!("signed-body")),
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRun::PullRequest(Digest::from([124; 32])),
-            ProviderRunAttempt::new(1).expect("an attempt"),
+            ProviderRunAttempt::FIRST,
             ObjectFormat::Sha1,
             oid('b'),
         )
         .expect("a provider run"),
-        evaluation_id: crate::ControllerEvaluationId::new("evaluation/1".to_owned())
-            .expect("an evaluation id"),
+        evaluation_id: opaque_id!("evaluation/1"),
         check: check_binding(&plan).expect("a binding"),
         plan,
         run: run_identity('b'),

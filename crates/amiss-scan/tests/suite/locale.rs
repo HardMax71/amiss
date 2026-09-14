@@ -18,14 +18,14 @@ use amiss_wire::locale::{
     LocaleCoverageAssessment, LocaleCoverageEvidence, LocaleCoveragePlan, LocaleCoverageReason,
     LocaleFallbackRule, LocaleFallbackStatus, LocalePageRequirement, LocaleTargetOrigin, assess,
 };
-use amiss_wire::model::{ArtifactId, Digest, ObjectFormat, RepoPathText};
+use amiss_wire::model::{Digest, ObjectFormat, RepoPathText};
 
 const PLAN: &[u8] = include_bytes!("../../../../spec/examples/locale-coverage-plan.json");
 const CHAPTER: &str = include_str!("../../../../docs/src/locale-coverage.md");
 
 fn side(root: &str, locale: &str, suffix: Option<&str>) -> LocaleSide {
     LocaleSide {
-        root: RepoPathText::new(root.to_owned()).unwrap(),
+        root: RepoPathText::try_from(root.to_owned()).unwrap(),
         locale: locale.to_owned(),
         suffix: suffix.map(str::to_owned),
     }
@@ -172,7 +172,7 @@ fn an_untranslated_copy_is_a_fallback_the_plan_has_to_authorize() {
     assert_eq!(
         page.origin,
         LocaleTargetOrigin::Fallback {
-            class: ArtifactId::new(SOURCE_IDENTICAL_CLASS.to_owned()).unwrap(),
+            class: SOURCE_IDENTICAL_CLASS,
             source_resource_digest: page.resource_digest,
         }
     );
@@ -194,7 +194,7 @@ fn an_authorized_identical_page_carries_the_whole_locale() {
     let context = directories();
     let plan = plan(&chain, &context, |plan| {
         plan.policy.fallbacks = vec![LocaleFallbackRule {
-            class: ArtifactId::new(SOURCE_IDENTICAL_CLASS.to_owned()).unwrap(),
+            class: SOURCE_IDENTICAL_CLASS,
             pages: LocalePageRequirement::AllSource {},
         }];
     });

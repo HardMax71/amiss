@@ -4,6 +4,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use amiss_wire::artifact_id;
 use amiss_wire::de::Document as _;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
@@ -15,7 +16,7 @@ mod tests;
 
 const RUSTDOC_DOMAIN: &str = "amiss/rust-public-api-rustdoc-v1";
 const INPUT_DOMAIN: &str = "amiss/rust-public-api-input-v1";
-const PRODUCER_IDENTITY: &str = "amiss-rust-public-api";
+const PRODUCER_IDENTITY: ArtifactId = artifact_id!("amiss-rust-public-api");
 
 struct Invocation {
     context: PathBuf,
@@ -42,8 +43,6 @@ enum Failure {
     Context(#[from] context::Error),
     #[error(transparent)]
     Normalize(#[from] normalize::Error),
-    #[error("the fixed producer identity is invalid")]
-    ProducerIdentity,
     #[error("the producer input identity cannot be encoded")]
     InputIdentity(#[source] serde_json::Error),
     #[error("the semantic template cannot be produced")]
@@ -137,8 +136,7 @@ fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Vec<u8>, Failur
         )
     })
     .map_err(Failure::InputIdentity)?;
-    let producer_identity =
-        ArtifactId::new(PRODUCER_IDENTITY.to_owned()).ok_or(Failure::ProducerIdentity)?;
+    let producer_identity = PRODUCER_IDENTITY;
     amiss_wire::semantic::record::template(Input {
         schema: InputSchema::Current,
         producer_identity,

@@ -1,13 +1,25 @@
+use std::borrow::Cow;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub struct ArtifactId(String);
+pub struct ArtifactId(Cow<'static, str>);
 
 impl ArtifactId {
+    const INVALID: &'static str = "invalid artifact identity";
+    const MAXIMUM: usize = 128;
+
+    /// # Panics
+    /// When the literal is not an artifact identity; `artifact_id!` makes that a build error.
     #[must_use]
-    pub fn new(raw: String) -> Option<Self> {
-        (raw.len() <= 128 && id_body_valid(raw.as_bytes())).then_some(Self(raw))
+    pub const fn from_static(raw: &'static str) -> Self {
+        assert!(
+            id_body_valid(raw.as_bytes(), Self::MAXIMUM),
+            "{}",
+            Self::INVALID
+        );
+        Self(Cow::Borrowed(raw))
     }
 
     #[must_use]
@@ -20,8 +32,19 @@ impl TryFrom<String> for ArtifactId {
     type Error = &'static str;
 
     fn try_from(raw: String) -> Result<Self, Self::Error> {
-        Self::new(raw).ok_or("invalid artifact identity")
+        if id_body_valid(raw.as_bytes(), Self::MAXIMUM) {
+            Ok(Self(Cow::Owned(raw)))
+        } else {
+            Err(Self::INVALID)
+        }
     }
+}
+
+#[macro_export]
+macro_rules! artifact_id {
+    ($raw:literal) => {
+        const { $crate::model::ArtifactId::from_static($raw) }
+    };
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -37,7 +60,7 @@ impl OwnerId {
         let suffix = ["team:", "service:", "user:"]
             .iter()
             .find_map(|prefix| raw.strip_prefix(prefix))?;
-        id_body_valid(suffix.as_bytes()).then_some(Self(raw))
+        id_body_valid(suffix.as_bytes(), 160).then_some(Self(raw))
     }
 
     #[must_use]
@@ -46,51 +69,71 @@ impl OwnerId {
     }
 }
 
-fn id_body_valid(raw: &[u8]) -> bool {
-    let Some((&first, tail)) = raw.split_first() else {
+const fn id_body_valid(raw: &[u8], maximum: usize) -> bool {
+    let Some((&first, mut rest)) = raw.split_first() else {
         return false;
     };
-    (first.is_ascii_lowercase() || first.is_ascii_digit())
-        && tail.iter().copied().all(|byte| {
-            byte.is_ascii_lowercase()
-                || byte.is_ascii_digit()
-                || matches!(byte, b'.' | b'_' | b'/' | b'-')
-        })
+    if raw.len() > maximum || (!first.is_ascii_lowercase() && !first.is_ascii_digit()) {
+        return false;
+    }
+    while let Some((&byte, tail)) = rest.split_first() {
+        rest = tail;
+        if !byte.is_ascii_lowercase()
+            && !byte.is_ascii_digit()
+            && !matches!(byte, b'.' | b'_' | b'/' | b'-')
+        {
+            return false;
+        }
+    }
+    true
 }
 
 /// Full branch ref under the rolling `ref-format` contract.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub struct BranchRef(String);
+pub struct BranchRef(Cow<'static, str>);
 
 impl BranchRef {
+    const INVALID: &'static str = "invalid branch reference";
+    const PREFIX: &'static [u8] = b"refs/heads/";
+
+    /// # Panics
+    /// When the literal is not a branch ref; `branch_ref!` makes that a build error.
     #[must_use]
-    #[expect(
-        clippy::case_sensitive_file_extension_comparisons,
-        reason = "ref-format component rules are byte-exact"
-    )]
-    pub fn new(raw: String) -> Option<Self> {
-        if raw.len() > 266 {
-            return None;
+    pub const fn from_static(raw: &'static str) -> Self {
+        assert!(Self::valid(raw.as_bytes()), "{}", Self::INVALID);
+        Self(Cow::Borrowed(raw))
+    }
+
+    const fn valid(raw: &[u8]) -> bool {
+        let Some(mut rest) = strip_prefix(raw, Self::PREFIX) else {
+            return false;
+        };
+        if raw.len() > 266 || rest.is_empty() {
+            return false;
         }
-        let suffix = raw.strip_prefix("refs/heads/")?;
-        if suffix.is_empty() || suffix.contains("..") || suffix.contains("@{") {
-            return None;
+        let mut component = rest;
+        let mut previous = b'/';
+        while let Some((&byte, tail)) = rest.split_first() {
+            if byte < 0x20
+                || byte == 0x7f
+                || matches!(byte, b' ' | b'~' | b'^' | b':' | b'?' | b'*' | b'[' | b'\\')
+                || (previous == b'.' && byte == b'.')
+                || (previous == b'@' && byte == b'{')
+                || (previous == b'/' && matches!(byte, b'/' | b'.'))
+            {
+                return false;
+            }
+            if byte == b'/' {
+                if ends_with(component, tail, b".lock") {
+                    return false;
+                }
+                component = tail;
+            }
+            previous = byte;
+            rest = tail;
         }
-        if suffix.bytes().any(|b| {
-            b < 0x20
-                || b == 0x7f
-                || matches!(b, b' ' | b'~' | b'^' | b':' | b'?' | b'*' | b'[' | b'\\')
-        }) {
-            return None;
-        }
-        if suffix.ends_with('.') {
-            return None;
-        }
-        let components_ok = suffix
-            .split('/')
-            .all(|c| !c.is_empty() && !c.starts_with('.') && !c.ends_with(".lock"));
-        if components_ok { Some(Self(raw)) } else { None }
+        previous != b'/' && previous != b'.' && !ends_with(component, rest, b".lock")
     }
 
     #[must_use]
@@ -108,8 +151,60 @@ impl TryFrom<String> for BranchRef {
     type Error = &'static str;
 
     fn try_from(raw: String) -> Result<Self, Self::Error> {
-        Self::new(raw).ok_or("invalid branch reference")
+        if Self::valid(raw.as_bytes()) {
+            Ok(Self(Cow::Owned(raw)))
+        } else {
+            Err(Self::INVALID)
+        }
     }
+}
+
+#[macro_export]
+macro_rules! branch_ref {
+    ($raw:literal) => {
+        const { $crate::model::BranchRef::from_static($raw) }
+    };
+}
+
+const fn strip_prefix<'a>(raw: &'a [u8], prefix: &[u8]) -> Option<&'a [u8]> {
+    match raw.split_at_checked(prefix.len()) {
+        Some((head, tail)) if bytes_equal(head, prefix) => Some(tail),
+        _ => None,
+    }
+}
+
+/// Whether the component that runs from `component` up to `tail` ends with `suffix`.
+const fn ends_with(component: &[u8], tail: &[u8], suffix: &[u8]) -> bool {
+    let Some(length) = component.len().checked_sub(tail.len()) else {
+        return false;
+    };
+    let Some(start) = length.checked_sub(suffix.len()) else {
+        return false;
+    };
+    match component.split_at_checked(start) {
+        Some((_, rest)) => match rest.split_at_checked(suffix.len()) {
+            Some((end, _)) => bytes_equal(end, suffix),
+            None => false,
+        },
+        None => false,
+    }
+}
+
+const fn bytes_equal(left: &[u8], right: &[u8]) -> bool {
+    if left.len() != right.len() {
+        return false;
+    }
+    let (mut left, mut right) = (left, right);
+    while let (Some((&a, left_tail)), Some((&b, right_tail))) =
+        (left.split_first(), right.split_first())
+    {
+        if a != b {
+            return false;
+        }
+        left = left_tail;
+        right = right_tail;
+    }
+    true
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]

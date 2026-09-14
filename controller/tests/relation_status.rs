@@ -2,11 +2,13 @@
     clippy::unwrap_used,
     reason = "the fixtures construct known-valid relation audits and identities"
 )]
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::artifact_id;
+use amiss_wire::required_status_name;
 
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
     ArtifactAuditBundle, ArtifactAuditReference, ArtifactError, ArtifactStoreConfig,
     ControllerClock, ControllerEvaluationId, FileArtifactStore, FileRelationScheduleStore,
@@ -19,7 +21,6 @@ use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::relation::{
     RelationAuditFixture, relation_audit, relation_audit_with_coordination,
 };
-use amiss_wire::model::ArtifactId;
 use amiss_wire::relation::RelationSnapshot;
 
 fn store(root: &tempfile::TempDir, clock: Arc<dyn ControllerClock>) -> FileArtifactStore {
@@ -74,7 +75,7 @@ fn retain(
 ) -> ArtifactAuditReference {
     store
         .retain_audit(
-            &ControllerEvaluationId::new(evaluation.to_owned()).unwrap(),
+            &ControllerEvaluationId::try_from(evaluation.to_owned()).unwrap(),
             ArtifactAuditBundle::Relation(bundle(fixture)),
         )
         .unwrap()
@@ -248,7 +249,7 @@ fn stale_foreign_and_conflicting_status_state_fails_closed() {
     );
 
     let mut foreign_transition = fixture.transition.clone();
-    foreign_transition.coordination = ArtifactId::new("workflow/release-43".to_owned()).unwrap();
+    foreign_transition.coordination = artifact_id!("workflow/release-43");
     assert_eq!(
         stage_relation_status(
             &pending,
@@ -275,9 +276,8 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
     Arc::make_mut(&mut fixture.transition.relation.plan)
         .status_destinations
         .push(RelationStatusDestination {
-            subject_role: ArtifactId::new("source".to_owned()).unwrap(),
-            required_status_name: RequiredStatusName::try_from("Amiss source relation".to_owned())
-                .unwrap(),
+            subject_role: artifact_id!("source"),
+            required_status_name: required_status_name!("Amiss source relation"),
         });
     let registry =
         relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()]).unwrap();
@@ -437,8 +437,7 @@ fn delivery_claim_recovers_the_oldest_fence_before_newer_work() {
         .unwrap();
     assert_eq!(recovered.status, older_status);
     assert_eq!(recovered.target, target);
-    recovered.target.credential =
-        amiss_controller::OpaqueId::new("credential/rebound".to_owned()).unwrap();
+    recovered.target.credential = opaque_id!("credential/rebound");
     assert!(matches!(
         contender.acknowledge_status_destination(recovered),
         Err(RelationScheduleStoreError::Status(
@@ -516,10 +515,13 @@ fn reopening_status_rejects_missing_rebound_and_expired_authorities() {
     ));
 
     let mut credential_rebound = fixture.transition.relation.plan.as_ref().clone();
-    credential_rebound.subjects[0].credential =
-        amiss_controller::OpaqueId::new("credential/rebound".to_owned()).unwrap();
+    credential_rebound.subjects[0].credential = opaque_id!("credential/rebound");
     let mut limits_rebound = fixture.transition.relation.plan.as_ref().clone();
-    limits_rebound.aggregate_limits.acquisition_objects += 1;
+    limits_rebound.aggregate_limits.acquisition_objects = limits_rebound
+        .aggregate_limits
+        .acquisition_objects
+        .checked_add(1)
+        .unwrap();
     for rebound in [credential_rebound, limits_rebound] {
         let rebound = relation_registry(vec![rebound]).unwrap();
         assert!(matches!(
@@ -602,7 +604,7 @@ fn status_rebinding_and_superseded_staging_do_not_change_the_journal() {
     assert_eq!(std::fs::metadata(&journal).unwrap().len(), before_conflict);
 
     let mut next = fixture.transition.clone();
-    next.coordination = ArtifactId::new("workflow/release-43".to_owned()).unwrap();
+    next.coordination = artifact_id!("workflow/release-43");
     let RelationAdmission::Scheduled(next) = relations.schedule(next).unwrap() else {
         panic!("the next coordination schedules");
     };
@@ -683,7 +685,7 @@ fn concurrent_supersession_and_status_staging_commit_in_one_order() {
         panic!("the exact relation schedules");
     };
     let mut next = fixture.transition.clone();
-    next.coordination = ArtifactId::new("workflow/release-43".to_owned()).unwrap();
+    next.coordination = artifact_id!("workflow/release-43");
     let barrier = Arc::new(std::sync::Barrier::new(3));
 
     let stage_barrier = Arc::clone(&barrier);

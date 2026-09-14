@@ -8,7 +8,7 @@ use amiss_controller::{
     Runner,
 };
 use amiss_fixtures::path_arg;
-use amiss_wire::model::ArtifactId;
+use amiss_wire::artifact_id;
 
 use super::*;
 
@@ -157,7 +157,7 @@ fn malformed_acquired_semantic_template_is_a_tampered_runtime() {
         action: harness.action.root().to_path_buf(),
         paths: Arc::new(AcquiredPaths::default()),
         semantic_templates: vec![AcquiredSemanticTemplate {
-            acquisition_identity: ArtifactId::new("test-artifact".to_owned()).unwrap(),
+            acquisition_identity: artifact_id!("test-artifact"),
             bytes: Arc::from(*b"null"),
         }],
     };

@@ -191,8 +191,8 @@ pub(super) fn feedback(
                     .annotation
                     .map(|annotation| -> Result<_, crate::Error> {
                         Ok(model::FeedbackAnnotation {
-                            path: RepoPathText::new(annotation.path)
-                                .ok_or(crate::Error::Internal)?,
+                            path: RepoPathText::try_from(annotation.path)
+                                .map_err(|_defect| crate::Error::Internal)?,
                             span: source_span(annotation.span, annotation.display),
                         })
                     })

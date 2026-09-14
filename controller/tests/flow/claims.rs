@@ -2,9 +2,10 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
     ControllerError, DeliveryClaim, HandleOutcome, IngressError, LeaseCompletion, ProviderError,
-    ProviderInstance, check_plan,
+    check_plan,
 };
 use amiss_wire::controls::Profile;
 
@@ -115,7 +116,7 @@ fn a_replay_cannot_switch_to_a_new_check_plan() {
 fn authenticated_provider_must_match_the_routed_instance() {
     let actual = provider();
     let mut expected = actual.clone();
-    expected.instance = ProviderInstance::new("other.example.test".to_owned()).unwrap();
+    expected.instance = opaque_id!("other.example.test");
     let change = locator(&actual, repository("amiss"));
     let run = run(change.clone(), 'b', 'd');
     let adapter = Arc::new(

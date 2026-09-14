@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
     ArtifactAuditBundle, ArtifactAuditDigests, ArtifactAuditReference, ArtifactBundle,
     ArtifactComponent, ArtifactError, ArtifactStoreConfig, ControllerClock, ControllerEvaluationId,
@@ -30,7 +31,7 @@ fn exact_components_survive_restart_under_one_stable_locator() {
     let store =
         FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
             .unwrap();
-    let evaluation = ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap();
+    let evaluation = opaque_id!("evaluation/1");
     let report = br#"{"payload":{"feedback":{"items":[],"status":"available"}}}"#;
     let plan = br#"{"schema":"amiss/external-plan-envelope"}"#;
     let evidence = br#"{"schema":"amiss/external-evidence"}"#;
@@ -208,7 +209,7 @@ fn audits_survive_restart_with_optional_evidence_exact() {
             ),
         ] {
             let evaluation =
-                ControllerEvaluationId::new(format!("evaluation/{kind}/{mode}")).unwrap();
+                ControllerEvaluationId::try_from(format!("evaluation/{kind}/{mode}")).unwrap();
             retained.push(retained_once(
                 &store, evaluation, bundle, expected, components,
             ));
@@ -232,8 +233,7 @@ fn invalid_audits_create_no_evaluation_binding() {
     let root = tempfile::tempdir().unwrap();
     let clock: Arc<dyn ControllerClock> = TestClock::at(1_000);
     let store = FileArtifactStore::open_with_clock(root.path(), config(), clock).unwrap();
-    let publication_evaluation =
-        ControllerEvaluationId::new("evaluation/publication/invalid".to_owned()).unwrap();
+    let publication_evaluation = opaque_id!("evaluation/publication/invalid");
     let mut publication = publication_audit(true).unwrap();
     publication.plan.push(b'x');
 
@@ -250,8 +250,7 @@ fn invalid_audits_create_no_evaluation_binding() {
         Err(ArtifactError::Corrupt)
     ));
 
-    let relation_evaluation =
-        ControllerEvaluationId::new("evaluation/relation/invalid".to_owned()).unwrap();
+    let relation_evaluation = opaque_id!("evaluation/relation/invalid");
     let mut relation = relation_audit(true).unwrap();
     relation.plan.push(b'x');
     assert!(matches!(
@@ -280,7 +279,7 @@ fn expiry_removes_bytes_and_clock_rollback_cannot_restore_them() {
     let store =
         FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&controller_clock))
             .unwrap();
-    let evaluation = ControllerEvaluationId::new("evaluation/expiry".to_owned()).unwrap();
+    let evaluation = opaque_id!("evaluation/expiry");
     let retained = store
         .retain(
             &evaluation,
@@ -316,7 +315,7 @@ fn one_evaluation_cannot_be_rebound_and_missing_components_are_explicit() {
     let root = tempfile::tempdir().unwrap();
     let clock: Arc<dyn ControllerClock> = TestClock::at(1_000);
     let store = FileArtifactStore::open_with_clock(root.path(), config(), clock).unwrap();
-    let evaluation = ControllerEvaluationId::new("evaluation/conflict".to_owned()).unwrap();
+    let evaluation = opaque_id!("evaluation/conflict");
     let retained = store
         .retain(
             &evaluation,
@@ -360,7 +359,7 @@ fn capacity_is_strict_without_eviction() {
     let mut limits = config();
     limits.max_records = 1;
     let store = FileArtifactStore::open_with_clock(root.path(), limits, clock).unwrap();
-    let first = ControllerEvaluationId::new("evaluation/first".to_owned()).unwrap();
+    let first = opaque_id!("evaluation/first");
     let retained = store
         .retain(
             &first,
@@ -375,7 +374,7 @@ fn capacity_is_strict_without_eviction() {
             },
         )
         .unwrap();
-    let second = ControllerEvaluationId::new("evaluation/second".to_owned()).unwrap();
+    let second = opaque_id!("evaluation/second");
     assert!(matches!(
         store.retain(
             &second,
@@ -405,7 +404,7 @@ fn corrupted_payload_prevents_reopening_the_store() {
         FileArtifactStore::open_with_clock(root.path(), config(), Arc::clone(&clock)).unwrap();
     let retained = store
         .retain(
-            &ControllerEvaluationId::new("evaluation/corrupt".to_owned()).unwrap(),
+            &opaque_id!("evaluation/corrupt"),
             ArtifactBundle {
                 report: br#"{"result":"exact"}"#,
                 semantic: None,
@@ -438,7 +437,7 @@ fn one_oversized_record_is_not_misreported_as_recoverable_capacity() {
     let store = FileArtifactStore::open_with_clock(root.path(), limits, clock).unwrap();
     assert!(matches!(
         store.retain(
-            &ControllerEvaluationId::new("evaluation/oversized".to_owned()).unwrap(),
+            &opaque_id!("evaluation/oversized"),
             ArtifactBundle {
                 report: br#"{"result":"too-large-for-this-record"}"#,
                 semantic: None,

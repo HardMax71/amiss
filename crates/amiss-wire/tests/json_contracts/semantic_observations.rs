@@ -1,7 +1,6 @@
 use amiss_wire::envelope::Envelope;
 use amiss_wire::envelope::Payload as _;
-use amiss_wire::model::ArtifactId;
-use amiss_wire::model::RepoPathText;
+use amiss_wire::{artifact_id, repo_path_text};
 use amiss_wire::{
     assessment::Nullable,
     semantic::{
@@ -20,7 +19,7 @@ fn observations() -> Vec<(Observation, Vec<u8>)> {
     let sites = [
         SiteBuildObservation::Route {
             route: "/guide".to_owned(),
-            source: RepoPathText::try_from("docs/guide.md".to_owned()).unwrap(),
+            source: repo_path_text!("docs/guide.md"),
             anchors: vec!["intro".to_owned()],
         },
         SiteBuildObservation::GeneratedRoute {
@@ -30,14 +29,14 @@ fn observations() -> Vec<(Observation, Vec<u8>)> {
         },
         SiteBuildObservation::Redirect {
             route: "/old".to_owned(),
-            source: RepoPathText::try_from("docs/guide.md".to_owned()).unwrap(),
+            source: repo_path_text!("docs/guide.md"),
             destination: "/guide".to_owned(),
         },
         SiteBuildObservation::Navigation {
             root: Nullable::Null,
-            manifest: RepoPathText::try_from("SUMMARY.md".to_owned()).unwrap(),
+            manifest: repo_path_text!("SUMMARY.md"),
             entrypoints: vec!["/guide".to_owned()],
-            reachable: vec![RepoPathText::try_from("docs/guide.md".to_owned()).unwrap()],
+            reachable: vec![repo_path_text!("docs/guide.md")],
         },
     ];
     let mut cases = sites
@@ -49,7 +48,7 @@ fn observations() -> Vec<(Observation, Vec<u8>)> {
         .collect::<Vec<_>>();
     let label = SphinxLabelObservation {
         kind: SphinxLabelKind::Current,
-        inventory: ArtifactId::try_from("python".to_owned()).unwrap(),
+        inventory: artifact_id!("python"),
         name: "context managers".to_owned(),
         destination: "https://docs.python.org/reference/datamodel.html".to_owned(),
     };
@@ -57,7 +56,7 @@ fn observations() -> Vec<(Observation, Vec<u8>)> {
     cases.push((Observation::Sphinx(label), expected));
     let records = record::Observation {
         kind: record::ObservationKind::Current,
-        name: ArtifactId::try_from("rust/api".to_owned()).unwrap(),
+        name: artifact_id!("rust/api"),
         records: vec![record::Record {
             key: "amiss::check".to_owned(),
             value: "pub fn check()".to_owned(),

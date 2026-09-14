@@ -7,13 +7,12 @@ use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::sync::Arc;
 
-use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    Change, ChangeLocator, ControllerEvaluationId, Delivery, DeliveryIdentity, IntegrationId,
-    OidPair, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun,
-    ProviderRunAttempt, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, check_binding,
-    check_plan,
+    Change, ChangeLocator, Delivery, DeliveryIdentity, IntegrationId, OidPair, PolicyControls,
+    ProviderIdentity, ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
+    RunIdentity, RunRefs, RunRequest, check_binding, check_plan,
 };
 use amiss_controller_gitea::{GiteaPlanError, gitea_fetch_plan};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
@@ -99,8 +98,8 @@ fn tree_claims_do_not_change_the_provider_fetch_plan() {
 
 fn request(namespace: &str) -> RunRequest {
     let provider = ProviderIdentity {
-        namespace: ProviderNamespace::new(namespace.to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
+        instance: opaque_id!("forge.example"),
     };
     let repository = repository("acme", "widget");
     let change = ChangeLocator {
@@ -108,7 +107,7 @@ fn request(namespace: &str) -> RunRequest {
         repository,
         change: Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap()),
     };
-    let integration = IntegrationId::new("77".to_owned()).unwrap();
+    let integration = opaque_id!("77");
     let refs = RunRefs {
         forge: ForgeDialect::Gitea,
         candidate: branch("topic"),
@@ -129,10 +128,10 @@ fn request(namespace: &str) -> RunRequest {
         delivery: DeliveryIdentity {
             provider,
             integration,
-            delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
+            delivery: Delivery::Provided(opaque_id!("signed-body")),
         },
         provider_run,
-        evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation/1"),
         check: check_binding(&plan).unwrap(),
         plan,
         run: RunIdentity::new(
@@ -191,7 +190,7 @@ fn provider_run(
                 .finalize()
                 .0,
         )),
-        ProviderRunAttempt::new(1).unwrap(),
+        ProviderRunAttempt::FIRST,
         ObjectFormat::Sha1,
         candidate.clone(),
     )
@@ -208,7 +207,7 @@ fn repository(owner: &str, name: &str) -> RepositoryIdentity {
 }
 
 fn branch(name: &str) -> BranchRef {
-    BranchRef::new(format!("refs/heads/{name}")).unwrap()
+    BranchRef::try_from(format!("refs/heads/{name}")).unwrap()
 }
 
 fn oid(value: char) -> Oid {
@@ -253,7 +252,7 @@ fn each_demand_on_a_repository_identity_refuses_by_itself() {
     );
 
     let mut underscored = request("gitea");
-    let instance = ProviderInstance::new("forge_example".to_owned()).unwrap();
+    let instance = opaque_id!("forge_example");
     underscored.delivery.provider.instance = instance.clone();
     underscored.run.change.provider.instance = instance;
     underscored.run.change.repository = RepositoryIdentity::new(

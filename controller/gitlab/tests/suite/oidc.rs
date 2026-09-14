@@ -3,10 +3,9 @@
     reason = "fixed cryptographic fixtures and protocol identities must fail loudly"
 )]
 
+use amiss_controller::opaque_id;
 use amiss_controller::{Change, Delivery, MergeRequestChange, OidcToken, PipelineJob, ProviderRun};
-use amiss_controller::{
-    OpaqueId, ProviderError, ProviderInstance, ReplayIdentity, SignedTimePolicy,
-};
+use amiss_controller::{ProviderError, ReplayIdentity, SignedTimePolicy};
 use serde_json::{Value, json};
 
 use crate::support::identity::now_seconds;
@@ -236,7 +235,7 @@ fn anchors(kids: &[String]) -> std::collections::BTreeMap<String, amiss_controll
         .map(|kid| {
             (
                 kid.clone(),
-                OpaqueId::new(format!("gitlab-key/{kid}")).unwrap(),
+                OpaqueId::try_from(format!("gitlab-key/{kid}")).unwrap(),
             )
         })
         .collect()
@@ -501,9 +500,9 @@ fn every_route_clause_stands_alone() {
     assert!(verify_routed(&source, &route(), now).is_ok());
 
     let mut other_provider = route();
-    other_provider.provider.instance = ProviderInstance::new("other.example".to_owned()).unwrap();
+    other_provider.provider.instance = opaque_id!("other.example");
     let mut other_trust_set = route();
-    other_trust_set.trust_set = OpaqueId::new("gitlab-webhook".to_owned()).unwrap();
+    other_trust_set.trust_set = opaque_id!("gitlab-webhook");
     let mut replay_only = route();
     replay_only.signed_time = SignedTimePolicy::ReplayOnly;
 

@@ -3,22 +3,23 @@
     reason = "integration fixtures construct known-valid wire identities"
 )]
 
+use amiss_wire::branch_ref;
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::de::Document as _;
 use std::sync::Arc;
 
 use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, result_bytes};
 use amiss_controller::MergeRequestChange;
+use amiss_controller::PipelineJob;
 use amiss_controller::{
-    BootstrapTermination, Change, ChangeLocator, CheckPlan, ControllerEvaluationId, Delivery,
-    DeliveryIdentity, Evaluation, IntegrationId, OidPair, PolicyControls, ProviderIdentity,
-    ProviderInstance, ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
-    RunIdentity, RunRefs, RunRequest, RunnerOutcome, check_binding, check_plan,
-    classify_bootstrap_result,
+    BootstrapTermination, Change, ChangeLocator, CheckPlan, Delivery, DeliveryIdentity, Evaluation,
+    OidPair, PolicyControls, ProviderIdentity, ProviderRun, ProviderRunAttempt,
+    ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, RunnerOutcome, check_binding,
+    check_plan, classify_bootstrap_result,
 };
-use amiss_controller::{OpaqueId, PipelineJob};
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::controls::Profile;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
 fn oid(value: char) -> Oid {
@@ -27,8 +28,8 @@ fn oid(value: char) -> Oid {
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example.internal".to_owned()).unwrap(),
+        namespace: provider_namespace!("gitlab"),
+        instance: opaque_id!("gitlab.example.internal"),
     }
 }
 
@@ -46,17 +47,17 @@ fn request() -> RunRequest {
     RunRequest {
         delivery: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new("project-hook/7".to_owned()).unwrap(),
-            delivery: Delivery::Provided(OpaqueId::new("webhook/9".to_owned()).unwrap()),
+            integration: opaque_id!("project-hook/7"),
+            delivery: Delivery::Provided(opaque_id!("webhook/9")),
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRun::Job(PipelineJob::new(987_654_321, 42).unwrap()),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::FIRST,
             ObjectFormat::Sha1,
             oid('3'),
         )
         .unwrap(),
-        evaluation_id: ControllerEvaluationId::new("evaluation/11".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation/11"),
         check: check_binding(&plan).unwrap(),
         plan,
         run: RunIdentity::new(
@@ -72,9 +73,9 @@ fn request() -> RunRequest {
             },
             RunRefs {
                 forge: ForgeDialect::Gitlab,
-                candidate: BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
-                target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-                default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+                candidate: branch_ref!("refs/heads/topic"),
+                target: branch_ref!("refs/heads/main"),
+                default_branch: branch_ref!("refs/heads/main"),
             },
             ObjectFormat::Sha1,
             OidPair {

@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use amiss_controller::{BootstrapJobError, SemanticEvidenceTemplate, bind_semantic_evidence};
-use amiss_wire::model::ArtifactId;
+use amiss_wire::artifact_id;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
 pub struct SemanticInputArtifact {
@@ -20,8 +20,7 @@ pub fn semantic_input_artifact() -> Result<SemanticInputArtifact, BootstrapJobEr
             schema: TemplateSchema::Current,
             producer: SemanticProducer {
                 kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
-                identity: ArtifactId::new("test-records".to_owned())
-                    .ok_or(BootstrapJobError::SemanticEvidence)?,
+                identity: artifact_id!("test-records"),
                 version: "1".to_owned(),
                 context_digest: amiss_wire::model::Digest::from([
                     0x7e, 0x23, 0xf6, 0xee, 0x04, 0xbb, 0x34, 0xdd, 0x84, 0xac, 0xb6, 0xd4, 0x61,

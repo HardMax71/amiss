@@ -219,7 +219,7 @@ pub(super) fn snapshot(
 }
 
 fn branch(name: &str) -> BranchRef {
-    BranchRef::new(format!("refs/heads/{name}")).unwrap()
+    BranchRef::try_from(format!("refs/heads/{name}")).unwrap()
 }
 
 fn oid(value: char) -> Oid {

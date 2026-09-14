@@ -2,9 +2,9 @@ use sha2::Digest as _;
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    ArtifactBundle, ArtifactComponent, ArtifactStoreConfig, ControllerClock,
-    ControllerEvaluationId, FileArtifactStore,
+    ArtifactBundle, ArtifactComponent, ArtifactStoreConfig, ControllerClock, FileArtifactStore,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_fixtures::semantic::semantic_input_artifact;
@@ -30,7 +30,7 @@ fn generated_semantic_artifacts_keep_their_bytes_and_replay_after_retention() {
     };
     let store = FileArtifactStore::open_with_clock(root.path(), config.clone(), Arc::clone(&clock))
         .unwrap();
-    let evaluation = ControllerEvaluationId::new("evaluation/semantic".to_owned()).unwrap();
+    let evaluation = opaque_id!("evaluation/semantic");
     let reference = store
         .retain(
             &evaluation,

@@ -98,7 +98,7 @@ fn items<P: serde::Serialize, R, M, E: serde::Serialize>(
         let key = row.finding_key.to_string();
         let full = key.strip_prefix("sha256:").ok_or(())?;
         rows.push(DebtItem {
-            debt_id: ArtifactId::new(format!("debt/{full}")).ok_or(())?,
+            debt_id: ArtifactId::try_from(format!("debt/{full}")).map_err(|_defect| ())?,
             finding_key: row.finding_key,
             accepted_fact: Fact::parse(&serde_json::to_vec(fact).map_err(|_defect| ())?)
                 .map_err(|_defect| ())?,

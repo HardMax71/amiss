@@ -1,9 +1,10 @@
 use amiss_wire::de::Document as _;
 use std::sync::Arc;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeSnapshot, CheckPlan, ControllerEvaluationId, PlanScope,
-    PolicyControls, RunRequest, check_binding, check_plan,
+    AuthenticatedDelivery, ChangeSnapshot, CheckPlan, PlanScope, PolicyControls, RunRequest,
+    check_binding, check_plan,
 };
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
@@ -15,7 +16,7 @@ pub fn run_request(delivery: &AuthenticatedDelivery, snapshot: &ChangeSnapshot) 
     RunRequest {
         delivery: delivery.identity.clone(),
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation/1"),
         check: check_binding(&plan).unwrap(),
         plan,
         run: snapshot.run.clone(),

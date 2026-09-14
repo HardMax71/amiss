@@ -9,7 +9,7 @@ use amiss_controller::{
     FileRelationScheduleStore, RelationAdmission, RelationScheduleError, RelationScheduleStoreError,
 };
 use amiss_controller_fixtures::relation::relation_audit;
-use amiss_wire::model::ArtifactId;
+use amiss_wire::artifact_id;
 
 #[test]
 fn restart_retains_current_work_and_historical_coordination_bindings() {
@@ -40,14 +40,14 @@ fn restart_retains_current_work_and_historical_coordination_bindings() {
     drop(store);
     let store = FileRelationScheduleStore::open(directory.path(), 4).unwrap();
     let mut opposite_trigger = first_transition.clone();
-    opposite_trigger.relation.trigger_role = ArtifactId::new("documentation".to_owned()).unwrap();
+    opposite_trigger.relation.trigger_role = artifact_id!("documentation");
     let RelationAdmission::Duplicate(repeated) = store.schedule(opposite_trigger).unwrap() else {
         panic!("the other trigger repeats the first retained work");
     };
     assert_eq!(repeated, first);
 
     let mut second_transition = first_transition.clone();
-    second_transition.coordination = ArtifactId::new("workflow/release-43".to_owned()).unwrap();
+    second_transition.coordination = artifact_id!("workflow/release-43");
     let RelationAdmission::Scheduled(second) = store.schedule(second_transition).unwrap() else {
         panic!("a new coordination identity advances the durable fence");
     };
@@ -101,7 +101,7 @@ fn capacity_refuses_only_new_bindings_and_is_immutable_on_reopen() {
     ));
 
     let mut next = first_transition;
-    next.coordination = ArtifactId::new("workflow/release-43".to_owned()).unwrap();
+    next.coordination = artifact_id!("workflow/release-43");
     assert!(matches!(
         store.schedule(next),
         Err(RelationScheduleStoreError::Full)
@@ -209,7 +209,7 @@ fn concurrent_new_work_advances_one_shared_fence() {
     ];
     let first = relation_audit(true).unwrap().transition;
     let mut second = first.clone();
-    second.coordination = ArtifactId::new("workflow/release-43".to_owned()).unwrap();
+    second.coordination = artifact_id!("workflow/release-43");
     let barrier = Arc::new(Barrier::new(3));
     let workers = stores
         .into_iter()

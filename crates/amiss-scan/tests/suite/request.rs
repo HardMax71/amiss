@@ -2,7 +2,7 @@
     clippy::expect_used,
     reason = "integration assertions over the external-control request gate"
 )]
-use amiss_wire::model::RepoPathText;
+use amiss_wire::{artifact_id, repo_path_text};
 
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::controls::OrganizationFloor;
@@ -15,7 +15,6 @@ use std::borrow::Cow;
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_scan::request::controls;
 use amiss_wire::assessment::Nullable;
-use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
 use amiss_wire::report::AnalysisErrorCode;
 use amiss_wire::requests::{
@@ -112,8 +111,7 @@ fn semantic_evidence(
         },
         producer: SemanticProducer {
             kind: producer_kind,
-            identity: ArtifactId::new("amiss-test".to_owned())
-                .expect("the producer identity is valid"),
+            identity: artifact_id!("amiss-test"),
             version: producer_version.to_owned(),
             context_digest: input_digest,
             input_digest,
@@ -233,7 +231,7 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
         None,
         vec![Observation::Sphinx(SphinxLabelObservation {
             kind: SphinxLabelKind::Current,
-            inventory: ArtifactId::try_from("python".to_owned()).unwrap(),
+            inventory: artifact_id!("python"),
             name: "except_star".to_owned(),
             destination: "https://docs.python.org/3/reference/".to_owned(),
         })],
@@ -245,7 +243,7 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
     let mut malformed = valid;
     malformed.observations[0] = Cow::Owned(Observation::Sphinx(SphinxLabelObservation {
         kind: SphinxLabelKind::Current,
-        inventory: ArtifactId::try_from("python".to_owned()).unwrap(),
+        inventory: artifact_id!("python"),
         name: "except_star".to_owned(),
         destination: "https:///missing-authority".to_owned(),
     }));
@@ -278,7 +276,7 @@ fn record_sets_accept_complete_empty_and_partial_typed_rows() {
             None,
             vec![Observation::Record(record::Observation {
                 kind: record::ObservationKind::Current,
-                name: ArtifactId::try_from("rust/public-api".to_owned()).unwrap(),
+                name: artifact_id!("rust/public-api"),
                 records: records
                     .iter()
                     .map(|(key, value)| record::Record {
@@ -310,7 +308,7 @@ fn malformed_record_sets_fail_closed() {
         None,
         vec![Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
-            name: ArtifactId::try_from("rust/public-api".to_owned()).unwrap(),
+            name: artifact_id!("rust/public-api"),
             records: vec![record::Record {
                 key: "amiss::check".to_owned(),
                 value: "pub fn check()".to_owned(),
@@ -332,7 +330,7 @@ fn malformed_record_sets_fail_closed() {
         .observations
         .push(Cow::Owned(Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
-            name: ArtifactId::try_from("rust/other".to_owned()).unwrap(),
+            name: artifact_id!("rust/other"),
             records: Vec::new(),
         })));
     let mut invalid = vec![wrong_version, report_derived, multiple_sets];
@@ -345,7 +343,7 @@ fn malformed_record_sets_fail_closed() {
         let mut evidence = valid.clone();
         evidence.observations = vec![Cow::Owned(Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
-            name: ArtifactId::try_from("rust/public-api".to_owned()).unwrap(),
+            name: artifact_id!("rust/public-api"),
             records: rows
                 .iter()
                 .map(|(key, value)| record::Record {
@@ -386,7 +384,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
                 None,
                 vec![Observation::Record(record::Observation {
                     kind: record::ObservationKind::Current,
-                    name: ArtifactId::try_from("rust/public-api".to_owned()).unwrap(),
+                    name: artifact_id!("rust/public-api"),
                     records: vec![record::Record {
                         key: key.to_owned(),
                         value: value.to_owned(),
@@ -455,10 +453,10 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
             )
             .unwrap(),
             Observation::Site(SiteBuildObservation::Navigation {
-                root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
-                manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
+                root: Nullable::Value(repo_path_text!("docs")),
+                manifest: repo_path_text!("docs/SUMMARY.md"),
                 entrypoints: vec!["/guide/".to_owned()],
-                reachable: vec![RepoPathText::try_from("docs/guide.md".to_owned()).unwrap()],
+                reachable: vec![repo_path_text!("docs/guide.md")],
             }),
         ],
     );
@@ -596,8 +594,8 @@ fn generated_site_claims_admit_absent_repository_attribution() {
         vec![
             site_observation("/generated/", SiteObservation::Generated(None, &["intro"])).unwrap(),
             Observation::Site(SiteBuildObservation::Navigation {
-                root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
-                manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
+                root: Nullable::Value(repo_path_text!("docs")),
+                manifest: repo_path_text!("docs/SUMMARY.md"),
                 entrypoints: vec!["/generated/".to_owned()],
                 reachable: vec![],
             }),
@@ -618,22 +616,22 @@ fn inconsistent_site_navigation_never_becomes_input() {
     .unwrap();
     let cases = [
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
-            manifest: RepoPathText::try_from("other/SUMMARY.md".to_owned()).unwrap(),
+            root: Nullable::Value(repo_path_text!("docs")),
+            manifest: repo_path_text!("other/SUMMARY.md"),
             entrypoints: vec!["/guide/".to_owned()],
-            reachable: vec![RepoPathText::try_from("docs/guide.md".to_owned()).unwrap()],
+            reachable: vec![repo_path_text!("docs/guide.md")],
         }),
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
-            manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
+            root: Nullable::Value(repo_path_text!("docs")),
+            manifest: repo_path_text!("docs/SUMMARY.md"),
             entrypoints: vec!["/missing/".to_owned()],
-            reachable: vec![RepoPathText::try_from("docs/guide.md".to_owned()).unwrap()],
+            reachable: vec![repo_path_text!("docs/guide.md")],
         }),
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
-            manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
+            root: Nullable::Value(repo_path_text!("docs")),
+            manifest: repo_path_text!("docs/SUMMARY.md"),
             entrypoints: vec!["/guide/".to_owned()],
-            reachable: vec![RepoPathText::try_from("docs/missing.md".to_owned()).unwrap()],
+            reachable: vec![repo_path_text!("docs/missing.md")],
         }),
     ];
     for navigation in cases {

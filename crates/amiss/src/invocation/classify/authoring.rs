@@ -73,7 +73,7 @@ pub(super) fn classify_claim(
         .claim_path
         .unique_value()
         .filter(|value| !value.contains(['&', '<', '>', '"', ' ', '%', '?', '#', '\\']))
-        .and_then(|value| RepoPathText::new(value.to_owned()));
+        .and_then(|value| RepoPathText::try_from(value.to_owned()).ok());
     match (repo, name, line, path) {
         (Some(repo), Some(name), Some(line), Some(path)) if codes.is_empty() => {
             Ok(AuthorInvocation {
@@ -125,7 +125,7 @@ pub(super) fn classify_policy_include(
     let path = gathered
         .claim_path
         .unique_value()
-        .and_then(|value| RepoPathText::new(value.to_owned()));
+        .and_then(|value| RepoPathText::try_from(value.to_owned()).ok());
     let suffix = gathered.suffix.unique_value().map(str::to_owned);
     let adapter = gathered
         .adapter

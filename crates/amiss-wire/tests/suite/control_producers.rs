@@ -4,6 +4,7 @@
 )]
 
 use amiss_wire::de::Document as _;
+use amiss_wire::{branch_ref, repo_path_text};
 use std::fs;
 use std::path::Path;
 
@@ -15,9 +16,7 @@ use amiss_wire::controls::{
 use amiss_wire::de::ErrorKind;
 use amiss_wire::model::Digest;
 
-use amiss_wire::model::{
-    BranchRef, ObjectFormat, Oid, RepoPathText, RepositoryIdentity, UtcInstant,
-};
+use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity, UtcInstant};
 
 const DIGEST_A: &str = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
 const DIGEST_B: &str = "sha256:2222222222222222222222222222222222222222222222222222222222222222";
@@ -46,7 +45,7 @@ fn trusted_time_statement() -> TrustedTimeStatement {
         schema: TrustedTimeSchema::Current,
         controller: TrustedTimeController::ExternalRequiredCheckClock,
         repository: repository(),
-        ref_name: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+        ref_name: branch_ref!("refs/heads/main"),
         candidate_identity_digest: Digest::from_wire(DIGEST_A).unwrap(),
         provider: "gitlab-ci".to_owned(),
         provider_run_id: "pipeline/01J2Z9-7".to_owned(),
@@ -72,7 +71,7 @@ fn execution_constraint() -> ExecutionConstraintDescriptor {
             "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb".to_owned(),
         )
         .unwrap(),
-        manifest_path: RepoPathText::new("release/manifest.json".to_owned()).unwrap(),
+        manifest_path: repo_path_text!("release/manifest.json"),
         release_manifest_digest: Digest::from_wire(DIGEST_B).unwrap(),
         selected_platform: ConstraintPlatform::LinuxX8664,
         required_status_name: RequiredStatusName::try_from(

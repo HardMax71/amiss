@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use amiss_controller::PullRequestChange;
 use amiss_controller::{ForgeNegative, ProviderError};
+use amiss_controller::{opaque_id, provider_namespace};
 use reqwest::StatusCode;
 use secrecy::SecretString;
 
@@ -103,15 +104,13 @@ fn a_review_page_is_complete_exactly_under_its_size() {
 
 #[test]
 fn a_repository_route_names_its_owner_and_repository() {
-    use amiss_controller::{
-        Change, ChangeLocator, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    };
+    use amiss_controller::{Change, ChangeLocator, ProviderIdentity};
     use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
     let change = ChangeLocator {
         provider: ProviderIdentity {
-            namespace: ProviderNamespace::new("gitea".to_owned()).unwrap(),
-            instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+            namespace: provider_namespace!("gitea"),
+            instance: opaque_id!("forge.example"),
         },
         repository: RepositoryIdentity::new(
             "forge.example".to_owned(),

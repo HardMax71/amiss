@@ -3,8 +3,8 @@
     clippy::expect_used,
     reason = "integration harness over asserted fixture shapes"
 )]
-use amiss_wire::model::ArtifactId;
 use amiss_wire::model::RepoPathText;
+use amiss_wire::repo_path_text;
 
 use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
@@ -321,7 +321,7 @@ fn an_engine_whose_header_names_another_platform_refuses() {
     let binary_path = format!("dist/amiss-{}", platform.as_ref());
     let artifacts = vec![StagedArtifact {
         platform,
-        artifact_name: ArtifactId::try_from(format!("amiss-{}", platform.as_ref())).unwrap(),
+        artifact_name: platform.artifact_name(),
         files: vec![
             StagedFile {
                 path: RepoPathText::try_from(binary_path.clone()).unwrap(),
@@ -330,7 +330,7 @@ fn an_engine_whose_header_names_another_platform_refuses() {
                 bytes: &binary,
             },
             StagedFile {
-                path: RepoPathText::try_from("action.yml".to_owned()).unwrap(),
+                path: repo_path_text!("action.yml"),
                 role: RuntimeRole::RuntimeData,
                 executable: false,
                 bytes: ACTION,
@@ -347,10 +347,7 @@ fn an_engine_whose_header_names_another_platform_refuses() {
         .unwrap(),
         object_format: ObjectFormat::Sha1,
         commit_oid: "a".repeat(40).parse().unwrap(),
-        locks: vec![(
-            RepoPathText::try_from("Cargo.lock".to_owned()).unwrap(),
-            &lock,
-        )],
+        locks: vec![(repo_path_text!("Cargo.lock"), &lock)],
     };
     let (manifest_bytes, manifest_digest) = build_manifest(build, artifacts).unwrap();
     fs::create_dir_all(root.join("dist")).unwrap();

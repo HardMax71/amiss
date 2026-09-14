@@ -21,6 +21,7 @@ use amiss_wire::resolution::{
     BlobContent, BlobMode, BlobTarget, InvalidReference, Missing, TaggedBlobTarget, Target,
     UnsupportedSemantics, UnsupportedTarget, VersionScope,
 };
+use amiss_wire::{artifact_id, branch_ref, repo_path_text};
 use sha2::Digest as _;
 
 mod applications;
@@ -732,7 +733,6 @@ fn moment(raw: &str) -> amiss_wire::model::UtcInstant {
     amiss_wire::model::UtcInstant::new(raw.to_owned()).expect("an instant")
 }
 
-#[expect(clippy::expect_used, reason = "test fixture helper")]
 fn waived_fact() -> amiss_wire::controls::Fact {
     amiss_wire::controls::Fact {
         schema: amiss_wire::controls::FactSchema::Current,
@@ -742,13 +742,12 @@ fn waived_fact() -> amiss_wire::controls::Fact {
             finding_kind: amiss_wire::controls::EligibleFindingKind::ExplicitTargetMissing,
             scope: amiss_wire::controls::FindingScope {
                 kind: amiss_wire::controls::ReferenceScopeKind::Reference,
-                document: amiss_wire::model::RepoPathText::new("d.md".to_owned()).expect("path"),
+                document: repo_path_text!("d.md"),
                 source_construct: SourceConstruct::InlineLink,
                 normalized_target_intent: amiss_wire::controls::TargetIntent {
                     kind: amiss_wire::controls::TargetIntentKind::RepositoryPath,
                     commit_oid: None,
-                    path: amiss_wire::model::RepoPathText::new("absent.md".to_owned())
-                        .expect("path"),
+                    path: repo_path_text!("absent.md"),
                     target_kind: TargetKind::Either,
                     query_digest: None,
                     fragment_digest: None,
@@ -769,8 +768,7 @@ fn waived_fact() -> amiss_wire::controls::Fact {
             kind: amiss_wire::controls::FactEvidenceKind::Reference,
             resolution: amiss_wire::controls::StructuralResolution::Missing(
                 amiss_wire::controls::MissingResolution::PathNotFound {
-                    path: amiss_wire::model::RepoPathText::new("absent.md".to_owned())
-                        .expect("path"),
+                    path: repo_path_text!("absent.md"),
                     near: None,
                     same_object_at: Some(amiss_wire::assessment::Nullable::Null),
                 },
@@ -785,7 +783,7 @@ fn waived_fact() -> amiss_wire::controls::Fact {
 fn a_waiver_active_at_this_very_instant_is_not_early() {
     let instant = moment("2026-07-02T00:00:00Z");
     let item = amiss_wire::controls::WaiverItem {
-        waiver_id: amiss_wire::model::ArtifactId::new("waiver/one".to_owned()).expect("id"),
+        waiver_id: artifact_id!("waiver/one"),
         finding_key: amiss_wire::model::Digest::from(
             sha2::Sha256::new_with_prefix("amiss/scanner-finding-key")
                 .chain_update([0_u8])
@@ -818,7 +816,7 @@ fn a_waiver_active_at_this_very_instant_is_not_early() {
             "widget".to_owned(),
         )
         .expect("identity"),
-        ref_name: amiss_wire::model::BranchRef::new("refs/heads/main".to_owned()).expect("ref"),
+        ref_name: branch_ref!("refs/heads/main"),
         candidate_identity_digest: amiss_wire::model::Digest::from(
             sha2::Sha256::new_with_prefix("amiss/raw-evidence")
                 .chain_update([0_u8])

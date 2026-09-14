@@ -11,10 +11,11 @@ use std::time::Duration;
 use amiss_controller::{
     ArtifactReference, ArtifactStoreConfig, AuthenticatedDelivery, ChangeSnapshot, CheckConclusion,
     ControllerClock, DeliveryRoute, ExternalTally, FileArtifactStore, FileLedgerConfig,
-    FileLedgerRoot, HandleOutcome, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
-    ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    Publication, ReplayWindow, RunFailure, SignedTimePolicy, VerifiedDelivery,
+    FileLedgerRoot, HandleOutcome, IngressLimits, IngressPolicy, PlanRegistry, ProviderAdapter,
+    ProviderError, ProviderIdentity, ProviderNamespace, Publication, ReplayWindow, RunFailure,
+    SignedTimePolicy, VerifiedDelivery,
 };
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_git::GitFetchBounds;
 use amiss_controller_service::{AdmissionRejection, DeliveryHeader, EvaluationRequest, Operations};
@@ -130,12 +131,12 @@ fn failed_authentication_never_touches_the_delivery_record() {
     )
     .unwrap();
     let provider = ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example".to_owned()).unwrap(),
+        namespace: provider_namespace!("gitlab"),
+        instance: opaque_id!("gitlab.example"),
     };
     let route = DeliveryRoute {
         provider,
-        trust_set: OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+        trust_set: opaque_id!("gitlab-oidc"),
         signed_time: SignedTimePolicy::Required(Duration::from_mins(5)),
     };
     let adapter: Arc<dyn ProviderAdapter> = Arc::new(RejectingAdapter {

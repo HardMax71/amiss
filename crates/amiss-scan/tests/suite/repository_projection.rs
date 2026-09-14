@@ -7,16 +7,14 @@ use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::{
     Error, RepositoryProjectionLimits, RepositoryProjectionRequest, project_repository,
 };
+use amiss_wire::artifact_id;
 use amiss_wire::controls::{
     BlobLineSelection, NamedRegionSelection, ProjectionKind, ProjectionSource, RecordSetSelection,
     TreePathSelection,
 };
-use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText};
+use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::repo_path_text;
 use sha2::Digest as _;
-
-fn path(raw: &str) -> RepoPathText {
-    RepoPathText::new(raw.to_owned()).unwrap()
-}
 
 fn project(
     pair: &amiss_fixtures::CommitPair,
@@ -52,12 +50,12 @@ fn line_and_named_region_sources_share_the_code_text_canonicalization() {
     )
     .unwrap();
     let lines = ProjectionSource::BlobLines(BlobLineSelection {
-        path: path("lines.txt"),
+        path: repo_path_text!("lines.txt"),
         first_line: 2,
         last_line: 3,
     });
     let region = ProjectionSource::NamedRegion(NamedRegionSelection {
-        path: path("region.txt"),
+        path: repo_path_text!("region.txt"),
         start_marker: "BEGIN".to_owned(),
         end_marker: "END".to_owned(),
     });
@@ -90,7 +88,7 @@ fn complete_tree_paths_project_sorted_rows_or_their_decimal_count() {
     )
     .unwrap();
     let source = ProjectionSource::TreePaths(TreePathSelection {
-        root: path("docs"),
+        root: repo_path_text!("docs"),
         suffix: Some(".md".to_owned()),
         maximum_depth: 2,
     });
@@ -145,7 +143,7 @@ fn exact_count_includes_selected_paths_that_cannot_form_rows() {
     )
     .unwrap();
     let source = ProjectionSource::TreePaths(TreePathSelection {
-        root: path("docs"),
+        root: repo_path_text!("docs"),
         suffix: Some(".md".to_owned()),
         maximum_depth: 1,
     });
@@ -190,7 +188,7 @@ fn refused_paths_only_hide_values_selected_from_their_own_root() {
     )
     .unwrap();
     let source = ProjectionSource::TreePaths(TreePathSelection {
-        root: path("docs"),
+        root: repo_path_text!("docs"),
         suffix: Some(".md".to_owned()),
         maximum_depth: 1,
     });
@@ -232,7 +230,7 @@ fn unavailable_repository_sources_and_external_record_sets_stay_null() {
         (
             ProjectionKind::CodeTextV1,
             ProjectionSource::BlobLines(BlobLineSelection {
-                path: path("missing.txt"),
+                path: repo_path_text!("missing.txt"),
                 first_line: 1,
                 last_line: 1,
             }),
@@ -240,7 +238,7 @@ fn unavailable_repository_sources_and_external_record_sets_stay_null() {
         (
             ProjectionKind::CodeTextV1,
             ProjectionSource::NamedRegion(NamedRegionSelection {
-                path: path("region.txt"),
+                path: repo_path_text!("region.txt"),
                 start_marker: "BEGIN".to_owned(),
                 end_marker: "END".to_owned(),
             }),
@@ -248,7 +246,7 @@ fn unavailable_repository_sources_and_external_record_sets_stay_null() {
         (
             ProjectionKind::SortedRowsV1,
             ProjectionSource::TreePaths(TreePathSelection {
-                root: path("missing"),
+                root: repo_path_text!("missing"),
                 suffix: None,
                 maximum_depth: 1,
             }),
@@ -256,7 +254,7 @@ fn unavailable_repository_sources_and_external_record_sets_stay_null() {
         (
             ProjectionKind::SortedRowsV1,
             ProjectionSource::RecordSet(RecordSetSelection {
-                set: ArtifactId::new("rust/public-api".to_owned()).unwrap(),
+                set: artifact_id!("rust/public-api"),
             }),
         ),
     ];
@@ -279,7 +277,7 @@ fn record_and_byte_ceilings_stop_projection_before_a_value_is_claimed() {
     )
     .unwrap();
     let tree = ProjectionSource::TreePaths(TreePathSelection {
-        root: path("docs"),
+        root: repo_path_text!("docs"),
         suffix: Some(".md".to_owned()),
         maximum_depth: 1,
     });
@@ -289,7 +287,7 @@ fn record_and_byte_ceilings_stop_projection_before_a_value_is_claimed() {
     ));
 
     let blob = ProjectionSource::BlobLines(BlobLineSelection {
-        path: path("docs/a.md"),
+        path: repo_path_text!("docs/a.md"),
         first_line: 1,
         last_line: 1,
     });

@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use amiss_wire::model::RepoPathText;
+use amiss_wire::repo_path_text;
 use amiss_wire::report::model::{
     AnalysisError, AnalysisPhase, RepoPath, ReportEnvelope, ReportPayload, ReportStatus,
 };
@@ -48,9 +48,7 @@ fn dispositions_and_analysis_errors_keep_their_report_meaning() {
     {
         finding.description = "the target is missing".to_owned();
         finding.effective_disposition = disposition;
-        finding.location.path = Some(RepoPath::Text(
-            RepoPathText::new("docs/guide.md".to_owned()).unwrap(),
-        ));
+        finding.location.path = Some(RepoPath::Text(repo_path_text!("docs/guide.md")));
     }
     payload.errors = vec![AnalysisError {
         code: AnalysisErrorCode::ResourceLimitExceeded,
@@ -105,9 +103,7 @@ fn empty_success_and_hostile_xml_scalars_stay_well_formed() {
 
     hostile.effective_disposition = Disposition::Fail;
     hostile.description = "bad\u{1} description <&\"".to_owned();
-    hostile.location.path = Some(RepoPath::Text(
-        RepoPathText::new("docs/bad\u{1}.md".to_owned()).unwrap(),
-    ));
+    hostile.location.path = Some(RepoPath::Text(repo_path_text!("docs/bad\u{1}.md")));
     payload.findings.push(hostile);
     let xml = render(payload);
     assert!(xml.contains("bad\u{fffd} description &lt;&amp;&quot;"));

@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use hex_fmt::HexFmt;
@@ -8,12 +9,17 @@ use serde_with::{DisplayFromStr, serde_as};
 /// `RepoPathText`: the form every configuration surface is confined to.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub struct RepoPathText(String);
+pub struct RepoPathText(Cow<'static, str>);
 
 impl RepoPathText {
+    const INVALID: &'static str = "invalid repository path";
+
+    /// # Panics
+    /// When the literal is not a repository path; `repo_path_text!` makes that a build error.
     #[must_use]
-    pub fn new(raw: String) -> Option<Self> {
-        path_bytes_valid(raw.as_bytes()).then_some(Self(raw))
+    pub const fn from_static(raw: &'static str) -> Self {
+        assert!(path_bytes_valid(raw.as_bytes()), "{}", Self::INVALID);
+        Self(Cow::Borrowed(raw))
     }
 
     #[must_use]
@@ -26,8 +32,19 @@ impl TryFrom<String> for RepoPathText {
     type Error = &'static str;
 
     fn try_from(raw: String) -> Result<Self, Self::Error> {
-        Self::new(raw).ok_or("invalid repository path")
+        if path_bytes_valid(raw.as_bytes()) {
+            Ok(Self(Cow::Owned(raw)))
+        } else {
+            Err(Self::INVALID)
+        }
     }
+}
+
+#[macro_export]
+macro_rules! repo_path_text {
+    ($raw:literal) => {
+        const { $crate::model::RepoPathText::from_static($raw) }
+    };
 }
 
 /// A repository path as the snapshot names it, mirroring the schema's
@@ -125,10 +142,32 @@ impl PartialOrd for RepoPath {
     }
 }
 
-fn path_bytes_valid(raw: &[u8]) -> bool {
-    if raw.is_empty() || raw.len() > 4096 || raw.contains(&0) || raw.contains(&b'\\') {
+const fn path_bytes_valid(raw: &[u8]) -> bool {
+    if raw.is_empty() || raw.len() > 4096 {
         return false;
     }
-    !raw.split(|byte| *byte == b'/')
-        .any(|segment| segment.is_empty() || segment == b"." || segment == b"..")
+    let mut rest = raw;
+    let mut segment = Segment::Empty;
+    while let Some((&byte, tail)) = rest.split_first() {
+        rest = tail;
+        segment = match byte {
+            b'/' if matches!(segment, Segment::Named) => Segment::Empty,
+            0 | b'\\' | b'/' => return false,
+            b'.' => match segment {
+                Segment::Empty => Segment::Dot,
+                Segment::Dot => Segment::DotDot,
+                Segment::DotDot | Segment::Named => Segment::Named,
+            },
+            _ => Segment::Named,
+        };
+    }
+    matches!(segment, Segment::Named)
+}
+
+// a segment is a name once it holds anything other than one or two dots
+enum Segment {
+    Empty,
+    Dot,
+    DotDot,
+    Named,
 }

@@ -3,10 +3,12 @@
     reason = "shared tests build known-valid relation contract values"
 )]
 
+use amiss_wire::artifact_id;
+use amiss_wire::branch_ref;
 use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::Digest;
-use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
     RelationEvidence, RelationEvidenceSubject, RelationIdentity, RelationPlan,
     RelationProjectedValue, RelationProjectionSlot, RelationSnapshot, RelationSubject,
@@ -17,7 +19,7 @@ pub(crate) fn digest(digit: char) -> Digest {
 }
 
 pub(crate) fn identity(value: &str) -> ArtifactId {
-    ArtifactId::new(value.to_owned()).unwrap()
+    ArtifactId::try_from(value.to_owned()).unwrap()
 }
 
 pub(crate) fn oid(digit: char, object_format: ObjectFormat) -> Oid {
@@ -38,7 +40,7 @@ fn subject(
     RelationSubject {
         role: identity(role),
         repository: RepositoryIdentity::github("acme".to_owned(), repository.to_owned()).unwrap(),
-        target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+        target: branch_ref!("refs/heads/main"),
         object_format,
         source: ProjectionSource::RecordSet(RecordSetSelection { set: identity(set) }),
         base: RelationSnapshot {
@@ -62,11 +64,11 @@ pub(crate) fn relation_contract() -> RelationContract {
         schema: amiss_wire::relation::PlanPayloadSchema::Current,
         report_payload_digest: digest('1'),
         relation: RelationIdentity {
-            identity: identity("relation/public-api"),
+            identity: artifact_id!("relation/public-api"),
             context_digest: digest('2'),
         },
-        coordination: identity("workflow/release-42"),
-        trigger_role: identity("source"),
+        coordination: artifact_id!("workflow/release-42"),
+        trigger_role: artifact_id!("source"),
         projection: ProjectionKind::SortedRowsV1,
         subjects: [
             subject(
@@ -91,12 +93,12 @@ pub(crate) fn relation_contract() -> RelationContract {
         plan_payload_digest: RelationPlan::parse(&plan_bytes).unwrap().payload_digest,
         subjects: [
             RelationEvidenceSubject {
-                role: identity("documentation"),
+                role: artifact_id!("documentation"),
                 base: RelationProjectionSlot::Projected(projected('a', 1_024)),
                 candidate: RelationProjectionSlot::Projected(projected('a', 1_024)),
             },
             RelationEvidenceSubject {
-                role: identity("source"),
+                role: artifact_id!("source"),
                 base: RelationProjectionSlot::Projected(projected('a', 1_024)),
                 candidate: RelationProjectionSlot::Projected(projected('b', 1_031)),
             },

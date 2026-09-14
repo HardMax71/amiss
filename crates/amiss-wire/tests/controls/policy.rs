@@ -6,9 +6,8 @@ use amiss_wire::controls::{
 use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::repo_path_text;
 use sha2::Digest as _;
-
-use amiss_wire::model::RepoPathText;
 
 use super::support::POLICY;
 
@@ -60,7 +59,7 @@ fn parses_the_policy_fixture() {
 #[test]
 fn directly_constructed_projection_sources_reuse_the_policy_grammar() {
     let source = ProjectionSource::BlobLines(BlobLineSelection {
-        path: RepoPathText::new("src/lib.rs".to_owned()).unwrap(),
+        path: repo_path_text!("src/lib.rs"),
         first_line: 0,
         last_line: 1,
     });

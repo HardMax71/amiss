@@ -1,12 +1,12 @@
 #![cfg(test)]
 
+use amiss_controller::ProviderRun;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, IntegrationId,
-    OidPair, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, RunIdentity,
-    RunRefs,
+    AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, OidPair,
+    ProviderError, ProviderIdentity, RunIdentity, RunRefs,
 };
-use amiss_controller::{OpaqueId, ProviderRun};
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::{event_bound_run, validate_delivery};
@@ -18,13 +18,13 @@ fn oid(fill: char) -> Oid {
 }
 
 fn branch(name: &str) -> BranchRef {
-    BranchRef::new(format!("refs/heads/{name}")).expect("a branch ref")
+    BranchRef::try_from(format!("refs/heads/{name}")).expect("a branch ref")
 }
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("gitea".to_owned()).expect("a namespace"),
-        instance: ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
+        namespace: provider_namespace!("gitea"),
+        instance: opaque_id!("forge.example"),
     }
 }
 
@@ -44,7 +44,7 @@ fn delivery() -> AuthenticatedDelivery {
         .expect("an identity"),
         change: Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap()),
     };
-    let integration = IntegrationId::new("77".to_owned()).expect("an integration");
+    let integration = opaque_id!("77");
     let provider_run = crate::identity::provider_run(
         &integration,
         &change,
@@ -57,7 +57,7 @@ fn delivery() -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider,
             integration,
-            delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
+            delivery: Delivery::Provided(opaque_id!("signed-body")),
         },
         change,
         provider_run,
@@ -95,20 +95,20 @@ fn a_delivery_answers_for_every_field_alone() {
     assert!(validate_delivery(&sound, &provider(), &reviewer()).is_ok());
 
     let elsewhere = ProviderIdentity {
-        namespace: ProviderNamespace::new("gitea".to_owned()).expect("a namespace"),
-        instance: ProviderInstance::new("other.example".to_owned()).expect("an instance"),
+        namespace: provider_namespace!("gitea"),
+        instance: opaque_id!("other.example"),
     };
     let rows: [(&str, Deviation); 6] = [
         ("another delivery provider", |delivery| {
             delivery.identity.provider = ProviderIdentity {
-                namespace: ProviderNamespace::new("forgejo".to_owned()).expect("a namespace"),
-                instance: ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
+                namespace: provider_namespace!("forgejo"),
+                instance: opaque_id!("forge.example"),
             };
         }),
         ("another change provider", |delivery| {
             delivery.change.provider = ProviderIdentity {
-                namespace: ProviderNamespace::new("forgejo".to_owned()).expect("a namespace"),
-                instance: ProviderInstance::new("forge.example".to_owned()).expect("an instance"),
+                namespace: provider_namespace!("forgejo"),
+                instance: opaque_id!("forge.example"),
             };
         }),
         ("a nested owner", |delivery| {
@@ -120,8 +120,7 @@ fn a_delivery_answers_for_every_field_alone() {
             .expect("an identity");
         }),
         ("a second attempt", |delivery| {
-            delivery.provider_run.attempt =
-                amiss_controller::ProviderRunAttempt::new(2).expect("an attempt");
+            delivery.provider_run.attempt = amiss_controller::ProviderRunAttempt::literal(2);
         }),
         ("another object format", |delivery| {
             delivery.provider_run.object_format = ObjectFormat::Sha256;

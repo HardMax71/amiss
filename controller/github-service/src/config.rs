@@ -1,9 +1,10 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
     CheckPlan, DeliveryRoute, GitHubWebhook, IntegrationId, PlanScope, ProviderIdentity,
-    SignedTimePolicy, TrustSetId,
+    SignedTimePolicy,
 };
 use amiss_controller_github::{GitHubApp, GitHubTimeouts};
 pub use amiss_controller_service::ConfigError;
@@ -89,8 +90,7 @@ impl RawConfig {
         )?);
         validate_github_plan(&scope.provider, &plan)?;
         let limits = load_limits(&self.limits, self.webhook_path)?;
-        let trust_set = TrustSetId::new("github-webhook-keys".to_owned())
-            .ok_or(ConfigError::invalid("trust set identity is invalid"))?;
+        let trust_set = opaque_id!("github-webhook-keys");
         let route = DeliveryRoute {
             provider: scope.provider.clone(),
             trust_set: trust_set.clone(),
@@ -244,7 +244,7 @@ fn github_repository(
 
 fn github_branch(branch: &str) -> Result<BranchRef, ConfigError> {
     (!branch.starts_with("refs/"))
-        .then(|| BranchRef::new(format!("refs/heads/{branch}")))
+        .then(|| BranchRef::try_from(format!("refs/heads/{branch}")).ok())
         .flatten()
         .ok_or(ConfigError::invalid("GitHub target branch is invalid"))
 }
@@ -274,8 +274,8 @@ fn validate_github_plan(provider: &ProviderIdentity, plan: &CheckPlan) -> Result
 
 fn positive_id(raw: u64) -> Result<IntegrationId, ConfigError> {
     positive(raw)?;
-    IntegrationId::new(raw.to_string())
-        .ok_or(ConfigError::invalid("installation identity is invalid"))
+    IntegrationId::try_from(raw.to_string())
+        .map_err(|_defect| ConfigError::invalid("installation identity is invalid"))
 }
 
 fn positive(raw: u64) -> Result<u64, ConfigError> {

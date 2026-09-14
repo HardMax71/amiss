@@ -2,7 +2,7 @@
     clippy::unwrap_used,
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::{artifact_id, branch_ref, repo_path_text, required_status_name};
 
 use amiss_controller_fixtures::clock::TestClock;
 use sha2::Digest as _;
@@ -12,20 +12,18 @@ use std::time::Duration;
 
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckBinding, CheckConclusion,
-    ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GitHubWebhook, IngressCheck,
-    IngressLimits, IngressPolicy, OidPair, OpaqueId, ProviderAdapter, ProviderError,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, Publication,
-    ReplayWindow, RunIdentity, RunRefs, SemanticEvidenceExpectation, SignedTimePolicy,
+    DeliveryHeader, DeliveryRoute, GitHubWebhook, IngressCheck, IngressLimits, IngressPolicy,
+    OidPair, OpaqueId, ProviderAdapter, ProviderError, ProviderIdentity, ProviderRunAttempt,
+    Publication, ReplayWindow, RunIdentity, RunRefs, SemanticEvidenceExpectation, SignedTimePolicy,
     UntrustedDelivery, WebhookKey, WebhookKeyring, WorkflowArtifactExpectation,
 };
 use amiss_controller::{Change, PullRequestChange};
 use amiss_controller::{Delivery, DeliveryIdentity, PipelineJob, ProviderFacts, ProviderRun};
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_github::{
     GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
 };
-use amiss_wire::model::{
-    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
-};
+use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use serde_json::json;
 use sha2::Sha256;
@@ -241,8 +239,8 @@ fn signed_body_alone_defines_the_pull_request() {
 #[test]
 fn signed_target_must_belong_to_the_configured_lane() {
     let source = source();
-    let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
-    let release = BranchRef::new("refs/heads/release".to_owned()).unwrap();
+    let main = branch_ref!("refs/heads/main");
+    let release = branch_ref!("refs/heads/release");
 
     assert!(matches!(
         authenticate_target(&source, BODY, &main),
@@ -261,7 +259,7 @@ fn configured_workflow_completion_reproduces_the_pull_request_run() {
         webhook(),
         &[workflow_artifact("docs-evidence.yml")],
     );
-    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let target = branch_ref!("refs/heads/main");
     let pull_request = authenticate_target(&source(), BODY, &target)
         .unwrap()
         .unwrap();
@@ -294,7 +292,7 @@ fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
         webhook(),
         &[workflow_artifact("docs-evidence.yml")],
     );
-    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let target = branch_ref!("refs/heads/main");
     for (pointer, value) in [
         ("/action", json!("in_progress")),
         ("/workflow/path", json!(".github/workflows/other.yml")),
@@ -314,7 +312,7 @@ fn only_a_successful_configured_completion_with_one_pull_request_is_work() {
         br#"{"action":"completed","check_run":{"id":89721586894},"installation":{"id":7}}"#;
     assert_eq!(authenticate_target(&source, check_run, &target), Ok(None));
 
-    let other_target = BranchRef::new("refs/heads/release".to_owned()).unwrap();
+    let other_target = branch_ref!("refs/heads/release");
     let body = serde_json::to_vec(&workflow_payload()).unwrap();
     assert_eq!(
         authenticate_target(&source, &body, &other_target),
@@ -329,7 +327,7 @@ fn contradictory_configured_completion_fields_fail_authentication() {
         webhook(),
         &[workflow_artifact("docs-evidence.yml")],
     );
-    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let target = branch_ref!("refs/heads/main");
     for (pointer, value) in [
         ("/workflow/id", json!(999)),
         ("/workflow_run/status", json!("in_progress")),
@@ -352,7 +350,7 @@ fn contradictory_configured_completion_fields_fail_authentication() {
 #[test]
 fn signed_irrelevant_deliveries_are_authenticated_without_work() {
     let source = source();
-    let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let main = branch_ref!("refs/heads/main");
     for action in ["created", "completed"] {
         let body = format!(
             r#"{{"action":"{action}","check_run":{{"id":89721586894}},"installation":{{"id":7}}}}"#
@@ -394,7 +392,7 @@ fn signed_irrelevant_deliveries_are_authenticated_without_work() {
 #[test]
 fn malformed_supported_delivery_is_not_no_work() {
     let source = source();
-    let main = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let main = branch_ref!("refs/heads/main");
     let malformed = br#"{"action":"opened","pull_request":{}}"#;
 
     assert_eq!(
@@ -524,8 +522,8 @@ fn rejects_body_tampering_and_wrong_routes() {
     );
 
     let wrong_provider = ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.enterprise.test".to_owned()).unwrap(),
+        namespace: provider_namespace!("github"),
+        instance: opaque_id!("github.enterprise.test"),
     };
     assert_eq!(
         authenticated(
@@ -647,8 +645,8 @@ fn every_clause_binding_the_delivery_stands_alone() {
         authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
     let delivery = delivered(verified.facts());
     let elsewhere = ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.example".to_owned()).unwrap(),
+        namespace: provider_namespace!("github"),
+        instance: opaque_id!("github.example"),
     };
 
     let mut foreign_identity = delivery.clone();
@@ -667,7 +665,7 @@ fn every_clause_binding_the_delivery_stands_alone() {
         "a non-canonical owner cannot enter an authenticated delivery"
     );
     let mut retried = delivery.clone();
-    retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    retried.provider_run.attempt = ProviderRunAttempt::literal(2);
     let mut wider_format = delivery.clone();
     wider_format.provider_run.object_format = ObjectFormat::Sha256;
     let mut wider_candidate = delivery;
@@ -713,16 +711,16 @@ fn workflow_artifact(workflow_identity: &str) -> WorkflowArtifactExpectation {
             "widget".to_owned(),
         )
         .unwrap(),
-        workflow_identity: OpaqueId::new(workflow_identity.to_owned()).unwrap(),
-        event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+        workflow_identity: OpaqueId::try_from(workflow_identity.to_owned()).unwrap(),
+        event: opaque_id!("pull_request"),
         artifact_name: "amiss-semantic-evidence".to_owned(),
-        payload_file: RepoPathText::new("amiss/semantic-template.json".to_owned()).unwrap(),
+        payload_file: repo_path_text!("amiss/semantic-template.json"),
         archive_byte_limit: 1_048_576,
         file_byte_limit: 524_288,
         semantic: SemanticEvidenceExpectation {
-            acquisition_identity: ArtifactId::new("github-docs-evidence".to_owned()).unwrap(),
+            acquisition_identity: artifact_id!("github-docs-evidence"),
             producer_kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
-            producer_identity: ArtifactId::new("docs-site".to_owned()).unwrap(),
+            producer_identity: artifact_id!("docs-site"),
             producer_version: "0.5.1".to_owned(),
             context_digest: amiss_wire::model::Digest::from(
                 Sha256::new_with_prefix("amiss/test-workflow-completion")
@@ -792,14 +790,8 @@ fn workflow_payload() -> serde_json::Value {
 }
 
 fn webhook() -> GitHubWebhook {
-    let trust_set = OpaqueId::new("github-webhooks".to_owned()).unwrap();
-    let key = WebhookKey::new(
-        OpaqueId::new("current".to_owned()).unwrap(),
-        SECRET.to_vec(),
-        0,
-        None,
-    )
-    .unwrap();
+    let trust_set = opaque_id!("github-webhooks");
+    let key = WebhookKey::new(opaque_id!("current"), SECRET.to_vec(), 0, None).unwrap();
     GitHubWebhook::new(WebhookKeyring::new(trust_set, vec![key]).unwrap())
 }
 
@@ -817,8 +809,8 @@ fn observed(pull_request: GitHubPullRequest<'_>) -> ApiRequest {
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        namespace: provider_namespace!("github"),
+        instance: opaque_id!("github.com"),
     }
 }
 
@@ -849,7 +841,7 @@ fn try_authenticate_with_signature(
 ) -> Result<amiss_controller::VerifiedDelivery, ProviderError> {
     let route = DeliveryRoute {
         provider: route_provider,
-        trust_set: OpaqueId::new("github-webhooks".to_owned()).unwrap(),
+        trust_set: opaque_id!("github-webhooks"),
         signed_time,
     };
     let mut headers = Vec::with_capacity(unsigned.len().saturating_add(1));
@@ -898,7 +890,7 @@ fn authenticate_target(
     }];
     let route = DeliveryRoute {
         provider: provider(),
-        trust_set: OpaqueId::new("github-webhooks".to_owned()).unwrap(),
+        trust_set: opaque_id!("github-webhooks"),
         signed_time: SignedTimePolicy::ReplayOnly,
     };
     let check = policy()
@@ -935,9 +927,9 @@ fn snapshot(
             delivery.change.clone(),
             RunRefs {
                 forge: ForgeDialect::Github,
-                candidate: BranchRef::new(format!("refs/heads/{candidate_ref}")).unwrap(),
-                target: BranchRef::new(format!("refs/heads/{target_ref}")).unwrap(),
-                default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+                candidate: BranchRef::try_from(format!("refs/heads/{candidate_ref}")).unwrap(),
+                target: BranchRef::try_from(format!("refs/heads/{target_ref}")).unwrap(),
+                default_branch: branch_ref!("refs/heads/main"),
             },
             ObjectFormat::Sha1,
             OidPair {
@@ -968,9 +960,9 @@ fn dummy_snapshot() -> ChangeSnapshot {
             change,
             RunRefs {
                 forge: ForgeDialect::Github,
-                candidate: BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
-                target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-                default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+                candidate: branch_ref!("refs/heads/topic"),
+                target: branch_ref!("refs/heads/main"),
+                default_branch: branch_ref!("refs/heads/main"),
             },
             ObjectFormat::Sha1,
             OidPair {
@@ -997,10 +989,10 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
     );
     Publication {
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation-1"),
         check: CheckBinding {
             plan_digest: digest,
-            required_status_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
+            required_status_name: required_status_name!("amiss"),
             execution_constraint_digest: digest,
         },
         run,
@@ -1035,7 +1027,7 @@ fn delivered(facts: &ProviderFacts) -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: facts.provider.clone(),
             integration: facts.integration.clone(),
-            delivery: Delivery::Provided(OpaqueId::new("delivery".to_owned()).unwrap()),
+            delivery: Delivery::Provided(opaque_id!("delivery")),
         },
         change: facts.change.clone(),
         provider_run: facts.provider_run.clone(),

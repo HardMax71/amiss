@@ -35,9 +35,12 @@ relevant checks without unrelated Rust builds. Unknown paths take the full code 
   helpers are forbidden, including macro-generated substitutes. So are handwritten
   `FromStr`, `Display` and primitive `From` impls that spell a value: derive them (strum,
   serde_with) or keep the domain type and format at the boundary. A validated newtype
-  reads through `#[serde(try_from)]` and one `TryFrom` that calls its constructor; `Digest`
-  and `Oid` still spell themselves by hand and are named in the ast-grep rule until they
-  do not. Use library calls
+  has one runtime constructor, its `TryFrom`, which serde reads through
+  `#[serde(try_from)]`, and a const `from_static` behind a literal macro
+  (`repo_path_text!`, `artifact_id!`, `branch_ref!`, `required_status_name!`,
+  `opaque_id!`, `provider_namespace!`) that checks a literal at build time, so code and
+  tests never parse a value they can spell. `Digest` and `Oid` still spell themselves by
+  hand and are named in the ast-grep rule until they do not. Use library calls
   directly and keep domain validation separate. Accept standard Serde JSON behavior;
   do not restore object-only guards or a custom JSON profile.
   Let derives infer generic bounds; handwritten `serde(bound)` overrides are forbidden.

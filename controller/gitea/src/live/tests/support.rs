@@ -1,14 +1,14 @@
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::required_status_name;
 use sha2::Digest as _;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
+use amiss_controller::opaque_id;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, CheckBinding, CheckConclusion,
-    ControllerEvaluationId, Delivery, DeliveryIdentity, IntegrationId, ProviderError,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, Publication,
+    ControllerEvaluationId, Delivery, DeliveryIdentity, ProviderError, ProviderIdentity,
+    ProviderNamespace, Publication,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -243,7 +243,7 @@ impl Fixture {
             repository,
             change: Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap()),
         };
-        let integration = IntegrationId::new("77".to_owned()).unwrap();
+        let integration = opaque_id!("77");
         let provider_run = crate::identity::provider_run(
             &integration,
             &change,
@@ -256,7 +256,7 @@ impl Fixture {
             identity: DeliveryIdentity {
                 provider: provider.clone(),
                 integration,
-                delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
+                delivery: Delivery::Provided(opaque_id!("signed-body")),
             },
             change: change.clone(),
             provider_run,
@@ -270,7 +270,7 @@ impl Fixture {
             config: Config {
                 provider,
                 reviewer: reviewer(),
-                review_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
+                review_name: required_status_name!("amiss"),
             },
             rest: rest.clone(),
             objects: Arc::new(FakeObjects { objects }),
@@ -309,10 +309,10 @@ impl Fixture {
         );
         Publication {
             provider_run: self.delivery.provider_run.clone(),
-            evaluation_id: ControllerEvaluationId::new(evaluation.to_owned()).unwrap(),
+            evaluation_id: ControllerEvaluationId::try_from(evaluation.to_owned()).unwrap(),
             check: CheckBinding {
                 plan_digest: digest,
-                required_status_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
+                required_status_name: required_status_name!("amiss"),
                 execution_constraint_digest: digest,
             },
             run: snapshot.run,
@@ -330,8 +330,8 @@ pub(super) fn reviewer() -> DedicatedReviewer {
 
 pub(super) fn provider(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new(namespace.to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
+        instance: opaque_id!("forge.example"),
     }
 }
 
@@ -481,5 +481,5 @@ fn pull_repository(id: u64, owner: &str, name: &str) -> PullRepositoryRecord {
 }
 
 fn branch(name: &str) -> BranchRef {
-    BranchRef::new(format!("refs/heads/{name}")).unwrap()
+    BranchRef::try_from(format!("refs/heads/{name}")).unwrap()
 }

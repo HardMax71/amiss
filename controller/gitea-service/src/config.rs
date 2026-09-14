@@ -3,9 +3,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::objects::GiteaGitObjects;
+use amiss_controller::opaque_id;
 use amiss_controller::{
     CheckPlan, DeliveryRoute, GiteaWebhook, IntegrationId, PlanScope, ProviderIdentity,
-    SignedTimePolicy, TrustSetId,
+    SignedTimePolicy,
 };
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaClient, GiteaObjectResolver, GiteaTimeouts, gitea_repository_url,
@@ -205,8 +206,7 @@ fn webhook_binding(
     provider: &ProviderIdentity,
     keys: Vec<WebhookKeyFile>,
 ) -> Result<(DeliveryRoute, GiteaWebhook), ConfigError> {
-    let trust_set = TrustSetId::new("gitea-family-webhook-keys".to_owned())
-        .ok_or(ConfigError::invalid("trust set identity is invalid"))?;
+    let trust_set = opaque_id!("gitea-family-webhook-keys");
     let route = DeliveryRoute {
         provider: provider.clone(),
         trust_set: trust_set.clone(),
@@ -275,7 +275,7 @@ fn repository_identity(
 
 fn target_branch(raw: &str) -> Result<BranchRef, ConfigError> {
     (!raw.starts_with("refs/"))
-        .then(|| BranchRef::new(format!("refs/heads/{raw}")))
+        .then(|| BranchRef::try_from(format!("refs/heads/{raw}")).ok())
         .flatten()
         .ok_or(ConfigError::invalid(
             "Gitea-family target branch is invalid",
@@ -283,9 +283,8 @@ fn target_branch(raw: &str) -> Result<BranchRef, ConfigError> {
 }
 
 fn reviewer_integration(id: u64) -> Result<IntegrationId, ConfigError> {
-    IntegrationId::new(id.to_string()).ok_or(ConfigError::invalid(
-        "dedicated reviewer integration is invalid",
-    ))
+    IntegrationId::try_from(id.to_string())
+        .map_err(|_defect| ConfigError::invalid("dedicated reviewer integration is invalid"))
 }
 
 fn load_token(path: &Path) -> Result<SecretString, ConfigError> {

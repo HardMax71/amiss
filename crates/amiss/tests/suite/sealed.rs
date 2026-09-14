@@ -4,9 +4,12 @@
     reason = "black-box harness over asserted fixture shapes"
 )]
 
+use amiss_wire::artifact_id;
+use amiss_wire::branch_ref;
 use amiss_wire::controls::OrganizationFloor;
 use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::repo_path_text;
 use sha2::Digest as _;
 use std::io::Write as _;
 use std::process::{Command, Stdio};
@@ -15,9 +18,7 @@ use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::Profile;
 use amiss_wire::envelope::Payload as _;
-use amiss_wire::model::{
-    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
-};
+use amiss_wire::model::{ArtifactId, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::model::ReportPayload;
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,
@@ -166,9 +167,9 @@ fn a_sealed_run_resolves_against_the_identity_it_was_given() {
         "widget".to_owned(),
     );
     evaluation.forge = Some(ForgeDialect::Github);
-    evaluation.candidate_ref = BranchRef::new("refs/heads/main".to_owned());
-    evaluation.target_ref = BranchRef::new("refs/heads/main".to_owned());
-    evaluation.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
+    evaluation.candidate_ref = Some(branch_ref!("refs/heads/main"));
+    evaluation.target_ref = Some(branch_ref!("refs/heads/main"));
+    evaluation.default_branch_ref = Some(branch_ref!("refs/heads/main"));
 
     let streams = RequestStreams {
         evaluation: serde_json_canonicalizer::to_vec(&evaluation).unwrap(),
@@ -204,9 +205,9 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
         "docs".to_owned(),
     );
     evaluation.forge = Some(ForgeDialect::Github);
-    evaluation.candidate_ref = BranchRef::new("refs/heads/feature/docs".to_owned());
-    evaluation.target_ref = BranchRef::new("refs/heads/main".to_owned());
-    evaluation.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
+    evaluation.candidate_ref = Some(branch_ref!("refs/heads/feature/docs"));
+    evaluation.target_ref = Some(branch_ref!("refs/heads/main"));
+    evaluation.default_branch_ref = Some(branch_ref!("refs/heads/main"));
 
     let floor_bytes = br#"{
       "schema":"amiss/organization-floor",
@@ -255,7 +256,7 @@ fn sealed_requests_keep_candidate_identity_separate_from_the_control_target() {
 }
 
 fn id(value: &str) -> ArtifactId {
-    ArtifactId::new(value.to_owned()).unwrap()
+    ArtifactId::try_from(value.to_owned()).unwrap()
 }
 
 fn sphinx_label(inventory: &str, name: &str, destination: &str) -> Observation {
@@ -308,7 +309,7 @@ fn intersphinx_case() -> (
         },
         producer: SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::SphinxInventorySet,
-            identity: id("amiss-test"),
+            identity: artifact_id!("amiss-test"),
             version: "1".to_owned(),
             context_digest,
             input_digest: context_digest,
@@ -465,7 +466,7 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
         },
         producer: SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
-            identity: id("amiss-test"),
+            identity: artifact_id!("amiss-test"),
             version: "0.5.1".to_owned(),
             context_digest,
             input_digest: amiss_wire::model::Digest::from(
@@ -740,10 +741,10 @@ fn site_build_observations() -> Vec<Observation> {
         ),
     ];
     let navigation = [Ok(Observation::Site(SiteBuildObservation::Navigation {
-        root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
-        manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
+        root: Nullable::Value(repo_path_text!("docs")),
+        manifest: repo_path_text!("docs/SUMMARY.md"),
         entrypoints: vec!["/generated/".to_owned()],
-        reachable: vec![RepoPathText::try_from("docs/guide.md".to_owned()).unwrap()],
+        reachable: vec![repo_path_text!("docs/guide.md")],
     }))];
 
     pages

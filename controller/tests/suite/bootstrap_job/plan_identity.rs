@@ -1,12 +1,14 @@
 use amiss_controller::{
-    BootstrapJobError, OpaqueId, PolicyControls, ProviderInstance, ProviderNamespace,
-    SemanticEvidenceTemplate, WorkflowArtifactExpectation, check_binding, check_plan,
+    BootstrapJobError, PolicyControls, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
+    check_binding, check_plan,
 };
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::controls::Profile;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
-use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
+use amiss_wire::model::RepositoryIdentity;
 use amiss_wire::requests::RequestTrust;
+use amiss_wire::{artifact_id, repo_path_text};
 use sha2::Digest as _;
 
 use super::{execution, site_acquisition, workflow_acquisition};
@@ -112,7 +114,7 @@ fn changing_a_typed_control_and_its_digest_cannot_preserve_a_frozen_plan() {
     let changes: [fn(&mut PolicyControls); 6] = [
         |policy| {
             let floor = policy.organization_floor.as_mut().unwrap();
-            floor.value.floor_id = ArtifactId::new("other-floor".to_owned()).unwrap();
+            floor.value.floor_id = artifact_id!("other-floor");
             floor.expected_digest =
                 document_digest("amiss/organization-floor", &floor.value).unwrap();
         },
@@ -158,11 +160,10 @@ fn changing_a_typed_control_and_its_digest_cannot_preserve_a_frozen_plan() {
 fn every_workflow_identity_member_changes_the_frozen_binding() {
     let changes: [fn(&mut WorkflowArtifactExpectation); 15] = [
         |artifact| {
-            artifact.provider.namespace = ProviderNamespace::new("other".to_owned()).unwrap();
+            artifact.provider.namespace = provider_namespace!("other");
         },
         |artifact| {
-            artifact.provider.instance =
-                ProviderInstance::new("gitlab.other.internal".to_owned()).unwrap();
+            artifact.provider.instance = opaque_id!("gitlab.other.internal");
             artifact.repository = RepositoryIdentity::new(
                 "gitlab.other.internal".to_owned(),
                 "platform/security".to_owned(),
@@ -186,24 +187,22 @@ fn every_workflow_identity_member_changes_the_frozen_binding() {
             )
             .unwrap();
         },
-        |artifact| artifact.workflow_identity = OpaqueId::new("other.yml".to_owned()).unwrap(),
-        |artifact| artifact.event = OpaqueId::new("push".to_owned()).unwrap(),
+        |artifact| artifact.workflow_identity = opaque_id!("other.yml"),
+        |artifact| artifact.event = opaque_id!("push"),
         |artifact| artifact.artifact_name = "other \"β\"".to_owned(),
         |artifact| {
-            artifact.payload_file = RepoPathText::new("other/template.json".to_owned()).unwrap();
+            artifact.payload_file = repo_path_text!("other/template.json");
         },
         |artifact| artifact.archive_byte_limit = 2048,
         |artifact| artifact.file_byte_limit = 1024,
         |artifact| {
-            artifact.semantic.acquisition_identity =
-                ArtifactId::new("other-source".to_owned()).unwrap();
+            artifact.semantic.acquisition_identity = artifact_id!("other-source");
         },
         |artifact| {
             artifact.semantic.producer_kind = amiss_wire::semantic::SemanticProducerKind::RecordSet;
         },
         |artifact| {
-            artifact.semantic.producer_identity =
-                ArtifactId::new("other-producer".to_owned()).unwrap();
+            artifact.semantic.producer_identity = artifact_id!("other-producer");
         },
         |artifact| artifact.semantic.producer_version = "0.5.2".to_owned(),
         |artifact| {
@@ -245,7 +244,7 @@ fn semantic_template_identity_members_cannot_change_under_a_frozen_plan() {
         },
         |template| template.producer.kind = amiss_wire::semantic::SemanticProducerKind::RecordSet,
         |template| {
-            template.producer.identity = ArtifactId::new("other-producer".to_owned()).unwrap();
+            template.producer.identity = artifact_id!("other-producer");
         },
         |template| template.producer.version = "0.5.2".to_owned(),
     ];

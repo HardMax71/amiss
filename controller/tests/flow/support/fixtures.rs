@@ -1,20 +1,20 @@
 use amiss_controller_fixtures::clock::TestClock;
+use amiss_wire::branch_ref;
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::de::Document as _;
 use amiss_wire::model::Digest;
 use std::sync::Arc;
 use std::time::Duration;
 
-use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState,
     CheckBinding, CheckPlan, Controller, Delivery, DeliveryIdentity, DeliveryLedger, IngressLimits,
-    IngressPolicy, IntegrationId, OidPair, PlanRegistry, PlanScope, PolicyControls,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun, ProviderRunAttempt,
-    ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs, RunnerOutcome, check_binding,
-    check_plan, register_plan,
+    IngressPolicy, OidPair, PlanRegistry, PlanScope, PolicyControls, ProviderIdentity, ProviderRun,
+    ProviderRunAttempt, ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs, RunnerOutcome,
+    check_binding, check_plan, register_plan,
 };
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -22,8 +22,8 @@ use super::{FakeAdapter, FakeRunner, MemoryLedger};
 
 pub(crate) fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("forgejo".to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example.test".to_owned()).unwrap(),
+        namespace: provider_namespace!("forgejo"),
+        instance: opaque_id!("forge.example.test"),
     }
 }
 
@@ -55,13 +55,13 @@ pub(crate) fn delivery(
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: Delivery::Provided(OpaqueId::new("delivery-9".to_owned()).unwrap()),
+            integration: opaque_id!("installation-7"),
+            delivery: Delivery::Provided(opaque_id!("delivery-9")),
         },
         change,
         provider_run: ProviderRunIdentity::new(
             ProviderRun::PullRequest(Digest::from([150; 32])),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::FIRST,
             ObjectFormat::Sha1,
             oid(candidate_commit),
         )
@@ -98,9 +98,9 @@ pub(crate) fn run_with_resolution(
         change,
         RunRefs {
             forge,
-            candidate: BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
-            target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-            default_branch: BranchRef::new(default_branch_ref.to_owned()).unwrap(),
+            candidate: branch_ref!("refs/heads/topic"),
+            target: branch_ref!("refs/heads/main"),
+            default_branch: BranchRef::try_from(default_branch_ref.to_owned()).unwrap(),
         },
         ObjectFormat::Sha1,
         OidPair {

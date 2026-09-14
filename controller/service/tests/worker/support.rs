@@ -1,3 +1,4 @@
+use amiss_wire::branch_ref;
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::de::Document as _;
 use amiss_wire::model::Digest;
@@ -11,20 +12,21 @@ use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState,
     Controller, ControllerClock, Delivery, DeliveryIdentity, DeliveryRoute, Evaluation, FileLedger,
     FileLedgerConfig, GitHubWebhook, HeartbeatOutcome, IngressCheck, IngressLimits, IngressPolicy,
-    IntegrationId, OidPair, OpaqueId, PlanRegistry, PlanScope, PolicyControls, ProviderAdapter,
-    ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun,
-    ProviderRunAttempt, ProviderRunIdentity, Publication, ReplayWindow, RunHeartbeat, RunIdentity,
-    RunRefs, RunRequest, Runner, RunnerOutcome, SignedTimePolicy, SystemClock, VerifiedDelivery,
-    WebhookKey, WebhookKeyring, check_plan, register_plan,
+    OidPair, PlanRegistry, PlanScope, PolicyControls, ProviderAdapter, ProviderError,
+    ProviderIdentity, ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
+    Publication, ReplayWindow, RunHeartbeat, RunIdentity, RunRefs, RunRequest, Runner,
+    RunnerOutcome, SignedTimePolicy, SystemClock, VerifiedDelivery, WebhookKey, WebhookKeyring,
+    check_plan, register_plan,
 };
 use amiss_controller::{ProviderFacts, PullRequestChange};
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_service::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, DeliveryHeader,
     DeliveryWorker, DeliveryWorkerInput, Inbox, InboxLimits, IncomingDelivery, IncomingHeader,
     Operations,
 };
 use amiss_wire::controls::Profile;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha256;
 use tempfile::TempDir;
@@ -393,8 +395,8 @@ fn signature(body: &[u8]) -> Vec<u8> {
 }
 
 fn verifier() -> GitHubWebhook {
-    let trust_set = OpaqueId::new("webhooks-main".to_owned()).unwrap();
-    let anchor = OpaqueId::new("anchor-current".to_owned()).unwrap();
+    let trust_set = opaque_id!("webhooks-main");
+    let anchor = opaque_id!("anchor-current");
     let key = WebhookKey::new(anchor, SECRET.to_vec(), 0, None).unwrap();
     GitHubWebhook::new(WebhookKeyring::new(trust_set, vec![key]).unwrap())
 }
@@ -402,15 +404,15 @@ fn verifier() -> GitHubWebhook {
 fn route() -> DeliveryRoute {
     DeliveryRoute {
         provider: provider(),
-        trust_set: OpaqueId::new("webhooks-main".to_owned()).unwrap(),
+        trust_set: opaque_id!("webhooks-main"),
         signed_time: SignedTimePolicy::ReplayOnly,
     }
 }
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        namespace: provider_namespace!("github"),
+        instance: opaque_id!("github.com"),
     }
 }
 
@@ -419,13 +421,13 @@ fn authenticated() -> AuthenticatedDelivery {
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: Delivery::Provided(OpaqueId::new("placeholder".to_owned()).unwrap()),
+            integration: opaque_id!("installation-7"),
+            delivery: Delivery::Provided(opaque_id!("placeholder")),
         },
         change: change(provider),
         provider_run: ProviderRunIdentity::new(
             ProviderRun::PullRequest(Digest::from([150; 32])),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::FIRST,
             ObjectFormat::Sha1,
             oid('b'),
         )
@@ -451,9 +453,9 @@ fn run() -> RunIdentity {
         change(provider()),
         RunRefs {
             forge: ForgeDialect::Github,
-            candidate: BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
-            target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-            default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+            candidate: branch_ref!("refs/heads/topic"),
+            target: branch_ref!("refs/heads/main"),
+            default_branch: branch_ref!("refs/heads/main"),
         },
         ObjectFormat::Sha1,
         OidPair {

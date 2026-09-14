@@ -11,20 +11,21 @@ use std::sync::{Arc, Mutex};
 use amiss_controller::MergeRequestChange;
 use amiss_controller::{
     ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, Change, ChangeState,
-    CheckConclusion, HandleOutcome, LeaseFence, OpaqueId, PlanScope, ProviderAdapter,
-    ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
-    RelationAuditDigests, RelationLimits, RelationStatusRecord, RelationStatusTarget,
-    RelationStatusTargets, RelationSubject, RunFailure,
+    CheckConclusion, HandleOutcome, LeaseFence, PlanScope, ProviderAdapter, ProviderError,
+    ProviderIdentity, ProviderRunAttempt, RelationAuditDigests, RelationLimits,
+    RelationStatusRecord, RelationStatusTarget, RelationStatusTargets, RelationSubject, RunFailure,
 };
 use amiss_controller::{PipelineJob, ProviderRun};
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_gitlab::{
     GitLabAccess, GitLabApi, GitLabMergeTrainAdapter, GitLabProtection, GitLabRefresh,
     GitLabRefreshQuery, policy_job_accepted,
 };
 
-use amiss_wire::controls::{ProjectionSource, RecordSetSelection, RequiredStatusName};
-use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, RepositoryIdentity};
+use amiss_wire::controls::{ProjectionSource, RecordSetSelection};
+use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
+use amiss_wire::{artifact_id, branch_ref, required_status_name};
 
 use crate::support::identity::{HOST, now_seconds};
 use crate::support::oidc::{accept, claims, oidc};
@@ -156,8 +157,8 @@ fn wrong_job_pipeline_and_commit_topology_are_invalid_provider_data() {
 fn every_binding_clause_of_the_refresh_query_stands_alone() {
     let (source, delivery, valid) = fixture();
     let elsewhere = ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("other.example".to_owned()).unwrap(),
+        namespace: provider_namespace!("gitlab"),
+        instance: opaque_id!("other.example"),
     };
 
     let mut foreign_identity = delivery.clone();
@@ -165,14 +166,14 @@ fn every_binding_clause_of_the_refresh_query_stands_alone() {
     let mut foreign_change = delivery.clone();
     foreign_change.change.provider = elsewhere;
     let mut other_integration = delivery.clone();
-    other_integration.identity.integration = OpaqueId::new("policy/2".to_owned()).unwrap();
+    other_integration.identity.integration = opaque_id!("policy/2");
     let mut other_repository = delivery.clone();
     other_repository.change.repository =
         RepositoryIdentity::new(HOST.to_owned(), "acme".to_owned(), "other".to_owned()).unwrap();
     let mut other_project = delivery.clone();
     other_project.change.change = Change::MergeRequest(MergeRequestChange::new(102, 42).unwrap());
     let mut retried = delivery.clone();
-    retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    retried.provider_run.attempt = ProviderRunAttempt::literal(2);
     let mut wider_format = delivery.clone();
     wider_format.provider_run.object_format = ObjectFormat::Sha256;
 
@@ -314,17 +315,17 @@ fn policy_job_resolves_only_its_ephemeral_relation_candidate() {
     let api = FakeApi::new([valid]);
     let adapter = GitLabMergeTrainAdapter::new(source, api.clone());
     let mut subject = RelationSubject {
-        role: ArtifactId::new("source".to_owned()).unwrap(),
+        role: artifact_id!("source"),
         scope: PlanScope {
             provider: delivery.identity.provider.clone(),
             integration: delivery.identity.integration.clone(),
             repository: delivery.change.repository.clone(),
         },
-        target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+        target: branch_ref!("refs/heads/main"),
         object_format: ObjectFormat::Sha1,
-        credential: OpaqueId::new("credential/gitlab".to_owned()).unwrap(),
+        credential: opaque_id!("credential/gitlab"),
         source: ProjectionSource::RecordSet(RecordSetSelection {
-            set: ArtifactId::new("rust/public-api".to_owned()).unwrap(),
+            set: artifact_id!("rust/public-api"),
         }),
         limits: RelationLimits {
             acquisition_objects: 100,
@@ -344,7 +345,7 @@ fn policy_job_resolves_only_its_ephemeral_relation_candidate() {
             },
         })
     );
-    subject.target = BranchRef::new("refs/heads/other".to_owned()).unwrap();
+    subject.target = branch_ref!("refs/heads/other");
     assert_eq!(
         adapter.resolve_relation_head(&delivery, &subject),
         Err(ProviderError::InvalidResponse)
@@ -384,7 +385,7 @@ fn malformed_relation_bindings_are_rejected_before_provider_io() {
     let api = FakeApi::new([valid]);
     let adapter = GitLabMergeTrainAdapter::new(source, api.clone());
     let (status, mut target) = relation_status(&delivery, RelationVerdict::Aligned);
-    target.required_status_name = RequiredStatusName::try_from("another-job".to_owned()).unwrap();
+    target.required_status_name = required_status_name!("another-job");
     assert_eq!(
         adapter.relation_policy_job_result(&delivery, &status, &target),
         Err(ProviderError::InvalidResponse)
@@ -395,7 +396,7 @@ fn malformed_relation_bindings_are_rejected_before_provider_io() {
 
 #[test]
 fn only_a_published_pass_can_succeed_the_policy_job() {
-    let evaluation_id = OpaqueId::new("evaluation/1".to_owned()).unwrap();
+    let evaluation_id = opaque_id!("evaluation/1");
     assert!(policy_job_accepted(&HandleOutcome::Published {
         conclusion: CheckConclusion::Pass,
         artifact: None,
@@ -447,22 +448,22 @@ fn relation_status(
 ) -> (RelationStatusRecord, RelationStatusTarget) {
     let report_digest = amiss_wire::model::Digest::from(sha2::Sha256::digest(b"report").0);
     let target = RelationStatusTarget {
-        role: ArtifactId::new("source".to_owned()).unwrap(),
+        role: artifact_id!("source"),
         scope: PlanScope {
             provider: delivery.identity.provider.clone(),
             integration: delivery.identity.integration.clone(),
             repository: delivery.change.repository.clone(),
         },
-        credential: OpaqueId::new("credential/gitlab".to_owned()).unwrap(),
+        credential: opaque_id!("credential/gitlab"),
         candidate_commit: delivery.provider_run.candidate_commit.clone(),
-        required_status_name: RequiredStatusName::try_from("amiss:policy".to_owned()).unwrap(),
+        required_status_name: required_status_name!("amiss:policy"),
     };
     (
         RelationStatusRecord {
             targets: RelationStatusTargets {
-                relation: ArtifactId::new("relation/public-api".to_owned()).unwrap(),
-                coordination: ArtifactId::new("workflow/release-42".to_owned()).unwrap(),
-                trigger_role: ArtifactId::new("source".to_owned()).unwrap(),
+                relation: artifact_id!("relation/public-api"),
+                coordination: artifact_id!("workflow/release-42"),
+                trigger_role: artifact_id!("source"),
                 fence: LeaseFence::new(1).unwrap(),
                 destinations: vec![target.clone()],
             },

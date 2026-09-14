@@ -2,8 +2,8 @@ use amiss_controller::{
     ArtifactError, RelationAuditBundle, relation_audit_plan, validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
+use amiss_wire::artifact_id;
 use amiss_wire::envelope::Payload as _;
-use amiss_wire::model::ArtifactId;
 use amiss_wire::relation::{RelationAssessment, RelationPlan, RelationVerdict, assess};
 use sha2::Digest as _;
 
@@ -66,8 +66,7 @@ fn changed_transition_report_and_assessment_bindings_are_refused() -> Result<(),
     ));
 
     let mut changed_coordination = relation_audit(true).ok_or(ArtifactError::Corrupt)?;
-    changed_coordination.transition.coordination =
-        ArtifactId::new("workflow/release-43".to_owned()).ok_or(ArtifactError::Corrupt)?;
+    changed_coordination.transition.coordination = artifact_id!("workflow/release-43");
     assert!(matches!(
         validate_relation_audit(bundle(&changed_coordination)),
         Err(ArtifactError::Corrupt)

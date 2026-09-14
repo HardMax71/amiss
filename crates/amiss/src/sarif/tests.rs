@@ -1,6 +1,7 @@
 #![cfg(test)]
 
 use amiss_wire::model::RepoPathText;
+use amiss_wire::repo_path_text;
 use amiss_wire::report::model::{
     AnalysisError, AnalysisPhase, ByteSpan, FindingFix, RepoPath, RepoPathBytes, ReportEnvelope,
     ReportStatus, SourceSpan,
@@ -28,9 +29,7 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
     first.kind = FindingKind::ExplicitTargetMissing;
     first.description = "missing \"target\"\n".to_owned();
     first.effective_disposition = Disposition::Fail;
-    first.location.path = Some(RepoPath::Text(
-        RepoPathText::new("docs/a b.md".to_owned()).unwrap(),
-    ));
+    first.location.path = Some(RepoPath::Text(repo_path_text!("docs/a b.md")));
     first.location.span = Some(SourceSpan {
         start_byte: 4,
         end_byte: 7,
@@ -40,7 +39,7 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
         end_column: 8,
     });
     first.fix = Some(FindingFix {
-        path: RepoPathText::new("docs/a b.md".to_owned()).unwrap(),
+        path: repo_path_text!("docs/a b.md"),
         description: "repair".to_owned(),
         replacement: String::new(),
         span: ByteSpan {
@@ -57,9 +56,7 @@ fn projection_payload() -> amiss_wire::report::model::ReportPayload {
     byte_path.fix = None;
     let mut without_span = first.clone();
     without_span.effective_disposition = Disposition::Record;
-    without_span.location.path = Some(RepoPath::Text(
-        RepoPathText::new("docs/b.md".to_owned()).unwrap(),
-    ));
+    without_span.location.path = Some(RepoPath::Text(repo_path_text!("docs/b.md")));
     without_span.location.span = None;
     without_span.fix = None;
     payload.findings = vec![first, byte_path, without_span];
@@ -134,7 +131,7 @@ fn sarif_paths_escape_uri_delimiters_and_utf8_in_locations_and_fixes() {
         ("docs/%20\u{1b}.md", "docs/%2520%1B.md"),
     ] {
         let mut payload = projection_payload();
-        let path = RepoPathText::new(path.to_owned()).unwrap();
+        let path = RepoPathText::try_from(path.to_owned()).unwrap();
         let finding = &mut payload.findings[0];
         finding.location.path = Some(RepoPath::Text(path.clone()));
         finding.fix.as_mut().unwrap().path = path;

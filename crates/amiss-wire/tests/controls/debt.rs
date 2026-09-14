@@ -1,7 +1,7 @@
+use amiss_wire::artifact_id;
 use amiss_wire::controls::DebtSnapshot;
 use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
 use amiss_wire::model::UtcInstant;
 
@@ -28,9 +28,9 @@ fn rejects_debt_digest_and_order_defects() {
     let mut bad_fact = original.clone();
     bad_fact.items[0].accepted_fact_digest = Digest::from([0; 32]);
     let mut unsorted = original.clone();
-    unsorted.items[0].debt_id = ArtifactId::try_from("debt/b".to_owned()).unwrap();
+    unsorted.items[0].debt_id = artifact_id!("debt/b");
     let mut second = unsorted.items[0].clone();
-    second.debt_id = ArtifactId::try_from("debt/a".to_owned()).unwrap();
+    second.debt_id = artifact_id!("debt/a");
     unsorted.items.push(second);
     let mut duplicate = unsorted.clone();
     duplicate.items.reverse();

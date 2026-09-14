@@ -1,3 +1,4 @@
+use amiss_wire::artifact_id;
 use amiss_wire::controls::OrganizationFloor;
 use amiss_wire::de::Document as _;
 use sha2::Digest as _;
@@ -5,8 +6,8 @@ use std::fs;
 use std::io::Write as _;
 use std::time::Duration;
 
-use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
+use amiss_controller::opaque_id;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, ExternalPolicy,
     IntegrationId, ProviderIdentity, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
@@ -18,7 +19,7 @@ use amiss_controller_service::{
     read_regular,
 };
 use amiss_wire::controls::Profile;
-use amiss_wire::model::{ArtifactId, Digest, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{Digest, ObjectFormat, Oid, RepositoryIdentity};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use flate2::Compression;
@@ -101,8 +102,8 @@ fn relation_delivery(
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
-            integration: IntegrationId::new(integration.to_owned()).unwrap(),
-            delivery: Delivery::Provided(OpaqueId::new("delivery/1".to_owned()).unwrap()),
+            integration: IntegrationId::try_from(integration.to_owned()).unwrap(),
+            delivery: Delivery::Provided(opaque_id!("delivery/1")),
         },
         change: ChangeLocator {
             provider,
@@ -111,7 +112,7 @@ fn relation_delivery(
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRun::PullRequest(Digest::from([187; 32])),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::FIRST,
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
         )
@@ -170,8 +171,8 @@ fn authenticated_subjects_admit_only_the_operator_declared_relation()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = TempDir::new()?;
     let registry = load_relation_fixture(&directory)?;
-    let relation = ArtifactId::new("relation/public-api".to_owned()).unwrap();
-    let coordination = ArtifactId::new("workflow/release-42".to_owned()).unwrap();
+    let relation = artifact_id!("relation/public-api");
+    let coordination = artifact_id!("workflow/release-42");
     let source_delivery = relation_delivery("gitea", "forge.example", "77", "service");
 
     let source = admit_relation_coordination(
@@ -203,9 +204,9 @@ fn coordination_admission_rejects_unowned_or_incoherent_declarations()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = TempDir::new()?;
     let registry = load_relation_fixture(&directory)?;
-    let relation = ArtifactId::new("relation/public-api".to_owned()).unwrap();
-    let coordination = ArtifactId::new("workflow/release-42".to_owned()).unwrap();
-    let unowned = ArtifactId::new("relation/other".to_owned()).unwrap();
+    let relation = artifact_id!("relation/public-api");
+    let coordination = artifact_id!("workflow/release-42");
+    let unowned = artifact_id!("relation/other");
 
     assert!(
         admit_relation_coordination(

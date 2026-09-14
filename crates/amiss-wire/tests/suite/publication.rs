@@ -6,10 +6,11 @@
 use sha2::Digest as _;
 use std::{fs, path::Path};
 
+use amiss_wire::artifact_id;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::Digest;
-use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{
     CompletedSite, DocsCandidate, PLAN_PAYLOAD_SCHEMA, PlanPayloadSchema, PublicationPlan,
     PublicationProducer, PublicationRelation, PublicationResource, PublicationTarget,
@@ -30,10 +31,6 @@ fn oid(digit: char, format: ObjectFormat) -> Oid {
     Oid::new(format, digit.to_string().repeat(length)).unwrap()
 }
 
-fn identity(value: &str) -> ArtifactId {
-    ArtifactId::new(value.to_owned()).unwrap()
-}
-
 fn publication_plan() -> PublicationPlan {
     PublicationPlan {
         schema: PlanPayloadSchema::Current,
@@ -46,10 +43,10 @@ fn publication_plan() -> PublicationPlan {
             candidate_identity_digest: digest('2'),
         },
         target: PublicationTarget {
-            provider: identity("github-pages"),
-            instance: identity("github.com"),
-            environment: identity("github-pages"),
-            channel: identity("stable"),
+            provider: artifact_id!("github-pages"),
+            instance: artifact_id!("github.com"),
+            environment: artifact_id!("github-pages"),
+            channel: artifact_id!("stable"),
             canonical_url: "https://docs.example.com/widget/".to_owned(),
         },
         site: CompletedSite {
@@ -64,12 +61,12 @@ fn publication_plan() -> PublicationPlan {
             digest: digest('5'),
         },
         producer: PublicationProducer {
-            identity: identity("github-pages-deployment"),
+            identity: artifact_id!("github-pages-deployment"),
             version: "1".to_owned(),
             context_digest: digest('6'),
         },
         relation: PublicationRelation {
-            identity: identity("stable-docs-release"),
+            identity: artifact_id!("stable-docs-release"),
             context_digest: digest('7'),
         },
     }

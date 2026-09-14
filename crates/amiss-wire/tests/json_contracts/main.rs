@@ -6,7 +6,7 @@ use amiss_wire::controls::TrustedTimeStatement;
 use amiss_wire::controls::WaiverBundle;
 use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Envelope;
-use amiss_wire::model::RepoPathText;
+use amiss_wire::repo_path_text;
 use amiss_wire::semantic::SemanticEvidence;
 use amiss_wire::semantic::record::Input;
 use std::{collections::BTreeSet, fs, path::Path};
@@ -74,7 +74,7 @@ fn resolver_reasons_fill_report_rows_without_changing_the_contract() {
         "../../../../spec/scanner-report.schema.json"
     ))
     .unwrap();
-    let path = RepoPath::Text(RepoPathText::try_from("docs/target.md".to_owned()).unwrap());
+    let path = RepoPath::Text(repo_path_text!("docs/target.md"));
     for (definition, rows) in [
         (
             "InvalidResolution",

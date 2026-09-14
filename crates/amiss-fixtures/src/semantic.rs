@@ -1,7 +1,8 @@
+use amiss_wire::artifact_id;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
-use amiss_wire::model::{ArtifactId, RepoPathText};
+use amiss_wire::model::RepoPathText;
 use amiss_wire::report::{
     PAYLOAD_SCHEMA,
     model::{
@@ -27,7 +28,7 @@ pub fn semantic_report(payload_digests: &[Digest]) -> Option<Vec<u8>> {
     let Controls::Resolved(controls) = &mut report.payload.controls else {
         return None;
     };
-    let identity = ArtifactId::new("fixture".to_owned())?;
+    let identity = artifact_id!("fixture");
     controls.semantic_evidence = Some(
         payload_digests
             .iter()

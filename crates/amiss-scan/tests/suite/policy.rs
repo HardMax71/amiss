@@ -2,6 +2,7 @@ use amiss_wire::controls::DebtSnapshot;
 use amiss_wire::controls::WaiverBundle;
 use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
+use amiss_wire::repo_path_text;
 use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -126,7 +127,7 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
     let mut document_includes = includes
         .iter()
         .map(|(raw, kind)| DocumentInclude {
-            path: RepoPathText::new((*raw).to_owned()).expect("valid include path"),
+            path: RepoPathText::try_from((*raw).to_owned()).expect("valid include path"),
             kind: *kind,
             suffix: None,
             adapter: None,
@@ -137,7 +138,7 @@ fn policy(includes: &[(&str, IncludeKind)], inventory: &[&str]) -> PolicySide {
     });
     let mut protected_inventory = inventory
         .iter()
-        .map(|raw| RepoPathText::new((*raw).to_owned()).expect("valid inventory path"))
+        .map(|raw| RepoPathText::try_from((*raw).to_owned()).expect("valid inventory path"))
         .collect::<Vec<_>>();
     protected_inventory.sort();
     policy_side(ScannerPolicy {
@@ -156,13 +157,12 @@ fn a_projection_selector_change_keeps_identity_and_removal_weakens() {
             schema: ScannerPolicySchema::Current,
             document_includes: Vec::new(),
             projection_assertions: Some(vec![ProjectionAssertion {
-                document: RepoPathText::new("docs/example.md".to_owned())
-                    .expect("valid document path"),
+                document: repo_path_text!("docs/example.md"),
                 name: "example".to_owned(),
                 projection: ProjectionKind::CodeTextV1,
                 sink: ProjectionSink::PreviousCode,
                 source: ProjectionSource::BlobLines(BlobLineSelection {
-                    path: RepoPathText::new("src/lib.rs".to_owned()).expect("valid source path"),
+                    path: repo_path_text!("src/lib.rs"),
                     first_line,
                     last_line: first_line,
                 }),
@@ -213,7 +213,7 @@ fn the_union_carries_both_suffixes_but_the_candidate_binding() {
         policy_side(ScannerPolicy {
             schema: ScannerPolicySchema::Current,
             document_includes: vec![DocumentInclude {
-                path: RepoPathText::new("manual".to_owned()).expect("valid include path"),
+                path: repo_path_text!("manual"),
                 kind: IncludeKind::Tree,
                 suffix: Some(suffix.to_owned()),
                 adapter: Some(adapter),
@@ -562,7 +562,7 @@ fn a_binding_drop_or_change_weakens_and_an_addition_does_not() {
         policy_side(ScannerPolicy {
             schema: ScannerPolicySchema::Current,
             document_includes: vec![DocumentInclude {
-                path: RepoPathText::new("man".to_owned()).expect("valid include path"),
+                path: repo_path_text!("man"),
                 kind: IncludeKind::Tree,
                 suffix: None,
                 adapter,
@@ -605,7 +605,7 @@ fn suffix_selector_changes_keep_their_stable_root_identity() {
         policy_side(ScannerPolicy {
             schema: ScannerPolicySchema::Current,
             document_includes: vec![DocumentInclude {
-                path: RepoPathText::new("manual".to_owned()).expect("valid include path"),
+                path: repo_path_text!("manual"),
                 kind: IncludeKind::Tree,
                 suffix: suffix.map(str::to_owned),
                 adapter,

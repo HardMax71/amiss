@@ -204,7 +204,9 @@ fn collect_pages(
         let source = page
             .source
             .as_ref()
-            .map(|source| RepoPathText::new(source.clone()).ok_or(MdBookEvidenceError::Path))
+            .map(|source| {
+                RepoPathText::try_from(source.clone()).map_err(|_defect| MdBookEvidenceError::Path)
+            })
             .transpose()?;
         collected.inputs.push(SiteInputPage {
             route: route.clone(),
@@ -252,13 +254,16 @@ fn navigation_observation(
     let root = build
         .source_root
         .as_ref()
-        .map(|root| RepoPathText::new(root.clone()).ok_or(MdBookEvidenceError::Path))
+        .map(|root| {
+            RepoPathText::try_from(root.clone()).map_err(|_defect| MdBookEvidenceError::Path)
+        })
         .transpose()?
         .map_or(Nullable::Null, Nullable::Value);
-    let manifest = RepoPathText::new(build.manifest.clone()).ok_or(MdBookEvidenceError::Path)?;
+    let manifest = RepoPathText::try_from(build.manifest.clone())
+        .map_err(|_defect| MdBookEvidenceError::Path)?;
     let reachable = reachable
         .into_iter()
-        .map(|source| RepoPathText::new(source).ok_or(MdBookEvidenceError::Path))
+        .map(|source| RepoPathText::try_from(source).map_err(|_defect| MdBookEvidenceError::Path))
         .collect::<Result<Vec<_>, _>>()?;
     Ok(SiteBuildObservation::Navigation {
         root,

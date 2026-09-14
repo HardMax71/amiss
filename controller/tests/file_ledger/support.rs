@@ -1,5 +1,5 @@
 pub(super) use amiss_controller_fixtures::clock::TestClock;
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::{branch_ref, required_status_name};
 use sha2::Digest as _;
 use std::ffi::OsStr;
 use std::fs;
@@ -7,18 +7,18 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
     AcceptedDelivery, AuthenticatedDelivery, Change, ChangeLocator, CheckBinding, CheckConclusion,
     ControllerClock, Delivery, DeliveryClaim, DeliveryHeader, DeliveryIdentity, DeliveryLease,
     DeliveryRoute, FileLedger, FileLedgerConfig, GitLabWebhook, IngressLimits, IngressPolicy,
-    IntegrationId, OidPair, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRun, ProviderRunAttempt, ProviderRunIdentity, Publication, ReplayWindow, RunIdentity,
-    RunRefs, SignedTimePolicy, StageOutcome, StagedPublication, UntrustedDelivery, WebhookKey,
-    WebhookKeyring,
+    OidPair, OpaqueId, ProviderIdentity, ProviderNamespace, ProviderRun, ProviderRunAttempt,
+    ProviderRunIdentity, Publication, ReplayWindow, RunIdentity, RunRefs, SignedTimePolicy,
+    StageOutcome, StagedPublication, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
 use amiss_controller::{ProviderFacts, PullRequestChange};
 use amiss_wire::model::Digest;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use base64::Engine as _;
 use hmac::{Hmac, KeyInit as _, Mac as _};
 use sha2::Sha256;
@@ -59,7 +59,7 @@ pub(super) fn check_binding() -> CheckBinding {
                 .finalize()
                 .0,
         ),
-        required_status_name: RequiredStatusName::try_from("amiss/enforce".to_owned()).unwrap(),
+        required_status_name: required_status_name!("amiss/enforce"),
         execution_constraint_digest: Digest::from(
             Sha256::new_with_prefix("amiss/test-execution-constraint")
                 .chain_update([0_u8])
@@ -80,8 +80,8 @@ fn gitlab_provider() -> ProviderIdentity {
 
 fn provider_in(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new(namespace.to_owned()).unwrap(),
-        instance: ProviderInstance::new("forge.example.test".to_owned()).unwrap(),
+        namespace: ProviderNamespace::try_from(namespace.to_owned()).unwrap(),
+        instance: opaque_id!("forge.example.test"),
     }
 }
 
@@ -104,7 +104,7 @@ pub(super) fn bounded_delivery_at(
     issued_at: i64,
 ) -> AcceptedDelivery {
     let provider = gitlab_provider();
-    let trust_set = OpaqueId::new("webhooks-main".to_owned()).unwrap();
+    let trust_set = opaque_id!("webhooks-main");
     let route = DeliveryRoute {
         provider: provider.clone(),
         trust_set: trust_set.clone(),
@@ -144,7 +144,7 @@ pub(super) fn bounded_delivery_at(
         )
         .unwrap();
     let key = WebhookKey::new(
-        OpaqueId::new("gitlab-current".to_owned()).unwrap(),
+        opaque_id!("gitlab-current"),
         WEBHOOK_SECRET.to_vec(),
         0,
         None,
@@ -174,7 +174,7 @@ fn authenticated_delivery(
         identity: DeliveryIdentity {
             provider: facts.provider,
             integration: facts.integration,
-            delivery: Delivery::Provided(OpaqueId::new(delivery_id.to_owned()).unwrap()),
+            delivery: Delivery::Provided(OpaqueId::try_from(delivery_id.to_owned()).unwrap()),
         },
         change: facts.change,
         provider_run: facts.provider_run,
@@ -184,7 +184,7 @@ fn authenticated_delivery(
 fn provider_facts(provider: ProviderIdentity, number: u64) -> ProviderFacts {
     ProviderFacts {
         provider: provider.clone(),
-        integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
+        integration: opaque_id!("installation-7"),
         change: ChangeLocator {
             provider,
             repository: RepositoryIdentity::new(
@@ -213,7 +213,7 @@ fn standard_signature(delivery_id: &[u8], timestamp: &[u8]) -> String {
 fn provider_run() -> ProviderRunIdentity {
     ProviderRunIdentity::new(
         ProviderRun::PullRequest(Digest::from([150; 32])),
-        ProviderRunAttempt::new(1).unwrap(),
+        ProviderRunAttempt::FIRST,
         ObjectFormat::Sha1,
         oid('b'),
     )
@@ -244,9 +244,9 @@ fn run_identity(delivery: &AuthenticatedDelivery) -> RunIdentity {
         delivery.change.clone(),
         RunRefs {
             forge: ForgeDialect::Gitea,
-            candidate: BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
-            target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-            default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+            candidate: branch_ref!("refs/heads/topic"),
+            target: branch_ref!("refs/heads/main"),
+            default_branch: branch_ref!("refs/heads/main"),
         },
         ObjectFormat::Sha1,
         OidPair {

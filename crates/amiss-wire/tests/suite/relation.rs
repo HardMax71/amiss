@@ -12,11 +12,12 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::envelope::Payload as _;
-use amiss_wire::model::{ObjectFormat, RepoPathText};
+use amiss_wire::model::ObjectFormat;
 use amiss_wire::relation::{
     EVIDENCE_PAYLOAD_SCHEMA, PLAN_PAYLOAD_SCHEMA, RELATION_DOCUMENT_BYTES, RelationEvidence,
     RelationPlan, RelationProjectionSlot,
 };
+use amiss_wire::repo_path_text;
 
 use crate::relation_fixture::{digest, identity, oid, projected, relation_contract};
 
@@ -109,7 +110,7 @@ fn relation_plan_refuses_mixed_objects_and_incompatible_sources() {
 
 #[test]
 fn relation_plan_preserves_every_projection_source_shape() {
-    let path = RepoPathText::new("reference/api.md".to_owned()).unwrap();
+    let path = repo_path_text!("reference/api.md");
     let cases = [
         (
             ProjectionKind::CodeTextV1,

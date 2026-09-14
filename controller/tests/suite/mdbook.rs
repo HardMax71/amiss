@@ -4,6 +4,7 @@
 )]
 
 use amiss_wire::envelope::Payload as _;
+use amiss_wire::repo_path_text;
 use amiss_wire::semantic::SemanticEvidence;
 use sha2::Digest as _;
 use std::{borrow::Cow, fs};
@@ -60,7 +61,7 @@ fn output(root: &tempfile::TempDir) -> Dir {
 
 fn site(configuration: &str, route_prefix: &str) -> SiteBuildContext {
     SiteBuildContext {
-        configuration: RepoPathText::new(configuration.to_owned()).unwrap(),
+        configuration: RepoPathText::try_from(configuration.to_owned()).unwrap(),
         route_prefix: route_prefix.to_owned(),
         locale: None,
         version: None,
@@ -139,12 +140,12 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
         )
         .unwrap(),
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value(RepoPathText::try_from("docs/guide".to_owned()).unwrap()),
-            manifest: RepoPathText::try_from("docs/guide/SUMMARY.md".to_owned()).unwrap(),
+            root: Nullable::Value(repo_path_text!("docs/guide")),
+            manifest: repo_path_text!("docs/guide/SUMMARY.md"),
             entrypoints: vec!["/manual/index.html".to_owned()],
             reachable: vec![
-                RepoPathText::try_from("docs/guide/README.md".to_owned()).unwrap(),
-                RepoPathText::try_from("docs/guide/nested/chapter.md".to_owned()).unwrap(),
+                repo_path_text!("docs/guide/README.md"),
+                repo_path_text!("docs/guide/nested/chapter.md"),
             ],
         }),
     ] {
@@ -195,8 +196,8 @@ fn generated_chapters_need_no_repository_attribution() {
         .unwrap(),
         site_observation("/manual/index.html", SiteObservation::Generated(None, &[])).unwrap(),
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value(RepoPathText::try_from("guide".to_owned()).unwrap()),
-            manifest: RepoPathText::try_from("guide/SUMMARY.md".to_owned()).unwrap(),
+            root: Nullable::Value(repo_path_text!("guide")),
+            manifest: repo_path_text!("guide/SUMMARY.md"),
             entrypoints: vec!["/manual/index.html".to_owned()],
             reachable: vec![],
         }),
@@ -261,12 +262,12 @@ fn completed_links_not_chapter_membership_define_navigation() {
             .observations
             .contains(&Cow::Owned(Observation::Site(
                 SiteBuildObservation::Navigation {
-                    root: Nullable::Value(RepoPathText::try_from("guide".to_owned()).unwrap()),
-                    manifest: RepoPathText::try_from("guide/SUMMARY.md".to_owned()).unwrap(),
+                    root: Nullable::Value(repo_path_text!("guide")),
+                    manifest: repo_path_text!("guide/SUMMARY.md"),
                     entrypoints: vec!["/manual/index.html".to_owned()],
                     reachable: vec![
-                        RepoPathText::try_from("guide/first.md".to_owned()).unwrap(),
-                        RepoPathText::try_from("guide/nested/second.md".to_owned()).unwrap()
+                        repo_path_text!("guide/first.md"),
+                        repo_path_text!("guide/nested/second.md")
                     ],
                 }
             )))
@@ -278,7 +279,7 @@ fn configuration_locale_and_version_define_the_planned_context() {
     let base = site("docs/book.toml", "/manual/");
     let mut variants = Vec::new();
     let mut configuration = base.clone();
-    configuration.configuration = RepoPathText::new("archive/book.toml".to_owned()).unwrap();
+    configuration.configuration = repo_path_text!("archive/book.toml");
     variants.push(configuration);
     let mut prefix = base.clone();
     prefix.route_prefix = "/archive/".to_owned();

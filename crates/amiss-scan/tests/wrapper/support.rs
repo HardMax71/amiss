@@ -5,6 +5,7 @@
     reason = "integration harness over asserted fixture shapes"
 )]
 
+use amiss_wire::branch_ref;
 use amiss_wire::controls::OrganizationFloor;
 use amiss_wire::controls::TrustedTimeStatement;
 use amiss_wire::de::Document as _;
@@ -20,7 +21,7 @@ use amiss_scan::{Effects, Setup, SetupShell, SnapshotIdentity, commit_pair};
 use amiss_wire::controls::{DebtSnapshot, Profile, WaiverBundle};
 use amiss_wire::de::Error;
 use amiss_wire::model::Digest;
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
+use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
 use amiss_wire::requests::RequestTrust;
 
@@ -110,8 +111,8 @@ pub(crate) fn shell(profile: Profile) -> SetupShell {
                 .unwrap(),
         ),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
-        target_ref: BranchRef::new("refs/heads/main".to_owned()),
+        candidate_ref: Some(branch_ref!("refs/heads/main")),
+        target_ref: Some(branch_ref!("refs/heads/main")),
         default_branch_ref: None,
         floor: Some(floor_input()),
         debt: None,
@@ -143,8 +144,8 @@ pub(crate) fn time_input(fx: &Fixture) -> TimeInput {
                 .unwrap(),
         ),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
-        target_ref: BranchRef::new("refs/heads/main".to_owned()),
+        candidate_ref: Some(branch_ref!("refs/heads/main")),
+        target_ref: Some(branch_ref!("refs/heads/main")),
         default_branch_ref: None,
         base: identity(&fx.base, &fx.base_tree),
         candidate: CandidateBlock::Commit(identity(&fx.candidate, &fx.candidate_tree)),

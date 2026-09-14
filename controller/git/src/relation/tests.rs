@@ -5,15 +5,16 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
 use amiss_controller::{
-    IntegrationId, OidPair, OpaqueId, PlanScope, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, RelationAcquisitionError, RelationLimits, RelationPlan,
-    RelationStatusDestination, RelationSubject, RelationSubjectTransition, TriggeredRelation,
-    relation_transition,
+    IntegrationId, OidPair, OpaqueId, PlanScope, ProviderIdentity, RelationAcquisitionError,
+    RelationLimits, RelationPlan, RelationStatusDestination, RelationSubject,
+    RelationSubjectTransition, TriggeredRelation, relation_transition,
 };
-use amiss_wire::controls::{
-    ProjectionKind, ProjectionSource, RecordSetSelection, RequiredStatusName,
-};
-use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_controller::{opaque_id, provider_namespace};
+use amiss_wire::artifact_id;
+use amiss_wire::branch_ref;
+use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
+use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::required_status_name;
 use secrecy::SecretString;
 
 use super::{remaining_after, subject_fetch_limits};
@@ -23,11 +24,11 @@ use crate::{
 };
 
 fn artifact(raw: &str) -> ArtifactId {
-    ArtifactId::new(raw.to_owned()).expect("fixed artifact identity")
+    ArtifactId::try_from(raw.to_owned()).expect("fixed artifact identity")
 }
 
 fn opaque(raw: &str) -> OpaqueId {
-    OpaqueId::new(raw.to_owned()).expect("fixed opaque identity")
+    OpaqueId::try_from(raw.to_owned()).expect("fixed opaque identity")
 }
 
 fn subject(role: &str, repository: &str) -> RelationSubject {
@@ -35,19 +36,19 @@ fn subject(role: &str, repository: &str) -> RelationSubject {
         role: artifact(role),
         scope: PlanScope {
             provider: ProviderIdentity {
-                namespace: ProviderNamespace::new("github".to_owned()).expect("namespace"),
-                instance: ProviderInstance::new("github.com".to_owned()).expect("instance"),
+                namespace: provider_namespace!("github"),
+                instance: opaque_id!("github.com"),
             },
-            integration: IntegrationId::new(format!("installation/{repository}"))
+            integration: IntegrationId::try_from(format!("installation/{repository}"))
                 .expect("integration"),
             repository: RepositoryIdentity::github("acme".to_owned(), repository.to_owned())
                 .expect("repository"),
         },
-        target: BranchRef::new("refs/heads/main".to_owned()).expect("branch"),
+        target: branch_ref!("refs/heads/main"),
         object_format: ObjectFormat::Sha1,
         credential: opaque(&format!("credential/{repository}")),
         source: ProjectionSource::RecordSet(RecordSetSelection {
-            set: artifact("public/api"),
+            set: artifact_id!("public/api"),
         }),
         limits: RelationLimits {
             acquisition_objects: 100,
@@ -76,7 +77,7 @@ fn transition() -> amiss_controller::RelationTransition {
     let documentation = subject("documentation", "handbook");
     let source = subject("source", "service");
     let plan = Arc::new(RelationPlan {
-        identity: artifact("relation/api"),
+        identity: artifact_id!("relation/api"),
         context_digest: amiss_wire::model::Digest::from(
             sha2::Sha256::digest(b"operator relation context").0,
         ),
@@ -89,17 +90,16 @@ fn transition() -> amiss_controller::RelationTransition {
             projection_bytes: 1_572_864,
         },
         status_destinations: vec![RelationStatusDestination {
-            subject_role: artifact("documentation"),
-            required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
-                .unwrap(),
+            subject_role: artifact_id!("documentation"),
+            required_status_name: required_status_name!("Amiss cross-repository"),
         }],
     });
     relation_transition(
         TriggeredRelation {
             plan,
-            trigger_role: artifact("source"),
+            trigger_role: artifact_id!("source"),
         },
-        artifact("workflow/release-42"),
+        artifact_id!("workflow/release-42"),
         [revisions("source", 'a'), revisions("documentation", 'b')],
     )
     .expect("frozen transition")

@@ -116,7 +116,7 @@ impl PullRequestFacts {
             repository,
             change: Change::PullRequest(change),
         };
-        let integration = IntegrationId::new(reviewer.id.to_string())?;
+        let integration = IntegrationId::try_from(reviewer.id.to_string()).ok()?;
         let candidate = Oid::new(ObjectFormat::Sha1, payload.pull_request.head.sha)?;
         let candidate_ref = branch_ref(&payload.pull_request.head.branch)?;
         let target_ref = branch_ref(&payload.pull_request.base.branch)?;
