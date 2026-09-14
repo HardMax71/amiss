@@ -1,4 +1,5 @@
 use std::fs;
+use std::num::NonZeroUsize;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -54,14 +55,15 @@ fn fixture() -> TempDir {
 }
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
-fn run(
+fn run_with(
     dir: &Path,
     scan_limits: ScanLimits,
     git_limits: GitLimits,
+    workers: NonZeroUsize,
 ) -> Result<amiss_scan::SnapshotDiscovery, Error> {
     let repo = Repository::open(dir, ObjectFormat::Sha1).expect("fixture repository opens");
     let mut git_resources = GitResources::new(git_limits);
-    let mut scan_resources = ScanResources::new(scan_limits);
+    let mut scan_resources = ScanResources::new(scan_limits).with_workers(workers);
     discover(
         &repo,
         &mut git_resources,
@@ -69,6 +71,14 @@ fn run(
         &amiss_scan::Includes::default(),
         &head_tree(dir),
     )
+}
+
+fn run(
+    dir: &Path,
+    scan_limits: ScanLimits,
+    git_limits: GitLimits,
+) -> Result<amiss_scan::SnapshotDiscovery, Error> {
+    run_with(dir, scan_limits, git_limits, NonZeroUsize::MIN)
 }
 
 #[test]
@@ -628,4 +638,71 @@ fn a_snapshot_scoped_defect_ends_the_walk() {
         ),
         "a snapshot budget is nobody's document: {got:?}"
     );
+}
+
+#[expect(clippy::unwrap_used, reason = "test fixture helper")]
+fn representative(documents: usize) -> TempDir {
+    let dir = TempDir::new().unwrap();
+    amiss_fixtures::representative_repository(dir.path(), documents).unwrap();
+    dir
+}
+
+/// Serial against four threads over a pool of four, under the contract and
+/// under two crossings: one that fails documents and one that ends the run.
+#[test]
+fn the_thread_count_never_changes_a_snapshot_or_its_crossing() {
+    amiss_scan::workers::install(NonZeroUsize::new(4).unwrap());
+    let dir = representative(40);
+    let per_document = ScanLimits {
+        references_per_document: 3,
+        ..ScanLimits::CONTRACT
+    };
+    let per_snapshot = ScanLimits {
+        references_per_snapshot: 100,
+        ..ScanLimits::CONTRACT
+    };
+    for (limits, scanned, failed, ended) in [
+        (ScanLimits::CONTRACT, 41, 0, false),
+        (per_document, 1, 40, false),
+        (per_snapshot, 0, 0, true),
+    ] {
+        let serial = run_with(dir.path(), limits, GitLimits::CONTRACT, NonZeroUsize::MIN);
+        let parallel = run_with(
+            dir.path(),
+            limits,
+            GitLimits::CONTRACT,
+            NonZeroUsize::new(4).unwrap(),
+        );
+        assert_eq!(serial, parallel);
+        match serial {
+            Ok(snapshot) => {
+                assert!(!ended);
+                let statuses = snapshot.documents.iter().map(|record| &record.status);
+                let (mut seen_scanned, mut seen_failed) = (0, 0);
+                for status in statuses {
+                    match status {
+                        DocumentStatus::Scanned(_) => seen_scanned += 1,
+                        DocumentStatus::Failed(Error::ResourceLimit {
+                            resource: ResourceName::ReferencesPerDocument,
+                            ..
+                        }) => seen_failed += 1,
+                        DocumentStatus::Failed(_)
+                        | DocumentStatus::ExcludedBuiltIn
+                        | DocumentStatus::Unsupported(_) => {}
+                    }
+                }
+                assert_eq!((seen_scanned, seen_failed), (scanned, failed));
+            }
+            Err(defect) => {
+                assert!(ended);
+                assert!(matches!(
+                    defect,
+                    Error::ResourceLimit {
+                        resource: ResourceName::ReferencesPerSnapshot,
+                        ..
+                    }
+                ));
+            }
+        }
+    }
 }

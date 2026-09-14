@@ -28,6 +28,8 @@ mod observation_support;
 use observation_support::side;
 
 fn main() {
+    // the same parser pool the engine installs before it confines itself
+    amiss_scan::workers::install(std::num::NonZeroUsize::MIN.saturating_add(2));
     divan::main();
 }
 

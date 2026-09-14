@@ -58,7 +58,7 @@ fn resolved_observations_bind_the_fields_retained_for_reporting() {
         ),
     ] {
         let mut scan = ScanResources::new(ScanLimits::CONTRACT);
-        let scanned = crate::scan::scan_bytes(&mut scan, adapter, source.as_bytes()).unwrap();
+        let scanned = crate::scan::scan_document(&mut scan, adapter, source.as_bytes()).unwrap();
         assert_eq!(scanned.occurrences.len(), 2, "{adapter:?}");
         let mut git = GitResources::new(GitLimits::CONTRACT);
         let mut cache = TargetCache::default();

@@ -66,12 +66,20 @@ fn apply_sandbox() {
 #[cfg(not(unix))]
 const fn apply_sandbox() {}
 
+/// Parser threads beyond the main one. Each thread costs the allocator a
+/// 64 MiB arena reservation against the address-space ceiling below.
+const PARSE_THREADS: usize = 3;
+
 #[expect(
     clippy::print_stderr,
     clippy::print_stdout,
     reason = "contract output channels"
 )]
 fn main() -> ExitCode {
+    let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+    if let Some(extra) = std::num::NonZeroUsize::new(cores.saturating_sub(1).min(PARSE_THREADS)) {
+        amiss_scan::workers::install(extra);
+    }
     apply_sandbox();
     let mut reserve = BufWriter::with_capacity(report::FATAL_SCRATCH_BYTES, std::io::stdout());
     let argv: Vec<std::ffi::OsString> = env::args_os().skip(1).collect();

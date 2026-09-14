@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use amiss_wire::controls::ResourceName;
@@ -108,6 +109,7 @@ pub(crate) struct ScanIdentity {
 #[derive(Debug)]
 pub struct ScanResources {
     cache_scope: Arc<()>,
+    workers: NonZeroUsize,
     pub(crate) scans: BTreeMap<ScanIdentity, Arc<Scanned>>,
     limits: ScanLimits,
     documents: u64,
@@ -133,6 +135,7 @@ impl Clone for ScanResources {
     fn clone(&self) -> Self {
         Self {
             cache_scope: Arc::new(()),
+            workers: self.workers,
             scans: BTreeMap::new(),
             limits: self.limits,
             documents: self.documents,
@@ -188,6 +191,7 @@ impl ScanResources {
     pub fn new(limits: ScanLimits) -> Self {
         Self {
             cache_scope: Arc::new(()),
+            workers: std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN),
             scans: BTreeMap::new(),
             limits,
             documents: 0,
@@ -237,6 +241,19 @@ impl ScanResources {
     #[must_use]
     pub const fn limits(&self) -> &ScanLimits {
         &self.limits
+    }
+
+    /// Documents of one discovery batch parse on this many threads; charges,
+    /// records and every reported outcome still follow tree order.
+    #[must_use]
+    pub const fn workers(&self) -> NonZeroUsize {
+        self.workers
+    }
+
+    #[must_use]
+    pub const fn with_workers(mut self, workers: NonZeroUsize) -> Self {
+        self.workers = workers;
+        self
     }
 
     pub(crate) const fn cache_scope(&self) -> &Arc<()> {

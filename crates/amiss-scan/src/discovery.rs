@@ -1,4 +1,3 @@
-use sha2::Digest as _;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
@@ -8,9 +7,13 @@ use amiss_wire::model::{Adapter, Oid, RepoPath};
 
 use crate::document::{Classification, classify, excluded_by_built_in, native_adapter};
 use crate::policy::Includes;
-use crate::resources::{ScanIdentity, ScanResources, crossing};
-use crate::scan::{Scanned, replay_scan_charges, scan_bytes};
-use crate::{Error, GitDefect, lfs};
+use crate::resources::{ScanResources, crossing};
+use crate::scan::Scanned;
+use crate::{Error, GitDefect};
+
+mod batch;
+
+use batch::{Batch, Pending, Staged};
 
 /// The deliberate object and format boundaries a discovered document side can
 /// sit behind without failing the run.
@@ -175,6 +178,7 @@ struct DocumentContext<'a> {
     repo: &'a Repository,
     includes: &'a Includes,
     scope: Option<&'a BTreeSet<RepoPath>>,
+    document_blob_bytes: u64,
 }
 
 pub(crate) fn empty_discovery() -> SnapshotDiscovery {
@@ -201,20 +205,23 @@ fn charge_entry(discovery: &mut SnapshotDiscovery, limit: u64) -> Result<(), Err
     }
 }
 
-fn record_document(
+/// Classifies one non-tree entry and either settles it on the spot or reads
+/// it for the batch. Exclusion is decided before any read, a symlink or
+/// gitlink is never read, and a regular blob is read under the document cap
+/// with its defect kept for settlement.
+fn stage_document(
     context: &DocumentContext<'_>,
     git: &mut GitResources,
-    scan: &mut ScanResources,
     discovery: &mut SnapshotDiscovery,
     path: RepoPath,
     entry: &TreeEntry,
-) -> Result<(), Error> {
+) -> Result<Option<Staged>, Error> {
     let classification = match classify(path.as_bytes()) {
         Some(native) => native,
         None if context.includes.matches(&path) => Classification::PolicyIncluded,
         None => {
             discovery.outside_document_set = discovery.outside_document_set.saturating_add(1);
-            return Ok(());
+            return Ok(None);
         }
     };
     let adapter = if classification == Classification::PolicyIncluded {
@@ -226,29 +233,54 @@ fn record_document(
         .scope
         .is_some_and(|documents| !documents.contains(&path))
     {
-        return Ok(());
+        return Ok(None);
     }
-    let (status, byte_count, raw_digest) = side_status(
-        context.repo,
-        git,
-        scan,
-        context.includes,
-        adapter,
-        &path,
-        entry,
-    )?;
-    collect_labels(scan, &mut discovery.labels, &path, &status)?;
-    discovery.documents.push(DocumentRecord {
+    let settled = |status| {
+        Staged::Settled(DocumentRecord {
+            path: path.clone(),
+            classification,
+            adapter,
+            status,
+            oid: entry.oid.clone(),
+            mode: entry.mode,
+            byte_count: 0,
+            raw_digest: None,
+        })
+    };
+    if excluded_by_built_in(path.as_bytes()) && !context.includes.matches(&path) {
+        return Ok(Some(settled(DocumentStatus::ExcludedBuiltIn)));
+    }
+    match entry.mode {
+        GitMode::Symlink => {
+            return Ok(Some(settled(DocumentStatus::Unsupported(
+                UnsupportedKind::Symlink,
+            ))));
+        }
+        GitMode::Gitlink => {
+            return Ok(Some(settled(DocumentStatus::Unsupported(
+                UnsupportedKind::Gitlink,
+            ))));
+        }
+        GitMode::Tree => return Err(Error::Git(GitDefect::ObjectUnreadable)),
+        GitMode::RegularFile | GitMode::ExecutableFile => {}
+    }
+    let cap = ValueCap {
+        resource: ResourceName::DocumentBlobBytes,
+        limit: context.document_blob_bytes,
+    };
+    let read = context
+        .repo
+        .read_expected_capped(git, &entry.oid, ObjectKind::Blob, cap)
+        .map(|object| Arc::from(object.body))
+        .map_err(Error::from);
+    Ok(Some(Staged::Pending(Pending {
         path,
         classification,
         adapter,
-        status,
         oid: entry.oid.clone(),
         mode: entry.mode,
-        byte_count,
-        raw_digest,
-    });
-    Ok(())
+        read,
+    })))
 }
 
 /// Vets one raw entry name under `prefix` and returns the admitted path:
@@ -362,6 +394,7 @@ pub(crate) fn discover_walk(
     mut mode: WalkMode<'_>,
 ) -> Result<SnapshotDiscovery, Error> {
     let mut discovery = empty_discovery();
+    let mut batch = Batch::default();
     let root = repo.read_expected(git, root_tree, ObjectKind::Tree)?;
     let mut frames = vec![Frame {
         oid: root_tree.clone(),
@@ -430,10 +463,16 @@ pub(crate) fn discover_walk(
                     repo,
                     includes,
                     scope: *scope,
+                    document_blob_bytes: scan.limits().document_blob_bytes,
                 };
-                record_document(&context, git, scan, &mut discovery, path, &entry)?;
+                if let Some(staged) = stage_document(&context, git, &mut discovery, path, &entry)? {
+                    batch.stage(staged, &mut discovery, scan)?;
+                }
             }
         }
+    }
+    if let WalkMode::Documents { scan, .. } = &mut mode {
+        batch.finish(&mut discovery, scan)?;
     }
     Ok(discovery)
 }
@@ -458,8 +497,10 @@ pub fn discover_index(
         repo,
         includes,
         scope: None,
+        document_blob_bytes: scan.limits().document_blob_bytes,
     };
     let mut discovery = empty_discovery();
+    let mut batch = Batch::default();
     for entry in &index.entries {
         charge_entry(&mut discovery, git.limits().tree_entries_per_snapshot)?;
         let Some(path) = admitted_path(
@@ -482,102 +523,10 @@ pub fn discover_index(
             name: entry.path.clone(),
             oid: entry.oid.clone(),
         };
-        record_document(&context, git, scan, &mut discovery, path, &tree_entry)?;
+        if let Some(staged) = stage_document(&context, git, &mut discovery, path, &tree_entry)? {
+            batch.stage(staged, &mut discovery, scan)?;
+        }
     }
+    batch.finish(&mut discovery, scan)?;
     Ok(discovery)
-}
-
-/// One selected non-tree entry's outcome. Exclusion is decided before any
-/// read, a symlink or gitlink is never read, and a regular blob is admitted,
-/// read under the document cap, then recognized as pointer content or
-/// scanned.
-fn side_status(
-    repo: &Repository,
-    git: &mut GitResources,
-    scan: &mut ScanResources,
-    includes: &Includes,
-    adapter: Option<Adapter>,
-    path: &RepoPath,
-    entry: &TreeEntry,
-) -> Result<(DocumentStatus, u64, Option<amiss_wire::model::Digest>), Error> {
-    if excluded_by_built_in(path.as_bytes()) && !includes.matches(path) {
-        return Ok((DocumentStatus::ExcludedBuiltIn, 0, None));
-    }
-    match entry.mode {
-        GitMode::Symlink => {
-            return Ok((
-                DocumentStatus::Unsupported(UnsupportedKind::Symlink),
-                0,
-                None,
-            ));
-        }
-        GitMode::Gitlink => {
-            return Ok((
-                DocumentStatus::Unsupported(UnsupportedKind::Gitlink),
-                0,
-                None,
-            ));
-        }
-        GitMode::Tree => return Err(Error::Git(GitDefect::ObjectUnreadable)),
-        GitMode::RegularFile | GitMode::ExecutableFile => {}
-    }
-
-    scan.admit_document()?;
-    let cap = ValueCap {
-        resource: ResourceName::DocumentBlobBytes,
-        limit: scan.limits().document_blob_bytes,
-    };
-    let object = match repo.read_expected_capped(git, &entry.oid, ObjectKind::Blob, cap) {
-        Ok(object) => object,
-        Err(defect) => {
-            let defect = Error::from(defect);
-            if defect.is_document_scoped() {
-                return Ok((DocumentStatus::Failed(defect), 0, None));
-            }
-            return Err(defect);
-        }
-    };
-    let byte_count = u64::try_from(object.body.len()).unwrap_or(u64::MAX);
-    scan.charge_document_bytes(byte_count)?;
-    let raw = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
-            .chain_update([0_u8])
-            .chain_update(&object.body)
-            .finalize()
-            .0,
-    );
-    if lfs::is_pointer(&object.body) {
-        return Ok((
-            DocumentStatus::Unsupported(UnsupportedKind::LfsPointer),
-            byte_count,
-            Some(raw),
-        ));
-    }
-    let Some(adapter) = adapter else {
-        return Ok((
-            DocumentStatus::Unsupported(UnsupportedKind::Format),
-            byte_count,
-            Some(raw),
-        ));
-    };
-    let identity = ScanIdentity {
-        oid: entry.oid.clone(),
-        adapter,
-        embedded_code_allowance: (adapter == Adapter::Mdx).then(|| scan.embedded_code_allowance()),
-    };
-    let scanned = match scan.scans.get(&identity).cloned() {
-        Some(scanned) => replay_scan_charges(scan, &scanned).map(|()| scanned),
-        None => scan_bytes(scan, adapter, &object.body)
-            .map(Arc::new)
-            .inspect(|scanned| {
-                scan.scans.insert(identity, Arc::clone(scanned));
-            }),
-    };
-    match scanned {
-        Ok(scanned) => Ok((DocumentStatus::Scanned(scanned), byte_count, Some(raw))),
-        Err(defect) if defect.is_document_scoped() => {
-            Ok((DocumentStatus::Failed(defect), byte_count, Some(raw)))
-        }
-        Err(defect) => Err(defect),
-    }
 }

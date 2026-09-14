@@ -9,7 +9,7 @@ These are accounting ceilings, not all wall-clock deadlines. Document bytes are 
 before parsing, parser node and nesting totals after the grammar returns, and
 embedded-code evaluation bytes inside the parse itself, at every candidate close of an
 MDX code region. How the ceilings relate to CPU, and which lanes carry wall-clock
-watchdogs, is described in [Security model](security.md).
+watchdogs, is described in [Security model](security.md). A snapshot's documents parse on up to four threads, in batches that follow tree order, and every charge, record and report row still settles in that order, so nothing in a report depends on the thread count.
 
 Line-fragment work is charged pessimistically: the complete target size, once per
 distinct target identity (path, file mode, and object id) and numeric range. Successful

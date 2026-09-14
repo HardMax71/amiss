@@ -92,7 +92,10 @@ pub fn scan_document(
     source: &[u8],
 ) -> Result<Scanned, Error> {
     resources.charge_document(length(source))?;
-    scan_bytes(resources, adapter, source)
+    match scan_pure(adapter, source, resources.embedded_code_allowance()) {
+        Ok(scanned) => replay_scan_charges(resources, &scanned).map(|()| scanned),
+        Err(failure) => Err(failure.into_error(resources)),
+    }
 }
 
 /// The one place an adapter is chosen. Both the document scan and the
@@ -115,26 +118,39 @@ pub(crate) fn parse(
     }
 }
 
-/// Parses and extracts one already admitted document body.
-///
-/// # Errors
-///
-/// Everything `scan_document` fails with except the admission crossings.
-pub fn scan_bytes(
-    resources: &mut ScanResources,
+/// Why a scan that touched no resources stopped: the embedded-code meter ran
+/// past the allowance it was handed, or any other scan error.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum PureFailure {
+    EmbeddedCodeAllowance { spent: u64 },
+    Error(Error),
+}
+
+impl PureFailure {
+    pub(crate) const fn into_error(self, resources: &ScanResources) -> Error {
+        match self {
+            Self::EmbeddedCodeAllowance { spent } => resources.embedded_code_crossing(spent),
+            Self::Error(error) => error,
+        }
+    }
+}
+
+/// The scan with every resource charge left out: the parse under a fixed
+/// embedded-code allowance and everything the bytes alone determine, so it
+/// can run on any thread. `replay_scan_charges` then charges the result in
+/// the order the charged scan always did.
+pub(crate) fn scan_pure(
     adapter: Adapter,
     source: &[u8],
-) -> Result<Scanned, Error> {
-    let analysis = parse(adapter, source, resources.embedded_code_allowance()).map_err(
-        |error| match error {
-            AnalyzeError::Fault(fault) => Error::Parse(fault),
+    embedded_code_allowance: u64,
+) -> Result<Scanned, PureFailure> {
+    let analysis =
+        parse(adapter, source, embedded_code_allowance).map_err(|error| match error {
+            AnalyzeError::Fault(fault) => PureFailure::Error(Error::Parse(fault)),
             AnalyzeError::EmbeddedCodeAllowance { spent } => {
-                resources.embedded_code_crossing(spent)
+                PureFailure::EmbeddedCodeAllowance { spent }
             }
-        },
-    )?;
-    resources.charge_embedded_code(analysis.embedded_code_bytes);
-    resources.charge_work(analysis.work.nodes, analysis.work.nesting)?;
+        })?;
 
     let Some(extraction) = analysis.extraction else {
         return Ok(Scanned {
@@ -155,16 +171,11 @@ pub fn scan_bytes(
         scan(source).map(|line| line.end).collect()
     };
     let mut occurrences = Vec::with_capacity(extraction.occurrences.len());
-    let mut document_references: u64 = 0;
     let mut previous_projection = None;
     for occurrence in extraction.occurrences {
-        document_references = document_references.saturating_add(1);
-        resources.charge_reference(
-            length(occurrence.raw_destination.as_bytes()),
-            document_references,
-        )?;
         let projection_digest =
-            source_projection_digest(source, occurrence.block_span, previous_projection)?;
+            source_projection_digest(source, occurrence.block_span, previous_projection)
+                .map_err(PureFailure::Error)?;
         previous_projection = Some((occurrence.block_span, projection_digest));
         let (start_line, start_column) = position(source, &line_ends, occurrence.span.0);
         let (end_line, end_column) = position(source, &line_ends, occurrence.span.1);
@@ -188,13 +199,8 @@ pub fn scan_bytes(
         });
     }
 
-    let governed = governed_sources(
-        resources,
-        source,
-        &line_ends,
-        &extraction.governed,
-        document_references,
-    )?;
+    let governed =
+        governed_sources(source, &line_ends, &extraction.governed).map_err(PureFailure::Error)?;
 
     Ok(Scanned {
         adapter,
@@ -213,17 +219,13 @@ pub fn scan_bytes(
 }
 
 fn governed_sources(
-    resources: &mut ScanResources,
     source: &[u8],
     line_ends: &[usize],
     definitions: &[GovernedDefinition],
-    mut document_references: u64,
 ) -> Result<Vec<GovernedSource>, Error> {
     let mut governed = Vec::with_capacity(definitions.len());
     for definition in definitions {
         let span = definition.span;
-        document_references = document_references.saturating_add(1);
-        resources.charge_reference(0, document_references)?;
         let bytes = source
             .get(span.0..span.1)
             .ok_or(Error::Parse(amiss_md::Fault::InvalidSourceSpan))?;
