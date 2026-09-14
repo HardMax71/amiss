@@ -6,8 +6,9 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::time::{Duration, Instant};
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AdapterRegistry, AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState,
+    AdapterRegistry, AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState,
     Controller, ControllerClock, DeliveryId, DeliveryIdentity, DeliveryRoute, Evaluation,
     FileLedger, FileLedgerConfig, GitHubWebhook, HeartbeatOutcome, IngressCheck, IngressLimits,
     IngressPolicy, IntegrationId, OidPair, OpaqueId, PlanRegistry, PlanScope, PolicyControls,
@@ -433,7 +434,7 @@ fn change(provider: ProviderIdentity) -> ChangeLocator {
             "amiss".to_owned(),
         )
         .unwrap(),
-        change: ChangeId::new("42".to_owned()).unwrap(),
+        change: Change::PullRequest(PullRequestChange::new(1, 1, 42).unwrap()),
     }
 }
 

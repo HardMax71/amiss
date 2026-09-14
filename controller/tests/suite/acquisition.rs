@@ -6,8 +6,9 @@
 use amiss_wire::de::Document as _;
 use std::sync::Arc;
 
+use amiss_controller::MergeRequestChange;
 use amiss_controller::{
-    AcquireError, AcquiredRoots, ChangeId, ChangeLocator, ControllerEvaluationId, DeliveryId,
+    AcquireError, AcquiredRoots, Change, ChangeLocator, ControllerEvaluationId, DeliveryId,
     DeliveryIdentity, IntegrationId, OidPair, PolicyControls, ProviderIdentity, ProviderInstance,
     ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity,
     RunRefs, RunRequest, check_binding, check_plan, verify_acquired,
@@ -72,7 +73,7 @@ fn request(repository_pair: &CommitPair, action: &CommitPair) -> RunRequest {
             ChangeLocator {
                 provider,
                 repository: repository(),
-                change: ChangeId::new("merge-request/42".to_owned()).unwrap(),
+                change: Change::MergeRequest(MergeRequestChange::new(1, 42).unwrap()),
             },
             RunRefs {
                 forge: ForgeDialect::Gitlab,

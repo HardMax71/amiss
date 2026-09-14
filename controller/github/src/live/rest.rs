@@ -260,7 +260,9 @@ impl GitHubRest for HttpRest {
         self.transport.get(
             &format!(
                 "/repos/{}/{}/pulls/{}",
-                pull_request.repository_owner, pull_request.repository_name, pull_request.number
+                pull_request.repository_owner,
+                pull_request.repository_name,
+                pull_request.pull_request.number
             ),
             deadline,
         )

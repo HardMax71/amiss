@@ -150,7 +150,7 @@ impl HttpRest {
             let batch: Vec<ReviewRecord> = self.get(
                 &format!(
                     "{prefix}/pulls/{}/reviews?page={page}&limit={PAGE_SIZE}",
-                    pull_request.number
+                    pull_request.pull_request.number
                 ),
                 deadline,
             )?;
@@ -203,8 +203,10 @@ impl GiteaRest for HttpRest {
         let prefix = repository_route(pull_request.repository_owner, pull_request.repository_name);
         let reviewer = self.current_user(deadline)?;
         let repository: RepositoryRecord = self.get(&prefix, deadline)?;
-        let authoritative: PullRequestRecord =
-            self.get(&format!("{prefix}/pulls/{}", pull_request.number), deadline)?;
+        let authoritative: PullRequestRecord = self.get(
+            &format!("{prefix}/pulls/{}", pull_request.pull_request.number),
+            deadline,
+        )?;
         let target_branch: BranchRecord = self.get(
             &format!(
                 "{prefix}/branches/{}",
@@ -268,7 +270,7 @@ impl GiteaRest for HttpRest {
             &format!(
                 "{}/pulls/{}/reviews",
                 repository_route(pull_request.repository_owner, pull_request.repository_name,),
-                pull_request.number
+                pull_request.pull_request.number
             ),
             review,
             deadline,

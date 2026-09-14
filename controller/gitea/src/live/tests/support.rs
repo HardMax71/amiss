@@ -2,8 +2,9 @@ use sha2::Digest as _;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, CheckBinding, CheckConclusion,
+    AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, CheckBinding, CheckConclusion,
     ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId, ProviderError,
     ProviderIdentity, ProviderInstance, ProviderNamespace, Publication,
 };
@@ -238,7 +239,7 @@ impl Fixture {
         let change = ChangeLocator {
             provider: provider.clone(),
             repository,
-            change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
+            change: Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap()),
         };
         let integration = IntegrationId::new("77".to_owned()).unwrap();
         let provider_run = crate::identity::provider_run(
@@ -283,12 +284,10 @@ impl Fixture {
     pub(super) fn pull_request(&self) -> GiteaPullRequest<'_> {
         GiteaPullRequest {
             change: &self.change,
+            pull_request: PullRequestChange::new(101, 4201, 42).unwrap(),
             reviewer_id: 77,
-            repository_id: 101,
             repository_owner: "acme",
             repository_name: "widget",
-            pull_request_id: 4201,
-            number: 42,
             candidate_commit: &self.delivery.provider_run.candidate_commit,
         }
     }

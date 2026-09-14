@@ -203,7 +203,7 @@ impl<R: GiteaRest> Client<R> {
         )
         .ok_or(ProviderError::InvalidResponse)?;
         let objects = self.objects.resolve(&GiteaObjectRequest {
-            repository_id: pull_request.repository_id,
+            repository_id: pull_request.pull_request.repository_id.get(),
             repository_url: repository_url(&repository),
             candidate_commit: pull_request.candidate_commit.clone(),
             base_commit: exact_oid(&data.target.sha)?,

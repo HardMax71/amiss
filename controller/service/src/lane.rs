@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use amiss_controller::Change;
 use amiss_controller::{
     AcceptedDelivery, ControllerClock, DeliveryHeader as IngressHeader, DeliveryRoute,
     IngressCheck, IngressPolicy, PlanRegistry, ProviderError, UntrustedDelivery, VerifiedDelivery,
@@ -14,7 +15,7 @@ struct RepositoryAdmission<F> {
     ingress: IngressPolicy,
     plans: PlanRegistry,
     clock: Arc<dyn ControllerClock>,
-    repository_prefix: String,
+    repository_id: u64,
     authenticate: F,
 }
 
@@ -34,14 +35,13 @@ where
         + Sync
         + 'static,
 {
-    let repository_prefix = format!("repository/{repository_id}/");
     Arc::new(RepositoryAdmission {
         route_id,
         route,
         ingress,
         plans,
         clock,
-        repository_prefix,
+        repository_id,
         authenticate,
     })
 }
@@ -124,12 +124,11 @@ where
         let Some(verified) = (self.authenticate)(checked).map_err(provider_rejection)? else {
             return Ok(None);
         };
-        let verified = verified
-            .delivery()
-            .change
-            .change
-            .as_str()
-            .starts_with(&self.repository_prefix)
+        let bound = match verified.delivery().change.change {
+            Change::PullRequest(change) => change.repository_id.get() == self.repository_id,
+            Change::MergeRequest(change) => change.project_id.get() == self.repository_id,
+        };
+        let verified = bound
             .then_some(verified)
             .ok_or(AdmissionRejection::Forbidden)?;
         let accepted = accept_verified(&self.ingress, &self.plans, checked, verified)?;

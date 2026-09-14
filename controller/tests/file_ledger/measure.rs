@@ -32,7 +32,7 @@ fn admission_cost_is_measured_against_retained_root_entries() {
             .map(|sample| {
                 let delivery = delivery_with_id(
                     &format!("scale-{threshold}-{sample}"),
-                    &format!("{}", threshold + sample + 1),
+                    threshold + sample + 1,
                 );
                 let started = Instant::now();
                 let claim = ledger.claim(&delivery, &binding).unwrap();
@@ -51,15 +51,14 @@ fn admission_cost_is_measured_against_retained_root_entries() {
     for fill in ADMISSION_PROBES..MAX_RECORDS {
         ledger
             .claim(
-                &delivery_with_id(&format!("fill-{fill}"), &format!("{}", 200_000 + fill)),
+                &delivery_with_id(&format!("fill-{fill}"), 200_000 + fill),
                 &binding,
             )
             .unwrap();
     }
     let mut full = (0..SAMPLES)
         .map(|sample| {
-            let delivery =
-                delivery_with_id(&format!("full-{sample}"), &format!("{}", 300_000 + sample));
+            let delivery = delivery_with_id(&format!("full-{sample}"), 300_000 + sample);
             let started = Instant::now();
             let claim = ledger.claim(&delivery, &binding);
             let elapsed = started.elapsed();

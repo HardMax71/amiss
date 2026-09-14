@@ -10,8 +10,9 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
+use amiss_controller::MergeRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, CheckPlan, DeliveryId, DeliveryIdentity,
+    AuthenticatedDelivery, Change, ChangeLocator, CheckPlan, DeliveryId, DeliveryIdentity,
     ExternalPolicy, IntegrationId, PlanError, PlanRegistry, PlanScope, PolicyControls,
     ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
     ProviderRunIdentity, check_binding, check_plan, register_plan, resolve_plan,
@@ -64,7 +65,7 @@ fn delivery() -> AuthenticatedDelivery {
         change: ChangeLocator {
             provider,
             repository: repository(),
-            change: ChangeId::new("merge-request/42".to_owned()).unwrap(),
+            change: Change::MergeRequest(MergeRequestChange::new(1, 42).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("pipeline/11".to_owned()).unwrap(),

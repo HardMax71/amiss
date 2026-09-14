@@ -5,7 +5,8 @@
 
 use std::sync::Arc;
 
-use amiss_controller::{ChangeId, DeliveryId, ProviderInstance, ProviderRunAttempt, ProviderRunId};
+use amiss_controller::PullRequestChange;
+use amiss_controller::{Change, DeliveryId, ProviderInstance, ProviderRunAttempt, ProviderRunId};
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, GitLabPlanError, gitlab_fetch_plan};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -73,7 +74,8 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
         "a non-canonical owner cannot enter a run request"
     );
     let mut wrong_change = request.clone();
-    wrong_change.run.change.change = ChangeId::new("merge-request/42".to_owned()).unwrap();
+    wrong_change.run.change.change =
+        Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap());
     let mut wrong_run = request.clone();
     wrong_run.provider_run.run_id = ProviderRunId::new("pipeline/0/job/303".to_owned()).unwrap();
     let mut wrong_delivery = request.clone();

@@ -1,5 +1,6 @@
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    ArtifactReference, ChangeId, CheckConclusion, ProviderError, ProviderRunAttempt, RunFailure,
+    ArtifactReference, Change, CheckConclusion, ProviderError, ProviderRunAttempt, RunFailure,
 };
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
 use amiss_wire::report::model::{
@@ -253,7 +254,7 @@ fn a_publication_is_validated_in_every_field() {
     wrong_attempt.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
     let mut wrong_change = fresh();
     wrong_change.run.change.change =
-        ChangeId::new("repository/101/pull/4201/number/43".to_owned()).unwrap();
+        Change::PullRequest(PullRequestChange::new(101, 4201, 43).unwrap());
     let mut wrong_format = fresh();
     wrong_format.run.object_format = ObjectFormat::Sha256;
     let mut wrong_forge = fresh();

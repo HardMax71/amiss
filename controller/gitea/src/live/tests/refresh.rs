@@ -1,3 +1,4 @@
+use amiss_controller::PullRequestChange;
 use amiss_controller::{ChangeState, ProviderError};
 use amiss_wire::model::ForgeDialect;
 
@@ -351,11 +352,11 @@ fn the_request_binding_is_exact_in_every_field() {
         "another provider identity"
     );
 
-    let deviations: [(&str, RequestDeviation); 6] = [
+    let deviations: [(&str, RequestDeviation); 4] = [
         ("reviewer", |request| request.reviewer_id = 78),
-        ("repository id", |request| request.repository_id = 0),
-        ("pull id", |request| request.pull_request_id = 0),
-        ("number", |request| request.number = 0),
+        ("pull request", |request| {
+            request.pull_request = PullRequestChange::new(101, 4201, 43).unwrap();
+        }),
         ("owner", |request| request.repository_owner = "other"),
         ("name", |request| request.repository_name = "other"),
     ];
@@ -470,22 +471,13 @@ fn an_injected_allowlist_revokes_the_forgejo_shape() {
     );
 }
 
-/// Each route identity refuses zero on its own boundary.
+/// A pull request that disagrees with its own locator never reaches the API.
 #[test]
-fn route_identities_refuse_zero_alone() {
+fn a_pull_request_off_its_locator_is_refused_alone() {
     let fixture = Fixture::new("gitea");
-    let deviations: [(&str, RequestDeviation); 3] = [
-        ("repository", |pull_request| pull_request.repository_id = 0),
-        ("pull request", |pull_request| {
-            pull_request.pull_request_id = 0;
-        }),
-        ("number", |pull_request| pull_request.number = 0),
-    ];
-    for (name, mutate) in deviations {
-        let mut pull_request = fixture.pull_request();
-        mutate(&mut pull_request);
-        assert!(fixture.client.refresh(pull_request).is_err(), "{name}");
-    }
+    let mut pull_request = fixture.pull_request();
+    pull_request.pull_request = PullRequestChange::new(101, 4201, 43).unwrap();
+    assert!(fixture.client.refresh(pull_request).is_err());
 }
 
 /// The base resolver answers for itself: a base object naming a foreign

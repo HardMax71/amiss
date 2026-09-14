@@ -8,10 +8,11 @@ use sha2::Digest as _;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    ArtifactReference, ChangeId, ChangeLocator, ChangeState, CheckBinding, CheckConclusion,
-    ControllerEvaluationId, IntegrationId, OpaqueId, ProviderError, ProviderIdentity,
-    ProviderInstance, ProviderNamespace, Publication, RunFailure,
+    ArtifactReference, Change, ChangeLocator, ChangeState, CheckBinding, CheckConclusion,
+    ControllerEvaluationId, IntegrationId, ProviderError, ProviderIdentity, ProviderInstance,
+    ProviderNamespace, Publication, RunFailure,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::model::{
@@ -131,11 +132,9 @@ fn refresh_rejects_wrong_ids_and_github_path_shapes() {
     let nested_request = GitHubPullRequest {
         change: &nested,
         installation_id: INSTALLATION_ID,
-        repository_id: 101,
+        pull_request: PullRequestChange::new(101, 4_201, 42).unwrap(),
         repository_owner: "group/owner",
         repository_name: "widget",
-        pull_request_id: 4_201,
-        number: 42,
         candidate_commit: &fixture.candidate,
     };
     assert_eq!(
@@ -144,7 +143,7 @@ fn refresh_rejects_wrong_ids_and_github_path_shapes() {
     );
 
     let mut inconsistent = fixture.change.clone();
-    inconsistent.change = ChangeId::new("repository/101/pull/4201/number/43".to_owned()).unwrap();
+    inconsistent.change = Change::PullRequest(PullRequestChange::new(101, 4201, 43).unwrap());
     let request = GitHubPullRequest {
         change: &inconsistent,
         ..fixture.request()
@@ -576,7 +575,7 @@ fn publication_conclusions_and_create_response_are_exact() {
                 repository.owner(),
                 repository.name()
             ),
-            format!("change: {}", run.change.change),
+            "change: pull request 42 in repository 101 (id 4201)".to_owned(),
             format!(
                 "provider-run: {}#{}",
                 publication.provider_run.run_id,
@@ -756,11 +755,9 @@ impl Fixture {
         GitHubPullRequest {
             change: &self.change,
             installation_id: INSTALLATION_ID,
-            repository_id: 101,
+            pull_request: PullRequestChange::new(101, 4_201, 42).unwrap(),
             repository_owner: "acme",
             repository_name: "widget",
-            pull_request_id: 4_201,
-            number: 42,
             candidate_commit: &self.candidate,
         }
     }
@@ -1041,8 +1038,8 @@ fn provider() -> ProviderIdentity {
     }
 }
 
-fn change_id() -> ChangeId {
-    OpaqueId::new("repository/101/pull/4201/number/42".to_owned()).unwrap()
+fn change_id() -> Change {
+    Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap())
 }
 
 fn oid(value: char) -> Oid {

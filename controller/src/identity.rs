@@ -1,3 +1,4 @@
+use std::num::NonZeroU64;
 use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
@@ -50,7 +51,6 @@ pub struct OpaqueId(String);
 pub type ProviderInstance = OpaqueId;
 pub type IntegrationId = OpaqueId;
 pub type DeliveryId = OpaqueId;
-pub type ChangeId = OpaqueId;
 pub type ProviderRunId = OpaqueId;
 pub type ControllerEvaluationId = OpaqueId;
 
@@ -169,31 +169,56 @@ pub struct DeliveryIdentity {
 pub struct ChangeLocator {
     pub provider: ProviderIdentity,
     pub repository: RepositoryIdentity,
-    pub change: ChangeId,
+    pub change: Change,
 }
 
-/// Where a pull request sits in a GitHub-family API: the repository and the
-/// pull request by id, and the pull request by number. Its change id spells
-/// all three, so a stored locator can be held against a refreshed one.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, parse_display::Display, parse_display::FromStr)]
-#[display("repository/{repository_id}/pull/{pull_request_id}/number/{number}")]
+/// Which change a delivery is about, numbered the way its provider family
+/// numbers it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Change {
+    PullRequest(PullRequestChange),
+    MergeRequest(MergeRequestChange),
+}
+
+/// A GitHub-family pull request: the repository and the pull request by id,
+/// and the pull request by number.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct PullRequestChange {
-    #[from_str(regex = "[1-9][0-9]*")]
-    pub repository_id: u64,
-    #[from_str(regex = "[1-9][0-9]*")]
-    pub pull_request_id: u64,
-    #[from_str(regex = "[1-9][0-9]*")]
-    pub number: u64,
+    pub repository_id: NonZeroU64,
+    pub pull_request_id: NonZeroU64,
+    pub number: NonZeroU64,
 }
 
 impl PullRequestChange {
-    /// Every id is positive, as the providers issue them.
+    /// None when the provider issued a zero for any of the three.
     #[must_use]
     pub fn new(repository_id: u64, pull_request_id: u64, number: u64) -> Option<Self> {
-        (repository_id > 0 && pull_request_id > 0 && number > 0).then_some(Self {
-            repository_id,
-            pull_request_id,
-            number,
+        Some(Self {
+            repository_id: NonZeroU64::new(repository_id)?,
+            pull_request_id: NonZeroU64::new(pull_request_id)?,
+            number: NonZeroU64::new(number)?,
+        })
+    }
+}
+
+/// A GitLab merge request: the project by id and the merge request by the
+/// iid the project counts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MergeRequestChange {
+    pub project_id: NonZeroU64,
+    pub iid: NonZeroU64,
+}
+
+impl MergeRequestChange {
+    /// None when the provider issued a zero for either.
+    #[must_use]
+    pub fn new(project_id: u64, iid: u64) -> Option<Self> {
+        Some(Self {
+            project_id: NonZeroU64::new(project_id)?,
+            iid: NonZeroU64::new(iid)?,
         })
     }
 }

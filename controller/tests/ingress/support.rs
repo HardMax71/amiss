@@ -1,8 +1,9 @@
 pub(crate) use amiss_controller_fixtures::clock::TestClock;
 use std::time::Duration;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryHeader, DeliveryId, DeliveryIdentity,
+    AuthenticatedDelivery, Change, ChangeLocator, DeliveryHeader, DeliveryId, DeliveryIdentity,
     DeliveryRoute, GitHubWebhook, GitLabWebhook, IngressError, IngressLimits, IngressPolicy,
     IntegrationId, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
     ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, ReplayWindow, SignedTimePolicy,
@@ -90,7 +91,7 @@ pub(crate) fn split_delivery(
                 "amiss".to_owned(),
             )
             .unwrap(),
-            change: ChangeId::new("42".to_owned()).unwrap(),
+            change: Change::PullRequest(PullRequestChange::new(1, 1, 42).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("run-11".to_owned()).unwrap(),

@@ -9,8 +9,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AcquiredSemanticTemplate, Acquisition as _, AcquisitionTarget, ChangeId, ChangeLocator,
+    AcquiredSemanticTemplate, Acquisition as _, AcquisitionTarget, Change, ChangeLocator,
     ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
     MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair, OpaqueId,
     PolicyControls, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
@@ -27,7 +28,7 @@ use amiss_wire::model::{
 };
 use secrecy::SecretString;
 
-const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v1";
+const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v2";
 const TOKEN: &str = "github_pat_never_print_this";
 
 #[test]
@@ -82,7 +83,8 @@ fn rejects_wrong_host_identity_change_and_object_format() {
     );
 
     let mut wrong_change = request();
-    wrong_change.run.change.change = ChangeId::new("pull/42".to_owned()).unwrap();
+    wrong_change.run.change.change =
+        Change::PullRequest(PullRequestChange::new(101, 4201, 43).unwrap());
     assert_eq!(
         github_fetch_plan(&wrong_change),
         Err(GitHubAcquireError::InvalidRequest)
@@ -268,7 +270,7 @@ fn request() -> RunRequest {
     let change = ChangeLocator {
         provider: provider.clone(),
         repository,
-        change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
+        change: Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap()),
     };
     let integration = IntegrationId::new("7".to_owned()).unwrap();
     let refs = RunRefs {
@@ -338,16 +340,16 @@ fn provider_run(
     candidate_ref: &BranchRef,
     target_ref: &BranchRef,
 ) -> ProviderRunIdentity {
-    let fields = serde_json::to_vec(&[
+    let fields = serde_json::to_vec(&(
         installation.as_str(),
         change.repository.host(),
         change.repository.owner(),
         change.repository.name(),
-        change.change.as_str(),
+        change.change,
         candidate.as_str(),
         candidate_ref.as_str(),
         target_ref.as_str(),
-    ])
+    ))
     .unwrap();
     ProviderRunIdentity::new(
         ProviderRunId::new(format!(

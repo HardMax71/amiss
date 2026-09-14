@@ -7,8 +7,9 @@ use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::sync::Arc;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    ChangeId, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
+    Change, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
     OidPair, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace,
     ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
     check_binding, check_plan,
@@ -17,7 +18,7 @@ use amiss_controller_gitea::{GiteaPlanError, gitea_fetch_plan};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-const RUN_DOMAIN: &str = "amiss/controller-gitea-family-pull-request-v1";
+const RUN_DOMAIN: &str = "amiss/controller-gitea-family-pull-request-v2";
 
 #[test]
 fn projects_exact_fetches_for_gitea_and_forgejo() {
@@ -56,7 +57,8 @@ fn rejects_wrong_host_identity_change_and_object_format() {
     );
 
     let mut wrong_change = request("forgejo");
-    wrong_change.run.change.change = ChangeId::new("pull/42".to_owned()).unwrap();
+    wrong_change.run.change.change =
+        Change::PullRequest(PullRequestChange::new(101, 4201, 43).unwrap());
     assert_eq!(
         gitea_fetch_plan(&wrong_change),
         Err(GiteaPlanError::InvalidRequest)
@@ -103,7 +105,7 @@ fn request(namespace: &str) -> RunRequest {
     let change = ChangeLocator {
         provider: provider.clone(),
         repository,
-        change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
+        change: Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap()),
     };
     let integration = IntegrationId::new("77".to_owned()).unwrap();
     let refs = RunRefs {
@@ -168,17 +170,17 @@ fn provider_run(
     candidate_ref: &BranchRef,
     target_ref: &BranchRef,
 ) -> ProviderRunIdentity {
-    let fields = serde_json::to_vec(&[
+    let fields = serde_json::to_vec(&(
         reviewer.as_str(),
         change.provider.namespace.as_str(),
         change.repository.host(),
         change.repository.owner(),
         change.repository.name(),
-        change.change.as_str(),
+        change.change,
         candidate.as_str(),
         candidate_ref.as_str(),
         target_ref.as_str(),
-    ])
+    ))
     .unwrap();
     ProviderRunIdentity::new(
         ProviderRunId::new(format!(

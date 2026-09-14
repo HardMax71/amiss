@@ -3,10 +3,6 @@ mod tests;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use url::Url;
 
-pub(crate) fn parse_change_id(raw: &str) -> Option<(u64, u64)> {
-    parse_pair(raw, "project", "merge-request")
-}
-
 pub(crate) fn parse_run_id(raw: &str) -> Option<(u64, u64)> {
     parse_pair(raw, "pipeline", "job")
 }

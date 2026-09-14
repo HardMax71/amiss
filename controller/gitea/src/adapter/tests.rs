@@ -1,7 +1,8 @@
 #![cfg(test)]
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
+    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
     OidPair, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, RunIdentity,
     RunRefs,
 };
@@ -40,7 +41,7 @@ fn delivery() -> AuthenticatedDelivery {
             "widget".to_owned(),
         )
         .expect("an identity"),
-        change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).expect("a change"),
+        change: Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap()),
     };
     let integration = IntegrationId::new("77".to_owned()).expect("an integration");
     let provider_run = crate::identity::provider_run(

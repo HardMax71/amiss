@@ -2,6 +2,7 @@
 
 use std::time::Duration;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{ForgeNegative, ProviderError};
 use reqwest::StatusCode;
 use secrecy::SecretString;
@@ -103,7 +104,7 @@ fn a_review_page_is_complete_exactly_under_its_size() {
 #[test]
 fn a_repository_route_names_its_owner_and_repository() {
     use amiss_controller::{
-        ChangeId, ChangeLocator, ProviderIdentity, ProviderInstance, ProviderNamespace,
+        Change, ChangeLocator, ProviderIdentity, ProviderInstance, ProviderNamespace,
     };
     use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -118,17 +119,15 @@ fn a_repository_route_names_its_owner_and_repository() {
             "widget".to_owned(),
         )
         .unwrap(),
-        change: ChangeId::new("repository/101/pull/4201/number/42".to_owned()).unwrap(),
+        change: Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap()),
     };
     let candidate = Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap();
     let pull_request = crate::GiteaPullRequest {
         change: &change,
+        pull_request: PullRequestChange::new(101, 4201, 42).unwrap(),
         reviewer_id: 77,
-        repository_id: 101,
         repository_owner: "acme",
         repository_name: "widget",
-        pull_request_id: 4201,
-        number: 42,
         candidate_commit: &candidate,
     };
     let route =

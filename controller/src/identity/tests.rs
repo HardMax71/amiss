@@ -1,30 +1,41 @@
 #![cfg(test)]
 
-use super::PullRequestChange;
+use std::num::NonZeroU64;
+
+use super::{Change, MergeRequestChange, PullRequestChange};
 
 #[test]
-fn a_pull_request_change_spells_its_ids_and_reads_them_back() {
-    let change = PullRequestChange::new(101, 4201, 42).unwrap();
-    let spelled = change.to_string();
-    assert_eq!(spelled, "repository/101/pull/4201/number/42");
-    assert_eq!(spelled.parse::<PullRequestChange>().ok(), Some(change));
-}
-
-#[test]
-fn a_pull_request_change_refuses_zero_ids_and_other_spellings() {
+fn changes_refuse_zero_ids() {
     assert_eq!(PullRequestChange::new(0, 4201, 42), None);
     assert_eq!(PullRequestChange::new(101, 0, 42), None);
     assert_eq!(PullRequestChange::new(101, 4201, 0), None);
-    for raw in [
-        "",
-        "repository/101/pull/4201",
-        "repository/101/pull/4201/number/42/extra",
-        "repository/0/pull/4201/number/42",
-        "repo/101/pull/4201/number/42",
-        "repository/101/pull/4201/number/-42",
-        "repository/101/pull/4201/number/forty-two",
-        "repository/101/pull/4201/number/42/",
+    assert_eq!(MergeRequestChange::new(0, 3), None);
+    assert_eq!(MergeRequestChange::new(7, 0), None);
+    assert_eq!(
+        PullRequestChange::new(101, 4201, 42).map(|change| change.number),
+        NonZeroU64::new(42)
+    );
+}
+
+#[test]
+fn a_stored_change_reads_back_as_written_and_refuses_zeros() {
+    let change = Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap());
+    let bytes = serde_json::to_vec(&change).unwrap();
+    assert_eq!(serde_json::from_slice::<Change>(&bytes).unwrap(), change);
+    assert_eq!(
+        String::from_utf8(bytes).unwrap(),
+        r#"{"pull-request":{"repository_id":101,"pull_request_id":4201,"number":42}}"#
+    );
+    for invalid in [
+        r#"{"pull-request":{"repository_id":0,"pull_request_id":4201,"number":42}}"#,
+        r#"{"merge-request":{"project_id":7,"iid":3,"extra":1}}"#,
+        r#"{"merge-request":{"project_id":7}}"#,
+        r#"{"issue":{"number":1}}"#,
+        r#""repository/101/pull/4201/number/42""#,
     ] {
-        assert!(raw.parse::<PullRequestChange>().is_err(), "{raw}");
+        assert!(
+            serde_json::from_str::<Change>(invalid).is_err(),
+            "{invalid}"
+        );
     }
 }

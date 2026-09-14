@@ -58,9 +58,13 @@ frame or an unmarked count disagreement with the decoded rows is corruption. Sto
 controller process before the first upgraded open; the metadata upgrade is one-way.
 
 The state file is a versioned, length-delimited, checksummed frame containing canonical JSON and is
-capped at 128 KiB. The reader accepts only its current row schema. The older v2 schema contains no
-check-plan binding, so it is rejected instead of attaching a caller-supplied policy to old work; a
-future schema change needs an explicit migration that preserves every stored authorization field.
+capped at 128 KiB. The reader accepts only its current row schema, v4. The v2 schema contains no
+check-plan binding, so it is rejected instead of attaching a caller-supplied policy to old work.
+The v3 schema spells the change a delivery is about as one opaque string; v4 stores it typed, as
+the pull request or merge request ids the provider issued, and no reader for the old spelling
+exists, so v3 rows are rejected too and a controller crossing that upgrade starts from an empty
+root. A schema change either carries every stored authorization field forward or rejects the old
+rows outright; nothing in between.
 A report is kept separately at one fixed path, bounded by the machine-report byte ceiling, while
 its digest and length remain in the saved state. Saving removes any dead report, writes and syncs
 the new report, then atomically replaces the state that names it. Completion first saves `done`,

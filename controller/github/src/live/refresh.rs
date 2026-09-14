@@ -1,5 +1,5 @@
 use crate::states::PullRequestState;
-use amiss_controller::PullRequestChange;
+use amiss_controller::{Change, PullRequestChange};
 use amiss_controller::{
     ChangeSnapshot, ChangeState, OidPair, ProviderError, Publication, RunIdentity, RunRefs,
 };
@@ -30,16 +30,8 @@ pub(super) fn validate_request(
     )
     .as_ref()
         == Some(repository);
-    let exact_change = PullRequestChange::new(
-        pull_request.repository_id,
-        pull_request.pull_request_id,
-        pull_request.number,
-    )
-    .is_some_and(|expected| pull_request.change.change.as_str().parse().ok() == Some(expected));
+    let exact_change = pull_request.change.change == Change::PullRequest(pull_request.pull_request);
     if pull_request.installation_id != config.installation_id
-        || pull_request.repository_id == 0
-        || pull_request.pull_request_id == 0
-        || pull_request.number == 0
         || pull_request.change.provider != config.provider
         || repository.host() != config.provider.instance.as_str()
         || repository.owner() != pull_request.repository_owner
@@ -187,7 +179,8 @@ fn validate_repository(
         &repository.name,
         &repository.full_name,
     )?;
-    (repository.id == pull_request.repository_id && identity == pull_request.change.repository)
+    (repository.id == pull_request.pull_request.repository_id.get()
+        && identity == pull_request.change.repository)
         .then_some(())
         .ok_or(ProviderError::InvalidResponse)
 }
@@ -203,13 +196,12 @@ fn validate_pull_request(
         .as_ref()
         .ok_or(ProviderError::InvalidResponse)?;
     let base_identity = pull_repository_identity(config, base_repository)?;
-    if authoritative.id != pull_request.pull_request_id
-        || authoritative.number != pull_request.number
-        || base_repository.id != pull_request.repository_id
-        || base_identity != pull_request.change.repository
-    {
-        return Err(ProviderError::InvalidResponse);
-    }
+    let authoritative_change =
+        PullRequestChange::new(base_repository.id, authoritative.id, authoritative.number);
+    (authoritative_change == Some(pull_request.pull_request)
+        && base_identity == pull_request.change.repository)
+        .then_some(())
+        .ok_or(ProviderError::InvalidResponse)?;
     match authoritative.head.repo.as_ref() {
         Some(repository) => {
             pull_repository_identity(config, repository)?;

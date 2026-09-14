@@ -2,8 +2,8 @@ use crate::states::{JobSource, PipelineSource};
 use sha2::Digest as _;
 
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, ProviderError,
-    ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, MergeRequestChange,
+    ProviderError, ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
 };
 use amiss_wire::model::ObjectFormat;
 use serde::Deserialize;
@@ -67,8 +67,10 @@ pub(crate) fn authenticated_facts(
     let change = ChangeLocator {
         provider: provider.clone(),
         repository,
-        change: change_id(policy.project_id, hint.merge_request_iid)
-            .ok_or(ProviderError::Authentication)?,
+        change: Change::MergeRequest(
+            MergeRequestChange::new(policy.project_id, hint.merge_request_iid)
+                .ok_or(ProviderError::Authentication)?,
+        ),
     };
     let provider_run = ProviderRunIdentity::new(
         ProviderRunId::new(format!(
@@ -104,12 +106,6 @@ pub(crate) fn authenticated_facts(
         replay,
         issued_at_unix_millis,
     })
-}
-
-fn change_id(project_id: u64, merge_request_iid: u64) -> Option<ChangeId> {
-    ChangeId::new(format!(
-        "project/{project_id}/merge-request/{merge_request_iid}"
-    ))
 }
 
 #[serde_with::serde_as]

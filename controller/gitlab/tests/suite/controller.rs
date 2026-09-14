@@ -9,10 +9,11 @@ use std::time::Duration;
 
 use amiss_controller::{
     AdapterRegistry, Controller, DeliveryHeader, DeliveryRoute, Evaluation, FileLedger,
-    FileLedgerConfig, HandleOutcome, HeartbeatOutcome, OpaqueId, PlanRegistry, ProviderError,
-    ReplayWindow, RunHeartbeat, RunIdentity, RunRequest, Runner, RunnerOutcome, SignedTimePolicy,
+    FileLedgerConfig, HandleOutcome, HeartbeatOutcome, PlanRegistry, ProviderError, ReplayWindow,
+    RunHeartbeat, RunIdentity, RunRequest, Runner, RunnerOutcome, SignedTimePolicy,
     UntrustedDelivery, register_plan,
 };
+use amiss_controller::{Change, MergeRequestChange};
 use amiss_controller_gitlab::{
     GitLabApi, GitLabMergeTrainAdapter, GitLabRefresh, GitLabRefreshQuery,
 };
@@ -73,7 +74,7 @@ fn signed_policy_request_runs_once_and_replay_cannot_pass_again() {
 fn controller_classifies_wrong_identity_and_wrong_tree_without_passing() {
     let now = now_seconds();
     let wrong_identity = run_once(now, |mut identity| {
-        identity.change.change = OpaqueId::new("project/101/merge-request/99".to_owned()).unwrap();
+        identity.change.change = Change::MergeRequest(MergeRequestChange::new(101, 99).unwrap());
         identity
     });
     assert_eq!(

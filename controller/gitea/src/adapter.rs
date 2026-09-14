@@ -3,9 +3,9 @@ mod tests;
 use std::sync::Arc;
 
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckConclusion, GiteaWebhook,
+    AuthenticatedDelivery, Change, ChangeSnapshot, ChangeState, CheckConclusion, GiteaWebhook,
     IngressCheck, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace, Publication,
-    PullRequestChange, VerifiedDelivery,
+    VerifiedDelivery,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
@@ -100,12 +100,9 @@ fn validate_delivery<'a>(
         .parse::<u64>()
         .ok()
         .and_then(positive);
-    let change = delivery
-        .change
-        .change
-        .as_str()
-        .parse::<PullRequestChange>()
-        .ok();
+    let Change::PullRequest(pull_request) = delivery.change.change else {
+        return Err(ProviderError::InvalidResponse);
+    };
     let run_digest = delivery
         .provider_run
         .run_id
@@ -139,19 +136,12 @@ fn validate_delivery<'a>(
     let reviewer_id = reviewer_id
         .filter(|id| *id == reviewer.id)
         .ok_or(ProviderError::InvalidResponse)?;
-    let PullRequestChange {
-        repository_id,
-        pull_request_id,
-        number,
-    } = change.ok_or(ProviderError::InvalidResponse)?;
     Ok(GiteaPullRequest {
         change: &delivery.change,
+        pull_request,
         reviewer_id,
-        repository_id,
         repository_owner: repository.owner(),
         repository_name: repository.name(),
-        pull_request_id,
-        number,
         candidate_commit: &delivery.provider_run.candidate_commit,
     })
 }

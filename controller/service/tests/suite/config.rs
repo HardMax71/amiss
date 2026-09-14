@@ -5,8 +5,9 @@ use std::fs;
 use std::io::Write as _;
 use std::time::Duration;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, ExternalPolicy,
+    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, ExternalPolicy,
     IntegrationId, ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
     RelationRegistry, relations_for_delivery,
 };
@@ -105,7 +106,7 @@ fn relation_delivery(
         change: ChangeLocator {
             provider,
             repository,
-            change: ChangeId::new("change/1".to_owned()).unwrap(),
+            change: Change::PullRequest(PullRequestChange::new(1, 1, 1).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("run/1".to_owned()).unwrap(),

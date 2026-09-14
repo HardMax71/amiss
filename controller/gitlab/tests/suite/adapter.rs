@@ -8,8 +8,9 @@ use sha2::Digest as _;
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex};
 
+use amiss_controller::MergeRequestChange;
 use amiss_controller::{
-    ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, ChangeId, ChangeState,
+    ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, Change, ChangeState,
     CheckConclusion, HandleOutcome, LeaseFence, OpaqueId, PlanScope, ProviderAdapter,
     ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
     RelationAuditDigests, RelationLimits, RelationStatusRecord, RelationStatusTarget,
@@ -168,7 +169,7 @@ fn every_binding_clause_of_the_refresh_query_stands_alone() {
     other_repository.change.repository =
         RepositoryIdentity::new(HOST.to_owned(), "acme".to_owned(), "other".to_owned()).unwrap();
     let mut other_project = delivery.clone();
-    other_project.change.change = ChangeId::new("project/102/merge-request/42".to_owned()).unwrap();
+    other_project.change.change = Change::MergeRequest(MergeRequestChange::new(102, 42).unwrap());
     let mut retried = delivery.clone();
     retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
     let mut wider_format = delivery.clone();

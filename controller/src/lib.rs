@@ -59,9 +59,9 @@ pub use file_ledger::{
     FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError, FileLedgerRoot,
 };
 pub use identity::{
-    ChangeId, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
-    OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
-    ProviderRunId, ProviderRunIdentity, PullRequestChange,
+    Change, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
+    MergeRequestChange, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, PullRequestChange,
 };
 pub use ingress::{
     AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits,

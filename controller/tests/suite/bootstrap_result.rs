@@ -8,8 +8,9 @@ use amiss_wire::de::Document as _;
 use std::sync::Arc;
 
 use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, result_bytes};
+use amiss_controller::MergeRequestChange;
 use amiss_controller::{
-    BootstrapTermination, ChangeId, ChangeLocator, CheckPlan, ControllerEvaluationId, DeliveryId,
+    BootstrapTermination, Change, ChangeLocator, CheckPlan, ControllerEvaluationId, DeliveryId,
     DeliveryIdentity, Evaluation, IntegrationId, OidPair, PolicyControls, ProviderIdentity,
     ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
     RunIdentity, RunRefs, RunRequest, RunnerOutcome, check_binding, check_plan,
@@ -66,7 +67,7 @@ fn request() -> RunRequest {
                     "docs".to_owned(),
                 )
                 .unwrap(),
-                change: ChangeId::new("merge-request/42".to_owned()).unwrap(),
+                change: Change::MergeRequest(MergeRequestChange::new(1, 42).unwrap()),
             },
             RunRefs {
                 forge: ForgeDialect::Gitlab,
