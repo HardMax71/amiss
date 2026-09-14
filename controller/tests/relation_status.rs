@@ -2,6 +2,7 @@
     clippy::unwrap_used,
     reason = "the fixtures construct known-valid relation audits and identities"
 )]
+use amiss_wire::controls::RequiredStatusName;
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -275,7 +276,8 @@ fn durable_status_replays_and_completes_exactly_across_restart() {
         .status_destinations
         .push(RelationStatusDestination {
             subject_role: ArtifactId::new("source".to_owned()).unwrap(),
-            required_status_name: "Amiss source relation".parse().unwrap(),
+            required_status_name: RequiredStatusName::try_from("Amiss source relation".to_owned())
+                .unwrap(),
         });
     let registry =
         relation_registry(vec![fixture.transition.relation.plan.as_ref().clone()]).unwrap();

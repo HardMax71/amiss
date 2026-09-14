@@ -1,3 +1,4 @@
+use amiss_wire::controls::RequiredStatusName;
 use amiss_wire::de::Document as _;
 use std::collections::VecDeque;
 use std::io;
@@ -116,7 +117,8 @@ pub fn execution_constraint(
     descriptor.action_object_format = ObjectFormat::Sha1;
     descriptor.action_commit_oid = repositories.action_commit.clone();
     descriptor.action_tree_oid = repositories.action_tree.clone();
-    descriptor.required_status_name = required_status_name.parse().map_err(io::Error::other)?;
+    descriptor.required_status_name =
+        RequiredStatusName::try_from(required_status_name.to_owned()).map_err(io::Error::other)?;
     descriptor.bootstrap_digest = bootstrap_digest;
     descriptor.validate().map_err(io::Error::other)?;
     Ok(descriptor)

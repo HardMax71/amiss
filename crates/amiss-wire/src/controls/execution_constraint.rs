@@ -56,7 +56,8 @@ pub enum ConstraintPlatform {
 }
 
 /// The admitted name of one required provider check.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct RequiredStatusName(String);
 
 impl RequiredStatusName {
@@ -71,17 +72,11 @@ impl RequiredStatusName {
     }
 }
 
-impl std::str::FromStr for RequiredStatusName {
-    type Err = &'static str;
+impl TryFrom<String> for RequiredStatusName {
+    type Error = &'static str;
 
-    fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        Self::new(raw.to_owned()).ok_or("invalid required status name")
-    }
-}
-
-impl std::fmt::Display for RequiredStatusName {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str(self.as_str())
+    fn try_from(raw: String) -> Result<Self, Self::Error> {
+        Self::new(raw).ok_or("invalid required status name")
     }
 }
 

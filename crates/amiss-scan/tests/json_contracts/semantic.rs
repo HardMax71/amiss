@@ -1,5 +1,6 @@
 use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Envelope;
+use amiss_wire::model::ArtifactId;
 use sha2::Digest as _;
 use std::borrow::Cow;
 
@@ -49,7 +50,7 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
             kind: SemanticProducerKind::SiteBuild,
-            identity: "fixture".parse().unwrap(),
+            identity: ArtifactId::try_from("fixture".to_owned()).unwrap(),
             version: semantic::observation::SITE_BUILD_VERSION.to_owned(),
             context_digest: amiss_wire::model::Digest::from([20; 32]),
             input_digest: amiss_wire::model::Digest::from([21; 32]),
@@ -148,7 +149,7 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
             semantic::observation::SPHINX_INVENTORY_VERSION,
             Observation::Sphinx(SphinxLabelObservation {
                 kind: SphinxLabelKind::Current,
-                inventory: "python".parse().unwrap(),
+                inventory: ArtifactId::try_from("python".to_owned()).unwrap(),
                 name: "context managers".to_owned(),
                 destination: "https://docs.python.org/reference/datamodel.html".to_owned(),
             }),
@@ -158,7 +159,7 @@ fn semantic_consumers_refuse_unknown_or_foreign_observations_with_correct_digest
             record::PRODUCER_VERSION,
             Observation::Record(record::Observation {
                 kind: record::ObservationKind::Current,
-                name: "rust/api".parse().unwrap(),
+                name: ArtifactId::try_from("rust/api".to_owned()).unwrap(),
                 records: Vec::new(),
             }),
         ),

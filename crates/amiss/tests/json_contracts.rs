@@ -1,3 +1,4 @@
+use amiss_wire::model::RepoPathText;
 use sha2::Digest as _;
 use std::{fs, process::Command};
 
@@ -109,7 +110,7 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
     let original: ReportEnvelope = serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("report.json");
-    let text_target = RepoPath::Text("docs/query.md".parse().unwrap());
+    let text_target = RepoPath::Text(RepoPathText::try_from("docs/query.md".to_owned()).unwrap());
     for (intent, resolution, flag, target) in [
         (
             Some(text_target.clone()),

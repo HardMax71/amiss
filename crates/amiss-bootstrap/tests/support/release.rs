@@ -1,3 +1,5 @@
+use amiss_wire::model::ArtifactId;
+use amiss_wire::model::RepoPathText;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -38,16 +40,16 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
     let binary_path = format!("dist/amiss-{}", platform.as_ref());
     let artifacts = vec![StagedArtifact {
         platform,
-        artifact_name: format!("amiss-{}", platform.as_ref()).parse().unwrap(),
+        artifact_name: ArtifactId::try_from(format!("amiss-{}", platform.as_ref())).unwrap(),
         files: vec![
             StagedFile {
-                path: binary_path.parse().unwrap(),
+                path: RepoPathText::try_from(binary_path.clone()).unwrap(),
                 role: RuntimeRole::Executable,
                 executable: true,
                 bytes: engine,
             },
             StagedFile {
-                path: "action.yml".parse().unwrap(),
+                path: RepoPathText::try_from("action.yml".to_owned()).unwrap(),
                 role: RuntimeRole::RuntimeData,
                 executable: false,
                 bytes: ACTION,
@@ -64,7 +66,10 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
         .unwrap(),
         object_format: amiss_wire::model::ObjectFormat::Sha1,
         commit_oid: "a".repeat(40).parse().unwrap(),
-        locks: vec![("Cargo.lock".parse().unwrap(), lock)],
+        locks: vec![(
+            RepoPathText::try_from("Cargo.lock".to_owned()).unwrap(),
+            lock,
+        )],
     };
     let (manifest_bytes, manifest_digest) = build_manifest(build, artifacts).unwrap();
     let engine_digest = Digest::from(

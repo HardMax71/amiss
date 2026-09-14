@@ -1,9 +1,7 @@
-use core::{fmt, str::FromStr};
-
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct ArtifactId(String);
 
 impl ArtifactId {
@@ -18,17 +16,11 @@ impl ArtifactId {
     }
 }
 
-impl fmt::Display for ArtifactId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
+impl TryFrom<String> for ArtifactId {
+    type Error = &'static str;
 
-impl FromStr for ArtifactId {
-    type Err = &'static str;
-
-    fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        Self::new(raw.to_owned()).ok_or("invalid artifact identity")
+    fn try_from(raw: String) -> Result<Self, Self::Error> {
+        Self::new(raw).ok_or("invalid artifact identity")
     }
 }
 
@@ -67,7 +59,8 @@ fn id_body_valid(raw: &[u8]) -> bool {
 }
 
 /// Full branch ref under the rolling `ref-format` contract.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct BranchRef(String);
 
 impl BranchRef {
@@ -111,17 +104,11 @@ impl BranchRef {
     }
 }
 
-impl fmt::Display for BranchRef {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
+impl TryFrom<String> for BranchRef {
+    type Error = &'static str;
 
-impl FromStr for BranchRef {
-    type Err = &'static str;
-
-    fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        Self::new(raw.to_owned()).ok_or("invalid branch reference")
+    fn try_from(raw: String) -> Result<Self, Self::Error> {
+        Self::new(raw).ok_or("invalid branch reference")
     }
 }
 

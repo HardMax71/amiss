@@ -10,7 +10,9 @@ use amiss_controller::{
     RelationStatusDestination, RelationSubject, RelationSubjectTransition, TriggeredRelation,
     relation_transition,
 };
-use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
+use amiss_wire::controls::{
+    ProjectionKind, ProjectionSource, RecordSetSelection, RequiredStatusName,
+};
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use secrecy::SecretString;
 
@@ -88,7 +90,8 @@ fn transition() -> amiss_controller::RelationTransition {
         },
         status_destinations: vec![RelationStatusDestination {
             subject_role: artifact("documentation"),
-            required_status_name: "Amiss cross-repository".parse().unwrap(),
+            required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
+                .unwrap(),
         }],
     });
     relation_transition(

@@ -2,7 +2,8 @@ use amiss_controller::PullRequestChange;
 use amiss_controller::{
     ArtifactReference, Change, CheckConclusion, ProviderError, ProviderRunAttempt, RunFailure,
 };
-use amiss_wire::model::{ForgeDialect, ObjectFormat};
+use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::model::{ForgeDialect, ObjectFormat, RepoPathText};
 use amiss_wire::report::model::{
     AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
 };
@@ -27,7 +28,9 @@ fn review_bodies_carry_the_report_feedback_lines() {
             effective_disposition: Disposition::Warn,
             finding_kinds: vec![FindingKind::DependencyChangedSubjectUnchanged],
             location_count: std::num::NonZeroU64::new(3).unwrap(),
-            target: Some(RepoPath::Text("docs/guide.md".parse().unwrap())),
+            target: Some(RepoPath::Text(
+                RepoPathText::try_from("docs/guide.md".to_owned()).unwrap(),
+            )),
         }],
         status: AvailableFeedbackStatus::Available,
     }));
@@ -232,7 +235,7 @@ fn config() -> Config {
     Config {
         provider: provider("gitea"),
         reviewer: reviewer(),
-        review_name: "amiss".parse().unwrap(),
+        review_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
     }
 }
 
@@ -262,7 +265,8 @@ fn a_publication_is_validated_in_every_field() {
     let mut wrong_candidate = fresh();
     wrong_candidate.run.commits.candidate = oid('9');
     let mut wrong_name = fresh();
-    wrong_name.check.required_status_name = "other".parse().unwrap();
+    wrong_name.check.required_status_name =
+        RequiredStatusName::try_from("other".to_owned()).unwrap();
     for (reason, wrong) in [
         ("gate", wrong_gate),
         ("attempt", wrong_attempt),

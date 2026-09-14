@@ -7,7 +7,9 @@ use amiss_controller::{
     RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_audit_plan,
     relation_transition,
 };
-use amiss_wire::controls::{ProjectionKind, ProjectionSource, RecordSetSelection};
+use amiss_wire::controls::{
+    ProjectionKind, ProjectionSource, RecordSetSelection, RequiredStatusName,
+};
 use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::{
@@ -132,7 +134,8 @@ fn registered_relation() -> Option<Arc<RelationPlan>> {
         },
         status_destinations: vec![RelationStatusDestination {
             subject_role: ArtifactId::new("documentation".to_owned())?,
-            required_status_name: "Amiss cross-repository".parse().ok()?,
+            required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
+                .ok()?,
         }],
     });
     Some(registered)
@@ -146,7 +149,7 @@ fn report() -> Option<Vec<u8>> {
     else {
         return None;
     };
-    evaluation.target_ref = Some("refs/heads/main".parse().ok()?);
+    evaluation.target_ref = Some(BranchRef::try_from("refs/heads/main".to_owned()).ok()?);
     report.payload_digest = amiss_wire::model::Digest::from(
         sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
             .chain_update([0_u8])

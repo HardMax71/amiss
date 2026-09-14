@@ -3,7 +3,7 @@ use amiss_git::GitLimits;
 use amiss_scan::resolve::{ForgeContext, RAW_EVIDENCE_DOMAIN};
 use amiss_scan::{Error, Resolution, ScanLimits};
 use amiss_wire::controls::{ResourceName, TargetKind};
-use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid};
+use amiss_wire::model::{Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobContent, ExternalReference, Missing, Target, UnsupportedSemantics, VersionScope,
@@ -344,7 +344,7 @@ fn repeated_historical_walks_share_the_tree_entry_budget() {
 fn a_ref_spelled_like_a_full_oid_is_ambiguous() {
     let raw = "0123456789012345678901234567890123456789";
     let mut context = forge_context(ForgeDialect::Github);
-    context.candidate_ref = Some(format!("refs/heads/{raw}").parse().unwrap());
+    context.candidate_ref = Some(BranchRef::try_from(format!("refs/heads/{raw}")).unwrap());
     let (intent, resolution) = bed()
         .run_as(
             Adapter::Markdown,
@@ -482,7 +482,7 @@ fn bitbucket_cloud_recognizes_only_the_documented_source_contract() {
     ));
 
     let slashed = ForgeContext {
-        candidate_ref: Some("refs/heads/feature/x".parse().unwrap()),
+        candidate_ref: Some(BranchRef::try_from("refs/heads/feature/x".to_owned()).unwrap()),
         ..context
     };
     let (_intent, no_guessed_split) = bed

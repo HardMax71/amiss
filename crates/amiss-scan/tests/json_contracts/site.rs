@@ -2,6 +2,7 @@ use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_git::Repository;
 use amiss_scan::{SetupShell, pipeline::commit_pair, report::RequestDigests};
 use amiss_wire::envelope::Payload as _;
+use amiss_wire::model::ArtifactId;
 use amiss_wire::{
     controls::Profile,
     model::{ObjectFormat, Oid},
@@ -56,7 +57,7 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
             schema: TemplateSchema::Current,
             producer: SemanticProducer {
                 kind: SemanticProducerKind::SiteBuild,
-                identity: "fixture".parse().unwrap(),
+                identity: ArtifactId::try_from("fixture".to_owned()).unwrap(),
                 version: SITE_BUILD_VERSION.to_owned(),
                 context_digest: amiss_wire::model::Digest::from([20; 32]),
                 input_digest: amiss_wire::model::Digest::from([21; 32]),

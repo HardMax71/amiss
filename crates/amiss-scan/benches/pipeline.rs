@@ -16,7 +16,7 @@ use amiss_scan::{
 };
 use amiss_wire::controls::GitMode;
 use amiss_wire::extraction::{Opaque, Work};
-use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::EngineProvenance;
 use divan::{Bencher, black_box};
 
@@ -197,8 +197,8 @@ fn resolve_repository_path(bencher: Bencher<'_, '_>, shape: ResolutionShape) {
             "widgets".to_owned(),
         )
         .unwrap(),
-        candidate_ref: Some("refs/heads/feature/x".parse().unwrap()),
-        default_ref: Some("refs/heads/main".parse().unwrap()),
+        candidate_ref: Some(BranchRef::try_from("refs/heads/feature/x".to_owned()).unwrap()),
+        default_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
     };
     let (target, mode, forge, document, semantic) = match shape {
         ResolutionShape::Native => (

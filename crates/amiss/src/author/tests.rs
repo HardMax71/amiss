@@ -1,4 +1,5 @@
 #![cfg(test)]
+use amiss_wire::model::RepoPathText;
 
 use crate::invocation::AuthorInvocation;
 
@@ -7,7 +8,7 @@ use super::round_trips;
 fn author(path: &str, line: u64, name: &str) -> AuthorInvocation {
     AuthorInvocation {
         repo: std::path::PathBuf::from("."),
-        path: path.parse().unwrap(),
+        path: RepoPathText::try_from(path.to_owned()).unwrap(),
         line,
         name: name.to_owned(),
     }

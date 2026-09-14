@@ -21,7 +21,7 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
         Err(_defect) => {
             eprintln!(
                 "amiss claim: {} is unreadable under the repo root",
-                author.path
+                author.path.as_str()
             );
             return ExitCode::FAILURE;
         }
@@ -36,7 +36,8 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
         let held = amiss_md::lines::scan(&bytes).count();
         eprintln!(
             "amiss claim: {} holds {held} lines and L{} is past them",
-            author.path, author.line
+            author.path.as_str(),
+            author.line
         );
         return ExitCode::FAILURE;
     };
@@ -49,7 +50,8 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
     let Ok(expected) = std::str::from_utf8(content) else {
         eprintln!(
             "amiss claim: line L{} of {} is not UTF-8, so it cannot be quoted",
-            author.line, author.path
+            author.line,
+            author.path.as_str()
         );
         return ExitCode::FAILURE;
     };
@@ -57,11 +59,15 @@ pub(crate) fn run(author: &AuthorInvocation) -> ExitCode {
     let spellings = [
         format!(
             "[amiss:{}]: <amiss:value?path={}&line=L{}> \"{expected}\"",
-            author.name, author.path, author.line
+            author.name,
+            author.path.as_str(),
+            author.line
         ),
         format!(
             "[amiss:{}]: <amiss:value?path={}&line=L{}> '{expected}'",
-            author.name, author.path, author.line
+            author.name,
+            author.path.as_str(),
+            author.line
         ),
     ];
     for definition in &spellings {

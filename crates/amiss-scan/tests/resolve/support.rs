@@ -6,7 +6,7 @@ use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
 use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover};
 use amiss_wire::controls::TargetKind;
 use amiss_wire::model::ForgeDialect;
-use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{Adapter, BranchRef, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     BlobContent, ExternalReference, InvalidReference, Target, UnsupportedSemantics, VersionScope,
@@ -133,8 +133,8 @@ pub(crate) fn forge_context(dialect: ForgeDialect) -> ForgeContext {
             "widgets".to_owned(),
         )
         .unwrap(),
-        candidate_ref: Some(candidate_ref.parse().unwrap()),
-        default_ref: Some("refs/heads/main".parse().unwrap()),
+        candidate_ref: Some(BranchRef::try_from(candidate_ref.to_owned()).unwrap()),
+        default_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
     }
 }
 
@@ -390,8 +390,8 @@ fn ambiguous_trusted_splits_have_unknown_version_scope() {
             "widgets".to_owned(),
         )
         .unwrap(),
-        candidate_ref: Some("refs/heads/a".parse().unwrap()),
-        default_ref: Some("refs/heads/a/b".parse().unwrap()),
+        candidate_ref: Some(BranchRef::try_from("refs/heads/a".to_owned()).unwrap()),
+        default_ref: Some(BranchRef::try_from("refs/heads/a/b".to_owned()).unwrap()),
     };
     let (intent, row) = bed
         .run_as(

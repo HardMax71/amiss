@@ -3,6 +3,7 @@
     clippy::unwrap_used,
     reason = "fixed provider fixtures must fail loudly"
 )]
+use amiss_wire::controls::RequiredStatusName;
 
 use amiss_controller::{
     ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, IntegrationId, LeaseFence,
@@ -175,7 +176,7 @@ fn commit_status_requests_and_responses_use_the_native_wire_shape() {
             "{MARKER}{}",
             Digest::from(sha2::Sha256::digest(b"projection").0)
         ),
-        context: "Amiss cross-repository".parse().unwrap(),
+        context: RequiredStatusName::try_from("Amiss cross-repository".to_owned()).unwrap(),
     };
     assert_eq!(
         serde_json::to_value(request).unwrap(),
@@ -387,7 +388,8 @@ fn status_fixture(fixture: &Fixture) -> (RelationStatusRecord, RelationStatusTar
             .commits
             .candidate
             .clone(),
-        required_status_name: "Amiss cross-repository".parse().unwrap(),
+        required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
+            .unwrap(),
     };
     let audit = validate_relation_audit(audit_bundle(&audit_fixture)).unwrap();
     (
@@ -438,6 +440,6 @@ fn record(fixture: &Fixture, expected: &CreateCommitStatus) -> CommitStatusRecor
         status: expected.state.clone(),
         target_url: expected.target_url.clone(),
         description: expected.description.clone(),
-        context: expected.context.to_string(),
+        context: expected.context.as_str().to_owned(),
     }
 }

@@ -4,6 +4,7 @@
     clippy::unwrap_used,
     reason = "integration harness over asserted fixture shapes"
 )]
+use amiss_wire::model::BranchRef;
 
 use amiss_wire::de::Document as _;
 use amiss_wire::envelope::document_digest;
@@ -260,8 +261,8 @@ fn sealed_expectations(
     };
     let sealed = SealedExpectations {
         profile: amiss_wire::controls::Profile::Observe,
-        candidate_ref: CANDIDATE_REF.parse().unwrap(),
-        target_ref: TARGET_REF.parse().unwrap(),
+        candidate_ref: BranchRef::try_from(CANDIDATE_REF.to_owned()).unwrap(),
+        target_ref: BranchRef::try_from(TARGET_REF.to_owned()).unwrap(),
         repository: evaluation.repository.unwrap(),
         provider: PROVIDER.to_owned(),
         provider_run_id: RUN_ID.to_owned(),
@@ -327,13 +328,13 @@ fn a_complete_block_report_is_accepted_at_class_one() {
 fn the_sealed_identity_binds_refs_time_and_candidate() {
     assert_eq!(
         refused(Deviation::expect(|sealed| {
-            sealed.candidate_ref = "refs/heads/other".parse().unwrap();
+            sealed.candidate_ref = BranchRef::try_from("refs/heads/other".to_owned()).unwrap();
         })),
         AcceptanceDefect::SealedIdentity
     );
     assert_eq!(
         refused(Deviation::expect(|sealed| {
-            sealed.target_ref = "refs/heads/other".parse().unwrap();
+            sealed.target_ref = BranchRef::try_from("refs/heads/other".to_owned()).unwrap();
         })),
         AcceptanceDefect::SealedIdentity
     );

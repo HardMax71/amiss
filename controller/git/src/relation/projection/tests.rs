@@ -9,7 +9,9 @@ use amiss_controller::{
     RelationStatusDestination, RelationSubject, RelationSubjectTransition, RelationTransition,
     TriggeredRelation, relation_transition,
 };
-use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
+use amiss_wire::controls::{
+    BlobLineSelection, ProjectionKind, ProjectionSource, RequiredStatusName,
+};
 use amiss_wire::envelope::{Envelope, Payload as _};
 use amiss_wire::model::{
     ArtifactId, BranchRef, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
@@ -111,7 +113,8 @@ fn fixture(aggregate_records: u64) -> Fixture {
         },
         status_destinations: vec![RelationStatusDestination {
             subject_role: artifact("documentation"),
-            required_status_name: "Amiss cross-repository".parse().unwrap(),
+            required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
+                .unwrap(),
         }],
     });
     let transition = relation_transition(

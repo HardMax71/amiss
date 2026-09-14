@@ -73,7 +73,7 @@ pub(super) fn classify_claim(
         .claim_path
         .unique_value()
         .filter(|value| !value.contains(['&', '<', '>', '"', ' ', '%', '?', '#', '\\']))
-        .and_then(|value| value.parse::<RepoPathText>().ok());
+        .and_then(|value| RepoPathText::new(value.to_owned()));
     match (repo, name, line, path) {
         (Some(repo), Some(name), Some(line), Some(path)) if codes.is_empty() => {
             Ok(AuthorInvocation {

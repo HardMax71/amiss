@@ -53,8 +53,8 @@ fn spec_to_rest() -> ForgeContext {
             "spec_to_rest".to_owned(),
         )
         .unwrap(),
-        candidate_ref: Some("refs/heads/main".parse().unwrap()),
-        default_ref: Some("refs/heads/main".parse().unwrap()),
+        candidate_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
+        default_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
     }
 }
 

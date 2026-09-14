@@ -1,4 +1,5 @@
 use amiss_wire::envelope::{Payload as _, document_digest};
+use amiss_wire::model::ArtifactId;
 use amiss_wire::{
     report::{
         PAYLOAD_SCHEMA, ReportDefect,
@@ -52,7 +53,7 @@ fn reports() -> Vec<ReportEnvelope> {
         execution_constraint_digest: descriptor_digest,
         mechanism: SandboxMechanism::OciRootlessSandbox,
         platform: descriptor.selected_platform,
-        provider: statement.provider.parse().unwrap(),
+        provider: ArtifactId::try_from(statement.provider.clone()).unwrap(),
         provider_run_attempt: statement.provider_run_attempt,
         provider_run_id: statement.provider_run_id.clone(),
         sandbox_descriptor_digest: controls.sandbox.descriptor_digest,
@@ -75,7 +76,7 @@ fn reports() -> Vec<ReportEnvelope> {
     controls.semantic_evidence = Some(vec![SemanticEvidenceProvenance {
         payload_digest: amiss_wire::model::Digest::from([23; 32]),
         producer: SemanticEvidenceProducer {
-            identity: "producer".parse().unwrap(),
+            identity: ArtifactId::try_from("producer".to_owned()).unwrap(),
             input_digest: amiss_wire::model::Digest::from([21; 32]),
             kind: SemanticProducerKind::RecordSet,
             version: "1".to_owned(),
@@ -117,7 +118,7 @@ fn forge_action(
         dependency_lock_digest: release_manifest.dependency_lock_digest,
         kind: ForgeActionKind::ForgeAction,
         manifest_path: descriptor.manifest_path.clone(),
-        selected_artifact_name: artifact.artifact_name.to_string(),
+        selected_artifact_name: artifact.artifact_name.as_str().to_owned(),
         release_manifest,
         release_manifest_digest,
         selected_platform: descriptor.selected_platform,

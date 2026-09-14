@@ -1,3 +1,4 @@
+use amiss_wire::controls::RequiredStatusName;
 use std::time::Duration;
 
 use super::super::model::BranchRecord;
@@ -14,7 +15,7 @@ fn live_client_rejects_unsafe_transport_and_identity_configuration() {
             reviewer(),
             "a-secure-dedicated-token".to_owned(),
             api,
-            "amiss".parse().unwrap(),
+            RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
             timeouts,
             objects(),
         )

@@ -1,13 +1,13 @@
-use core::{fmt, str::FromStr};
 use std::sync::Arc;
 
 use hex_fmt::HexFmt;
-use serde::Serialize;
-use serde_with::{DeserializeFromStr, DisplayFromStr, SerializeDisplay, serde_as};
+use serde::{Deserialize, Serialize};
+use serde_with::{DisplayFromStr, serde_as};
 
 /// A repository path whose bytes are valid UTF-8, mirroring the schema's
 /// `RepoPathText`: the form every configuration surface is confined to.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct RepoPathText(String);
 
 impl RepoPathText {
@@ -22,17 +22,11 @@ impl RepoPathText {
     }
 }
 
-impl fmt::Display for RepoPathText {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(&self.0)
-    }
-}
+impl TryFrom<String> for RepoPathText {
+    type Error = &'static str;
 
-impl FromStr for RepoPathText {
-    type Err = &'static str;
-
-    fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        Self::new(raw.to_owned()).ok_or("invalid repository path")
+    fn try_from(raw: String) -> Result<Self, Self::Error> {
+        Self::new(raw).ok_or("invalid repository path")
     }
 }
 

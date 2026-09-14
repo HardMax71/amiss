@@ -1,3 +1,4 @@
+use amiss_wire::controls::RequiredStatusName;
 use sha2::Digest as _;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -198,7 +199,7 @@ impl GiteaRest for FakeRest {
             status: status.state.clone(),
             target_url: status.target_url.clone(),
             description: status.description.clone(),
-            context: status.context.to_string(),
+            context: status.context.as_str().to_owned(),
         };
         state.statuses.insert(0, created.clone());
         Ok(created)
@@ -269,7 +270,7 @@ impl Fixture {
             config: Config {
                 provider,
                 reviewer: reviewer(),
-                review_name: "amiss".parse().unwrap(),
+                review_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
             },
             rest: rest.clone(),
             objects: Arc::new(FakeObjects { objects }),
@@ -311,7 +312,7 @@ impl Fixture {
             evaluation_id: ControllerEvaluationId::new(evaluation.to_owned()).unwrap(),
             check: CheckBinding {
                 plan_digest: digest,
-                required_status_name: "amiss".parse().unwrap(),
+                required_status_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
                 execution_constraint_digest: digest,
             },
             run: snapshot.run,

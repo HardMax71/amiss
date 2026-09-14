@@ -1,4 +1,5 @@
 use amiss_wire::de::Document as _;
+use amiss_wire::model::RepoPathText;
 use amiss_wire::{
     controls::{ProjectionKind, ProjectionSource, ScannerPolicy, TreePathSelection},
     de::ErrorKind,
@@ -65,7 +66,7 @@ fn projection_suffix_normalizes_null_to_absence() {
     let mut digests = Vec::new();
     for suffix in [Some(".md".to_owned()), None] {
         let source = ProjectionSource::TreePaths(TreePathSelection {
-            root: "docs".parse().unwrap(),
+            root: RepoPathText::try_from("docs".to_owned()).unwrap(),
             suffix,
             maximum_depth: 3,
         });

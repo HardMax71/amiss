@@ -8,7 +8,7 @@ use amiss_scan::{
     DocumentStatus, Intent, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover,
 };
 use amiss_wire::controls::SourceConstruct;
-use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::{
     ExternalReference, InvalidReference, Missing, Target, UnsupportedSemantics, VersionScope,
@@ -130,8 +130,8 @@ fn context(
             name.to_owned(),
         )
         .unwrap(),
-        candidate_ref: Some(candidate_ref.parse().unwrap()),
-        default_ref: Some(default_ref.parse().unwrap()),
+        candidate_ref: Some(BranchRef::try_from(candidate_ref.to_owned()).unwrap()),
+        default_ref: Some(BranchRef::try_from(default_ref.to_owned()).unwrap()),
     }
 }
 

@@ -134,7 +134,7 @@ fn parse_args(argv: &[OsString]) -> Option<Args> {
     {
         return None;
     }
-    let required_status_name = required_status_name?.parse().ok()?;
+    let required_status_name = RequiredStatusName::try_from(required_status_name?.clone()).ok()?;
     let action_commit_oid = Oid::new(ObjectFormat::Sha1, action_commit_oid?)?;
     Some(Args {
         action_repository,
