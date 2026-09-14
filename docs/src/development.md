@@ -39,9 +39,9 @@ window. The hook
 is a no-op where cargo-sweep is not installed. Code CI runs the same two hook stages. What CI adds on
 top is the work that does not belong on a developer's machine: the fuzz packages' release runs,
 whose separate lockfiles and release builds cost minutes, and mutation, which costs ten of them
-for a code change. Clippy over the scanner fuzz crate does run on push, since that crate is its
-own manifest and a rename that misses it fails nowhere else. A push should not buy what a pull
-request already measures.
+for a code change. Clippy and cargo shear over the scanner fuzz crate do run on push, since that
+crate is its own manifest and a rename or a dropped import that misses it fails nowhere else. A
+push should not buy what a pull request already measures.
 
 The shared [change detector](https://github.com/HardMax71/amiss/blob/main/.github/workflows/changes.yml)
 compares Git revisions, including renames and deletions. Documentation-only changes retain the
