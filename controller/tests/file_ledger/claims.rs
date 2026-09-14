@@ -2,11 +2,11 @@ use sha2::Digest as _;
 use std::fs;
 use std::sync::Arc;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    ChangeId, ControllerClock, ControllerEvaluationId, DeliveryClaim, DeliveryLease,
-    DeliveryLedger, FileLedger, FileLedgerError, LeaseCompletion, LeaseFence, LeaseRenewal,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, StageOutcome,
-    StagedPublication,
+    Change, ControllerClock, ControllerEvaluationId, DeliveryClaim, DeliveryLease, DeliveryLedger,
+    FileLedger, FileLedgerError, LeaseCompletion, LeaseFence, LeaseRenewal, ProviderRunAttempt,
+    ProviderRunId, ProviderRunIdentity, Publication, StageOutcome, StagedPublication,
 };
 use amiss_wire::model::{ObjectFormat, Oid};
 use tempfile::TempDir;
@@ -20,7 +20,7 @@ use super::support::{
 fn a_live_claim_resumes_for_its_owner_and_is_busy_for_another() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut first_owner = open(directory.path(), &clock);
     let first = executed(first_owner.claim(&delivery, &check_binding()).unwrap()).unwrap();
 
@@ -46,7 +46,7 @@ fn the_epoch_instant_is_a_valid_clock_reading() {
     let clock = TestClock::at(0);
     let mut ledger = open(directory.path(), &clock);
     assert!(matches!(
-        ledger.claim(&delivery("42"), &check_binding()).unwrap(),
+        ledger.claim(&delivery(42), &check_binding()).unwrap(),
         DeliveryClaim::Execute(_)
     ));
 }
@@ -140,7 +140,7 @@ fn every_refusal_says_what_it_is_and_keeps_its_cause() {
 fn expiry_reclaims_the_same_evaluation_with_a_higher_fence() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut first_owner = open(directory.path(), &clock);
     let mut second_owner = open(directory.path(), &clock);
     let first = executed(first_owner.claim(&delivery, &check_binding()).unwrap()).unwrap();
@@ -167,8 +167,8 @@ fn expiry_reclaims_the_same_evaluation_with_a_higher_fence() {
 fn renewal_advances_the_deadline_and_rejects_stale_or_rebound_claims() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let rebound = delivery("43");
-    let delivery = delivery("42");
+    let rebound = delivery(43);
+    let delivery = delivery(42);
     let mut ledger = open(directory.path(), &clock);
     let first = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
 
@@ -193,7 +193,7 @@ fn renewal_advances_the_deadline_and_rejects_stale_or_rebound_claims() {
 fn clock_rollback_does_not_shorten_a_persisted_lease() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut owner = open(directory.path(), &clock);
     let first = executed(owner.claim(&delivery, &check_binding()).unwrap()).unwrap();
 
@@ -224,7 +224,7 @@ fn clock_rollback_does_not_shorten_a_persisted_lease() {
 fn the_check_binding_is_frozen_for_every_delivery_transition() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let check = check_binding();
     let mut changed = check.clone();
     changed.plan_digest = amiss_wire::model::Digest::from(
@@ -291,7 +291,7 @@ fn a_lease_and_a_publication_are_matched_field_by_field() {
     for (reason, deviate) in leases {
         let directory = TempDir::new().unwrap();
         let clock = TestClock::at(1_000);
-        let delivery = delivery("42");
+        let delivery = delivery(42);
         let mut ledger = open(directory.path(), &clock);
         let mut lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
         deviate(&mut lease);
@@ -317,7 +317,8 @@ fn a_lease_and_a_publication_are_matched_field_by_field() {
             .unwrap();
         }),
         ("another change", |publication| {
-            publication.run.change.change = ChangeId::new("99".to_owned()).unwrap();
+            publication.run.change.change =
+                Change::PullRequest(PullRequestChange::new(1, 1, 99).unwrap());
         }),
         ("another candidate commit", |publication| {
             publication.run.commits.candidate =
@@ -327,7 +328,7 @@ fn a_lease_and_a_publication_are_matched_field_by_field() {
     for (reason, deviate) in publications {
         let directory = TempDir::new().unwrap();
         let clock = TestClock::at(1_000);
-        let delivery = delivery("42");
+        let delivery = delivery(42);
         let mut ledger = open(directory.path(), &clock);
         let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
         let mut publication = publication(&delivery, &lease);
@@ -346,7 +347,7 @@ fn a_lease_and_a_publication_are_matched_field_by_field() {
 fn a_lease_belongs_to_the_owner_that_took_it() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut owner = open(directory.path(), &clock);
     let lease = executed(owner.claim(&delivery, &check_binding()).unwrap()).unwrap();
     drop(owner);
@@ -385,7 +386,7 @@ fn completion_answers_for_the_staged_publication_alone() {
     for (reason, complete_first, deviate) in rows {
         let directory = TempDir::new().unwrap();
         let clock = TestClock::at(1_000);
-        let delivery = delivery("42");
+        let delivery = delivery(42);
         let mut ledger = open(directory.path(), &clock);
         let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
         let publication = publication(&delivery, &lease);
@@ -412,7 +413,7 @@ fn an_evaluation_identity_varies_across_both_halves_of_its_nonce() {
     let mut halves: [std::collections::BTreeSet<String>; 2] = Default::default();
 
     for index in 0..4 {
-        let delivery = delivery_with_id(&format!("delivery-{index}"), "42");
+        let delivery = delivery_with_id(&format!("delivery-{index}"), 42);
         let DeliveryClaim::Execute(lease) = ledger.claim(&delivery, &check_binding()).unwrap()
         else {
             panic!("a fresh delivery is claimed for execution");

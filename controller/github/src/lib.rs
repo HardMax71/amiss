@@ -10,7 +10,7 @@ mod workflow_artifact;
 use std::sync::Arc;
 
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion,
+    AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion,
     DeliveryId, DeliveryIdentity, GitHubWebhook, IngressCheck, IntegrationId, OpaqueId,
     ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace, ProviderRunAttempt,
     ProviderRunId, ProviderRunIdentity, Publication, PullRequestChange, SignedTimePolicy,
@@ -27,17 +27,15 @@ pub use acquisition::{
 pub use live::{GitHubApp, GitHubClientError, GitHubTimeouts};
 pub use workflow_artifact::{GitHubArtifactError, decode_workflow_artifact};
 
-const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v1";
+const RUN_DOMAIN: &str = "amiss/controller-github-pull-request-v2";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GitHubPullRequest<'a> {
     pub change: &'a ChangeLocator,
+    pub pull_request: PullRequestChange,
     pub installation_id: u64,
-    pub repository_id: u64,
     pub repository_owner: &'a str,
     pub repository_name: &'a str,
-    pub pull_request_id: u64,
-    pub number: u64,
     pub candidate_commit: &'a Oid,
 }
 
@@ -362,12 +360,13 @@ fn bind_pull_request(
 ) -> Result<PullRequestFacts, ProviderError> {
     use ProviderError::Authentication;
 
-    let change = PullRequestChange::new(repository_id, binding.pull_request_id, binding.number)
-        .ok_or(Authentication)?;
     let change = ChangeLocator {
         provider: provider.clone(),
         repository,
-        change: ChangeId::new(change.to_string()).ok_or(Authentication)?,
+        change: Change::PullRequest(
+            PullRequestChange::new(repository_id, binding.pull_request_id, binding.number)
+                .ok_or(Authentication)?,
+        ),
     };
     let integration = IntegrationId::new(installation_id.to_string()).ok_or(Authentication)?;
     let candidate =
@@ -497,12 +496,9 @@ fn validate_delivery<'a>(
         .parse::<u64>()
         .ok()
         .and_then(positive);
-    let change = delivery
-        .change
-        .change
-        .as_str()
-        .parse::<PullRequestChange>()
-        .ok();
+    let Change::PullRequest(pull_request) = delivery.change.change else {
+        return Err(ProviderError::InvalidResponse);
+    };
     let run_digest = delivery
         .provider_run
         .run_id
@@ -532,19 +528,12 @@ fn validate_delivery<'a>(
         return Err(ProviderError::InvalidResponse);
     }
     let installation_id = installation_id.ok_or(ProviderError::InvalidResponse)?;
-    let PullRequestChange {
-        repository_id,
-        pull_request_id,
-        number,
-    } = change.ok_or(ProviderError::InvalidResponse)?;
     Ok(GitHubPullRequest {
         change: &delivery.change,
+        pull_request,
         installation_id,
-        repository_id,
         repository_owner: repository.owner(),
         repository_name: repository.name(),
-        pull_request_id,
-        number,
         candidate_commit: &delivery.provider_run.candidate_commit,
     })
 }
@@ -576,16 +565,16 @@ fn provider_run(
     candidate_ref: &BranchRef,
     target_ref: &BranchRef,
 ) -> Option<ProviderRunIdentity> {
-    let fields = serde_json::to_vec(&[
+    let fields = serde_json::to_vec(&(
         installation.as_str(),
         change.repository.host(),
         change.repository.owner(),
         change.repository.name(),
-        change.change.as_str(),
+        change.change,
         candidate.as_str(),
         candidate_ref.as_str(),
         target_ref.as_str(),
-    ])
+    ))
     .ok()?;
     ProviderRunIdentity::new(
         ProviderRunId::new(format!(

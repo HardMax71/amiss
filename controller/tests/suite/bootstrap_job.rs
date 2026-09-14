@@ -14,8 +14,9 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
+use amiss_controller::MergeRequestChange;
 use amiss_controller::{
-    AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput, ChangeId,
+    AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput, Change,
     ChangeLocator, CheckPlan, ControllerEvaluationId, DeliveryId, DeliveryIdentity, ExternalPolicy,
     IntegrationId, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair,
     OpaqueId, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace,
@@ -103,7 +104,7 @@ fn run_request(policy: PolicyControls) -> RunRequest {
     let change = ChangeLocator {
         provider: provider.clone(),
         repository: repository(),
-        change: ChangeId::new("merge-request/42".to_owned()).unwrap(),
+        change: Change::MergeRequest(MergeRequestChange::new(1, 42).unwrap()),
     };
     RunRequest {
         delivery: DeliveryIdentity {

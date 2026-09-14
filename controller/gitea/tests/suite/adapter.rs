@@ -15,6 +15,7 @@ use amiss_controller::{
     ProviderNamespace, Publication, ReplayIdentity, ReplayWindow, RunIdentity, RunRefs,
     SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
+use amiss_controller::{Change, PullRequestChange};
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestAdapter, GiteaPullRequestSource,
 };
@@ -88,8 +89,8 @@ fn both_supported_namespaces_bind_the_same_signed_facts() {
         assert_eq!(delivery.change.repository.owner(), "acme");
         assert_eq!(delivery.change.repository.name(), "widget");
         assert_eq!(
-            delivery.change.change.as_str(),
-            "repository/101/pull/4201/number/42"
+            delivery.change.change,
+            Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap())
         );
         assert_eq!(
             delivery.provider_run.candidate_commit.as_str(),
@@ -395,7 +396,7 @@ fn dummy_snapshot(namespace: &str) -> ChangeSnapshot {
     let change = amiss_controller::ChangeLocator {
         provider,
         repository,
-        change: amiss_controller::OpaqueId::new("42".to_owned()).unwrap(),
+        change: Change::PullRequest(PullRequestChange::new(1, 1, 42).unwrap()),
     };
     ChangeSnapshot {
         state: ChangeState::Active,

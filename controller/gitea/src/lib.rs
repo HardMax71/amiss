@@ -10,6 +10,7 @@ mod identity;
 mod live;
 mod source;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{ChangeLocator, ChangeSnapshot, ProviderError, Publication};
 use amiss_wire::model::Oid;
 
@@ -51,12 +52,10 @@ impl DedicatedReviewer {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GiteaPullRequest<'a> {
     pub change: &'a ChangeLocator,
+    pub pull_request: PullRequestChange,
     pub reviewer_id: u64,
-    pub repository_id: u64,
     pub repository_owner: &'a str,
     pub repository_name: &'a str,
-    pub pull_request_id: u64,
-    pub number: u64,
     pub candidate_commit: &'a Oid,
 }
 

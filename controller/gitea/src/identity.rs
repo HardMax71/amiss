@@ -4,7 +4,7 @@ use amiss_controller::{
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use sha2::Digest as _;
 
-const RUN_DOMAIN: &str = "amiss/controller-gitea-family-pull-request-v1";
+const RUN_DOMAIN: &str = "amiss/controller-gitea-family-pull-request-v2";
 
 pub(crate) fn provider_run(
     reviewer: &IntegrationId,
@@ -13,17 +13,17 @@ pub(crate) fn provider_run(
     candidate_ref: &BranchRef,
     target_ref: &BranchRef,
 ) -> Option<ProviderRunIdentity> {
-    let fields = serde_json::to_vec(&[
+    let fields = serde_json::to_vec(&(
         reviewer.as_str(),
         change.provider.namespace.as_str(),
         change.repository.host(),
         change.repository.owner(),
         change.repository.name(),
-        change.change.as_str(),
+        change.change,
         candidate.as_str(),
         candidate_ref.as_str(),
         target_ref.as_str(),
-    ])
+    ))
     .ok()?;
     ProviderRunIdentity::new(
         ProviderRunId::new(format!(

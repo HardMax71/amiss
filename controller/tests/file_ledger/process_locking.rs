@@ -74,7 +74,7 @@ fn concurrent_distinct_claims_enforce_capacity_across_processes() {
     let clock = TestClock::at(1_000);
     let mut reopened = open_with_max(&run.ledger_root, &clock, 1);
     assert!(matches!(
-        reopened.claim(&delivery_with_id("capacity-third", "43"), &check_binding()),
+        reopened.claim(&delivery_with_id("capacity-third", 43), &check_binding()),
         Err(FileLedgerError::Full)
     ));
 }
@@ -177,7 +177,7 @@ fn run_child() {
         "parent process did not open the start gate"
     );
 
-    let claim = ledger.claim(&delivery_with_id(&delivery_id, "42"), &check_binding());
+    let claim = ledger.claim(&delivery_with_id(&delivery_id, 42), &check_binding());
     let outcome = if matches!(&claim, Err(FileLedgerError::Full)) {
         Some(FULL)
     } else {

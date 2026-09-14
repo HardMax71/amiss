@@ -6,11 +6,12 @@ use amiss_controller::{
     Publication, RelationStatusRecord, RelationStatusTarget, RelationSubject, RelationSubjectHead,
     VerifiedDelivery, relation_status_publication,
 };
+use amiss_controller::{Change, MergeRequestChange};
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::relation::RelationSnapshot;
 
 use crate::identity::{
-    branch_ref, exact_sha1, parse_change_id, parse_delivery_id, parse_run_id, repository_identity,
+    branch_ref, exact_sha1, parse_delivery_id, parse_run_id, repository_identity,
 };
 use crate::snapshot::{conclusion_matches, snapshot};
 use crate::{GitLabOidc, GitLabRefresh, GitLabRefreshQuery, PolicyBinding};
@@ -201,8 +202,13 @@ fn refresh_query(
     provider: &ProviderIdentity,
     policy: &PolicyBinding,
 ) -> Result<GitLabRefreshQuery, ProviderError> {
-    let (project_id, merge_request_iid) =
-        parse_change_id(delivery.change.change.as_str()).ok_or(ProviderError::InvalidResponse)?;
+    let Change::MergeRequest(MergeRequestChange {
+        project_id,
+        iid: merge_request_iid,
+    }) = delivery.change.change
+    else {
+        return Err(ProviderError::InvalidResponse);
+    };
     let (pipeline_id, job_id) = parse_run_id(delivery.provider_run.run_id.as_str())
         .ok_or(ProviderError::InvalidResponse)?;
     let runner_id = parse_delivery_id(delivery.identity.delivery.as_str())
@@ -214,14 +220,14 @@ fn refresh_query(
         && delivery.change.provider == *provider
         && delivery.identity.integration == policy.integration
         && delivery.change.repository == expected_repository
-        && project_id == policy.project_id
+        && project_id.get() == policy.project_id
         && delivery.provider_run.attempt.get() == 1
         && delivery.provider_run.object_format == ObjectFormat::Sha1
         && exact_gate == delivery.provider_run.candidate_commit;
     valid
         .then_some(GitLabRefreshQuery {
-            project_id,
-            merge_request_iid,
+            project_id: project_id.get(),
+            merge_request_iid: merge_request_iid.get(),
             pipeline_id,
             job_id,
             runner_id,

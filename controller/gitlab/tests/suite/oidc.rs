@@ -3,6 +3,7 @@
     reason = "fixed cryptographic fixtures and protocol identities must fail loudly"
 )]
 
+use amiss_controller::{Change, MergeRequestChange};
 use amiss_controller::{
     OpaqueId, ProviderError, ProviderInstance, ReplayIdentity, SignedTimePolicy,
 };
@@ -27,8 +28,8 @@ fn pinned_policy_job_claims_define_the_delivery() {
     assert_eq!(delivery.change.repository.owner(), "acme");
     assert_eq!(delivery.change.repository.name(), "widget");
     assert_eq!(
-        delivery.change.change.as_str(),
-        "project/101/merge-request/42"
+        delivery.change.change,
+        Change::MergeRequest(MergeRequestChange::new(101, 42).unwrap())
     );
     assert_eq!(
         delivery.provider_run.run_id.as_str(),

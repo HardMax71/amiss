@@ -6,14 +6,15 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AcceptedDelivery, AuthenticatedDelivery, ChangeId, ChangeLocator, CheckBinding,
-    CheckConclusion, ControllerClock, DeliveryClaim, DeliveryHeader, DeliveryId, DeliveryIdentity,
-    DeliveryLease, DeliveryRoute, FileLedger, FileLedgerConfig, GitLabWebhook, IngressLimits,
-    IngressPolicy, IntegrationId, OidPair, OpaqueId, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication,
-    ReplayWindow, RunIdentity, RunRefs, SignedTimePolicy, StageOutcome, StagedPublication,
-    UntrustedDelivery, WebhookKey, WebhookKeyring,
+    AcceptedDelivery, AuthenticatedDelivery, Change, ChangeLocator, CheckBinding, CheckConclusion,
+    ControllerClock, DeliveryClaim, DeliveryHeader, DeliveryId, DeliveryIdentity, DeliveryLease,
+    DeliveryRoute, FileLedger, FileLedgerConfig, GitLabWebhook, IngressLimits, IngressPolicy,
+    IntegrationId, OidPair, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
+    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, ReplayWindow, RunIdentity,
+    RunRefs, SignedTimePolicy, StageOutcome, StagedPublication, UntrustedDelivery, WebhookKey,
+    WebhookKeyring,
 };
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use base64::Engine as _;
@@ -82,22 +83,22 @@ fn provider_in(namespace: &str) -> ProviderIdentity {
     }
 }
 
-pub(super) fn delivery(change_id: &str) -> AcceptedDelivery {
-    delivery_with_id("delivery-9", change_id)
+pub(super) fn delivery(number: u64) -> AcceptedDelivery {
+    delivery_with_id("delivery-9", number)
 }
 
-pub(super) fn delivery_with_id(delivery_id: &str, change_id: &str) -> AcceptedDelivery {
+pub(super) fn delivery_with_id(delivery_id: &str, number: u64) -> AcceptedDelivery {
     let provider = provider();
-    AcceptedDelivery::permanent(authenticated_delivery(provider, delivery_id, change_id))
+    AcceptedDelivery::permanent(authenticated_delivery(provider, delivery_id, number))
 }
 
-pub(super) fn bounded_delivery(delivery_id: &str, change_id: &str) -> AcceptedDelivery {
-    bounded_delivery_at(delivery_id, change_id, BOUNDED_ISSUED_AT)
+pub(super) fn bounded_delivery(delivery_id: &str, number: u64) -> AcceptedDelivery {
+    bounded_delivery_at(delivery_id, number, BOUNDED_ISSUED_AT)
 }
 
 pub(super) fn bounded_delivery_at(
     delivery_id: &str,
-    change_id: &str,
+    number: u64,
     issued_at: i64,
 ) -> AcceptedDelivery {
     let provider = gitlab_provider();
@@ -153,7 +154,7 @@ pub(super) fn bounded_delivery_at(
     let verified = proof.bind(authenticated_delivery(
         provider,
         "untrusted-placeholder",
-        change_id,
+        number,
     ));
     let accepted = policy.post_auth(check, verified).unwrap();
     assert_eq!(
@@ -168,7 +169,7 @@ pub(super) fn bounded_delivery_at(
 fn authenticated_delivery(
     provider: ProviderIdentity,
     delivery_id: &str,
-    change_id: &str,
+    number: u64,
 ) -> AuthenticatedDelivery {
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
@@ -176,7 +177,7 @@ fn authenticated_delivery(
             integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
             delivery: DeliveryId::new(delivery_id.to_owned()).unwrap(),
         },
-        change: change(provider, change_id),
+        change: change(provider, number),
         provider_run: provider_run(),
     }
 }
@@ -192,7 +193,7 @@ fn standard_signature(delivery_id: &[u8], timestamp: &[u8]) -> String {
     )
 }
 
-fn change(provider: ProviderIdentity, change_id: &str) -> ChangeLocator {
+fn change(provider: ProviderIdentity, number: u64) -> ChangeLocator {
     ChangeLocator {
         provider,
         repository: RepositoryIdentity::new(
@@ -201,7 +202,7 @@ fn change(provider: ProviderIdentity, change_id: &str) -> ChangeLocator {
             "amiss".to_owned(),
         )
         .unwrap(),
-        change: ChangeId::new(change_id.to_owned()).unwrap(),
+        change: Change::PullRequest(PullRequestChange::new(1, 1, number).unwrap()),
     }
 }
 

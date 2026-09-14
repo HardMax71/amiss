@@ -2,7 +2,7 @@ use amiss_wire::model::RepositoryIdentity;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
+    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
     ProviderIdentity, ProviderInstance, ProviderNamespace,
 };
 
@@ -66,7 +66,7 @@ impl StoredDelivery {
 pub(in crate::file_ledger::format) struct StoredChange {
     provider: ProviderIdentity,
     repository: StoredRepository,
-    change: ChangeId,
+    change: Change,
 }
 
 impl StoredChange {
@@ -74,7 +74,7 @@ impl StoredChange {
         Self {
             provider: change.provider.clone(),
             repository: StoredRepository::new(&change.repository),
-            change: change.change.clone(),
+            change: change.change,
         }
     }
 

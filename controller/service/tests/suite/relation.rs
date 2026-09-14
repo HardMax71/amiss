@@ -7,8 +7,9 @@ use sha2::Digest as _;
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    ArtifactComponent, ArtifactStoreConfig, AuthenticatedDelivery, ChangeId, ChangeLocator,
+    ArtifactComponent, ArtifactStoreConfig, AuthenticatedDelivery, Change, ChangeLocator,
     ControllerClock, ControllerEvaluationId, DeliveryId, DeliveryIdentity, FileArtifactStore,
     FileRelationScheduleStore, PendingRelation, ProviderError, ProviderRunAttempt, ProviderRunId,
     ProviderRunIdentity, RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission,
@@ -64,7 +65,7 @@ fn delivery(transition: &RelationTransition) -> AuthenticatedDelivery {
         change: ChangeLocator {
             provider: subject.scope.provider.clone(),
             repository: subject.scope.repository.clone(),
-            change: ChangeId::new("change/relation".to_owned()).unwrap(),
+            change: Change::PullRequest(PullRequestChange::new(1, 1, 1).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRunId::new("run/relation".to_owned()).unwrap(),

@@ -1,6 +1,6 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) enum RecordSchema {
-    #[serde(rename = "amiss/controller-file-record-v3")]
+    #[serde(rename = "amiss/controller-file-record-v4")]
     Current,
 }
 

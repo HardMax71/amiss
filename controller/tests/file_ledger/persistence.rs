@@ -19,7 +19,7 @@ use super::support::{
 fn state_files_keep_the_existing_frame_contracts() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut ledger = open(directory.path(), &clock);
     ledger.claim(&delivery, &check_binding()).unwrap();
 
@@ -42,7 +42,7 @@ fn state_files_keep_the_existing_frame_contracts() {
         b"AMISS-DELIVERY-RECORD",
         "amiss/controller-file-record-v1",
         131_072,
-        "amiss/controller-file-record-v3",
+        "amiss/controller-file-record-v4",
     );
 }
 
@@ -50,7 +50,7 @@ fn state_files_keep_the_existing_frame_contracts() {
 fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     let mut publication = publication(&delivery, &lease);
@@ -123,7 +123,7 @@ fn staged_bytes_survive_reopen_and_completion_is_repeat_safe() {
 fn staged_v3_without_a_gate_commit_is_reexecuted_before_publication() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut ledger = open(directory.path(), &clock);
     let original = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     let original_publication = publication(&delivery, &original);
@@ -151,7 +151,7 @@ fn staged_v3_without_a_gate_commit_is_reexecuted_before_publication() {
 #[test]
 fn corrupt_state_or_report_fails_closed() {
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let state_directory = TempDir::new().unwrap();
     let mut state_ledger = open(state_directory.path(), &clock);
     state_ledger.claim(&delivery, &check_binding()).unwrap();
@@ -192,7 +192,7 @@ fn an_unreadable_file_is_an_error_not_an_absence() {
         fs::set_permissions(path, fs::Permissions::from_mode(0o000)).unwrap();
     };
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
 
     let record_directory = TempDir::new().unwrap();
     let mut record_ledger = open(record_directory.path(), &clock);
@@ -243,7 +243,7 @@ fn an_unreadable_file_is_an_error_not_an_absence() {
 fn a_staged_row_without_its_report_is_corrupt_at_reopen() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     ledger
@@ -267,7 +267,7 @@ fn a_state_file_replaced_by_a_symlink_is_corrupt_at_claim() {
     let directory = TempDir::new().unwrap();
     let aside = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut ledger = open(directory.path(), &clock);
     ledger.claim(&delivery, &check_binding()).unwrap();
     let state = ledger_file(directory.path(), ".state").unwrap();
@@ -285,7 +285,7 @@ fn a_state_file_replaced_by_a_symlink_is_corrupt_at_claim() {
 fn a_missing_staged_report_is_corrupt() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     ledger
@@ -302,7 +302,7 @@ fn a_missing_staged_report_is_corrupt() {
 #[test]
 fn impossible_but_checksummed_states_fail_closed() {
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let expiry_directory = TempDir::new().unwrap();
     let mut expiry_ledger = open(expiry_directory.path(), &clock);
     expiry_ledger.claim(&delivery, &check_binding()).unwrap();
@@ -331,7 +331,7 @@ fn impossible_but_checksummed_states_fail_closed() {
 #[test]
 fn malformed_record_and_publication_check_bindings_fail_closed() {
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
 
     let record_directory = TempDir::new().unwrap();
     let mut record_ledger = open(record_directory.path(), &clock);
@@ -505,7 +505,7 @@ enum Reached {
 fn refuses_edited_state(reached: Reached, edit: fn(&str) -> String, reason: &str) {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut ledger = open(directory.path(), &clock);
     let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
     if reached != Reached::Running {
@@ -532,7 +532,7 @@ fn one_impossible_field_fails_the_record_closed() {
     type Defect = fn(&str) -> String;
     let rows: [(&str, Reached, Defect); 15] = [
         ("a foreign schema", Reached::Running, |text| {
-            replace_string(text, "file-record-v3", "file-record-v0")
+            replace_string(text, "file-record-v4", "file-record-v0")
         }),
         ("a generation before the first", Reached::Running, |text| {
             replace_field(text, "generation", "0")
@@ -578,7 +578,7 @@ fn one_impossible_field_fails_the_record_closed() {
             replace_last(text, r#""run_id":""#, r#""run_id":"other-"#)
         }),
         ("another change", Reached::Staged, |text| {
-            replace_last(text, r#""change":""#, r#""change":"9"#)
+            replace_last(text, r#""number":"#, r#""number":9"#)
         }),
         ("a run naming another candidate", Reached::Staged, |text| {
             let at = text.find(r#""commits":"#).unwrap();
@@ -613,7 +613,7 @@ fn a_fence_at_its_generation_is_current_when_staged_or_done() {
     for complete_it in [false, true] {
         let directory = TempDir::new().unwrap();
         let clock = TestClock::at(1_000);
-        let delivery = delivery("42");
+        let delivery = delivery(42);
         let mut ledger = open(directory.path(), &clock);
         let lease = executed(ledger.claim(&delivery, &check_binding()).unwrap()).unwrap();
         let publication = publication(&delivery, &lease);

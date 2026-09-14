@@ -1,9 +1,9 @@
+use amiss_controller::{Change, MergeRequestChange};
 use amiss_controller::{RunIdentity, RunRequest};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
 
 use crate::identity::{
-    canonical_repository, exact_sha1, parse_change_id, parse_delivery_id, parse_run_id,
-    repository_url,
+    canonical_repository, exact_sha1, parse_delivery_id, parse_run_id, repository_url,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -35,8 +35,9 @@ pub fn gitlab_fetch_plan(request: &RunRequest) -> Result<GitLabFetchPlan, GitLab
     let provider = &request.delivery.provider;
     let repository = &run.change.repository;
     let action = &request.plan.execution.action_repository;
-    let (project_id, _merge_request_iid) =
-        parse_change_id(run.change.change.as_str()).ok_or(GitLabPlanError)?;
+    let Change::MergeRequest(MergeRequestChange { project_id, .. }) = run.change.change else {
+        return Err(GitLabPlanError);
+    };
     let (pipeline_id, job_id) =
         parse_run_id(request.provider_run.run_id.as_str()).ok_or(GitLabPlanError)?;
     let _runner_id =
@@ -67,7 +68,7 @@ pub fn gitlab_fetch_plan(request: &RunRequest) -> Result<GitLabFetchPlan, GitLab
     let project_path = format!("{}/{}", repository.owner(), repository.name());
     let action_path = format!("{}/{}", action.owner(), action.name());
     Ok(GitLabFetchPlan {
-        project_id,
+        project_id: project_id.get(),
         pipeline_id,
         job_id,
         repository_url: repository_url(repository.host(), &project_path).ok_or(GitLabPlanError)?,

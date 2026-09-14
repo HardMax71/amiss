@@ -17,7 +17,7 @@ fn a_lock_name_held_by_a_directory_is_corrupt() {
     fs::create_dir(directory.path().join(".amiss-clock.lock")).unwrap();
 
     assert!(matches!(
-        ledger.claim(&delivery("42"), &check_binding()),
+        ledger.claim(&delivery(42), &check_binding()),
         Err(FileLedgerError::Corrupt)
     ));
 }
@@ -27,7 +27,7 @@ fn delivery_identity_has_a_stable_disk_key_and_random_evaluation_incarnation() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
     let mut ledger = open(directory.path(), &clock);
-    let lease = executed(ledger.claim(&delivery("42"), &check_binding()).unwrap()).unwrap();
+    let lease = executed(ledger.claim(&delivery(42), &check_binding()).unwrap()).unwrap();
 
     let evaluation_prefix = format!("eval:{FIXTURE_KEY}:");
     let evaluation_nonce = lease
@@ -65,7 +65,7 @@ fn concurrent_first_claims_choose_one_owner() {
     let root = FileLedgerRoot::open_with_clock(directory.path(), config(64), clock_source).unwrap();
     let mut first = root.session().unwrap();
     let mut second = root.session().unwrap();
-    let first_delivery = delivery("42");
+    let first_delivery = delivery(42);
     let second_delivery = first_delivery.clone();
     let first_barrier = Arc::clone(&barrier);
     let second_barrier = Arc::clone(&barrier);

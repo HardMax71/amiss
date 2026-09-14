@@ -16,7 +16,7 @@ use super::support::{
 fn permanent_completion_survives_cleanup() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(1_000);
-    let delivery = delivery("42");
+    let delivery = delivery(42);
     let mut ledger = open(directory.path(), &clock);
     let finished = finish(&mut ledger, &delivery);
     let report_path = directory.path().join(format!("{FIXTURE_KEY}.report"));
@@ -44,7 +44,7 @@ fn permanent_completion_survives_cleanup() {
 fn bounded_completion_uses_an_inclusive_cutoff_and_rollback_cannot_reopen_it() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(BOUNDED_ISSUED_AT);
-    let delivery = bounded_delivery("bounded-cutoff", "42");
+    let delivery = bounded_delivery("bounded-cutoff", 42);
     let mut ledger = open(directory.path(), &clock);
     let finished = finish(&mut ledger, &delivery);
 
@@ -84,7 +84,7 @@ fn bounded_completion_uses_an_inclusive_cutoff_and_rollback_cannot_reopen_it() {
 fn an_unseen_delivery_may_start_at_the_last_instant_of_its_lifetime() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(BOUNDED_ISSUED_AT);
-    let delivery = bounded_delivery("bounded-edge", "42");
+    let delivery = bounded_delivery("bounded-edge", 42);
     let mut ledger = open(directory.path(), &clock);
 
     clock.set(BOUNDED_KEEP_THROUGH);
@@ -101,7 +101,7 @@ fn an_unseen_delivery_may_start_at_the_last_instant_of_its_lifetime() {
 fn an_expired_unseen_delivery_stays_expired_after_clock_rollback() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(BOUNDED_ISSUED_AT);
-    let delivery = bounded_delivery("bounded-unseen", "42");
+    let delivery = bounded_delivery("bounded-unseen", 42);
     let mut ledger = open(directory.path(), &clock);
 
     clock.set(BOUNDED_KEEP_THROUGH + 1);
@@ -123,8 +123,8 @@ fn an_expired_unseen_delivery_stays_expired_after_clock_rollback() {
 fn expired_running_and_staged_work_is_never_pruned() {
     let directory = TempDir::new().unwrap();
     let clock = TestClock::at(BOUNDED_ISSUED_AT);
-    let running = bounded_delivery("bounded-running", "41");
-    let staged_delivery = bounded_delivery("bounded-staged", "42");
+    let running = bounded_delivery("bounded-running", 41);
+    let staged_delivery = bounded_delivery("bounded-staged", 42);
     let mut ledger = open(directory.path(), &clock);
     let _running_lease = executed(ledger.claim(&running, &check_binding()).unwrap()).unwrap();
     let staged_lease = executed(ledger.claim(&staged_delivery, &check_binding()).unwrap()).unwrap();
@@ -213,7 +213,7 @@ fn corrupt_root_metadata_and_a_renamed_valid_record_fail_closed() {
     let record_directory = TempDir::new().unwrap();
     let mut record_ledger = open(record_directory.path(), &clock);
     record_ledger
-        .claim(&delivery("42"), &check_binding())
+        .claim(&delivery(42), &check_binding())
         .unwrap();
     let state = record_directory.path().join(format!("{FIXTURE_KEY}.state"));
     let renamed = record_directory

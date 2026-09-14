@@ -11,8 +11,9 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use amiss_bootstrap::BOOTSTRAP_DOMAIN;
+use amiss_controller::MergeRequestChange;
 use amiss_controller::{
-    BootstrapRun, ChangeId, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity,
+    BootstrapRun, Change, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity,
     Evaluation, HeartbeatOutcome, IntegrationId, OidPair, PolicyControls, ProviderIdentity,
     ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
     RunHeartbeat, RunIdentity, RunRefs, RunRequest, RunnerOutcome, check_binding, check_plan,
@@ -258,7 +259,7 @@ fn request(
             ChangeLocator {
                 provider,
                 repository: repository_identity(),
-                change: ChangeId::new("merge-request/42".to_owned()).unwrap(),
+                change: Change::MergeRequest(MergeRequestChange::new(1, 42).unwrap()),
             },
             RunRefs {
                 forge: ForgeDialect::Gitlab,

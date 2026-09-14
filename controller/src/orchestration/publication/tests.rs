@@ -8,8 +8,9 @@ use amiss_wire::controls::Profile;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
+use crate::PullRequestChange;
 use crate::{
-    ChangeId, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion, DeliveryId,
+    Change, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion, DeliveryId,
     DeliveryIdentity, Evaluation, IntegrationId, OidPair, PolicyControls, ProviderIdentity,
     ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunFailure, RunIdentity, RunRefs,
     RunnerOutcome, check_binding, check_plan,
@@ -38,7 +39,7 @@ fn run_identity(candidate: char) -> RunIdentity {
             "widget".to_owned(),
         )
         .expect("an identity"),
-        change: ChangeId::new("pull/42".to_owned()).expect("a change"),
+        change: Change::PullRequest(PullRequestChange::new(1, 1, 42).unwrap()),
     };
     RunIdentity::new(
         change,

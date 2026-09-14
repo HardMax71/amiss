@@ -4,8 +4,9 @@ use amiss_wire::de::Document as _;
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AdapterRegistry, AuthenticatedDelivery, ChangeId, ChangeLocator, ChangeSnapshot, ChangeState,
+    AdapterRegistry, AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState,
     CheckBinding, CheckPlan, Controller, DeliveryId, DeliveryIdentity, DeliveryLedger,
     IngressLimits, IngressPolicy, IntegrationId, OidPair, PlanRegistry, PlanScope, PolicyControls,
     ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
@@ -40,7 +41,7 @@ pub(crate) fn locator(
     ChangeLocator {
         provider: provider.clone(),
         repository,
-        change: ChangeId::new("42".to_owned()).unwrap(),
+        change: Change::PullRequest(PullRequestChange::new(1, 1, 42).unwrap()),
     }
 }
 

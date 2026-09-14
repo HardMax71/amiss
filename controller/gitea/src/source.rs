@@ -1,6 +1,6 @@
 use crate::states::WebhookAction;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeId, ChangeLocator, DeliveryId, DeliveryIdentity, GiteaWebhook,
+    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, GiteaWebhook,
     IngressCheck, IntegrationId, ProviderError, ProviderIdentity, PullRequestChange,
     SignedTimePolicy, VerifiedDelivery, WebhookProof,
 };
@@ -118,7 +118,7 @@ impl PullRequestFacts {
         let change = ChangeLocator {
             provider: provider.clone(),
             repository,
-            change: ChangeId::new(change.to_string())?,
+            change: Change::PullRequest(change),
         };
         let integration = IntegrationId::new(reviewer.id.to_string())?;
         let candidate = Oid::new(ObjectFormat::Sha1, payload.pull_request.head.sha)?;

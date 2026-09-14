@@ -1,7 +1,6 @@
 use crate::states::{PullRequestState, ReviewState};
 use amiss_controller::{
-    ChangeSnapshot, ChangeState, OidPair, ProviderError, Publication, PullRequestChange,
-    RunIdentity, RunRefs,
+    Change, ChangeSnapshot, ChangeState, OidPair, ProviderError, Publication, RunIdentity, RunRefs,
 };
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -25,9 +24,6 @@ pub(super) fn validate_request(
 
 fn request_route_matches(config: &Config, pull_request: GiteaPullRequest<'_>) -> bool {
     pull_request.reviewer_id == config.reviewer.id
-        && pull_request.repository_id > 0
-        && pull_request.pull_request_id > 0
-        && pull_request.number > 0
         && pull_request.change.provider == config.provider
 }
 
@@ -46,12 +42,7 @@ fn request_subject_matches(config: &Config, pull_request: GiteaPullRequest<'_>) 
         && !repository.owner().contains('/')
         && exact_oid(pull_request.candidate_commit.as_str()).as_ref()
             == Ok(pull_request.candidate_commit)
-        && PullRequestChange::new(
-            pull_request.repository_id,
-            pull_request.pull_request_id,
-            pull_request.number,
-        )
-        .is_some_and(|expected| pull_request.change.change.as_str().parse().ok() == Some(expected))
+        && pull_request.change.change == Change::PullRequest(pull_request.pull_request)
 }
 
 pub(super) fn snapshot(
@@ -199,14 +190,14 @@ fn validate_change(
         .map(|head| pull_repository_identity(config, head))
         .transpose()?;
     valid_response(
-        repository.id == pull_request.repository_id
+        repository.id == pull_request.pull_request.repository_id.get()
             && repository_identity == pull_request.change.repository
             && repository.object_format_name == ObjectFormat::Sha1
-            && base_repository.id == pull_request.repository_id
+            && base_repository.id == pull_request.pull_request.repository_id.get()
             && base_identity == pull_request.change.repository
-            && authoritative.id == pull_request.pull_request_id
-            && authoritative.number == pull_request.number
-            && authoritative.base.repo_id == pull_request.repository_id
+            && authoritative.id == pull_request.pull_request.pull_request_id.get()
+            && authoritative.number == pull_request.pull_request.number.get()
+            && authoritative.base.repo_id == pull_request.pull_request.repository_id.get()
             && authoritative.head.repo_id > 0
             && (head_identity.is_some() || authoritative.state == PullRequestState::Closed),
     )

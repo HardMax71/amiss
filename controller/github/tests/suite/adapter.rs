@@ -17,6 +17,7 @@ use amiss_controller::{
     ReplayWindow, RunIdentity, RunRefs, SemanticEvidenceExpectation, SignedTimePolicy,
     UntrustedDelivery, WebhookKey, WebhookKeyring, WorkflowArtifactExpectation,
 };
+use amiss_controller::{Change, PullRequestChange};
 use amiss_controller_github::{
     GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
 };
@@ -208,8 +209,8 @@ fn signed_body_alone_defines_the_pull_request() {
     assert_eq!(first.delivery().change.repository.owner(), "hardmax71");
     assert_eq!(first.delivery().change.repository.name(), "widget");
     assert_eq!(
-        first.delivery().change.change.as_str(),
-        "repository/101/pull/4201/number/42"
+        first.delivery().change.change,
+        Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap())
     );
     assert_eq!(
         first.delivery().provider_run.candidate_commit.as_str(),
@@ -809,11 +810,11 @@ fn webhook() -> GitHubWebhook {
 fn observed(pull_request: GitHubPullRequest<'_>) -> ApiRequest {
     ApiRequest {
         installation_id: pull_request.installation_id,
-        repository_id: pull_request.repository_id,
+        repository_id: pull_request.pull_request.repository_id.get(),
         owner: pull_request.repository_owner.to_owned(),
         name: pull_request.repository_name.to_owned(),
-        pull_request_id: pull_request.pull_request_id,
-        number: pull_request.number,
+        pull_request_id: pull_request.pull_request.pull_request_id.get(),
+        number: pull_request.pull_request.number.get(),
         candidate: pull_request.candidate_commit.as_str().to_owned(),
     }
 }
@@ -963,7 +964,7 @@ fn dummy_snapshot() -> ChangeSnapshot {
     let change = amiss_controller::ChangeLocator {
         provider,
         repository,
-        change: OpaqueId::new("42".to_owned()).unwrap(),
+        change: Change::PullRequest(PullRequestChange::new(1, 1, 42).unwrap()),
     };
     ChangeSnapshot {
         state: ChangeState::Active,
