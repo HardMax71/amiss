@@ -17,6 +17,7 @@ use amiss_wire::requests::{
     SuppliedSemanticEvidence, SuppliedTime, commit_candidate_identity_digest,
 };
 
+use crate::ProviderRun;
 use crate::{OpaqueId, ProviderIdentity, RunRequest};
 
 pub use amiss_wire::semantic::SemanticEvidenceTemplate;
@@ -185,7 +186,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         ref_name: run.refs.target.clone(),
         candidate_identity_digest: candidate_identity,
         provider: input.run.delivery.provider.namespace.as_str().to_owned(),
-        provider_run_id: input.run.provider_run.run_id.as_str().to_owned(),
+        provider_run_id: provider_run_id(&input.run.provider_run.run),
         provider_run_attempt: input.run.provider_run.attempt.get(),
         evaluation_instant: input.evaluation_instant,
         valid_until: input.valid_until,
@@ -216,7 +217,7 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
             value: statement,
             expected_digest: statement_digest,
             provider: input.run.delivery.provider.namespace.as_str().to_owned(),
-            provider_run_id: input.run.provider_run.run_id.as_str().to_owned(),
+            provider_run_id: provider_run_id(&input.run.provider_run.run),
             provider_run_attempt: input.run.provider_run.attempt.get(),
         },
         SuppliedControl {
@@ -251,4 +252,12 @@ pub fn bootstrap_job(input: BootstrapJobInput<'_>) -> Result<BootstrapJob, Boots
         constraint,
         semantic_artifact: semantic.artifact,
     })
+}
+
+/// The run as the scanner's controls request carries it: one opaque string.
+fn provider_run_id(run: &ProviderRun) -> String {
+    match run {
+        ProviderRun::PullRequest(digest) => format!("pr:{digest}"),
+        ProviderRun::Job(job) => format!("pipeline/{}/job/{}", job.pipeline_id, job.job_id),
+    }
 }

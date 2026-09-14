@@ -1,5 +1,5 @@
 use crate::states::ReviewState;
-use amiss_controller::Change;
+use amiss_controller::{Change, ProviderRun};
 use amiss_controller::{ChangeState, CheckConclusion, IntegrationId, ProviderError, Publication};
 use amiss_wire::model::{ForgeDialect, ObjectFormat};
 
@@ -117,6 +117,9 @@ fn expected(publication: &Publication) -> Result<CreateReview, ProviderError> {
     let Change::PullRequest(pull_request) = run.change.change else {
         return Err(ProviderError::InvalidResponse);
     };
+    let ProviderRun::PullRequest(provider_run) = publication.provider_run.run else {
+        return Err(ProviderError::InvalidResponse);
+    };
     let body = format!(
         "{MARKER}{}\nconclusion: {label}{failure}\nprovider: {}/{}\nrepository: {}/{}/{}\nchange: pull request {} in repository {} (id {})\nprovider-run: {}#{}\ngate-commit: {}\ncandidate-ref: {}\ntarget-ref: {}\ndefault-ref: {}\nbase-commit: {}\nbase-tree: {}\ncandidate-commit: {}\ncandidate-tree: {}\nplan: {}\nconstraint: {}",
         publication.evaluation_id,
@@ -128,7 +131,7 @@ fn expected(publication: &Publication) -> Result<CreateReview, ProviderError> {
         pull_request.number,
         pull_request.repository_id,
         pull_request.pull_request_id,
-        publication.provider_run.run_id,
+        provider_run,
         publication.provider_run.attempt.get(),
         publication.gate_commit.as_str(),
         run.refs.candidate.as_str(),

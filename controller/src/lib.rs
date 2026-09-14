@@ -59,9 +59,9 @@ pub use file_ledger::{
     FileLedger, FileLedgerCleanup, FileLedgerConfig, FileLedgerError, FileLedgerRoot,
 };
 pub use identity::{
-    Change, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
-    MergeRequestChange, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, PullRequestChange,
+    Change, ChangeLocator, ControllerEvaluationId, Delivery, DeliveryIdentity, IntegrationId,
+    MergeRequestChange, OidcToken, OpaqueId, PipelineJob, ProviderIdentity, ProviderInstance,
+    ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity, PullRequestChange,
 };
 pub use ingress::{
     AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits,
@@ -87,7 +87,7 @@ pub use orchestration::{
 pub use plans::{PlanError, PlanRegistry, PlanScope, ResolvedPlan, register_plan, resolve_plan};
 pub use provider::{
     AdapterRegistry, AuthenticatedDelivery, ForgeFact, ForgeNegative, OperationDeadline,
-    ProviderAdapter, ProviderError, RegistryError, provider_api_url,
+    ProviderAdapter, ProviderError, ProviderFacts, RegistryError, provider_api_url,
 };
 pub use publication_audit::{
     PublicationAuditBundle, PublicationAuditDigests, validate_publication_audit,

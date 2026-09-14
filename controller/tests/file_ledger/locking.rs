@@ -47,7 +47,12 @@ fn delivery_identity_has_a_stable_disk_key_and_random_evaluation_incarnation() {
             .bytes()
             .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
     );
-    assert!(directory.path().join(".amiss-row-0b.lock").is_file());
+    assert!(
+        directory
+            .path()
+            .join(format!(".amiss-row-{}.lock", FIXTURE_KEY.get(..2).unwrap()))
+            .is_file()
+    );
     assert!(
         directory
             .path()

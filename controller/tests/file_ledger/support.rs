@@ -6,16 +6,17 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AcceptedDelivery, AuthenticatedDelivery, Change, ChangeLocator, CheckBinding, CheckConclusion,
-    ControllerClock, DeliveryClaim, DeliveryHeader, DeliveryId, DeliveryIdentity, DeliveryLease,
+    ControllerClock, Delivery, DeliveryClaim, DeliveryHeader, DeliveryIdentity, DeliveryLease,
     DeliveryRoute, FileLedger, FileLedgerConfig, GitLabWebhook, IngressLimits, IngressPolicy,
     IntegrationId, OidPair, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, ReplayWindow, RunIdentity,
+    ProviderRun, ProviderRunAttempt, ProviderRunIdentity, Publication, ReplayWindow, RunIdentity,
     RunRefs, SignedTimePolicy, StageOutcome, StagedPublication, UntrustedDelivery, WebhookKey,
     WebhookKeyring,
 };
+use amiss_controller::{ProviderFacts, PullRequestChange};
+use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use base64::Engine as _;
 use hmac::{Hmac, KeyInit as _, Mac as _};
@@ -26,7 +27,7 @@ pub(super) const MAX_RECORDS: u64 = 64;
 pub(super) const BOUNDED_ISSUED_AT: i64 = 1_744_578_123_000;
 pub(super) const BOUNDED_KEEP_THROUGH: i64 = BOUNDED_ISSUED_AT + 70_000;
 pub(super) const FIXTURE_KEY: &str =
-    "0b320f59191352125bbed161c51c73615a815b31a16e07f1fd4e9276ed616369";
+    "f6b73c31b4198c8b47f2461b6b55b6ee927675350b030ac06d00fff5559b61b2";
 
 const WEBHOOK_SECRET: &[u8] = b"0123456789abcdef0123456789abcdef";
 const WEBHOOK_BODY: &[u8] = b"{\"object_kind\":\"pipeline\",\"status\":\"success\"}";
@@ -50,7 +51,7 @@ pub(super) fn replay_window() -> ReplayWindow {
 
 pub(super) fn check_binding() -> CheckBinding {
     CheckBinding {
-        plan_digest: amiss_wire::model::Digest::from(
+        plan_digest: Digest::from(
             Sha256::new_with_prefix("amiss/test-check-plan")
                 .chain_update([0_u8])
                 .chain_update(b"plan")
@@ -58,7 +59,7 @@ pub(super) fn check_binding() -> CheckBinding {
                 .0,
         ),
         required_status_name: "amiss/enforce".parse().unwrap(),
-        execution_constraint_digest: amiss_wire::model::Digest::from(
+        execution_constraint_digest: Digest::from(
             Sha256::new_with_prefix("amiss/test-execution-constraint")
                 .chain_update([0_u8])
                 .chain_update(b"constraint")
@@ -151,11 +152,7 @@ pub(super) fn bounded_delivery_at(
     let proof = GitLabWebhook::new(WebhookKeyring::new(trust_set, vec![key]).unwrap())
         .verify(check)
         .unwrap();
-    let verified = proof.bind(authenticated_delivery(
-        provider,
-        "untrusted-placeholder",
-        number,
-    ));
+    let verified = proof.bind(provider_facts(provider, number));
     let accepted = policy.post_auth(check, verified).unwrap();
     assert_eq!(
         accepted.replay_keep_through_unix_millis(),
@@ -171,13 +168,32 @@ fn authenticated_delivery(
     delivery_id: &str,
     number: u64,
 ) -> AuthenticatedDelivery {
+    let facts = provider_facts(provider, number);
     AuthenticatedDelivery {
         identity: DeliveryIdentity {
-            provider: provider.clone(),
-            integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: DeliveryId::new(delivery_id.to_owned()).unwrap(),
+            provider: facts.provider,
+            integration: facts.integration,
+            delivery: Delivery::Provided(OpaqueId::new(delivery_id.to_owned()).unwrap()),
         },
-        change: change(provider, number),
+        change: facts.change,
+        provider_run: facts.provider_run,
+    }
+}
+
+fn provider_facts(provider: ProviderIdentity, number: u64) -> ProviderFacts {
+    ProviderFacts {
+        provider: provider.clone(),
+        integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
+        change: ChangeLocator {
+            provider,
+            repository: RepositoryIdentity::new(
+                "forge.example.test".to_owned(),
+                "owner".to_owned(),
+                "amiss".to_owned(),
+            )
+            .unwrap(),
+            change: Change::PullRequest(PullRequestChange::new(1, 1, number).unwrap()),
+        },
         provider_run: provider_run(),
     }
 }
@@ -193,22 +209,9 @@ fn standard_signature(delivery_id: &[u8], timestamp: &[u8]) -> String {
     )
 }
 
-fn change(provider: ProviderIdentity, number: u64) -> ChangeLocator {
-    ChangeLocator {
-        provider,
-        repository: RepositoryIdentity::new(
-            "forge.example.test".to_owned(),
-            "owner".to_owned(),
-            "amiss".to_owned(),
-        )
-        .unwrap(),
-        change: Change::PullRequest(PullRequestChange::new(1, 1, number).unwrap()),
-    }
-}
-
 fn provider_run() -> ProviderRunIdentity {
     ProviderRunIdentity::new(
-        ProviderRunId::new("provider-run-11".to_owned()).unwrap(),
+        ProviderRun::PullRequest(Digest::from([150; 32])),
         ProviderRunAttempt::new(1).unwrap(),
         ObjectFormat::Sha1,
         oid('b'),
@@ -319,7 +322,7 @@ pub(super) fn write_capacity_frame(root: &Path, version: u8, length: u64, digest
     frame.push(version);
     frame.extend_from_slice(&length.to_be_bytes());
     frame.extend_from_slice(
-        amiss_wire::model::Digest::from(
+        Digest::from(
             Sha256::new_with_prefix(DOMAIN)
                 .chain_update([0_u8])
                 .chain_update(digest_over)
@@ -404,7 +407,7 @@ fn test_frame(magic: &[u8], domain: &str, payload: &[u8]) -> Vec<u8> {
     frame.push(1);
     frame.extend_from_slice(&u64::try_from(payload.len()).unwrap().to_be_bytes());
     frame.extend_from_slice(
-        amiss_wire::model::Digest::from(
+        Digest::from(
             Sha256::new_with_prefix(domain)
                 .chain_update([0_u8])
                 .chain_update(payload)

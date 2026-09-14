@@ -11,10 +11,10 @@ use std::sync::Arc;
 
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion,
-    DeliveryId, DeliveryIdentity, GitHubWebhook, IngressCheck, IntegrationId, OpaqueId,
-    ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace, ProviderRunAttempt,
-    ProviderRunId, ProviderRunIdentity, Publication, PullRequestChange, SignedTimePolicy,
-    VerifiedDelivery, WebhookProof, WorkflowArtifactExpectation,
+    GitHubWebhook, IngressCheck, IntegrationId, OpaqueId, ProviderAdapter, ProviderError,
+    ProviderFacts, ProviderIdentity, ProviderNamespace, ProviderRun, ProviderRunAttempt,
+    ProviderRunIdentity, Publication, PullRequestChange, SignedTimePolicy, VerifiedDelivery,
+    WebhookProof, WorkflowArtifactExpectation,
 };
 use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
@@ -124,7 +124,7 @@ impl GitHubPullRequestSource {
         let (proof, facts) = self
             .authenticate_facts(check)?
             .ok_or(ProviderError::Authentication)?;
-        Ok(proof.bind(facts.delivery))
+        Ok(proof.bind(facts.authenticated))
     }
 
     /// Authenticates work only when its signed target is this lane's target.
@@ -144,7 +144,7 @@ impl GitHubPullRequestSource {
         if facts.target_ref != *target {
             return Err(ProviderError::AuthorizationRevoked);
         }
-        Ok(Some(proof.bind(facts.delivery)))
+        Ok(Some(proof.bind(facts.authenticated)))
     }
 
     fn authenticate_facts(
@@ -241,7 +241,7 @@ impl<A: GitHubApi> ProviderAdapter for GitHubPullRequestAdapter<A> {
 }
 
 struct PullRequestFacts {
-    delivery: AuthenticatedDelivery,
+    authenticated: ProviderFacts,
     target_ref: BranchRef,
 }
 
@@ -382,12 +382,9 @@ fn bind_pull_request(
     )
     .ok_or(Authentication)?;
     Ok(PullRequestFacts {
-        delivery: AuthenticatedDelivery {
-            identity: DeliveryIdentity {
-                provider: provider.clone(),
-                integration,
-                delivery: DeliveryId::new("signed-body".to_owned()).ok_or(Authentication)?,
-            },
+        authenticated: ProviderFacts {
+            provider: provider.clone(),
+            integration,
             change,
             provider_run,
         },
@@ -499,12 +496,9 @@ fn validate_delivery<'a>(
     let Change::PullRequest(pull_request) = delivery.change.change else {
         return Err(ProviderError::InvalidResponse);
     };
-    let run_digest = delivery
-        .provider_run
-        .run_id
-        .as_str()
-        .strip_prefix("pr:")
-        .and_then(Digest::from_wire);
+    let ProviderRun::PullRequest(_) = delivery.provider_run.run else {
+        return Err(ProviderError::InvalidResponse);
+    };
     if delivery.identity.provider != *provider
         || delivery.change.provider != *provider
         || repository.host() != provider.instance.as_str()
@@ -523,7 +517,6 @@ fn validate_delivery<'a>(
         )
         .as_ref()
             != Some(&delivery.provider_run.candidate_commit)
-        || run_digest.is_none()
     {
         return Err(ProviderError::InvalidResponse);
     }
@@ -577,16 +570,13 @@ fn provider_run(
     ))
     .ok()?;
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!(
-            "pr:{}",
-            Digest::from(
-                sha2::Sha256::new_with_prefix(RUN_DOMAIN)
-                    .chain_update([0_u8])
-                    .chain_update(&fields)
-                    .finalize()
-                    .0
-            )
-        ))?,
+        ProviderRun::PullRequest(Digest::from(
+            sha2::Sha256::new_with_prefix(RUN_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&fields)
+                .finalize()
+                .0,
+        )),
         ProviderRunAttempt::new(1)?,
         ObjectFormat::Sha1,
         candidate.clone(),

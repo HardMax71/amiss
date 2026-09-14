@@ -2,7 +2,7 @@ use amiss_wire::model::RepositoryIdentity;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
+    AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, IntegrationId,
     ProviderIdentity, ProviderInstance, ProviderNamespace,
 };
 
@@ -15,7 +15,7 @@ pub(in crate::file_ledger::format) struct StoredDeliveryKey<'a> {
     provider_namespace: &'a ProviderNamespace,
     provider_instance: &'a ProviderInstance,
     integration: &'a IntegrationId,
-    delivery: &'a DeliveryId,
+    delivery: &'a Delivery,
 }
 
 impl<'a> StoredDeliveryKey<'a> {

@@ -5,10 +5,11 @@ use std::fs;
 use std::io::Write as _;
 use std::time::Duration;
 
+use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, ExternalPolicy,
-    IntegrationId, ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, ExternalPolicy,
+    IntegrationId, ProviderIdentity, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
     RelationRegistry, relations_for_delivery,
 };
 use amiss_controller_service::{
@@ -17,7 +18,7 @@ use amiss_controller_service::{
     read_regular,
 };
 use amiss_wire::controls::Profile;
-use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ArtifactId, Digest, ObjectFormat, Oid, RepositoryIdentity};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
 use flate2::Compression;
@@ -57,7 +58,7 @@ fn relation_registry() -> Value {
     json!({
         "relations": [{
             "identity": "relation/public-api",
-            "context_digest": amiss_wire::model::Digest::from(sha2::Sha256::digest(b"operator relation context").0).to_string(),
+            "context_digest": Digest::from(sha2::Sha256::digest(b"operator relation context").0).to_string(),
             "projection": "sorted-rows-v1",
             "subjects": [
                 subject(
@@ -101,7 +102,7 @@ fn relation_delivery(
         identity: DeliveryIdentity {
             provider: provider.clone(),
             integration: IntegrationId::new(integration.to_owned()).unwrap(),
-            delivery: DeliveryId::new("delivery/1".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("delivery/1".to_owned()).unwrap()),
         },
         change: ChangeLocator {
             provider,
@@ -109,7 +110,7 @@ fn relation_delivery(
             change: Change::PullRequest(PullRequestChange::new(1, 1, 1).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("run/1".to_owned()).unwrap(),
+            ProviderRun::PullRequest(Digest::from([187; 32])),
             ProviderRunAttempt::new(1).unwrap(),
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
@@ -749,7 +750,7 @@ fn a_plan_binds_its_profile_and_carries_its_floor() {
     assert_eq!(floor.value, expected);
     assert_eq!(
         floor.expected_digest,
-        amiss_wire::model::Digest::from(
+        Digest::from(
             sha2::Sha256::new_with_prefix("amiss/organization-floor")
                 .chain_update([0_u8])
                 .chain_update(serde_json_canonicalizer::to_vec(&expected).unwrap())

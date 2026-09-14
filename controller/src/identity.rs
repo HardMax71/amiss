@@ -4,7 +4,7 @@ use std::{fmt, str::FromStr};
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
-use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{Digest, ObjectFormat, Oid, RepositoryIdentity};
 
 mod tests;
 
@@ -50,8 +50,6 @@ pub struct OpaqueId(String);
 
 pub type ProviderInstance = OpaqueId;
 pub type IntegrationId = OpaqueId;
-pub type DeliveryId = OpaqueId;
-pub type ProviderRunId = OpaqueId;
 pub type ControllerEvaluationId = OpaqueId;
 
 impl OpaqueId {
@@ -113,7 +111,7 @@ impl From<ProviderRunAttempt> for u64 {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProviderRunIdentity {
-    pub run_id: ProviderRunId,
+    pub run: ProviderRun,
     pub attempt: ProviderRunAttempt,
     pub object_format: ObjectFormat,
     pub candidate_commit: Oid,
@@ -122,13 +120,13 @@ pub struct ProviderRunIdentity {
 impl ProviderRunIdentity {
     /// None unless the candidate commit is well formed for the object format.
     pub fn new(
-        run_id: ProviderRunId,
+        run: ProviderRun,
         attempt: ProviderRunAttempt,
         object_format: ObjectFormat,
         candidate_commit: Oid,
     ) -> Option<Self> {
         let identity = Self {
-            run_id,
+            run,
             attempt,
             object_format,
             candidate_commit,
@@ -162,7 +160,66 @@ impl ProviderIdentity {
 pub struct DeliveryIdentity {
     pub provider: ProviderIdentity,
     pub integration: IntegrationId,
-    pub delivery: DeliveryId,
+    pub delivery: Delivery,
+}
+
+/// What one delivery is, once and only once: the id the provider put on it,
+/// the exact body when the provider signs nothing else, or the token a GitLab
+/// runner presented.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Delivery {
+    Provided(OpaqueId),
+    Body(Digest),
+    Token(OidcToken),
+}
+
+/// One GitLab OIDC token: the runner that presented it and the digest of its
+/// token id, which the provider never reuses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OidcToken {
+    pub runner_id: NonZeroU64,
+    pub jti: Digest,
+}
+
+impl OidcToken {
+    /// None when the provider issued a zero runner id.
+    #[must_use]
+    pub fn new(runner_id: u64, jti: Digest) -> Option<Self> {
+        Some(Self {
+            runner_id: NonZeroU64::new(runner_id)?,
+            jti,
+        })
+    }
+}
+
+/// Which provider run a delivery came from. The GitHub family has no run of
+/// its own for a pull request event, so the run is the digest of the fields
+/// the delivery bound; GitLab names the job inside its pipeline.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProviderRun {
+    PullRequest(Digest),
+    Job(PipelineJob),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PipelineJob {
+    pub pipeline_id: NonZeroU64,
+    pub job_id: NonZeroU64,
+}
+
+impl PipelineJob {
+    /// None when the provider issued a zero for either.
+    #[must_use]
+    pub fn new(pipeline_id: u64, job_id: u64) -> Option<Self> {
+        Some(Self {
+            pipeline_id: NonZeroU64::new(pipeline_id)?,
+            job_id: NonZeroU64::new(job_id)?,
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]

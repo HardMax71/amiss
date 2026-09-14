@@ -16,6 +16,7 @@ use amiss_controller::{
     RelationAuditDigests, RelationLimits, RelationStatusRecord, RelationStatusTarget,
     RelationStatusTargets, RelationSubject, RunFailure,
 };
+use amiss_controller::{PipelineJob, ProviderRun};
 use amiss_controller_gitlab::{
     GitLabAccess, GitLabApi, GitLabMergeTrainAdapter, GitLabProtection, GitLabRefresh,
     GitLabRefreshQuery, policy_job_accepted,
@@ -300,7 +301,7 @@ fn publication_performs_a_final_authoritative_refresh() {
         Err(ProviderError::AuthorizationRevoked)
     );
     let mut wrong_run = pass;
-    wrong_run.provider_run.run_id = OpaqueId::new("pipeline/999/job/303".to_owned()).unwrap();
+    wrong_run.provider_run.run = ProviderRun::Job(PipelineJob::new(999, 303).unwrap());
     assert_eq!(
         drifted.publish(&delivery, &wrong_run),
         Err(ProviderError::InvalidResponse)

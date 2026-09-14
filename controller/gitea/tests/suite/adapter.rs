@@ -16,6 +16,7 @@ use amiss_controller::{
     SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
 use amiss_controller::{Change, PullRequestChange};
+use amiss_controller::{Delivery, DeliveryIdentity, OpaqueId, ProviderFacts};
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestAdapter, GiteaPullRequestSource,
 };
@@ -83,9 +84,9 @@ fn both_supported_namespaces_bind_the_same_signed_facts() {
     for namespace in ["gitea", "forgejo"] {
         let adapter = adapter(namespace, dummy_snapshot(namespace));
         let verified = authenticated(&adapter, BODY, provider(namespace)).unwrap();
-        let delivery = verified.delivery();
+        let delivery = verified.facts();
         assert_eq!(adapter.namespace().as_str(), namespace);
-        assert_eq!(delivery.identity.integration.as_str(), "77");
+        assert_eq!(delivery.integration.as_str(), "77");
         assert_eq!(delivery.change.repository.owner(), "acme");
         assert_eq!(delivery.change.repository.name(), "widget");
         assert_eq!(
@@ -117,7 +118,7 @@ fn only_run_defining_actions_are_accepted() {
     let adapter = adapter("gitea", dummy_snapshot("gitea"));
     let original = authenticated(&adapter, BODY, provider("gitea"))
         .unwrap()
-        .delivery()
+        .facts()
         .clone();
     for action in ["reopened", "synchronized"] {
         let body = replaced_once(
@@ -127,10 +128,9 @@ fn only_run_defining_actions_are_accepted() {
         );
         let delivery = authenticated(&adapter, &body, provider("gitea"))
             .unwrap()
-            .delivery()
+            .facts()
             .clone();
         assert_eq!(delivery.provider_run, original.provider_run);
-        assert_ne!(delivery.identity.delivery, original.identity.delivery);
     }
     let edited = replaced_once(
         BODY,
@@ -205,10 +205,11 @@ fn rejects_wrong_identity_treeish_facts_and_body_tampering() {
 #[test]
 fn refresh_and_publication_remain_event_bound() {
     let seed = adapter("gitea", dummy_snapshot("gitea"));
-    let delivery = authenticated(&seed, BODY, provider("gitea"))
-        .unwrap()
-        .delivery()
-        .clone();
+    let delivery = delivered(
+        authenticated(&seed, BODY, provider("gitea"))
+            .unwrap()
+            .facts(),
+    );
     let exact = snapshot(&delivery, "topic", "main");
     let publications = Arc::new(Mutex::new(Vec::new()));
     let exact_adapter = adapter_with("gitea", exact.clone(), Arc::clone(&publications));
@@ -264,7 +265,7 @@ fn reviewer() -> DedicatedReviewer {
 
 fn webhook() -> GiteaWebhook {
     let key = WebhookKey::new(
-        amiss_controller::OpaqueId::new("current".to_owned()).unwrap(),
+        OpaqueId::new("current".to_owned()).unwrap(),
         SECRET.to_vec(),
         0,
         None,
@@ -272,7 +273,7 @@ fn webhook() -> GiteaWebhook {
     .unwrap();
     GiteaWebhook::new(
         WebhookKeyring::new(
-            amiss_controller::OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
+            OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
             vec![key],
         )
         .unwrap(),
@@ -307,7 +308,7 @@ fn authenticate_with_signature(
     };
     let route = DeliveryRoute {
         provider: route_provider,
-        trust_set: amiss_controller::OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
+        trust_set: OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
         signed_time,
     };
     let headers = [DeliveryHeader {
@@ -466,7 +467,7 @@ fn the_signed_target_binds_the_lane() {
     let attempt = |target: &str| -> Result<(), ProviderError> {
         let route = DeliveryRoute {
             provider: provider("gitea"),
-            trust_set: amiss_controller::OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
+            trust_set: OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
             signed_time: SignedTimePolicy::ReplayOnly,
         };
         let signed = signature(BODY);
@@ -511,4 +512,17 @@ fn a_base_repository_that_disagrees_beyond_its_id_is_refused() {
         authenticated(&adapter, &body, provider("gitea")),
         Err(ProviderError::Authentication)
     );
+}
+
+/// The delivery ingress would assemble from these facts, with an id of its own.
+fn delivered(facts: &ProviderFacts) -> AuthenticatedDelivery {
+    AuthenticatedDelivery {
+        identity: DeliveryIdentity {
+            provider: facts.provider.clone(),
+            integration: facts.integration.clone(),
+            delivery: Delivery::Provided(OpaqueId::new("delivery".to_owned()).unwrap()),
+        },
+        change: facts.change.clone(),
+        provider_run: facts.provider_run.clone(),
+    }
 }

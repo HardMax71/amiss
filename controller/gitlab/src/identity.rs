@@ -3,20 +3,6 @@ mod tests;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use url::Url;
 
-pub(crate) fn parse_run_id(raw: &str) -> Option<(u64, u64)> {
-    parse_pair(raw, "pipeline", "job")
-}
-
-pub(crate) fn parse_delivery_id(raw: &str) -> Option<u64> {
-    let mut fields = raw.split('/');
-    (fields.next()? == "oidc").then_some(())?;
-    (fields.next()? == "runner").then_some(())?;
-    let runner_id = positive(fields.next()?.parse().ok()?)?;
-    (fields.next()? == "jti").then_some(())?;
-    let digest = fields.next()?;
-    (!digest.is_empty() && fields.next().is_none()).then_some(runner_id)
-}
-
 pub(crate) fn exact_sha1(raw: &str) -> Option<Oid> {
     Oid::new(ObjectFormat::Sha1, raw.to_owned())
 }
@@ -71,17 +57,4 @@ pub(crate) fn canonical_host(host: &str) -> bool {
                     .iter()
                     .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || *byte == b'-')
         })
-}
-
-fn positive(value: u64) -> Option<u64> {
-    (value > 0).then_some(value)
-}
-
-fn parse_pair(raw: &str, first_label: &str, second_label: &str) -> Option<(u64, u64)> {
-    let mut fields = raw.split('/');
-    (fields.next()? == first_label).then_some(())?;
-    let first = positive(fields.next()?.parse().ok()?)?;
-    (fields.next()? == second_label).then_some(())?;
-    let second = positive(fields.next()?.parse().ok()?)?;
-    fields.next().is_none().then_some((first, second))
 }

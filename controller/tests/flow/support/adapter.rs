@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use amiss_controller::ProviderFacts;
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, DeliveryHeader, DeliveryRoute, GitHubWebhook,
     IngressCheck, OpaqueId, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace,
@@ -106,7 +107,14 @@ impl ProviderAdapter for FakeAdapter {
         self.verifier
             .verify(delivery)
             .map_err(|_defect| ProviderError::Authentication)
-            .map(|proof| proof.bind(self.authenticated.clone()))
+            .map(|proof| {
+                proof.bind(ProviderFacts {
+                    provider: self.authenticated.identity.provider.clone(),
+                    integration: self.authenticated.identity.integration.clone(),
+                    change: self.authenticated.change.clone(),
+                    provider_run: self.authenticated.provider_run.clone(),
+                })
+            })
     }
 
     fn refresh(&self, _delivery: &AuthenticatedDelivery) -> Result<ChangeSnapshot, ProviderError> {

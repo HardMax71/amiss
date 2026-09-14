@@ -3,10 +3,12 @@
     reason = "fixed provider identities and constraints must fail loudly"
 )]
 
+use amiss_wire::model::Digest;
 use std::sync::Arc;
 
+use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
-use amiss_controller::{Change, DeliveryId, ProviderInstance, ProviderRunAttempt, ProviderRunId};
+use amiss_controller::{Change, Delivery, ProviderInstance, ProviderRun, ProviderRunAttempt};
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, GitLabPlanError, gitlab_fetch_plan};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -77,9 +79,10 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
     wrong_change.run.change.change =
         Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap());
     let mut wrong_run = request.clone();
-    wrong_run.provider_run.run_id = ProviderRunId::new("pipeline/0/job/303".to_owned()).unwrap();
+    wrong_run.provider_run.run = ProviderRun::PullRequest(Digest::from([7; 32]));
     let mut wrong_delivery = request.clone();
-    wrong_delivery.delivery.delivery = DeliveryId::new("signed-body".to_owned()).unwrap();
+    wrong_delivery.delivery.delivery =
+        Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap());
     let mut wrong_forge = request.clone();
     wrong_forge.run.refs.forge = ForgeDialect::Github;
     let mut wrong_format = request.clone();

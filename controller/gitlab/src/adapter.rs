@@ -6,13 +6,11 @@ use amiss_controller::{
     Publication, RelationStatusRecord, RelationStatusTarget, RelationSubject, RelationSubjectHead,
     VerifiedDelivery, relation_status_publication,
 };
-use amiss_controller::{Change, MergeRequestChange};
+use amiss_controller::{Change, Delivery, MergeRequestChange, OidcToken, PipelineJob, ProviderRun};
 use amiss_wire::model::ObjectFormat;
 use amiss_wire::relation::RelationSnapshot;
 
-use crate::identity::{
-    branch_ref, exact_sha1, parse_delivery_id, parse_run_id, repository_identity,
-};
+use crate::identity::{branch_ref, exact_sha1, repository_identity};
 use crate::snapshot::{conclusion_matches, snapshot};
 use crate::{GitLabOidc, GitLabRefresh, GitLabRefreshQuery, PolicyBinding};
 
@@ -209,10 +207,16 @@ fn refresh_query(
     else {
         return Err(ProviderError::InvalidResponse);
     };
-    let (pipeline_id, job_id) = parse_run_id(delivery.provider_run.run_id.as_str())
-        .ok_or(ProviderError::InvalidResponse)?;
-    let runner_id = parse_delivery_id(delivery.identity.delivery.as_str())
-        .ok_or(ProviderError::InvalidResponse)?;
+    let ProviderRun::Job(PipelineJob {
+        pipeline_id,
+        job_id,
+    }) = delivery.provider_run.run
+    else {
+        return Err(ProviderError::InvalidResponse);
+    };
+    let Delivery::Token(OidcToken { runner_id, .. }) = delivery.identity.delivery else {
+        return Err(ProviderError::InvalidResponse);
+    };
     let expected_repository = repository_identity(provider.instance.as_str(), &policy.project_path)
         .ok_or(ProviderError::InvalidResponse)?;
     let exact_gate = exact_oid(delivery.provider_run.candidate_commit.as_str())?;
@@ -228,9 +232,9 @@ fn refresh_query(
         .then_some(GitLabRefreshQuery {
             project_id: project_id.get(),
             merge_request_iid: merge_request_iid.get(),
-            pipeline_id,
-            job_id,
-            runner_id,
+            pipeline_id: pipeline_id.get(),
+            job_id: job_id.get(),
+            runner_id: runner_id.get(),
             gate_commit: exact_gate,
         })
         .ok_or(ProviderError::InvalidResponse)

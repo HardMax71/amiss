@@ -124,7 +124,7 @@ where
         let Some(verified) = (self.authenticate)(checked).map_err(provider_rejection)? else {
             return Ok(None);
         };
-        let bound = match verified.delivery().change.change {
+        let bound = match verified.facts().change.change {
             Change::PullRequest(change) => change.repository_id.get() == self.repository_id,
             Change::MergeRequest(change) => change.project_id.get() == self.repository_id,
         };
@@ -134,7 +134,8 @@ where
         let accepted = accept_verified(&self.ingress, &self.plans, checked, verified)?;
         Ok(Some(AdmittedDelivery {
             route: self.route_id.clone(),
-            source_id: accepted.delivery().identity.delivery.as_str().to_owned(),
+            source_id: serde_json::to_string(&accepted.delivery().identity.delivery)
+                .map_err(|_defect| AdmissionRejection::Malformed)?,
         }))
     }
 }

@@ -1,6 +1,7 @@
 #![cfg(test)]
 #![allow(
     clippy::unwrap_used,
+    clippy::panic,
     reason = "fixed provider fixtures must fail loudly"
 )]
 
@@ -8,12 +9,12 @@ use sha2::Digest as _;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use amiss_controller::PullRequestChange;
 use amiss_controller::{
     ArtifactReference, Change, ChangeLocator, ChangeState, CheckBinding, CheckConclusion,
     ControllerEvaluationId, IntegrationId, ProviderError, ProviderIdentity, ProviderInstance,
     ProviderNamespace, Publication, RunFailure,
 };
+use amiss_controller::{ProviderRun, PullRequestChange};
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::model::{
     AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
@@ -562,6 +563,9 @@ fn publication_conclusions_and_create_response_are_exact() {
         assert_eq!(expected.head_sha, publication.gate_commit.as_str());
         let run = &publication.run;
         let repository = &run.change.repository;
+        let ProviderRun::PullRequest(provider_run) = publication.provider_run.run else {
+            panic!("a GitHub run is a pull request");
+        };
         let bindings = [
             format!("evaluation: {}", publication.evaluation_id),
             format!("conclusion: {label}"),
@@ -578,7 +582,7 @@ fn publication_conclusions_and_create_response_are_exact() {
             "change: pull request 42 in repository 101 (id 4201)".to_owned(),
             format!(
                 "provider-run: {}#{}",
-                publication.provider_run.run_id,
+                provider_run,
                 publication.provider_run.attempt.get()
             ),
             format!("gate-commit: {}", publication.gate_commit.as_str()),

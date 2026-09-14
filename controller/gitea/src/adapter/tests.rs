@@ -2,10 +2,11 @@
 
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
+    AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, IntegrationId,
     OidPair, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, RunIdentity,
     RunRefs,
 };
+use amiss_controller::{OpaqueId, ProviderRun};
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use super::{event_bound_run, validate_delivery};
@@ -56,7 +57,7 @@ fn delivery() -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider,
             integration,
-            delivery: DeliveryId::new("signed-body".to_owned()).expect("a delivery id"),
+            delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
         },
         change,
         provider_run,
@@ -126,9 +127,8 @@ fn a_delivery_answers_for_every_field_alone() {
             delivery.provider_run.object_format = ObjectFormat::Sha256;
         }),
         ("a run nobody minted", |delivery| {
-            delivery.provider_run.run_id =
-                amiss_controller::ProviderRunId::new("pr:not-a-digest".to_owned())
-                    .expect("a run id");
+            delivery.provider_run.run =
+                ProviderRun::Job(amiss_controller::PipelineJob::new(1, 1).expect("a job"));
         }),
     ];
     for (reason, deviate) in rows {

@@ -4,7 +4,8 @@ mod policy;
 use std::fmt;
 use std::time::Duration;
 
-use crate::{AuthenticatedDelivery, DeliveryId, OpaqueId, ProviderIdentity};
+use crate::ProviderFacts;
+use crate::{AuthenticatedDelivery, Delivery, OpaqueId, ProviderIdentity};
 pub(crate) use binding::RequestBinding;
 
 pub use policy::{IngressCheck, IngressError, IngressLimits, IngressPolicy};
@@ -60,7 +61,7 @@ impl fmt::Debug for UntrustedDelivery<'_> {
 /// The authenticated value used to suppress delivery replay.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ReplayIdentity {
-    Authenticated(DeliveryId),
+    Authenticated(Delivery),
     ExactBody,
 }
 
@@ -149,7 +150,7 @@ impl AcceptedDelivery {
 /// Provider facts plus transient proof details from a successful verifier.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifiedDelivery {
-    delivery: AuthenticatedDelivery,
+    facts: ProviderFacts,
     trust_set: TrustSetId,
     anchor: TrustAnchorId,
     issued_at_unix_millis: Option<i64>,
@@ -159,7 +160,7 @@ pub struct VerifiedDelivery {
 
 impl VerifiedDelivery {
     pub(crate) fn from_webhook(
-        delivery: AuthenticatedDelivery,
+        facts: ProviderFacts,
         trust_set: TrustSetId,
         anchor: TrustAnchorId,
         issued_at_unix_millis: Option<i64>,
@@ -167,7 +168,7 @@ impl VerifiedDelivery {
         request: RequestBinding,
     ) -> Self {
         Self {
-            delivery,
+            facts,
             trust_set,
             anchor,
             issued_at_unix_millis,
@@ -176,8 +177,8 @@ impl VerifiedDelivery {
         }
     }
 
-    pub fn delivery(&self) -> &AuthenticatedDelivery {
-        &self.delivery
+    pub fn facts(&self) -> &ProviderFacts {
+        &self.facts
     }
 
     pub fn trust_set(&self) -> &TrustSetId {

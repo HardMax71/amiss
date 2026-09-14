@@ -2,8 +2,8 @@ use crate::states::{JobSource, PipelineSource};
 use sha2::Digest as _;
 
 use amiss_controller::{
-    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, MergeRequestChange,
-    ProviderError, ProviderIdentity, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    Change, ChangeLocator, Delivery, MergeRequestChange, OidcToken, PipelineJob, ProviderError,
+    ProviderFacts, ProviderIdentity, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
 };
 use amiss_wire::model::ObjectFormat;
 use serde::Deserialize;
@@ -13,8 +13,8 @@ use crate::identity::{canonical_project_path, exact_sha1, repository_identity};
 use super::PolicyBinding;
 
 pub(crate) struct AuthenticatedFacts {
-    pub delivery: AuthenticatedDelivery,
-    pub replay: DeliveryId,
+    pub authenticated: ProviderFacts,
+    pub replay: Delivery,
     pub issued_at_unix_millis: i64,
 }
 
@@ -46,9 +46,6 @@ pub(crate) fn authenticated_facts(
         || claims.job_source != JobSource::PipelineExecutionPolicy
         || claims.job_config.url != policy.config_url
         || claims.job_config.sha != policy.config_commit.as_str()
-        || claims.pipeline_id == 0
-        || claims.job_id == 0
-        || claims.runner_id == 0
         || !runner_authorized
         || claims.iat > claims.exp
         || claims.nbf > claims.exp
@@ -73,11 +70,10 @@ pub(crate) fn authenticated_facts(
         ),
     };
     let provider_run = ProviderRunIdentity::new(
-        ProviderRunId::new(format!(
-            "pipeline/{}/job/{}",
-            claims.pipeline_id, claims.job_id
-        ))
-        .ok_or(ProviderError::Authentication)?,
+        ProviderRun::Job(
+            PipelineJob::new(claims.pipeline_id, claims.job_id)
+                .ok_or(ProviderError::Authentication)?,
+        ),
         ProviderRunAttempt::new(1).ok_or(ProviderError::Authentication)?,
         ObjectFormat::Sha1,
         gate,
@@ -90,16 +86,13 @@ pub(crate) fn authenticated_facts(
             .finalize()
             .0,
     );
-    let replay = DeliveryId::new(format!("oidc/runner/{}/jti/{digest}", claims.runner_id))
-        .ok_or(ProviderError::Authentication)?;
+    let replay = Delivery::Token(
+        OidcToken::new(claims.runner_id, digest).ok_or(ProviderError::Authentication)?,
+    );
     Ok(AuthenticatedFacts {
-        delivery: AuthenticatedDelivery {
-            identity: DeliveryIdentity {
-                provider: provider.clone(),
-                integration: policy.integration.clone(),
-                delivery: DeliveryId::new("pending".to_owned())
-                    .ok_or(ProviderError::Authentication)?,
-            },
+        authenticated: ProviderFacts {
+            provider: provider.clone(),
+            integration: policy.integration.clone(),
             change,
             provider_run,
         },

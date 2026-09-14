@@ -2,17 +2,19 @@
 
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::de::Document as _;
+use amiss_wire::model::Digest;
 use std::sync::Arc;
 
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
 
+use crate::OpaqueId;
 use crate::PullRequestChange;
 use crate::{
-    Change, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion, DeliveryId,
+    Change, ChangeLocator, ChangeSnapshot, ChangeState, CheckConclusion, Delivery,
     DeliveryIdentity, Evaluation, IntegrationId, OidPair, PolicyControls, ProviderIdentity,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunFailure, RunIdentity, RunRefs,
+    ProviderRun, ProviderRunAttempt, ProviderRunIdentity, RunFailure, RunIdentity, RunRefs,
     RunnerOutcome, check_binding, check_plan,
 };
 
@@ -81,10 +83,10 @@ fn request() -> super::super::model::RunRequest {
                     .expect("an instance"),
             },
             integration: IntegrationId::new("77".to_owned()).expect("an integration"),
-            delivery: DeliveryId::new("signed-body".to_owned()).expect("a delivery"),
+            delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("pr:run".to_owned()).expect("a run id"),
+            ProviderRun::PullRequest(Digest::from([124; 32])),
             ProviderRunAttempt::new(1).expect("an attempt"),
             ObjectFormat::Sha1,
             oid('b'),

@@ -1,6 +1,8 @@
 use std::time::Duration;
 
+use amiss_controller::{Delivery, OpaqueId};
 use amiss_controller::{DeliveryHeader, IngressError, SignedTimePolicy};
+use amiss_wire::model::Digest;
 
 use super::support::{
     BODY, GITHUB_HEADERS, GITLAB_BODY, GITLAB_HEADERS, GITLAB_NOW, TestClock, delivery,
@@ -154,8 +156,10 @@ fn replay_identity_is_normalized_only_after_verification() -> Result<(), Ingress
         )
         .unwrap();
     assert_eq!(
-        signed.delivery().identity.delivery.as_str(),
-        "f5e5f430-f57b-4e6e-9fac-d9128cd7232f"
+        signed.delivery().identity.delivery,
+        Delivery::Provided(
+            OpaqueId::new("f5e5f430-f57b-4e6e-9fac-d9128cd7232f".to_owned()).unwrap()
+        )
     );
     assert_eq!(
         signed.replay_keep_through_unix_millis(),
@@ -185,8 +189,13 @@ fn replay_identity_is_normalized_only_after_verification() -> Result<(), Ingress
         )
         .unwrap();
     assert_eq!(
-        exact.delivery().identity.delivery.as_str(),
-        "body:sha256:70625f14c886c25b874c1bf13658987108dd149896764fc6707b06164e83a233"
+        exact.delivery().identity.delivery,
+        Delivery::Body(
+            Digest::from_wire(
+                "sha256:70625f14c886c25b874c1bf13658987108dd149896764fc6707b06164e83a233"
+            )
+            .unwrap()
+        )
     );
     assert_eq!(exact.replay_keep_through_unix_millis(), None);
     Ok(())

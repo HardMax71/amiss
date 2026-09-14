@@ -8,9 +8,9 @@ use std::sync::Arc;
 
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, IntegrationId,
+    AuthenticatedDelivery, Change, ChangeLocator, Delivery, DeliveryIdentity, IntegrationId,
     LeaseFence, OidPair, OpaqueId, PendingRelation, PlanScope, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
     RELATION_REGISTRY_LIMIT, RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission,
     RelationCredentialError, RelationCredentialRoute, RelationLimits, RelationPlan,
     RelationRegistryError, RelationScheduleError, RelationStatusDestination, RelationStatusError,
@@ -22,7 +22,7 @@ use amiss_fixtures::{CommitPair, commit_pair, git};
 use amiss_wire::controls::{
     ProjectionKind, ProjectionSource, RecordSetSelection, RecordValueSelection,
 };
-use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ArtifactId, BranchRef, Digest, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::RelationSnapshot;
 
 fn artifact(raw: &str) -> ArtifactId {
@@ -72,9 +72,7 @@ fn subject(role: &str, repository: &str, set: &str) -> RelationSubject {
 fn plan(identity: &str, source: &str, documentation: &str) -> RelationPlan {
     RelationPlan {
         identity: artifact(identity),
-        context_digest: amiss_wire::model::Digest::from(
-            sha2::Sha256::digest(identity.as_bytes()).0,
-        ),
+        context_digest: Digest::from(sha2::Sha256::digest(identity.as_bytes()).0),
         projection: ProjectionKind::SortedRowsV1,
         subjects: [
             subject("source", source, "rust/public-api"),
@@ -108,7 +106,7 @@ fn delivery(repository: &str, object_format: ObjectFormat) -> AuthenticatedDeliv
         identity: DeliveryIdentity {
             provider: scope.provider.clone(),
             integration: scope.integration,
-            delivery: DeliveryId::new("delivery/1".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("delivery/1".to_owned()).unwrap()),
         },
         change: ChangeLocator {
             provider: scope.provider,
@@ -116,7 +114,7 @@ fn delivery(repository: &str, object_format: ObjectFormat) -> AuthenticatedDeliv
             change: Change::PullRequest(PullRequestChange::new(1, 1, 7).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("run/9".to_owned()).unwrap(),
+            ProviderRun::PullRequest(Digest::from([195; 32])),
             ProviderRunAttempt::new(1).unwrap(),
             object_format,
             Oid::new(object_format, hex).unwrap(),
@@ -670,9 +668,8 @@ fn scheduling_refuses_configuration_rebinding_and_fence_overflow() {
     };
     let mut rebound = transition.clone();
     let mut plan = rebound.relation.plan.as_ref().clone();
-    plan.context_digest = amiss_wire::model::Digest::from(
-        sha2::Sha256::digest(b"another operator relation context").0,
-    );
+    plan.context_digest =
+        Digest::from(sha2::Sha256::digest(b"another operator relation context").0);
     rebound.relation.plan = Arc::new(plan);
     assert_eq!(
         schedule_relation(Some(previous), rebound).unwrap_err(),

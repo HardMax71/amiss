@@ -2,10 +2,11 @@ use sha2::Digest as _;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, CheckBinding, CheckConclusion,
-    ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId, ProviderError,
+    ControllerEvaluationId, Delivery, DeliveryIdentity, IntegrationId, ProviderError,
     ProviderIdentity, ProviderInstance, ProviderNamespace, Publication,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
@@ -254,7 +255,7 @@ impl Fixture {
             identity: DeliveryIdentity {
                 provider: provider.clone(),
                 integration,
-                delivery: DeliveryId::new("signed-body".to_owned()).unwrap(),
+                delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
             },
             change: change.clone(),
             provider_run,

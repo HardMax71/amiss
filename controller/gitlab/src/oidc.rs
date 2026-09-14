@@ -129,7 +129,7 @@ impl GitLabOidc {
             ReplayIdentity::Authenticated(facts.replay),
             Some(facts.issued_at_unix_millis),
         );
-        Ok(proof.bind(facts.delivery))
+        Ok(proof.bind(facts.authenticated))
     }
 }
 

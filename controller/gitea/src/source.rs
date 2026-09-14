@@ -1,17 +1,13 @@
 use crate::states::WebhookAction;
 use amiss_controller::{
-    AuthenticatedDelivery, Change, ChangeLocator, DeliveryId, DeliveryIdentity, GiteaWebhook,
-    IngressCheck, IntegrationId, ProviderError, ProviderIdentity, PullRequestChange,
-    SignedTimePolicy, VerifiedDelivery, WebhookProof,
+    Change, ChangeLocator, GiteaWebhook, IngressCheck, IntegrationId, ProviderError, ProviderFacts,
+    ProviderIdentity, PullRequestChange, SignedTimePolicy, VerifiedDelivery, WebhookProof,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
 use serde::Deserialize;
-use sha2::Digest as _;
 
 use crate::DedicatedReviewer;
 use crate::identity::{branch_ref, canonical_host, canonical_segment, provider_run};
-
-const DELIVERY_DOMAIN: &str = "amiss/controller-gitea-family-delivery-v1";
 
 pub struct GiteaPullRequestSource {
     pub(crate) provider: ProviderIdentity,
@@ -43,7 +39,7 @@ impl GiteaPullRequestSource {
     /// The route, signature, or signed pull-request payload is invalid.
     pub fn authenticate(&self, check: IngressCheck<'_>) -> Result<VerifiedDelivery, ProviderError> {
         let (proof, facts) = self.authenticate_facts(check)?;
-        Ok(proof.bind(facts.delivery))
+        Ok(proof.bind(facts.authenticated))
     }
 
     /// Authenticates one delivery only when its signed target is this lane's target.
@@ -60,7 +56,7 @@ impl GiteaPullRequestSource {
         if facts.target_ref != *target {
             return Err(ProviderError::AuthorizationRevoked);
         }
-        Ok(proof.bind(facts.delivery))
+        Ok(proof.bind(facts.authenticated))
     }
 
     fn authenticate_facts(
@@ -84,7 +80,7 @@ impl GiteaPullRequestSource {
 }
 
 struct PullRequestFacts {
-    delivery: AuthenticatedDelivery,
+    authenticated: ProviderFacts,
     target_ref: BranchRef,
 }
 
@@ -132,21 +128,9 @@ impl PullRequestFacts {
             &target_ref,
         )?;
         Some(Self {
-            delivery: AuthenticatedDelivery {
-                identity: DeliveryIdentity {
-                    provider: provider.clone(),
-                    integration,
-                    delivery: DeliveryId::new(format!(
-                        "body:{}",
-                        amiss_wire::model::Digest::from(
-                            sha2::Sha256::new_with_prefix(DELIVERY_DOMAIN)
-                                .chain_update([0_u8])
-                                .chain_update(body)
-                                .finalize()
-                                .0
-                        )
-                    ))?,
-                },
+            authenticated: ProviderFacts {
+                provider: provider.clone(),
+                integration,
                 change,
                 provider_run,
             },

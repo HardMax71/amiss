@@ -12,11 +12,12 @@ use std::sync::Arc;
 
 use amiss_controller::MergeRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, Change, ChangeLocator, CheckPlan, DeliveryId, DeliveryIdentity,
+    AuthenticatedDelivery, Change, ChangeLocator, CheckPlan, Delivery, DeliveryIdentity,
     ExternalPolicy, IntegrationId, PlanError, PlanRegistry, PlanScope, PolicyControls,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
+    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun, ProviderRunAttempt,
     ProviderRunIdentity, check_binding, check_plan, register_plan, resolve_plan,
 };
+use amiss_controller::{OpaqueId, PipelineJob};
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -60,7 +61,7 @@ fn delivery() -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
             integration: integration(),
-            delivery: DeliveryId::new("webhook/9".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("webhook/9".to_owned()).unwrap()),
         },
         change: ChangeLocator {
             provider,
@@ -68,7 +69,7 @@ fn delivery() -> AuthenticatedDelivery {
             change: Change::MergeRequest(MergeRequestChange::new(1, 42).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("pipeline/11".to_owned()).unwrap(),
+            ProviderRun::Job(PipelineJob::new(11, 1).unwrap()),
             ProviderRunAttempt::new(1).unwrap(),
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "a".repeat(40)).unwrap(),
