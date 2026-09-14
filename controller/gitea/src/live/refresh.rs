@@ -1,10 +1,10 @@
 use crate::states::{PullRequestState, ReviewState};
 use amiss_controller::{
-    ChangeSnapshot, ChangeState, OidPair, ProviderError, Publication, RunIdentity, RunRefs,
+    ChangeSnapshot, ChangeState, OidPair, ProviderError, Publication, PullRequestChange,
+    RunIdentity, RunRefs,
 };
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
-use crate::identity::parse_change_id;
 use crate::{GiteaObjects, GiteaPullRequest};
 
 use super::Config;
@@ -46,12 +46,12 @@ fn request_subject_matches(config: &Config, pull_request: GiteaPullRequest<'_>) 
         && !repository.owner().contains('/')
         && exact_oid(pull_request.candidate_commit.as_str()).as_ref()
             == Ok(pull_request.candidate_commit)
-        && parse_change_id(pull_request.change.change.as_str())
-            == Some((
-                pull_request.repository_id,
-                pull_request.pull_request_id,
-                pull_request.number,
-            ))
+        && PullRequestChange::new(
+            pull_request.repository_id,
+            pull_request.pull_request_id,
+            pull_request.number,
+        )
+        .is_some_and(|expected| pull_request.change.change.as_str().parse().ok() == Some(expected))
 }
 
 pub(super) fn snapshot(

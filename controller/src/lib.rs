@@ -61,7 +61,7 @@ pub use file_ledger::{
 pub use identity::{
     ChangeId, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
     OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt,
-    ProviderRunId, ProviderRunIdentity,
+    ProviderRunId, ProviderRunIdentity, PullRequestChange,
 };
 pub use ingress::{
     AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits,

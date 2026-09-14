@@ -1,4 +1,5 @@
 use crate::states::PullRequestState;
+use amiss_controller::PullRequestChange;
 use amiss_controller::{
     ChangeSnapshot, ChangeState, OidPair, ProviderError, Publication, RunIdentity, RunRefs,
 };
@@ -29,12 +30,12 @@ pub(super) fn validate_request(
     )
     .as_ref()
         == Some(repository);
-    let exact_change = crate::parse_change_id(pull_request.change.change.as_str())
-        == Some((
-            pull_request.repository_id,
-            pull_request.pull_request_id,
-            pull_request.number,
-        ));
+    let exact_change = PullRequestChange::new(
+        pull_request.repository_id,
+        pull_request.pull_request_id,
+        pull_request.number,
+    )
+    .is_some_and(|expected| pull_request.change.change.as_str().parse().ok() == Some(expected));
     if pull_request.installation_id != config.installation_id
         || pull_request.repository_id == 0
         || pull_request.pull_request_id == 0
