@@ -2,6 +2,7 @@
     clippy::expect_used,
     reason = "integration assertions over the external-control request gate"
 )]
+use amiss_wire::model::RepoPathText;
 
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::controls::OrganizationFloor;
@@ -232,7 +233,7 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
         None,
         vec![Observation::Sphinx(SphinxLabelObservation {
             kind: SphinxLabelKind::Current,
-            inventory: "python".parse().unwrap(),
+            inventory: ArtifactId::try_from("python".to_owned()).unwrap(),
             name: "except_star".to_owned(),
             destination: "https://docs.python.org/3/reference/".to_owned(),
         })],
@@ -244,7 +245,7 @@ fn incomplete_or_invalid_inventory_evidence_never_becomes_input() {
     let mut malformed = valid;
     malformed.observations[0] = Cow::Owned(Observation::Sphinx(SphinxLabelObservation {
         kind: SphinxLabelKind::Current,
-        inventory: "python".parse().unwrap(),
+        inventory: ArtifactId::try_from("python".to_owned()).unwrap(),
         name: "except_star".to_owned(),
         destination: "https:///missing-authority".to_owned(),
     }));
@@ -277,7 +278,7 @@ fn record_sets_accept_complete_empty_and_partial_typed_rows() {
             None,
             vec![Observation::Record(record::Observation {
                 kind: record::ObservationKind::Current,
-                name: "rust/public-api".parse().unwrap(),
+                name: ArtifactId::try_from("rust/public-api".to_owned()).unwrap(),
                 records: records
                     .iter()
                     .map(|(key, value)| record::Record {
@@ -309,7 +310,7 @@ fn malformed_record_sets_fail_closed() {
         None,
         vec![Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
-            name: "rust/public-api".parse().unwrap(),
+            name: ArtifactId::try_from("rust/public-api".to_owned()).unwrap(),
             records: vec![record::Record {
                 key: "amiss::check".to_owned(),
                 value: "pub fn check()".to_owned(),
@@ -331,7 +332,7 @@ fn malformed_record_sets_fail_closed() {
         .observations
         .push(Cow::Owned(Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
-            name: "rust/other".parse().unwrap(),
+            name: ArtifactId::try_from("rust/other".to_owned()).unwrap(),
             records: Vec::new(),
         })));
     let mut invalid = vec![wrong_version, report_derived, multiple_sets];
@@ -344,7 +345,7 @@ fn malformed_record_sets_fail_closed() {
         let mut evidence = valid.clone();
         evidence.observations = vec![Cow::Owned(Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
-            name: "rust/public-api".parse().unwrap(),
+            name: ArtifactId::try_from("rust/public-api".to_owned()).unwrap(),
             records: rows
                 .iter()
                 .map(|(key, value)| record::Record {
@@ -385,7 +386,7 @@ fn two_envelopes_cannot_claim_the_same_record_set() {
                 None,
                 vec![Observation::Record(record::Observation {
                     kind: record::ObservationKind::Current,
-                    name: "rust/public-api".parse().unwrap(),
+                    name: ArtifactId::try_from("rust/public-api".to_owned()).unwrap(),
                     records: vec![record::Record {
                         key: key.to_owned(),
                         value: value.to_owned(),
@@ -454,10 +455,10 @@ fn incomplete_or_invalid_site_build_evidence_never_becomes_input() {
             )
             .unwrap(),
             Observation::Site(SiteBuildObservation::Navigation {
-                root: Nullable::Value("docs".parse().unwrap()),
-                manifest: "docs/SUMMARY.md".parse().unwrap(),
+                root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
+                manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
                 entrypoints: vec!["/guide/".to_owned()],
-                reachable: vec!["docs/guide.md".parse().unwrap()],
+                reachable: vec![RepoPathText::try_from("docs/guide.md".to_owned()).unwrap()],
             }),
         ],
     );
@@ -595,8 +596,8 @@ fn generated_site_claims_admit_absent_repository_attribution() {
         vec![
             site_observation("/generated/", SiteObservation::Generated(None, &["intro"])).unwrap(),
             Observation::Site(SiteBuildObservation::Navigation {
-                root: Nullable::Value("docs".parse().unwrap()),
-                manifest: "docs/SUMMARY.md".parse().unwrap(),
+                root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
+                manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
                 entrypoints: vec!["/generated/".to_owned()],
                 reachable: vec![],
             }),
@@ -617,22 +618,22 @@ fn inconsistent_site_navigation_never_becomes_input() {
     .unwrap();
     let cases = [
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value("docs".parse().unwrap()),
-            manifest: "other/SUMMARY.md".parse().unwrap(),
+            root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
+            manifest: RepoPathText::try_from("other/SUMMARY.md".to_owned()).unwrap(),
             entrypoints: vec!["/guide/".to_owned()],
-            reachable: vec!["docs/guide.md".parse().unwrap()],
+            reachable: vec![RepoPathText::try_from("docs/guide.md".to_owned()).unwrap()],
         }),
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value("docs".parse().unwrap()),
-            manifest: "docs/SUMMARY.md".parse().unwrap(),
+            root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
+            manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
             entrypoints: vec!["/missing/".to_owned()],
-            reachable: vec!["docs/guide.md".parse().unwrap()],
+            reachable: vec![RepoPathText::try_from("docs/guide.md".to_owned()).unwrap()],
         }),
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value("docs".parse().unwrap()),
-            manifest: "docs/SUMMARY.md".parse().unwrap(),
+            root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
+            manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
             entrypoints: vec!["/guide/".to_owned()],
-            reachable: vec!["docs/missing.md".parse().unwrap()],
+            reachable: vec![RepoPathText::try_from("docs/missing.md".to_owned()).unwrap()],
         }),
     ];
     for navigation in cases {

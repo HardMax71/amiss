@@ -139,12 +139,12 @@ fn postprocessed_pages_become_exact_source_bound_routes_and_anchors() {
         )
         .unwrap(),
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value("docs/guide".parse().unwrap()),
-            manifest: "docs/guide/SUMMARY.md".parse().unwrap(),
+            root: Nullable::Value(RepoPathText::try_from("docs/guide".to_owned()).unwrap()),
+            manifest: RepoPathText::try_from("docs/guide/SUMMARY.md".to_owned()).unwrap(),
             entrypoints: vec!["/manual/index.html".to_owned()],
             reachable: vec![
-                "docs/guide/README.md".parse().unwrap(),
-                "docs/guide/nested/chapter.md".parse().unwrap(),
+                RepoPathText::try_from("docs/guide/README.md".to_owned()).unwrap(),
+                RepoPathText::try_from("docs/guide/nested/chapter.md".to_owned()).unwrap(),
             ],
         }),
     ] {
@@ -195,8 +195,8 @@ fn generated_chapters_need_no_repository_attribution() {
         .unwrap(),
         site_observation("/manual/index.html", SiteObservation::Generated(None, &[])).unwrap(),
         Observation::Site(SiteBuildObservation::Navigation {
-            root: Nullable::Value("guide".parse().unwrap()),
-            manifest: "guide/SUMMARY.md".parse().unwrap(),
+            root: Nullable::Value(RepoPathText::try_from("guide".to_owned()).unwrap()),
+            manifest: RepoPathText::try_from("guide/SUMMARY.md".to_owned()).unwrap(),
             entrypoints: vec!["/manual/index.html".to_owned()],
             reachable: vec![],
         }),
@@ -261,12 +261,12 @@ fn completed_links_not_chapter_membership_define_navigation() {
             .observations
             .contains(&Cow::Owned(Observation::Site(
                 SiteBuildObservation::Navigation {
-                    root: Nullable::Value("guide".parse().unwrap()),
-                    manifest: "guide/SUMMARY.md".parse().unwrap(),
+                    root: Nullable::Value(RepoPathText::try_from("guide".to_owned()).unwrap()),
+                    manifest: RepoPathText::try_from("guide/SUMMARY.md".to_owned()).unwrap(),
                     entrypoints: vec!["/manual/index.html".to_owned()],
                     reachable: vec![
-                        "guide/first.md".parse().unwrap(),
-                        "guide/nested/second.md".parse().unwrap()
+                        RepoPathText::try_from("guide/first.md".to_owned()).unwrap(),
+                        RepoPathText::try_from("guide/nested/second.md".to_owned()).unwrap()
                     ],
                 }
             )))

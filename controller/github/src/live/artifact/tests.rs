@@ -1,4 +1,5 @@
 #![cfg(test)]
+use amiss_wire::controls::RequiredStatusName;
 
 use sha2::Digest as _;
 use std::io::{Cursor, Write as _};
@@ -179,7 +180,7 @@ fn fixture() -> (Config, WorkflowArtifactExpectation, Oid) {
             provider: provider.clone(),
             app_id: 99,
             installation_id: 7,
-            required_status_name: "amiss".parse().unwrap(),
+            required_status_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
         },
         WorkflowArtifactExpectation {
             provider,

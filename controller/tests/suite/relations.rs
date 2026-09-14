@@ -20,7 +20,7 @@ use amiss_controller::{
 };
 use amiss_fixtures::{CommitPair, commit_pair, git};
 use amiss_wire::controls::{
-    ProjectionKind, ProjectionSource, RecordSetSelection, RecordValueSelection,
+    ProjectionKind, ProjectionSource, RecordSetSelection, RecordValueSelection, RequiredStatusName,
 };
 use amiss_wire::model::{ArtifactId, BranchRef, Digest, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::relation::RelationSnapshot;
@@ -81,7 +81,8 @@ fn plan(identity: &str, source: &str, documentation: &str) -> RelationPlan {
         aggregate_limits: limits(150, 1_572_864),
         status_destinations: vec![RelationStatusDestination {
             subject_role: artifact("documentation"),
-            required_status_name: "Amiss cross-repository".parse().unwrap(),
+            required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
+                .unwrap(),
         }],
     }
 }
@@ -187,9 +188,11 @@ fn current_heads(transition: &RelationTransition) -> [RelationSubjectHead; 2] {
 #[test]
 fn either_authenticated_subject_selects_every_owned_relation_in_identity_order() {
     let mut zeta = plan("relation/zeta", "sdk", "handbook");
-    zeta.status_destinations[0].required_status_name = "Amiss zeta relation".parse().unwrap();
+    zeta.status_destinations[0].required_status_name =
+        RequiredStatusName::try_from("Amiss zeta relation".to_owned()).unwrap();
     let mut alpha = plan("relation/alpha", "service", "handbook");
-    alpha.status_destinations[0].required_status_name = "Amiss alpha relation".parse().unwrap();
+    alpha.status_destinations[0].required_status_name =
+        RequiredStatusName::try_from("Amiss alpha relation".to_owned()).unwrap();
     let registry = relation_registry(vec![zeta, alpha]).unwrap();
 
     let handbook =
@@ -429,7 +432,8 @@ fn one_provider_repository_status_key_has_one_relation_owner() {
         Some(RelationRegistryError::DuplicateDestination)
     );
 
-    second.status_destinations[0].required_status_name = "Amiss schema relation".parse().unwrap();
+    second.status_destinations[0].required_status_name =
+        RequiredStatusName::try_from("Amiss schema relation".to_owned()).unwrap();
     assert!(relation_registry(vec![first, second]).is_ok());
 }
 

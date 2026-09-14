@@ -1,3 +1,4 @@
+use amiss_wire::controls::RequiredStatusName;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -228,7 +229,8 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
         ..expected.clone()
     };
     let mut other_check = expected.check.clone();
-    other_check.required_status_name = "amiss / another check".parse().unwrap();
+    other_check.required_status_name =
+        RequiredStatusName::try_from("amiss / another check".to_owned()).unwrap();
     let changed_check = DeliveryLease {
         check: other_check,
         ..expected.clone()
@@ -347,7 +349,8 @@ fn a_staged_row_must_echo_the_lease_and_publication_exactly() {
     ));
 
     let mut drifted_check = expected.clone();
-    drifted_check.check.required_status_name = "amiss / elsewhere".parse().unwrap();
+    drifted_check.check.required_status_name =
+        RequiredStatusName::try_from("amiss / elsewhere".to_owned()).unwrap();
     let (adapter, mut ledger) = scripted(None, drifted_check.clone());
     ledger.renewals = renewal_script([
         LeaseRenewal::Renewed(drifted_check.clone()),

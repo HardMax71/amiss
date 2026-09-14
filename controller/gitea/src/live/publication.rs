@@ -71,7 +71,7 @@ pub(super) fn publication_decision(
             if review
                 .body
                 .lines()
-                .any(|line| line == format!("{MARKER}{}", publication.evaluation_id)) =>
+                .any(|line| line == format!("{MARKER}{}", publication.evaluation_id.as_str())) =>
         {
             Err(ProviderError::InvalidResponse)
         }
@@ -122,9 +122,9 @@ fn expected(publication: &Publication) -> Result<CreateReview, ProviderError> {
     };
     let body = format!(
         "{MARKER}{}\nconclusion: {label}{failure}\nprovider: {}/{}\nrepository: {}/{}/{}\nchange: pull request {} in repository {} (id {})\nprovider-run: {}#{}\ngate-commit: {}\ncandidate-ref: {}\ntarget-ref: {}\ndefault-ref: {}\nbase-commit: {}\nbase-tree: {}\ncandidate-commit: {}\ncandidate-tree: {}\nplan: {}\nconstraint: {}",
-        publication.evaluation_id,
-        run.change.provider.namespace,
-        run.change.provider.instance,
+        publication.evaluation_id.as_str(),
+        run.change.provider.namespace.as_str(),
+        run.change.provider.instance.as_str(),
         repository.host(),
         repository.owner(),
         repository.name(),

@@ -10,7 +10,7 @@ use amiss_bootstrap::build::{
 };
 use amiss_wire::action::executable_platform;
 use amiss_wire::manifest::RuntimeRole;
-use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
+use amiss_wire::model::{ArtifactId, ObjectFormat, RepoPathText, RepositoryIdentity};
 
 /// The release-side manifest builder: it reads the staged action tree,
 /// hashes the exact bytes, and writes the strict manifest plus its digest
@@ -80,13 +80,13 @@ fn run(args: Args) -> Result<(), String> {
             .ok_or_else(|| format!("{path}: the executable header names no supported platform"))?;
         let files = vec![
             StagedFile {
-                path: path.parse().map_err(str::to_owned)?,
+                path: RepoPathText::try_from(path.to_string()).map_err(str::to_owned)?,
                 role: RuntimeRole::Executable,
                 executable: true,
                 bytes,
             },
             StagedFile {
-                path: args.action.parse().map_err(str::to_owned)?,
+                path: RepoPathText::try_from(args.action.clone()).map_err(str::to_owned)?,
                 role: RuntimeRole::RuntimeData,
                 executable: false,
                 bytes: &action_bytes,
@@ -94,8 +94,7 @@ fn run(args: Args) -> Result<(), String> {
         ];
         staged.push(StagedArtifact {
             platform,
-            artifact_name: format!("amiss-{}", platform.as_ref())
-                .parse()
+            artifact_name: ArtifactId::try_from(format!("amiss-{}", platform.as_ref()))
                 .map_err(str::to_owned)?,
             files,
         });
@@ -109,7 +108,12 @@ fn run(args: Args) -> Result<(), String> {
         commit_oid: args.commit.parse().map_err(str::to_owned)?,
         locks: lock_bytes
             .iter()
-            .map(|(path, bytes)| Ok((path.parse().map_err(str::to_owned)?, bytes.as_slice())))
+            .map(|(path, bytes)| {
+                Ok((
+                    RepoPathText::try_from(path.to_string()).map_err(str::to_owned)?,
+                    bytes.as_slice(),
+                ))
+            })
             .collect::<Result<_, String>>()?,
     };
     let (manifest, digest) = build_manifest(build, staged).map_err(str::to_owned)?;

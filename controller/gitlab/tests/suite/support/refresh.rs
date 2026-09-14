@@ -7,6 +7,7 @@ use amiss_controller_gitlab::{
     GitLabPipeline, GitLabProject, GitLabProtection, GitLabRefresh, GitLabTrainCar,
     GitLabTrainSettings,
 };
+use amiss_wire::controls::RequiredStatusName;
 use amiss_wire::model::ObjectFormat;
 use sha2::Digest as _;
 
@@ -123,7 +124,7 @@ pub fn publication(
         evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
         check: CheckBinding {
             plan_digest: digest,
-            required_status_name: "amiss".parse().unwrap(),
+            required_status_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
             execution_constraint_digest: digest,
         },
         run: snapshot.run.clone(),

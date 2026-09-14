@@ -22,7 +22,7 @@ use amiss_controller_gitlab::{
     GitLabRefreshQuery, policy_job_accepted,
 };
 
-use amiss_wire::controls::{ProjectionSource, RecordSetSelection};
+use amiss_wire::controls::{ProjectionSource, RecordSetSelection, RequiredStatusName};
 use amiss_wire::model::{ArtifactId, BranchRef, ObjectFormat, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 
@@ -384,7 +384,7 @@ fn malformed_relation_bindings_are_rejected_before_provider_io() {
     let api = FakeApi::new([valid]);
     let adapter = GitLabMergeTrainAdapter::new(source, api.clone());
     let (status, mut target) = relation_status(&delivery, RelationVerdict::Aligned);
-    target.required_status_name = "another-job".parse().unwrap();
+    target.required_status_name = RequiredStatusName::try_from("another-job".to_owned()).unwrap();
     assert_eq!(
         adapter.relation_policy_job_result(&delivery, &status, &target),
         Err(ProviderError::InvalidResponse)
@@ -455,7 +455,7 @@ fn relation_status(
         },
         credential: OpaqueId::new("credential/gitlab".to_owned()).unwrap(),
         candidate_commit: delivery.provider_run.candidate_commit.clone(),
-        required_status_name: "amiss:policy".parse().unwrap(),
+        required_status_name: RequiredStatusName::try_from("amiss:policy".to_owned()).unwrap(),
     };
     (
         RelationStatusRecord {

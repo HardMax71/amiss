@@ -1,4 +1,5 @@
 pub(super) use amiss_controller_fixtures::clock::TestClock;
+use amiss_wire::controls::RequiredStatusName;
 use sha2::Digest as _;
 use std::ffi::OsStr;
 use std::fs;
@@ -58,7 +59,7 @@ pub(super) fn check_binding() -> CheckBinding {
                 .finalize()
                 .0,
         ),
-        required_status_name: "amiss/enforce".parse().unwrap(),
+        required_status_name: RequiredStatusName::try_from("amiss/enforce".to_owned()).unwrap(),
         execution_constraint_digest: Digest::from(
             Sha256::new_with_prefix("amiss/test-execution-constraint")
                 .chain_update([0_u8])

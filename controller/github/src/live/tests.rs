@@ -4,6 +4,7 @@
     clippy::panic,
     reason = "fixed provider fixtures must fail loudly"
 )]
+use amiss_wire::controls::RequiredStatusName;
 
 use sha2::Digest as _;
 use std::sync::Mutex;
@@ -15,7 +16,7 @@ use amiss_controller::{
     ProviderNamespace, Publication, RunFailure,
 };
 use amiss_controller::{ProviderRun, PullRequestChange};
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 use amiss_wire::report::model::{
     AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
 };
@@ -376,7 +377,7 @@ fn a_token_answers_only_for_its_own_installation() {
         INSTALLATION_ID,
         rsa_keys().unwrap().private_pem,
         "https://ghes.invalid",
-        "amiss / documentation assurance".parse().unwrap(),
+        RequiredStatusName::try_from("amiss / documentation assurance".to_owned()).unwrap(),
         GitHubTimeouts::new(Duration::from_millis(1), Duration::from_millis(2)).unwrap(),
     )
     .unwrap();
@@ -426,11 +427,11 @@ fn an_owned_check_run_is_exact_in_every_field_that_names_it() {
     let mut unnumbered = exact.clone();
     unnumbered.id = 0;
     let mut other_name = exact.clone();
-    other_name.name = format!("{} (retry)", expected.name);
+    other_name.name = format!("{} (retry)", expected.name.as_str());
     let mut other_head = exact.clone();
     other_head.head_sha = "f".repeat(40);
     let mut other_name_and_evaluation = exact;
-    other_name_and_evaluation.name = format!("{} (retry)", expected.name);
+    other_name_and_evaluation.name = format!("{} (retry)", expected.name.as_str());
     other_name_and_evaluation.external_id = Some("evaluation-older".to_owned());
 
     for broken in [
@@ -491,7 +492,9 @@ fn publication_summary_carries_the_report_feedback_lines() {
             effective_disposition: Disposition::Fail,
             finding_kinds: vec![FindingKind::ExplicitTargetMissing],
             location_count: std::num::NonZeroU64::new(2).unwrap(),
-            target: Some(RepoPath::Text("docs/new.md".parse().unwrap())),
+            target: Some(RepoPath::Text(
+                RepoPathText::try_from("docs/new.md".to_owned()).unwrap(),
+            )),
         }],
         status: AvailableFeedbackStatus::Available,
     }));
@@ -567,11 +570,12 @@ fn publication_conclusions_and_create_response_are_exact() {
             panic!("a GitHub run is a pull request");
         };
         let bindings = [
-            format!("evaluation: {}", publication.evaluation_id),
+            format!("evaluation: {}", publication.evaluation_id.as_str()),
             format!("conclusion: {label}"),
             format!(
                 "provider: {}/{}",
-                run.change.provider.namespace, run.change.provider.instance
+                run.change.provider.namespace.as_str(),
+                run.change.provider.instance.as_str()
             ),
             format!(
                 "repository: {}/{}/{}",
@@ -747,7 +751,8 @@ impl Fixture {
                 provider,
                 app_id: APP_ID,
                 installation_id: INSTALLATION_ID,
-                required_status_name: "amiss/provider".parse().unwrap(),
+                required_status_name: RequiredStatusName::try_from("amiss/provider".to_owned())
+                    .unwrap(),
             },
             change,
             candidate: candidate.clone(),
@@ -889,7 +894,7 @@ impl GitHubRest for FakeRest {
         _repository: &RepositoryIdentity,
         _head_sha: &Oid,
         _app_id: u64,
-        _name: &amiss_wire::controls::RequiredStatusName,
+        _name: &RequiredStatusName,
         _deadline: OperationDeadline,
     ) -> Result<Vec<CheckRunRecord>, ProviderError> {
         self.checks.fetch_add(1, Ordering::Relaxed);
@@ -990,7 +995,7 @@ fn required_rule_with_policy(integration_id: Option<u64>, strict: bool) -> Branc
 fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
     CheckRunRecord {
         id: 81,
-        name: expected.name.to_string(),
+        name: expected.name.as_str().to_owned(),
         head_sha: expected.head_sha.clone(),
         external_id: Some(expected.external_id.clone()),
         status: expected.status.clone(),

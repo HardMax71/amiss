@@ -2,6 +2,7 @@
     clippy::unwrap_used,
     reason = "integration assertions over values constructed in the same test"
 )]
+use amiss_wire::model::ArtifactId;
 
 use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Envelope;
@@ -25,7 +26,7 @@ const C: &str = "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 fn observation(name: &str) -> Observation {
     Observation::Record(record::Observation {
         kind: record::ObservationKind::Current,
-        name: name.parse().unwrap(),
+        name: ArtifactId::try_from(name.to_owned()).unwrap(),
         records: Vec::new(),
     })
 }
@@ -39,7 +40,7 @@ fn evidence(observations: Vec<Observation>) -> SemanticEvidence<'static> {
         },
         producer: SemanticProducer {
             kind: SemanticProducerKind::RecordSet,
-            identity: "test-public-api".parse().unwrap(),
+            identity: ArtifactId::try_from("test-public-api".to_owned()).unwrap(),
             version: "1".to_owned(),
             context_digest: B.parse().unwrap(),
             input_digest: C.parse().unwrap(),
@@ -244,7 +245,7 @@ fn semantic_readers_refuse_unknown_shapes_even_with_correct_payload_digests() {
 fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
     let row = Observation::Record(record::Observation {
         kind: record::ObservationKind::Current,
-        name: "rust/api".parse().unwrap(),
+        name: ArtifactId::try_from("rust/api".to_owned()).unwrap(),
         records: vec![record::Record {
             key: "\u{e000}\u{10000}".to_owned(),
             value: "quote\" slash/ backslash\\ newline\n nul\0 é".to_owned(),
@@ -276,7 +277,7 @@ fn serialized_semantic_bytes_preserve_unicode_and_escaping() {
 fn serialized_semantic_bytes_enforce_the_complete_document_ceiling() {
     let mut records = record::Observation {
         kind: record::ObservationKind::Current,
-        name: "rust/api".parse().unwrap(),
+        name: ArtifactId::try_from("rust/api".to_owned()).unwrap(),
         records: vec![record::Record {
             key: "a".to_owned(),
             value: String::new(),

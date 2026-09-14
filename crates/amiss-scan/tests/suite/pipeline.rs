@@ -337,8 +337,8 @@ fn a_historical_absence_never_borrows_candidate_relocation_evidence() {
             "widgets".to_owned(),
         )
         .unwrap(),
-        candidate_ref: Some("refs/heads/main".parse().unwrap()),
-        default_ref: Some("refs/heads/main".parse().unwrap()),
+        candidate_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
+        default_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
     };
     let mut setup = shell();
     setup.repository = RepositoryIdentity::github("acme".to_owned(), "widgets".to_owned());

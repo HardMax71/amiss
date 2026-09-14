@@ -16,7 +16,7 @@ use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::Profile;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::{
-    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity,
+    ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
 };
 use amiss_wire::report::model::ReportPayload;
 use amiss_wire::requests::{
@@ -740,10 +740,10 @@ fn site_build_observations() -> Vec<Observation> {
         ),
     ];
     let navigation = [Ok(Observation::Site(SiteBuildObservation::Navigation {
-        root: Nullable::Value("docs".parse().unwrap()),
-        manifest: "docs/SUMMARY.md".parse().unwrap(),
+        root: Nullable::Value(RepoPathText::try_from("docs".to_owned()).unwrap()),
+        manifest: RepoPathText::try_from("docs/SUMMARY.md".to_owned()).unwrap(),
         entrypoints: vec!["/generated/".to_owned()],
-        reachable: vec!["docs/guide.md".parse().unwrap()],
+        reachable: vec![RepoPathText::try_from("docs/guide.md".to_owned()).unwrap()],
     }))];
 
     pages

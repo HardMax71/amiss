@@ -1,3 +1,4 @@
+use amiss_wire::model::ArtifactId;
 use sha2::Digest as _;
 use std::borrow::Cow;
 
@@ -14,7 +15,7 @@ use amiss_wire::{
 fn controller_binding_preserves_candidate_context_and_typed_observations() {
     let observation = Observation::Record(record::Observation {
         kind: record::ObservationKind::Current,
-        name: "rust/api".parse().unwrap(),
+        name: ArtifactId::try_from("rust/api".to_owned()).unwrap(),
         records: vec![record::Record {
             key: "é".to_owned(),
             value: "quote\" and newline\n".to_owned(),
@@ -24,7 +25,7 @@ fn controller_binding_preserves_candidate_context_and_typed_observations() {
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
-            identity: "fixture".parse().unwrap(),
+            identity: ArtifactId::try_from("fixture".to_owned()).unwrap(),
             version: "1".to_owned(),
             context_digest: amiss_wire::model::Digest::from(
                 sha2::Sha256::new_with_prefix("test")

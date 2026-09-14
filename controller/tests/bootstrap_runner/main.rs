@@ -21,7 +21,7 @@ use amiss_controller::{
 };
 use amiss_controller::{OpaqueId, PipelineJob};
 use amiss_fixtures::{CommitPair, commit_pair, git};
-use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile, RequiredStatusName};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{
     BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity, UtcInstant,
@@ -217,7 +217,7 @@ fn execution(
     .unwrap();
     constraint.action_commit_oid = oid(&action.candidate);
     constraint.action_tree_oid = tree(action, &action.candidate);
-    constraint.required_status_name = status.parse().unwrap();
+    constraint.required_status_name = RequiredStatusName::try_from(status.to_owned()).unwrap();
     constraint.bootstrap_digest = bootstrap_digest;
     constraint
 }

@@ -9,8 +9,8 @@ use std::path::Path;
 
 use amiss_wire::controls::{
     ActionBootstrapContract, ConstraintPlatform, ExecutionConstraintDescriptor,
-    ExecutionConstraintSchema, TrustedTimeController, TrustedTimeSchema, TrustedTimeStatement,
-    valid_required_status_name,
+    ExecutionConstraintSchema, RequiredStatusName, TrustedTimeController, TrustedTimeSchema,
+    TrustedTimeStatement, valid_required_status_name,
 };
 use amiss_wire::de::ErrorKind;
 use amiss_wire::model::Digest;
@@ -75,7 +75,10 @@ fn execution_constraint() -> ExecutionConstraintDescriptor {
         manifest_path: RepoPathText::new("release/manifest.json".to_owned()).unwrap(),
         release_manifest_digest: Digest::from_wire(DIGEST_B).unwrap(),
         selected_platform: ConstraintPlatform::LinuxX8664,
-        required_status_name: "amiss / documentation assurance".parse().unwrap(),
+        required_status_name: RequiredStatusName::try_from(
+            "amiss / documentation assurance".to_owned(),
+        )
+        .unwrap(),
         bootstrap_contract: ActionBootstrapContract::Current,
         bootstrap_digest: Digest::from_wire(DIGEST_C).unwrap(),
     }

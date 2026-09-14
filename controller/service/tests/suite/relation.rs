@@ -23,7 +23,9 @@ use amiss_controller_service::{
     CoordinatedRelation, CoordinatedTransition, RelationAuditExecutionError, RelationAuditRequest,
     RelationOutboxError, drain_relation_outbox, execute_relation_audit, freeze_relation_transition,
 };
-use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
+use amiss_wire::controls::{
+    BlobLineSelection, ProjectionKind, ProjectionSource, RequiredStatusName,
+};
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::{ArtifactId, Digest, ObjectFormat, Oid, RepoPathText};
 use amiss_wire::relation::{RelationAssessment, RelationSnapshot, RelationVerdict};
@@ -259,7 +261,7 @@ fn relation_outbox_retries_after_restart_and_acknowledges_only_success()
     let mut plan = fixture.transition.relation.plan.as_ref().clone();
     plan.status_destinations.push(RelationStatusDestination {
         subject_role: ArtifactId::new("source".to_owned()).unwrap(),
-        required_status_name: "Amiss source relation".parse().unwrap(),
+        required_status_name: RequiredStatusName::try_from("Amiss source relation".to_owned())?,
     });
     fixture.transition.relation.plan = Arc::new(plan);
     let RelationStores {

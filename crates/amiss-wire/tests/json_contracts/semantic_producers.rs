@@ -1,5 +1,6 @@
 use amiss_wire::envelope::Envelope;
 use amiss_wire::envelope::Payload as _;
+use amiss_wire::model::ArtifactId;
 use amiss_wire::{
     de::ErrorKind,
     report::model::SemanticEvidenceProducer,
@@ -14,7 +15,7 @@ use strum::IntoEnumIterator;
 fn semantic_producer_kinds_are_closed_string_tags_through_provenance() {
     let mut producer = SemanticProducer {
         kind: SemanticProducerKind::SiteBuild,
-        identity: "fixture".parse().unwrap(),
+        identity: ArtifactId::try_from("fixture".to_owned()).unwrap(),
         version: "1".to_owned(),
         context_digest: amiss_wire::model::Digest::from([20; 32]),
         input_digest: amiss_wire::model::Digest::from([21; 32]),

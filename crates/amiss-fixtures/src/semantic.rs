@@ -71,20 +71,20 @@ pub fn site_observation(
     Ok(Observation::Site(match observation {
         SiteObservation::Page(source, anchors) => SiteBuildObservation::Route {
             route: route.to_owned(),
-            source: source.parse()?,
+            source: RepoPathText::try_from(source.to_owned())?,
             anchors: anchors.iter().map(|anchor| (*anchor).to_owned()).collect(),
         },
         SiteObservation::Generated(source, anchors) => SiteBuildObservation::GeneratedRoute {
             route: route.to_owned(),
             source: source
-                .map(str::parse::<RepoPathText>)
+                .map(|source| RepoPathText::try_from(source.to_owned()))
                 .transpose()?
                 .map_or(Nullable::Null, Nullable::Value),
             anchors: anchors.iter().map(|anchor| (*anchor).to_owned()).collect(),
         },
         SiteObservation::Redirect(source, destination) => SiteBuildObservation::Redirect {
             route: route.to_owned(),
-            source: source.parse()?,
+            source: RepoPathText::try_from(source.to_owned())?,
             destination: destination.to_owned(),
         },
     }))

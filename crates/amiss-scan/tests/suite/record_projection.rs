@@ -96,7 +96,7 @@ fn semantic_inputs(
         complete,
         observations: vec![Cow::Owned(Observation::Record(record::Observation {
             kind: record::ObservationKind::Current,
-            name: set.parse().unwrap(),
+            name: ArtifactId::try_from(set.to_owned()).unwrap(),
             records: records
                 .iter()
                 .map(|(key, value)| record::Record {

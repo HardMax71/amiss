@@ -33,10 +33,11 @@ relevant checks without unrelated Rust builds. Unknown paths take the full code 
 - Serialization belongs to Serde derives and library adapters. Handwritten Serde
   implementations, visitors, field codecs, JSON parsers, and forwarding encode/decode
   helpers are forbidden, including macro-generated substitutes. So are handwritten
-  `FromStr`, `Display`, `TryFrom` and primitive `From` impls that spell or read a value:
-  derive them (strum, serde_with, parse-display) or keep the domain type and format at
-  the boundary. The validated newtypes that still carry such a pair are named in the
-  ast-grep rule and only leave it. Use library calls
+  `FromStr`, `Display` and primitive `From` impls that spell a value: derive them (strum,
+  serde_with) or keep the domain type and format at the boundary. A validated newtype
+  reads through `#[serde(try_from)]` and one `TryFrom` that calls its constructor; `Digest`
+  and `Oid` still spell themselves by hand and are named in the ast-grep rule until they
+  do not. Use library calls
   directly and keep domain validation separate. Accept standard Serde JSON behavior;
   do not restore object-only guards or a custom JSON profile.
   Let derives infer generic bounds; handwritten `serde(bound)` overrides are forbidden.

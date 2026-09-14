@@ -1,8 +1,6 @@
 use std::num::NonZeroU64;
-use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
-use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 use amiss_wire::model::{Digest, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -16,7 +14,8 @@ fn bounded(raw: String, maximum: usize, valid: impl Fn(u8) -> bool) -> Option<St
 
 /// The registry key for one provider family, in a lowercase DNS-label
 /// grammar so it can never collide by case or whitespace.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct ProviderNamespace(String);
 
 impl ProviderNamespace {
@@ -36,16 +35,11 @@ impl ProviderNamespace {
     }
 }
 
-impl fmt::Display for ProviderNamespace {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
 /// One provider-issued opaque identifier: bounded printable bytes the
 /// controller stores and compares but never interprets. Which role a value
 /// plays is said by the field that holds it, not by a wrapper type.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, SerializeDisplay, DeserializeFromStr)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct OpaqueId(String);
 
 pub type ProviderInstance = OpaqueId;
@@ -66,16 +60,10 @@ impl OpaqueId {
     }
 }
 
-impl fmt::Display for OpaqueId {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter.write_str(self.as_str())
-    }
-}
-
 /// A provider run attempt: one-based and inside the exact-integer range
 /// every JSON consumer can carry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(try_from = "u64", into = "u64")]
+#[serde(try_from = "u64")]
 pub struct ProviderRunAttempt(u64);
 
 impl ProviderRunAttempt {
@@ -97,12 +85,6 @@ impl TryFrom<u64> for ProviderRunAttempt {
 
     fn try_from(raw: u64) -> Result<Self, Self::Error> {
         Self::new(raw).ok_or("invalid provider run attempt")
-    }
-}
-
-impl From<ProviderRunAttempt> for u64 {
-    fn from(attempt: ProviderRunAttempt) -> Self {
-        attempt.get()
     }
 }
 
@@ -280,18 +262,18 @@ impl MergeRequestChange {
     }
 }
 
-impl FromStr for ProviderNamespace {
-    type Err = &'static str;
+impl TryFrom<String> for ProviderNamespace {
+    type Error = &'static str;
 
-    fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        Self::new(raw.to_owned()).ok_or("invalid provider namespace")
+    fn try_from(raw: String) -> Result<Self, Self::Error> {
+        Self::new(raw).ok_or("invalid provider namespace")
     }
 }
 
-impl FromStr for OpaqueId {
-    type Err = &'static str;
+impl TryFrom<String> for OpaqueId {
+    type Error = &'static str;
 
-    fn from_str(raw: &str) -> Result<Self, Self::Err> {
-        Self::new(raw.to_owned()).ok_or("invalid opaque identifier")
+    fn try_from(raw: String) -> Result<Self, Self::Error> {
+        Self::new(raw).ok_or("invalid opaque identifier")
     }
 }

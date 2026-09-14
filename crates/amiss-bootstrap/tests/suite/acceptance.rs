@@ -4,6 +4,7 @@
     clippy::unwrap_used,
     reason = "integration harness over asserted fixture shapes"
 )]
+use amiss_wire::model::BranchRef;
 
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::controls::TrustedTimeStatement;
@@ -482,8 +483,8 @@ fn sealed_report() -> (Vec<u8>, Expectations) {
     wire.push(b'\n');
     expectations.sealed = Some(SealedExpectations {
         profile: amiss_wire::controls::Profile::Observe,
-        candidate_ref: "refs/heads/feature/docs".parse().unwrap(),
-        target_ref: "refs/heads/main".parse().unwrap(),
+        candidate_ref: BranchRef::try_from("refs/heads/feature/docs".to_owned()).unwrap(),
+        target_ref: BranchRef::try_from("refs/heads/main".to_owned()).unwrap(),
         repository: RepositoryIdentity::new(
             "git.example.internal".to_owned(),
             "group/subgroup".to_owned(),

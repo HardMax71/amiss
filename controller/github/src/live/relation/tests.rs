@@ -3,6 +3,7 @@
     clippy::unwrap_used,
     reason = "fixed provider fixtures must fail loudly"
 )]
+use amiss_wire::controls::RequiredStatusName;
 
 use sha2::Digest as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -264,7 +265,8 @@ fn fixture() -> (Config, RelationSubject) {
             provider: subject.scope.provider.clone(),
             app_id: APP_ID,
             installation_id: INSTALLATION_ID,
-            required_status_name: "amiss/provider".parse().unwrap(),
+            required_status_name: RequiredStatusName::try_from("amiss/provider".to_owned())
+                .unwrap(),
         },
         subject,
     )
@@ -293,7 +295,8 @@ fn status_fixture() -> (Config, RelationStatusRecord, RelationStatusTarget) {
         scope: subject.scope,
         credential: subject.credential,
         candidate_commit: frozen.commits.candidate.clone(),
-        required_status_name: "Amiss cross-repository".parse().unwrap(),
+        required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
+            .unwrap(),
     };
     let audit = validate_relation_audit(audit_bundle(&fixture)).unwrap();
     let status = RelationStatusRecord {
@@ -324,7 +327,8 @@ fn status_fixture() -> (Config, RelationStatusRecord, RelationStatusTarget) {
             provider: target.scope.provider.clone(),
             app_id: APP_ID,
             installation_id: INSTALLATION_ID,
-            required_status_name: "amiss/provider".parse().unwrap(),
+            required_status_name: RequiredStatusName::try_from("amiss/provider".to_owned())
+                .unwrap(),
         },
         status,
         target,
@@ -344,7 +348,7 @@ fn audit_bundle(fixture: &RelationAuditFixture) -> RelationAuditBundle<'_> {
 fn check_run(app_id: u64, expected: &CreateCheckRun) -> CheckRunRecord {
     CheckRunRecord {
         id: 42,
-        name: expected.name.to_string(),
+        name: expected.name.as_str().to_owned(),
         head_sha: expected.head_sha.clone(),
         external_id: Some(expected.external_id.clone()),
         status: expected.status.clone(),

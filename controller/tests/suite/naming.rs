@@ -70,11 +70,15 @@ fn identities_display_their_spellings() {
     assert_eq!(
         ProviderNamespace::new("github".to_owned())
             .unwrap()
-            .to_string(),
+            .as_str()
+            .to_owned(),
         "github"
     );
     assert_eq!(
-        OpaqueId::new("delivery/1".to_owned()).unwrap().to_string(),
+        OpaqueId::new("delivery/1".to_owned())
+            .unwrap()
+            .as_str()
+            .to_owned(),
         "delivery/1"
     );
 }

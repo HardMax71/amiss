@@ -25,7 +25,9 @@ use amiss_controller::{
     SemanticEvidenceExpectation, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
     bootstrap_job, check_binding, check_plan,
 };
-use amiss_wire::controls::{ExecutionConstraintDescriptor, OrganizationFloor, Profile};
+use amiss_wire::controls::{
+    ExecutionConstraintDescriptor, OrganizationFloor, Profile, RequiredStatusName,
+};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
@@ -792,7 +794,8 @@ fn typed_policy_controls_remain_bound_to_the_target_and_the_supplied_floor() {
 fn a_changed_constraint_gets_a_new_semantic_digest() {
     let original = execution();
     let mut changed = original.clone();
-    changed.required_status_name = "amiss / another check".parse().unwrap();
+    changed.required_status_name =
+        RequiredStatusName::try_from("amiss / another check".to_owned()).unwrap();
     assert_ne!(
         Digest::from(
             sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")

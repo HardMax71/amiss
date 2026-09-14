@@ -2,6 +2,7 @@
     clippy::unwrap_used,
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
+use amiss_wire::controls::RequiredStatusName;
 
 use amiss_controller_fixtures::clock::TestClock;
 use sha2::Digest as _;
@@ -999,7 +1000,7 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
         evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),
         check: CheckBinding {
             plan_digest: digest,
-            required_status_name: "amiss".parse().unwrap(),
+            required_status_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
             execution_constraint_digest: digest,
         },
         run,
