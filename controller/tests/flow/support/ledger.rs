@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, VecDeque};
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    AcceptedDelivery, AuthenticatedDelivery, CheckBinding, ControllerEvaluationId, DeliveryClaim,
-    DeliveryIdentity, DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal,
-    Publication, StageOutcome, StagedPublication,
+    AcceptedDelivery, AuthenticatedDelivery, CheckBinding, DeliveryClaim, DeliveryIdentity,
+    DeliveryLease, DeliveryLedger, LeaseCompletion, LeaseFence, LeaseRenewal, Publication,
+    StageOutcome, StagedPublication,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -183,7 +184,7 @@ pub(crate) fn lease() -> DeliveryLease {
 
 fn lease_with(check: CheckBinding) -> DeliveryLease {
     DeliveryLease {
-        evaluation_id: ControllerEvaluationId::new("evaluation-01".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation-01"),
         check,
         fence: LeaseFence::new(1).unwrap(),
         expires_at_unix_millis: 1_800_000_100_000,

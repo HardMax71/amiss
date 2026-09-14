@@ -1,12 +1,13 @@
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::required_status_name;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeState, CheckConclusion, ControllerError, ControllerEvaluationId,
-    DeliveryClaim, DeliveryLease, LeaseCompletion, LeaseFence, LeaseRenewal, Publication,
-    RunIdentity, StageOutcome, StagedPublication,
+    AuthenticatedDelivery, ChangeState, CheckConclusion, ControllerError, DeliveryClaim,
+    DeliveryLease, LeaseCompletion, LeaseFence, LeaseRenewal, Publication, RunIdentity,
+    StageOutcome, StagedPublication,
 };
 use amiss_wire::model::{ObjectFormat, Oid};
 
@@ -217,7 +218,7 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
     let run = run(change.clone(), 'b', 'd');
     let expected = lease();
     let changed_evaluation = DeliveryLease {
-        evaluation_id: ControllerEvaluationId::new("evaluation-02".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation-02"),
         ..expected.clone()
     };
     let changed_fence = DeliveryLease {
@@ -225,12 +226,11 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
         ..expected.clone()
     };
     let shortened = DeliveryLease {
-        expires_at_unix_millis: expected.expires_at_unix_millis - 1,
+        expires_at_unix_millis: expected.expires_at_unix_millis.checked_sub(1).unwrap(),
         ..expected.clone()
     };
     let mut other_check = expected.check.clone();
-    other_check.required_status_name =
-        RequiredStatusName::try_from("amiss / another check".to_owned()).unwrap();
+    other_check.required_status_name = required_status_name!("amiss / another check");
     let changed_check = DeliveryLease {
         check: other_check,
         ..expected.clone()
@@ -262,7 +262,7 @@ fn a_ledger_cannot_change_the_lease_during_renewal() {
 fn submitted_publication(run: &RunIdentity, delivery: &AuthenticatedDelivery) -> Publication {
     Publication {
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation-01".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation-01"),
         check: binding(),
         run: run.clone(),
         gate_commit: run.commits.candidate.clone(),
@@ -321,8 +321,7 @@ fn a_staged_row_must_echo_the_lease_and_publication_exactly() {
     );
 
     let mut wrong_evaluation = staged_publication.clone();
-    wrong_evaluation.evaluation_id =
-        ControllerEvaluationId::new("evaluation-02".to_owned()).unwrap();
+    wrong_evaluation.evaluation_id = opaque_id!("evaluation-02");
     let (adapter, ledger) = scripted(Some(wrong_evaluation), expected.clone());
     let mut controller = controller_with_ledger(Arc::clone(&adapter), ledger, complete(&run));
     assert!(matches!(
@@ -349,8 +348,7 @@ fn a_staged_row_must_echo_the_lease_and_publication_exactly() {
     ));
 
     let mut drifted_check = expected.clone();
-    drifted_check.check.required_status_name =
-        RequiredStatusName::try_from("amiss / elsewhere".to_owned()).unwrap();
+    drifted_check.check.required_status_name = required_status_name!("amiss / elsewhere");
     let (adapter, mut ledger) = scripted(None, drifted_check.clone());
     ledger.renewals = renewal_script([
         LeaseRenewal::Renewed(drifted_check.clone()),

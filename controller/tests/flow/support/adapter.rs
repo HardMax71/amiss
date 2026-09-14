@@ -3,10 +3,11 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amiss_controller::ProviderFacts;
+use amiss_controller::opaque_id;
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, DeliveryHeader, DeliveryRoute, GitHubWebhook,
-    IngressCheck, OpaqueId, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace,
-    Publication, SignedTimePolicy, UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring,
+    IngressCheck, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace, Publication,
+    SignedTimePolicy, UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring,
 };
 
 const FLOW_SIGNATURE: &[u8] =
@@ -36,8 +37,8 @@ impl FakeAdapter {
         authenticated: AuthenticatedDelivery,
         refreshes: impl IntoIterator<Item = Result<ChangeSnapshot, ProviderError>>,
     ) -> Self {
-        let trust_set = OpaqueId::new("webhooks-main".to_owned()).unwrap();
-        let anchor = OpaqueId::new("anchor-current".to_owned()).unwrap();
+        let trust_set = opaque_id!("webhooks-main");
+        let anchor = opaque_id!("anchor-current");
         let key = WebhookKey::new(anchor, FLOW_SECRET.to_vec(), 0, None).unwrap();
         Self {
             namespace: authenticated.identity.provider.namespace.clone(),

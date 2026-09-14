@@ -2,6 +2,7 @@ use amiss_wire::controls::{ConstraintPlatform, GitMode};
 use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::model::Digest;
+use amiss_wire::repo_path_text;
 use sha2::Digest as _;
 
 use amiss_wire::manifest::{
@@ -20,7 +21,7 @@ fn digest(fill: char) -> Digest {
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn row(path: &str, role: RuntimeRole, git_mode: GitMode, fill: char) -> RuntimeFile {
     RuntimeFile {
-        path: RepoPathText::new(path.to_owned()).expect("a repo path"),
+        path: RepoPathText::try_from(path.to_owned()).expect("a repo path"),
         role,
         git_mode,
         file_sha256: digest(fill),
@@ -35,8 +36,8 @@ fn artifact(
 ) -> ReleaseArtifact {
     ReleaseArtifact {
         platform,
-        artifact_name: ArtifactId::new(name.to_owned()).expect("an artifact id"),
-        tree_path: RepoPathText::new("dist/amiss".to_owned()).expect("a repo path"),
+        artifact_name: ArtifactId::try_from(name.to_owned()).expect("an artifact id"),
+        tree_path: repo_path_text!("dist/amiss"),
         binary_sha256: digest('1'),
         engine_digest: digest('2'),
         runtime_contract: RuntimeContract::Current,
@@ -50,7 +51,7 @@ fn manifest(artifact: ReleaseArtifact) -> ReleaseManifest {
     let dependency_lock = DependencyLockInput {
         schema: DependencyLockSchema::Current,
         files: vec![DependencyLockFile {
-            path: RepoPathText::new("Cargo.lock".to_owned()).expect("a repo path"),
+            path: repo_path_text!("Cargo.lock"),
             raw_digest: digest('4'),
         }],
     };

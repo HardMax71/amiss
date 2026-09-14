@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    ArtifactAuditBundle, ArtifactBundle, ControllerClock, ControllerEvaluationId,
-    PublicationAuditBundle,
+    ArtifactAuditBundle, ArtifactBundle, ControllerClock, PublicationAuditBundle,
 };
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_service::{
@@ -104,7 +104,7 @@ async fn retained_bytes_require_the_exact_bearer_and_expire_at_the_boundary()
         "feedback": (0..11).collect::<Vec<_>>()
     }))?;
     let retained = service.store.retain(
-        &ControllerEvaluationId::new("evaluation/http".to_owned()).unwrap(),
+        &opaque_id!("evaluation/http"),
         ArtifactBundle {
             report: &report,
             semantic: None,
@@ -209,7 +209,7 @@ async fn publication_audit_components_survive_authenticated_service_restart()
     let publication = publication_audit(true)
         .ok_or_else(|| std::io::Error::other("invalid publication fixture"))?;
     let publication_reference = service.store.retain_audit(
-        &ControllerEvaluationId::new("evaluation/publication-http".to_owned())
+        &Some(opaque_id!("evaluation/publication-http"))
             .ok_or_else(|| std::io::Error::other("invalid fixture evaluation"))?,
         ArtifactAuditBundle::Publication(PublicationAuditBundle {
             report: &publication.report,

@@ -3,16 +3,17 @@
     clippy::unwrap_used,
     reason = "fixed provider fixtures must fail loudly"
 )]
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::{branch_ref, required_status_name};
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, IntegrationId, LeaseFence,
-    PlanScope, ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
+    ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, LeaseFence, PlanScope,
+    ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
     RelationStatusTargets, RelationSubject, RelationSubjectHead, validate_relation_audit,
 };
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::model::Digest;
-use amiss_wire::model::{BranchRef, ObjectFormat, RepositoryIdentity};
+use amiss_wire::model::{ObjectFormat, RepositoryIdentity};
 use amiss_wire::relation::{RelationSnapshot, RelationVerdict};
 use sha2::Digest as _;
 
@@ -45,7 +46,7 @@ fn subject_scope_is_rejected_before_head_resolution() {
     let fixture = Fixture::new("gitea");
     let subject = subject_fixture(&fixture);
     let mut wrong_integration = subject.clone();
-    wrong_integration.scope.integration = IntegrationId::new("88".to_owned()).unwrap();
+    wrong_integration.scope.integration = opaque_id!("88");
     let mut nested_owner = subject.clone();
     nested_owner.scope.repository = RepositoryIdentity::new(
         "forge.example".to_owned(),
@@ -176,7 +177,7 @@ fn commit_status_requests_and_responses_use_the_native_wire_shape() {
             "{MARKER}{}",
             Digest::from(sha2::Sha256::digest(b"projection").0)
         ),
-        context: RequiredStatusName::try_from("Amiss cross-repository".to_owned()).unwrap(),
+        context: required_status_name!("Amiss cross-repository"),
     };
     assert_eq!(
         serde_json::to_value(request).unwrap(),
@@ -286,7 +287,7 @@ fn a_relation_target_must_name_the_configured_reviewer_and_flat_repository() {
     let fixture = Fixture::new("gitea");
     let (status, target) = status_fixture(&fixture);
     let mut wrong_integration = target.clone();
-    wrong_integration.scope.integration = IntegrationId::new("88".to_owned()).unwrap();
+    wrong_integration.scope.integration = opaque_id!("88");
     let mut nested = target.clone();
     nested.scope.repository = RepositoryIdentity::new(
         "forge.example".to_owned(),
@@ -355,7 +356,7 @@ fn subject_fixture(fixture: &Fixture) -> RelationSubject {
         .clone();
     subject.scope = PlanScope {
         provider: fixture.client.config.provider.clone(),
-        integration: IntegrationId::new("77".to_owned()).unwrap(),
+        integration: opaque_id!("77"),
         repository: RepositoryIdentity::new(
             "forge.example".to_owned(),
             "acme".to_owned(),
@@ -363,7 +364,7 @@ fn subject_fixture(fixture: &Fixture) -> RelationSubject {
         )
         .unwrap(),
     };
-    subject.target = BranchRef::new("refs/heads/release/v1".to_owned()).unwrap();
+    subject.target = branch_ref!("refs/heads/release/v1");
     subject.object_format = ObjectFormat::Sha1;
     subject
 }
@@ -375,7 +376,7 @@ fn status_fixture(fixture: &Fixture) -> (RelationStatusRecord, RelationStatusTar
         role: source.role.clone(),
         scope: PlanScope {
             provider: fixture.client.config.provider.clone(),
-            integration: IntegrationId::new("77".to_owned()).unwrap(),
+            integration: opaque_id!("77"),
             repository: RepositoryIdentity::new(
                 "forge.example".to_owned(),
                 "acme".to_owned(),
@@ -388,8 +389,7 @@ fn status_fixture(fixture: &Fixture) -> (RelationStatusRecord, RelationStatusTar
             .commits
             .candidate
             .clone(),
-        required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
-            .unwrap(),
+        required_status_name: required_status_name!("Amiss cross-repository"),
     };
     let audit = validate_relation_audit(audit_bundle(&audit_fixture)).unwrap();
     (

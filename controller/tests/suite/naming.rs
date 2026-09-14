@@ -1,6 +1,8 @@
+use amiss_controller::opaque_id;
+use amiss_controller::provider_namespace;
 use amiss_controller::{
-    AcquireError, BootstrapJobError, ControllerError, OpaqueId, PlanError, ProviderError,
-    ProviderNamespace, RegistryError, SystemClock,
+    AcquireError, BootstrapJobError, ControllerError, PlanError, ProviderError, RegistryError,
+    SystemClock,
 };
 
 fn all_distinct_and_nonempty(messages: &[String]) {
@@ -67,20 +69,8 @@ fn every_error_message_is_its_own_sentence() {
 /// Identity displays are their exact spellings.
 #[test]
 fn identities_display_their_spellings() {
-    assert_eq!(
-        ProviderNamespace::new("github".to_owned())
-            .unwrap()
-            .as_str()
-            .to_owned(),
-        "github"
-    );
-    assert_eq!(
-        OpaqueId::new("delivery/1".to_owned())
-            .unwrap()
-            .as_str()
-            .to_owned(),
-        "delivery/1"
-    );
+    assert_eq!(provider_namespace!("github").as_str().to_owned(), "github");
+    assert_eq!(opaque_id!("delivery/1").as_str().to_owned(), "delivery/1");
 }
 
 /// The system clock reads a present-day instant: after 2020, before 2100.

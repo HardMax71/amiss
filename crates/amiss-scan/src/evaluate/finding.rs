@@ -80,7 +80,7 @@ pub(super) fn missing_fix(candidates: &[&Observation]) -> Option<FindingFix> {
 
 fn anchor_fix(observation: &Observation, near: &str) -> Option<FindingFix> {
     Some(FindingFix {
-        path: RepoPathText::new(observation.document.as_str()?.to_owned())?,
+        path: RepoPathText::try_from(observation.document.as_str()?.to_owned()).ok()?,
         span: observation.fragment_span?,
         replacement: near.to_owned(),
         kind: FixKind::AnchorRespelling,
@@ -108,7 +108,7 @@ fn path_fix(observation: &Observation, near: &RepoPath) -> Option<FindingFix> {
     }
     let replacement = near.as_str()?.get(tail_at..)?.to_owned();
     Some(FindingFix {
-        path: RepoPathText::new(observation.document.as_str()?.to_owned())?,
+        path: RepoPathText::try_from(observation.document.as_str()?.to_owned()).ok()?,
         span,
         replacement,
         kind: FixKind::PathRespelling,

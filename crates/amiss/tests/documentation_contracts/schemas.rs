@@ -213,7 +213,7 @@ fn public_schemas_share_the_branch_ref_and_integer_bounds() {
         jsonschema::validator_for(&branch_schema).expect("branch-ref schema compiles");
     for reference in ["refs/heads/main", "refs/heads/topic/docs"] {
         assert!(
-            BranchRef::new(reference.to_owned()).is_some()
+            BranchRef::try_from(reference.to_owned()).is_ok()
                 && branch_validator.is_valid(&serde_json::json!(reference)),
             "the Rust and schema branch-ref grammars must accept {reference}",
         );
@@ -226,7 +226,7 @@ fn public_schemas_share_the_branch_ref_and_integer_bounds() {
         "refs/heads/topic..next",
     ] {
         assert!(
-            BranchRef::new(reference.to_owned()).is_none()
+            BranchRef::try_from(reference.to_owned()).is_err()
                 && !branch_validator.is_valid(&serde_json::json!(reference)),
             "the Rust and schema branch-ref grammars must reject {reference}",
         );

@@ -2,6 +2,7 @@ use sha2::Digest as _;
 use std::io::Cursor;
 use std::sync::Arc;
 
+use amiss_wire::artifact_id;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
 use amiss_wire::semantic::observation::{
@@ -92,7 +93,8 @@ pub fn intersphinx_evidence(
     let mut inputs = Vec::with_capacity(inventories.len());
     let mut decoded_bytes = 0_u64;
     for inventory in inventories {
-        let identity = ArtifactId::new(inventory.identity).ok_or(IntersphinxError::Identity)?;
+        let identity = ArtifactId::try_from(inventory.identity)
+            .map_err(|_defect| IntersphinxError::Identity)?;
         let base_url = base_url(&inventory.base_url)?;
         let (labels, decoded) = labels(
             &identity,
@@ -140,8 +142,7 @@ pub fn intersphinx_evidence(
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
             kind: SemanticProducerKind::SphinxInventorySet,
-            identity: ArtifactId::new("amiss-controller-intersphinx".to_owned())
-                .ok_or(IntersphinxError::Identity)?,
+            identity: artifact_id!("amiss-controller-intersphinx"),
             version: SPHINX_INVENTORY_VERSION.to_owned(),
             context_digest: input_digest,
             input_digest,

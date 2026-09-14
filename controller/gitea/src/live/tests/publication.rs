@@ -2,12 +2,12 @@ use amiss_controller::PullRequestChange;
 use amiss_controller::{
     ArtifactReference, Change, CheckConclusion, ProviderError, ProviderRunAttempt, RunFailure,
 };
-use amiss_wire::controls::RequiredStatusName;
-use amiss_wire::model::{ForgeDialect, ObjectFormat, RepoPathText};
+use amiss_wire::model::{ForgeDialect, ObjectFormat};
 use amiss_wire::report::model::{
     AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
 };
 use amiss_wire::report::{Disposition, FindingKind};
+use amiss_wire::{repo_path_text, required_status_name};
 use sha2::Digest as _;
 
 use super::super::Config;
@@ -28,9 +28,7 @@ fn review_bodies_carry_the_report_feedback_lines() {
             effective_disposition: Disposition::Warn,
             finding_kinds: vec![FindingKind::DependencyChangedSubjectUnchanged],
             location_count: std::num::NonZeroU64::new(3).unwrap(),
-            target: Some(RepoPath::Text(
-                RepoPathText::try_from("docs/guide.md".to_owned()).unwrap(),
-            )),
+            target: Some(RepoPath::Text(repo_path_text!("docs/guide.md"))),
         }],
         status: AvailableFeedbackStatus::Available,
     }));
@@ -235,7 +233,7 @@ fn config() -> Config {
     Config {
         provider: provider("gitea"),
         reviewer: reviewer(),
-        review_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
+        review_name: required_status_name!("amiss"),
     }
 }
 
@@ -254,7 +252,7 @@ fn a_publication_is_validated_in_every_field() {
     let mut wrong_gate = fresh();
     wrong_gate.gate_commit = oid('9');
     let mut wrong_attempt = fresh();
-    wrong_attempt.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    wrong_attempt.provider_run.attempt = ProviderRunAttempt::literal(2);
     let mut wrong_change = fresh();
     wrong_change.run.change.change =
         Change::PullRequest(PullRequestChange::new(101, 4201, 43).unwrap());
@@ -265,8 +263,7 @@ fn a_publication_is_validated_in_every_field() {
     let mut wrong_candidate = fresh();
     wrong_candidate.run.commits.candidate = oid('9');
     let mut wrong_name = fresh();
-    wrong_name.check.required_status_name =
-        RequiredStatusName::try_from("other".to_owned()).unwrap();
+    wrong_name.check.required_status_name = required_status_name!("other");
     for (reason, wrong) in [
         ("gate", wrong_gate),
         ("attempt", wrong_attempt),

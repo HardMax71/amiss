@@ -9,6 +9,7 @@ use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;
 use amiss_wire::semantic::SemanticEvidence;
+use amiss_wire::{artifact_id, branch_ref, repo_path_text, required_status_name};
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -18,16 +19,14 @@ use amiss_controller::MergeRequestChange;
 use amiss_controller::PipelineJob;
 use amiss_controller::{
     AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput, Change,
-    ChangeLocator, CheckPlan, ControllerEvaluationId, Delivery, DeliveryIdentity, ExternalPolicy,
-    IntegrationId, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair,
-    OpaqueId, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun,
-    ProviderRunAttempt, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
-    SemanticEvidenceExpectation, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
+    ChangeLocator, CheckPlan, Delivery, DeliveryIdentity, ExternalPolicy,
+    MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair, PolicyControls,
+    ProviderIdentity, ProviderRun, ProviderRunAttempt, ProviderRunIdentity, RunIdentity, RunRefs,
+    RunRequest, SemanticEvidenceExpectation, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
     bootstrap_job, check_binding, check_plan,
 };
-use amiss_wire::controls::{
-    ExecutionConstraintDescriptor, OrganizationFloor, Profile, RequiredStatusName,
-};
+use amiss_controller::{opaque_id, provider_namespace};
+use amiss_wire::controls::{ExecutionConstraintDescriptor, OrganizationFloor, Profile};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
@@ -66,14 +65,14 @@ fn near_ceiling_floor() -> OrganizationFloor {
     let ceiling = usize::try_from(REQUEST_STREAM_BYTES).unwrap();
     let mut floor = OrganizationFloor::parse(&example("organization-floor.json")).unwrap();
     floor.protected_inventory = (0..LARGE_INVENTORY_ENTRIES)
-        .map(|index| RepoPathText::new(inventory_path(index, MAX_PATH_BYTES)).unwrap())
+        .map(|index| RepoPathText::try_from(inventory_path(index, MAX_PATH_BYTES)).unwrap())
         .collect();
     let maximal = serde_json_canonicalizer::to_vec(&floor).unwrap();
     let floor_length = ceiling.checked_sub(1).unwrap();
     let excess = maximal.len().checked_sub(floor_length).unwrap();
     let last = LARGE_INVENTORY_ENTRIES.checked_sub(1).unwrap();
     let shorter_path = inventory_path(last, MAX_PATH_BYTES.checked_sub(excess).unwrap());
-    *floor.protected_inventory.last_mut().unwrap() = RepoPathText::new(shorter_path).unwrap();
+    *floor.protected_inventory.last_mut().unwrap() = RepoPathText::try_from(shorter_path).unwrap();
     assert_eq!(
         serde_json_canonicalizer::to_vec(&floor).unwrap().len(),
         floor_length
@@ -96,55 +95,56 @@ fn repository() -> RepositoryIdentity {
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example.internal".to_owned()).unwrap(),
+        namespace: provider_namespace!("gitlab"),
+        instance: opaque_id!("gitlab.example.internal"),
     }
 }
 
 fn run_request(policy: PolicyControls) -> RunRequest {
     let provider = provider();
     let plan = Arc::new(plan(policy));
-    let change = ChangeLocator {
-        provider: provider.clone(),
-        repository: repository(),
-        change: Change::MergeRequest(MergeRequestChange::new(1, 42).unwrap()),
-    };
+    let run = run_identity(provider.clone());
     RunRequest {
         delivery: DeliveryIdentity {
             provider,
-            integration: IntegrationId::new("project-hook/7".to_owned()).unwrap(),
-            delivery: Delivery::Provided(OpaqueId::new("webhook/9".to_owned()).unwrap()),
+            integration: opaque_id!("project-hook/7"),
+            delivery: Delivery::Provided(opaque_id!("webhook/9")),
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRun::Job(PipelineJob::new(987_654_321, 42).unwrap()),
-            ProviderRunAttempt::new(2).unwrap(),
+            ProviderRunAttempt::literal(2),
             ObjectFormat::Sha1,
             oid('3'),
         )
         .unwrap(),
-        evaluation_id: ControllerEvaluationId::new("evaluation/11".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation/11"),
         check: check_binding(&plan).unwrap(),
         plan,
-        run: RunIdentity::new(
-            change,
-            RunRefs {
-                forge: ForgeDialect::Gitlab,
-                candidate: BranchRef::new("refs/heads/amiss-controller".to_owned()).unwrap(),
-                target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-                default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-            },
-            ObjectFormat::Sha1,
-            OidPair {
-                base: oid('1'),
-                candidate: oid('3'),
-            },
-            OidPair {
-                base: oid('2'),
-                candidate: oid('4'),
-            },
-        )
-        .unwrap(),
+        run,
     }
+}
+
+fn run_identity(provider: ProviderIdentity) -> RunIdentity {
+    let change = ChangeLocator {
+        provider,
+        repository: repository(),
+        change: Change::MergeRequest(MergeRequestChange::new(1, 42).unwrap()),
+    };
+    let refs = RunRefs {
+        forge: ForgeDialect::Gitlab,
+        candidate: branch_ref!("refs/heads/amiss-controller"),
+        target: branch_ref!("refs/heads/main"),
+        default_branch: branch_ref!("refs/heads/main"),
+    };
+    let base = OidPair {
+        base: oid('1'),
+        candidate: oid('3'),
+    };
+    let tree = OidPair {
+        base: oid('2'),
+        candidate: oid('4'),
+    };
+    RunIdentity::new(change, refs, ObjectFormat::Sha1, base, tree).unwrap()
 }
 
 fn execution() -> ExecutionConstraintDescriptor {
@@ -212,7 +212,7 @@ fn semantic_template(context_digest: Digest) -> Vec<u8> {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
-            identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
+            identity: artifact_id!("amiss-test-site-build"),
             version: "0.5.1".to_owned(),
             context_digest,
             input_digest: Digest::from(
@@ -235,14 +235,14 @@ struct SiteAcquisition {
 }
 
 fn site_acquisition(context_digest: Digest) -> SiteAcquisition {
-    let acquisition_identity = ArtifactId::new("test-site-artifact".to_owned()).unwrap();
+    let acquisition_identity = artifact_id!("test-site-artifact");
     let mut bytes = semantic_template(context_digest);
     bytes.push(b'\n');
     SiteAcquisition {
         expectation: SemanticEvidenceExpectation {
             acquisition_identity: acquisition_identity.clone(),
             producer_kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
-            producer_identity: ArtifactId::new("amiss-test-site-build".to_owned()).unwrap(),
+            producer_identity: artifact_id!("amiss-test-site-build"),
             producer_version: "0.5.1".to_owned(),
             context_digest,
         },
@@ -259,17 +259,17 @@ fn workflow_acquisition(
     context_digest: Digest,
 ) -> (WorkflowArtifactExpectation, AcquiredSemanticTemplate) {
     let mut acquisition = site_acquisition(context_digest);
-    let identity = ArtifactId::new(acquisition_identity.to_owned()).unwrap();
+    let identity = ArtifactId::try_from(acquisition_identity.to_owned()).unwrap();
     acquisition.expectation.acquisition_identity = identity.clone();
     acquisition.template.acquisition_identity = identity;
     (
         WorkflowArtifactExpectation {
             provider: provider(),
             repository: repository(),
-            workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
-            event: OpaqueId::new("merge_request_event".to_owned()).unwrap(),
+            workflow_identity: opaque_id!("docs-evidence.yml"),
+            event: opaque_id!("merge_request_event"),
             artifact_name: artifact_name.to_owned(),
-            payload_file: RepoPathText::new("amiss/semantic-template.json".to_owned()).unwrap(),
+            payload_file: repo_path_text!("amiss/semantic-template.json"),
             archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
             file_byte_limit: MAX_WORKFLOW_ARTIFACT_FILE_BYTES,
             semantic: acquisition.expectation,
@@ -494,7 +494,7 @@ fn workflow_artifact_plans_reject_invalid_or_ambiguous_sources() {
     let mut control_name = valid.clone();
     control_name.artifact_name = "site\nprimary".to_owned();
     let mut control_path = valid.clone();
-    control_path.payload_file = RepoPathText::new("amiss/site\nprimary.json".to_owned()).unwrap();
+    control_path.payload_file = repo_path_text!("amiss/site\nprimary.json");
     let mut zero_archive = valid.clone();
     zero_archive.archive_byte_limit = 0;
     let mut large_archive = valid.clone();
@@ -583,11 +583,11 @@ fn acquired_semantic_templates_must_match_the_planned_identity_and_context() {
     });
     let defects = [
         AcquiredSemanticTemplate {
-            acquisition_identity: ArtifactId::new("test-site-artifact".to_owned()).unwrap(),
+            acquisition_identity: artifact_id!("test-site-artifact"),
             bytes: Arc::from(*b"null"),
         },
         AcquiredSemanticTemplate {
-            acquisition_identity: ArtifactId::new("other-site-artifact".to_owned()).unwrap(),
+            acquisition_identity: artifact_id!("other-site-artifact"),
             bytes: semantic_template(context).into(),
         },
         site_acquisition(Digest::from(
@@ -719,15 +719,13 @@ fn typed_policy_controls_remain_bound_to_the_target_and_the_supplied_floor() {
     let changes: [fn(&mut PolicyControls); 5] = [
         |policy| {
             policy.organization_floor.as_mut().unwrap().value.ref_name =
-                BranchRef::new("refs/heads/other".to_owned()).unwrap();
+                branch_ref!("refs/heads/other");
         },
         |policy| {
-            policy.debt_snapshot.as_mut().unwrap().value.ref_name =
-                BranchRef::new("refs/heads/other".to_owned()).unwrap();
+            policy.debt_snapshot.as_mut().unwrap().value.ref_name = branch_ref!("refs/heads/other");
         },
         |policy| {
-            policy.waiver_bundle.as_mut().unwrap().value.ref_name =
-                BranchRef::new("refs/heads/other".to_owned()).unwrap();
+            policy.waiver_bundle.as_mut().unwrap().value.ref_name = branch_ref!("refs/heads/other");
         },
         |policy| {
             policy
@@ -794,8 +792,7 @@ fn typed_policy_controls_remain_bound_to_the_target_and_the_supplied_floor() {
 fn a_changed_constraint_gets_a_new_semantic_digest() {
     let original = execution();
     let mut changed = original.clone();
-    changed.required_status_name =
-        RequiredStatusName::try_from("amiss / another check".to_owned()).unwrap();
+    changed.required_status_name = required_status_name!("amiss / another check");
     assert_ne!(
         Digest::from(
             sha2::Sha256::new_with_prefix("amiss/scanner-execution-constraint")

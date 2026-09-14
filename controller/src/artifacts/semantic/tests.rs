@@ -1,6 +1,7 @@
 #![cfg(test)]
 
-use amiss_wire::model::{ArtifactId, Digest};
+use amiss_wire::artifact_id;
+use amiss_wire::model::Digest;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 use base64::Engine as _;
 use sha2::Digest as _;
@@ -18,7 +19,7 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
-            identity: ArtifactId::new("test-records".to_owned()).ok_or(ArtifactError::Corrupt)?,
+            identity: artifact_id!("test-records"),
             version: "1".to_owned(),
             context_digest: Digest::from([2; 32]),
             input_digest: Digest::from([3; 32]),
@@ -37,9 +38,7 @@ fn exact_inputs_bind_to_the_report_and_every_byte_is_replayable() -> Result<(), 
     let payload_digest = envelope.payload_digest;
     let artifact = serde_json::to_vec(&InputArtifact {
         inputs: vec![InputArtifactRow {
-            acquisition_identity: Some(
-                ArtifactId::new("test-artifact".to_owned()).ok_or(ArtifactError::Corrupt)?,
-            ),
+            acquisition_identity: Some(artifact_id!("test-artifact")),
             envelope_bytes_base64: base64::engine::general_purpose::STANDARD
                 .encode(&envelope_bytes),
             envelope_digest: Digest::from(sha2::Sha256::digest(&envelope_bytes).0),

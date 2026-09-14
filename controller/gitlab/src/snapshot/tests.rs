@@ -2,7 +2,8 @@
 
 use std::collections::BTreeSet;
 
-use amiss_controller::{ChangeState, CheckConclusion, OpaqueId, ProviderError, RunFailure};
+use amiss_controller::opaque_id;
+use amiss_controller::{ChangeState, CheckConclusion, ProviderError, RunFailure};
 use amiss_wire::model::{ObjectFormat, Oid};
 
 use super::{conclusion_matches, train_matches, wildcard_matches};
@@ -25,7 +26,7 @@ fn query() -> GitLabRefreshQuery {
 
 fn policy() -> PolicyBinding {
     PolicyBinding {
-        integration: OpaqueId::new("policy/1".to_owned()).expect("an integration id"),
+        integration: opaque_id!("policy/1"),
         project_id: 101,
         project_path: "platform/security".to_owned(),
         target_branch: "main".to_owned(),

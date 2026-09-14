@@ -1,6 +1,6 @@
 #![cfg(test)]
 
-use amiss_wire::model::RepoPathText;
+use amiss_wire::repo_path_text;
 use amiss_wire::report::model::{RepoPath, RepoPathBytes, ReportEnvelope};
 use amiss_wire::report::{Disposition, FindingKind};
 
@@ -46,7 +46,7 @@ fn paths_and_dispositions_keep_their_projection_without_owned_json_rows() {
     report.payload.findings.truncate(1);
     for (path, line, disposition, expected_path, expected_line, severity) in [
         (
-            RepoPath::Text(RepoPathText::new("docs/a\"b\n.md".to_owned()).unwrap()),
+            RepoPath::Text(repo_path_text!("docs/a\"b\n.md")),
             7,
             Disposition::Warn,
             "docs/a\"b\n.md",

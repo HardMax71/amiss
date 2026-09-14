@@ -3,16 +3,17 @@
     clippy::unwrap_used,
     reason = "fixed provider fixtures must fail loudly"
 )]
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::required_status_name;
 
 use sha2::Digest as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use amiss_controller::{
     ArtifactAuditDigests, ArtifactAuditReference, ArtifactReference, IntegrationId, LeaseFence,
-    ProviderError, ProviderInstance, RelationAuditBundle, RelationStatusRecord,
-    RelationStatusTarget, RelationStatusTargets, RelationSubject, validate_relation_audit,
+    ProviderError, RelationAuditBundle, RelationStatusRecord, RelationStatusTarget,
+    RelationStatusTargets, RelationSubject, validate_relation_audit,
 };
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_fixtures::relation::{RelationAuditFixture, relation_audit};
 use amiss_wire::model::Digest;
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
@@ -57,11 +58,10 @@ fn request_scope_is_checked_before_provider_io() {
     let (config, subject) = fixture();
     let defects: [fn(&mut RelationSubject); 6] = [
         |subject| {
-            subject.scope.provider.instance =
-                ProviderInstance::new("github.example".to_owned()).unwrap();
+            subject.scope.provider.instance = opaque_id!("github.example");
         },
         |subject| {
-            subject.scope.integration = IntegrationId::new("8".to_owned()).unwrap();
+            subject.scope.integration = opaque_id!("8");
         },
         |subject| {
             subject.scope.repository = RepositoryIdentity::new(
@@ -81,8 +81,7 @@ fn request_scope_is_checked_before_provider_io() {
         },
         |subject| subject.object_format = ObjectFormat::Sha256,
         |subject| {
-            subject.scope.provider.namespace =
-                amiss_controller::ProviderNamespace::new("gitlab".to_owned()).unwrap();
+            subject.scope.provider.namespace = provider_namespace!("gitlab");
         },
     ];
 
@@ -194,7 +193,7 @@ fn relation_status_mutations_are_rejected_before_reconciliation() {
     ));
 
     let mut foreign = target.clone();
-    foreign.scope.integration = IntegrationId::new("8".to_owned()).unwrap();
+    foreign.scope.integration = opaque_id!("8");
     let mut foreign_status = status.clone();
     foreign_status.targets.destinations[0] = foreign.clone();
     assert!(matches!(
@@ -259,14 +258,13 @@ fn fixture() -> (Config, RelationSubject) {
         .find(|subject| subject.scope.provider.namespace.as_str() == "github")
         .unwrap()
         .clone();
-    subject.scope.integration = IntegrationId::new(INSTALLATION_ID.to_string()).unwrap();
+    subject.scope.integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
     (
         Config {
             provider: subject.scope.provider.clone(),
             app_id: APP_ID,
             installation_id: INSTALLATION_ID,
-            required_status_name: RequiredStatusName::try_from("amiss/provider".to_owned())
-                .unwrap(),
+            required_status_name: required_status_name!("amiss/provider"),
         },
         subject,
     )
@@ -283,7 +281,7 @@ fn status_fixture() -> (Config, RelationStatusRecord, RelationStatusTarget) {
         .find(|subject| subject.scope.provider.namespace.as_str() == "github")
         .unwrap()
         .clone();
-    subject.scope.integration = IntegrationId::new(INSTALLATION_ID.to_string()).unwrap();
+    subject.scope.integration = IntegrationId::try_from(INSTALLATION_ID.to_string()).unwrap();
     let frozen = fixture
         .transition
         .subjects
@@ -295,8 +293,7 @@ fn status_fixture() -> (Config, RelationStatusRecord, RelationStatusTarget) {
         scope: subject.scope,
         credential: subject.credential,
         candidate_commit: frozen.commits.candidate.clone(),
-        required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
-            .unwrap(),
+        required_status_name: required_status_name!("Amiss cross-repository"),
     };
     let audit = validate_relation_audit(audit_bundle(&fixture)).unwrap();
     let status = RelationStatusRecord {
@@ -327,8 +324,7 @@ fn status_fixture() -> (Config, RelationStatusRecord, RelationStatusTarget) {
             provider: target.scope.provider.clone(),
             app_id: APP_ID,
             installation_id: INSTALLATION_ID,
-            required_status_name: RequiredStatusName::try_from("amiss/provider".to_owned())
-                .unwrap(),
+            required_status_name: required_status_name!("amiss/provider"),
         },
         status,
         target,

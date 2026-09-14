@@ -1,4 +1,5 @@
 use amiss_controller::Delivery;
+use amiss_controller::opaque_id;
 use amiss_controller::{GitLabWebhook, IngressError, ReplayIdentity, WebhookError, WebhookKeyring};
 use secrecy::SecretString;
 
@@ -25,11 +26,9 @@ fn accepts_a_standard_webhooks_vector() -> Result<(), IngressError> {
     assert_eq!(proof.anchor(), &anchor("gitlab-current"));
     assert_eq!(
         proof.replay(),
-        &ReplayIdentity::Authenticated(
-            amiss_controller::OpaqueId::new("f5e5f430-f57b-4e6e-9fac-d9128cd7232f".to_owned(),)
-                .map(Delivery::Provided)
-                .unwrap(),
-        )
+        &ReplayIdentity::Authenticated(Delivery::Provided(opaque_id!(
+            "f5e5f430-f57b-4e6e-9fac-d9128cd7232f"
+        )),)
     );
     assert_eq!(proof.issued_at_unix_millis(), Some(NOW));
     Ok(())

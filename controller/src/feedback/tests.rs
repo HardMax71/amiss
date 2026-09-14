@@ -1,5 +1,6 @@
 #![cfg(test)]
 use amiss_wire::model::RepoPathText;
+use amiss_wire::repo_path_text;
 
 use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::report::model::{
@@ -50,9 +51,7 @@ fn feedback_projects_counts_labels_and_atom_targets() {
         vec![
             item(
                 FeedbackAction::Fix,
-                Some(RepoPath::Text(
-                    RepoPathText::try_from("docs/new.md".to_owned()).unwrap(),
-                )),
+                Some(RepoPath::Text(repo_path_text!("docs/new.md"))),
                 1,
             ),
             item(
@@ -65,9 +64,7 @@ fn feedback_projects_counts_labels_and_atom_targets() {
             item(FeedbackAction::Existing, None, 3),
             item(
                 FeedbackAction::Fix,
-                Some(RepoPath::Text(
-                    RepoPathText::try_from("docs/second.md".to_owned()).unwrap(),
-                )),
+                Some(RepoPath::Text(repo_path_text!("docs/second.md"))),
                 4,
             ),
         ],
@@ -90,9 +87,9 @@ fn a_hostile_target_cannot_carry_control_bytes_into_provider_markdown() {
         0,
         vec![item(
             FeedbackAction::Fix,
-            Some(RepoPath::Text(
-                RepoPathText::try_from("docs/\u{1b}[31m::error::x.md".to_owned()).unwrap(),
-            )),
+            Some(RepoPath::Text(repo_path_text!(
+                "docs/\u{1b}[31m::error::x.md"
+            ))),
             1,
         )],
     );
@@ -313,9 +310,7 @@ fn with_feedback_appends_below_the_text_or_leaves_it_alone() {
         0,
         vec![item(
             FeedbackAction::Fix,
-            Some(RepoPath::Text(
-                RepoPathText::try_from("docs/new.md".to_owned()).unwrap(),
-            )),
+            Some(RepoPath::Text(repo_path_text!("docs/new.md"))),
             1,
         )],
     );

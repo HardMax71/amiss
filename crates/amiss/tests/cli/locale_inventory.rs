@@ -15,7 +15,7 @@ const PLAN: &str = "../../spec/examples/locale-coverage-plan.json";
 
 fn side(root: &str, locale: &str) -> LocaleSide {
     LocaleSide {
-        root: RepoPathText::new(root.to_owned()).unwrap(),
+        root: RepoPathText::try_from(root.to_owned()).unwrap(),
         locale: locale.to_owned(),
         suffix: None,
     }

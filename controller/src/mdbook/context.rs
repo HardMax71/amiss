@@ -3,8 +3,9 @@ use sha2::Digest as _;
 use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
+use amiss_wire::artifact_id;
 use amiss_wire::model::Digest;
-use amiss_wire::model::{ArtifactId, RepoPathText};
+use amiss_wire::model::RepoPathText;
 use amiss_wire::semantic::SemanticProducerKind;
 use amiss_wire::semantic::observation::SITE_BUILD_VERSION;
 use serde::Deserialize as _;
@@ -62,8 +63,7 @@ pub(super) fn site_build_context(
             )
         })
         .map_err(|_defect| MdBookEvidenceError::ContextShape)?;
-    let producer_identity = ArtifactId::new("amiss-controller-mdbook-html".to_owned())
-        .ok_or(MdBookEvidenceError::Evidence)?;
+    let producer_identity = artifact_id!("amiss-controller-mdbook-html");
     Ok((
         crate::SemanticEvidenceExpectation {
             acquisition_identity: producer_identity.clone(),
@@ -234,7 +234,7 @@ fn repository_path(
     }
     if joined.is_empty() {
         Ok(None)
-    } else if RepoPathText::new(joined.clone()).is_some() {
+    } else if RepoPathText::try_from(joined.clone()).is_ok() {
         Ok(Some(joined))
     } else {
         Err(MdBookEvidenceError::Path)

@@ -4,22 +4,22 @@ use sha2::Digest as _;
 use std::sync::Arc;
 
 use amiss_controller::{
-    IntegrationId, OidPair, OpaqueId, PlanScope, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, RelationAcquiredRoot, RelationLimits, RelationPlan,
-    RelationStatusDestination, RelationSubject, RelationSubjectTransition, RelationTransition,
-    TriggeredRelation, relation_transition,
+    IntegrationId, OidPair, OpaqueId, PlanScope, ProviderIdentity, RelationAcquiredRoot,
+    RelationLimits, RelationPlan, RelationStatusDestination, RelationSubject,
+    RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_transition,
 };
-use amiss_wire::controls::{
-    BlobLineSelection, ProjectionKind, ProjectionSource, RequiredStatusName,
-};
+use amiss_controller::{opaque_id, provider_namespace};
+use amiss_wire::artifact_id;
+use amiss_wire::branch_ref;
+use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
 use amiss_wire::envelope::{Envelope, Payload as _};
-use amiss_wire::model::{
-    ArtifactId, BranchRef, ObjectFormat, Oid, RepoPathText, RepositoryIdentity,
-};
+use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 use amiss_wire::relation::{
     RelationAssessment, RelationEvidence, RelationIdentity, RelationPlan as PlanPayload,
     RelationSnapshot, RelationSubject as PlannedSubject, RelationVerdict, assess,
 };
+use amiss_wire::repo_path_text;
+use amiss_wire::required_status_name;
 
 use super::{RelationProjectionError, RelationProjectionRequest, project_relation_evidence};
 
@@ -31,11 +31,11 @@ struct Fixture {
 }
 
 fn artifact(raw: &str) -> ArtifactId {
-    ArtifactId::new(raw.to_owned()).expect("fixed artifact identity")
+    ArtifactId::try_from(raw.to_owned()).expect("fixed artifact identity")
 }
 
 fn path(raw: &str) -> RepoPathText {
-    RepoPathText::new(raw.to_owned()).expect("fixed repository path")
+    RepoPathText::try_from(raw.to_owned()).expect("fixed repository path")
 }
 
 fn repository(name: &str) -> RepositoryIdentity {
@@ -47,16 +47,17 @@ fn subject(role: &str, repository_name: &str, source_path: &str) -> RelationSubj
         role: artifact(role),
         scope: PlanScope {
             provider: ProviderIdentity {
-                namespace: ProviderNamespace::new("github".to_owned()).expect("namespace"),
-                instance: ProviderInstance::new("github.com".to_owned()).expect("instance"),
+                namespace: provider_namespace!("github"),
+                instance: opaque_id!("github.com"),
             },
-            integration: IntegrationId::new(format!("installation/{repository_name}"))
+            integration: IntegrationId::try_from(format!("installation/{repository_name}"))
                 .expect("integration"),
             repository: repository(repository_name),
         },
-        target: BranchRef::new("refs/heads/main".to_owned()).expect("branch"),
+        target: branch_ref!("refs/heads/main"),
         object_format: ObjectFormat::Sha1,
-        credential: OpaqueId::new(format!("credential/{repository_name}")).expect("credential"),
+        credential: OpaqueId::try_from(format!("credential/{repository_name}"))
+            .expect("credential"),
         source: ProjectionSource::BlobLines(BlobLineSelection {
             path: path(source_path),
             first_line: 1,
@@ -96,7 +97,7 @@ fn fixture(aggregate_records: u64) -> Fixture {
     let documentation = amiss_fixtures::commit_pair(&[("mirror.txt", "timeout: u64\n")], &[])
         .expect("documentation repository");
     let registered = Arc::new(RelationPlan {
-        identity: artifact("relation/api"),
+        identity: artifact_id!("relation/api"),
         context_digest: amiss_wire::model::Digest::from(
             sha2::Sha256::digest(b"operator relation context").0,
         ),
@@ -112,17 +113,16 @@ fn fixture(aggregate_records: u64) -> Fixture {
             projection_bytes: 2_048,
         },
         status_destinations: vec![RelationStatusDestination {
-            subject_role: artifact("documentation"),
-            required_status_name: RequiredStatusName::try_from("Amiss cross-repository".to_owned())
-                .unwrap(),
+            subject_role: artifact_id!("documentation"),
+            required_status_name: required_status_name!("Amiss cross-repository"),
         }],
     });
     let transition = relation_transition(
         TriggeredRelation {
             plan: Arc::clone(&registered),
-            trigger_role: artifact("source"),
+            trigger_role: artifact_id!("source"),
         },
-        artifact("workflow/release-42"),
+        artifact_id!("workflow/release-42"),
         [
             frozen("source", &source),
             frozen("documentation", &documentation),
@@ -232,7 +232,7 @@ fn changed_plan_fields_and_aliased_roots_are_refused_before_projection() {
     let fixture = fixture(4);
     let mut changed = fixture.plan.payload.clone();
     changed.subjects[0].source = ProjectionSource::BlobLines(BlobLineSelection {
-        path: path("other.txt"),
+        path: repo_path_text!("other.txt"),
         first_line: 1,
         last_line: 1,
     });

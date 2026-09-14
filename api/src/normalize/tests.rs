@@ -26,7 +26,7 @@ fn produced_templates_keep_the_context_and_rustdoc_digest_preimages() {
                 .0,
         ),
         features: vec!["default".to_owned()],
-        name: amiss_wire::model::ArtifactId::new(
+        name: amiss_wire::model::ArtifactId::try_from(
             "rust/example/local-function-declarations".to_owned(),
         )
         .unwrap(),

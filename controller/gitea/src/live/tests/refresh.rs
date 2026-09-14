@@ -1,7 +1,7 @@
 use amiss_controller::PullRequestChange;
 use amiss_controller::{ChangeState, ProviderError};
-use amiss_wire::controls::RequiredStatusName;
 use amiss_wire::model::ForgeDialect;
+use amiss_wire::required_status_name;
 
 use super::super::model::{BranchProtectionRecord, RefreshData, ReviewRecord, UserRecord};
 use super::super::{GiteaClientError, GiteaPullRequest};
@@ -344,7 +344,7 @@ fn the_request_binding_is_exact_in_every_field() {
     let config = |namespace: &str| super::super::Config {
         provider: provider(namespace),
         reviewer: reviewer(),
-        review_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
+        review_name: required_status_name!("amiss"),
     };
     assert!(validate_request(&config("gitea"), fixture.pull_request()).is_ok());
     assert_eq!(

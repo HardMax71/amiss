@@ -10,12 +10,11 @@ use amiss_scan::report::{
     SnapshotIdentity, candidate_identity_digest, synthetic_candidate,
 };
 use amiss_scan::resolve::Intent;
+use amiss_wire::branch_ref;
 use amiss_wire::controls::{GitMode, SourceConstruct, TargetKind};
 use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
-use amiss_wire::model::{
-    Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
-};
+use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
 use amiss_wire::report::model::ObservationIdInput;
 use amiss_wire::report::{EngineProvenance, IntentKind, adapter_contract};
 use serde_json::Value;
@@ -257,9 +256,9 @@ fn the_commit_candidate_identity_fixture_matches_the_runtime_preimage() {
         "docs".to_owned(),
     );
     setup.forge = Some(ForgeDialect::Gitlab);
-    setup.candidate_ref = BranchRef::new("refs/heads/amiss-controller".to_owned());
-    setup.target_ref = BranchRef::new("refs/heads/main".to_owned());
-    setup.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
+    setup.candidate_ref = Some(branch_ref!("refs/heads/amiss-controller"));
+    setup.target_ref = Some(branch_ref!("refs/heads/main"));
+    setup.default_branch_ref = Some(branch_ref!("refs/heads/main"));
 
     let published = fixture_digest(
         "candidate-identity.json",

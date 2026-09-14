@@ -4,25 +4,27 @@ use sha2::Digest as _;
 use std::io::{Cursor, Write as _};
 use std::sync::Arc;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OpaqueId,
-    ProviderIdentity, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
-    WorkflowArtifactExpectation,
+    MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, ProviderIdentity,
+    SemanticEvidenceExpectation, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
 };
-use amiss_wire::model::{ArtifactId, RepoPathText, RepositoryIdentity};
+use amiss_wire::artifact_id;
+use amiss_wire::model::{RepoPathText, RepositoryIdentity};
+use amiss_wire::repo_path_text;
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
 use super::{GitHubArtifactError, decode_workflow_artifact};
 
-const PAYLOAD_FILE: &str = "amiss/semantic-template.json";
+static PAYLOAD_FILE: RepoPathText = repo_path_text!("amiss/semantic-template.json");
 
 #[test]
 fn stored_and_deflated_single_payloads_retain_the_exact_template() {
     let expectation = expectation();
     let payload = template(expectation.semantic.context_digest);
     for method in [CompressionMethod::Stored, CompressionMethod::Deflated] {
-        let archive = archive(&[(PAYLOAD_FILE, payload.as_slice())], method);
+        let archive = archive(&[(PAYLOAD_FILE.as_str(), payload.as_slice())], method);
         let acquired = decode_workflow_artifact(&expectation, &archive).unwrap();
         assert_eq!(
             acquired.acquisition_identity,
@@ -37,7 +39,7 @@ fn both_byte_limits_are_inclusive_and_independent() {
     let mut expectation = expectation();
     let payload = template(expectation.semantic.context_digest);
     let archive = archive(
-        &[(PAYLOAD_FILE, payload.as_slice())],
+        &[(PAYLOAD_FILE.as_str(), payload.as_slice())],
         CompressionMethod::Deflated,
     );
     expectation.archive_byte_limit = u64::try_from(archive.len()).unwrap();
@@ -62,23 +64,26 @@ fn malformed_ambiguous_unsafe_and_encrypted_archives_are_refused() {
     let expectation = expectation();
     let payload = template(expectation.semantic.context_digest);
     let regular = archive(
-        &[(PAYLOAD_FILE, payload.as_slice())],
+        &[(PAYLOAD_FILE.as_str(), payload.as_slice())],
         CompressionMethod::Stored,
     );
     let cases = [
         b"not a zip".to_vec(),
         archive(&[], CompressionMethod::Stored),
         archive(
-            &[(PAYLOAD_FILE, payload.as_slice()), ("extra", b"extra")],
+            &[
+                (PAYLOAD_FILE.as_str(), payload.as_slice()),
+                ("extra", b"extra"),
+            ],
             CompressionMethod::Stored,
         ),
         archive(
             &[("../semantic-template.json", payload.as_slice())],
             CompressionMethod::Stored,
         ),
-        directory_archive(PAYLOAD_FILE),
-        symlink_archive(PAYLOAD_FILE),
-        commented_archive(PAYLOAD_FILE, &payload),
+        directory_archive(PAYLOAD_FILE.as_str()),
+        symlink_archive(PAYLOAD_FILE.as_str()),
+        commented_archive(PAYLOAD_FILE.as_str(), &payload),
         [b"prepended junk".as_slice(), regular.as_slice()].concat(),
         encrypted(regular),
     ];
@@ -94,7 +99,7 @@ fn malformed_ambiguous_unsafe_and_encrypted_archives_are_refused() {
 fn the_payload_must_be_the_planned_semantic_template() {
     let expectation = expectation();
     let invalid = archive(
-        &[(PAYLOAD_FILE, b"not semantic JSON")],
+        &[(PAYLOAD_FILE.as_str(), b"not semantic JSON")],
         CompressionMethod::Stored,
     );
     assert_eq!(
@@ -110,7 +115,7 @@ fn the_payload_must_be_the_planned_semantic_template() {
             .0,
     ));
     let mismatched = archive(
-        &[(PAYLOAD_FILE, other.as_slice())],
+        &[(PAYLOAD_FILE.as_str(), other.as_slice())],
         CompressionMethod::Stored,
     );
     assert_eq!(
@@ -124,7 +129,7 @@ fn an_unchecked_non_github_or_unbounded_expectation_is_refused() {
     let mut expectation = expectation();
     let payload = template(expectation.semantic.context_digest);
     let archive = archive(
-        &[(PAYLOAD_FILE, payload.as_slice())],
+        &[(PAYLOAD_FILE.as_str(), payload.as_slice())],
         CompressionMethod::Stored,
     );
     expectation.provider =
@@ -170,16 +175,16 @@ fn expectation() -> WorkflowArtifactExpectation {
     WorkflowArtifactExpectation {
         provider: provider(),
         repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
-        workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
-        event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+        workflow_identity: opaque_id!("docs-evidence.yml"),
+        event: opaque_id!("pull_request"),
         artifact_name: "amiss-semantic-evidence".to_owned(),
-        payload_file: RepoPathText::new(PAYLOAD_FILE.to_owned()).unwrap(),
+        payload_file: PAYLOAD_FILE.clone(),
         archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
         file_byte_limit: MAX_WORKFLOW_ARTIFACT_FILE_BYTES,
         semantic: SemanticEvidenceExpectation {
-            acquisition_identity: ArtifactId::new("github-docs-evidence".to_owned()).unwrap(),
+            acquisition_identity: artifact_id!("github-docs-evidence"),
             producer_kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
-            producer_identity: ArtifactId::new("test-site-builder".to_owned()).unwrap(),
+            producer_identity: artifact_id!("test-site-builder"),
             producer_version: "0.5.1".to_owned(),
             context_digest,
         },
@@ -195,7 +200,7 @@ fn template(context_digest: amiss_wire::model::Digest) -> Vec<u8> {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
-            identity: ArtifactId::new("test-site-builder".to_owned()).unwrap(),
+            identity: artifact_id!("test-site-builder"),
             version: "0.5.1".to_owned(),
             context_digest,
             input_digest: amiss_wire::model::Digest::from(

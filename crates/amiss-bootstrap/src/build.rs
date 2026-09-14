@@ -8,12 +8,13 @@ use amiss_wire::manifest::{
 };
 use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 use amiss_wire::model::{Digest, RAW_EVIDENCE_DOMAIN};
+use amiss_wire::repo_path_text;
 use sha2::Digest as _;
 
 use crate::ENGINE_DOMAIN;
 
-pub const RELEASE_MANIFEST_PATH: &str = "release-manifest.json";
-pub const RELEASE_MANIFEST_DIGEST_PATH: &str = "release-manifest.digest";
+pub static RELEASE_MANIFEST_PATH: RepoPathText = repo_path_text!("release-manifest.json");
+pub static RELEASE_MANIFEST_DIGEST_PATH: RepoPathText = repo_path_text!("release-manifest.digest");
 
 /// One staged runtime file: its action-tree path, its role, whether Git will
 /// record the execute bit, and its exact bytes.

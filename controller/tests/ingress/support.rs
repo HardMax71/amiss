@@ -6,11 +6,11 @@ use amiss_controller::ProviderFacts;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     Change, ChangeLocator, DeliveryHeader, DeliveryRoute, GitHubWebhook, GitLabWebhook,
-    IngressError, IngressLimits, IngressPolicy, IntegrationId, OpaqueId, ProviderIdentity,
-    ProviderInstance, ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
-    ReplayWindow, SignedTimePolicy, TrustSetId, UntrustedDelivery, VerifiedDelivery, WebhookKey,
-    WebhookKeyring, WebhookProof,
+    IngressError, IngressLimits, IngressPolicy, OpaqueId, ProviderIdentity, ProviderInstance,
+    ProviderRun, ProviderRunAttempt, ProviderRunIdentity, ReplayWindow, SignedTimePolicy,
+    TrustSetId, UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring, WebhookProof,
 };
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
 pub(crate) const BODY: &[u8] = br#"{"event":"change"}"#;
@@ -38,20 +38,20 @@ pub(crate) const GITLAB_HEADERS: &[DeliveryHeader<'_>] = &[
 ];
 
 pub(crate) fn opaque(value: &str) -> OpaqueId {
-    OpaqueId::new(value.to_owned()).unwrap()
+    OpaqueId::try_from(value.to_owned()).unwrap()
 }
 
 pub(crate) fn provider(instance: &str) -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("forge".to_owned()).unwrap(),
-        instance: ProviderInstance::new(instance.to_owned()).unwrap(),
+        namespace: provider_namespace!("forge"),
+        instance: ProviderInstance::try_from(instance.to_owned()).unwrap(),
     }
 }
 
 pub(crate) fn route(signed_time: SignedTimePolicy) -> DeliveryRoute {
     DeliveryRoute {
         provider: provider("forge.example.test"),
-        trust_set: opaque("webhooks-main"),
+        trust_set: opaque_id!("webhooks-main"),
         signed_time,
     }
 }
@@ -80,7 +80,7 @@ pub(crate) fn split_delivery(
 ) -> ProviderFacts {
     ProviderFacts {
         provider: identity_provider.clone(),
-        integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
+        integration: opaque_id!("installation-7"),
         change: ChangeLocator {
             provider: change_provider.clone(),
             repository: RepositoryIdentity::new(
@@ -93,7 +93,7 @@ pub(crate) fn split_delivery(
         },
         provider_run: ProviderRunIdentity::new(
             ProviderRun::PullRequest(Digest::from([234; 32])),
-            ProviderRunAttempt::new(1).unwrap(),
+            ProviderRunAttempt::FIRST,
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap(),
         )
@@ -122,7 +122,7 @@ pub(crate) fn github_proof(
     check: amiss_controller::IngressCheck<'_>,
     trust_set: TrustSetId,
 ) -> WebhookProof {
-    let key = WebhookKey::new(opaque("anchor-2"), GITHUB_SECRET.to_vec(), 0, None).unwrap();
+    let key = WebhookKey::new(opaque_id!("anchor-2"), GITHUB_SECRET.to_vec(), 0, None).unwrap();
     GitHubWebhook::new(WebhookKeyring::new(trust_set, vec![key]).unwrap())
         .verify(check)
         .unwrap()
@@ -132,8 +132,8 @@ pub(crate) fn gitlab_verified(
     check: amiss_controller::IngressCheck<'_>,
     provider: &ProviderIdentity,
 ) -> VerifiedDelivery {
-    let key = WebhookKey::new(opaque("anchor-2"), GITLAB_SECRET.to_vec(), 0, None).unwrap();
-    GitLabWebhook::new(WebhookKeyring::new(opaque("webhooks-main"), vec![key]).unwrap())
+    let key = WebhookKey::new(opaque_id!("anchor-2"), GITLAB_SECRET.to_vec(), 0, None).unwrap();
+    GitLabWebhook::new(WebhookKeyring::new(opaque_id!("webhooks-main"), vec![key]).unwrap())
         .verify(check)
         .unwrap()
         .bind(delivery(provider))

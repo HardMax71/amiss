@@ -1,7 +1,7 @@
+use amiss_wire::artifact_id;
 use amiss_wire::controls::WaiverBundle;
 use amiss_wire::de::Document as _;
 use amiss_wire::de::ErrorKind;
-use amiss_wire::model::ArtifactId;
 use amiss_wire::model::UtcInstant;
 
 use super::support::WAIVER;
@@ -47,7 +47,7 @@ fn parses_a_valid_waiver_bundle_and_rejects_duplicates() {
 
     let mut duplicate = original.clone();
     let mut second = duplicate.items[0].clone();
-    second.waiver_id = ArtifactId::try_from("waiver/two".to_owned()).unwrap();
+    second.waiver_id = artifact_id!("waiver/two");
     duplicate.items.push(second);
     assert_eq!(
         duplicate.validate().unwrap_err().kind,

@@ -84,7 +84,10 @@ pub(super) fn governed_finding(
             path: seed
                 .document
                 .as_str()
-                .map(|path| RepoPathText::new(path.to_owned()).ok_or(crate::Error::Internal))
+                .map(|path| {
+                    RepoPathText::try_from(path.to_owned())
+                        .map_err(|_defect| crate::Error::Internal)
+                })
                 .transpose()?,
             sources: seed.sources.clone(),
             state: ControlState::Unsupported,

@@ -3,7 +3,7 @@
 use sha2::Digest as _;
 use std::sync::Arc;
 
-use amiss_wire::model::ArtifactId;
+use amiss_wire::artifact_id;
 use amiss_wire::semantic::{SemanticProducer, TemplateSchema};
 
 use super::{bind_input, input_artifact};
@@ -16,8 +16,7 @@ fn an_input_artifact_admits_its_exact_size_and_refuses_the_next_lower_limit()
         schema: TemplateSchema::Current,
         producer: SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::RecordSet,
-            identity: ArtifactId::new("test-records".to_owned())
-                .ok_or(BootstrapJobError::SemanticEvidence)?,
+            identity: artifact_id!("test-records"),
             version: "1".to_owned(),
             context_digest: amiss_wire::model::Digest::from(
                 sha2::Sha256::new_with_prefix("amiss/test-context")

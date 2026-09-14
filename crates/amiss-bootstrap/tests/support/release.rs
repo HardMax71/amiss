@@ -1,5 +1,6 @@
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::RepoPathText;
+use amiss_wire::repo_path_text;
 use sha2::Digest as _;
 use std::fs;
 use std::path::Path;
@@ -49,7 +50,7 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
                 bytes: engine,
             },
             StagedFile {
-                path: RepoPathText::try_from("action.yml".to_owned()).unwrap(),
+                path: repo_path_text!("action.yml"),
                 role: RuntimeRole::RuntimeData,
                 executable: false,
                 bytes: ACTION,
@@ -66,10 +67,7 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
         .unwrap(),
         object_format: amiss_wire::model::ObjectFormat::Sha1,
         commit_oid: "a".repeat(40).parse().unwrap(),
-        locks: vec![(
-            RepoPathText::try_from("Cargo.lock".to_owned()).unwrap(),
-            lock,
-        )],
+        locks: vec![(repo_path_text!("Cargo.lock"), lock)],
     };
     let (manifest_bytes, manifest_digest) = build_manifest(build, artifacts).unwrap();
     let engine_digest = Digest::from(
@@ -82,9 +80,9 @@ pub(crate) fn release_with_engine(engine: &[u8], mutate: impl FnOnce(&Path)) -> 
 
     fs::create_dir_all(root.join("dist")).unwrap();
     fs::write(root.join("action.yml"), ACTION).unwrap();
-    fs::write(root.join(RELEASE_MANIFEST_PATH), &manifest_bytes).unwrap();
+    fs::write(root.join(RELEASE_MANIFEST_PATH.as_str()), &manifest_bytes).unwrap();
     fs::write(
-        root.join(RELEASE_MANIFEST_DIGEST_PATH),
+        root.join(RELEASE_MANIFEST_DIGEST_PATH.as_str()),
         format!("{manifest_digest}\n"),
     )
     .unwrap();

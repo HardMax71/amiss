@@ -4,7 +4,8 @@ use amiss_controller::{
     ChangeState, CheckConclusion, ControllerError, HandleOutcome, OidPair, RunFailure, RunIdentity,
     RunRefs,
 };
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat};
+use amiss_wire::branch_ref;
+use amiss_wire::model::{ForgeDialect, ObjectFormat};
 
 use crate::support::{
     FakeAdapter, complete, controller, delivery, locator, oid, provider, repository, run,
@@ -100,9 +101,9 @@ fn run_identity_rejects_oids_from_another_object_format() {
         change,
         RunRefs {
             forge: ForgeDialect::Gitea,
-            candidate: BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
-            target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-            default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+            candidate: branch_ref!("refs/heads/topic"),
+            target: branch_ref!("refs/heads/main"),
+            default_branch: branch_ref!("refs/heads/main"),
         },
         ObjectFormat::Sha256,
         OidPair {

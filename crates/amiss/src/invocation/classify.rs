@@ -377,8 +377,8 @@ fn classify_identity(gathered: &Gathered) -> Validation<Option<ProviderIdentity>
         .ok_or(Code::InvalidInvocation)?;
 
     let identity = RepositoryIdentity::new(host.to_owned(), owner.to_owned(), name.to_owned());
-    let ref_name = BranchRef::new(ref_value.to_owned());
-    let default_branch_ref = BranchRef::new(default_value.to_owned());
+    let ref_name = BranchRef::try_from(ref_value.to_owned()).ok();
+    let default_branch_ref = BranchRef::try_from(default_value.to_owned()).ok();
     if let (Some(repository), Some(ref_name), Some(default_branch_ref)) =
         (identity, ref_name, default_branch_ref)
     {

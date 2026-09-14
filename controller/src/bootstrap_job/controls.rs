@@ -73,8 +73,8 @@ fn maximal_trusted_time(
         "a".repeat(100),
     )
     .ok_or(BootstrapJobError::RequestEncoding)?;
-    let ref_name = BranchRef::new(format!("refs/heads/{}", "\"".repeat(255)))
-        .ok_or(BootstrapJobError::RequestEncoding)?;
+    let ref_name = BranchRef::try_from(format!("refs/heads/{}", "\"".repeat(255)))
+        .map_err(|_defect| BootstrapJobError::RequestEncoding)?;
     let evaluation_instant = UtcInstant::new("9999-12-31T23:50:00Z".to_owned())
         .ok_or(BootstrapJobError::RequestEncoding)?;
     let valid_until = UtcInstant::new("9999-12-31T23:59:00Z".to_owned())

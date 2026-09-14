@@ -44,7 +44,7 @@ fn acceptance_matches_the_grammar_and_both_constructors_agree() {
                 "the String constructor is the byte constructor: {raw:?}"
             );
             assert_eq!(
-                RepoPathText::new(text).is_some(),
+                RepoPathText::try_from(text).is_ok(),
                 accepted,
                 "the text-only type accepts exactly the UTF-8 slice of the grammar: {raw:?}"
             );

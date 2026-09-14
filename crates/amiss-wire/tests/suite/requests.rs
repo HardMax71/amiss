@@ -13,6 +13,7 @@ use std::path::Path;
 use amiss_wire::controls::Profile;
 use amiss_wire::de::ErrorKind;
 
+use amiss_wire::branch_ref;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::requests::{
     CANDIDATE_IDENTITY_DOMAIN, ControlsRequest, EvaluationRequest, EvaluationRequestSchema,
@@ -156,9 +157,9 @@ fn commit_identity_construction_matches_the_published_preimage() {
         "docs".to_owned(),
     );
     evaluation.forge = Some(ForgeDialect::Gitlab);
-    evaluation.candidate_ref = BranchRef::new("refs/heads/amiss-controller".to_owned());
-    evaluation.target_ref = BranchRef::new("refs/heads/main".to_owned());
-    evaluation.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
+    evaluation.candidate_ref = Some(branch_ref!("refs/heads/amiss-controller"));
+    evaluation.target_ref = Some(branch_ref!("refs/heads/main"));
+    evaluation.default_branch_ref = Some(branch_ref!("refs/heads/main"));
 
     let published =
         serde_json::from_slice::<serde_json::Value>(&request_example("candidate-identity.json"))

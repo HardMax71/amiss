@@ -1,5 +1,6 @@
 #![expect(clippy::unwrap_used, reason = "test fixture plumbing")]
 
+use amiss_wire::branch_ref;
 use amiss_wire::controls::DebtSnapshot;
 use amiss_wire::controls::OrganizationFloor;
 use amiss_wire::controls::TrustedTimeStatement;
@@ -13,7 +14,7 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::commit_pair;
 use amiss_scan::policy::{DebtInput, FloorInput, TimeInput};
 use amiss_scan::report::{CandidateBlock, Setup, SnapshotIdentity, candidate_identity_digest};
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
+use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::requests::RequestTrust;
 use tempfile::TempDir;
 
@@ -197,8 +198,8 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         profile: amiss_wire::controls::Profile::Enforce,
         repository: Some(identity.clone()),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
-        target_ref: BranchRef::new("refs/heads/main".to_owned()),
+        candidate_ref: Some(branch_ref!("refs/heads/main")),
+        target_ref: Some(branch_ref!("refs/heads/main")),
         default_branch_ref: None,
         base: base_block,
         candidate: CandidateBlock::Commit(candidate_block),
@@ -228,8 +229,8 @@ fn a_minted_snapshot_round_trips_into_tolerance() {
         profile: amiss_wire::controls::Profile::Enforce,
         repository: Some(identity),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
-        target_ref: BranchRef::new("refs/heads/main".to_owned()),
+        candidate_ref: Some(branch_ref!("refs/heads/main")),
+        target_ref: Some(branch_ref!("refs/heads/main")),
         default_branch_ref: None,
         floor: Some({
             let floor = OrganizationFloor::parse(FLOOR.as_bytes()).unwrap();

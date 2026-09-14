@@ -96,7 +96,7 @@ fn policy(count: usize, reverse: bool) -> PolicySide {
     };
     let mut document_includes = indexes
         .map(|index| DocumentInclude {
-            path: RepoPathText::new(format!("roots/{index:06}"))
+            path: RepoPathText::try_from(format!("roots/{index:06}"))
                 .expect("valid benchmark include path"),
             kind: IncludeKind::Tree,
             suffix: None,

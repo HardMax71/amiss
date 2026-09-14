@@ -6,8 +6,9 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair, staged_index};
 use amiss_scan::report::{Built, RequestDigests};
 use amiss_scan::resolve::ForgeContext;
+use amiss_wire::branch_ref;
 use amiss_wire::controls::Profile;
-use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::{EngineProvenance, FixKind};
 use tempfile::TempDir;
 
@@ -337,14 +338,14 @@ fn a_historical_absence_never_borrows_candidate_relocation_evidence() {
             "widgets".to_owned(),
         )
         .unwrap(),
-        candidate_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
-        default_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
+        candidate_ref: Some(branch_ref!("refs/heads/main")),
+        default_ref: Some(branch_ref!("refs/heads/main")),
     };
     let mut setup = shell();
     setup.repository = RepositoryIdentity::github("acme".to_owned(), "widgets".to_owned());
     setup.forge = Some(ForgeDialect::Github);
-    setup.candidate_ref = BranchRef::new("refs/heads/main".to_owned());
-    setup.default_branch_ref = BranchRef::new("refs/heads/main".to_owned());
+    setup.candidate_ref = Some(branch_ref!("refs/heads/main"));
+    setup.default_branch_ref = Some(branch_ref!("refs/heads/main"));
     let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
     let built = commit_pair(
         &repo,

@@ -135,7 +135,7 @@ pub(super) fn claim_finding(group: &ClaimGroup, profile: Profile) -> Result<Find
         target_path: group
             .target_path
             .as_str()
-            .and_then(|path| RepoPathText::new(path.to_owned()))
+            .and_then(|path| RepoPathText::try_from(path.to_owned()).ok())
             .ok_or(crate::Error::Internal)?,
         line: group.line,
         expected_digest: group.expected_digest,
@@ -173,7 +173,7 @@ fn claim_fix(group: &ClaimGroup) -> Option<FindingFix> {
     )?;
     let span = group.representative_span?;
     Some(FindingFix {
-        path: RepoPathText::new(group.document.as_str()?.to_owned())?,
+        path: RepoPathText::try_from(group.document.as_str()?.to_owned()).ok()?,
         span,
         replacement,
         kind: FixKind::ClaimValueRewrite,

@@ -3,10 +3,11 @@ use std::fs;
 use std::sync::Arc;
 
 use amiss_controller::PullRequestChange;
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    Change, ControllerClock, ControllerEvaluationId, DeliveryClaim, DeliveryLease, DeliveryLedger,
-    FileLedger, FileLedgerError, LeaseCompletion, LeaseFence, LeaseRenewal, ProviderRun,
-    ProviderRunAttempt, ProviderRunIdentity, Publication, StageOutcome, StagedPublication,
+    Change, ControllerClock, DeliveryClaim, DeliveryLease, DeliveryLedger, FileLedger,
+    FileLedgerError, LeaseCompletion, LeaseFence, LeaseRenewal, ProviderRun, ProviderRunAttempt,
+    ProviderRunIdentity, Publication, StageOutcome, StagedPublication,
 };
 use amiss_wire::model::{Digest, ObjectFormat, Oid};
 use tempfile::TempDir;
@@ -304,13 +305,12 @@ fn a_lease_and_a_publication_are_matched_field_by_field() {
 
     let publications: [(&str, Deviate); 4] = [
         ("another evaluation", |publication| {
-            publication.evaluation_id =
-                ControllerEvaluationId::new("other-evaluation".to_owned()).unwrap();
+            publication.evaluation_id = opaque_id!("other-evaluation");
         }),
         ("another provider run", |publication| {
             publication.provider_run = ProviderRunIdentity::new(
                 ProviderRun::PullRequest(Digest::from([180; 32])),
-                ProviderRunAttempt::new(1).unwrap(),
+                ProviderRunAttempt::FIRST,
                 ObjectFormat::Sha1,
                 publication.provider_run.candidate_commit.clone(),
             )
@@ -366,8 +366,7 @@ fn a_lease_belongs_to_the_owner_that_took_it() {
 fn completion_answers_for_the_staged_publication_alone() {
     let rows: [(&str, bool, Restage); 5] = [
         ("another evaluation", false, |staged| {
-            staged.evaluation_id =
-                ControllerEvaluationId::new("other-evaluation".to_owned()).unwrap();
+            staged.evaluation_id = opaque_id!("other-evaluation");
         }),
         ("another fence", false, |staged| {
             staged.fence = LeaseFence::new(staged.fence.get().saturating_add(1)).unwrap();
@@ -379,8 +378,7 @@ fn completion_answers_for_the_staged_publication_alone() {
             staged.publication.report = Some(vec![9, 9, 9, 9, 9]);
         }),
         ("another evaluation after completion", true, |staged| {
-            staged.evaluation_id =
-                ControllerEvaluationId::new("other-evaluation".to_owned()).unwrap();
+            staged.evaluation_id = opaque_id!("other-evaluation");
         }),
     ];
     for (reason, complete_first, deviate) in rows {

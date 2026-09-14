@@ -2,9 +2,8 @@ use std::collections::{BTreeSet, VecDeque};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
-use amiss_controller::{
-    OpaqueId, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
-};
+use amiss_controller::{ProviderError, ProviderIdentity, ProviderInstance};
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitlab::{
     AcquiredCommit, GitLabAccess, GitLabApi, GitLabBranch, GitLabJob, GitLabMergeChecks,
@@ -73,14 +72,14 @@ impl GitLabApi for FakeGitLab {
 pub(super) fn source() -> Arc<GitLabOidc> {
     let key = OidcPublicKey::from_rsa_pem(
         KID.to_owned(),
-        OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
+        opaque_id!("gitlab-key/current"),
         &RSA_KEYS.public_pem,
     )
     .unwrap();
     Arc::new(
         GitLabOidc::new(
             provider(),
-            OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+            opaque_id!("gitlab-oidc"),
             format!("https://{HOST}"),
             AUDIENCE.to_owned(),
             policy(),
@@ -93,7 +92,7 @@ pub(super) fn source() -> Arc<GitLabOidc> {
 
 pub(super) fn policy() -> PolicyBinding {
     PolicyBinding {
-        integration: OpaqueId::new("pipeline-execution-policy/1".to_owned()).unwrap(),
+        integration: opaque_id!("pipeline-execution-policy/1"),
         project_id: PROJECT_ID,
         project_path: PROJECT_PATH.to_owned(),
         target_branch: "main".to_owned(),
@@ -109,8 +108,8 @@ pub(super) fn policy() -> PolicyBinding {
 
 pub(super) fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new(HOST.to_owned()).unwrap(),
+        namespace: provider_namespace!("gitlab"),
+        instance: ProviderInstance::try_from(HOST.to_owned()).unwrap(),
     }
 }
 

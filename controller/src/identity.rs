@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::num::NonZeroU64;
 
 use serde::{Deserialize, Serialize};
@@ -6,33 +7,90 @@ use amiss_wire::model::{Digest, ObjectFormat, Oid, RepositoryIdentity};
 
 mod tests;
 
-fn bounded(raw: String, maximum: usize, valid: impl Fn(u8) -> bool) -> Option<String> {
-    let bytes = raw.as_bytes();
-    (!bytes.is_empty() && bytes.len() <= maximum && bytes.iter().all(|byte| valid(*byte)))
-        .then_some(raw)
+#[derive(Clone, Copy)]
+enum ByteClass {
+    Namespace,
+    Opaque,
+}
+
+impl ByteClass {
+    const fn admits(self, byte: u8) -> bool {
+        match self {
+            Self::Namespace => {
+                byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
+            }
+            Self::Opaque => {
+                byte.is_ascii_alphanumeric()
+                    || matches!(byte, b'.' | b'_' | b':' | b'/' | b'@' | b'+' | b'-')
+            }
+        }
+    }
+}
+
+const fn bounded(raw: &[u8], maximum: usize, class: ByteClass) -> bool {
+    if raw.is_empty() || raw.len() > maximum {
+        return false;
+    }
+    let mut rest = raw;
+    while let Some((&byte, tail)) = rest.split_first() {
+        rest = tail;
+        if !class.admits(byte) {
+            return false;
+        }
+    }
+    true
 }
 
 /// The registry key for one provider family, in a lowercase DNS-label
 /// grammar so it can never collide by case or whitespace.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub struct ProviderNamespace(String);
+pub struct ProviderNamespace(Cow<'static, str>);
 
 impl ProviderNamespace {
-    pub fn new(raw: String) -> Option<Self> {
-        let first = *raw.as_bytes().first()?;
-        if !first.is_ascii_lowercase() && !first.is_ascii_digit() {
-            return None;
-        }
-        bounded(raw, 64, |byte| {
-            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'.' | b'-')
-        })
-        .map(Self)
+    const INVALID: &'static str = "invalid provider namespace";
+
+    /// # Panics
+    /// When the literal is not a namespace; `provider_namespace!` makes that a build error.
+    #[must_use]
+    pub const fn from_static(raw: &'static str) -> Self {
+        assert!(Self::valid(raw.as_bytes()), "{}", Self::INVALID);
+        Self(Cow::Borrowed(raw))
     }
 
+    const fn valid(raw: &[u8]) -> bool {
+        match raw.split_first() {
+            Some((&first, _)) => {
+                (first.is_ascii_lowercase() || first.is_ascii_digit())
+                    && bounded(raw, 64, ByteClass::Namespace)
+            }
+            None => false,
+        }
+    }
+
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+impl TryFrom<String> for ProviderNamespace {
+    type Error = &'static str;
+
+    fn try_from(raw: String) -> Result<Self, Self::Error> {
+        if Self::valid(raw.as_bytes()) {
+            Ok(Self(Cow::Owned(raw)))
+        } else {
+            Err(Self::INVALID)
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! provider_namespace {
+    ($raw:literal) => {
+        const { $crate::ProviderNamespace::from_static($raw) }
+    };
 }
 
 /// One provider-issued opaque identifier: bounded printable bytes the
@@ -40,24 +98,50 @@ impl ProviderNamespace {
 /// plays is said by the field that holds it, not by a wrapper type.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub struct OpaqueId(String);
+pub struct OpaqueId(Cow<'static, str>);
 
 pub type ProviderInstance = OpaqueId;
 pub type IntegrationId = OpaqueId;
 pub type ControllerEvaluationId = OpaqueId;
 
 impl OpaqueId {
-    pub fn new(raw: String) -> Option<Self> {
-        bounded(raw, 256, |byte| {
-            byte.is_ascii_alphanumeric()
-                || matches!(byte, b'.' | b'_' | b':' | b'/' | b'@' | b'+' | b'-')
-        })
-        .map(Self)
+    const INVALID: &'static str = "invalid opaque identifier";
+
+    /// # Panics
+    /// When the literal is not an opaque identifier; `opaque_id!` makes that a build error.
+    #[must_use]
+    pub const fn from_static(raw: &'static str) -> Self {
+        assert!(Self::valid(raw.as_bytes()), "{}", Self::INVALID);
+        Self(Cow::Borrowed(raw))
     }
 
+    const fn valid(raw: &[u8]) -> bool {
+        bounded(raw, 256, ByteClass::Opaque)
+    }
+
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+impl TryFrom<String> for OpaqueId {
+    type Error = &'static str;
+
+    fn try_from(raw: String) -> Result<Self, Self::Error> {
+        if Self::valid(raw.as_bytes()) {
+            Ok(Self(Cow::Owned(raw)))
+        } else {
+            Err(Self::INVALID)
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! opaque_id {
+    ($raw:literal) => {
+        const { $crate::OpaqueId::from_static($raw) }
+    };
 }
 
 /// A provider run attempt: one-based and inside the exact-integer range
@@ -67,14 +151,22 @@ impl OpaqueId {
 pub struct ProviderRunAttempt(u64);
 
 impl ProviderRunAttempt {
-    pub const fn new(raw: u64) -> Option<Self> {
-        if raw == 0 || raw > 9_007_199_254_740_991 {
-            None
-        } else {
-            Some(Self(raw))
-        }
+    pub const FIRST: Self = Self(1);
+    const INVALID: &'static str = "invalid provider run attempt";
+
+    /// # Panics
+    /// When `raw` is zero or beyond the exact-integer range; meant for literals.
+    #[must_use]
+    pub const fn literal(raw: u64) -> Self {
+        assert!(Self::valid(raw), "{}", Self::INVALID);
+        Self(raw)
     }
 
+    const fn valid(raw: u64) -> bool {
+        raw != 0 && raw <= 9_007_199_254_740_991
+    }
+
+    #[must_use]
     pub const fn get(self) -> u64 {
         self.0
     }
@@ -84,7 +176,11 @@ impl TryFrom<u64> for ProviderRunAttempt {
     type Error = &'static str;
 
     fn try_from(raw: u64) -> Result<Self, Self::Error> {
-        Self::new(raw).ok_or("invalid provider run attempt")
+        if Self::valid(raw) {
+            Ok(Self(raw))
+        } else {
+            Err(Self::INVALID)
+        }
     }
 }
 
@@ -131,8 +227,8 @@ pub struct ProviderIdentity {
 impl ProviderIdentity {
     pub fn new(namespace: String, instance: String) -> Option<Self> {
         Some(Self {
-            namespace: ProviderNamespace::new(namespace)?,
-            instance: ProviderInstance::new(instance)?,
+            namespace: ProviderNamespace::try_from(namespace).ok()?,
+            instance: ProviderInstance::try_from(instance).ok()?,
         })
     }
 }
@@ -259,21 +355,5 @@ impl MergeRequestChange {
             project_id: NonZeroU64::new(project_id)?,
             iid: NonZeroU64::new(iid)?,
         })
-    }
-}
-
-impl TryFrom<String> for ProviderNamespace {
-    type Error = &'static str;
-
-    fn try_from(raw: String) -> Result<Self, Self::Error> {
-        Self::new(raw).ok_or("invalid provider namespace")
-    }
-}
-
-impl TryFrom<String> for OpaqueId {
-    type Error = &'static str;
-
-    fn try_from(raw: String) -> Result<Self, Self::Error> {
-        Self::new(raw).ok_or("invalid opaque identifier")
     }
 }

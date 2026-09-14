@@ -5,9 +5,10 @@ use std::time::Duration;
 use amiss_controller::{
     AcquiringRunner, ArtifactStoreConfig, ChangeState, CheckConclusion, CheckPlan, ControllerClock,
     DeliveryRoute, FileArtifactStore, FileLedger, FileLedgerConfig, IngressLimits, IngressPolicy,
-    OpaqueId, PlanRegistry, PlanScope, ProviderAdapter, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, ReplayWindow, SignedTimePolicy, WebhookKey, WebhookKeyring, register_plan,
+    PlanRegistry, PlanScope, ProviderAdapter, ProviderIdentity, ReplayWindow, SignedTimePolicy,
+    WebhookKey, WebhookKeyring, register_plan,
 };
+use amiss_controller::{opaque_id, provider_namespace};
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_controller_github::{GitHubPullRequestAdapter, GitHubPullRequestSource};
 use amiss_controller_service::{
@@ -16,7 +17,8 @@ use amiss_controller_service::{
     IncomingDelivery, IncomingHeader, Operations, WorkOutcome, acquiring_worker,
     repository_admission,
 };
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::branch_ref;
+use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use tempfile::TempDir;
 
 use super::provider::{CHECK_RUN_BODY, FakeGitHub, REPOSITORY_ID, SignedEvent, snapshot};
@@ -278,7 +280,7 @@ fn provider_setup(
         plan,
     )
     .unwrap();
-    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let target = branch_ref!("refs/heads/main");
     let admission = repository_admission(
         ROUTE_ID.to_owned(),
         route.clone(),
@@ -330,33 +332,23 @@ impl LaneCase {
 
 fn provider() -> ProviderIdentity {
     ProviderIdentity {
-        namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
-        instance: ProviderInstance::new("github.com".to_owned()).unwrap(),
+        namespace: provider_namespace!("github"),
+        instance: opaque_id!("github.com"),
     }
 }
 
 fn route(provider: &ProviderIdentity) -> DeliveryRoute {
     DeliveryRoute {
         provider: provider.clone(),
-        trust_set: OpaqueId::new("github-provider-lane-keys".to_owned()).unwrap(),
+        trust_set: opaque_id!("github-provider-lane-keys"),
         signed_time: SignedTimePolicy::ReplayOnly,
     }
 }
 
 fn webhook() -> amiss_controller::GitHubWebhook {
-    let key = WebhookKey::new(
-        OpaqueId::new("current".to_owned()).unwrap(),
-        SECRET.to_vec(),
-        0,
-        None,
-    )
-    .unwrap();
+    let key = WebhookKey::new(opaque_id!("current"), SECRET.to_vec(), 0, None).unwrap();
     amiss_controller::GitHubWebhook::new(
-        WebhookKeyring::new(
-            OpaqueId::new("github-provider-lane-keys".to_owned()).unwrap(),
-            vec![key],
-        )
-        .unwrap(),
+        WebhookKeyring::new(opaque_id!("github-provider-lane-keys"), vec![key]).unwrap(),
     )
 }
 

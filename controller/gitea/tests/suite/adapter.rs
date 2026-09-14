@@ -2,22 +2,23 @@
     clippy::unwrap_used,
     reason = "fixed provider payloads and protocol identities must fail loudly"
 )]
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::{branch_ref, required_status_name};
 
 use amiss_controller_fixtures::clock::TestClock;
 use sha2::Digest as _;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use amiss_controller::ProviderNamespace;
+use amiss_controller::opaque_id;
 use amiss_controller::{
     AuthenticatedDelivery, ChangeSnapshot, ChangeState, CheckBinding, CheckConclusion,
-    ControllerEvaluationId, DeliveryHeader, DeliveryRoute, GiteaWebhook, IngressLimits,
-    IngressPolicy, OidPair, ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance,
-    ProviderNamespace, Publication, ReplayIdentity, ReplayWindow, RunIdentity, RunRefs,
-    SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
+    DeliveryHeader, DeliveryRoute, GiteaWebhook, IngressLimits, IngressPolicy, OidPair,
+    ProviderAdapter, ProviderError, ProviderIdentity, Publication, ReplayIdentity, ReplayWindow,
+    RunIdentity, RunRefs, SignedTimePolicy, UntrustedDelivery, WebhookKey, WebhookKeyring,
 };
 use amiss_controller::{Change, PullRequestChange};
-use amiss_controller::{Delivery, DeliveryIdentity, OpaqueId, ProviderFacts};
+use amiss_controller::{Delivery, DeliveryIdentity, ProviderFacts};
 use amiss_controller_gitea::{
     DedicatedReviewer, GiteaApi, GiteaPullRequest, GiteaPullRequestAdapter, GiteaPullRequestSource,
 };
@@ -265,20 +266,8 @@ fn reviewer() -> DedicatedReviewer {
 }
 
 fn webhook() -> GiteaWebhook {
-    let key = WebhookKey::new(
-        OpaqueId::new("current".to_owned()).unwrap(),
-        SECRET.to_vec(),
-        0,
-        None,
-    )
-    .unwrap();
-    GiteaWebhook::new(
-        WebhookKeyring::new(
-            OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
-            vec![key],
-        )
-        .unwrap(),
-    )
+    let key = WebhookKey::new(opaque_id!("current"), SECRET.to_vec(), 0, None).unwrap();
+    GiteaWebhook::new(WebhookKeyring::new(opaque_id!("gitea-webhooks"), vec![key]).unwrap())
 }
 
 fn authenticated(
@@ -309,7 +298,7 @@ fn authenticate_with_signature(
     };
     let route = DeliveryRoute {
         provider: route_provider,
-        trust_set: OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
+        trust_set: opaque_id!("gitea-webhooks"),
         signed_time,
     };
     let headers = [DeliveryHeader {
@@ -348,12 +337,8 @@ fn signature(body: &[u8]) -> Vec<u8> {
 fn provider(namespace: &str) -> ProviderIdentity {
     ProviderIdentity {
         namespace: self::namespace(namespace),
-        instance: ProviderInstance::new("forge.example".to_owned()).unwrap(),
+        instance: opaque_id!("forge.example"),
     }
-}
-
-fn namespace(raw: &str) -> ProviderNamespace {
-    ProviderNamespace::new(raw.to_owned()).unwrap()
 }
 
 fn snapshot(
@@ -368,9 +353,9 @@ fn snapshot(
             delivery.change.clone(),
             RunRefs {
                 forge: ForgeDialect::Gitea,
-                candidate: BranchRef::new(format!("refs/heads/{candidate_ref}")).unwrap(),
-                target: BranchRef::new(format!("refs/heads/{target_ref}")).unwrap(),
-                default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+                candidate: BranchRef::try_from(format!("refs/heads/{candidate_ref}")).unwrap(),
+                target: BranchRef::try_from(format!("refs/heads/{target_ref}")).unwrap(),
+                default_branch: branch_ref!("refs/heads/main"),
             },
             ObjectFormat::Sha1,
             OidPair {
@@ -406,9 +391,9 @@ fn dummy_snapshot(namespace: &str) -> ChangeSnapshot {
             change,
             RunRefs {
                 forge: ForgeDialect::Gitea,
-                candidate: BranchRef::new("refs/heads/topic".to_owned()).unwrap(),
-                target: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
-                default_branch: BranchRef::new("refs/heads/main".to_owned()).unwrap(),
+                candidate: branch_ref!("refs/heads/topic"),
+                target: branch_ref!("refs/heads/main"),
+                default_branch: branch_ref!("refs/heads/main"),
             },
             ObjectFormat::Sha1,
             OidPair {
@@ -435,10 +420,10 @@ fn publication(delivery: &AuthenticatedDelivery, run: RunIdentity) -> Publicatio
     );
     Publication {
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation-1".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation-1"),
         check: CheckBinding {
             plan_digest: digest,
-            required_status_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
+            required_status_name: required_status_name!("amiss"),
             execution_constraint_digest: digest,
         },
         gate_commit: delivery.provider_run.candidate_commit.clone(),
@@ -468,7 +453,7 @@ fn the_signed_target_binds_the_lane() {
     let attempt = |target: &str| -> Result<(), ProviderError> {
         let route = DeliveryRoute {
             provider: provider("gitea"),
-            trust_set: OpaqueId::new("gitea-webhooks".to_owned()).unwrap(),
+            trust_set: opaque_id!("gitea-webhooks"),
             signed_time: SignedTimePolicy::ReplayOnly,
         };
         let signed = signature(BODY);
@@ -487,7 +472,7 @@ fn the_signed_target_binds_the_lane() {
                 &*TestClock::at(NOW),
             )
             .unwrap();
-        let bound = BranchRef::new(target.to_owned()).unwrap();
+        let bound = BranchRef::try_from(target.to_owned()).unwrap();
         source
             .authenticate_for_target(check, &bound)
             .map(|_proof| ())
@@ -521,9 +506,13 @@ fn delivered(facts: &ProviderFacts) -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: facts.provider.clone(),
             integration: facts.integration.clone(),
-            delivery: Delivery::Provided(OpaqueId::new("delivery".to_owned()).unwrap()),
+            delivery: Delivery::Provided(opaque_id!("delivery")),
         },
         change: facts.change.clone(),
         provider_run: facts.provider_run.clone(),
     }
+}
+
+fn namespace(raw: &str) -> ProviderNamespace {
+    ProviderNamespace::try_from(raw.to_owned()).unwrap()
 }

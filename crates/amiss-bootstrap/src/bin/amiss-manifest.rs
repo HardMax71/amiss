@@ -10,7 +10,7 @@ use amiss_bootstrap::build::{
 };
 use amiss_wire::action::executable_platform;
 use amiss_wire::manifest::RuntimeRole;
-use amiss_wire::model::{ArtifactId, ObjectFormat, RepoPathText, RepositoryIdentity};
+use amiss_wire::model::{ObjectFormat, RepoPathText, RepositoryIdentity};
 
 /// The release-side manifest builder: it reads the staged action tree,
 /// hashes the exact bytes, and writes the strict manifest plus its digest
@@ -94,8 +94,7 @@ fn run(args: Args) -> Result<(), String> {
         ];
         staged.push(StagedArtifact {
             platform,
-            artifact_name: ArtifactId::try_from(format!("amiss-{}", platform.as_ref()))
-                .map_err(str::to_owned)?,
+            artifact_name: platform.artifact_name(),
             files,
         });
     }
@@ -117,13 +116,13 @@ fn run(args: Args) -> Result<(), String> {
             .collect::<Result<_, String>>()?,
     };
     let (manifest, digest) = build_manifest(build, staged).map_err(str::to_owned)?;
-    std::fs::write(args.tree.join(RELEASE_MANIFEST_PATH), &manifest)
-        .map_err(|defect| format!("{RELEASE_MANIFEST_PATH}: {defect}"))?;
+    std::fs::write(args.tree.join(RELEASE_MANIFEST_PATH.as_str()), &manifest)
+        .map_err(|defect| format!("{}: {defect}", RELEASE_MANIFEST_PATH.as_str()))?;
     std::fs::write(
-        args.tree.join(RELEASE_MANIFEST_DIGEST_PATH),
+        args.tree.join(RELEASE_MANIFEST_DIGEST_PATH.as_str()),
         format!("{digest}\n"),
     )
-    .map_err(|defect| format!("{RELEASE_MANIFEST_DIGEST_PATH}: {defect}"))?;
+    .map_err(|defect| format!("{}: {defect}", RELEASE_MANIFEST_DIGEST_PATH.as_str()))?;
     print_digest(digest.to_string().as_str());
     Ok(())
 }

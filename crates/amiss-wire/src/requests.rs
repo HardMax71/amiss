@@ -302,8 +302,8 @@ impl Document for ControlsRequest {
     /// Refuses malformed provider context, unsafe integers, or too many evidence envelopes.
     fn validate(&self) -> Result<(), Error> {
         if let Some(time) = &self.trusted_time {
-            ArtifactId::new(time.provider.clone())
-                .is_some()
+            ArtifactId::try_from(time.provider.clone())
+                .is_ok()
                 .then_some(())
                 .ok_or_else(|| Error::new("$.trusted_time.provider", ErrorKind::InvalidValue))?;
             provider_run_id_valid(&time.provider_run_id)

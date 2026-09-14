@@ -1,16 +1,18 @@
 #![cfg(test)]
-use amiss_wire::controls::RequiredStatusName;
+use amiss_wire::repo_path_text;
+use amiss_wire::{artifact_id, required_status_name};
 
 use sha2::Digest as _;
 use std::io::{Cursor, Write as _};
 use std::sync::Arc;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OpaqueId, ProviderError,
+    MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, ProviderError,
     ProviderIdentity, SemanticEvidenceExpectation, SemanticEvidenceTemplate,
     WorkflowArtifactExpectation,
 };
-use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
+use amiss_wire::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 use zip::write::SimpleFileOptions;
 use zip::{CompressionMethod, ZipWriter};
 
@@ -22,7 +24,7 @@ use super::{
 use crate::live::Config;
 use crate::live::model::OwnerRecord;
 
-const PAYLOAD_FILE: &str = "amiss/semantic-template.json";
+static PAYLOAD_FILE: RepoPathText = repo_path_text!("amiss/semantic-template.json");
 
 #[test]
 fn exact_provider_records_select_and_retain_the_planned_template() {
@@ -73,7 +75,7 @@ fn every_workflow_run_binding_clause_fails_closed() {
     }
 
     let mut numeric = expectation.clone();
-    numeric.workflow_identity = OpaqueId::new("123".to_owned()).unwrap();
+    numeric.workflow_identity = opaque_id!("123");
     assert_eq!(
         select_workflow_run(&config, &numeric, &candidate, run_page(&candidate)).err(),
         Some(ProviderError::InvalidResponse)
@@ -180,21 +182,21 @@ fn fixture() -> (Config, WorkflowArtifactExpectation, Oid) {
             provider: provider.clone(),
             app_id: 99,
             installation_id: 7,
-            required_status_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
+            required_status_name: required_status_name!("amiss"),
         },
         WorkflowArtifactExpectation {
             provider,
             repository: RepositoryIdentity::github("acme".to_owned(), "widget".to_owned()).unwrap(),
-            workflow_identity: OpaqueId::new("docs-evidence.yml".to_owned()).unwrap(),
-            event: OpaqueId::new("pull_request".to_owned()).unwrap(),
+            workflow_identity: opaque_id!("docs-evidence.yml"),
+            event: opaque_id!("pull_request"),
             artifact_name: "amiss-semantic-evidence".to_owned(),
-            payload_file: RepoPathText::new(PAYLOAD_FILE.to_owned()).unwrap(),
+            payload_file: PAYLOAD_FILE.clone(),
             archive_byte_limit: MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES,
             file_byte_limit: MAX_WORKFLOW_ARTIFACT_FILE_BYTES,
             semantic: SemanticEvidenceExpectation {
-                acquisition_identity: ArtifactId::new("github-docs-evidence".to_owned()).unwrap(),
+                acquisition_identity: artifact_id!("github-docs-evidence"),
                 producer_kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
-                producer_identity: ArtifactId::new("test-site-builder".to_owned()).unwrap(),
+                producer_identity: artifact_id!("test-site-builder"),
                 producer_version: "0.5.1".to_owned(),
                 context_digest,
             },
@@ -255,7 +257,7 @@ fn template(context_digest: amiss_wire::model::Digest) -> Vec<u8> {
         schema: amiss_wire::semantic::TemplateSchema::Current,
         producer: amiss_wire::semantic::SemanticProducer {
             kind: amiss_wire::semantic::SemanticProducerKind::SiteBuild,
-            identity: ArtifactId::new("test-site-builder".to_owned()).unwrap(),
+            identity: artifact_id!("test-site-builder"),
             version: "0.5.1".to_owned(),
             context_digest,
             input_digest: amiss_wire::model::Digest::from(
@@ -276,7 +278,7 @@ fn archive(payload: &[u8]) -> Vec<u8> {
     let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
     writer
         .start_file(
-            PAYLOAD_FILE,
+            PAYLOAD_FILE.as_str(),
             SimpleFileOptions::default().compression_method(CompressionMethod::Deflated),
         )
         .unwrap();

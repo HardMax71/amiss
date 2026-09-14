@@ -2,9 +2,10 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, LazyLock};
 use std::time::Duration;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressLimits, IngressPolicy, OpaqueId,
-    ProviderError, ReplayWindow, SignedTimePolicy, UntrustedDelivery, VerifiedDelivery,
+    AcceptedDelivery, DeliveryHeader, DeliveryRoute, IngressLimits, IngressPolicy, ProviderError,
+    ReplayWindow, SignedTimePolicy, UntrustedDelivery, VerifiedDelivery,
 };
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitlab::{
@@ -28,7 +29,7 @@ static RSA_KEYS: LazyLock<RsaKeys> =
 
 pub fn oidc() -> Arc<GitLabOidc> {
     let policy = PolicyBinding {
-        integration: OpaqueId::new("policy/1".to_owned()).unwrap(),
+        integration: opaque_id!("policy/1"),
         project_id: 101,
         project_path: PROJECT_PATH.to_owned(),
         target_branch: "main".to_owned(),
@@ -43,7 +44,7 @@ pub fn oidc() -> Arc<GitLabOidc> {
     Arc::new(
         GitLabOidc::new(
             provider(),
-            OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+            opaque_id!("gitlab-oidc"),
             format!("https://{HOST}"),
             AUDIENCE.to_owned(),
             policy,
@@ -56,7 +57,7 @@ pub fn oidc() -> Arc<GitLabOidc> {
 
 pub fn policy_binding() -> PolicyBinding {
     PolicyBinding {
-        integration: OpaqueId::new("policy/1".to_owned()).unwrap(),
+        integration: opaque_id!("policy/1"),
         project_id: 101,
         project_path: PROJECT_PATH.to_owned(),
         target_branch: "main".to_owned(),
@@ -85,7 +86,7 @@ pub fn keys_with(kid: &str) -> Vec<OidcPublicKey> {
 pub fn try_key(kid: &str) -> Result<OidcPublicKey, GitLabConfigError> {
     OidcPublicKey::from_rsa_pem(
         kid.to_owned(),
-        OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
+        opaque_id!("gitlab-key/current"),
         &RSA_KEYS.public_pem,
     )
 }
@@ -98,7 +99,7 @@ pub fn accepts(
 ) -> bool {
     GitLabOidc::new(
         provider(),
-        OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+        opaque_id!("gitlab-oidc"),
         issuer.to_owned(),
         audience.to_owned(),
         policy,
@@ -111,7 +112,7 @@ pub fn accepts(
 fn public_key() -> OidcPublicKey {
     OidcPublicKey::from_rsa_pem(
         KID.to_owned(),
-        OpaqueId::new("gitlab-key/current".to_owned()).unwrap(),
+        opaque_id!("gitlab-key/current"),
         &RSA_KEYS.public_pem,
     )
     .unwrap()
@@ -280,7 +281,7 @@ fn verify_token(
 pub fn route() -> DeliveryRoute {
     DeliveryRoute {
         provider: provider(),
-        trust_set: OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+        trust_set: opaque_id!("gitlab-oidc"),
         signed_time: SignedTimePolicy::Required(Duration::from_mins(5)),
     }
 }

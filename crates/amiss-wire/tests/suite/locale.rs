@@ -6,6 +6,7 @@
 use sha2::Digest as _;
 use std::{fs, path::Path};
 
+use amiss_wire::artifact_id;
 use amiss_wire::assessment::Nullable;
 use amiss_wire::de::ErrorKind;
 use amiss_wire::envelope::Payload as _;
@@ -14,8 +15,9 @@ use amiss_wire::locale::{
     LocaleFallbackRule, LocalePageRequirement, PAGE_KEY_BYTES, PLAN_PAYLOAD_SCHEMA,
     PlanPayloadSchema,
 };
+use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
-use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::publication::{DocsCandidate, PublicationProducer, PublicationResource};
 
 mod assessment;
@@ -27,10 +29,6 @@ fn digest(digit: char) -> Digest {
 
 fn oid(digit: char) -> Oid {
     Oid::new(ObjectFormat::Sha1, digit.to_string().repeat(40)).unwrap()
-}
-
-fn identity(value: &str) -> ArtifactId {
-    ArtifactId::new(value.to_owned()).unwrap()
 }
 
 fn product_resource(digit: char) -> PublicationResource {
@@ -52,20 +50,20 @@ fn locale_plan() -> LocaleCoveragePlan {
             candidate_identity_digest: digest('2'),
         },
         scope: LocaleCoverageScope {
-            site: identity("widget-docs"),
+            site: artifact_id!("widget-docs"),
             source_locale: "en".to_owned(),
             target_locale: "de-DE".to_owned(),
-            channel: identity("stable"),
+            channel: artifact_id!("stable"),
             version: Nullable::Value("1.2".to_owned()),
         },
         product: Nullable::Null,
         producer: PublicationProducer {
-            identity: identity("sphinx-locale-manifest"),
+            identity: artifact_id!("sphinx-locale-manifest"),
             version: "1.0.0".to_owned(),
             context_digest: digest('3'),
         },
         policy: LocaleCoveragePolicy {
-            identity: identity("product-docs-coverage"),
+            identity: artifact_id!("product-docs-coverage"),
             context_digest: digest('4'),
             required: LocalePageRequirement::Named {
                 keys: vec![
@@ -74,7 +72,7 @@ fn locale_plan() -> LocaleCoveragePlan {
                 ],
             },
             fallbacks: vec![LocaleFallbackRule {
-                class: identity("source-copy"),
+                class: artifact_id!("source-copy"),
                 pages: LocalePageRequirement::Named {
                     keys: vec!["reference/api".to_owned()],
                 },
@@ -167,7 +165,7 @@ fn product_alignment_uses_the_existing_exact_publication_resource() {
 fn fallback_authorizations_are_class_sorted_and_page_scoped() {
     let mut valid = locale_plan();
     valid.policy.fallbacks.push(LocaleFallbackRule {
-        class: identity("vendor-copy"),
+        class: artifact_id!("vendor-copy"),
         pages: LocalePageRequirement::AllSource {},
     });
     let parsed = LocaleCoveragePlan::parse(&valid.emit().unwrap()).unwrap();
@@ -181,7 +179,7 @@ fn fallback_authorizations_are_class_sorted_and_page_scoped() {
 
     let mut duplicate = locale_plan();
     duplicate.policy.fallbacks.push(LocaleFallbackRule {
-        class: identity("source-copy"),
+        class: artifact_id!("source-copy"),
         pages: LocalePageRequirement::AllSource {},
     });
     let error = duplicate.emit().unwrap_err();
@@ -348,4 +346,8 @@ fn all_source_policies_reject_unknown_members_with_a_matching_received_digest() 
     let error = LocaleCoveragePlan::parse(&serde_json::to_vec(&document).unwrap()).unwrap_err();
     assert_eq!(error.kind, ErrorKind::UnknownField);
     assert_eq!(error.path, "$.payload.policy.required.keys");
+}
+
+fn identity(value: &str) -> ArtifactId {
+    ArtifactId::try_from(value.to_owned()).unwrap()
 }

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
-use amiss_controller::{Delivery, OpaqueId};
+use amiss_controller::Delivery;
+use amiss_controller::opaque_id;
 use amiss_controller::{DeliveryHeader, IngressError, SignedTimePolicy};
 use amiss_wire::model::Digest;
 
@@ -157,9 +158,7 @@ fn replay_identity_is_normalized_only_after_verification() -> Result<(), Ingress
         .unwrap();
     assert_eq!(
         signed.delivery().identity.delivery,
-        Delivery::Provided(
-            OpaqueId::new("f5e5f430-f57b-4e6e-9fac-d9128cd7232f".to_owned()).unwrap()
-        )
+        Delivery::Provided(opaque_id!("f5e5f430-f57b-4e6e-9fac-d9128cd7232f"))
     );
     assert_eq!(
         signed.replay_keep_through_unix_millis(),

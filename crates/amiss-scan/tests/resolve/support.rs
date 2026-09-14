@@ -4,6 +4,7 @@ use amiss_fixtures::{CommitChain, Staged, staged_repository};
 use amiss_git::{GitLimits, GitResources, Repository};
 use amiss_scan::resolve::{ForgeContext, Resolver, TargetCache};
 use amiss_scan::{Error, Resolution, ScanLimits, ScanResources, SnapshotDiscovery, discover};
+use amiss_wire::branch_ref;
 use amiss_wire::controls::TargetKind;
 use amiss_wire::model::ForgeDialect;
 use amiss_wire::model::{Adapter, BranchRef, ObjectFormat, Oid, RepoPath};
@@ -134,7 +135,7 @@ pub(crate) fn forge_context(dialect: ForgeDialect) -> ForgeContext {
         )
         .unwrap(),
         candidate_ref: Some(BranchRef::try_from(candidate_ref.to_owned()).unwrap()),
-        default_ref: Some(BranchRef::try_from("refs/heads/main".to_owned()).unwrap()),
+        default_ref: Some(branch_ref!("refs/heads/main")),
     }
 }
 
@@ -390,8 +391,8 @@ fn ambiguous_trusted_splits_have_unknown_version_scope() {
             "widgets".to_owned(),
         )
         .unwrap(),
-        candidate_ref: Some(BranchRef::try_from("refs/heads/a".to_owned()).unwrap()),
-        default_ref: Some(BranchRef::try_from("refs/heads/a/b".to_owned()).unwrap()),
+        candidate_ref: Some(branch_ref!("refs/heads/a")),
+        default_ref: Some(branch_ref!("refs/heads/a/b")),
     };
     let (intent, row) = bed
         .run_as(

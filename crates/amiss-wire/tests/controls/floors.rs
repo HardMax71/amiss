@@ -356,7 +356,7 @@ fn branch_refs_follow_ref_format() {
         "refs/heads/-dash",
     ];
     for case in valid {
-        assert!(BranchRef::new(case.to_owned()).is_some(), "{case}");
+        assert!(BranchRef::try_from(case.to_owned()).is_ok(), "{case}");
     }
     let invalid = [
         "refs/heads/".to_owned(),
@@ -374,6 +374,6 @@ fn branch_refs_follow_ref_format() {
         format!("refs/heads/{}", "a".repeat(256)),
     ];
     for case in invalid {
-        assert!(BranchRef::new(case.clone()).is_none(), "{case}");
+        assert!(BranchRef::try_from(case.clone()).is_err(), "{case}");
     }
 }

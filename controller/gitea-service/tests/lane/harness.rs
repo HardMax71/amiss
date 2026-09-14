@@ -2,10 +2,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
     AcquiringRunner, ArtifactStoreConfig, CheckConclusion, CheckPlan, ControllerClock,
     DeliveryRoute, FileArtifactStore, FileLedger, FileLedgerConfig, GiteaWebhook, IngressLimits,
-    IngressPolicy, OpaqueId, PlanRegistry, PlanScope, ProviderAdapter, ProviderError, ReplayWindow,
+    IngressPolicy, PlanRegistry, PlanScope, ProviderAdapter, ProviderError, ReplayWindow,
     SignedTimePolicy, WebhookKey, WebhookKeyring, register_plan,
 };
 use amiss_controller_fixtures::clock::TestClock;
@@ -15,7 +16,8 @@ use amiss_controller_service::{
     DeliveryAdmission, DeliveryHeader, DeliveryWorker, Inbox, InboxLimits, IncomingDelivery,
     IncomingHeader, Operations, WorkOutcome, acquiring_worker, repository_admission,
 };
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::branch_ref;
+use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 use tempfile::TempDir;
 
 use super::provider::{
@@ -293,7 +295,7 @@ fn provider_setup(
         plan,
     )
     .unwrap();
-    let target = BranchRef::new("refs/heads/main".to_owned()).unwrap();
+    let target = branch_ref!("refs/heads/main");
     let admission = repository_admission(
         ROUTE_ID.to_owned(),
         route.clone(),
@@ -316,25 +318,15 @@ fn provider_setup(
 fn route(provider: &amiss_controller::ProviderIdentity) -> DeliveryRoute {
     DeliveryRoute {
         provider: provider.clone(),
-        trust_set: OpaqueId::new("gitea-family-provider-lane-keys".to_owned()).unwrap(),
+        trust_set: opaque_id!("gitea-family-provider-lane-keys"),
         signed_time: SignedTimePolicy::ReplayOnly,
     }
 }
 
 fn webhook() -> GiteaWebhook {
-    let key = WebhookKey::new(
-        OpaqueId::new("current".to_owned()).unwrap(),
-        SECRET.to_vec(),
-        0,
-        None,
-    )
-    .unwrap();
+    let key = WebhookKey::new(opaque_id!("current"), SECRET.to_vec(), 0, None).unwrap();
     GiteaWebhook::new(
-        WebhookKeyring::new(
-            OpaqueId::new("gitea-family-provider-lane-keys".to_owned()).unwrap(),
-            vec![key],
-        )
-        .unwrap(),
+        WebhookKeyring::new(opaque_id!("gitea-family-provider-lane-keys"), vec![key]).unwrap(),
     )
 }
 

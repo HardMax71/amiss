@@ -4,6 +4,7 @@
     clippy::unwrap_used,
     reason = "integration harness over asserted fixture shapes"
 )]
+use amiss_wire::branch_ref;
 use amiss_wire::model::BranchRef;
 
 use amiss_wire::de::Document as _;
@@ -28,8 +29,8 @@ mod controls;
 mod identity;
 mod semantic;
 
-const CANDIDATE_REF: &str = "refs/heads/topic";
-const TARGET_REF: &str = "refs/heads/main";
+static CANDIDATE_REF: BranchRef = branch_ref!("refs/heads/topic");
+static TARGET_REF: BranchRef = branch_ref!("refs/heads/main");
 const INSTANT: &str = "2026-07-12T10:00:00Z";
 const VALID_UNTIL: &str = "2026-07-12T10:05:00Z";
 const PROVIDER: &str = "gitlab-ci";
@@ -113,7 +114,7 @@ fn statement_value(repository: &Value, ties: &StatementTies, identity: &str) -> 
         "schema": "amiss/scanner-trusted-time-statement",
         "controller": "external-required-check-clock",
         "repository": repository,
-        "ref": ties.ref_name.unwrap_or(TARGET_REF),
+        "ref": ties.ref_name.unwrap_or(TARGET_REF.as_str()),
         "candidate_identity_digest": ties.identity.unwrap_or(identity),
         "provider": PROVIDER,
         "provider_run_id": RUN_ID,
@@ -159,8 +160,8 @@ fn golden(deviation: Deviation) -> (Vec<u8>, Expectations) {
     let evaluation = (payload)
         .get_mut("evaluation")
         .expect("fixture member exists");
-    (evaluation)["candidate_ref"] = Value::from(CANDIDATE_REF);
-    (evaluation)["target_ref"] = Value::from(TARGET_REF);
+    (evaluation)["candidate_ref"] = Value::from(CANDIDATE_REF.as_str());
+    (evaluation)["target_ref"] = Value::from(TARGET_REF.as_str());
     (evaluation)["trusted_time"] = Value::Bool(true);
     (evaluation)["evaluation_instant"] = Value::from(INSTANT);
     if let Some(patch) = pre {
@@ -261,8 +262,8 @@ fn sealed_expectations(
     };
     let sealed = SealedExpectations {
         profile: amiss_wire::controls::Profile::Observe,
-        candidate_ref: BranchRef::try_from(CANDIDATE_REF.to_owned()).unwrap(),
-        target_ref: BranchRef::try_from(TARGET_REF.to_owned()).unwrap(),
+        candidate_ref: CANDIDATE_REF.clone(),
+        target_ref: TARGET_REF.clone(),
         repository: evaluation.repository.unwrap(),
         provider: PROVIDER.to_owned(),
         provider_run_id: RUN_ID.to_owned(),
@@ -328,13 +329,13 @@ fn a_complete_block_report_is_accepted_at_class_one() {
 fn the_sealed_identity_binds_refs_time_and_candidate() {
     assert_eq!(
         refused(Deviation::expect(|sealed| {
-            sealed.candidate_ref = BranchRef::try_from("refs/heads/other".to_owned()).unwrap();
+            sealed.candidate_ref = branch_ref!("refs/heads/other");
         })),
         AcceptanceDefect::SealedIdentity
     );
     assert_eq!(
         refused(Deviation::expect(|sealed| {
-            sealed.target_ref = BranchRef::try_from("refs/heads/other".to_owned()).unwrap();
+            sealed.target_ref = branch_ref!("refs/heads/other");
         })),
         AcceptanceDefect::SealedIdentity
     );
@@ -490,7 +491,7 @@ fn the_time_echo_binds_every_statement_fact() {
 
     for deviation in [
         Deviation {
-            statement_ref: Some(CANDIDATE_REF),
+            statement_ref: Some(CANDIDATE_REF.as_str()),
             ..Deviation::default()
         },
         Deviation {

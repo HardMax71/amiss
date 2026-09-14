@@ -6,7 +6,8 @@
 
 use std::time::{Duration, Instant};
 
-use amiss_controller::{ProviderError, ProviderInstance, ProviderNamespace};
+use amiss_controller::ProviderError;
+use amiss_controller::{opaque_id, provider_namespace};
 use reqwest::StatusCode;
 use secrecy::SecretString;
 
@@ -112,8 +113,8 @@ fn status_mapping_is_fail_closed_and_debug_redacts_the_token() {
 
 fn provider() -> amiss_controller::ProviderIdentity {
     amiss_controller::ProviderIdentity {
-        namespace: ProviderNamespace::new("gitlab".to_owned()).unwrap(),
-        instance: ProviderInstance::new("gitlab.example".to_owned()).unwrap(),
+        namespace: provider_namespace!("gitlab"),
+        instance: opaque_id!("gitlab.example"),
     }
 }
 

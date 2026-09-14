@@ -1,4 +1,5 @@
 use amiss_wire::envelope::document_digest;
+use amiss_wire::repo_path_text;
 use amiss_wire::report::{
     Disposition, FixKind,
     model::{
@@ -73,7 +74,7 @@ pub(super) fn reports() -> [ReportEnvelope; 2] {
     waiver.payload.summary.findings.waived = 1;
     finding.fix = Some(FindingFix {
         description: FixKind::PathRespelling.meaning().to_owned(),
-        path: amiss_wire::model::RepoPathText::new("README.md".to_owned()).unwrap(),
+        path: repo_path_text!("README.md"),
         replacement: "docs/Example.md".to_owned(),
         span: ByteSpan {
             end_byte: 39,

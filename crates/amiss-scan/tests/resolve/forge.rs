@@ -2,6 +2,7 @@ use amiss_fixtures::commit_chain;
 use amiss_git::GitLimits;
 use amiss_scan::resolve::{ForgeContext, RAW_EVIDENCE_DOMAIN};
 use amiss_scan::{Error, Resolution, ScanLimits};
+use amiss_wire::branch_ref;
 use amiss_wire::controls::{ResourceName, TargetKind};
 use amiss_wire::model::{Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid};
 use amiss_wire::report::IntentKind;
@@ -482,7 +483,7 @@ fn bitbucket_cloud_recognizes_only_the_documented_source_contract() {
     ));
 
     let slashed = ForgeContext {
-        candidate_ref: Some(BranchRef::try_from("refs/heads/feature/x".to_owned()).unwrap()),
+        candidate_ref: Some(branch_ref!("refs/heads/feature/x")),
         ..context
     };
     let (_intent, no_guessed_split) = bed

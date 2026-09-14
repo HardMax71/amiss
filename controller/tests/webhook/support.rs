@@ -4,9 +4,10 @@ use std::time::Duration;
 
 use amiss_controller::{
     DeliveryHeader, DeliveryRoute, IngressCheck, IngressError, IngressLimits, IngressPolicy,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, ReplayWindow, SignedTimePolicy,
-    TrustAnchorId, TrustSetId, UntrustedDelivery, WebhookKey, WebhookKeyring,
+    ProviderIdentity, ReplayWindow, SignedTimePolicy, TrustAnchorId, TrustSetId, UntrustedDelivery,
+    WebhookKey, WebhookKeyring,
 };
+use amiss_controller::{opaque_id, provider_namespace};
 
 pub(crate) const NOW: i64 = 1_744_578_123_000;
 
@@ -16,11 +17,11 @@ static SIGNED_ROUTE: LazyLock<DeliveryRoute> =
     LazyLock::new(|| route(SignedTimePolicy::Required(Duration::from_mins(5))));
 
 pub(crate) fn anchor(value: &str) -> TrustAnchorId {
-    TrustAnchorId::new(value.to_owned()).unwrap()
+    TrustAnchorId::try_from(value.to_owned()).unwrap()
 }
 
 pub(crate) fn trust_set() -> TrustSetId {
-    TrustSetId::new("primary-webhooks".to_owned()).unwrap()
+    opaque_id!("primary-webhooks")
 }
 
 pub(crate) fn key(
@@ -87,8 +88,8 @@ fn check<'a>(
 fn route(signed_time: SignedTimePolicy) -> DeliveryRoute {
     DeliveryRoute {
         provider: ProviderIdentity {
-            namespace: ProviderNamespace::new("test".to_owned()).unwrap(),
-            instance: ProviderInstance::new("forge.example.test".to_owned()).unwrap(),
+            namespace: provider_namespace!("test"),
+            instance: opaque_id!("forge.example.test"),
         },
         trust_set: trust_set(),
         signed_time,

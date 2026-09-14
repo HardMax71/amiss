@@ -3,11 +3,11 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
+use amiss_controller::opaque_id;
 use amiss_controller::{
     AcquiringRunner, AdapterRegistry, Controller, ControllerClock, DeliveryHeader, DeliveryRoute,
-    FileLedgerConfig, FileLedgerRoot, IngressLimits, IngressPolicy, OpaqueId, PlanRegistry,
-    PlanScope, ProviderAdapter, ReplayWindow, SignedTimePolicy, SystemClock, UntrustedDelivery,
-    register_plan,
+    FileLedgerConfig, FileLedgerRoot, IngressLimits, IngressPolicy, PlanRegistry, PlanScope,
+    ProviderAdapter, ReplayWindow, SignedTimePolicy, SystemClock, UntrustedDelivery, register_plan,
 };
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, policy_job_accepted};
 use amiss_controller_service::{
@@ -92,7 +92,7 @@ impl Harness {
         .unwrap();
         let route = DeliveryRoute {
             provider: provider(),
-            trust_set: OpaqueId::new("gitlab-oidc".to_owned()).unwrap(),
+            trust_set: opaque_id!("gitlab-oidc"),
             signed_time: SignedTimePolicy::Required(Duration::from_mins(5)),
         };
         let source = source();

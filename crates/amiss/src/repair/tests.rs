@@ -1,16 +1,16 @@
 #![cfg(test)]
 
 use super::{Fix, splice};
+use amiss_wire::repo_path_text;
 
 #[test]
 fn typed_fixes_keep_their_exact_spans_and_count_absent_repairs() {
-    use amiss_wire::model::RepoPathText;
     use amiss_wire::report::model::{ByteSpan, FindingFix, ReportEnvelope};
 
     let mut report: ReportEnvelope =
         serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
     report.payload.findings[0].fix = Some(FindingFix {
-        path: RepoPathText::new("docs/guide.md".to_owned()).unwrap(),
+        path: repo_path_text!("docs/guide.md"),
         span: ByteSpan {
             start_byte: 3,
             end_byte: 7,

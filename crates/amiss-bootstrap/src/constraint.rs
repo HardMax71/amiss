@@ -6,7 +6,7 @@ use amiss_wire::controls::{
 };
 use amiss_wire::de::Document as _;
 use amiss_wire::model::Digest;
-use amiss_wire::model::{Oid, RepoPathText, RepositoryIdentity};
+use amiss_wire::model::{Oid, RepositoryIdentity};
 use sha2::Digest as _;
 
 use crate::build::{RELEASE_MANIFEST_DIGEST_PATH, RELEASE_MANIFEST_PATH};
@@ -44,17 +44,11 @@ pub fn derive_execution_constraint(
     })?;
     let tree =
         resolve_action_tree(action, resources, action_commit_oid).map_err(constraint_error)?;
-    let manifest_path =
-        RepoPathText::new(RELEASE_MANIFEST_PATH.to_owned()).ok_or(ConstraintError {
-            reason: "execution-constraint-invalid",
-        })?;
+    let manifest_path = RELEASE_MANIFEST_PATH.clone();
     let (manifest, manifest_digest) =
         load_release_manifest(action, resources, &tree, &manifest_path)
             .map_err(constraint_error)?;
-    let marker_path =
-        RepoPathText::new(RELEASE_MANIFEST_DIGEST_PATH.to_owned()).ok_or(ConstraintError {
-            reason: "execution-constraint-invalid",
-        })?;
+    let marker_path = RELEASE_MANIFEST_DIGEST_PATH.clone();
     let (marker, mode) = blob(action, resources, &tree, &marker_path).map_err(constraint_error)?;
     if mode != GitMode::RegularFile {
         return Err(ConstraintError {

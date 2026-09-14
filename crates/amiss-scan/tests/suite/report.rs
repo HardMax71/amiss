@@ -1,3 +1,4 @@
+use amiss_wire::branch_ref;
 use amiss_wire::envelope::document_digest;
 use sha2::Digest as _;
 use std::fs;
@@ -16,7 +17,7 @@ use amiss_scan::{
 };
 use amiss_wire::controls::GitMode;
 
-use amiss_wire::model::{BranchRef, ObjectFormat, Oid, RepoPath};
+use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
 use amiss_wire::report::model::{DocumentCounts, FindingCounts, ReferenceCounts, Summary};
 use amiss_wire::report::{
     AnalysisErrorCode, EngineProvenance, ErrorDetail, MACHINE_JSON_BYTES, adapter_contract,
@@ -1098,9 +1099,9 @@ fn the_evaluation_echoes_a_self_hosted_forge_host() {
             "widget".to_owned(),
         ),
         forge: Some(amiss_wire::model::ForgeDialect::Github),
-        candidate_ref: BranchRef::new("refs/heads/main".to_owned()),
+        candidate_ref: Some(branch_ref!("refs/heads/main")),
         target_ref: None,
-        default_branch_ref: BranchRef::new("refs/heads/main".to_owned()),
+        default_branch_ref: Some(branch_ref!("refs/heads/main")),
         floor: None,
         debt: None,
         waiver: None,

@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_with::{DeserializeFromStr, SerializeDisplay};
+use std::borrow::Cow;
 use strum::{Display, EnumString};
 
 use crate::de::{Document, Error, ErrorKind, fail};
+use crate::model::ArtifactId;
 use crate::model::Digest;
 use crate::model::{ObjectFormat, Oid, RepoPathText, RepositoryIdentity};
 
@@ -55,15 +57,35 @@ pub enum ConstraintPlatform {
     WindowsAarch64,
 }
 
+impl ConstraintPlatform {
+    /// The release artifact that carries this platform's executable.
+    #[must_use]
+    pub const fn artifact_name(self) -> ArtifactId {
+        match self {
+            Self::LinuxX8664 => crate::artifact_id!("amiss-linux-x86_64"),
+            Self::LinuxAarch64 => crate::artifact_id!("amiss-linux-aarch64"),
+            Self::MacosX8664 => crate::artifact_id!("amiss-macos-x86_64"),
+            Self::MacosAarch64 => crate::artifact_id!("amiss-macos-aarch64"),
+            Self::WindowsX8664 => crate::artifact_id!("amiss-windows-x86_64"),
+            Self::WindowsAarch64 => crate::artifact_id!("amiss-windows-aarch64"),
+        }
+    }
+}
+
 /// The admitted name of one required provider check.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(try_from = "String")]
-pub struct RequiredStatusName(String);
+pub struct RequiredStatusName(Cow<'static, str>);
 
 impl RequiredStatusName {
+    const INVALID: &'static str = "invalid required status name";
+
+    /// # Panics
+    /// When the literal is not a status name; `required_status_name!` makes that a build error.
     #[must_use]
-    pub fn new(raw: String) -> Option<Self> {
-        valid_required_status_name(&raw).then_some(Self(raw))
+    pub const fn from_static(raw: &'static str) -> Self {
+        assert!(valid_required_status_name(raw), "{}", Self::INVALID);
+        Self(Cow::Borrowed(raw))
     }
 
     #[must_use]
@@ -76,8 +98,19 @@ impl TryFrom<String> for RequiredStatusName {
     type Error = &'static str;
 
     fn try_from(raw: String) -> Result<Self, Self::Error> {
-        Self::new(raw).ok_or("invalid required status name")
+        if valid_required_status_name(&raw) {
+            Ok(Self(Cow::Owned(raw)))
+        } else {
+            Err(Self::INVALID)
+        }
     }
+}
+
+#[macro_export]
+macro_rules! required_status_name {
+    ($raw:literal) => {
+        const { $crate::controls::RequiredStatusName::from_static($raw) }
+    };
 }
 
 /// The externally protected allow-list entry for one scanner action tree,
@@ -99,23 +132,23 @@ pub struct ExecutionConstraintDescriptor {
 }
 
 #[must_use]
-pub fn valid_required_status_name(raw: &str) -> bool {
+pub const fn valid_required_status_name(raw: &str) -> bool {
     let bytes = raw.as_bytes();
-    let interior = |byte: &u8| {
-        byte.is_ascii_alphanumeric() || matches!(byte, b' ' | b'.' | b'_' | b'/' | b':' | b'-')
+    let (Some((&first, _)), Some((&last, _))) = (bytes.split_first(), bytes.split_last()) else {
+        return false;
     };
-    let edge = |byte: &u8| {
-        byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'/' | b':' | b'-')
-    };
-    match (bytes.first(), bytes.last()) {
-        (Some(first), Some(last)) => {
-            bytes.len() <= 160
-                && first.is_ascii_alphanumeric()
-                && (bytes.len() == 1 || edge(last))
-                && bytes.iter().all(interior)
-        }
-        _ => false,
+    if bytes.len() > 160 || !first.is_ascii_alphanumeric() || last == b' ' {
+        return false;
     }
+    let mut rest = bytes;
+    while let Some((&byte, tail)) = rest.split_first() {
+        rest = tail;
+        if !byte.is_ascii_alphanumeric() && !matches!(byte, b' ' | b'.' | b'_' | b'/' | b':' | b'-')
+        {
+            return false;
+        }
+    }
+    true
 }
 
 impl Document for ExecutionConstraintDescriptor {

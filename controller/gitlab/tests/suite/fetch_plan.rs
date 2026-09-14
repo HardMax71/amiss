@@ -6,9 +6,9 @@
 use amiss_wire::model::Digest;
 use std::sync::Arc;
 
-use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
-use amiss_controller::{Change, Delivery, ProviderInstance, ProviderRun, ProviderRunAttempt};
+use amiss_controller::opaque_id;
+use amiss_controller::{Change, Delivery, ProviderRun, ProviderRunAttempt};
 use amiss_controller_gitlab::{GitLabMergeTrainAdapter, GitLabPlanError, gitlab_fetch_plan};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
@@ -81,15 +81,13 @@ fn host_change_run_delivery_and_format_substitutions_are_rejected() {
     let mut wrong_run = request.clone();
     wrong_run.provider_run.run = ProviderRun::PullRequest(Digest::from([7; 32]));
     let mut wrong_delivery = request.clone();
-    wrong_delivery.delivery.delivery =
-        Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap());
+    wrong_delivery.delivery.delivery = Delivery::Provided(opaque_id!("signed-body"));
     let mut wrong_forge = request.clone();
     wrong_forge.run.refs.forge = ForgeDialect::Github;
     let mut wrong_format = request.clone();
     wrong_format.run.object_format = ObjectFormat::Sha256;
     let mut wrong_instance = request.clone();
-    wrong_instance.delivery.provider.instance =
-        ProviderInstance::new("other.example".to_owned()).unwrap();
+    wrong_instance.delivery.provider.instance = opaque_id!("other.example");
     let mut wrong_action = request;
     replace_action_repository(&mut wrong_action, repository("other.example", "hardmax71"));
 
@@ -128,7 +126,7 @@ fn every_binding_clause_of_the_plan_stands_alone() {
     assert!(gitlab_fetch_plan(&request).is_ok());
 
     let mut retried = request.clone();
-    retried.provider_run.attempt = ProviderRunAttempt::new(2).unwrap();
+    retried.provider_run.attempt = ProviderRunAttempt::literal(2);
     let mut other_candidate = request.clone();
     other_candidate.run.commits.candidate = Oid::new(ObjectFormat::Sha1, "d".repeat(40)).unwrap();
     let mut wider_tree = request;

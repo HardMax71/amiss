@@ -368,7 +368,8 @@ fn bind_pull_request(
                 .ok_or(Authentication)?,
         ),
     };
-    let integration = IntegrationId::new(installation_id.to_string()).ok_or(Authentication)?;
+    let integration =
+        IntegrationId::try_from(installation_id.to_string()).map_err(|_defect| Authentication)?;
     let candidate =
         Oid::new(ObjectFormat::Sha1, binding.candidate.to_owned()).ok_or(Authentication)?;
     let candidate_ref = github_ref(binding.candidate_branch).ok_or(Authentication)?;
@@ -577,7 +578,7 @@ fn provider_run(
                 .finalize()
                 .0,
         )),
-        ProviderRunAttempt::new(1)?,
+        ProviderRunAttempt::FIRST,
         ObjectFormat::Sha1,
         candidate.clone(),
     )
@@ -588,7 +589,7 @@ fn positive(value: u64) -> Option<u64> {
 }
 
 fn github_ref(branch: &str) -> Option<BranchRef> {
-    BranchRef::new(format!("refs/heads/{branch}"))
+    BranchRef::try_from(format!("refs/heads/{branch}")).ok()
 }
 
 #[derive(Deserialize)]

@@ -23,7 +23,7 @@ fn measurement_report(finding_count: usize) -> amiss_wire::report::model::Report
             finding.fix = None;
             finding.kind = amiss_wire::report::FindingKind::ExplicitTargetMissing;
             finding.location.path = Some(RepoPath::Text(
-                RepoPathText::new(format!("docs/guide-{index:05}.md")).unwrap(),
+                RepoPathText::try_from(format!("docs/guide-{index:05}.md")).unwrap(),
             ));
             finding.location.span = Some(amiss_wire::report::model::SourceSpan {
                 end_byte: 19,

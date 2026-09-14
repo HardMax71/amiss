@@ -1,14 +1,14 @@
+use amiss_controller::opaque_id;
 use amiss_controller::{
-    AuthenticatedDelivery, ChangeSnapshot, CheckBinding, CheckConclusion, ControllerEvaluationId,
-    Publication,
+    AuthenticatedDelivery, ChangeSnapshot, CheckBinding, CheckConclusion, Publication,
 };
 use amiss_controller_gitlab::{
     AcquiredCommit, GitLabAccess, GitLabBranch, GitLabJob, GitLabMergeChecks, GitLabMergeRequest,
     GitLabPipeline, GitLabProject, GitLabProtection, GitLabRefresh, GitLabTrainCar,
     GitLabTrainSettings,
 };
-use amiss_wire::controls::RequiredStatusName;
 use amiss_wire::model::ObjectFormat;
+use amiss_wire::required_status_name;
 use sha2::Digest as _;
 
 use super::identity::{HOST, PROJECT_PATH, oid};
@@ -121,10 +121,10 @@ pub fn publication(
     );
     Publication {
         provider_run: delivery.provider_run.clone(),
-        evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
+        evaluation_id: opaque_id!("evaluation/1"),
         check: CheckBinding {
             plan_digest: digest,
-            required_status_name: RequiredStatusName::try_from("amiss".to_owned()).unwrap(),
+            required_status_name: required_status_name!("amiss"),
             execution_constraint_digest: digest,
         },
         run: snapshot.run.clone(),

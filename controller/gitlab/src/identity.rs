@@ -8,7 +8,7 @@ pub(crate) fn exact_sha1(raw: &str) -> Option<Oid> {
 }
 
 pub(crate) fn branch_ref(branch: &str) -> Option<BranchRef> {
-    BranchRef::new(format!("refs/heads/{branch}"))
+    BranchRef::try_from(format!("refs/heads/{branch}")).ok()
 }
 
 pub(crate) fn train_ref(merge_request_iid: u64) -> String {
