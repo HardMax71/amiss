@@ -10,12 +10,13 @@ use std::sync::Arc;
 use amiss_bootstrap::result::{BootstrapResult, RESULT_BYTES, result_bytes};
 use amiss_controller::MergeRequestChange;
 use amiss_controller::{
-    BootstrapTermination, Change, ChangeLocator, CheckPlan, ControllerEvaluationId, DeliveryId,
+    BootstrapTermination, Change, ChangeLocator, CheckPlan, ControllerEvaluationId, Delivery,
     DeliveryIdentity, Evaluation, IntegrationId, OidPair, PolicyControls, ProviderIdentity,
-    ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    ProviderInstance, ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
     RunIdentity, RunRefs, RunRequest, RunnerOutcome, check_binding, check_plan,
     classify_bootstrap_result,
 };
+use amiss_controller::{OpaqueId, PipelineJob};
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::MACHINE_JSON_BYTES;
@@ -46,10 +47,10 @@ fn request() -> RunRequest {
         delivery: DeliveryIdentity {
             provider: provider.clone(),
             integration: IntegrationId::new("project-hook/7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("webhook/9".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("webhook/9".to_owned()).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("pipeline/987654321:job-42".to_owned()).unwrap(),
+            ProviderRun::Job(PipelineJob::new(987_654_321, 42).unwrap()),
             ProviderRunAttempt::new(1).unwrap(),
             ObjectFormat::Sha1,
             oid('3'),

@@ -3,7 +3,7 @@
     reason = "fixed cryptographic fixtures and protocol identities must fail loudly"
 )]
 
-use amiss_controller::{Change, MergeRequestChange};
+use amiss_controller::{Change, Delivery, MergeRequestChange, OidcToken, PipelineJob, ProviderRun};
 use amiss_controller::{
     OpaqueId, ProviderError, ProviderInstance, ReplayIdentity, SignedTimePolicy,
 };
@@ -32,21 +32,17 @@ fn pinned_policy_job_claims_define_the_delivery() {
         Change::MergeRequest(MergeRequestChange::new(101, 42).unwrap())
     );
     assert_eq!(
-        delivery.provider_run.run_id.as_str(),
-        "pipeline/202/job/303"
+        delivery.provider_run.run,
+        ProviderRun::Job(PipelineJob::new(202, 303).unwrap())
     );
     assert_eq!(
         delivery.provider_run.candidate_commit.as_str(),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     );
-    assert!(
-        delivery
-            .identity
-            .delivery
-            .as_str()
-            .starts_with("oidc/runner/77/jti/")
-    );
-    assert!(!delivery.identity.delivery.as_str().contains("2d7d0a3f"));
+    assert!(matches!(
+        delivery.identity.delivery,
+        Delivery::Token(OidcToken { runner_id, .. }) if runner_id.get() == 77
+    ));
     assert!(matches!(
         verify(&source, &claims(now), BODY, now).unwrap().replay(),
         ReplayIdentity::Authenticated(_)
@@ -487,12 +483,10 @@ fn a_numeric_identifier_is_the_same_identifier() {
     set_claim(&mut numeric, "job_id", json!(303));
     let delivery = accept(&source, &numeric, BODY, now).expect("a numeric identifier verifies");
     assert!(
-        delivery
-            .delivery()
-            .identity
-            .delivery
-            .as_str()
-            .starts_with("oidc/runner/77/jti/"),
+        matches!(
+            delivery.delivery().identity.delivery,
+            Delivery::Token(OidcToken { runner_id, .. }) if runner_id.get() == 77
+        ),
         "the number it read is the runner it names"
     );
 }

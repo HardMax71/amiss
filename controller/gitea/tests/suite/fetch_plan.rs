@@ -7,12 +7,13 @@ use amiss_wire::de::Document as _;
 use sha2::Digest as _;
 use std::sync::Arc;
 
+use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    Change, ChangeLocator, ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
-    OidPair, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
-    check_binding, check_plan,
+    Change, ChangeLocator, ControllerEvaluationId, Delivery, DeliveryIdentity, IntegrationId,
+    OidPair, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun,
+    ProviderRunAttempt, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest, check_binding,
+    check_plan,
 };
 use amiss_controller_gitea::{GiteaPlanError, gitea_fetch_plan};
 use amiss_wire::controls::{ExecutionConstraintDescriptor, Profile};
@@ -128,7 +129,7 @@ fn request(namespace: &str) -> RunRequest {
         delivery: DeliveryIdentity {
             provider,
             integration,
-            delivery: DeliveryId::new("signed-body".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
         },
         provider_run,
         evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
@@ -183,17 +184,13 @@ fn provider_run(
     ))
     .unwrap();
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!(
-            "pr:{}",
-            amiss_wire::model::Digest::from(
-                sha2::Sha256::new_with_prefix(RUN_DOMAIN)
-                    .chain_update([0_u8])
-                    .chain_update(&fields)
-                    .finalize()
-                    .0
-            )
-        ))
-        .unwrap(),
+        ProviderRun::PullRequest(amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(RUN_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&fields)
+                .finalize()
+                .0,
+        )),
         ProviderRunAttempt::new(1).unwrap(),
         ObjectFormat::Sha1,
         candidate.clone(),

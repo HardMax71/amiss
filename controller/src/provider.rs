@@ -3,13 +3,23 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::{
-    ChangeLocator, ChangeSnapshot, DeliveryIdentity, IngressCheck, ProviderNamespace,
-    ProviderRunIdentity, Publication, VerifiedDelivery,
+    ChangeLocator, ChangeSnapshot, DeliveryIdentity, IngressCheck, IntegrationId, ProviderIdentity,
+    ProviderNamespace, ProviderRunIdentity, Publication, VerifiedDelivery,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct AuthenticatedDelivery {
     pub identity: DeliveryIdentity,
+    pub change: ChangeLocator,
+    pub provider_run: ProviderRunIdentity,
+}
+
+/// What a provider authenticated about one delivery. Which delivery it is
+/// stays the ingress's to say, from the replay identity the proof carries.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ProviderFacts {
+    pub provider: ProviderIdentity,
+    pub integration: IntegrationId,
     pub change: ChangeLocator,
     pub provider_run: ProviderRunIdentity,
 }

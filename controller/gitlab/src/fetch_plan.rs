@@ -1,10 +1,8 @@
-use amiss_controller::{Change, MergeRequestChange};
+use amiss_controller::{Change, Delivery, MergeRequestChange, PipelineJob, ProviderRun};
 use amiss_controller::{RunIdentity, RunRequest};
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid};
 
-use crate::identity::{
-    canonical_repository, exact_sha1, parse_delivery_id, parse_run_id, repository_url,
-};
+use crate::identity::{canonical_repository, exact_sha1, repository_url};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 #[error("the GitLab acquisition request is inconsistent")]
@@ -38,10 +36,16 @@ pub fn gitlab_fetch_plan(request: &RunRequest) -> Result<GitLabFetchPlan, GitLab
     let Change::MergeRequest(MergeRequestChange { project_id, .. }) = run.change.change else {
         return Err(GitLabPlanError);
     };
-    let (pipeline_id, job_id) =
-        parse_run_id(request.provider_run.run_id.as_str()).ok_or(GitLabPlanError)?;
-    let _runner_id =
-        parse_delivery_id(request.delivery.delivery.as_str()).ok_or(GitLabPlanError)?;
+    let ProviderRun::Job(PipelineJob {
+        pipeline_id,
+        job_id,
+    }) = request.provider_run.run
+    else {
+        return Err(GitLabPlanError);
+    };
+    let Delivery::Token(_) = request.delivery.delivery else {
+        return Err(GitLabPlanError);
+    };
     let identity_valid = provider.namespace.as_str() == "gitlab"
         && request.delivery.provider == run.change.provider
         && repository.host() == provider.instance.as_str()
@@ -69,8 +73,8 @@ pub fn gitlab_fetch_plan(request: &RunRequest) -> Result<GitLabFetchPlan, GitLab
     let action_path = format!("{}/{}", action.owner(), action.name());
     Ok(GitLabFetchPlan {
         project_id: project_id.get(),
-        pipeline_id,
-        job_id,
+        pipeline_id: pipeline_id.get(),
+        job_id: job_id.get(),
         repository_url: repository_url(repository.host(), &project_path).ok_or(GitLabPlanError)?,
         repository_oids: [run.commits.base.clone(), run.commits.candidate.clone()],
         action_url: repository_url(action.host(), &action_path).ok_or(GitLabPlanError)?,

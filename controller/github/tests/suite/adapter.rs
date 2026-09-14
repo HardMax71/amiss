@@ -18,6 +18,7 @@ use amiss_controller::{
     UntrustedDelivery, WebhookKey, WebhookKeyring, WorkflowArtifactExpectation,
 };
 use amiss_controller::{Change, PullRequestChange};
+use amiss_controller::{Delivery, DeliveryIdentity, PipelineJob, ProviderFacts, ProviderRun};
 use amiss_controller_github::{
     GitHubApi, GitHubPullRequest, GitHubPullRequestAdapter, GitHubPullRequestSource,
 };
@@ -205,21 +206,18 @@ fn signed_body_alone_defines_the_pull_request() {
     )
     .unwrap();
 
-    assert_eq!(first.delivery().identity.integration.as_str(), "7");
-    assert_eq!(first.delivery().change.repository.owner(), "hardmax71");
-    assert_eq!(first.delivery().change.repository.name(), "widget");
+    assert_eq!(first.facts().integration.as_str(), "7");
+    assert_eq!(first.facts().change.repository.owner(), "hardmax71");
+    assert_eq!(first.facts().change.repository.name(), "widget");
     assert_eq!(
-        first.delivery().change.change,
+        first.facts().change.change,
         Change::PullRequest(PullRequestChange::new(101, 4201, 42).unwrap())
     );
     assert_eq!(
-        first.delivery().provider_run.candidate_commit.as_str(),
+        first.facts().provider_run.candidate_commit.as_str(),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     );
-    assert_eq!(
-        first.delivery().provider_run,
-        pretty.delivery().provider_run
-    );
+    assert_eq!(first.facts().provider_run, pretty.facts().provider_run);
 
     for action in ["reopened", "synchronize"] {
         let body = replaced_once(
@@ -235,10 +233,7 @@ fn signed_body_alone_defines_the_pull_request() {
             provider(),
         )
         .unwrap();
-        assert_eq!(
-            delivery.delivery().provider_run,
-            first.delivery().provider_run
-        );
+        assert_eq!(delivery.facts().provider_run, first.facts().provider_run);
     }
 }
 
@@ -274,10 +269,10 @@ fn configured_workflow_completion_reproduces_the_pull_request_run() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(completion.delivery().change, pull_request.delivery().change);
+    assert_eq!(completion.facts().change, pull_request.facts().change);
     assert_eq!(
-        completion.delivery().provider_run,
-        pull_request.delivery().provider_run
+        completion.facts().provider_run,
+        pull_request.facts().provider_run
     );
     assert_eq!(
         authenticate_target(&completion_source, BODY, &target),
@@ -424,7 +419,7 @@ fn edited_requires_a_signed_base_change() {
     )
     .unwrap();
     assert_eq!(
-        accepted.delivery().provider_run.candidate_commit.as_str(),
+        accepted.facts().provider_run.candidate_commit.as_str(),
         "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     );
 
@@ -558,7 +553,7 @@ fn refresh_marks_ref_drift_superseded() {
     let seed = adapter(FakeApi::new(dummy_snapshot()));
     let verified =
         authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
-    let delivery = verified.delivery().clone();
+    let delivery = delivered(verified.facts());
     let exact = snapshot(&delivery, "topic", "main");
     let exact_api = FakeApi::new(exact.clone());
     let exact_adapter = adapter(exact_api.clone());
@@ -601,7 +596,7 @@ fn refresh_marks_ref_drift_superseded() {
     assert_eq!(wrong_api.state.refreshes.load(Ordering::Relaxed), 1);
 
     let mut invalid_delivery = delivery.clone();
-    invalid_delivery.provider_run.run_id = OpaqueId::new("unbound".to_owned()).unwrap();
+    invalid_delivery.provider_run.run = ProviderRun::Job(PipelineJob::new(1, 1).unwrap());
     let refused_api = FakeApi::new(snapshot(&delivery, "topic", "main"));
     let refused_adapter = adapter(refused_api.clone());
     assert_eq!(
@@ -616,7 +611,7 @@ fn publication_is_delegated_only_under_the_authenticated_identity() {
     let seed = adapter(FakeApi::new(dummy_snapshot()));
     let verified =
         authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
-    let delivery = verified.delivery().clone();
+    let delivery = delivered(verified.facts());
     let run = snapshot(&delivery, "topic", "main").run;
     let valid = publication(&delivery, run.clone());
     let api = FakeApi::new(ChangeSnapshot {
@@ -649,7 +644,7 @@ fn every_clause_binding_the_delivery_stands_alone() {
     let seed = adapter(FakeApi::new(dummy_snapshot()));
     let verified =
         authenticated(&seed, BODY, &[], SignedTimePolicy::ReplayOnly, provider()).unwrap();
-    let delivery = verified.delivery().clone();
+    let delivery = delivered(verified.facts());
     let elsewhere = ProviderIdentity {
         namespace: ProviderNamespace::new("github".to_owned()).unwrap(),
         instance: ProviderInstance::new("github.example".to_owned()).unwrap(),
@@ -1031,4 +1026,17 @@ fn replaced_once(source: &[u8], from: &str, to: &str) -> Vec<u8> {
         .unwrap()
         .replacen(from, to, 1)
         .into_bytes()
+}
+
+/// The delivery ingress would assemble from these facts, with an id of its own.
+fn delivered(facts: &ProviderFacts) -> AuthenticatedDelivery {
+    AuthenticatedDelivery {
+        identity: DeliveryIdentity {
+            provider: facts.provider.clone(),
+            integration: facts.integration.clone(),
+            delivery: Delivery::Provided(OpaqueId::new("delivery".to_owned()).unwrap()),
+        },
+        change: facts.change.clone(),
+        provider_run: facts.provider_run.clone(),
+    }
 }

@@ -5,7 +5,8 @@ use super::{
     AcceptedDelivery, ReplayIdentity, ReplayWindow, RequestBinding, SignedTimePolicy,
     UntrustedDelivery, VerifiedDelivery,
 };
-use crate::{ControllerClock, DeliveryId};
+use crate::{AuthenticatedDelivery, DeliveryIdentity, ProviderFacts};
+use crate::{ControllerClock, Delivery};
 
 const EXACT_BODY_DOMAIN: &str = "amiss/controller-exact-delivery-v1";
 
@@ -142,8 +143,8 @@ impl IngressPolicy {
             return Err(IngressError::Request);
         }
         if verified.trust_set != check.delivery.route.trust_set
-            || verified.delivery.identity.provider != check.delivery.route.provider
-            || verified.delivery.change.provider != check.delivery.route.provider
+            || verified.facts.provider != check.delivery.route.provider
+            || verified.facts.change.provider != check.delivery.route.provider
         {
             return Err(IngressError::Route);
         }
@@ -225,10 +226,24 @@ fn normalize_delivery(
     issued_at: Option<i64>,
     replay_window: ReplayWindow,
 ) -> Result<AcceptedDelivery, IngressError> {
-    let mut delivery = verified.delivery;
+    let ProviderFacts {
+        provider,
+        integration,
+        change,
+        provider_run,
+    } = verified.facts;
+    let identity = |delivery| DeliveryIdentity {
+        provider,
+        integration,
+        delivery,
+    };
     match verified.replay {
-        ReplayIdentity::Authenticated(delivery_id) => {
-            delivery.identity.delivery = delivery_id;
+        ReplayIdentity::Authenticated(assigned) => {
+            let delivery = AuthenticatedDelivery {
+                identity: identity(assigned),
+                change,
+                provider_run,
+            };
             match issued_at {
                 Some(issued_at) => {
                     let unix_millis = issued_at
@@ -244,25 +259,22 @@ fn normalize_delivery(
                 None => Ok(AcceptedDelivery::permanent(delivery)),
             }
         }
-        ReplayIdentity::ExactBody => {
-            delivery.identity.delivery = exact_body_id(body)?;
-            Ok(AcceptedDelivery::permanent(delivery))
-        }
+        ReplayIdentity::ExactBody => Ok(AcceptedDelivery::permanent(AuthenticatedDelivery {
+            identity: identity(Delivery::Body(exact_body_digest(body))),
+            change,
+            provider_run,
+        })),
     }
 }
 
-fn exact_body_id(body: &[u8]) -> Result<DeliveryId, IngressError> {
-    DeliveryId::new(format!(
-        "body:{}",
-        amiss_wire::model::Digest::from(
-            sha2::Sha256::new_with_prefix(EXACT_BODY_DOMAIN)
-                .chain_update([0_u8])
-                .chain_update(body)
-                .finalize()
-                .0
-        )
-    ))
-    .ok_or(IngressError::Replay)
+fn exact_body_digest(body: &[u8]) -> amiss_wire::model::Digest {
+    amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(EXACT_BODY_DOMAIN)
+            .chain_update([0_u8])
+            .chain_update(body)
+            .finalize()
+            .0,
+    )
 }
 
 fn check_window(

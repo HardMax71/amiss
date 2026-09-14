@@ -1,5 +1,5 @@
 use amiss_controller::{
-    ChangeLocator, IntegrationId, ProviderRunAttempt, ProviderRunId, ProviderRunIdentity,
+    ChangeLocator, IntegrationId, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
 };
 use amiss_wire::model::{BranchRef, ObjectFormat, Oid};
 use sha2::Digest as _;
@@ -26,16 +26,13 @@ pub(crate) fn provider_run(
     ))
     .ok()?;
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!(
-            "pr:{}",
-            amiss_wire::model::Digest::from(
-                sha2::Sha256::new_with_prefix(RUN_DOMAIN)
-                    .chain_update([0_u8])
-                    .chain_update(&fields)
-                    .finalize()
-                    .0
-            )
-        ))?,
+        ProviderRun::PullRequest(amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(RUN_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&fields)
+                .finalize()
+                .0,
+        )),
         ProviderRunAttempt::new(1)?,
         ObjectFormat::Sha1,
         candidate.clone(),

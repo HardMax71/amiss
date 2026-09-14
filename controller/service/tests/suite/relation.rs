@@ -7,11 +7,12 @@ use sha2::Digest as _;
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     ArtifactComponent, ArtifactStoreConfig, AuthenticatedDelivery, Change, ChangeLocator,
-    ControllerClock, ControllerEvaluationId, DeliveryId, DeliveryIdentity, FileArtifactStore,
-    FileRelationScheduleStore, PendingRelation, ProviderError, ProviderRunAttempt, ProviderRunId,
+    ControllerClock, ControllerEvaluationId, Delivery, DeliveryIdentity, FileArtifactStore,
+    FileRelationScheduleStore, PendingRelation, ProviderError, ProviderRun, ProviderRunAttempt,
     ProviderRunIdentity, RelationAcquiredRoot, RelationAcquisitionError, RelationAdmission,
     RelationCredentialRoute, RelationStatusDestination, RelationSubjectHead,
     RelationSubjectTransition, RelationTransition, TriggeredRelation, relation_credential_router,
@@ -24,7 +25,7 @@ use amiss_controller_service::{
 };
 use amiss_wire::controls::{BlobLineSelection, ProjectionKind, ProjectionSource};
 use amiss_wire::envelope::Payload as _;
-use amiss_wire::model::{ArtifactId, ObjectFormat, Oid, RepoPathText};
+use amiss_wire::model::{ArtifactId, Digest, ObjectFormat, Oid, RepoPathText};
 use amiss_wire::relation::{RelationAssessment, RelationSnapshot, RelationVerdict};
 
 struct RelationWorkFixture {
@@ -60,7 +61,7 @@ fn delivery(transition: &RelationTransition) -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: subject.scope.provider.clone(),
             integration: subject.scope.integration.clone(),
-            delivery: DeliveryId::new("delivery/relation".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("delivery/relation".to_owned()).unwrap()),
         },
         change: ChangeLocator {
             provider: subject.scope.provider.clone(),
@@ -68,7 +69,7 @@ fn delivery(transition: &RelationTransition) -> AuthenticatedDelivery {
             change: Change::PullRequest(PullRequestChange::new(1, 1, 1).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("run/relation".to_owned()).unwrap(),
+            ProviderRun::PullRequest(Digest::from([247; 32])),
             ProviderRunAttempt::new(1).unwrap(),
             subject.object_format,
             frozen.commits.candidate.clone(),
@@ -433,7 +434,7 @@ fn report_for(
     let payload = report
         .pointer("/payload")
         .ok_or_else(|| std::io::Error::other("fixture report has no payload"))?;
-    let payload_digest = amiss_wire::model::Digest::from(
+    let payload_digest = Digest::from(
         sha2::Sha256::new_with_prefix(amiss_wire::report::PAYLOAD_SCHEMA)
             .chain_update([0_u8])
             .chain_update(serde_json_canonicalizer::to_vec(payload)?)
@@ -512,8 +513,6 @@ fn audit_request<'a>(
             }
         }),
         engine_version: env!("CARGO_PKG_VERSION"),
-        engine_digest: amiss_wire::model::Digest::from(
-            sha2::Sha256::digest(b"relation service evaluator fixture").0,
-        ),
+        engine_digest: Digest::from(sha2::Sha256::digest(b"relation service evaluator fixture").0),
     }
 }

@@ -1,17 +1,7 @@
 #![cfg(test)]
 
-use super::{
-    canonical_host, canonical_project_path, canonical_repository, parse_delivery_id, repository_url,
-};
+use super::{canonical_host, canonical_project_path, canonical_repository, repository_url};
 use amiss_wire::model::RepositoryIdentity;
-
-#[test]
-fn a_delivery_id_is_exactly_five_fields_with_a_digest() {
-    assert_eq!(parse_delivery_id("oidc/runner/5/jti/abc123"), Some(5));
-    assert_eq!(parse_delivery_id("oidc/runner/5/jti/"), None);
-    assert_eq!(parse_delivery_id("oidc/runner/5/jti/abc/extra"), None);
-    assert_eq!(parse_delivery_id("oidc/runner/0/jti/abc"), None);
-}
 
 #[test]
 fn a_project_path_needs_both_halves() {

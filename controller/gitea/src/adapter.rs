@@ -2,12 +2,12 @@ mod tests;
 
 use std::sync::Arc;
 
+use amiss_controller::ProviderRun;
 use amiss_controller::{
     AuthenticatedDelivery, Change, ChangeSnapshot, ChangeState, CheckConclusion, GiteaWebhook,
     IngressCheck, ProviderAdapter, ProviderError, ProviderIdentity, ProviderNamespace, Publication,
     VerifiedDelivery,
 };
-use amiss_wire::model::Digest;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 
 use crate::identity::{positive, provider_run};
@@ -103,12 +103,9 @@ fn validate_delivery<'a>(
     let Change::PullRequest(pull_request) = delivery.change.change else {
         return Err(ProviderError::InvalidResponse);
     };
-    let run_digest = delivery
-        .provider_run
-        .run_id
-        .as_str()
-        .strip_prefix("pr:")
-        .and_then(Digest::from_wire);
+    let ProviderRun::PullRequest(_) = delivery.provider_run.run else {
+        return Err(ProviderError::InvalidResponse);
+    };
     let canonical_repository = RepositoryIdentity::new(
         repository.host().to_owned(),
         repository.owner().to_owned(),
@@ -129,7 +126,6 @@ fn validate_delivery<'a>(
         )
         .as_ref()
             != Some(&delivery.provider_run.candidate_commit)
-        || run_digest.is_none()
     {
         return Err(ProviderError::InvalidResponse);
     }

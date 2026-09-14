@@ -1,6 +1,7 @@
 use base64::Engine as _;
 
-use crate::{DeliveryId, IngressCheck, ReplayIdentity};
+use crate::OpaqueId;
+use crate::{Delivery, IngressCheck, ReplayIdentity};
 
 use super::headers::Headers;
 use super::{WebhookError, WebhookKeyring, WebhookProof};
@@ -59,12 +60,14 @@ impl GitLabWebhook {
     }
 }
 
-fn delivery_id(raw: &[u8]) -> Result<DeliveryId, WebhookError> {
+fn delivery_id(raw: &[u8]) -> Result<Delivery, WebhookError> {
     if raw.contains(&b'.') {
         return Err(WebhookError::Headers);
     }
     let value = std::str::from_utf8(raw).map_err(|_defect| WebhookError::Headers)?;
-    DeliveryId::new(value.to_owned()).ok_or(WebhookError::Headers)
+    OpaqueId::new(value.to_owned())
+        .map(Delivery::Provided)
+        .ok_or(WebhookError::Headers)
 }
 
 fn timestamp_millis(raw: &[u8]) -> Result<i64, WebhookError> {

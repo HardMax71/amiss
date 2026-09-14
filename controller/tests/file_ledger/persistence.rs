@@ -575,7 +575,7 @@ fn one_impossible_field_fails_the_record_closed() {
             replace_last(text, r#""evaluation_id":""#, r#""evaluation_id":"other-"#)
         }),
         ("another provider run", Reached::Staged, |text| {
-            replace_last(text, r#""run_id":""#, r#""run_id":"other-"#)
+            replace_last(text, r#""attempt":1"#, r#""attempt":2"#)
         }),
         ("another change", Reached::Staged, |text| {
             replace_last(text, r#""number":"#, r#""number":9"#)

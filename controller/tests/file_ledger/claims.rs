@@ -5,10 +5,10 @@ use std::sync::Arc;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     Change, ControllerClock, ControllerEvaluationId, DeliveryClaim, DeliveryLease, DeliveryLedger,
-    FileLedger, FileLedgerError, LeaseCompletion, LeaseFence, LeaseRenewal, ProviderRunAttempt,
-    ProviderRunId, ProviderRunIdentity, Publication, StageOutcome, StagedPublication,
+    FileLedger, FileLedgerError, LeaseCompletion, LeaseFence, LeaseRenewal, ProviderRun,
+    ProviderRunAttempt, ProviderRunIdentity, Publication, StageOutcome, StagedPublication,
 };
-use amiss_wire::model::{ObjectFormat, Oid};
+use amiss_wire::model::{Digest, ObjectFormat, Oid};
 use tempfile::TempDir;
 
 use super::support::{
@@ -227,7 +227,7 @@ fn the_check_binding_is_frozen_for_every_delivery_transition() {
     let delivery = delivery(42);
     let check = check_binding();
     let mut changed = check.clone();
-    changed.plan_digest = amiss_wire::model::Digest::from(
+    changed.plan_digest = Digest::from(
         sha2::Sha256::new_with_prefix("amiss/test-check-plan")
             .chain_update([0_u8])
             .chain_update(b"changed")
@@ -309,7 +309,7 @@ fn a_lease_and_a_publication_are_matched_field_by_field() {
         }),
         ("another provider run", |publication| {
             publication.provider_run = ProviderRunIdentity::new(
-                ProviderRunId::new("other-run".to_owned()).unwrap(),
+                ProviderRun::PullRequest(Digest::from([180; 32])),
                 ProviderRunAttempt::new(1).unwrap(),
                 ObjectFormat::Sha1,
                 publication.provider_run.candidate_commit.clone(),

@@ -1,13 +1,15 @@
 pub(crate) use amiss_controller_fixtures::clock::TestClock;
+use amiss_wire::model::Digest;
 use std::time::Duration;
 
+use amiss_controller::ProviderFacts;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
-    AuthenticatedDelivery, Change, ChangeLocator, DeliveryHeader, DeliveryId, DeliveryIdentity,
-    DeliveryRoute, GitHubWebhook, GitLabWebhook, IngressError, IngressLimits, IngressPolicy,
-    IntegrationId, OpaqueId, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, ReplayWindow, SignedTimePolicy,
-    TrustSetId, UntrustedDelivery, VerifiedDelivery, WebhookKey, WebhookKeyring, WebhookProof,
+    Change, ChangeLocator, DeliveryHeader, DeliveryRoute, GitHubWebhook, GitLabWebhook,
+    IngressError, IngressLimits, IngressPolicy, IntegrationId, OpaqueId, ProviderIdentity,
+    ProviderInstance, ProviderNamespace, ProviderRun, ProviderRunAttempt, ProviderRunIdentity,
+    ReplayWindow, SignedTimePolicy, TrustSetId, UntrustedDelivery, VerifiedDelivery, WebhookKey,
+    WebhookKeyring, WebhookProof,
 };
 use amiss_wire::model::{ObjectFormat, Oid, RepositoryIdentity};
 
@@ -68,21 +70,17 @@ pub(crate) fn raw<'a>(
     }
 }
 
-pub(crate) fn delivery(provider: &ProviderIdentity) -> AuthenticatedDelivery {
+pub(crate) fn delivery(provider: &ProviderIdentity) -> ProviderFacts {
     split_delivery(provider, provider)
 }
 
 pub(crate) fn split_delivery(
     identity_provider: &ProviderIdentity,
     change_provider: &ProviderIdentity,
-) -> AuthenticatedDelivery {
-    let provider = identity_provider;
-    AuthenticatedDelivery {
-        identity: DeliveryIdentity {
-            provider: provider.clone(),
-            integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("untrusted-placeholder".to_owned()).unwrap(),
-        },
+) -> ProviderFacts {
+    ProviderFacts {
+        provider: identity_provider.clone(),
+        integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
         change: ChangeLocator {
             provider: change_provider.clone(),
             repository: RepositoryIdentity::new(
@@ -94,7 +92,7 @@ pub(crate) fn split_delivery(
             change: Change::PullRequest(PullRequestChange::new(1, 1, 42).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("run-11".to_owned()).unwrap(),
+            ProviderRun::PullRequest(Digest::from([234; 32])),
             ProviderRunAttempt::new(1).unwrap(),
             ObjectFormat::Sha1,
             Oid::new(ObjectFormat::Sha1, "b".repeat(40)).unwrap(),

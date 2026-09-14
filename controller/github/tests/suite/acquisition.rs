@@ -12,10 +12,10 @@ use std::time::Duration;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AcquiredSemanticTemplate, Acquisition as _, AcquisitionTarget, Change, ChangeLocator,
-    ControllerEvaluationId, DeliveryId, DeliveryIdentity, IntegrationId,
+    ControllerEvaluationId, Delivery, DeliveryIdentity, IntegrationId,
     MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair, OpaqueId,
     PolicyControls, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
+    ProviderRun, ProviderRunAttempt, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
     SemanticEvidenceExpectation, WorkflowArtifactExpectation, check_binding, check_plan,
 };
 use amiss_controller_github::{
@@ -293,7 +293,7 @@ fn request() -> RunRequest {
         delivery: DeliveryIdentity {
             provider,
             integration,
-            delivery: DeliveryId::new("signed-body".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("signed-body".to_owned()).unwrap()),
         },
         provider_run,
         evaluation_id: ControllerEvaluationId::new("evaluation/1".to_owned()).unwrap(),
@@ -352,17 +352,13 @@ fn provider_run(
     ))
     .unwrap();
     ProviderRunIdentity::new(
-        ProviderRunId::new(format!(
-            "pr:{}",
-            amiss_wire::model::Digest::from(
-                sha2::Sha256::new_with_prefix(RUN_DOMAIN)
-                    .chain_update([0_u8])
-                    .chain_update(&fields)
-                    .finalize()
-                    .0
-            )
-        ))
-        .unwrap(),
+        ProviderRun::PullRequest(amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(RUN_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&fields)
+                .finalize()
+                .0,
+        )),
         ProviderRunAttempt::new(1).unwrap(),
         ObjectFormat::Sha1,
         candidate.clone(),

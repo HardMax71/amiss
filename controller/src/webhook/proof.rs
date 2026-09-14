@@ -1,7 +1,6 @@
 use crate::ingress::RequestBinding;
 use crate::{
-    AuthenticatedDelivery, IngressCheck, ReplayIdentity, TrustAnchorId, TrustSetId,
-    VerifiedDelivery,
+    IngressCheck, ProviderFacts, ReplayIdentity, TrustAnchorId, TrustSetId, VerifiedDelivery,
 };
 
 /// Transient proof returned after a provider-controlled signature is verified.
@@ -56,9 +55,9 @@ impl SignedRequestProof {
     /// Joins authenticated provider facts to the exact verifier proof without
     /// letting an adapter relabel the key ring's trust set.
     #[must_use]
-    pub fn bind(self, delivery: AuthenticatedDelivery) -> VerifiedDelivery {
+    pub fn bind(self, facts: ProviderFacts) -> VerifiedDelivery {
         VerifiedDelivery::from_webhook(
-            delivery,
+            facts,
             self.trust_set,
             self.anchor,
             self.issued_at_unix_millis,

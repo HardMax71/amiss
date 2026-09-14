@@ -1,22 +1,23 @@
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::de::Document as _;
+use amiss_wire::model::Digest;
 use std::collections::VecDeque;
 use std::fs;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
 use std::time::{Duration, Instant};
 
-use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState,
-    Controller, ControllerClock, DeliveryId, DeliveryIdentity, DeliveryRoute, Evaluation,
-    FileLedger, FileLedgerConfig, GitHubWebhook, HeartbeatOutcome, IngressCheck, IngressLimits,
-    IngressPolicy, IntegrationId, OidPair, OpaqueId, PlanRegistry, PlanScope, PolicyControls,
-    ProviderAdapter, ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, Publication, ReplayWindow,
-    RunHeartbeat, RunIdentity, RunRefs, RunRequest, Runner, RunnerOutcome, SignedTimePolicy,
-    SystemClock, VerifiedDelivery, WebhookKey, WebhookKeyring, check_plan, register_plan,
+    Controller, ControllerClock, Delivery, DeliveryIdentity, DeliveryRoute, Evaluation, FileLedger,
+    FileLedgerConfig, GitHubWebhook, HeartbeatOutcome, IngressCheck, IngressLimits, IngressPolicy,
+    IntegrationId, OidPair, OpaqueId, PlanRegistry, PlanScope, PolicyControls, ProviderAdapter,
+    ProviderError, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun,
+    ProviderRunAttempt, ProviderRunIdentity, Publication, ReplayWindow, RunHeartbeat, RunIdentity,
+    RunRefs, RunRequest, Runner, RunnerOutcome, SignedTimePolicy, SystemClock, VerifiedDelivery,
+    WebhookKey, WebhookKeyring, check_plan, register_plan,
 };
+use amiss_controller::{ProviderFacts, PullRequestChange};
 use amiss_controller_service::{
     AdmissionRejection, AdmissionRequest, AdmittedDelivery, DeliveryAdmission, DeliveryHeader,
     DeliveryWorker, DeliveryWorkerInput, Inbox, InboxLimits, IncomingDelivery, IncomingHeader,
@@ -123,7 +124,14 @@ impl ProviderAdapter for Adapter {
         self.authentications.fetch_add(1, Ordering::Relaxed);
         self.verifier
             .verify(delivery)
-            .map(|proof| proof.bind(self.authenticated.clone()))
+            .map(|proof| {
+                proof.bind(ProviderFacts {
+                    provider: self.authenticated.identity.provider.clone(),
+                    integration: self.authenticated.identity.integration.clone(),
+                    change: self.authenticated.change.clone(),
+                    provider_run: self.authenticated.provider_run.clone(),
+                })
+            })
             .map_err(|_error| ProviderError::Authentication)
     }
 
@@ -412,11 +420,11 @@ fn authenticated() -> AuthenticatedDelivery {
         identity: DeliveryIdentity {
             provider: provider.clone(),
             integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("placeholder".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("placeholder".to_owned()).unwrap()),
         },
         change: change(provider),
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("provider-run-11".to_owned()).unwrap(),
+            ProviderRun::PullRequest(Digest::from([150; 32])),
             ProviderRunAttempt::new(1).unwrap(),
             ObjectFormat::Sha1,
             oid('b'),

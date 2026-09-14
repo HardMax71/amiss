@@ -9,6 +9,7 @@ use amiss_controller::{
     IngressPolicy, OpaqueId, ProviderIdentity, ReplayWindow, SignedTimePolicy, UntrustedDelivery,
     WebhookKey, WebhookKeyring,
 };
+use amiss_controller::{Delivery, OidcToken};
 use amiss_controller_fixtures::{RsaKeys, rsa_keys};
 use amiss_controller_gitea::{DedicatedReviewer, GiteaPullRequestSource};
 use amiss_controller_github::GitHubPullRequestSource;
@@ -306,21 +307,19 @@ fn assert_gitlab_replay(claims: &Value, accepted: &AcceptedDelivery) {
                 .and_then(Value::as_str)
                 .and_then(|runner| runner.parse::<u64>().ok()),
         )
-        .map(|(jti, runner)| {
-            format!(
-                "oidc/runner/{runner}/jti/{}",
-                amiss_wire::model::Digest::from(
-                    Sha256::new_with_prefix("amiss/gitlab-oidc-jti-v1")
-                        .chain_update([0_u8])
-                        .chain_update(jti.as_bytes())
-                        .finalize()
-                        .0
-                )
-            )
+        .and_then(|(jti, runner)| {
+            let digest = amiss_wire::model::Digest::from(
+                Sha256::new_with_prefix("amiss/gitlab-oidc-jti-v1")
+                    .chain_update([0_u8])
+                    .chain_update(jti.as_bytes())
+                    .finalize()
+                    .0,
+            );
+            OidcToken::new(runner, digest).map(Delivery::Token)
         });
     assert_eq!(
-        Some(accepted.delivery().identity.delivery.as_str()),
-        replay.as_deref(),
+        Some(&accepted.delivery().identity.delivery),
+        replay.as_ref(),
         "the authenticated JTI determines the replay identity"
     );
     let keep_through = claims

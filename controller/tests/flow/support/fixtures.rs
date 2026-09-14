@@ -1,15 +1,17 @@
 use amiss_controller_fixtures::clock::TestClock;
 use amiss_wire::controls::ExecutionConstraintDescriptor;
 use amiss_wire::de::Document as _;
+use amiss_wire::model::Digest;
 use std::sync::Arc;
 use std::time::Duration;
 
+use amiss_controller::OpaqueId;
 use amiss_controller::PullRequestChange;
 use amiss_controller::{
     AdapterRegistry, AuthenticatedDelivery, Change, ChangeLocator, ChangeSnapshot, ChangeState,
-    CheckBinding, CheckPlan, Controller, DeliveryId, DeliveryIdentity, DeliveryLedger,
-    IngressLimits, IngressPolicy, IntegrationId, OidPair, PlanRegistry, PlanScope, PolicyControls,
-    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRunAttempt, ProviderRunId,
+    CheckBinding, CheckPlan, Controller, Delivery, DeliveryIdentity, DeliveryLedger, IngressLimits,
+    IngressPolicy, IntegrationId, OidPair, PlanRegistry, PlanScope, PolicyControls,
+    ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun, ProviderRunAttempt,
     ProviderRunIdentity, ReplayWindow, RunIdentity, RunRefs, RunnerOutcome, check_binding,
     check_plan, register_plan,
 };
@@ -54,11 +56,11 @@ pub(crate) fn delivery(
         identity: DeliveryIdentity {
             provider: provider.clone(),
             integration: IntegrationId::new("installation-7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("delivery-9".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("delivery-9".to_owned()).unwrap()),
         },
         change,
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("provider-run-11".to_owned()).unwrap(),
+            ProviderRun::PullRequest(Digest::from([150; 32])),
             ProviderRunAttempt::new(1).unwrap(),
             ObjectFormat::Sha1,
             oid(candidate_commit),

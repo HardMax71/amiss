@@ -60,10 +60,11 @@ controller process before the first upgraded open; the metadata upgrade is one-w
 The state file is a versioned, length-delimited, checksummed frame containing canonical JSON and is
 capped at 128 KiB. The reader accepts only its current row schema, v4. The v2 schema contains no
 check-plan binding, so it is rejected instead of attaching a caller-supplied policy to old work.
-The v3 schema spells the change a delivery is about as one opaque string; v4 stores it typed, as
-the pull request or merge request ids the provider issued, and no reader for the old spelling
-exists, so v3 rows are rejected too and a controller crossing that upgrade starts from an empty
-root. A schema change either carries every stored authorization field forward or rejects the old
+The v3 schema spells the change a delivery is about, the provider run and the delivery itself as
+opaque strings; v4 stores them typed, as the pull request or merge request ids the provider
+issued, the run digest or pipeline job, and the provided id, exact-body digest or OIDC token, and
+no reader for the old spellings exists, so v3 rows are rejected too and a controller crossing that
+upgrade starts from an empty root. A schema change either carries every stored authorization field forward or rejects the old
 rows outright; nothing in between.
 A report is kept separately at one fixed path, bounded by the machine-report byte ceiling, while
 its digest and length remain in the saved state. Saving removes any dead report, writes and syncs

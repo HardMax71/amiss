@@ -1,4 +1,5 @@
-use amiss_controller::{DeliveryId, ProviderIdentity, ProviderNamespace, ProviderRunAttempt};
+use amiss_controller::OpaqueId;
+use amiss_controller::{ProviderIdentity, ProviderNamespace, ProviderRunAttempt};
 
 #[test]
 fn provider_namespace_is_open_but_canonical() {
@@ -17,11 +18,11 @@ fn provider_identity_validates_both_parts() {
 
 #[test]
 fn opaque_delivery_ids_reject_ambiguous_bytes() {
-    assert!(DeliveryId::new("0123-abcd:1".to_owned()).is_some());
-    assert!(DeliveryId::new(" delivery".to_owned()).is_none());
-    assert!(DeliveryId::new("line\nbreak".to_owned()).is_none());
-    assert!(DeliveryId::new("a".repeat(256)).is_some());
-    assert!(DeliveryId::new("a".repeat(257)).is_none());
+    assert!(OpaqueId::new("0123-abcd:1".to_owned()).is_some());
+    assert!(OpaqueId::new(" delivery".to_owned()).is_none());
+    assert!(OpaqueId::new("line\nbreak".to_owned()).is_none());
+    assert!(OpaqueId::new("a".repeat(256)).is_some());
+    assert!(OpaqueId::new("a".repeat(257)).is_none());
 }
 
 #[test]

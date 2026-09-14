@@ -15,12 +15,13 @@ use std::path::Path;
 use std::sync::Arc;
 
 use amiss_controller::MergeRequestChange;
+use amiss_controller::PipelineJob;
 use amiss_controller::{
     AcquiredSemanticTemplate, BootstrapJob, BootstrapJobError, BootstrapJobInput, Change,
-    ChangeLocator, CheckPlan, ControllerEvaluationId, DeliveryId, DeliveryIdentity, ExternalPolicy,
+    ChangeLocator, CheckPlan, ControllerEvaluationId, Delivery, DeliveryIdentity, ExternalPolicy,
     IntegrationId, MAX_WORKFLOW_ARTIFACT_ARCHIVE_BYTES, MAX_WORKFLOW_ARTIFACT_FILE_BYTES, OidPair,
-    OpaqueId, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace,
-    ProviderRunAttempt, ProviderRunId, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
+    OpaqueId, PolicyControls, ProviderIdentity, ProviderInstance, ProviderNamespace, ProviderRun,
+    ProviderRunAttempt, ProviderRunIdentity, RunIdentity, RunRefs, RunRequest,
     SemanticEvidenceExpectation, SemanticEvidenceTemplate, WorkflowArtifactExpectation,
     bootstrap_job, check_binding, check_plan,
 };
@@ -110,10 +111,10 @@ fn run_request(policy: PolicyControls) -> RunRequest {
         delivery: DeliveryIdentity {
             provider,
             integration: IntegrationId::new("project-hook/7".to_owned()).unwrap(),
-            delivery: DeliveryId::new("webhook/9".to_owned()).unwrap(),
+            delivery: Delivery::Provided(OpaqueId::new("webhook/9".to_owned()).unwrap()),
         },
         provider_run: ProviderRunIdentity::new(
-            ProviderRunId::new("pipeline/987654321:job-42".to_owned()).unwrap(),
+            ProviderRun::Job(PipelineJob::new(987_654_321, 42).unwrap()),
             ProviderRunAttempt::new(2).unwrap(),
             ObjectFormat::Sha1,
             oid('3'),
@@ -306,7 +307,7 @@ fn job_construction_binds_the_complete_authenticated_run() {
     let supplied_time = controls.trusted_time.as_ref().unwrap();
     let statement = &supplied_time.value;
     assert_eq!(statement.provider, "gitlab");
-    assert_eq!(statement.provider_run_id, "pipeline/987654321:job-42");
+    assert_eq!(statement.provider_run_id, "pipeline/987654321/job/42");
     assert_eq!(statement.provider_run_attempt, 2);
     assert_eq!(
         statement.candidate_identity_digest,
