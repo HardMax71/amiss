@@ -7,7 +7,8 @@ pub(super) enum CapacitySchema {
 use serde::{Deserialize, Serialize};
 
 use super::validate_key;
-use crate::file_ledger::{FileLedgerError, frame};
+use crate::file_ledger::FileLedgerError;
+use crate::frame;
 
 const CAPACITY_SCHEMA: CapacitySchema = CapacitySchema::Current;
 

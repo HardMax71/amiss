@@ -11,7 +11,8 @@ use crate::{ControllerEvaluationId, DeliveryIdentity};
 use self::model::StoredDeliveryKey;
 pub(super) use self::publication::{ReportRef, StoredPublication};
 pub(super) use self::record::{Record, State};
-use super::{FileLedgerError, frame};
+use super::FileLedgerError;
+use crate::frame;
 
 const RECORD_FRAME: frame::FrameFormat = frame::define(
     b"AMISS-DELIVERY-RECORD",

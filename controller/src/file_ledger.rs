@@ -1,5 +1,4 @@
 mod format;
-pub(crate) mod frame;
 mod store;
 mod transitions;
 
@@ -34,6 +33,12 @@ pub enum FileLedgerError {
     Corrupt,
     #[error("delivery record I/O failed: {0}")]
     Io(#[from] io::Error),
+}
+
+impl From<crate::frame::Corrupt> for FileLedgerError {
+    fn from(_defect: crate::frame::Corrupt) -> Self {
+        Self::Corrupt
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

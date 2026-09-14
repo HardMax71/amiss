@@ -6,7 +6,6 @@ mod delivery;
 mod endpoint;
 mod error;
 mod evaluation;
-mod frame;
 mod inbox;
 mod lane;
 mod launcher;

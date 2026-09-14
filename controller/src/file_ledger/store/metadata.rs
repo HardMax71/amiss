@@ -8,7 +8,8 @@ pub(super) enum RootSchema {
 
 use serde::{Deserialize, Serialize};
 
-use crate::file_ledger::{FileLedgerConfig, FileLedgerError, frame};
+use crate::file_ledger::{FileLedgerConfig, FileLedgerError};
+use crate::frame;
 
 const METADATA_SCHEMA: RootSchema = RootSchema::Current;
 const LEGACY_METADATA_SCHEMA: RootSchema = RootSchema::Legacy;

@@ -1,4 +1,4 @@
-use crate::file_ledger::{FileLedgerError, frame};
+use crate::frame;
 
 use super::{
     JournalAction, JournalEntry, RELATION_SCHEDULE_BINDING_LIMIT, RelationScheduleStoreError,
@@ -52,10 +52,7 @@ pub(super) fn decode_metadata(
     bytes: &[u8],
     max_bindings: u64,
 ) -> Result<RootMetadata, RelationScheduleStoreError> {
-    let metadata = frame::decode(ROOT_FRAME, bytes, |metadata| {
-        validate_metadata(metadata).map_err(|_defect| FileLedgerError::Corrupt)
-    })
-    .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    let metadata = frame::decode(ROOT_FRAME, bytes, validate_metadata)?;
     if metadata.max_bindings != max_bindings {
         return Err(RelationScheduleStoreError::Configuration);
     }
@@ -65,10 +62,7 @@ pub(super) fn decode_metadata(
 pub(super) fn encode_metadata(
     metadata: &RootMetadata,
 ) -> Result<Vec<u8>, RelationScheduleStoreError> {
-    frame::encode(ROOT_FRAME, metadata, |metadata| {
-        validate_metadata(metadata).map_err(|_defect| FileLedgerError::Corrupt)
-    })
-    .map_err(|_defect| RelationScheduleStoreError::Corrupt)
+    frame::encode(ROOT_FRAME, metadata, validate_metadata)
 }
 
 fn validate_metadata(metadata: &RootMetadata) -> Result<(), RelationScheduleStoreError> {
@@ -116,10 +110,7 @@ fn validate_entry(entry: &JournalEntry) -> Result<(), RelationScheduleStoreError
 }
 
 pub(super) fn encode_entry(entry: &JournalEntry) -> Result<Vec<u8>, RelationScheduleStoreError> {
-    let frame = frame::encode(ENTRY_FRAME, entry, |entry| {
-        validate_entry(entry).map_err(|_defect| FileLedgerError::Corrupt)
-    })
-    .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    let frame = frame::encode(ENTRY_FRAME, entry, validate_entry)?;
     let length =
         u64::try_from(frame.len()).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
     if length > entry_byte_limit(&entry.action) {
@@ -137,10 +128,7 @@ pub(super) fn encode_entry(entry: &JournalEntry) -> Result<Vec<u8>, RelationSche
 }
 
 pub(super) fn decode_entry(bytes: &[u8]) -> Result<JournalEntry, RelationScheduleStoreError> {
-    let entry = frame::decode(ENTRY_FRAME, bytes, |entry| {
-        validate_entry(entry).map_err(|_defect| FileLedgerError::Corrupt)
-    })
-    .map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
+    let entry = frame::decode(ENTRY_FRAME, bytes, validate_entry)?;
     let length =
         u64::try_from(bytes.len()).map_err(|_defect| RelationScheduleStoreError::Corrupt)?;
     (length <= entry_byte_limit(&entry.action))
