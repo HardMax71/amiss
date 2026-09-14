@@ -101,16 +101,12 @@ fn example_reader_defect(contract_name: &str, bytes: &[u8]) -> Option<String> {
         "scanner-external-assessment" => parse_defect(ExternalAssessment::parse(bytes)),
         "scanner-external-evidence" => parse_defect(ExternalEvidence::parse(bytes)),
         "scanner-external-plan" => parse_defect(ExternalPlan::parse(bytes)),
-        "scanner-report" => parse_defect(amiss_wire::report::validate_envelope(bytes)),
+        "scanner-report" => parse_defect(<amiss_wire::report::model::ReportPayload>::parse(bytes)),
         "scanner-record-set-input" => parse_defect(Input::parse(bytes)),
         "scanner-semantic-evidence" => parse_defect(SemanticEvidence::parse(bytes)),
-        "scanner-semantic-template" => match serde_json::from_slice::<
-            amiss_wire::semantic::SemanticEvidenceTemplate<'static>,
-        >(bytes)
-        {
-            Ok(template) => parse_defect(template.validate()),
-            Err(error) => Some(error.to_string()),
-        },
+        "scanner-semantic-template" => {
+            parse_defect(amiss_wire::semantic::SemanticEvidenceTemplate::parse(bytes))
+        }
         "scanner-policy" => parse_defect(ScannerPolicy::parse(bytes)),
         "scanner-release-manifest" => parse_defect(ReleaseManifest::parse(bytes)),
         "scanner-snapshot-request" => match serde_json::from_slice::<SnapshotRequest>(bytes) {

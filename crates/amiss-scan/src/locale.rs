@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use amiss_git::{GitResources, ObjectKind, Repository, parse_commit};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::{DOCUMENT_SUFFIX_BYTES, GitMode};
+use amiss_wire::de::Document;
 use amiss_wire::envelope::{Payload as _, document_digest};
 use amiss_wire::locale::{
     EvidencePayloadSchema, LocaleCoverageEvidence, LocaleCoveragePlan, LocalePageInventory,
@@ -45,6 +46,17 @@ pub struct LocaleTreeContext {
     pub source: LocaleSide,
     pub target: LocaleSide,
     pub documents: Vec<String>,
+}
+
+/// The context's own grammar is its shape; what it claims is checked against
+/// the plan it is read for.
+impl Document for LocaleTreeContext {
+    type Defect = amiss_wire::de::Error;
+    const BYTES: u64 = LOCALE_CONTEXT_BYTES;
+
+    fn validate(&self) -> Result<(), amiss_wire::de::Error> {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

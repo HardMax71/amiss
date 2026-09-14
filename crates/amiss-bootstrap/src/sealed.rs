@@ -39,10 +39,7 @@ pub(super) fn capture_requests(
     let streams = request_streams(args)?;
     let evaluation = EvaluationRequest::parse(&streams.evaluation)
         .map_err(|_defect| tampered("evaluation-request-invalid"))?;
-    let snapshot: SnapshotRequest = serde_json::from_slice(&streams.snapshot)
-        .map_err(|_defect| tampered("snapshot-request-invalid"))?;
-    snapshot
-        .validate()
+    let snapshot = SnapshotRequest::parse(&streams.snapshot)
         .map_err(|_defect| tampered("snapshot-request-invalid"))?;
     let controls = ControlsRequest::parse(&streams.controls)
         .map_err(|_defect| tampered("controls-request-invalid"))?;

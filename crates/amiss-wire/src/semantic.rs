@@ -5,7 +5,7 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::assessment::Nullable;
-use crate::de::{Error, ErrorKind, fail};
+use crate::de::{Document, Error, ErrorKind, fail};
 use crate::envelope::{Envelope, Payload, Sealing};
 use crate::model::ArtifactId;
 use crate::model::Digest;
@@ -120,13 +120,15 @@ impl Payload for SemanticEvidence<'_> {
     }
 }
 
-impl SemanticEvidenceTemplate<'_> {
+impl Document for SemanticEvidenceTemplate<'_> {
+    type Defect = Error;
+    const BYTES: u64 = SEMANTIC_EVIDENCE_BYTES;
+
     /// Checks the producer and bounded canonical observation set after typed deserialization.
-    /// Intake callers enforce the raw document byte ceiling and Serde decoding.
     ///
     /// # Errors
     /// Refuses invalid producer versions, oversized observation sets, duplicates, or unsorted rows.
-    pub fn validate(&self) -> Result<(), Error> {
+    fn validate(&self) -> Result<(), Error> {
         validate_producer("$.producer", &self.producer)?;
         validate_observations("$.observations", &self.observations)
     }
@@ -208,9 +210,9 @@ pub fn envelope(
     evidence.observations = ordered_observations("$.payload.observations", evidence.observations)?;
     let payload_digest = evidence.digest()?;
     let document = Envelope {
-        schema: EnvelopeSchema::Current,
         payload: evidence,
         payload_digest,
+        schema: EnvelopeSchema::Current,
     };
     document.validate()?;
     Ok(document)

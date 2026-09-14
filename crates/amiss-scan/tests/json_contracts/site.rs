@@ -1,6 +1,7 @@
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_git::Repository;
 use amiss_scan::{SetupShell, pipeline::commit_pair, report::RequestDigests};
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::{
     controls::Profile,
     model::{ObjectFormat, Oid},
@@ -72,7 +73,9 @@ fn site_defect_identities_bind_the_exact_kind_and_route() {
     };
     let built = commit_pair(&repo, &engine, None, &setup, &base, &candidate).unwrap();
     let bytes = amiss_scan::report::wire(&built).unwrap();
-    let (payload, _, _) = amiss_wire::report::validate_envelope(&bytes).unwrap();
+    let payload = <amiss_wire::report::model::ReportPayload>::parse(&bytes)
+        .unwrap()
+        .payload;
     assert!(payload.errors.is_empty(), "{:?}", payload.errors);
     let mut ids = payload
         .findings

@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::Digest as _;
@@ -68,9 +70,9 @@ pub trait Payload: Serialize + Sized {
         Self::Schema: Default + Serialize,
     {
         let sealed = Envelope {
-            schema: Self::Schema::default(),
             payload_digest: self.digest()?,
             payload: self,
+            schema: Self::Schema::default(),
         };
         let canonical = serde_json_canonicalizer::to_vec(&sealed)
             .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
@@ -98,6 +100,17 @@ pub trait Payload: Serialize + Sized {
                 document.validate()?;
                 Ok(document)
             }
+            Sealing::Exact => {
+                let document: Envelope<Self> = de::read(bytes, Self::DOCUMENT_BYTES)?;
+                let spelled = document_digest(Self::DOMAIN, &document)
+                    .ok_or_else(|| Error::new("$", ErrorKind::InvalidValue))?;
+                if transcoded_digest(Self::DOMAIN, bytes) != Some(spelled) {
+                    return Err(Error::new("$", ErrorKind::Noncanonical).into());
+                }
+                document.sealed()?;
+                document.payload.validate()?;
+                Ok(document)
+            }
             Sealing::Received => {
                 de::read::<Received<'_, Self::Schema>>(bytes, Self::DOCUMENT_BYTES)?.open()
             }
@@ -112,6 +125,10 @@ pub enum Sealing {
     /// exactly what its model spells, and its consumers recompute the digest
     /// from the typed value, so no other spelling is that document.
     Typed,
+    /// The typed spelling, and the document has to arrive in it: a value the
+    /// model would read and write back differently, such as a struct spelled
+    /// as a sequence or an omitted null, is refused before the seal is checked.
+    Exact,
     /// The payload bytes as received, so additive fields the model does not
     /// carry stay under the seal.
     Received,
@@ -140,9 +157,9 @@ impl<S> Received<'_, S> {
         }
         payload.validate()?;
         Ok(Envelope {
-            schema: self.schema,
             payload,
             payload_digest: self.payload_digest,
+            schema: self.schema,
         })
     }
 }
@@ -159,17 +176,18 @@ impl<T: Payload> Payload for &T {
 }
 
 /// One sealed document: a payload, the schema that names it, and the digest
-/// that binds the two.
+/// that binds the two. The members sit in key order, so a plain serialization
+/// is already the canonical one.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Envelope<T: Payload> {
-    pub schema: T::Schema,
     pub payload: T,
     pub payload_digest: Digest,
+    pub schema: T::Schema,
 }
 
 impl<T: Payload> Envelope<T> {
-    /// Checks the payload grammar, the payload binding, and the encoded ceiling.
+    /// Checks the payload grammar, the encoded ceiling, and the payload binding.
     ///
     /// # Errors
     ///
@@ -179,16 +197,31 @@ impl<T: Payload> Envelope<T> {
     where
         T::Schema: Serialize,
     {
-        let digest = self.payload.digest()?;
+        self.payload.validate()?;
         let mut measured = countio::Counter::new(std::io::sink());
         serde_json_canonicalizer::to_writer(self, &mut measured)
             .map_err(|_defect| Error::new("$", ErrorKind::InvalidValue))?;
         if u64::try_from(measured.writer_bytes()).unwrap_or(u64::MAX) > T::DOCUMENT_BYTES {
             return Err(Error::new("$", ErrorKind::LimitExceeded).into());
         }
+        self.sealed()
+    }
+
+    fn sealed(&self) -> Result<(), T::Defect> {
+        let digest = document_digest(T::DOMAIN, &self.payload)
+            .ok_or_else(|| Error::new("$.payload", ErrorKind::InvalidValue))?;
         if digest != self.payload_digest {
             return Err(Error::new("$.payload_digest", ErrorKind::DigestMismatch).into());
         }
         Ok(())
     }
+}
+
+/// The shell of a `T` document with the payload elided, for measuring what
+/// the seal itself costs.
+impl<T: Payload> Payload for PhantomData<T> {
+    type Schema = T::Schema;
+    type Defect = T::Defect;
+    const DOMAIN: &'static str = T::DOMAIN;
+    const DOCUMENT_BYTES: u64 = T::DOCUMENT_BYTES;
 }

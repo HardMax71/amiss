@@ -4,6 +4,7 @@ use std::io::Write as _;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use amiss_wire::de::Document as _;
 use amiss_wire::model::ArtifactId;
 use amiss_wire::model::Digest;
 use amiss_wire::semantic::record::{Input, InputSchema, Record};
@@ -108,7 +109,8 @@ fn invocation(mut arguments: impl Iterator<Item = OsString>) -> Result<Invocatio
 }
 
 fn produce(context_bytes: &[u8], rustdoc_bytes: &[u8]) -> Result<Vec<u8>, Failure> {
-    let (context, context_digest) = context::parse(context_bytes)?;
+    let context = context::Context::parse(context_bytes)?;
+    let context_digest = context::digest(&context)?;
     let normalized = normalize::function_declarations(
         rustdoc_bytes,
         context.rustdoc_format,

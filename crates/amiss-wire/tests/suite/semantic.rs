@@ -3,6 +3,7 @@
     reason = "integration assertions over values constructed in the same test"
 )]
 
+use amiss_wire::de::Document as _;
 use amiss_wire::envelope::Envelope;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::envelope::document_digest;

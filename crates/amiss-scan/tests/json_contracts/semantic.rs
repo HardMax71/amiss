@@ -6,6 +6,7 @@ use std::borrow::Cow;
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_git::Repository;
 use amiss_scan::{SetupShell, pipeline::commit_pair, report::RequestDigests, semantic::Input};
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::{
     assessment::Nullable,
     controls::Profile,
@@ -104,7 +105,9 @@ fn template_and_captured_evidence_produce_identical_scanner_reports() {
         };
         let built = commit_pair(&repo, &engine, None, &setup, &base, &candidate).unwrap();
         let bytes = amiss_scan::report::wire(&built).unwrap();
-        let (payload, _, _) = amiss_wire::report::validate_envelope(&bytes).unwrap();
+        let payload = <amiss_wire::report::model::ReportPayload>::parse(&bytes)
+            .unwrap()
+            .payload;
         assert!(payload.errors.is_empty(), "{:?}", payload.errors);
         let amiss_wire::report::model::Controls::Resolved(controls) = payload.controls else {
             panic!("controls must resolve");

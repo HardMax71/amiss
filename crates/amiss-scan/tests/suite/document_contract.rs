@@ -6,9 +6,10 @@ use amiss_git::Repository;
 use amiss_scan::pipeline::{SetupShell, commit_pair, staged_index};
 use amiss_scan::report::RequestDigests;
 use amiss_wire::controls::Profile;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::{ObjectFormat, Oid};
-use amiss_wire::report::model::DocumentClassification;
-use amiss_wire::report::{EngineProvenance, validate_envelope};
+use amiss_wire::report::EngineProvenance;
+use amiss_wire::report::model::{DocumentClassification, ReportPayload};
 use tempfile::TempDir;
 
 #[test]
@@ -63,8 +64,9 @@ fn unparsed_documents_survive_the_report_contract() {
     ] {
         assert_eq!(report.exit_code, 0);
         let bytes = amiss_scan::report::wire(&report).unwrap();
-        let (payload, digest, _) = validate_envelope(&bytes).unwrap();
-        assert_eq!(digest, report.payload_digest);
+        let envelope = <ReportPayload>::parse(&bytes).unwrap();
+        assert_eq!(envelope.payload_digest, report.payload_digest);
+        let payload = envelope.payload;
         assert_eq!(payload.documents.len(), 3);
         assert_eq!(payload.summary.documents.unsupported, 2);
         assert_eq!(payload.summary.documents.excluded_builtin, 1);

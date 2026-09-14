@@ -3,7 +3,7 @@ use amiss_wire::external::ExternalAssessment;
 use sha2::Digest as _;
 use std::time::Duration;
 
-use amiss_wire::{external::ExternalVerdict, model::Oid, report::model::ReportEnvelope};
+use amiss_wire::{external::ExternalVerdict, model::Oid, report::model::ReportPayload};
 
 use crate::{
     AcceptedDelivery, ArtifactBundle, ArtifactError, ArtifactReference, AuthenticatedDelivery,
@@ -341,9 +341,7 @@ fn prepare_external(
     clock: &dyn ControllerClock,
     report: &[u8],
 ) -> PreparedExternal {
-    let Ok(engine) =
-        serde_json::from_slice::<ReportEnvelope>(report).map(|report| report.payload.engine)
-    else {
+    let Ok(engine) = <ReportPayload>::parse(report).map(|report| report.payload.engine) else {
         return PreparedExternal {
             incomplete: true,
             ..PreparedExternal::default()

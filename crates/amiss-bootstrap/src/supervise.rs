@@ -23,6 +23,8 @@ pub enum AcceptanceDefect {
     Noncanonical,
     /// The payload-only digest does not recompute.
     PayloadDigest,
+    /// The status, completeness flag and exit class disagree.
+    Completeness,
     /// The engine digest differs from the binary the wrapper validated.
     Engine,
     /// The evaluated base identity differs from the one requested.
@@ -33,8 +35,6 @@ pub enum AcceptanceDefect {
     SealedIdentity,
     /// The report does not carry the exact sealed controls and provider run.
     SealedControls,
-    /// The status, completeness flag and exit class disagree.
-    Completeness,
     /// The finding count differs from the findings array length.
     FindingCount,
 }

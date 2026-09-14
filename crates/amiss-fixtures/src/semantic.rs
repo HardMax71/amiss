@@ -1,14 +1,24 @@
 use amiss_wire::assessment::Nullable;
+use amiss_wire::envelope::document_digest;
 use amiss_wire::model::Digest;
 use amiss_wire::model::{ArtifactId, RepoPathText};
 use amiss_wire::report::{
     PAYLOAD_SCHEMA,
-    model::{Controls, ReportEnvelope, SemanticEvidenceProducer, SemanticEvidenceProvenance},
+    model::{
+        Controls, Feedback, ReportEnvelope, SemanticEvidenceProducer, SemanticEvidenceProvenance,
+    },
 };
 use amiss_wire::semantic::observation::{Observation, SiteBuildObservation};
-use sha2::Digest as _;
 
 const REPORT: &[u8] = include_bytes!("../../../spec/examples/scanner-report.canonical.json");
+
+/// Builds a digest-true passing report carrying the supplied feedback.
+#[must_use]
+pub fn feedback_report(feedback: Feedback) -> Option<Vec<u8>> {
+    let mut report: ReportEnvelope = serde_json::from_slice(REPORT).ok()?;
+    report.payload.feedback = feedback;
+    rebound(report)
+}
 
 /// Builds a digest-true passing report over the supplied semantic payloads.
 #[must_use]
@@ -33,14 +43,11 @@ pub fn semantic_report(payload_digests: &[Digest]) -> Option<Vec<u8>> {
             })
             .collect(),
     );
-    let payload = serde_json_canonicalizer::to_vec(&report.payload).ok()?;
-    report.payload_digest = Digest::from(
-        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
-            .chain_update([0_u8])
-            .chain_update(&payload)
-            .finalize()
-            .0,
-    );
+    rebound(report)
+}
+
+fn rebound(mut report: ReportEnvelope) -> Option<Vec<u8>> {
+    report.payload_digest = document_digest(PAYLOAD_SCHEMA, &report.payload)?;
     serde_json_canonicalizer::to_vec(&report).ok()
 }
 

@@ -4,6 +4,8 @@
 )]
 
 use std::fs;
+
+use amiss_wire::envelope::Payload as _;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
 
@@ -44,7 +46,7 @@ fn assert_valid(validator: &jsonschema::Validator, value: &serde_json::Value, la
 pub(crate) fn generated_report(
     bytes: &[u8],
 ) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
-    amiss_wire::report::validate_envelope(bytes)?;
+    <amiss_wire::report::model::ReportPayload>::parse(bytes)?;
     let value = serde_json::from_slice(bytes)?;
     REPORT_VALIDATOR
         .validate(&value)

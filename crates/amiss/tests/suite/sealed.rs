@@ -14,10 +14,11 @@ use std::process::{Command, Stdio};
 use amiss_fixtures::{SiteObservation, site_observation};
 use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::Profile;
+use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::{
     ArtifactId, BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity,
 };
-use amiss_wire::report::validate_envelope;
+use amiss_wire::report::model::ReportPayload;
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,
     SnapshotRequest, SuppliedControl, SuppliedSemanticEvidence, commit_candidate_identity_digest,
@@ -48,7 +49,7 @@ fn run(repo: Option<&str>, input: &[u8]) -> std::process::Output {
 }
 
 fn contract_report(bytes: &[u8]) -> serde_json::Value {
-    validate_envelope(bytes.strip_suffix(b"\n").unwrap()).unwrap();
+    <ReportPayload>::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(bytes).unwrap();
     let schema: serde_json::Value =
         serde_json::from_str(include_str!("../../../../spec/scanner-report.schema.json")).unwrap();

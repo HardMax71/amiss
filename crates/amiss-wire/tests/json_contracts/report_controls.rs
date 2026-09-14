@@ -1,17 +1,16 @@
-use amiss_wire::envelope::document_digest;
+use amiss_wire::envelope::{Payload as _, document_digest};
 use amiss_wire::{
     report::{
         PAYLOAD_SCHEMA, ReportDefect,
         model::{
             ActionProvenance, Controls, ControlsUnavailableReason, ExecutionConstraintProvenance,
-            ForgeActionKind, ForgeActionProvenance, LocalActionKind, ReportEnvelope,
+            ForgeActionKind, ForgeActionProvenance, LocalActionKind, ReportEnvelope, ReportPayload,
             SandboxAssurance, SandboxEnforcementSource, SandboxMechanism, SandboxVerification,
             SandboxVerificationSchema, SandboxVerifier, SemanticEvidenceProducer,
             SemanticEvidenceProvenance, TrustedTimeProvenance, TrustedTimeTrustSource,
             UnavailableControls, UnavailableStatus, VerifiedControlStatus,
             VerifiedExecutionConstraint, VerifiedTrustedTime,
         },
-        validate_envelope,
     },
     requests::RequestTrust,
     semantic::SemanticProducerKind,
@@ -151,7 +150,7 @@ fn complete_report_payloads_reject_unknown_members_with_matching_digests() {
         );
         let wire = String::from_utf8(serde_json_canonicalizer::to_vec(&report).unwrap()).unwrap();
         assert_eq!(
-            validate_envelope(wire.as_bytes()).unwrap().0,
+            <ReportPayload>::parse(wire.as_bytes()).unwrap().payload,
             report.payload
         );
         for (offset, _) in payload.match_indices('{') {
@@ -169,7 +168,7 @@ fn complete_report_payloads_reject_unknown_members_with_matching_digests() {
                 .to_string(),
             );
             assert_eq!(
-                validate_envelope(altered.as_bytes()).map(drop),
+                <ReportPayload>::parse(altered.as_bytes()).map(drop),
                 Err(ReportDefect::NotAReport),
                 "{invalid:.160} (object offset {offset})"
             );

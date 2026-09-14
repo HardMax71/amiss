@@ -1,26 +1,34 @@
 #![cfg(test)]
 
+use amiss_wire::report::PAYLOAD_SCHEMA;
 use amiss_wire::report::model::{
-    AvailableFeedback, AvailableFeedbackStatus, FeedbackAction, FeedbackItem, RepoPath,
-    RepoPathBytes,
+    AvailableFeedback, AvailableFeedbackStatus, Feedback, FeedbackAction, FeedbackItem, RepoPath,
+    RepoPathBytes, UnavailableFeedback, UnavailableStatus,
 };
 use amiss_wire::report::{Disposition, FindingKind};
 use sha2::Digest as _;
 
-use super::{FeedbackPayload, ReportFeedback, feedback_lines, with_feedback};
+use super::{feedback_lines, with_feedback};
 use crate::{ArtifactReference, ExternalTally};
 
 fn report(existing_count: u64, items: Vec<FeedbackItem>) -> Vec<u8> {
-    serde_json::to_vec(&ReportFeedback {
-        payload: FeedbackPayload {
-            feedback: AvailableFeedback {
-                existing_count,
-                items,
-                status: AvailableFeedbackStatus::Available,
-            },
-        },
-    })
+    amiss_fixtures::feedback_report(Feedback::Available(AvailableFeedback {
+        existing_count,
+        items,
+        status: AvailableFeedbackStatus::Available,
+    }))
     .unwrap()
+}
+
+fn bind(report: &mut serde_json::Value) -> Vec<u8> {
+    report["payload_digest"] = serde_json::json!(amiss_wire::model::Digest::from(
+        sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA)
+            .chain_update([0_u8])
+            .chain_update(serde_json_canonicalizer::to_vec(&report["payload"]).unwrap())
+            .finalize()
+            .0
+    ));
+    serde_json_canonicalizer::to_vec(report).unwrap()
 }
 
 fn item(action: FeedbackAction, target: Option<RepoPath>, places: u64) -> FeedbackItem {
@@ -93,7 +101,7 @@ fn a_hostile_target_cannot_carry_control_bytes_into_provider_markdown() {
 
     let mut forged: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
     forged["payload"]["feedback"]["items"][0]["action"] = serde_json::json!("fix\n\n- [x] done");
-    assert!(feedback_lines(Some(&serde_json::to_vec(&forged).unwrap()), false).is_empty());
+    assert!(feedback_lines(Some(&bind(&mut forged)), false).is_empty());
 }
 
 #[test]
@@ -135,9 +143,12 @@ fn unreadable_or_absent_feedback_adds_nothing() {
         feedback_lines(Some(br#"{"schema":"amiss/report"}"#), false),
         Vec::<String>::new()
     );
-    let unavailable = br#"{"payload":{"feedback":{"status":"unavailable"}}}"#;
+    let unavailable = amiss_fixtures::feedback_report(Feedback::Unavailable(UnavailableFeedback {
+        status: UnavailableStatus::Unavailable,
+    }))
+    .unwrap();
     assert_eq!(
-        feedback_lines(Some(unavailable), false),
+        feedback_lines(Some(&unavailable), false),
         Vec::<String>::new()
     );
 }
@@ -170,7 +181,7 @@ fn malformed_feedback_cannot_turn_into_plausible_counts_or_labels() {
         let mut changed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         *changed.pointer_mut(path).unwrap() = invalid;
         assert!(
-            feedback_lines(Some(&serde_json::to_vec(&changed).unwrap()), false).is_empty(),
+            feedback_lines(Some(&bind(&mut changed)), false).is_empty(),
             "{path}"
         );
     }
@@ -179,9 +190,9 @@ fn malformed_feedback_cannot_turn_into_plausible_counts_or_labels() {
         .as_object_mut()
         .unwrap()
         .remove("target");
-    assert_eq!(
-        feedback_lines(Some(&serde_json::to_vec(&missing).unwrap()), false),
-        feedback_lines(Some(&bytes), false)
+    assert!(
+        feedback_lines(Some(&bind(&mut missing)), false).is_empty(),
+        "an omitted null is not the report's own spelling"
     );
 }
 
@@ -239,7 +250,7 @@ fn malformed_byte_targets_refuse_the_summary_even_outside_the_display_window() {
 }
 
 #[test]
-fn ignored_extensions_preserve_feedback_but_trailing_input_is_rejected() {
+fn extensions_and_trailing_input_are_rejected() {
     let bytes = report(0, vec![item(FeedbackAction::Fix, None, 1)]);
     let text = std::str::from_utf8(&bytes).unwrap();
     let prefix = text.strip_suffix('}').unwrap();
@@ -247,10 +258,11 @@ fn ignored_extensions_preserve_feedback_but_trailing_input_is_rejected() {
         r#"{"duplicate":0,"duplicate":1}"#,
         "9007199254740992",
         "0.5",
+        "true",
     ] {
         let invalid = format!("{prefix},\"future\":{invalid}}}");
         assert!(
-            feedback_lines(Some(invalid.as_bytes()), false) == feedback_lines(Some(&bytes), false),
+            feedback_lines(Some(invalid.as_bytes()), false).is_empty(),
             "{invalid}"
         );
     }

@@ -1,4 +1,6 @@
-use amiss_wire::report::{PAYLOAD_SCHEMA, ReportDefect, validate_envelope};
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::report::model::ReportPayload;
+use amiss_wire::report::{PAYLOAD_SCHEMA, ReportDefect};
 use serde_json::{Value, json};
 use sha2::Digest as _;
 
@@ -11,15 +13,15 @@ fn extension_fields_are_rejected_before_digest_verification() {
         report.pointer_mut(path).unwrap()["future_field"] =
             json!({"\u{1f600}": [null, true, -7], "\u{e000}": "extra"});
         assert_eq!(
-            validate_envelope(&serde_json::to_vec(&report).unwrap()).map(|_| ()),
+            <ReportPayload>::parse(&serde_json::to_vec(&report).unwrap()).map(|_| ()),
             Err(ReportDefect::NotAReport),
             "{path}"
         );
         let canonical = bind(&mut report).unwrap();
-        let checked = validate_envelope(&canonical).map(drop);
+        let checked = <ReportPayload>::parse(&canonical).map(drop);
         assert_eq!(checked, Err(ReportDefect::NotAReport), "{path}");
         assert_eq!(
-            validate_envelope(&serde_json::to_vec_pretty(&report).unwrap()).map(drop),
+            <ReportPayload>::parse(&serde_json::to_vec_pretty(&report).unwrap()).map(drop),
             Err(ReportDefect::NotAReport),
             "{path}"
         );
@@ -34,13 +36,13 @@ fn the_outer_envelope_rejects_members_outside_the_payload_digest() {
     ))
     .unwrap();
     assert_eq!(schema["additionalProperties"], false);
-    validate_envelope(REPORT).unwrap();
+    <ReportPayload>::parse(REPORT).unwrap();
     for extra in [Value::Null, json!(false), json!(1), json!({"nested": []})] {
         let mut report = original.clone();
         report["future_field"] = extra;
         let bytes = serde_json::to_vec(&report).unwrap();
         assert_eq!(
-            validate_envelope(&bytes).map(|_| ()),
+            <ReportPayload>::parse(&bytes).map(|_| ()),
             Err(ReportDefect::NotAReport)
         );
     }
@@ -109,7 +111,7 @@ fn report_headers_and_verdicts_keep_their_closed_json_shapes() {
             bind(&mut report).unwrap()
         };
         assert_eq!(
-            validate_envelope(&bytes).map(|_| ()),
+            <ReportPayload>::parse(&bytes).map(|_| ()),
             Err(expected),
             "{path}"
         );
@@ -121,8 +123,8 @@ fn report_headers_and_verdicts_keep_their_closed_json_shapes() {
         report["schema"]
     ]);
     assert_eq!(
-        validate_envelope(&serde_json::to_vec(&array).unwrap()),
-        Err(ReportDefect::NotAReport)
+        <ReportPayload>::parse(&serde_json::to_vec(&array).unwrap()),
+        Err(ReportDefect::Noncanonical)
     );
 }
 
@@ -139,14 +141,14 @@ fn unowned_fields_keep_the_strict_number_duplicate_and_stream_rules() {
     ] {
         let changed = report.replacen(r#""payload":{"#, &format!(r#""payload":{{{inserted}"#), 1);
         assert_eq!(
-            validate_envelope(changed.as_bytes()).map(|_| ()),
+            <ReportPayload>::parse(changed.as_bytes()).map(|_| ()),
             Err(ReportDefect::NotAReport)
         );
     }
     for extra in ["null", "{}", "garbage"] {
         let changed = format!("{report}{extra}");
         assert_eq!(
-            validate_envelope(changed.as_bytes()).map(|_| ()),
+            <ReportPayload>::parse(changed.as_bytes()).map(|_| ()),
             Err(ReportDefect::NotAReport)
         );
     }
@@ -161,7 +163,7 @@ fn unknown_payload_fields_are_rejected_below_and_above_the_depth_ceiling() {
     }
     report["payload"]["future_field"] = nested.clone();
     assert_eq!(
-        validate_envelope(&bind(&mut report).unwrap()).map(drop),
+        <ReportPayload>::parse(&bind(&mut report).unwrap()).map(drop),
         Err(ReportDefect::NotAReport)
     );
     for _ in 256..513 {
@@ -169,7 +171,7 @@ fn unknown_payload_fields_are_rejected_below_and_above_the_depth_ceiling() {
     }
     report["payload"]["future_field"] = nested;
     assert_eq!(
-        validate_envelope(&bind(&mut report).unwrap()).map(|_| ()),
+        <ReportPayload>::parse(&bind(&mut report).unwrap()).map(|_| ()),
         Err(ReportDefect::NotAReport)
     );
 }

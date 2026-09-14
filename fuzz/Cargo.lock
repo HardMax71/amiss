@@ -33,7 +33,6 @@ dependencies = [
  "amiss-wire",
  "js_int",
  "libfuzzer-sys",
- "serde_json",
 ]
 
 [[package]]

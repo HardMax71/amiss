@@ -171,9 +171,9 @@ fn output_gate(
     built: Built,
 ) -> Result<Built, crate::Error> {
     let envelope_shell = model::ReportEnvelope {
-        schema: model::ReportEnvelopeSchema::Current,
-        payload: (),
+        payload: std::marker::PhantomData::<model::ReportPayload>,
         payload_digest: built.payload_digest,
+        schema: model::ReportEnvelopeSchema::Current,
     };
     let mut counter = countio::Counter::new(std::io::sink());
     serde_json::to_writer(&mut counter, &envelope_shell)

@@ -10,7 +10,7 @@ pub mod requests;
 pub use external::{external_facts, external_plan, external_report};
 pub use locale::{LocaleAuditFixture, locale_audit};
 pub use publication::{PublicationAuditFixture, publication_audit};
-pub use semantic::{SiteObservation, semantic_report, site_observation};
+pub use semantic::{SiteObservation, feedback_report, semantic_report, site_observation};
 
 use std::collections::BTreeMap;
 use std::io::Write as _;

@@ -6,13 +6,13 @@ use serde_with::{DeserializeFromStr, SerializeDisplay};
 use strum::{Display, EnumString};
 
 use crate::de::{Error, ErrorKind, fail};
-use crate::envelope::{Payload, Sealing};
+use crate::envelope::{Envelope, Payload, Sealing};
 use crate::model::Digest;
 use crate::model::ForgeDialect;
 use crate::report::model::{
-    Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath, Resolution,
+    Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath,
+    ReportPayload, Resolution,
 };
-use crate::report::validate_envelope;
 use crate::resolution::VersionScope;
 
 use super::{EXTERNAL_DOCUMENT_BYTES, PLAN_PAYLOAD_SCHEMA, PlanDefect};
@@ -112,7 +112,11 @@ pub fn plan(
     engine_version: &str,
     engine_digest: Digest,
 ) -> Result<Vec<u8>, PlanDefect> {
-    let (payload, recorded, _verdict) = validate_envelope(envelope)?;
+    let Envelope {
+        payload,
+        payload_digest: recorded,
+        ..
+    } = <ReportPayload>::parse(envelope)?;
     if !payload.result.complete {
         return Err(PlanDefect::Incomplete);
     }
