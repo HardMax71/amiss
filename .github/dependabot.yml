@@ -9,27 +9,6 @@ updates:
     groups:
       cargo:
         patterns: ["*"]
-  - package-ecosystem: cargo
-    directory: /fuzz
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
-    allow:
-      - dependency-name: libfuzzer-sys
-      - dependency-name: arbitrary
-    groups:
-      fuzz-cargo:
-        patterns: ["*"]
-  - package-ecosystem: cargo
-    directory: /controller
-    schedule:
-      interval: weekly
-    cooldown:
-      default-days: 7
-    groups:
-      controller-cargo:
-        patterns: ["*"]
   - package-ecosystem: github-actions
     directory: /
     exclude-paths:

@@ -11,12 +11,12 @@ grows lives in `corpus/<target>/` and stays untracked. The per-change smoke
 runs on stable and replays every seed plus a deterministic mutation sweep:
 
 ```
-cd fuzz && cargo test --locked --release
+cargo test -p amiss-fuzz --locked --release
 ```
 
-The coverage-guided long runs need nightly and cargo-fuzz. Pass both
-directories so the run starts from the seeds and accumulates into the
-untracked corpus:
+The coverage-guided long runs need nightly and cargo-fuzz, from this
+directory. Pass both corpus directories so the run starts from the seeds and
+accumulates into the untracked corpus:
 
 ```
 rustup toolchain install nightly --profile minimal

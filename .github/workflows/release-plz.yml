@@ -57,8 +57,6 @@ jobs:
           persist-credentials: false
       # Only main runs this job, so its cache saves as well as restores.
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          workspaces: fuzz
       - id: release-plz
         uses: release-plz/action@503fe65046e8810d4844f6b3aa12ab599a3549d7 # v0.5.134
         with:
@@ -66,10 +64,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-      # release-plz updates the workspace lockfile, but the scanner fuzz workspace
-      # is separate. Commit its path-package IDs to the release PR too, so locked
-      # CI verifies the repository instead of fixing an incomplete release
-      # checkout in place.
       - name: Refresh generated release files in the release PR
         shell: bash
         env:
@@ -87,9 +81,6 @@ jobs:
           # let only this runner's remote-tracking ref follow that rewrite.
           git fetch --no-tags origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
           git switch --force-create "$branch" "origin/$branch"
-          cargo update --workspace --manifest-path fuzz/Cargo.toml
-          cargo test --manifest-path fuzz/Cargo.toml --locked --release
-
           version="$(cargo metadata --locked --no-deps --format-version 1 \
             | jq -r '.packages[] | select(.name == "amiss") | .version')"
           matches="$(grep -Ec '^      uses: HardMax71/amiss@action/v[^[:space:]]+$' action.yml)"
@@ -105,21 +96,20 @@ jobs:
             spec/examples/scanner-report.last-released.json
 
           if [[ -n "$(git status --short --untracked-files=all -- . \
-            ':(exclude)fuzz/Cargo.lock' \
             ':(exclude)action.yml' \
             ':(exclude)spec/examples/scanner-report.last-released.json')" ]]; then
             echo "Refreshing release-generated files changed an unexpected path"
             git status --short
             exit 1
           fi
-          if git diff --quiet -- fuzz/Cargo.lock action.yml spec/examples/scanner-report.last-released.json; then
+          if git diff --quiet -- action.yml spec/examples/scanner-report.last-released.json; then
             echo "The release-generated files are already current"
             exit 0
           fi
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add fuzz/Cargo.lock action.yml spec/examples/scanner-report.last-released.json
+          git add action.yml spec/examples/scanner-report.last-released.json
           git commit -m "chore: refresh release-generated files"
 
           # Authenticate for this push only; do not persist the token in the

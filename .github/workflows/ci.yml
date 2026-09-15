@@ -361,26 +361,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: ./.github/actions/tools
-        with:
-          tools: cargo-deny cargo-shear
       - run: rustup toolchain uninstall stable
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
-          workspaces: |
-            .
-            fuzz
           save-if: ${{ github.ref == 'refs/heads/main' }}
-      - name: Verify the scanner fuzz lockfile
-        run: cargo test --locked --release
-        working-directory: fuzz
-      - name: Run the controller fuzz smoke
-        run: cargo test --locked --release
-        working-directory: controller/fuzz
-      - run: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
-      - run: cargo clippy --manifest-path controller/fuzz/Cargo.toml --all-targets --locked -- -D warnings
-      - run: cargo deny --manifest-path fuzz/Cargo.toml --config deny.toml check
-      - run: cargo shear --locked fuzz
+      - run: cargo test -p amiss-fuzz -p amiss-controller-fuzz --locked --release
 
   packaging:
     needs: changes
