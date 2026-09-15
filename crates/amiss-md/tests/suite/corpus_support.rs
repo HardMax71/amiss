@@ -618,3 +618,199 @@ pub(crate) fn directory_digest(
     )
     .to_string())
 }
+
+/// The `href` of every `<a>` and the `src` of every `<img>` one HTML
+/// document carries, in document order, with character references decoded.
+/// Footnote calls and back-references are anchors the renderer adds, not
+/// links the source wrote, so they are left out. A renderer escapes `>`
+/// inside an attribute value, so the first `>` after `<` ends the tag.
+#[must_use]
+pub(crate) fn html_destinations(html: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for chunk in html.split('<').skip(1) {
+        let Some((tag, _rest)) = chunk.split_once('>') else {
+            break;
+        };
+        let Some((attribute, anchor)) = destination_attribute(tag) else {
+            continue;
+        };
+        let machinery = anchor
+            && ["data-footnote-ref", "data-footnote-backref"]
+                .iter()
+                .any(|name| attribute_value(tag.as_bytes(), name.as_bytes()).is_some());
+        if machinery {
+            continue;
+        }
+        let Some(value) = attribute_value(tag.as_bytes(), attribute.as_bytes()) else {
+            continue;
+        };
+        let decoded = decode_references(value);
+        if anchor && (decoded.starts_with("#user-content-fn") || decoded.starts_with("#fn")) {
+            continue;
+        }
+        out.push(decoded);
+    }
+    out
+}
+
+/// The attribute carrying an `a` or `img` tag's destination, and whether the
+/// tag is an anchor.
+fn destination_attribute(tag: &str) -> Option<(&'static str, bool)> {
+    [("a", "href", true), ("img", "src", false)]
+        .into_iter()
+        .find_map(|(name, attribute, anchor)| {
+            let rest = tag.strip_prefix(name)?;
+            rest.chars()
+                .next()
+                .is_none_or(|next| next.is_ascii_whitespace() || next == '/')
+                .then_some((attribute, anchor))
+        })
+}
+
+/// The value of one attribute inside a tag, quoted or bare, matched only as a
+/// whole name outside every other attribute's value. A name written without a
+/// value is present with an empty one.
+fn attribute_value<'a>(tag: &'a [u8], name: &[u8]) -> Option<&'a str> {
+    let mut quote: Option<u8> = None;
+    let mut at = 0_usize;
+    while let Some(&byte) = tag.get(at) {
+        if let Some(mark) = quote {
+            if byte == mark {
+                quote = None;
+            }
+            at = at.saturating_add(1);
+            continue;
+        }
+        if matches!(byte, b'"' | b'\'') {
+            quote = Some(byte);
+            at = at.saturating_add(1);
+            continue;
+        }
+        let end = at.saturating_add(name.len());
+        let before = at
+            .checked_sub(1)
+            .and_then(|index| tag.get(index))
+            .is_some_and(u8::is_ascii_whitespace);
+        let after = tag
+            .get(end)
+            .is_none_or(|byte| byte.is_ascii_whitespace() || matches!(byte, b'=' | b'>' | b'/'));
+        if !(before && after && tag.get(at..end) == Some(name)) {
+            at = at.saturating_add(1);
+            continue;
+        }
+        let mut cursor = end;
+        while tag.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+            cursor = cursor.saturating_add(1);
+        }
+        if tag.get(cursor) != Some(&b'=') {
+            return Some("");
+        }
+        cursor = cursor.saturating_add(1);
+        while tag.get(cursor).is_some_and(u8::is_ascii_whitespace) {
+            cursor = cursor.saturating_add(1);
+        }
+        let mark = tag
+            .get(cursor)
+            .copied()
+            .filter(|byte| matches!(byte, b'"' | b'\''));
+        let start = if mark.is_some() {
+            cursor.saturating_add(1)
+        } else {
+            cursor
+        };
+        let mut stop = start;
+        while let Some(&byte) = tag.get(stop) {
+            let closes = mark.map_or_else(
+                || byte.is_ascii_whitespace() || byte == b'>',
+                |mark| byte == mark,
+            );
+            if closes {
+                break;
+            }
+            stop = stop.saturating_add(1);
+        }
+        return tag
+            .get(start..stop)
+            .and_then(|raw| std::str::from_utf8(raw).ok());
+    }
+    None
+}
+
+/// The predefined and numeric character references an attribute value can
+/// carry, decoded; anything else stays as written.
+fn decode_references(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(at) = rest.find('&') {
+        let (head, tail) = rest.split_at(at);
+        out.push_str(head);
+        if let Some((decoded, next)) = reference(tail) {
+            out.push(decoded);
+            rest = next;
+        } else {
+            out.push('&');
+            rest = tail.get(1..).unwrap_or_default();
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn reference(tail: &str) -> Option<(char, &str)> {
+    let end = tail.find(';')?;
+    let body = tail.get(1..end)?;
+    if body.is_empty()
+        || !body
+            .chars()
+            .all(|symbol| symbol.is_ascii_alphanumeric() || symbol == '#')
+    {
+        return None;
+    }
+    let next = tail.get(end.saturating_add(1)..)?;
+    let decoded = match body {
+        "amp" => '&',
+        "lt" => '<',
+        "gt" => '>',
+        "quot" => '"',
+        "apos" => '\'',
+        _ => {
+            let digits = body.strip_prefix('#')?;
+            let point = match digits.strip_prefix(['x', 'X']) {
+                Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                None => digits.parse().ok()?,
+            };
+            char::from_u32(point)?
+        }
+    };
+    Some((decoded, next))
+}
+
+/// A destination as bytes with every valid `%XX` escape decoded, which is the
+/// form two renderers that disagree about what to escape can be compared in.
+#[must_use]
+pub(crate) fn percent_decoded(value: &str) -> Vec<u8> {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut at = 0_usize;
+    while let Some(&byte) = bytes.get(at) {
+        let escaped = (byte == b'%')
+            .then(|| {
+                let digit = |offset: usize| {
+                    bytes
+                        .get(at.saturating_add(offset))
+                        .and_then(|raw| char::from(*raw).to_digit(16))
+                };
+                let value = digit(1)?.saturating_mul(16).saturating_add(digit(2)?);
+                u8::try_from(value).ok()
+            })
+            .flatten();
+        if let Some(value) = escaped {
+            out.push(value);
+            at = at.saturating_add(3);
+        } else {
+            out.push(byte);
+            at = at.saturating_add(1);
+        }
+    }
+    out
+}

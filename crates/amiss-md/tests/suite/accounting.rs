@@ -42,8 +42,8 @@ fn nodes_and_depth_follow_the_logical_tree() {
     assert_eq!(
         markdown(b"> - [a](b)\n"),
         Work {
-            nodes: 7,
-            nesting: 7
+            nodes: 6,
+            nesting: 6
         }
     );
 }

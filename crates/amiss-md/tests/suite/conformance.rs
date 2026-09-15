@@ -1,15 +1,23 @@
-use amiss_md::profile::parse_options;
+use amiss_md::analyze;
+use amiss_md::profile::mdx_options;
+use amiss_wire::controls::SourceConstruct;
 use amiss_wire::model::Adapter;
 use markdown::{CompileOptions, Options, ParseOptions, to_html_with_options};
+use pulldown_cmark::{Options as CmarkOptions, Parser, html};
 
 use crate::corpus_support::{self as corpus, Case, Expect};
 use crate::fixtures::{github_pairs, harvest};
 
-/// GFM 0.29 is `cmark-gfm`'s text, while the pinned parse additions are the
-/// `remark-gfm` bundle, so one example is expected to differ. Example 628
-/// autolinks `ftp://`; the pinned bundle recognizes only `www.`, `http://`,
-/// `https://`, and email, which is what github.com itself does.
-const GFM_DIVERGENCE: [&str; 1] = ["gfm-0.29/628"];
+/// GFM 0.29 is `cmark-gfm`'s text; autolink literals here come from linkify
+/// under the profile's protocol filter, so three examples differ. 625 keeps
+/// `(business))+ok` whole because the run does not end in a parenthesis,
+/// where linkify stops at the unbalanced one. 628 autolinks `ftp://`, which
+/// github.com does not and the profile does not. 631 links `a.b-c_d@a.b`,
+/// whose one-letter top-level domain linkify refuses.
+const GFM_DIVERGENCE: [&str; 3] = ["gfm-0.29/625", "gfm-0.29/628", "gfm-0.29/631"];
+
+/// The footnote and tilde suites publish no link the profile misses.
+const FOOTNOTE_DIVERGENCE: [&str; 0] = [];
 
 /// The MDX suites test one extension at a time, so a few of their expectations
 /// belong to a construct set that is not `mdx-source`, and their throwaway
@@ -49,7 +57,7 @@ const JAVASCRIPT_REASONS: [&str; 7] = [
     "only import/exports are supported",
 ];
 
-fn render(source: &str, parse: ParseOptions, tagfilter: bool) -> Option<String> {
+fn render_mdx(source: &str, parse: ParseOptions) -> Option<String> {
     to_html_with_options(
         source,
         &Options {
@@ -57,12 +65,28 @@ fn render(source: &str, parse: ParseOptions, tagfilter: bool) -> Option<String> 
             compile: CompileOptions {
                 allow_dangerous_html: true,
                 allow_dangerous_protocol: true,
-                gfm_tagfilter: tagfilter,
                 ..CompileOptions::default()
             },
         },
     )
     .ok()
+}
+
+/// The `CommonMark` half renders through the Markdown profile's own parser with
+/// every extension off, which is the configuration the specification text is
+/// written for.
+fn render_commonmark(source: &str) -> String {
+    let mut out = String::new();
+    html::push_html(&mut out, Parser::new_ext(source, CmarkOptions::empty()));
+    out
+}
+
+/// The two serialization choices the specification's own test runner does not
+/// distinguish and pulldown's spec suite normalizes the same way: a double
+/// quote in text may be written as itself or as `&quot;`, and a line break
+/// between two tags is not content.
+fn standardized(html: &str) -> String {
+    html.replace("&quot;", "\"").replace(">\n<", "><")
 }
 
 fn family(name: &str) -> Vec<Case> {
@@ -73,8 +97,73 @@ fn family(name: &str) -> Vec<Case> {
         .collect()
 }
 
+/// The link surface one upstream rendering publishes: every anchor `href` and
+/// image `src`, in order, as decoded bytes.
+fn published(html: &str) -> Vec<Vec<u8>> {
+    corpus::html_destinations(html)
+        .iter()
+        .map(|value| corpus::percent_decoded(value))
+        .collect()
+}
+
+fn is_image(construct: SourceConstruct) -> bool {
+    matches!(
+        construct,
+        SourceConstruct::InlineImage
+            | SourceConstruct::FullReferenceImage
+            | SourceConstruct::CollapsedReferenceImage
+            | SourceConstruct::ShortcutReferenceImage
+            | SourceConstruct::HtmlImage
+    )
+}
+
+/// The link surface the Markdown profile extracts from one source: every
+/// occurrence's semantic destination in document order, as decoded bytes. A
+/// definition nobody consumes renders nothing, so it is not on the surface.
+/// `github` applies the normalization the footnote suite applies to
+/// github.com's own output: the source of an image that points at nothing but
+/// a search or a hash is erased.
+fn extracted(source: &str, github: bool) -> Option<Vec<Vec<u8>>> {
+    let analysis = analyze(Adapter::Markdown, source.as_bytes(), u64::MAX).ok()?;
+    let extraction = analysis.extraction?;
+    Some(
+        extraction
+            .occurrences
+            .iter()
+            .filter(|entry| entry.construct != SourceConstruct::LinkReferenceDefinition)
+            .map(|entry| {
+                let destination = entry.semantic_destination.as_str();
+                if github && is_image(entry.construct) && destination.starts_with(['?', '#']) {
+                    return Vec::new();
+                }
+                corpus::percent_decoded(destination)
+            })
+            .collect(),
+    )
+}
+
+fn readable(surface: &[Vec<u8>]) -> Vec<String> {
+    surface
+        .iter()
+        .map(|bytes| String::from_utf8_lossy(bytes).into_owned())
+        .collect()
+}
+
+/// Compares one case's two surfaces and describes a mismatch for the report.
+fn mismatch(case_id: &str, want: &[Vec<u8>], got: Option<&[Vec<u8>]>) -> Option<String> {
+    if got == Some(want) {
+        return None;
+    }
+    Some(format!(
+        "{case_id}: upstream publishes {:?}, the profile extracts {:?}",
+        readable(want),
+        got.map(readable)
+    ))
+}
+
 /// The core half of the grammar pin: with the extensions off, the parser
-/// reproduces every executable `CommonMark` 0.31.2 example.
+/// reproduces every executable `CommonMark` 0.31.2 example, up to the two
+/// serialization choices `standardized` names.
 #[test]
 fn reproduces_commonmark_0_31_2() {
     let cases = family(corpus::COMMONMARK_FAMILY);
@@ -89,29 +178,34 @@ fn reproduces_commonmark_0_31_2() {
         let Expect::Html(want) = &case.expect else {
             panic!("every CommonMark example publishes HTML")
         };
-        if render(&case.source, ParseOptions::default(), false).as_ref() != Some(want) {
-            broken.push(case.case_id());
+        let got = render_commonmark(&case.source);
+        if standardized(&got) != standardized(want) {
+            broken.push(format!("{}: want {want:?}, got {got:?}", case.case_id()));
         }
     }
     assert!(
         broken.is_empty(),
-        "{} of {} CommonMark examples differ: {broken:?}",
+        "{} of {} CommonMark examples differ: {broken:#?}",
         broken.len(),
         cases.len()
     );
 }
 
 /// The extension half: every example GFM 0.29 marks with an extension and
-/// executes, under the pinned `commonmark-gfm` options. That document's
-/// untagged examples are `CommonMark` 0.29, which 0.31.2 supersedes, so they
-/// are corpus inputs rather than goldens here.
+/// executes. Renderers disagree on the markup around a table or a footnote,
+/// so the comparison is the link surface: the destinations the specification's
+/// HTML publishes must be the destinations the Markdown profile extracts, in
+/// order. That document's untagged examples are `CommonMark` 0.29, which
+/// 0.31.2 supersedes, so they are corpus inputs rather than goldens here.
 #[test]
 fn reproduces_gfm_0_29_extensions() {
     let mut checked = 0_usize;
     let mut skipped = 0_usize;
+    let mut surface = 0_usize;
     let mut broken = Vec::new();
+    let mut details = Vec::new();
     for case in &family(corpus::GFM_FAMILY) {
-        let (Some(tag), Expect::Html(want)) = (case.tag.as_deref(), &case.expect) else {
+        let (Some(_tag), Expect::Html(want)) = (case.tag.as_deref(), &case.expect) else {
             continue;
         };
         if !case.executable() {
@@ -119,18 +213,20 @@ fn reproduces_gfm_0_29_extensions() {
             continue;
         }
         checked = checked.saturating_add(1);
-        let Some((options, _meter)) = parse_options(Adapter::Markdown, u64::MAX) else {
-            panic!("the markdown adapter must pin parse options")
-        };
-        if render(&case.source, options, tag == "tagfilter").as_ref() != Some(want) {
+        let want = published(want);
+        surface = surface.saturating_add(want.len());
+        let got = extracted(&case.source, false);
+        if let Some(detail) = mismatch(&case.case_id(), &want, got.as_deref()) {
             broken.push(case.case_id());
+            details.push(detail);
         }
     }
     assert_eq!(checked, 22, "GFM 0.29 executes 22 extension examples");
     assert_eq!(skipped, 2, "GFM 0.29 disables its 2 task-list examples");
+    assert_eq!(surface, 19, "destinations the extension examples publish");
     assert_eq!(
         broken, GFM_DIVERGENCE,
-        "GFM extension examples diverge from the pinned bundle beyond the recorded case"
+        "GFM extension examples diverge from the pinned bundle beyond the recorded case: {details:#?}"
     );
 }
 
@@ -171,10 +267,8 @@ fn reproduces_mdx_syntax_and_errors() {
     let mut agreed = 0_usize;
 
     for case in &cases {
-        let Some((options, _meter)) = parse_options(Adapter::Mdx, u64::MAX) else {
-            panic!("the mdx adapter must pin parse options")
-        };
-        let ours = render(&case.source, options, false);
+        let (options, _meter) = mdx_options(u64::MAX);
+        let ours = render_mdx(&case.source, options);
         match (&case.expect, ours) {
             (Expect::Rejected(reason), Some(_accepted)) => {
                 assert!(
@@ -217,101 +311,6 @@ fn reproduces_mdx_syntax_and_errors() {
     assert_eq!(agreed, 225, "fixtures that agree exactly");
 }
 
-/// A back-reference's `aria-label` is a compile option with no parse meaning.
-/// micromark 2.1.0 writes one per reference; `markdown-rs` has a single static
-/// string and cannot express that. The scanner renders no HTML, so the label is
-/// erased on both sides rather than compared.
-fn erase_labels(html: &str) -> String {
-    let mut out = String::new();
-    let mut rest = html;
-    while let Some(at) = rest.find("aria-label=\"") {
-        let (before, after) = rest.split_at(at);
-        out.push_str(before);
-        out.push_str("aria-label=\"\"");
-        let inside = after.get("aria-label=\"".len()..).unwrap_or_default();
-        let end = inside
-            .find('"')
-            .map_or(inside.len(), |at| at.saturating_add(1));
-        rest = inside.get(end..).unwrap_or_default();
-    }
-    out.push_str(rest);
-    out
-}
-
-/// github.com drops the source of an image that points at nothing but a search
-/// or a hash, so the suite drops it on the rendered side too.
-fn erase_search_sources(html: &str) -> String {
-    let bytes = html.as_bytes();
-    let mut out: Vec<u8> = Vec::new();
-    let mut at = 0_usize;
-    while let Some(&byte) = bytes.get(at) {
-        let opens = bytes
-            .get(at..)
-            .is_some_and(|rest| rest.starts_with(b"src=\""));
-        let empty = matches!(bytes.get(at.saturating_add(5)), Some(&(b'?' | b'#')));
-        let quote = bytes
-            .get(at.saturating_add(5)..)
-            .and_then(|rest| rest.iter().position(|byte| *byte == b'"'));
-        if let Some(end) = quote.filter(|_at| opens && empty) {
-            out.extend_from_slice(b"src=\"\"");
-            at = at.saturating_add(6).saturating_add(end);
-            continue;
-        }
-        out.push(byte);
-        at = at.saturating_add(1);
-    }
-    String::from_utf8(out).unwrap_or_default()
-}
-
-/// The compensations the suite itself applies for bugs in github.com's renderer,
-/// so that what remains is a difference in this implementation rather than in
-/// GitHub. Each is keyed to the document it belongs to, exactly as upstream
-/// keys them.
-fn compensate(name: &str, expected: &str) -> String {
-    let mut html = expected.to_owned();
-    if name == "calls" {
-        html = html.replace("%5e", "%5E");
-    }
-    if name.starts_with("constructs-in-footnotes") {
-        html = html.replacen(
-            "<pre lang=\"js\"><code>",
-            "<pre><code class=\"language-js\">",
-            1,
-        );
-    }
-    if name == "constructs-in-identifiers" {
-        html = html.replacen(
-            "<a id=\"user-content-fnref-https://example.com\"",
-            "<a href=\"#user-content-fn-https://example.com\" id=\"user-content-fnref-https://example.com\"",
-            1,
-        );
-        html = html.replacen(
-            "<a id=\"user-content-fnref-://example.com\"",
-            "<a href=\"#user-content-fn-://example.com\" id=\"user-content-fnref-://example.com\"",
-            1,
-        );
-        html = html.replacen(
-            "<li id=\"user-content-fn-https://example.com\">\n<p>a \u{21a9}</p>",
-            "<li id=\"user-content-fn-https://example.com\">\n<p>a <a href=\"#user-content-fnref-https://example.com\" data-footnote-backref=\"\" aria-label=\"\" class=\"data-footnote-backref\">\u{21a9}</a></p>",
-            1,
-        );
-        html = html.replacen(
-            "<li id=\"user-content-fn-://example.com\">\n<p>a \u{21a9}</p>",
-            "<li id=\"user-content-fn-://example.com\">\n<p>a <a href=\"#user-content-fnref-://example.com\" data-footnote-backref=\"\" aria-label=\"\" class=\"data-footnote-backref\">\u{21a9}</a></p>",
-            1,
-        );
-        html = html.replace("![image](#)", "<img src=\"\" alt=\"image\" />");
-    }
-    if name == "footnotes-in-constructs" {
-        html = html.replacen(
-            "<a href=\"#\">link<sup></sup></a><a href=\"#user-content-fn-5\" id=\"user-content-fnref-5\" data-footnote-ref=\"\" aria-describedby=\"footnote-label\">4</a>",
-            "<a href=\"#\">link<sup><a href=\"#user-content-fn-5\" id=\"user-content-fnref-5\" data-footnote-ref=\"\" aria-describedby=\"footnote-label\">4</a></sup></a>",
-            1,
-        );
-    }
-    html
-}
-
 /// A suite that configures the extension away from what this profile pins is
 /// testing another profile, so its HTML is not a golden for this one. Those
 /// documents stay in the corpus as inputs; only the comparison is skipped.
@@ -326,23 +325,19 @@ fn other_profile(config: &str) -> bool {
     .any(|marker| config.contains(marker))
 }
 
-fn rendered(source: &str) -> Option<String> {
-    let (options, _meter) = parse_options(Adapter::Markdown, u64::MAX)?;
-    let mut html = render(source, options, false)?;
-    if !html.is_empty() && !html.ends_with('\n') {
-        html.push('\n');
-    }
-    Some(html)
-}
-
 /// Footnotes and single-tilde strikethrough are the pinned bundle's additions
-/// beyond formal GFM 0.29, so they carry their own suites.
+/// beyond formal GFM 0.29, so they carry their own suites. The comparison is
+/// the link surface, with the footnote machinery a renderer adds left out, and
+/// under the pinned configuration that surface is empty: the value of the
+/// suites here is that no footnote call or definition is read as a link.
 #[test]
 fn reproduces_the_footnote_and_tilde_suites() {
     let (all, _skipped) = harvest();
     let mut checked = 0_usize;
     let mut elsewhere = 0_usize;
+    let mut surface = 0_usize;
     let mut broken = Vec::new();
+    let mut details = Vec::new();
     for case in &all {
         if !matches!(
             case.family,
@@ -358,22 +353,33 @@ fn reproduces_the_footnote_and_tilde_suites() {
             continue;
         }
         checked = checked.saturating_add(1);
-        let want = erase_labels(want);
-        let want = if want.is_empty() || want.ends_with('\n') {
-            want
-        } else {
-            format!("{want}\n")
-        };
-        if rendered(&case.source).map(|html| erase_labels(&html)) != Some(want) {
+        let want = published(want);
+        surface = surface.saturating_add(want.len());
+        let got = extracted(&case.source, false);
+        if let Some(detail) = mismatch(&case.case_id(), &want, got.as_deref()) {
             broken.push(case.case_id());
+            details.push(detail);
         }
     }
     assert_eq!(checked, 22, "fixtures under the pinned configuration");
     assert_eq!(elsewhere, 7, "fixtures that configure another profile");
-    assert!(
-        broken.is_empty(),
-        "footnote or tilde fixtures differ: {broken:?}"
+    assert_eq!(surface, 0, "nothing on these fixtures is a link");
+    assert_eq!(
+        broken, FOOTNOTE_DIVERGENCE,
+        "footnote or tilde fixtures publish links the profile does not extract: {details:#?}"
     );
+}
+
+/// The one compensation the footnote suite applies to github.com's output that
+/// still touches the link surface: github.com leaves `![image](#)` as text
+/// inside a footnote-looking bracket, and the suite restores the image, so the
+/// restored image is what the source is measured against. Keyed to the
+/// document exactly as upstream keys it.
+fn compensate(name: &str, expected: &str) -> String {
+    if name == "constructs-in-identifiers" {
+        return expected.replace("![image](#)", "<img src=\"\" alt=\"image\" />");
+    }
+    expected.to_owned()
 }
 
 /// The footnote suite also renders 29 documents against the HTML github.com
@@ -382,10 +388,11 @@ fn reproduces_the_footnote_and_tilde_suites() {
 /// definition, and nesting inside every container.
 ///
 /// One of them differs, and it is this implementation that is wrong.
-/// `markdown-rs` 1.0.0 does not form a link whose label holds a footnote call,
-/// so `[link[^1]](#)` stays literal where the pinned grammar makes it a link.
-/// The scanner would miss that reference. It is recorded here, and it is worth
-/// reporting upstream.
+/// pulldown-cmark 0.13.4 forms neither a link nor an image whose label holds
+/// a footnote call once a footnote definition exists, so `[link[^5]](#)` and
+/// `![image[^4]](#)` stay literal where github.com makes them a link and an
+/// image. The scanner would miss both references. It is recorded here, and it
+/// is worth reporting upstream.
 const GITHUB_DIVERGENCE: [&str; 1] = ["footnotes-in-constructs"];
 
 #[test]
@@ -393,18 +400,21 @@ fn reproduces_githubs_own_footnote_rendering() {
     let pairs = github_pairs();
     assert_eq!(pairs.len(), 29, "the pinned footnote fixture directory");
 
+    let mut surface = 0_usize;
     let mut broken = Vec::new();
+    let mut details = Vec::new();
     for (name, source, html) in &pairs {
-        let want = erase_labels(&compensate(name, html));
-        let ours = rendered(source)
-            .map(|rendered| erase_labels(&erase_search_sources(&rendered)))
-            .unwrap_or_default();
-        if ours != want {
+        let want = published(&compensate(name, html));
+        surface = surface.saturating_add(want.len());
+        let got = extracted(source, true);
+        if let Some(detail) = mismatch(name, &want, got.as_deref()) {
             broken.push(name.clone());
+            details.push(detail);
         }
     }
+    assert_eq!(surface, 20, "destinations github.com publishes");
     assert_eq!(
         broken, GITHUB_DIVERGENCE,
-        "github footnote rendering differs beyond the recorded case"
+        "github footnote rendering differs beyond the recorded case: {details:#?}"
     );
 }

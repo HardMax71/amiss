@@ -38,14 +38,18 @@ only under github and gitea, `#file.rs-10` only under bitbucket-cloud when the b
 `#10-20` only under bitbucket-data-center.
 
 The parser pin records its known differences instead of hiding them. Measured against the
-pinned grammar bundle and against GitHub's own rendering, exactly one difference
-affects link extraction: `[link[^1]](#)`, a footnote call inside a link label, which the
-pinned Rust parser does not turn into a link. A reference written that way goes unseen.
-That is under-reporting, the safer direction to fail, and it is written down in the corpus
-notes rather than waiting to be discovered. Two upstream test documents make the parser
-panic; the engine catches both as `PARSER_PANIC`, and both live in the corpus as regression
-tests. The [GFM](https://github.github.com/gfm/) spec text says `ftp://` should autolink where the pinned bundle and
-GitHub's renderer disagree; the bundle wins, and the corpus records why.
+CommonMark and GFM suites and against GitHub's own rendering, four differences touch link
+extraction, all under the Markdown profile. A footnote call inside a link or image label
+(`[link[^1]](#)`, `![image[^1]](#)`) is a link and an image on GitHub, and pulldown-cmark
+builds neither once the footnote is defined, so a reference written that way goes unseen. A
+`www.` literal with an unbalanced closing parenthesis in the middle of its path stops at that
+parenthesis and publishes the shorter destination. An email address under a single-letter
+top-level domain is not recognized at all. And the [GFM](https://github.github.com/gfm/)
+spec text says `ftp://` should autolink where GitHub's renderer does not; GitHub wins, as
+before. Three of the four are under-reporting, the safer direction to fail, and every one is
+written down in the corpus notes with its example number rather than waiting to be
+discovered. Two upstream MDX test documents make markdown-rs panic; the engine catches both
+as `PARSER_PANIC`, and both live in the corpus as regression tests.
 
 One more, for flavor: the object store re-hashes everything with SHA-1 collision detection,
 and the suite proves that the public SHAttered and Shambles collision files cannot even be

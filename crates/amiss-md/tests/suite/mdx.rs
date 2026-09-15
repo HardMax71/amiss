@@ -1,4 +1,4 @@
-use amiss_md::profile::parse_options;
+use amiss_md::profile::mdx_options;
 use amiss_md::{AnalyzeError, Fault, Work, analyze, charge};
 use amiss_wire::model::Adapter;
 use markdown::mdast::Node;
@@ -6,7 +6,7 @@ use markdown::to_mdast;
 
 #[expect(clippy::expect_used, reason = "test fixture helper")]
 fn tree(source: &str) -> Node {
-    let (options, _meter) = parse_options(Adapter::Mdx, u64::MAX).expect("mdx parse options");
+    let (options, _meter) = mdx_options(u64::MAX);
     to_mdast(source, &options).expect("mdx parse")
 }
 

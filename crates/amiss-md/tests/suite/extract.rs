@@ -54,7 +54,7 @@ fn an_inline_link_carries_every_golden() {
     assert_eq!(entry.semantic_destination, "x y");
     assert_eq!(entry.span, (6, 20));
     assert_eq!(source.get(6..20), Some("[a](<x y> \"t\")"));
-    assert_eq!(entry.node_path, vec![0, 0, 0, 1]);
+    assert_eq!(entry.node_path, vec![0, 0, 1]);
     assert_eq!(entry.block_kind, BlockKind::ListItem);
     assert_eq!(entry.block_span, (0, 20));
     assert_eq!(source.get(0..20), Some("- see [a](<x y> \"t\")"));
@@ -95,13 +95,13 @@ fn definition_precedence_is_first_in_document_order() {
 #[test]
 fn autolink_forms_share_a_construct_and_differ_in_tokens() {
     let source =
-        "Go to <http://a.b>, <user@example.com>, www.example.com/x, and https://c.d/e?f=(g).\n";
+        "Go to <http://a.b>, <user@example.com>, www.example.com/x, and https://c.dev/e?f=(g).\n";
     let got = triples(&extraction(Adapter::Markdown, source));
     let expected: Vec<(SourceConstruct, String, String)> = [
         ("http://a.b", "http://a.b"),
         ("user@example.com", "mailto:user@example.com"),
         ("www.example.com/x", "http://www.example.com/x"),
-        ("https://c.d/e?f=(g)", "https://c.d/e?f=(g)"),
+        ("https://c.dev/e?f=(g)", "https://c.dev/e?f=(g)"),
     ]
     .iter()
     .map(|(raw, semantic)| {
@@ -577,6 +577,23 @@ fn reserved_duplicates_follow_first_winner_precedence() {
     let reserved_first = extraction(Adapter::Markdown, "[a][amiss:x]\n\n[amiss:x]: ./wins.md\n");
     assert_eq!(reserved_first.occurrences.len(), 0, "suppressed");
     assert_eq!(reserved_first.governed.len(), 1);
+}
+
+/// `CommonMark` shadows every copy of a label after the first, and pulldown
+/// drops the copies without an event; the Markdown profile parses again for
+/// them, so a reserved carrier written three times is three governed
+/// definitions under both grammars, in document order.
+#[test]
+fn every_copy_of_a_reserved_definition_is_governed() {
+    let source = "[amiss:claim]: ./a.md \"one\"\n\n[amiss:claim]: ./b.md\n\n> [amiss:claim]: ./c.md \"three\"\n";
+    for adapter in [Adapter::Markdown, Adapter::Mdx] {
+        let urls: Vec<String> = extraction(adapter, source)
+            .governed
+            .into_iter()
+            .map(|definition| definition.url)
+            .collect();
+        assert_eq!(urls, ["./a.md", "./b.md", "./c.md"], "{adapter}");
+    }
 }
 
 /// Escapes hide the byte that would otherwise end the token: a `\>` inside an

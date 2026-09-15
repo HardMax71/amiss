@@ -1,10 +1,22 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
-use amiss_wire::model::Adapter;
 use markdown::{Constructs, MdxExpressionKind, MdxSignal, ParseOptions};
+use pulldown_cmark::Options;
 
 use crate::js::{Completeness, completeness};
+
+/// The `commonmark-gfm` grammar pin: `CommonMark` plus the GFM extensions
+/// pulldown-cmark ships, which are tables, footnotes, strikethrough, task
+/// lists, and alerts. Autolink literals are recognized by the tree builder.
+#[must_use]
+pub const fn markdown_options() -> Options {
+    Options::ENABLE_TABLES
+        .union(Options::ENABLE_FOOTNOTES)
+        .union(Options::ENABLE_STRIKETHROUGH)
+        .union(Options::ENABLE_TASKLISTS)
+        .union(Options::ENABLE_GFM)
+}
 
 fn gfm() -> Constructs {
     Constructs {
@@ -89,52 +101,36 @@ fn code_ends_here(source: &str) -> MdxSignal {
     }
 }
 
-/// The grammar pin. `commonmark-gfm` is `CommonMark` plus exactly the
-/// `remark-gfm` bundle with single-tilde strikethrough; `mdx-source` is that
-/// profile plus MDX ESM, JSX, and expressions, minus the constructs MDX removes
-/// (indented code, raw HTML, and plain autolinks). `plain-zero-lexer` runs
-/// no grammar at all. The returned meter charges every embedded-code ask
-/// against `embedded_code_allowance`; only the MDX profile ever spends it.
+/// The `mdx-source` grammar pin: `CommonMark` plus exactly the `remark-gfm`
+/// bundle with single-tilde strikethrough, plus MDX ESM, JSX, and expressions,
+/// minus the constructs MDX removes (indented code, raw HTML, and plain
+/// autolinks). The returned meter charges every embedded-code ask against
+/// `embedded_code_allowance`.
 #[must_use]
-pub fn parse_options(
-    adapter: Adapter,
-    embedded_code_allowance: u64,
-) -> Option<(ParseOptions, EmbeddedCodeMeter)> {
+pub fn mdx_options(embedded_code_allowance: u64) -> (ParseOptions, EmbeddedCodeMeter) {
     let meter = EmbeddedCodeMeter::new(embedded_code_allowance);
-    match adapter {
-        Adapter::Markdown => Some((
-            ParseOptions {
-                constructs: gfm(),
-                ..ParseOptions::default()
+    let expression = meter.clone();
+    let esm = meter.clone();
+    (
+        ParseOptions {
+            constructs: Constructs {
+                autolink: false,
+                code_indented: false,
+                html_flow: false,
+                html_text: false,
+                mdx_esm: true,
+                mdx_expression_flow: true,
+                mdx_expression_text: true,
+                mdx_jsx_flow: true,
+                mdx_jsx_text: true,
+                ..gfm()
             },
-            meter,
-        )),
-        Adapter::Mdx => {
-            let expression = meter.clone();
-            let esm = meter.clone();
-            Some((
-                ParseOptions {
-                    constructs: Constructs {
-                        autolink: false,
-                        code_indented: false,
-                        html_flow: false,
-                        html_text: false,
-                        mdx_esm: true,
-                        mdx_expression_flow: true,
-                        mdx_expression_text: true,
-                        mdx_jsx_flow: true,
-                        mdx_jsx_text: true,
-                        ..gfm()
-                    },
-                    mdx_expression_parse: Some(Box::new(
-                        move |source, _kind: &MdxExpressionKind| expression.ask(source),
-                    )),
-                    mdx_esm_parse: Some(Box::new(move |source| esm.ask(source))),
-                    ..ParseOptions::default()
-                },
-                meter,
-            ))
-        }
-        Adapter::AsciiDoc | Adapter::Rst | Adapter::PlainAdvisory => None,
-    }
+            mdx_expression_parse: Some(Box::new(move |source, _kind: &MdxExpressionKind| {
+                expression.ask(source)
+            })),
+            mdx_esm_parse: Some(Box::new(move |source| esm.ask(source))),
+            ..ParseOptions::default()
+        },
+        meter,
+    )
 }
