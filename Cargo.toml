@@ -140,6 +140,8 @@ allow_attributes_without_reason = "deny"
 [profile.release]
 overflow-checks = true
 panic = "unwind"
+# The binary hashes itself on every run for the engine identity; symbols are a third of it.
+strip = "symbols"
 
 [profile.mutants]
 inherits = "test"

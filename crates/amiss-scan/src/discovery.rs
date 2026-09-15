@@ -8,7 +8,7 @@ use amiss_wire::model::{Adapter, Oid, RepoPath};
 
 use crate::document::{Classification, classify, excluded_by_built_in, native_adapter};
 use crate::policy::Includes;
-use crate::resources::{ScanIdentity, ScanResources, crossing};
+use crate::resources::{ScanIdentity, ScanMemo, ScanResources, crossing};
 use crate::scan::{Scanned, replay_scan_charges, scan_bytes};
 use crate::{Error, GitDefect, lfs};
 
@@ -523,55 +523,71 @@ fn side_status(
     }
 
     scan.admit_document()?;
-    let cap = ValueCap {
-        resource: ResourceName::DocumentBlobBytes,
-        limit: scan.limits().document_blob_bytes,
-    };
-    let object = match repo.read_expected_capped(git, &entry.oid, ObjectKind::Blob, cap) {
-        Ok(object) => object,
-        Err(defect) => {
-            let defect = Error::from(defect);
-            if defect.is_document_scoped() {
-                return Ok((DocumentStatus::Failed(defect), 0, None));
-            }
-            return Err(defect);
-        }
-    };
-    let byte_count = u64::try_from(object.body.len()).unwrap_or(u64::MAX);
-    scan.charge_document_bytes(byte_count)?;
-    let raw = amiss_wire::model::Digest::from(
-        sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
-            .chain_update([0_u8])
-            .chain_update(&object.body)
-            .finalize()
-            .0,
-    );
-    if lfs::is_pointer(&object.body) {
-        return Ok((
-            DocumentStatus::Unsupported(UnsupportedKind::LfsPointer),
-            byte_count,
-            Some(raw),
-        ));
-    }
-    let Some(adapter) = adapter else {
-        return Ok((
-            DocumentStatus::Unsupported(UnsupportedKind::Format),
-            byte_count,
-            Some(raw),
-        ));
-    };
-    let identity = ScanIdentity {
+    let identity = adapter.map(|adapter| ScanIdentity {
         oid: entry.oid.clone(),
         adapter,
         embedded_code_allowance: (adapter == Adapter::Mdx).then(|| scan.embedded_code_allowance()),
-    };
-    let scanned = match scan.scans.get(&identity).cloned() {
-        Some(scanned) => replay_scan_charges(scan, &scanned).map(|()| scanned),
-        None => scan_bytes(scan, adapter, &object.body)
+    });
+    let memo = identity
+        .as_ref()
+        .and_then(|identity| scan.scans.get(identity))
+        .cloned();
+    let (scanned, byte_count, raw) = if let Some(memo) = memo {
+        // A blob the other side scanned is not read again: its bytes are its oid's.
+        scan.charge_document_bytes(memo.byte_count)?;
+        let replayed = replay_scan_charges(scan, &memo.scanned).map(|()| memo.scanned);
+        (replayed, memo.byte_count, memo.raw_digest)
+    } else {
+        let cap = ValueCap {
+            resource: ResourceName::DocumentBlobBytes,
+            limit: scan.limits().document_blob_bytes,
+        };
+        let object = match repo.read_expected_capped(git, &entry.oid, ObjectKind::Blob, cap) {
+            Ok(object) => object,
+            Err(defect) => {
+                let defect = Error::from(defect);
+                if defect.is_document_scoped() {
+                    return Ok((DocumentStatus::Failed(defect), 0, None));
+                }
+                return Err(defect);
+            }
+        };
+        let byte_count = u64::try_from(object.body.len()).unwrap_or(u64::MAX);
+        scan.charge_document_bytes(byte_count)?;
+        let raw = amiss_wire::model::Digest::from(
+            sha2::Sha256::new_with_prefix(crate::resolve::RAW_EVIDENCE_DOMAIN)
+                .chain_update([0_u8])
+                .chain_update(&object.body)
+                .finalize()
+                .0,
+        );
+        if lfs::is_pointer(&object.body) {
+            return Ok((
+                DocumentStatus::Unsupported(UnsupportedKind::LfsPointer),
+                byte_count,
+                Some(raw),
+            ));
+        }
+        let Some(identity) = identity else {
+            return Ok((
+                DocumentStatus::Unsupported(UnsupportedKind::Format),
+                byte_count,
+                Some(raw),
+            ));
+        };
+        let scanned = scan_bytes(scan, identity.adapter, &object.body)
             .map(Arc::new)
             .inspect(|scanned| {
-                scan.scans.insert(identity, Arc::clone(scanned));
-            }),
+                scan.scans.insert(
+                    identity,
+                    ScanMemo {
+                        scanned: Arc::clone(scanned),
+                        byte_count,
+                        raw_digest: raw,
+                    },
+                );
+            });
+        (scanned, byte_count, raw)
     };
     match scanned {
         Ok(scanned) => Ok((DocumentStatus::Scanned(scanned), byte_count, Some(raw))),

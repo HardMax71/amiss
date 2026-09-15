@@ -100,6 +100,15 @@ pub(crate) struct ScanIdentity {
     pub embedded_code_allowance: Option<u64>,
 }
 
+/// One scanned blob as the other side may meet it again: its scan, and the
+/// two facts the blob read would otherwise repeat for the same oid.
+#[derive(Clone, Debug)]
+pub(crate) struct ScanMemo {
+    pub scanned: Arc<Scanned>,
+    pub byte_count: u64,
+    pub raw_digest: amiss_wire::model::Digest,
+}
+
 /// Snapshot-scoped charge state. Count resources observe exactly one past the
 /// limit and stop; per-value byte resources observe the exact declared value;
 /// an aggregate observes the prior charged total plus the first crossing
@@ -108,7 +117,7 @@ pub(crate) struct ScanIdentity {
 #[derive(Debug)]
 pub struct ScanResources {
     cache_scope: Arc<()>,
-    pub(crate) scans: BTreeMap<ScanIdentity, Arc<Scanned>>,
+    pub(crate) scans: BTreeMap<ScanIdentity, ScanMemo>,
     limits: ScanLimits,
     documents: u64,
     document_bytes: u64,
