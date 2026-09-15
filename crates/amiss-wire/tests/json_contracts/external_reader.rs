@@ -72,9 +72,9 @@ fn external_envelopes_use_standard_serde_and_complete_payload_digests() {
             assert!(!read(format!("{text}{suffix}").as_bytes()));
         }
         let positional = json!([
-            original["schema"],
             original["payload"],
-            original["payload_digest"]
+            original["payload_digest"],
+            original["schema"]
         ]);
         assert!(read(&serde_json::to_vec(&positional).unwrap()));
         let oversized = vec![b' '; usize::try_from(external::EXTERNAL_DOCUMENT_BYTES + 1).unwrap()];

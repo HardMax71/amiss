@@ -81,7 +81,7 @@ pub use failure::{
     invocation_failure_wire, unavailable_evaluation_envelope, unavailable_evaluation_wire,
 };
 pub use finding::{Disposition, FindingKind, FindingMetadata, FindingScope, FixKind, IntentKind};
-pub use output::emit_report;
+pub use output::{emit_report, emit_sealed};
 pub use sandbox::sandbox_descriptor;
 
 pub const ENGINE_CONTRACT: &str = "amiss/scanner";

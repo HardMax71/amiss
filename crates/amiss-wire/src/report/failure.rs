@@ -1,3 +1,4 @@
+use crate::envelope::{Payload as _, sealed_digest};
 use sha2::Digest as _;
 use std::collections::BTreeSet;
 
@@ -130,12 +131,12 @@ pub fn unavailable_evaluation_envelope(
         findings: Vec::new(),
         errors,
     };
-    let payload_digest = {
-        let mut writer = digest_io::IoWrapper(
-            sha2::Sha256::new_with_prefix(PAYLOAD_SCHEMA).chain_update([0_u8]),
-        );
-        serde_json::to_writer(&mut writer, &payload).map(|()| Digest::from(writer.0.finalize().0))
-    }?;
+    let payload_digest = sealed_digest(
+        PAYLOAD_SCHEMA,
+        &payload
+            .spell()
+            .map_err(|defect| serde_json::Error::io(std::io::Error::other(defect)))?,
+    );
     Ok(Some(model::ReportEnvelope {
         schema: model::ReportEnvelopeSchema::Current,
         payload,
