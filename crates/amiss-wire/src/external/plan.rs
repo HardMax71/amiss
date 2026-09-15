@@ -11,7 +11,7 @@ use crate::model::Digest;
 use crate::model::ForgeDialect;
 use crate::report::model::{
     Evaluation, ExternalResolutionReason, ObservationComparison, Occurrence, RepoPath,
-    ReportPayload, Resolution,
+    ReportPayload, Resolution, occurrences,
 };
 use crate::resolution::VersionScope;
 
@@ -124,9 +124,11 @@ pub fn plan(
         return Err(PlanDefect::NotAReport);
     };
 
-    let base = collect(&payload.observations, |comparison| comparison.base.as_ref())?;
+    let base = collect(&payload.observations, |comparison| {
+        occurrences(comparison).base
+    })?;
     let candidate = collect(&payload.observations, |comparison| {
-        comparison.candidate.as_ref()
+        occurrences(comparison).candidate
     })?;
     let retained = candidate
         .keys()
@@ -299,7 +301,7 @@ fn collect<'report>(
             .external_destination
             .as_deref()
             .filter(|value| !value.is_empty());
-        let document = match &occurrence.document {
+        let document = match &occurrence.observation_id_input.document {
             RepoPath::Text(path) => Some(path.as_str()),
             RepoPath::Bytes(_) => None,
         };
@@ -307,7 +309,8 @@ fn collect<'report>(
             Some("https")
         } else {
             occurrence
-                .intent
+                .observation_id_input
+                .extracted_intent
                 .external_scheme
                 .as_deref()
                 .filter(|value| !value.is_empty())

@@ -1,6 +1,9 @@
 use std::fs;
 
-use crate::support::{amiss, fixture, git, payload};
+use amiss_wire::repo_path_text;
+use amiss_wire::report::model::{RepoPath, occurrences};
+
+use crate::support::{amiss, fixture, git, payload, report};
 
 #[test]
 fn policy_include_authors_one_row_and_previews_the_exact_staged_matches() {
@@ -340,18 +343,19 @@ fn reserved_directives_are_boundary_incomplete_with_full_details() {
     );
     assert_eq!(sources[0]["multiplicity"], 2);
 
-    let suppressed: Vec<&str> = payload["observations"]
-        .as_array()
-        .map(|rows| {
-            rows.iter()
-                .filter_map(|row| row["candidate"]["document"].as_str())
-                .filter(|document| *document == "docs/governed.md")
-                .collect()
+    let report = report(&stdout);
+    let suppressed = report
+        .payload
+        .observations
+        .iter()
+        .filter_map(|row| occurrences(row).candidate)
+        .filter(|side| {
+            side.observation_id_input.document
+                == RepoPath::Text(repo_path_text!("docs/governed.md"))
         })
-        .unwrap_or_default();
+        .count();
     assert_eq!(
-        suppressed.len(),
-        1,
+        suppressed, 1,
         "only the ordinary link is an observation; the governed consumer is suppressed"
     );
 }

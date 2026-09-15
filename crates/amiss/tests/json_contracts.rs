@@ -6,7 +6,8 @@ use amiss_wire::{
     report::{
         PAYLOAD_SCHEMA,
         model::{
-            MissingResolution, Occurrence, RepoPath, RepoPathBytes, ReportEnvelope, Resolution,
+            MissingResolution, Occurrence, Pair, RepoPath, RepoPathBytes, ReportEnvelope,
+            Resolution, Sides, occurrences,
         },
     },
     resolution::{Target, VersionScope},
@@ -17,12 +18,12 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
     let mut report: ReportEnvelope =
         serde_json::from_slice(amiss_fixtures::SCANNER_REPORT).unwrap();
     let mut comparison = report.payload.observations[0].clone();
-    let candidate = comparison.candidate.as_ref().unwrap();
+    let candidate = occurrences(&comparison).candidate.unwrap().clone();
     let mut alternative = candidate.clone();
-    alternative.document = RepoPath::Bytes(RepoPathBytes {
+    alternative.observation_id_input.document = RepoPath::Bytes(RepoPathBytes {
         bytes_hex: hex::encode(b"docs/\xff.md"),
     });
-    let expected = [candidate.clone(), alternative.clone()];
+    let expected = [candidate, alternative.clone()];
     comparison.alternatives.candidate = vec![alternative.clone()];
     report.payload.observations = vec![comparison];
     let directory = tempfile::tempdir().unwrap();
@@ -62,7 +63,14 @@ fn refs_preserve_original_occurrences_but_reject_unknown_span_fields() {
         "{human}"
     );
 
-    report.payload.observations[0].candidate = None;
+    let base = occurrences(&report.payload.observations[0])
+        .base
+        .unwrap()
+        .clone();
+    report.payload.observations[0].sides = Sides::Each(Box::new(Pair {
+        base: Some(base),
+        candidate: None,
+    }));
     bind(&mut report, &path).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_amiss"))
         .args(["refs", "--report"])
@@ -157,10 +165,17 @@ fn refs_query_each_path_source_and_raw_byte_targets() {
     ] {
         let mut report = original.clone();
         let mut comparison = report.payload.observations[0].clone();
-        let candidate = comparison.candidate.as_mut().unwrap();
-        candidate.intent.repository_path = intent;
+        let mut candidate = occurrences(&comparison).candidate.unwrap().clone();
+        candidate
+            .observation_id_input
+            .extracted_intent
+            .repository_path = intent;
         candidate.resolution = resolution;
         let expected = [candidate.clone()];
+        comparison.sides = Sides::Each(Box::new(Pair {
+            base: None,
+            candidate: Some(candidate),
+        }));
         report.payload.observations = vec![comparison];
         bind(&mut report, &path).unwrap();
         let output = Command::new(env!("CARGO_BIN_EXE_amiss"))

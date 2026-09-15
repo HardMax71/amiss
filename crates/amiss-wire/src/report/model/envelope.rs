@@ -56,8 +56,8 @@ pub enum ReportPayloadSchema {
     strum::EnumString,
 )]
 pub enum ReportCompatibility {
-    #[strum(serialize = "1")]
-    One,
+    #[strum(serialize = "2")]
+    Two,
 }
 
 pub type ReportEnvelope<P = ReportPayload> = Envelope<P>;
@@ -65,6 +65,8 @@ pub type ReportEnvelope<P = ReportPayload> = Envelope<P>;
 impl<P, R, M, E> Payload for ReportPayload<P, R, M, E>
 where
     Self: Serialize,
+    P: PartialEq,
+    R: PartialEq,
 {
     type Schema = ReportEnvelopeSchema;
     type Defect = ReportDefect;
@@ -73,7 +75,8 @@ where
     const SEALING: Sealing = Sealing::Exact;
 
     fn validate(&self) -> Result<(), ReportDefect> {
-        result_verdict(&self.result).map(drop)
+        result_verdict(&self.result)?;
+        super::comparisons_valid(&self.observations)
     }
 }
 

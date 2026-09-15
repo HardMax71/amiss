@@ -15,7 +15,7 @@ use amiss_wire::report::{
 )]
 pub(super) fn reports() -> [ReportEnvelope; 2] {
     let mut debt: ReportEnvelope = serde_json::from_slice(include_bytes!(
-        "../../../../spec/examples/scanner-report.frozen-1.json"
+        "../../../../spec/examples/scanner-report.frozen-2.json"
     ))
     .unwrap();
     let snapshot: amiss_wire::controls::DebtSnapshot = serde_json::from_slice(include_bytes!(

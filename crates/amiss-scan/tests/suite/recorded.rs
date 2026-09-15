@@ -16,6 +16,8 @@ use amiss_wire::branch_ref;
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
+use amiss_wire::report::model::occurrences;
+use amiss_wire::resolution::Resolution;
 use tempfile::TempDir;
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -162,9 +164,9 @@ fn recorded() -> Recorded {
     }
 }
 
-fn payload(fixture: &Recorded, profile: Profile) -> (i64, serde_json::Value) {
+fn built(fixture: &Recorded, profile: Profile) -> amiss_scan::report::Built {
     let repo = Repository::open(&fixture.root, ObjectFormat::Sha1).unwrap();
-    let built = commit_pair(
+    commit_pair(
         &repo,
         &engine(),
         Some(&spec_to_rest()),
@@ -172,7 +174,11 @@ fn payload(fixture: &Recorded, profile: Profile) -> (i64, serde_json::Value) {
         &fixture.base,
         &fixture.candidate,
     )
-    .unwrap();
+    .unwrap()
+}
+
+fn payload(fixture: &Recorded, profile: Profile) -> (i64, serde_json::Value) {
+    let built = built(fixture, profile);
     let wire: serde_json::Value =
         crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     (i64::from(built.exit_code), wire["payload"].clone())
@@ -235,12 +241,18 @@ fn the_recorded_broken_links_are_the_only_two_the_scanner_finds() {
 #[test]
 fn the_recorded_resolved_links_stay_in_the_trusted_class_and_resolve() {
     let fixture = recorded();
-    let (_exit, payload) = payload(&fixture, Profile::Observe);
+    let built = built(&fixture, Profile::Observe);
 
-    let observations = payload["observations"].as_array().unwrap();
-    let github: Vec<&serde_json::Value> = observations
+    let github: Vec<_> = built
+        .envelope
+        .payload
+        .observations
         .iter()
-        .filter(|row| row["candidate"]["intent"]["kind"] == "same-repository-github")
+        .filter_map(|row| occurrences(row).candidate)
+        .filter(|side| {
+            side.observation_id_input.extracted_intent.kind
+                == amiss_wire::report::IntentKind::SameRepositoryGithub
+        })
         .collect();
     assert_eq!(
         github.len(),
@@ -250,11 +262,13 @@ fn the_recorded_resolved_links_stay_in_the_trusted_class_and_resolve() {
 
     let resolved: Vec<&str> = github
         .iter()
-        .filter(|row| row["candidate"]["resolution"]["kind"] == "resolved")
-        .map(|row| {
-            row["candidate"]["intent"]["repository_path"]
-                .as_str()
-                .unwrap()
+        .filter(|side| matches!(side.resolution, Resolution::Resolved { .. }))
+        .filter_map(|side| {
+            side.observation_id_input
+                .extracted_intent
+                .repository_path
+                .as_ref()
+                .and_then(|path| path.as_str())
         })
         .collect();
     let mut resolved = resolved;

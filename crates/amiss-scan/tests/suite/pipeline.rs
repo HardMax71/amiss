@@ -9,6 +9,7 @@ use amiss_scan::resolve::ForgeContext;
 use amiss_wire::branch_ref;
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::report::model::occurrences;
 use amiss_wire::report::{EngineProvenance, FixKind};
 use tempfile::TempDir;
 
@@ -359,15 +360,21 @@ fn a_historical_absence_never_borrows_candidate_relocation_evidence() {
     let envelope: serde_json::Value =
         crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
     let report = &envelope["payload"];
-    let observation = report["observations"]
-        .as_array()
-        .and_then(|rows| rows.first())
-        .and_then(|row| row.get("candidate"))
+    let observation = built
+        .envelope
+        .payload
+        .observations
+        .iter()
+        .find_map(|row| occurrences(row).candidate)
         .unwrap();
-    assert_eq!(observation["intent"]["commit_oid"], historical);
     assert_eq!(
-        observation["observation_id_input"]["extracted_intent"]["commit_oid"],
-        historical
+        observation
+            .observation_id_input
+            .extracted_intent
+            .commit_oid
+            .as_ref()
+            .map(ToString::to_string),
+        Some(historical.clone())
     );
     let finding = report["findings"]
         .as_array()
@@ -578,21 +585,27 @@ fn equal_broken_anchors_are_two_observations_in_one_finding() {
     .unwrap();
     let payload = payload(&built);
     assert_eq!(payload["result"]["complete"], true, "{payload}");
-    let anchors: Vec<&serde_json::Value> = payload["observations"]
-        .as_array()
-        .unwrap()
+    let anchors: Vec<_> = built
+        .envelope
+        .payload
+        .observations
         .iter()
-        .map(|row| &row["candidate"])
-        .filter(|side| side["source_construct"] == "html-anchor")
+        .filter_map(|row| occurrences(row).candidate)
+        .filter(|side| {
+            side.observation_id_input.source_construct
+                == amiss_wire::controls::SourceConstruct::HtmlAnchor
+        })
         .collect();
-    assert_eq!(anchors.len(), 2, "both mined anchors survive: {payload}");
+    let [first, second] = anchors.as_slice() else {
+        panic!("both mined anchors survive: {payload}");
+    };
     assert_ne!(
-        anchors[0]["observation_id"], anchors[1]["observation_id"],
+        first.observation_id, second.observation_id,
         "the mined ordinal keeps the identities apart"
     );
     assert_ne!(
-        anchors[0]["observation_id_input"]["structural_address"]["node_path"],
-        anchors[1]["observation_id_input"]["structural_address"]["node_path"],
+        first.observation_id_input.structural_address.node_path,
+        second.observation_id_input.structural_address.node_path,
         "each tag carries its own address"
     );
     let missing = payload["findings"]

@@ -2,6 +2,8 @@ use std::fs;
 
 use tempfile::TempDir;
 
+use amiss_wire::report::model::occurrences;
+
 use crate::support::{amiss, fixture, git, payload};
 
 #[test]
@@ -396,7 +398,6 @@ fn the_backlog_window_caps_at_ten_with_its_own_overflow() {
 /// Commits one document beside the fixture base, runs enforce over the pair,
 /// and returns the exit code, the human text, and the sorted candidate-side
 /// constructs matching the prefix from the JSON report.
-#[expect(clippy::indexing_slicing, reason = "test assertion helper")]
 fn enforced_document(name: &str, body: &str, prefix: &str) -> (i32, String, Vec<String>) {
     let fx = fixture();
     let root = fx.root();
@@ -422,12 +423,13 @@ fn enforced_document(name: &str, body: &str, prefix: &str) -> (i32, String, Vec<
     let mut json_args = base_args.to_vec();
     json_args.extend(["--format", "json"]);
     let (_code, stdout, _stderr) = amiss(&json_args);
-    let payload = payload(&stdout);
-    let mut constructs: Vec<String> = payload["observations"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter_map(|row| row["candidate"]["source_construct"].as_str())
+    let report = crate::support::report(&stdout);
+    let mut constructs: Vec<String> = report
+        .payload
+        .observations
+        .iter()
+        .filter_map(|row| occurrences(row).candidate)
+        .map(|side| side.observation_id_input.source_construct.as_ref())
         .filter(|construct| construct.starts_with(prefix))
         .map(str::to_owned)
         .collect();
