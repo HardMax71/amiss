@@ -97,22 +97,6 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
-      # The scanner fuzz crate is its own manifest, so the workspace lints
-      # never see it; CI runs this exact command.
-      - id: fuzz-clippy
-        name: cargo clippy on the scanner fuzz crate
-        entry: cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
-        language: system
-        types_or: [rust, toml]
-        pass_filenames: false
-        stages: [pre-push]
-      - id: fuzz-shear
-        name: cargo shear on the scanner fuzz crate
-        entry: cargo shear --locked fuzz
-        language: system
-        types_or: [rust, toml]
-        pass_filenames: false
-        stages: [pre-push]
       - id: deny
         name: cargo deny
         entry: cargo deny check
@@ -122,10 +106,7 @@ repos:
         stages: [pre-push]
       - id: deny-engine
         name: cargo deny engine bans
-        entry: >-
-          sh -c 'set -eu;
-          cargo deny --config deny-engine.toml check bans;
-          cargo deny --manifest-path fuzz/Cargo.toml --config deny-engine.toml check bans'
+        entry: cargo deny --config deny-engine.toml check bans
         language: system
         files: (^|/)(Cargo\.(toml|lock)|deny-engine\.toml)$
         pass_filenames: false

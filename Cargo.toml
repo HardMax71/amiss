@@ -26,8 +26,8 @@ members = [
   "controller/gitlab-service",
   "controller/probe",
   "controller/service",
+  "fuzz",
 ]
-exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.27.0"
@@ -155,9 +155,6 @@ opt-level = 2
 
 [profile.mutants.package.amiss-md]
 opt-level = 2
-
-[profile.release.package.amiss-controller-fuzz]
-debug = 1
 
 # Full DWARF was 96% of every test binary and 14.5 MB of the 15.2 MB lane fixture.
 [profile.dev]

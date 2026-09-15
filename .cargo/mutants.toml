@@ -8,4 +8,5 @@ exclude_globs = [
   "controller/tests/fixtures/**",
   "controller/*/tests/fixtures/**",
   "controller/fuzz/**",
+  "fuzz/**",
 ]
