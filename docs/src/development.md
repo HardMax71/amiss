@@ -38,9 +38,7 @@ held 86 GB and the sweep reclaimed nothing from it, because every generation was
 window. The hook
 is a no-op where cargo-sweep is not installed. Code CI runs the same two hook stages. What CI adds on
 top is the work that does not belong on a developer's machine: the fuzz packages' release runs,
-whose separate lockfiles and release builds cost minutes, and mutation, which costs ten of them
-for a code change. Clippy and cargo shear over the scanner fuzz crate do run on push, since that
-crate is its own manifest and a rename or a dropped import that misses it fails nowhere else. A
+whose release builds cost minutes, and mutation, which costs ten of them for a code change. A
 push should not buy what a pull request already measures.
 
 The shared [change detector](https://github.com/HardMax71/amiss/blob/main/.github/workflows/changes.yml)
@@ -106,13 +104,12 @@ that manifest to discover the `amiss` staged-index check shown in
 cargo nextest run --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
-cargo test --manifest-path fuzz/Cargo.toml --locked --release
-cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
+cargo test -p amiss-fuzz -p amiss-controller-fuzz --locked --release
 ```
 
-The first pair checks every crate, engine and provider alike, from one lockfile. The second
-checks the scanner's standalone fuzz package, which keeps its own lockfile because coverage-guided
-runs need nightly. The trust boundary is a dependency boundary rather than a workspace boundary:
+The first pair checks every crate, engine and provider alike, from one lockfile. The third
+replays the committed fuzz seeds in release; the coverage-guided runs need nightly and cargo-fuzz
+on top, from the same lockfile. The trust boundary is a dependency boundary rather than a workspace boundary:
 the compiler-output specialist under `api/` and the HTTP, provider API, Git acquisition,
 credential, storage, and service-runtime crates under `controller/` are unpublished.
 `deny-engine.toml` drops them from the graph and then bans the network and async stack, so what an

@@ -21,8 +21,6 @@ jobs:
         with:
           tools: cargo-deny
       - run: cargo deny check advisories sources
-      - run: cargo deny check advisories sources
-        working-directory: fuzz
 
   workflow-audit:
     runs-on: ubuntu-latest

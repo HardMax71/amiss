@@ -13,13 +13,11 @@ is the reference;
 cargo nextest run --workspace --locked
 cargo clippy --workspace --all-targets --locked -- -D warnings
 
-cargo test --manifest-path fuzz/Cargo.toml --locked --release
-cargo clippy --manifest-path fuzz/Cargo.toml --all-targets --locked -- -D warnings
+cargo test -p amiss-fuzz -p amiss-controller-fuzz --locked --release
 ```
 
 The toolchain is pinned by `rust-toolchain.toml`. Hooks run through prek: formatting and
-cheap checks on commit; clippy and `cargo shear` on the workspace and on the scanner fuzz
-crate, the full suite, `cargo deny`, a pinned similarity-rs twin-edge gate, and a cargo-sweep
+cheap checks on commit; clippy and `cargo shear` on the workspace, the full suite, `cargo deny`, a pinned similarity-rs twin-edge gate, and a cargo-sweep
 pass over `target/` on push. CI
 runs the same stages for code changes; documentation and reviewer-only changes retain the
 relevant checks without unrelated Rust builds. Unknown paths take the full code lane.
