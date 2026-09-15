@@ -344,3 +344,49 @@ fn report_emission_preserves_bytes_and_propagates_short_writes() {
         }
     }
 }
+
+/// The pipeline spells the payload once; the envelope written around those
+/// bytes is byte for byte the canonical envelope, and a short write still
+/// surfaces as `WriteZero` rather than a truncated report.
+#[test]
+fn sealed_emission_matches_the_canonical_envelope() {
+    use amiss_wire::report::emit_sealed;
+    use amiss_wire::report::model::ReportEnvelope;
+    use std::io::{BufWriter, Cursor, ErrorKind};
+
+    let bytes: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.canonical.json");
+    let envelope: ReportEnvelope = serde_json::from_slice(bytes).unwrap();
+    let sealed = serde_json_canonicalizer::to_vec(&envelope.payload).unwrap();
+    let mut expected = serde_json_canonicalizer::to_vec(&envelope).unwrap();
+    expected.push(b'\n');
+    let mut out = BufWriter::new(Vec::new());
+    let written =
+        emit_sealed(&envelope.schema, &sealed, envelope.payload_digest, &mut out).unwrap();
+    assert_eq!(out.into_inner().unwrap(), expected);
+    assert_eq!(written, u64::try_from(expected.len()).unwrap());
+
+    let mut short = vec![0; expected.len() - 1];
+    let mut output = BufWriter::new(Cursor::new(short.as_mut_slice()));
+    assert_eq!(
+        emit_sealed(
+            &envelope.schema,
+            &sealed,
+            envelope.payload_digest,
+            &mut output
+        )
+        .unwrap_err()
+        .kind(),
+        ErrorKind::WriteZero
+    );
+    assert_eq!(
+        emit_sealed(
+            &envelope.schema,
+            b"nope",
+            envelope.payload_digest,
+            &mut Vec::new()
+        )
+        .unwrap_err()
+        .kind(),
+        ErrorKind::InvalidData
+    );
+}

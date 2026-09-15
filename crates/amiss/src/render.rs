@@ -30,11 +30,12 @@ pub(crate) fn run(invocation: &RenderInvocation, reserve: &mut BufWriter<Stdout>
         }
     };
     let result = crate::project(
-        &envelope,
+        &envelope.payload,
         invocation.format,
         false,
         invocation.full,
         reserve,
+        |out| amiss_wire::report::emit_report(&envelope, out),
         |path| match path {
             RepoPath::Text(path) => Ok(path.as_str()),
             RepoPath::Bytes(path) => Err(Cow::Borrowed(&path.bytes_hex)),

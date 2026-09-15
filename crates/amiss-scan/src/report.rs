@@ -67,9 +67,10 @@ pub struct Setup {
     pub requests: RequestDigests,
 }
 
-/// A constructed report: the envelope value, the payload digest, and the
-/// result the process must exit with. The wire is never materialized here;
-/// a binary streams the envelope through its reserved output buffer.
+/// A constructed report: the envelope value, the payload spelled once in its
+/// canonical form with the digest over it, and the result the process must
+/// exit with. A binary streams the envelope around those bytes through its
+/// reserved output buffer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Built<
     P: amiss_wire::envelope::Payload<Schema = model::ReportEnvelopeSchema> = model::ReportPayload<
@@ -87,6 +88,7 @@ pub struct Built<
 > {
     pub envelope: model::ReportEnvelope<P>,
     pub payload_digest: Digest,
+    pub canonical_payload: Vec<u8>,
     pub status: model::ReportStatus,
     pub exit_code: u8,
 }
@@ -97,6 +99,11 @@ pub struct Built<
 /// Returns the serialization error without returning partial output.
 pub fn wire(built: &Built) -> std::io::Result<Vec<u8>> {
     let mut wire = Vec::new();
-    amiss_wire::report::emit_report(&built.envelope, &mut wire)?;
+    amiss_wire::report::emit_sealed(
+        &built.envelope.schema,
+        &built.canonical_payload,
+        built.payload_digest,
+        &mut wire,
+    )?;
     Ok(wire)
 }

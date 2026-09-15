@@ -96,10 +96,18 @@ fn main() -> ExitCode {
             match machine_refusal(&codes) {
                 Ok(envelope) => {
                     return projection_exit(
-                        project(&envelope, format, false, false, &mut reserve, |path| {
-                            path.as_str()
-                                .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
-                        }),
+                        project(
+                            &envelope.payload,
+                            format,
+                            false,
+                            false,
+                            &mut reserve,
+                            |out| report::emit_report(&envelope, out),
+                            |path| {
+                                path.as_str()
+                                    .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
+                            },
+                        ),
                         failure,
                     );
                 }
@@ -145,20 +153,17 @@ fn main() -> ExitCode {
 }
 
 fn project<P, R, M, E>(
-    envelope: &ReportEnvelope<ReportPayload<P, R, M, E>>,
+    payload: &ReportPayload<P, R, M, E>,
     format: OutputFormat,
     explain_scope: bool,
     full_feedback: bool,
     reserve: &mut BufWriter<Stdout>,
+    json: impl FnOnce(&mut BufWriter<Stdout>) -> std::io::Result<u64>,
     path: impl Fn(&P) -> Result<&str, Cow<'_, str>> + Copy,
-) -> std::io::Result<()>
-where
-    ReportPayload<P, R, M, E>: serde::Serialize,
-{
-    let payload = &envelope.payload;
+) -> std::io::Result<()> {
     match format {
         OutputFormat::Json => {
-            report::emit_report(envelope, reserve)?;
+            json(reserve)?;
         }
         OutputFormat::Sarif => {
             output::write_serialized(&sarif::log(payload, |value| path(value).ok()))?;
@@ -338,7 +343,13 @@ fn scan_sealed(
         return failure;
     };
     projection_exit(
-        report::emit_report(&built.envelope, reserve).map(|_written| ()),
+        report::emit_sealed(
+            &built.envelope.schema,
+            &built.canonical_payload,
+            built.payload_digest,
+            reserve,
+        )
+        .map(|_written| ()),
         ExitCode::from(built.exit_code),
     )
 }
@@ -461,11 +472,19 @@ fn run(invocation: &Invocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
     }
     projection_exit(
         project(
-            &built.envelope,
+            &built.envelope.payload,
             invocation.format,
             invocation.explain_scope,
             false,
             reserve,
+            |out| {
+                report::emit_sealed(
+                    &built.envelope.schema,
+                    &built.canonical_payload,
+                    built.payload_digest,
+                    out,
+                )
+            },
             |path| {
                 path.as_str()
                     .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
@@ -544,11 +563,19 @@ fn fatal(
             .map_err(|defect| std::io::Error::other(defect.code().meaning()))
             .and_then(|built| {
                 project(
-                    &built.envelope,
+                    &built.envelope.payload,
                     invocation.format,
                     invocation.explain_scope,
                     false,
                     reserve,
+                    |out| {
+                        report::emit_sealed(
+                            &built.envelope.schema,
+                            &built.canonical_payload,
+                            built.payload_digest,
+                            out,
+                        )
+                    },
                     |path| {
                         path.as_str()
                             .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
