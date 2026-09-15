@@ -9,7 +9,7 @@ the contract's numbers are integers, never floats.
 
 The outer envelope has three members: its schema, the payload, and `payload_digest`, a hash
 of the payload's canonical bytes. The payload carries its own schema, `compatibility`
-(the wire's own version, frozen at `1`), and an engine block whose `engine_digest` names the
+(the wire's own version, `2` since the one-occurrence reshape), and an engine block whose `engine_digest` names the
 binary that produced it. Every digest in the system is domain-separated, meaning the hash
 input starts with a label naming its purpose, so a digest computed for one context cannot be
 replayed as a digest for another.
@@ -58,8 +58,15 @@ Resolution tags select closed bodies: fields belonging to another kind or reason
 rejected. Targets, blob evidence and version scopes reuse the producer's types; a fragment
 target must carry the `blob` tag and its complete blob evidence.
 
-Observation comparisons, occurrences, intents and identity inputs are closed too. The
-`refs` command retains their decoded models for querying and output; it does not reparse
+Observation comparisons, occurrences, intents and identity inputs are closed too. An
+occurrence is its identity input plus its outcome: `observation_id_input` carries the
+document, adapter, source construct, source projection digest and extracted intent once,
+and beside it sit only the observation id, the resolution, the source span, the block kind
+and any external destination. A comparison's `sides` says what each tree held: `same`
+carries the one occurrence both trees hold, and `each` carries a `base` and a `candidate`
+occurrence, either of them `null` for a side that has none. An `each` pair whose two
+occurrences are equal is not the writer's spelling and is refused. The
+`refs` command retains the decoded models for querying and output; it does not reparse
 individual occurrences or retain unknown extension fields. Candidate and alternative order,
 byte-path spelling and canonical JSON output remain unchanged.
 
@@ -157,7 +164,7 @@ The envelope, down to its top-level keys:
   "schema": "amiss/scanner-report-envelope",
   "payload": {
     "schema": "amiss/scanner-report-payload",
-    "compatibility": "1",
+    "compatibility": "2",
     "engine": { "engine_digest": "sha256:..." },
     "evaluation": {},
     "controls": {},
@@ -303,12 +310,13 @@ emitted bytes with an independent schema validator, checks the canonical example
 that the schema identifiers match the writer constants in the
 [documentation contract test](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/documentation_contracts).
 
-The wire is versioned by its own `compatibility` field, not by the engine release: `1`
-means frozen, additive within the major. A `1` report may gain optional fields as `1`
-rolls forward, and nothing a `1.0` consumer parsed ever changes meaning or disappears.
-The promise is mechanical: the first frozen example is retained permanently beside the
-rolling one, a contract test requires every later schema in the major to keep validating
-it, and a second test holds the example the last release shipped to the same bar.
-Reshaping past that promise mints `2`, and that release is a major one. The record of
-how the contract earned the freeze is in
-[A settled wire](completed/a-settled-wire.md).
+The wire is versioned by its own `compatibility` field, not by the engine release: `2`
+since the one-occurrence reshape, additive within the major. A `2` report may gain
+optional fields as `2` rolls forward, and nothing a `2.0` consumer parsed ever changes
+meaning or disappears. The promise is mechanical: the frozen example that opened the major
+is retained permanently beside the rolling one, a contract test requires every later schema
+in the major to keep validating it, and a second test holds the example the last release
+shipped to the same bar. Reshaping past that promise mints `3`, and that release is a major
+one. Every reader of `2` refuses a `1` report: the render and refs verbs, the external
+plan, and the controller. The record of how the contract earned the freeze, and of the
+reshape that minted `2`, is in [A settled wire](completed/a-settled-wire.md).

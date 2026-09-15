@@ -96,7 +96,7 @@ pub fn unavailable_evaluation_envelope(
         .collect();
     let payload = model::ReportPayload {
         schema: model::ReportPayloadSchema::Current,
-        compatibility: model::ReportCompatibility::One,
+        compatibility: model::ReportCompatibility::Two,
         engine: engine_block(engine)?,
         evaluation: model::Evaluation::Unavailable(model::UnavailableEvaluation {
             status: model::UnavailableStatus::Unavailable,

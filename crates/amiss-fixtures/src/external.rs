@@ -1,4 +1,5 @@
 use amiss_wire::external::{ExternalEvidence, ExternalEvidenceRow};
+use amiss_wire::report::model::{Pair, Sides, occurrences};
 use amiss_wire::report::{
     PAYLOAD_SCHEMA,
     model::{ObservationComparison, ReportEnvelope},
@@ -17,8 +18,8 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
         .observations
         .iter()
         .find(|row| {
-            row.candidate
-                .as_ref()
+            occurrences(row)
+                .candidate
                 .is_some_and(|candidate| candidate.external_destination.is_none())
         })?
         .clone();
@@ -27,8 +28,8 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
         .observations
         .iter()
         .find(|row| {
-            row.candidate
-                .as_ref()
+            occurrences(row)
+                .candidate
                 .is_some_and(|candidate| candidate.external_destination.is_some())
         })?
         .clone();
@@ -41,17 +42,17 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
                 return None;
             }
             let mut row: ObservationComparison = external.clone();
-            let candidate = row.candidate.as_mut()?;
+            let mut candidate = occurrences(&row).candidate?.clone();
             candidate.external_destination = Some((*destination).to_owned());
-            candidate.intent.external_scheme = Some(scheme.to_owned());
-            candidate.intent.raw_destination_digest = amiss_wire::model::Digest::from(
+            let intent = &mut candidate.observation_id_input.extracted_intent;
+            intent.external_scheme = Some(scheme.to_owned());
+            intent.raw_destination_digest = amiss_wire::model::Digest::from(
                 sha2::Sha256::new_with_prefix("amiss/fixture-destination")
                     .chain_update([0_u8])
                     .chain_update(destination.as_bytes())
                     .finalize()
                     .0,
             );
-            candidate.observation_id_input.extracted_intent = candidate.intent.clone();
             candidate
                 .observation_id_input
                 .structural_address
@@ -63,6 +64,10 @@ pub fn external_report(destinations: &[&str]) -> Option<Vec<u8>> {
                     .finalize()
                     .0,
             );
+            row.sides = Sides::Each(Box::new(Pair {
+                base: occurrences(&row).base.cloned(),
+                candidate: Some(candidate),
+            }));
             Some(row)
         })
         .collect::<Option<Vec<_>>>()?;

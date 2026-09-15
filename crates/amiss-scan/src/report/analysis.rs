@@ -46,14 +46,9 @@ fn occurrence(
     serde_json::to_writer(&mut writer, &input).map_err(|_defect| crate::Error::Internal)?;
     Ok(model::Occurrence {
         observation_id: Digest::from(writer.0.finalize().0),
-        intent: input.extracted_intent.clone(),
         observation_id_input: input,
-        adapter_id: observation.adapter,
-        document: observation.document,
-        source_construct: observation.construct,
         source_span: source_span(observation.span, observation.display),
         block_kind: observation.block_kind,
-        source_projection_digest: observation.projection_digest,
         resolution: observation.resolution,
         external_destination: observation.external_destination,
     })
@@ -64,14 +59,17 @@ pub(super) fn comparison(
 ) -> Result<model::ObservationComparison<RepoPath, Resolution<RepoPath>>, crate::Error> {
     let [base, candidate] =
         [comparison.base, comparison.candidate].map(|side| side.map(occurrence).transpose());
+    let sides = match (base?, candidate?) {
+        (Some(base), Some(candidate)) if base == candidate => model::Sides::Same(Box::new(base)),
+        (base, candidate) => model::Sides::Each(Box::new(model::Pair { base, candidate })),
+    };
     let [alternatives_base, alternatives_candidate] = [
         comparison.alternatives_base,
         comparison.alternatives_candidate,
     ]
     .map(|side| side.into_iter().map(occurrence).collect::<Result<_, _>>());
     Ok(model::ObservationComparison {
-        base: base?,
-        candidate: candidate?,
+        sides,
         correlation: comparison.outcome,
         correlation_reason: comparison.reason,
         alternatives: model::CorrelationAlternatives {

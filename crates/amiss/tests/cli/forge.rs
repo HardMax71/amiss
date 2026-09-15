@@ -1,7 +1,11 @@
 use std::fs;
 use std::path::Path;
 
-use crate::support::{amiss, payload};
+use amiss_wire::repo_path_text;
+use amiss_wire::report::model::{RepoPath, Resolution, occurrences};
+use amiss_wire::resolution::VersionScope;
+
+use crate::support::{amiss, payload, report};
 
 #[expect(
     clippy::indexing_slicing,
@@ -108,23 +112,37 @@ fn a_declared_forge_host_is_recognized_and_reported_end_to_end() {
         "github.com is a foreign site when the identity lives elsewhere"
     );
     assert_eq!(references["resolved"], 1);
-    let history = payload["observations"]
-        .as_array()
-        .and_then(|observations| {
-            observations.iter().find_map(|observation| {
-                let scope = &observation["candidate"]["resolution"]["scope"];
-                (scope["kind"] == "known-commit").then_some(&observation["candidate"])
-            })
+    let report = report(&stdout);
+    let (history, commit_oid, path) = report
+        .payload
+        .observations
+        .iter()
+        .filter_map(|row| occurrences(row).candidate)
+        .find_map(|side| match &side.resolution {
+            Resolution::UnsupportedVersion {
+                scope: VersionScope::KnownCommit { commit_oid, path },
+            } => Some((side, commit_oid, path)),
+            Resolution::UnsupportedVersion { .. }
+            | Resolution::DeclaredUntracked { .. }
+            | Resolution::External { .. }
+            | Resolution::Invalid { .. }
+            | Resolution::Missing(_)
+            | Resolution::Resolved { .. }
+            | Resolution::TypeMismatch { .. }
+            | Resolution::UnsupportedSemantics(_)
+            | Resolution::UnsupportedTarget { .. } => None,
         })
         .unwrap_or_else(|| panic!("the immutable scope is reported"));
-    let scope = &history["resolution"]["scope"];
     assert_eq!(
-        scope["commit_oid"],
+        commit_oid.to_string(),
         "0123456789012345678901234567890123456789"
     );
-    assert_eq!(scope["path"], "docs/guide.md");
+    assert_eq!(*path, RepoPath::Text(repo_path_text!("docs/guide.md")));
     let historical_destination = "https://ghes.example/acme/widget/blob/0123456789012345678901234567890123456789/docs/guide.md";
-    assert_eq!(history["external_destination"], historical_destination);
+    assert_eq!(
+        history.external_destination.as_deref(),
+        Some(historical_destination)
+    );
     assert_historical_request(&fx.repo, &stdout, historical_destination);
 }
 

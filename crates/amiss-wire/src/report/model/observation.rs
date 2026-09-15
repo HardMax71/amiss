@@ -13,6 +13,7 @@ pub use crate::resolution::{
 use crate::resolution::{TaggedBlobTarget, Target, VersionScope};
 
 use super::RepoPath;
+use crate::report::ReportDefect;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, SerializeDisplay, DeserializeFromStr,
@@ -147,18 +148,66 @@ pub enum Resolution<P = RepoPath> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Occurrence<P = RepoPath, R = Resolution<P>> {
-    pub adapter_id: Adapter,
     pub block_kind: BlockKind,
-    pub document: P,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_destination: Option<String>,
-    pub intent: TargetIntent<P>,
     pub observation_id: Digest,
     pub observation_id_input: ObservationIdInput<P>,
     pub resolution: R,
-    pub source_construct: SourceConstruct,
-    pub source_projection_digest: Digest,
     pub source_span: SourceSpan,
+}
+
+/// What each tree held for one correlated reference: one occurrence both
+/// trees hold, or each side on its own.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+pub enum Sides<P = RepoPath, R = Resolution<P>> {
+    Each(Box<Pair<Occurrence<P, R>>>),
+    Same(Box<Occurrence<P, R>>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Pair<T> {
+    pub base: Option<T>,
+    pub candidate: Option<T>,
+}
+
+/// The occurrence each side holds; a same row holds one for both.
+#[must_use]
+pub fn occurrences<P, R>(comparison: &ObservationComparison<P, R>) -> Pair<&Occurrence<P, R>> {
+    match &comparison.sides {
+        Sides::Each(pair) => Pair {
+            base: pair.base.as_ref(),
+            candidate: pair.candidate.as_ref(),
+        },
+        Sides::Same(occurrence) => Pair {
+            base: Some(occurrence),
+            candidate: Some(occurrence),
+        },
+    }
+}
+
+/// The writer spells an equal pair as `same`, so a reader refuses an `each`
+/// pair whose sides are equal.
+///
+/// # Errors
+///
+/// `Noncanonical` for an `each` pair whose two occurrences are equal.
+pub fn comparisons_valid<P: PartialEq, R: PartialEq>(
+    comparisons: &[ObservationComparison<P, R>],
+) -> Result<(), ReportDefect> {
+    let equal = comparisons.iter().any(|comparison| {
+        matches!(
+            &comparison.sides,
+            Sides::Each(pair) if pair.base.is_some() && pair.base == pair.candidate
+        )
+    });
+    if equal {
+        Err(ReportDefect::Noncanonical)
+    } else {
+        Ok(())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -282,11 +331,10 @@ pub enum Impact {
 #[serde(deny_unknown_fields)]
 pub struct ObservationComparison<P = RepoPath, R = Resolution<P>> {
     pub alternatives: CorrelationAlternatives<P, R>,
-    pub base: Option<Occurrence<P, R>>,
-    pub candidate: Option<Occurrence<P, R>>,
     pub correlation: Correlation,
     pub correlation_reason: CorrelationReason,
     pub impact: Impact,
+    pub sides: Sides<P, R>,
     pub source_change: SourceChange,
     pub target_change: TargetChange,
 }

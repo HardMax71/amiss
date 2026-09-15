@@ -13,8 +13,10 @@ use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::RequestDigests;
 use amiss_scan::resolve::ForgeContext;
 use amiss_wire::branch_ref;
-use amiss_wire::model::{ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use amiss_wire::model::{Digest, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity};
 use amiss_wire::report::EngineProvenance;
+use amiss_wire::report::model::{TargetChange, occurrences};
+use amiss_wire::resolution::{BlobContent, BlobTarget, Missing, Resolution, Target};
 use tempfile::TempDir;
 
 fn git(root: &Path, args: &[&str]) -> String {
@@ -24,7 +26,7 @@ fn git(root: &Path, args: &[&str]) -> String {
 fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
-        digest: amiss_wire::model::Digest::from(
+        digest: Digest::from(
             sha2::Sha256::new_with_prefix("amiss/scanner-engine")
                 .chain_update([0_u8])
                 .chain_update(b"test engine")
@@ -49,7 +51,7 @@ fn run(
     fragment: &str,
     base_target: &str,
     candidate_target: &str,
-) -> serde_json::Value {
+) -> (amiss_scan::report::Built, serde_json::Value) {
     let dir = TempDir::new().unwrap();
     let root = dir.path();
     git(root, &["init", "-q"]);
@@ -122,8 +124,39 @@ fn run(
         &candidate,
     )
     .unwrap();
-    crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap()["payload"]
-        .take()
+    let payload = crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap())
+        .unwrap()["payload"]
+        .take();
+    (built, payload)
+}
+
+/// The raw digest of a resolved or mismatched blob target.
+fn raw_digest(resolution: &Resolution<RepoPath>) -> Option<Digest> {
+    match resolution {
+        Resolution::Resolved {
+            target: Target::Blob(BlobTarget { content, .. }),
+        }
+        | Resolution::TypeMismatch {
+            target: Target::Blob(BlobTarget { content, .. }),
+        } => Some(match content {
+            BlobContent::Available { raw_digest, .. } | BlobContent::LfsPointer { raw_digest } => {
+                *raw_digest
+            }
+        }),
+        Resolution::Resolved {
+            target: Target::Tree { .. },
+        }
+        | Resolution::TypeMismatch {
+            target: Target::Tree { .. },
+        }
+        | Resolution::Missing(_)
+        | Resolution::DeclaredUntracked(_)
+        | Resolution::UnsupportedTarget(_)
+        | Resolution::UnsupportedSemantics(_)
+        | Resolution::UnsupportedVersion { .. }
+        | Resolution::Invalid { .. }
+        | Resolution::External { .. } => None,
+    }
 }
 
 fn kinds(payload: &serde_json::Value) -> Vec<&str> {
@@ -147,7 +180,7 @@ fn every_forge_dialect_compares_the_selected_lines() {
         ForgeDialect::BitbucketDataCenter,
     ] {
         let (_, fragment) = dialect_identity(dialect);
-        let payload = run(dialect, fragment, base, candidate);
+        let (_built, payload) = run(dialect, fragment, base, candidate);
         assert!(
             kinds(&payload).contains(&"dependency-changed-subject-unchanged"),
             "{} must evaluate its own line-range spelling",
@@ -164,32 +197,41 @@ fn every_forge_dialect_compares_the_selected_lines() {
 
 #[test]
 fn bytes_outside_the_selection_do_not_create_drift() {
-    let payload = run(
+    let (built, payload) = run(
         ForgeDialect::Github,
         "L2-L3",
         "outside\nselected one\nselected two\ntail\n",
         "outside changed\nselected one\nselected two\ntail\n",
     );
     assert!(!kinds(&payload).contains(&"dependency-changed-subject-unchanged"));
-    assert_eq!(payload["observations"][0]["target_change"], "equal");
+    let row = built.envelope.payload.observations.first().unwrap();
+    assert_eq!(row.target_change, TargetChange::Equal);
     assert_ne!(
-        payload["observations"][0]["base"]["resolution"]["target"]["content"]["raw_digest"],
-        payload["observations"][0]["candidate"]["resolution"]["target"]["content"]["raw_digest"],
+        occurrences(row)
+            .base
+            .map(|base| raw_digest(&base.resolution)),
+        occurrences(row)
+            .candidate
+            .map(|side| raw_digest(&side.resolution)),
         "the whole blob changed even though the selected projection did not",
     );
 }
 
 #[test]
 fn a_range_that_leaves_the_blob_is_a_missing_target() {
-    let payload = run(
+    let (built, payload) = run(
         ForgeDialect::Gitlab,
         "L2-3",
         "one\ntwo\nthree\n",
         "one\ntwo\n",
     );
     assert!(kinds(&payload).contains(&"explicit-target-missing"));
-    let resolution = &payload["observations"][0]["candidate"]["resolution"];
-    assert_eq!(resolution["kind"], "missing");
-    assert_eq!(resolution["reason"], "line-fragment-out-of-range");
-    assert_eq!(resolution["path"], "src/lib.rs");
+    let candidate = occurrences(built.envelope.payload.observations.first().unwrap())
+        .candidate
+        .unwrap();
+    let Resolution::Missing(Missing::LineFragmentOutOfRange { path }) = &candidate.resolution
+    else {
+        panic!("the range leaves the blob: {:?}", candidate.resolution);
+    };
+    assert_eq!(path.as_str(), Some("src/lib.rs"));
 }

@@ -132,7 +132,7 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
         occurrences.len()
     );
     for row in occurrences {
-        let document = match &row.document {
+        let document = match &row.observation_id_input.document {
             amiss_wire::report::model::RepoPath::Text(path) => atom(path.as_str()),
             amiss_wire::report::model::RepoPath::Bytes(path) => hex::decode(&path.bytes_hex)
                 .map_or_else(|_defect| atom(&path.bytes_hex), |bytes| atom_bytes(&bytes)),
@@ -143,7 +143,7 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
             document,
             row.source_span.start_line,
             row.source_span.start_column,
-            atom(row.source_construct.as_ref()),
+            atom(row.observation_id_input.source_construct.as_ref()),
             atom(row.resolution.as_ref()),
             atom(&row.observation_id.to_string()),
         );
