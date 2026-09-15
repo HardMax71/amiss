@@ -6,6 +6,7 @@ use amiss_wire::model::RepoPath;
 use amiss_wire::report::ReportDefect;
 use amiss_wire::report::model::{
     MissingResolution, Occurrence, ReportPayload, Resolution, UnsupportedSemanticsResolution,
+    occurrences,
 };
 use amiss_wire::resolution::{BlobTarget, TaggedBlobTarget, Target, VersionScope};
 
@@ -50,8 +51,9 @@ fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrenc
         .observations
         .into_iter()
         .flat_map(|comparison| {
-            comparison
+            occurrences(&comparison)
                 .candidate
+                .cloned()
                 .into_iter()
                 .chain(comparison.alternatives.candidate)
         })
@@ -92,7 +94,13 @@ fn matching_occurrences(bytes: &[u8], target: &RepoPath) -> Result<Vec<Occurrenc
             };
             resolution_path
                 .into_iter()
-                .chain(occurrence.intent.repository_path.as_ref())
+                .chain(
+                    occurrence
+                        .observation_id_input
+                        .extracted_intent
+                        .repository_path
+                        .as_ref(),
+                )
                 .any(|path| match path {
                     amiss_wire::report::model::RepoPath::Text(path) => {
                         Some(path.as_str()) == target.as_str()

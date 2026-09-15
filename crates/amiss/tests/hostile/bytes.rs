@@ -319,11 +319,16 @@ fn a_percent_escaped_byte_reference_resolves_against_the_byte_named_target() {
             "json",
         ]);
         assert_eq!(query_code, 0);
-        let rows: serde_json::Value = serde_json::from_slice(&query).unwrap();
-        let rows = rows.as_array().unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0]["document"], "README.md");
-        assert_eq!(rows[0]["resolution"]["kind"], resolution);
+        let rows: Vec<amiss_wire::report::model::Occurrence> =
+            serde_json::from_slice(&query).unwrap();
+        let [row] = rows.as_slice() else {
+            panic!("one occurrence: {rows:?}");
+        };
+        assert_eq!(
+            row.observation_id_input.document,
+            amiss_wire::report::model::RepoPath::Text(amiss_wire::repo_path_text!("README.md"))
+        );
+        assert_eq!(row.resolution.as_ref(), resolution);
     }
     let payload = payload(&stdout);
     assert_eq!(payload["summary"]["references"]["extracted"], 2);

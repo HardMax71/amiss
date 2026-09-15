@@ -3257,13 +3257,8 @@
       "required": [
         "observation_id",
         "observation_id_input",
-        "adapter_id",
-        "document",
-        "source_construct",
         "source_span",
         "block_kind",
-        "source_projection_digest",
-        "intent",
         "resolution"
       ],
       "properties": {
@@ -3272,20 +3267,6 @@
         },
         "observation_id_input": {
           "$ref": "#/$defs/ObservationIdInput"
-        },
-        "adapter_id": {
-          "enum": [
-            "markdown",
-            "mdx",
-            "asciidoc",
-            "rst"
-          ]
-        },
-        "document": {
-          "$ref": "#/$defs/RepoPath"
-        },
-        "source_construct": {
-          "$ref": "#/$defs/ObservationSourceConstruct"
         },
         "source_span": {
           "$ref": "#/$defs/SourceSpan"
@@ -3297,12 +3278,6 @@
             "table-cell",
             "document-root"
           ]
-        },
-        "source_projection_digest": {
-          "$ref": "#/$defs/Digest"
-        },
-        "intent": {
-          "$ref": "#/$defs/TargetIntent"
         },
         "resolution": {
           "$ref": "#/$defs/Resolution"
@@ -3426,8 +3401,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "base",
-        "candidate",
+        "sides",
         "correlation",
         "correlation_reason",
         "alternatives",
@@ -3436,25 +3410,8 @@
         "impact"
       ],
       "properties": {
-        "base": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/Occurrence"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "candidate": {
-          "oneOf": [
-            {
-              "$ref": "#/$defs/Occurrence"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "sides": {
+          "$ref": "#/$defs/Sides"
         },
         "correlation": {
           "enum": [
@@ -3510,6 +3467,61 @@
           ]
         }
       }
+    },
+    "Sides": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "each"
+          ],
+          "properties": {
+            "each": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "base",
+                "candidate"
+              ],
+              "properties": {
+                "base": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Occurrence"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "candidate": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Occurrence"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "same"
+          ],
+          "properties": {
+            "same": {
+              "$ref": "#/$defs/Occurrence"
+            }
+          }
+        }
+      ]
     },
     "FindingKind": {
       "enum": [
@@ -5531,7 +5543,7 @@
           "const": "amiss/scanner-report-payload"
         },
         "compatibility": {
-          "const": "1"
+          "const": "2"
         },
         "engine": {
           "$ref": "#/$defs/Engine"
@@ -5610,5 +5622,5 @@
       }
     }
   },
-  "description": "The report contract, versioned by the in-payload compatibility field: frozen at 1, additive within the major; a reshape mints 2."
+  "description": "The report contract, versioned by the in-payload compatibility field: 2 since the one-occurrence reshape, additive within the major; a reshape mints 3."
 }

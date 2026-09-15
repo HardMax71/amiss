@@ -1,23 +1,16 @@
 use amiss_wire::controls::TargetKind;
 use amiss_wire::report::model::{
-    EmptyRepositoryPath, FindingKeyScope, ReportEnvelope, RepositoryIntentKind,
-    RepositoryIntentPath, RepositoryTargetIntent,
+    EmptyRepositoryPath, FindingKeyScope, RepositoryIntentKind, RepositoryIntentPath,
+    RepositoryTargetIntent,
 };
 
 #[test]
 fn finding_keys_require_closed_scope_tags() {
-    let report: ReportEnvelope = serde_json::from_slice(include_bytes!(
-        "../../../../spec/examples/scanner-report.frozen-1.json"
-    ))
-    .unwrap();
-    let finding = report
-        .payload
-        .findings
-        .iter()
-        .find(|finding| matches!(finding.key_input.scope, FindingKeyScope::Reference { .. }))
-        .unwrap();
-    let key = &finding.key_input;
-    let scope = serde_json::to_string(&key.scope).unwrap();
+    let scope = r#"{"document":"docs/guide.md","kind":"reference","normalized_target_intent":{"fragment_digest":null,"kind":"repository-path","path":"docs/missing.md","query_digest":null,"target_kind":"either"},"occurrence":{"kind":"source-projection","source_projection_digest":"sha256:f30e7675558037c19d770e8ed46d748dd180aa4ebb636eba2f939a1b1e501c62"},"source_construct":"markdown-inline-link"}"#.to_owned();
+    assert!(matches!(
+        serde_json::from_str::<FindingKeyScope>(&scope).unwrap(),
+        FindingKeyScope::Reference { .. }
+    ));
     let wrong_tag = scope.replace("\"kind\":\"reference\"", "\"kind\":\"document\"");
     assert_ne!(wrong_tag, scope);
     assert!(serde_json::from_str::<FindingKeyScope>(&wrong_tag).is_err());

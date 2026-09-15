@@ -15,6 +15,8 @@ use amiss_scan::pipeline::{SetupShell, commit_pair};
 use amiss_scan::report::{Built, RequestDigests};
 use amiss_wire::model::{ObjectFormat, Oid};
 use amiss_wire::report::EngineProvenance;
+use amiss_wire::report::model::occurrences;
+use amiss_wire::resolution::ResolutionTag;
 use tempfile::TempDir;
 
 fn git(dir: &Path, args: &[&str]) -> String {
@@ -307,15 +309,18 @@ fn an_undeclared_label_is_missing_unless_a_colon_names_another_inventory() {
     complete(&built, &payload);
 
     assert_eq!(count(&payload, "references", "extracted"), 2);
-    let observations = payload["observations"].as_array().unwrap();
-    let mut resolutions: Vec<&str> = observations
+    let mut resolutions: Vec<ResolutionTag> = built
+        .envelope
+        .payload
+        .observations
         .iter()
-        .map(|row| row["candidate"]["resolution"]["kind"].as_str().unwrap())
+        .filter_map(|row| occurrences(row).candidate)
+        .map(|side| ResolutionTag::from(&side.resolution))
         .collect();
-    resolutions.sort_unstable();
+    resolutions.sort_unstable_by(|left, right| left.as_ref().cmp(right.as_ref()));
     assert_eq!(
         resolutions,
-        ["missing", "unsupported-semantics"],
+        [ResolutionTag::Missing, ResolutionTag::UnsupportedSemantics],
         "the bare label is missing here, the colon label is another inventory's"
     );
 }

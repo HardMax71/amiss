@@ -112,7 +112,7 @@ fn every_report_variant_streams_in_canonical_order() -> Result<(), Box<dyn std::
         r#"{"base_control_digest":null,"base_control_state":null,"candidate_control_digest":null,"candidate_control_state":null,"control_path":null,"exception":null,"kind":"control","rule_id":"rule"}"#,
         r#"{"document_result":{"base":null,"candidate":null,"change":"unchanged","classification":"structured-markdown","path":"a.md"},"kind":"document"}"#,
         r#"{"claim_digests":["$digest"],"kind":"duplicate-route","route":"/docs","sources":["a.md"]}"#,
-        r#"{"comparison":{"alternatives":{"base":[],"candidate":[]},"base":null,"candidate":null,"correlation":"none","correlation_reason":"new-observation","impact":"not-applicable","source_change":"unknown","target_change":"not-comparable"},"kind":"observation"}"#,
+        r#"{"comparison":{"alternatives":{"base":[],"candidate":[]},"correlation":"none","correlation_reason":"new-observation","impact":"not-applicable","sides":{"each":{"base":null,"candidate":null}},"source_change":"unknown","target_change":"not-comparable"},"kind":"observation"}"#,
         r#"{"expected_bytes":null,"expected_digest":null,"kind":"projection","name":"names","observed":"sink-absent","observed_bytes":null,"observed_digest":null,"projection":"sorted-rows-v1","sink":"previous-code","source":{"kind":"record-set","set":"records"},"sources":[]}"#,
         r#"{"kind":"reference","occurrence_multiplicity":1,"resolution":{"kind":"external","reason":"url"}}"#,
     ] {

@@ -390,3 +390,44 @@ fn sealed_emission_matches_the_canonical_envelope() {
         ErrorKind::InvalidData
     );
 }
+
+/// An equal pair is written once as `same` and read back as one occurrence on
+/// both sides; a differing pair whose sides are equal is refused.
+#[test]
+fn an_equal_pair_is_written_once_as_same() {
+    use amiss_wire::envelope::{Payload as _, sealed_digest};
+    use amiss_wire::report::model::{
+        Pair, ReportEnvelope, ReportPayload, Sides, comparisons_valid, occurrences,
+    };
+    use amiss_wire::report::{PAYLOAD_SCHEMA, ReportDefect, emit_sealed};
+
+    let bytes: &[u8] = include_bytes!("../../../../spec/examples/scanner-report.json");
+    let mut envelope: ReportEnvelope = serde_json::from_slice(bytes).unwrap();
+    let row = envelope.payload.observations.first_mut().unwrap();
+    let base = occurrences(row).base.unwrap().clone();
+    row.sides = Sides::Same(Box::new(base.clone()));
+    let spelled = envelope.payload.spell().unwrap();
+    let mut written = Vec::new();
+    emit_sealed(
+        &envelope.schema,
+        &spelled,
+        sealed_digest(PAYLOAD_SCHEMA, &spelled),
+        &mut written,
+    )
+    .unwrap();
+    assert!(
+        String::from_utf8_lossy(&written).contains("\"sides\":{\"same\":{"),
+        "the equal pair is one occurrence on the wire"
+    );
+    let read = <ReportPayload>::parse(&written).unwrap();
+    let sides = occurrences(read.payload.observations.first().unwrap());
+    assert_eq!(sides.base, Some(&base));
+    assert_eq!(sides.candidate, Some(&base));
+
+    let mut rows = read.payload.observations.clone();
+    rows[0].sides = Sides::Each(Box::new(Pair {
+        base: Some(base.clone()),
+        candidate: Some(base),
+    }));
+    assert_eq!(comparisons_valid(&rows), Err(ReportDefect::Noncanonical));
+}

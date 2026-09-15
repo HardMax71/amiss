@@ -50,34 +50,46 @@ fn report(observations: Vec<Value>) -> Value {
         .pointer("/payload/observations")
         .and_then(Value::as_array)
         .expect("the report example has observations");
-    let resolved = examples
-        .first()
-        .and_then(|row| row.get("candidate"))
-        .expect("the report example has a resolved occurrence")
-        .clone();
+    let candidate_side = |row: &Value| {
+        let sides = row.get("sides").expect("the example comparison has sides");
+        sides
+            .get("same")
+            .or_else(|| sides.pointer("/each/candidate"))
+            .expect("the example comparison has a candidate side")
+            .clone()
+    };
+    let resolved = candidate_side(
+        examples
+            .first()
+            .expect("the report example has a resolved occurrence"),
+    );
     let external = examples
         .get(1)
         .expect("the report example has an external comparison")
         .clone();
-    let external_occurrence = external
-        .get("candidate")
-        .expect("the external comparison has a candidate")
-        .clone();
+    let external_occurrence = candidate_side(&external);
     let rows = observations
         .into_iter()
         .map(|row| {
-            let supplied = row;
             let mut comparison = external.clone();
-            for side in ["base", "candidate"] {
-                let expanded = expand_occurrence(
-                    supplied.get(side).expect("the comparison has both sides"),
+            let [base, candidate] = ["base", "candidate"].map(|side| {
+                expand_occurrence(
+                    row.get(side).expect("the comparison has both sides"),
                     &resolved,
                     &external_occurrence,
-                );
-                *comparison
-                    .get_mut(side)
-                    .expect("the example comparison has both sides") = expanded;
-            }
+                )
+            });
+            let sides = if !base.is_null() && base == candidate {
+                Value::from_iter([("same", base)])
+            } else {
+                Value::from_iter([(
+                    "each",
+                    Value::from_iter([("base", base), ("candidate", candidate)]),
+                )])
+            };
+            *comparison
+                .get_mut("sides")
+                .expect("the example comparison has sides") = sides;
             comparison
         })
         .collect();
@@ -117,13 +129,24 @@ fn expand_occurrence(supplied: &Value, resolved: &Value, external: &Value) -> Va
     let occurrence_object = occurrence
         .as_object_mut()
         .expect("the example occurrence is an object");
-    occurrence_object.insert(
+    let identity = occurrence_object
+        .get_mut("observation_id_input")
+        .and_then(Value::as_object_mut)
+        .expect("the example occurrence has an identity input");
+    identity.insert(
         "document".to_owned(),
         supplied
             .get("document")
             .expect("the supplied occurrence has a document")
             .clone(),
     );
+    if let Some(intent) = supplied.get("intent").and_then(Value::as_object) {
+        let target = identity
+            .get_mut("extracted_intent")
+            .and_then(Value::as_object_mut)
+            .expect("the example occurrence has an intent");
+        target.extend(intent.clone());
+    }
     match supplied.get("external_destination") {
         Some(destination) => {
             occurrence_object.insert("external_destination".to_owned(), destination.clone());
@@ -131,13 +154,6 @@ fn expand_occurrence(supplied: &Value, resolved: &Value, external: &Value) -> Va
         None => {
             occurrence_object.remove("external_destination");
         }
-    }
-    if let Some(intent) = supplied.get("intent").and_then(Value::as_object) {
-        let target = occurrence_object
-            .get_mut("intent")
-            .and_then(Value::as_object_mut)
-            .expect("the example occurrence has an intent");
-        target.extend(intent.clone());
     }
     if !is_resolved {
         occurrence_object.insert(

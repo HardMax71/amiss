@@ -1,3 +1,10 @@
+use amiss_wire::repo_path_text;
+use amiss_wire::report::IntentKind;
+use amiss_wire::report::model::{
+    MissingResolution, RepoPath, Resolution, UnsupportedSemanticsResolution, occurrences,
+};
+use amiss_wire::resolution::{BlobTarget, Target};
+
 use crate::support::{amiss, payload};
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
@@ -39,26 +46,21 @@ fn a_sphinx_doc_role_resolves_through_the_path_lane() {
     let (code, stdout, stderr) = sphinx_fixture();
     assert_eq!((code, stderr.as_str()), (1, ""), "the dead label blocks");
     let body = payload(&stdout);
-    let observations = body.get("observations").unwrap().as_array().unwrap();
-    let candidate_side = |kind: &str| {
-        observations
-            .iter()
-            .filter_map(|row| row.get("candidate"))
-            .filter(|side| {
-                side.pointer("/intent/kind")
-                    .is_some_and(|value| value == kind)
-            })
-            .collect::<Vec<_>>()
-    };
-
-    let doc = candidate_side("repository-path");
+    let report = crate::support::report(&stdout);
+    let doc: Vec<_> = report
+        .payload
+        .observations
+        .iter()
+        .filter_map(|row| occurrences(row).candidate)
+        .filter(|side| {
+            side.observation_id_input.extracted_intent.kind == IntentKind::RepositoryPath
+        })
+        .collect();
     assert!(
         doc.iter().any(|side| {
-            side.pointer("/intent/repository_path")
-                .is_some_and(|path| path == "docs/guide.rst")
-                && side
-                    .pointer("/resolution/kind")
-                    .is_some_and(|kind| kind == "resolved")
+            side.observation_id_input.extracted_intent.repository_path
+                == Some(RepoPath::Text(repo_path_text!("docs/guide.rst")))
+                && matches!(side.resolution, Resolution::Resolved { .. })
         }),
         "the :doc: role resolves through the ordinary path lane: {doc:?}"
     );
@@ -79,67 +81,76 @@ fn a_sphinx_doc_role_resolves_through_the_path_lane() {
 #[test]
 fn sphinx_labels_resolve_through_the_label_table() {
     let (_code, stdout, _stderr) = sphinx_fixture();
-    let body = payload(&stdout);
-    let observations = body.get("observations").unwrap().as_array().unwrap();
-    let candidate_side = |kind: &str| {
-        observations
-            .iter()
-            .filter_map(|row| row.get("candidate"))
-            .filter(|side| {
-                side.pointer("/intent/kind")
-                    .is_some_and(|value| value == kind)
-            })
-            .collect::<Vec<_>>()
-    };
-    let labels = candidate_side("label");
+    let report = crate::support::report(&stdout);
+    let labels: Vec<_> = report
+        .payload
+        .observations
+        .iter()
+        .filter_map(|row| occurrences(row).candidate)
+        .filter(|side| side.observation_id_input.extracted_intent.kind == IntentKind::Label)
+        .collect();
     assert_eq!(labels.len(), 5, "five :ref: observations: {labels:?}");
-    let outcome = |side: &&serde_json::Value| {
-        (
-            side.pointer("/resolution/kind")
-                .and_then(|value| value.as_str())
-                .unwrap_or_default()
-                .to_owned(),
-            side.pointer("/resolution/reason")
-                .and_then(|value| value.as_str())
-                .unwrap_or_default()
-                .to_owned(),
-        )
+    let count = |expected: fn(&Resolution) -> bool| {
+        labels
+            .iter()
+            .filter(|side| expected(&side.resolution))
+            .count()
     };
-    let mut outcomes: Vec<(String, String)> = labels.iter().map(outcome).collect();
-    outcomes.sort();
     assert_eq!(
-        outcomes,
-        vec![
-            ("missing".to_owned(), "label-not-declared".to_owned()),
-            ("resolved".to_owned(), String::new()),
-            ("resolved".to_owned(), String::new()),
-            (
-                "unsupported-semantics".to_owned(),
-                "duplicate-label".to_owned()
-            ),
-            (
-                "unsupported-semantics".to_owned(),
-                "external-inventory".to_owned()
-            ),
-        ],
-        "two held including the quoted phrase, one dead, one duplicated, one another project's"
+        count(|resolution| matches!(resolution, Resolution::Resolved { .. })),
+        2,
+        "two held including the quoted phrase: {labels:?}"
+    );
+    assert_eq!(
+        count(|resolution| matches!(
+            resolution,
+            Resolution::Missing(MissingResolution::LabelNotDeclared {})
+        )),
+        1,
+        "one dead: {labels:?}"
+    );
+    assert_eq!(
+        count(|resolution| matches!(
+            resolution,
+            Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution::DuplicateLabel {})
+        )),
+        1,
+        "one duplicated: {labels:?}"
+    );
+    assert_eq!(
+        count(|resolution| matches!(
+            resolution,
+            Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution::ExternalInventory {})
+        )),
+        1,
+        "one another project's: {labels:?}"
     );
     let held = labels
         .iter()
-        .find(|side| {
-            side.pointer("/resolution/kind")
-                .is_some_and(|kind| kind == "resolved")
+        .find_map(|side| match &side.resolution {
+            Resolution::Resolved { target } => Some(target),
+            Resolution::DeclaredUntracked { .. }
+            | Resolution::External { .. }
+            | Resolution::Invalid { .. }
+            | Resolution::Missing(_)
+            | Resolution::TypeMismatch { .. }
+            | Resolution::UnsupportedSemantics(_)
+            | Resolution::UnsupportedTarget { .. }
+            | Resolution::UnsupportedVersion { .. } => None,
         })
         .unwrap();
+    let (Target::Tree { path } | Target::Blob(BlobTarget { path, .. })) = held;
     assert_eq!(
-        held.pointer("/resolution/target/path").unwrap(),
-        "docs/guide.rst",
+        *path,
+        RepoPath::Text(repo_path_text!("docs/guide.rst")),
         "the label resolves to its declaring document"
     );
     for side in &labels {
         assert!(
-            side.pointer("/intent/fragment_digest")
-                .is_some_and(|digest| !digest.is_null()),
+            side.observation_id_input
+                .extracted_intent
+                .fragment_digest
+                .is_some(),
             "the label rides the intent as its fragment: {side:?}"
         );
     }

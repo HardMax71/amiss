@@ -63,7 +63,7 @@ fn report_headers_and_verdicts_keep_their_closed_json_shapes() {
         ),
         (
             "/payload/compatibility",
-            json!("2"),
+            json!("1"),
             ReportDefect::NotAReport,
         ),
         (

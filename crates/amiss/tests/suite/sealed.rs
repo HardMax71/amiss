@@ -19,11 +19,17 @@ use amiss_wire::assessment::Nullable;
 use amiss_wire::controls::Profile;
 use amiss_wire::envelope::Payload as _;
 use amiss_wire::model::{ArtifactId, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
-use amiss_wire::report::model::ReportPayload;
+use amiss_wire::report::IntentKind;
+use amiss_wire::report::model::{
+    ExternalResolutionReason, InvalidResolutionReason, MissingResolution, ObservationComparison,
+    Occurrence, RepoPath, ReportEnvelope, ReportPayload, Resolution,
+    UnsupportedSemanticsResolution, occurrences,
+};
 use amiss_wire::requests::{
     ControlsRequest, EvaluationRequest, RequestStreams, RequestTrust, SEALED_ENGINE_ARGUMENT,
     SnapshotRequest, SuppliedControl, SuppliedSemanticEvidence, commit_candidate_identity_digest,
 };
+use amiss_wire::resolution::{BlobTarget, Target};
 use amiss_wire::semantic::observation::{
     Observation, SiteBuildObservation, SphinxLabelKind, SphinxLabelObservation,
 };
@@ -49,8 +55,8 @@ fn run(repo: Option<&str>, input: &[u8]) -> std::process::Output {
     child.wait_with_output().expect("collect sealed engine")
 }
 
-fn contract_report(bytes: &[u8]) -> serde_json::Value {
-    <ReportPayload>::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap();
+fn contract_report(bytes: &[u8]) -> (serde_json::Value, ReportEnvelope) {
+    let report = <ReportPayload>::parse(bytes.strip_suffix(b"\n").unwrap()).unwrap();
     let envelope: serde_json::Value = serde_json::from_slice(bytes).unwrap();
     let schema: serde_json::Value =
         serde_json::from_str(include_str!("../../../../spec/scanner-report.schema.json")).unwrap();
@@ -60,7 +66,7 @@ fn contract_report(bytes: &[u8]) -> serde_json::Value {
         .map(|error| format!("{}: {error}", error.instance_path()))
         .collect();
     assert!(defects.is_empty(), "{defects:?}");
-    envelope
+    (envelope, report)
 }
 
 fn example_streams() -> RequestStreams {
@@ -369,31 +375,37 @@ fn sealed_intersphinx_evidence_resolves_only_unique_labels() {
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
-    let envelope = contract_report(&output.stdout);
-    let labels: Vec<&serde_json::Value> = envelope["payload"]["observations"]
-        .as_array()
-        .unwrap()
+    let (envelope, report) = contract_report(&output.stdout);
+    let labels: Vec<&Occurrence> = report
+        .payload
+        .observations
         .iter()
-        .filter_map(|row| row.get("candidate"))
-        .filter(|row| row.pointer("/intent/kind") == Some(&serde_json::json!("label")))
+        .filter_map(|row| occurrences(row).candidate)
+        .filter(|row| row.observation_id_input.extracted_intent.kind == IntentKind::Label)
         .collect();
     assert_eq!(labels.len(), 4);
     assert!(labels.iter().any(|row| {
-        row.pointer("/resolution/reason") == Some(&serde_json::json!("intersphinx-inventory"))
-            && row.get("external_destination")
-                == Some(&serde_json::json!(
-                    "https://docs.python.org/3/reference/compound_stmts.html#except-star"
-                ))
+        matches!(
+            row.resolution,
+            Resolution::External {
+                reason: ExternalResolutionReason::IntersphinxInventory
+            }
+        ) && row.external_destination.as_deref()
+            == Some("https://docs.python.org/3/reference/compound_stmts.html#except-star")
     }));
-    assert!(labels.iter().any(|row| {
-        row.pointer("/resolution/reason") == Some(&serde_json::json!("label-not-declared"))
-    }));
+    assert!(labels.iter().any(|row| matches!(
+        row.resolution,
+        Resolution::Missing(MissingResolution::LabelNotDeclared {})
+    )));
     assert_eq!(
         labels
             .iter()
-            .filter(|row| {
-                row.pointer("/resolution/reason") == Some(&serde_json::json!("external-inventory"))
-            })
+            .filter(|row| matches!(
+                row.resolution,
+                Resolution::UnsupportedSemantics(
+                    UnsupportedSemanticsResolution::ExternalInventory {}
+                )
+            ))
             .count(),
         2,
         "a named inventory and ambiguous prefixless evidence remain unsupported"
@@ -498,90 +510,105 @@ fn sealed_site_build_evidence_resolves_candidate_routes_anchors_and_redirects() 
     };
     let output = run(Some(&fixture.repo), &framed(&streams));
     assert_eq!(output.status.code(), Some(0), "{:?}", output.stderr);
-    let envelope = contract_report(&output.stdout);
-    assert_site_routes(&envelope);
+    let (envelope, report) = contract_report(&output.stdout);
+    assert_site_routes(&report.payload);
     assert_unlinked(&envelope, &["docs/index.md"]);
     assert_site_defects(&envelope);
 }
 
-fn assert_site_routes(envelope: &serde_json::Value) {
-    let routes: Vec<&serde_json::Value> = envelope
-        .pointer("/payload/observations")
-        .and_then(serde_json::Value::as_array)
-        .unwrap()
+fn assert_site_routes(payload: &ReportPayload) {
+    let routes: Vec<(&ObservationComparison, &Occurrence)> = payload
+        .observations
         .iter()
-        .filter(|row| {
-            row.pointer("/candidate/intent/kind") == Some(&serde_json::json!("site-route"))
+        .filter_map(|row| occurrences(row).candidate.map(|side| (row, side)))
+        .filter(|(_, side)| {
+            side.observation_id_input.extracted_intent.kind == IntentKind::SiteRoute
         })
         .collect();
     assert_eq!(routes.len(), 23);
     assert_eq!(
         routes
             .iter()
-            .filter(|row| {
-                row.pointer("/base/resolution/reason") == Some(&serde_json::json!("site-route"))
-            })
+            .filter(
+                |(row, _)| occurrences(row).base.is_some_and(|base| matches!(
+                    base.resolution,
+                    Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution::SiteRoute {})
+                ))
+            )
             .count(),
         21
     );
     assert_eq!(
         routes
             .iter()
-            .filter(|row| {
-                row.pointer("/base/resolution/reason")
-                    == Some(&serde_json::json!("fragment-encoding"))
-            })
+            .filter(
+                |(row, _)| occurrences(row).base.is_some_and(|base| matches!(
+                    base.resolution,
+                    Resolution::Invalid {
+                        reason: InvalidResolutionReason::FragmentEncoding
+                    }
+                ))
+            )
             .count(),
         2
     );
     assert_eq!(
         routes
             .iter()
-            .filter(|row| {
-                row.pointer("/candidate/resolution/target/path")
-                    == Some(&serde_json::json!("docs/guide.md"))
+            .filter(|(_, side)| match &side.resolution {
+                Resolution::Resolved {
+                    target: Target::Tree { path } | Target::Blob(BlobTarget { path, .. }),
+                } => *path == RepoPath::Text(repo_path_text!("docs/guide.md")),
+                Resolution::DeclaredUntracked { .. }
+                | Resolution::External { .. }
+                | Resolution::Invalid { .. }
+                | Resolution::Missing(_)
+                | Resolution::TypeMismatch { .. }
+                | Resolution::UnsupportedSemantics(_)
+                | Resolution::UnsupportedTarget { .. }
+                | Resolution::UnsupportedVersion { .. } => false,
             })
             .count(),
         9
     );
-    assert_generated_routes(&routes);
+    let sides: Vec<&Occurrence> = routes.iter().map(|(_, side)| *side).collect();
+    assert_generated_routes(&sides);
     assert_eq!(
-        routes
+        sides
             .iter()
-            .filter(|row| {
-                row.pointer("/candidate/resolution/reason")
-                    == Some(&serde_json::json!("site-route"))
-            })
+            .filter(|side| matches!(
+                side.resolution,
+                Resolution::UnsupportedSemantics(UnsupportedSemanticsResolution::SiteRoute {})
+            ))
             .count(),
         11,
-        "unproved route uses remain explicitly unsupported: {routes:?}"
+        "unproved route uses remain explicitly unsupported: {sides:?}"
     );
-    assert_eq!(
-        envelope.pointer("/payload/summary/references/resolved"),
-        Some(&serde_json::json!(12))
-    );
-    assert_eq!(
-        envelope.pointer("/payload/summary/references/unsupported"),
-        Some(&serde_json::json!(11))
-    );
+    assert_eq!(payload.summary.references.resolved, 12);
+    assert_eq!(payload.summary.references.unsupported, 11);
 }
 
-fn assert_generated_routes(routes: &[&serde_json::Value]) {
-    let generated: Vec<&&serde_json::Value> = routes
+fn assert_generated_routes(sides: &[&Occurrence]) {
+    let generated: Vec<&&Occurrence> = sides
         .iter()
-        .filter(|row| {
-            row.pointer("/candidate/resolution/reason") == Some(&serde_json::json!("site-build"))
+        .filter(|side| {
+            matches!(
+                side.resolution,
+                Resolution::External {
+                    reason: ExternalResolutionReason::SiteBuild
+                }
+            )
         })
         .collect();
     assert_eq!(
         generated.len(),
         3,
-        "generated pages resolve from build evidence without becoming repository blobs: {routes:?}"
+        "generated pages resolve from build evidence without becoming repository blobs: {sides:?}"
     );
     assert!(
         generated
             .iter()
-            .all(|row| row.pointer("/candidate/external_destination").is_none())
+            .all(|side| side.external_destination.is_none())
     );
 }
 
