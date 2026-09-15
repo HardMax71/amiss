@@ -1,15 +1,5 @@
 use amiss_wire::controls::SourceConstruct;
 use amiss_wire::extraction::{Fault, Heading, Occurrence, Opaque};
-use markdown::mdast::Node;
-
-pub(super) fn span_of(node: &Node) -> Result<(usize, usize), Fault> {
-    let position = node.position().ok_or(Fault::InvalidSourceSpan)?;
-    let span = (position.start.offset, position.end.offset);
-    if span.0 > span.1 {
-        return Err(Fault::InvalidSourceSpan);
-    }
-    Ok(span)
-}
 
 /// Sorts by `(start, end)`, discards any span contained in another, and unions
 /// overlapping or exactly adjacent spans into maximal disjoint intervals.

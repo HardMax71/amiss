@@ -1,9 +1,8 @@
-use amiss_wire::extraction::{Fault, Heading, HeadingAttribute, HeadingSource};
-use markdown::mdast::Node;
+use amiss_wire::extraction::{Heading, HeadingAttribute, HeadingSource};
 
-use super::span::span_of;
+use crate::tree::{Kind, Node};
 
-pub(super) fn markdown_heading(node: &Node) -> Result<Heading, Fault> {
+pub(super) fn markdown_heading(node: &Node) -> Heading {
     let content = text_content(node);
     let (text, attribute) = mdx_comment_attribute(node).map_or_else(
         || split_attribute(&content, trailing_text(node)),
@@ -13,12 +12,12 @@ pub(super) fn markdown_heading(node: &Node) -> Result<Heading, Fault> {
             (kept.to_owned(), Some(HeadingAttribute { id, suffix }))
         },
     );
-    Ok(Heading {
+    Heading {
         text,
         attribute,
         source: HeadingSource::Markdown,
-        span: span_of(node)?,
-    })
+        span: node.span,
+    }
 }
 
 /// The identity a block's own final line declares. `attr_list` applies a block
@@ -38,45 +37,23 @@ fn text_content(node: &Node) -> String {
     let mut out = String::new();
     let mut stack = vec![node];
     while let Some(current) = stack.pop() {
-        match current {
-            Node::Text(text) => out.push_str(&text.value),
-            Node::InlineCode(code) => out.push_str(&code.value),
-            Node::InlineMath(math) => out.push_str(&math.value),
-            Node::Code(code) => out.push_str(&code.value),
-            Node::Math(math) => out.push_str(&math.value),
-            Node::Break(_)
-            | Node::Definition(_)
-            | Node::FootnoteReference(_)
-            | Node::Html(_)
-            | Node::Image(_)
-            | Node::ImageReference(_)
-            | Node::MdxFlowExpression(_)
-            | Node::MdxJsxFlowElement(_)
-            | Node::MdxJsxTextElement(_)
-            | Node::MdxTextExpression(_)
-            | Node::MdxjsEsm(_)
-            | Node::ThematicBreak(_)
-            | Node::Toml(_)
-            | Node::Yaml(_) => {}
-            Node::Blockquote(_)
-            | Node::Delete(_)
-            | Node::Emphasis(_)
-            | Node::FootnoteDefinition(_)
-            | Node::Heading(_)
-            | Node::Link(_)
-            | Node::LinkReference(_)
-            | Node::List(_)
-            | Node::ListItem(_)
-            | Node::Paragraph(_)
-            | Node::Root(_)
-            | Node::Strong(_)
-            | Node::Table(_)
-            | Node::TableCell(_)
-            | Node::TableRow(_) => {
-                if let Some(children) = current.children() {
-                    stack.extend(children.iter().rev());
-                }
+        match &current.kind {
+            Kind::Text(value) | Kind::InlineCode(value) | Kind::CodeBlock(value) => {
+                out.push_str(value);
             }
+            Kind::Html
+            | Kind::Mdx { .. }
+            | Kind::Image { .. }
+            | Kind::ImageReference(_)
+            | Kind::Definition(_) => {}
+            Kind::Root
+            | Kind::Paragraph
+            | Kind::Heading
+            | Kind::ListItem
+            | Kind::TableCell
+            | Kind::Link { .. }
+            | Kind::LinkReference(_)
+            | Kind::Other => stack.extend(current.children.iter().rev()),
         }
     }
     out
@@ -86,11 +63,13 @@ fn text_content(node: &Node) -> String {
 /// attribute spelling is an expression there. The comment is the heading's last
 /// child and the identity is taken as written, case and all.
 fn mdx_comment_attribute(node: &Node) -> Option<String> {
-    let Node::MdxTextExpression(expression) = node.children()?.last()? else {
+    let Kind::Mdx {
+        expression: Some(expression),
+    } = &node.children.last()?.kind
+    else {
         return None;
     };
     let inner = expression
-        .value
         .strip_prefix("/*")?
         .strip_suffix("*/")?
         .trim()
@@ -102,9 +81,8 @@ fn mdx_comment_attribute(node: &Node) -> Option<String> {
 /// attribute block. Anything else last, inline code above all, means the block
 /// carries none however its flattened content reads.
 fn trailing_text(node: &Node) -> Option<&str> {
-    let last = node.children()?.last()?;
-    if let Node::Text(text) = last {
-        Some(text.value.as_str())
+    if let Kind::Text(value) = &node.children.last()?.kind {
+        Some(value.as_str())
     } else {
         None
     }

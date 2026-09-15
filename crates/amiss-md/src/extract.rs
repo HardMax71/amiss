@@ -11,17 +11,17 @@ pub use amiss_wire::extraction::{
     HeadingAttribute, HeadingSource, Occurrence, Opaque, Work,
 };
 use amiss_wire::model::Adapter;
-use markdown::mdast::Node;
 
 use crate::accounting::{parsed, plain};
 use crate::frontmatter;
+use crate::tree::{Kind, Node};
 
 pub use definition::RESERVED_LABEL_PREFIX;
 use definition::{CollectedDefinitions, Definitions, OrphanDefinitions, definitions};
 use source::{
     image_label_end, inline_destination, link_destination, reference_image, reference_link, token,
 };
-use span::{gated_span, span_of, union, validate};
+use span::{gated_span, union, validate};
 
 /// Charges and extracts one document in a single guarded parse. The lexical
 /// rescans of embedded code stay inside `embedded_code_allowance`: every ask
@@ -91,7 +91,7 @@ fn extract_tree(
         suffix,
         definitions: resolved,
         orphans,
-        root_span: span_of(tree)?,
+        root_span: tree.span,
         occurrences: Vec::new(),
         headings: Vec::new(),
         declared: Vec::new(),
@@ -202,16 +202,14 @@ fn sweep_tree(tree: &Node, sweep: &mut Sweep<'_>) -> Result<(), Fault> {
         if !sweep.visit(node, &path, &mut owners)? {
             continue;
         }
-        if let Some(children) = node.children() {
-            let parent_depth = path.len();
-            for (index, child) in children.iter().enumerate().rev() {
-                stack.push(Frame {
-                    node: child,
-                    parent_depth,
-                    index: Some(index),
-                    owners,
-                });
-            }
+        let parent_depth = path.len();
+        for (index, child) in node.children.iter().enumerate().rev() {
+            stack.push(Frame {
+                node: child,
+                parent_depth,
+                index: Some(index),
+                owners,
+            });
         }
     }
     Ok(())
@@ -235,17 +233,13 @@ impl Sweep<'_> {
     /// one is extracted.
     fn visit(&mut self, node: &Node, path: &[usize], owners: &mut Owners) -> Result<bool, Fault> {
         let bytes = self.suffix.as_bytes();
-        match node {
-            Node::MdxjsEsm(_)
-            | Node::MdxFlowExpression(_)
-            | Node::MdxTextExpression(_)
-            | Node::MdxJsxFlowElement(_)
-            | Node::MdxJsxTextElement(_) => {
-                self.mdx.push(span_of(node)?);
+        let span = node.span;
+        match &node.kind {
+            Kind::Mdx { .. } => {
+                self.mdx.push(span);
                 return Ok(false);
             }
-            Node::Html(_) => {
-                let span = span_of(node)?;
+            Kind::Html => {
                 self.html.push(span);
                 for destination in html::collect_regions(self.suffix, &[span], html::destinations) {
                     let mut tag_path = path.to_vec();
@@ -260,80 +254,61 @@ impl Sweep<'_> {
                     );
                 }
             }
-            Node::Heading(_) => self.headings.push(heading::markdown_heading(node)?),
-            Node::ListItem(_) => owners.list_item = Some(span_of(node)?),
-            Node::TableCell(_) => owners.cell = Some(span_of(node)?),
-            Node::Paragraph(_) => {
-                owners.paragraph = Some(span_of(node)?);
+            Kind::Heading => self.headings.push(heading::markdown_heading(node)),
+            Kind::ListItem => owners.list_item = Some(span),
+            Kind::TableCell => owners.cell = Some(span),
+            Kind::Paragraph => {
+                owners.paragraph = Some(span);
                 if let Some(id) = heading::paragraph_attribute(node) {
                     self.declared.push(id);
                 }
             }
-            Node::Link(link) => {
-                let span = span_of(node)?;
-                let (construct, raw) = link_destination(bytes, self.suffix, span, link)?;
-                self.push(construct, raw, link.url.clone(), span, path, *owners);
+            Kind::Link { url } => {
+                let children_end = node.children.last().map(|child| child.span.1);
+                let (construct, raw) = link_destination(bytes, self.suffix, span, children_end)?;
+                self.push(construct, raw, url.clone(), span, path, *owners);
             }
-            Node::Image(image) => {
-                let span = span_of(node)?;
+            Kind::Image { url } => {
                 let label_end = image_label_end(bytes, span)?;
                 let token_span = inline_destination(bytes, label_end)?;
                 let raw = token(self.suffix, token_span)?;
                 self.push(
                     SourceConstruct::InlineImage,
                     raw,
-                    image.url.clone(),
+                    url.clone(),
                     span,
                     path,
                     *owners,
                 );
             }
-            Node::LinkReference(reference) => {
-                let construct = reference_link(reference.reference_kind);
-                let winning = self.definitions.get(&reference.identifier);
+            Kind::LinkReference(reference) => {
+                let construct = reference_link(reference.form);
+                let winning = self.definitions.get(&reference.key);
                 let winning = winning.ok_or(Fault::ParserError)?;
                 if !winning.reserved {
                     let (raw, url) = (winning.raw.clone(), winning.url.clone());
-                    self.push(construct, raw, url, span_of(node)?, path, *owners);
+                    self.push(construct, raw, url, span, path, *owners);
                 }
             }
-            Node::ImageReference(reference) => {
-                let construct = reference_image(reference.reference_kind);
-                let winning = self.definitions.get(&reference.identifier);
+            Kind::ImageReference(reference) => {
+                let construct = reference_image(reference.form);
+                let winning = self.definitions.get(&reference.key);
                 let winning = winning.ok_or(Fault::ParserError)?;
                 if !winning.reserved {
                     let (raw, url) = (winning.raw.clone(), winning.url.clone());
-                    self.push(construct, raw, url, span_of(node)?, path, *owners);
+                    self.push(construct, raw, url, span, path, *owners);
                 }
             }
-            Node::Root(_)
-            | Node::Blockquote(_)
-            | Node::FootnoteDefinition(_)
-            | Node::List(_)
-            | Node::Toml(_)
-            | Node::Yaml(_)
-            | Node::Break(_)
-            | Node::InlineCode(_)
-            | Node::InlineMath(_)
-            | Node::Delete(_)
-            | Node::Emphasis(_)
-            | Node::FootnoteReference(_)
-            | Node::Strong(_)
-            | Node::Text(_)
-            | Node::Code(_)
-            | Node::Math(_)
-            | Node::Table(_)
-            | Node::ThematicBreak(_)
-            | Node::TableRow(_) => {}
             // A definition nobody references still maintains a destination.
-            Node::Definition(_definition) => self.orphan(node, path, *owners)?,
+            Kind::Definition(_) => self.orphan(node, path, *owners),
+            Kind::Root | Kind::Text(_) | Kind::InlineCode(_) | Kind::CodeBlock(_) | Kind::Other => {
+            }
         }
         Ok(true)
     }
 
-    fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) -> Result<(), Fault> {
-        let span = span_of(node)?;
-        if let Some((raw, url)) = self.orphans.remove(&span) {
+    fn orphan(&mut self, node: &Node, path: &[usize], owners: Owners) {
+        if let Some((raw, url)) = self.orphans.remove(&node.span) {
             // A definition is a block node holding one destination, so it takes
             // the same within-node ordinal as a mined tag; a root-level one then
             // reaches the two-element path the address shape requires.
@@ -343,12 +318,11 @@ impl Sweep<'_> {
                 SourceConstruct::LinkReferenceDefinition,
                 raw,
                 url,
-                span,
+                node.span,
                 &definition_path,
                 owners,
             );
         }
-        Ok(())
     }
 
     fn push(

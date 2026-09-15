@@ -101,9 +101,10 @@ Source text, diagnostic prose, signatures, labels, versions, and rendering outpu
 deltas, and the index, each under a parser that rejects malformed input and a published
 resource ceiling. It repairs nothing.
 
-`amiss-md` holds the document parsers, pinned against the official [CommonMark](https://commonmark.org) and
-[GFM](https://github.github.com/gfm/) test
-suites plus the [MDX](https://mdxjs.com) grammar's own tests. The pin is a checked-in manifest recording node
+`amiss-md` holds the document parsers: pulldown-cmark for Markdown, markdown-rs for MDX, and one
+extraction sweep over a tree both feed. They are pinned against the official
+[CommonMark](https://commonmark.org) and [GFM](https://github.github.com/gfm/) test suites plus
+the [MDX](https://mdxjs.com) grammar's own tests. The pin is a checked-in manifest recording node
 counts, extraction results, and byte positions for every test case. A parser change that
 moves any of those moves the manifest, and review sees the diff.
 

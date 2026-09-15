@@ -2,12 +2,12 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use amiss_wire::extraction::{AnalyzeError, Fault, Work};
 use amiss_wire::model::Adapter;
-use markdown::mdast::Node;
 use markdown::to_mdast;
 
 use crate::frontmatter;
 use crate::lines::scan;
-use crate::profile::parse_options;
+use crate::profile::{markdown_options, mdx_options};
+use crate::tree::{self, Node};
 
 /// Charges one document against the adapter's grammar under an unbounded
 /// embedded-code allowance. Frontmatter contributes no node; an empty document
@@ -24,7 +24,7 @@ pub fn charge(adapter: Adapter, source: &[u8]) -> Result<Work, AnalyzeError> {
     }
 }
 
-/// Counts the root and every node reachable through the ordered `children` of
+/// Counts the root and every node reachable through the ordered children of
 /// the logical tree. Iterative because a hostile document may nest deeper than
 /// the stack allows.
 pub(crate) fn walk(root: &Node) -> Work {
@@ -36,10 +36,8 @@ pub(crate) fn walk(root: &Node) -> Work {
     while let Some((node, depth)) = pending.pop() {
         work.nodes = work.nodes.saturating_add(1);
         work.nesting = work.nesting.max(depth);
-        if let Some(children) = node.children() {
-            let below = depth.saturating_add(1);
-            pending.extend(children.iter().map(|child| (child, below)));
-        }
+        let below = depth.saturating_add(1);
+        pending.extend(node.children.iter().map(|child| (child, below)));
     }
     work
 }
@@ -72,22 +70,36 @@ pub(crate) fn parsed(
     source: &[u8],
     embedded_code_allowance: u64,
 ) -> Result<Option<(Node, usize, &str, u64)>, AnalyzeError> {
-    let Some((options, meter)) = parse_options(adapter, embedded_code_allowance) else {
-        return Ok(None);
-    };
+    match adapter {
+        Adapter::Markdown | Adapter::Mdx => {}
+        Adapter::AsciiDoc | Adapter::Rst | Adapter::PlainAdvisory => return Ok(None),
+    }
     let text = str::from_utf8(source).map_err(|_invalid| Fault::DocumentInvalid)?;
     let suffix_offset = frontmatter::recognize(source).map_or(0, |region| region.suffix_offset);
     let suffix = text.get(suffix_offset..).ok_or(Fault::DocumentInvalid)?;
-    let guarded = catch_unwind(AssertUnwindSafe(|| to_mdast(suffix, &options)))
-        .map_err(|_panic| Fault::ParserPanic)?;
-    let tree = guarded.map_err(|_rejected| {
-        if meter.tripped() {
-            AnalyzeError::EmbeddedCodeAllowance {
-                spent: meter.spent(),
-            }
-        } else {
-            AnalyzeError::Fault(Fault::DocumentInvalid)
+    let (tree, spent) = match adapter {
+        Adapter::Mdx => {
+            let (options, meter) = mdx_options(embedded_code_allowance);
+            let parsed = guarded(|| to_mdast(suffix, &options))?;
+            let mdast = parsed.map_err(|_rejected| {
+                if meter.tripped() {
+                    AnalyzeError::EmbeddedCodeAllowance {
+                        spent: meter.spent(),
+                    }
+                } else {
+                    AnalyzeError::Fault(Fault::DocumentInvalid)
+                }
+            })?;
+            (tree::from_mdast(&mdast)?, meter.spent())
         }
-    })?;
-    Ok(Some((tree, suffix_offset, suffix, meter.spent())))
+        Adapter::Markdown | Adapter::AsciiDoc | Adapter::Rst | Adapter::PlainAdvisory => {
+            let built = guarded(|| tree::from_markdown(suffix, markdown_options()))?;
+            (built?, 0)
+        }
+    };
+    Ok(Some((tree, suffix_offset, suffix, spent)))
+}
+
+fn guarded<T>(parse: impl FnOnce() -> T) -> Result<T, Fault> {
+    catch_unwind(AssertUnwindSafe(parse)).map_err(|_panic| Fault::ParserPanic)
 }

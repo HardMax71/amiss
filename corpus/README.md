@@ -57,7 +57,7 @@ Footnotes and single-tilde strikethrough are the pinned bundle's additions beyon
 which is why they carry suites of their own rather than living in the 0.29 spec text. Seven of
 their fixtures configure the extension away from what this profile pins (a different footnote
 label, a clobber prefix, single tilde turned off, a construct disabled). They are testing another
-profile, so they stay in the corpus as inputs and only their HTML comparison is skipped.
+profile, so they stay in the corpus as inputs and only their link-surface comparison is skipped.
 
 The footnote suite also renders 29 documents against the HTML github.com itself produces for them.
 That is where the interactions the spec names live: a footnote call against a link, against an
@@ -69,26 +69,54 @@ it, so a fixture cannot be edited, added, or dropped without the pin moving.
 
 The scanner spec froze a Node oracle (`unified` + `remark-parse` + `remark-gfm`, with
 `remark-mdx` for MDX) and allowed a different parser only where it reproduces that pipeline. This
-implementation is Rust with no Node anywhere, so the oracle is re-pinned to the `markdown` crate,
-which is the same lineage: it is wooorm's port of micromark and `mdast-util-from-markdown`, the
-two halves of `remark-parse`, and it produces the same mdast.
+implementation is Rust with no Node anywhere, and it runs two parsers behind one extraction sweep.
+
+The Markdown profile parses with `pulldown-cmark` 0.13.4, with tables, footnotes, strikethrough,
+task lists, and alerts enabled. It replaced the `markdown` crate there for cost. That crate is a
+port of micromark, a per-byte state machine that spends 120 to 160 nanoseconds a byte and carries a
+quadratic edit map on tables and long paragraphs, and on this repository's own documentation the
+parse was 45 percent of a run. pulldown-cmark reads the same documents at 2 to 5 nanoseconds a
+byte. The swap is one library: no cache, no threads, nothing kept between runs.
+
+The MDX profile still parses with the `markdown` crate at 1.0.0, which is wooorm's port of
+micromark and `mdast-util-from-markdown`, the two halves of `remark-parse`, and the only Rust
+parser of MDX. It produces the same mdast as the oracle, and the embedded-code meter below runs
+inside it.
+
+Both parsers feed one tree (`crates/amiss-md/src/tree.rs`), and the sweep reads only that tree.
+Under MDX it is mdast, node for node. Under Markdown it is pulldown's event tree as this crate
+shapes it: every start and end pair is a node, every leaf event is a node, consecutive text and
+soft line breaks form one text node, a code block is one leaf, a raw HTML block is one leaf, an
+image is a leaf (nothing inside its label is a node), and link reference definitions, which leave
+no event, are taken from the parser's own table (and from the rescans described below for the
+copies CommonMark shadows) and inserted as leaves at their document position.
+GFM autolink literals, which pulldown does not recognize, become link nodes inside text runs. A
+block's span ends at its last content byte, so trailing blank lines and line endings belong to no
+block, and an indented block starts at its first marker byte rather than at the line start. A
+tight list item holds its text directly, with no paragraph node, so node paths and node counts
+moved for every list when the manifest was re-blessed.
 
 The equivalence is not asserted on lineage alone. It is held up by upstream ground truth:
 
-- all 652 CommonMark 0.31.2 examples reproduce byte for byte, with the extensions off;
-- all 22 examples that GFM 0.29 tags with an extension and actually executes reproduce under the
-  pinned `commonmark-gfm` options, except the one divergence below;
+- all 652 CommonMark 0.31.2 examples reproduce through pulldown-cmark's own HTML renderer with the
+  extensions off, up to two serialization choices its spec suite normalizes the same way: a double
+  quote in text written as itself rather than `&quot;`, and a line break between two tags;
+- the 22 examples that GFM 0.29 tags with an extension and actually executes, the 22 footnote and
+  tilde fixtures under the pinned configuration, and the 29 documents github.com renders are
+  compared on their link surface: the ordered `href` and `src` values upstream publishes must be
+  the semantic destinations the Markdown profile extracts, in order. Renderers disagree on the
+  markup around a table or a footnote, and the scanner renders no HTML, so the markup is not the
+  evidence; the links are. Nineteen of the 22 GFM examples, all 22 footnote and tilde fixtures,
+  and 28 of the 29 github.com documents agree, and the four that do not are recorded below;
 - of the 257 MDX fixtures, none is rejected here that the pinned grammar accepts, 166 of the 172
   that publish HTML reproduce it exactly, and every remaining difference is one of the recorded
-  cases below;
-- all 22 footnote and tilde fixtures under the pinned configuration reproduce their HTML, and 28
-  of the 29 documents reproduce what github.com renders for them.
+  cases below.
 
-What the Rust pipeline cannot prove on its own is mdast shape equality with the Node oracle for
-node counts and depths, since no upstream publishes those. They are a property of the tree, and
-the tree is only pinned here. This is a real gap in the evidence, and it stays open rather than
-being papered over: the manifest, not the Node pipeline, is now the thing implementations
-reproduce.
+What no upstream publishes is a node count or a depth, so tree shape cannot be proven against
+anything outside this repository. The tree is pinned here, by the manifest, and under Markdown it
+is pulldown's tree under the rules above rather than the oracle's mdast. That is a real gap in the
+evidence, and it stays open rather than being papered over: the manifest, not the Node pipeline,
+is the thing implementations reproduce.
 
 ## Embedded JavaScript is lexed, never parsed
 
@@ -129,11 +157,23 @@ determinism, and the one-ask overshoot bound are pinned in `crates/amiss-md/test
 ## The extraction goldens
 
 An occurrence is one supported syntax node: an inline link or image, a full, collapsed, or
-shortcut reference form, or an autolink, where all four autolink shapes (angle URI, angle email,
-`www.`, protocol and email literals) share the one `markdown-autolink` construct and differ in
-their tokens. Footnote references are not links, definitions consumed by nothing produce nothing,
-and anything inside raw HTML or a flattened image label produces no node, so nothing is extracted
-from it.
+shortcut reference form, an autolink, a reference definition no reference consumes, or an `href`
+or `src` mined out of raw HTML. All four autolink shapes (angle URI, angle email, `www.`, protocol
+and email literals) share the one `markdown-autolink` construct and differ in their tokens; an
+unconsumed definition is a `markdown-link-reference-definition`, and raw HTML yields `html-anchor`
+and `html-image`. Footnote references are not links, and nothing inside raw HTML or a flattened
+image label is a Markdown node, so the sweep extracts nothing from either; raw HTML is mined for
+its attribute values by a separate scanner.
+
+Under the Markdown profile the `www.`, protocol, and email literals come from the `linkify`
+crate, run over the source bytes of every text run outside links, images, code, and raw HTML, so
+an escape or a character reference inside a URL stays part of it. A match is kept when it starts
+with `http://`, `https://`, or `www.` (which gets `http://` in front), or is an email address
+(which gets `mailto:` in front, unless a `mailto:` or `xmpp:` written before it is kept as
+written). Two GFM rules run on top: a trailing run that spells a character reference (`&name;`)
+is left out, and a literal never starts right after a backslash escape. Other schemes such as
+`ftp://` and bare domains stay text, as they do on github.com. Under the MDX profile the literals
+are micromark's own.
 
 Each occurrence publishes two destination representations, because they answer different
 questions. `raw_destination` is the exact source-token byte slice: angle brackets dropped, titles
@@ -146,10 +186,13 @@ which is exactly the value the parser publishes as the node's URL. So `[a](&amp;
 
 Spans are zero-based half-open byte offsets into the raw document; a span endpoint never splits a
 CRLF pair. `node_path` is the zero-based child-index path from the post-frontmatter root to the
-syntax node itself, not to its owner, and frontmatter shifts every byte offset while shifting no
-path. The block owner follows the override order the spec fixes (nearest ancestor list item,
+syntax node itself, not to its owner, through the tree described above (pulldown's tree under the
+Markdown profile, mdast under MDX), and frontmatter shifts every byte offset while shifting no
+path. An unconsumed definition and a destination mined out of raw HTML append their ordinal within
+the node. The block owner follows the override order the spec fixes (nearest ancestor list item,
 otherwise nearest table cell, otherwise nearest paragraph, otherwise the document root), so a link
-in a heading is owned by the root, and raw HTML never owns anything.
+in a heading is owned by the root, a link in a tight list item is owned by the item with no
+paragraph in between, and raw HTML never owns anything.
 
 The opaque partition is frontmatter first, then MDX intervals, then raw-HTML intervals on what
 remains: spans sorted, contained spans discarded, overlapping or exactly adjacent spans unioned. A
@@ -158,17 +201,32 @@ The three interval families never overlap, and a Markdown document has no MDX in
 document has no raw-HTML nodes.
 
 A heading carries the text a renderer slugs and nothing else: text leaves in document order, code
-and math verbatim, the alt text of images, and no bytes from raw HTML, MDX, or a footnote call. A
-trailing `{#id}` splits off, in the plain spelling and in the `attr_list` spelling with the colon,
-because renderers disagree about it: mdBook, VitePress, Gitea and MkDocs with `attr_list` publish
-that id, while GitHub and GitLab render the braces as text. The removed bytes are kept whole, so
-the text followed by the suffix is exactly what the second group reads.
+and math verbatim, and no bytes from an image (its alt text is an attribute, not element text),
+raw HTML, MDX, or a footnote call. A trailing `{#id}` splits off, in the plain spelling and in the
+`attr_list` spelling with the colon, because renderers disagree about it: mdBook, VitePress, Gitea
+and MkDocs with `attr_list` publish that id, while GitHub and GitLab render the braces as text.
+The removed bytes are kept whole, so the text followed by the suffix is exactly what the second
+group reads.
 
 Raw HTML publishes its anchors separately, in document order: every `id` and `name` attribute
 inside a raw-HTML region, matched only at a word boundary, so `data-id` is not one. Accepting more
 than a browser would can only leave an anchor unreported, never report a live one as missing.
 Neither golden decides an identity. They record what a renderer would read; the rule it applies
 to that is pinned elsewhere.
+
+A definition's label is published decoded, backslash escapes and character references resolved and
+nothing else read, under both grammars: mdast decodes it itself, and under Markdown the label is
+read back through pulldown's own title decoder, since the crate keeps that decoder private. So
+`[amiss:name]`, `[amiss&colon;name]` and `[amiss\:name]` all reserve the governed channel and
+`[AMISS:name]` does not. Whitespace runs inside a label are collapsed the way pulldown keys them.
+
+CommonMark shadows every copy of a label after the first, and pulldown drops the copies without an
+event, while the claims layer reads every one (duplicate claim names aggregate into one finding).
+So the Markdown profile parses again for them: the definitions already found are blanked, spaces
+for every byte but the line endings so no offset moves, and each pass surfaces the next copy of
+every label until a pass finds nothing. A document with definitions costs one extra parse, a
+document with a label written three times costs three, and a document that still hides
+definitions after 32 passes is a `PARSER_ERROR` named in the report rather than a silent drop.
 
 Two locators read source bytes rather than the tree, because the tree does not carry them. The
 destination token is found by walking past the label (`](`, optional whitespace, angle or bare
@@ -181,10 +239,20 @@ documents caught their first two bugs: indented definitions and image labels hol
 
 ## Recorded divergences
 
-GFM example 628 autolinks `ftp://foo.bar.baz`. The pinned bundle does not, and neither does
-github.com: micromark's autolink-literal extension recognizes `www.`, `http://`, `https://`, and
-email, and says so. The spec pins the `remark-gfm` bundle rather than `cmark-gfm`, so the bundle
-wins and the 0.29 spec text is stale here.
+Three GFM examples diverge on the link surface, all three on autolink literals. Each divergence
+set is asserted by equality, so a new one fails the run rather than joining the list.
+
+GFM example 625 is `www.google.com/search?q=(business))+ok`. GFM keeps the whole run as the link,
+because its rule about unbalanced closing parentheses applies only to a link that ends in one.
+linkify stops at the unbalanced parenthesis, so the profile publishes
+`http://www.google.com/search?q=(business)`, a shorter destination than github.com's.
+
+GFM example 628 autolinks `ftp://foo.bar.baz`. github.com does not: its autolink literals are
+`www.`, `http://`, `https://`, and email, and the 0.29 spec text is stale here. The profile
+follows github.com, as it did before the parser change.
+
+GFM example 631 is `a.b-c_d@a.b`, an email address whose top-level domain is one letter. GFM
+accepts it and linkify does not, so the profile extracts nothing from that example.
 
 Six MDX fixtures produce different HTML, and none of the six is a grammar difference. Five differ
 only in which line endings survive: the suites drop a tag with a throwaway HTML extension, while a
@@ -193,41 +261,41 @@ identical in both. The sixth indents `{}` by four spaces and expects an indented
 because it loads one extension at a time and never loads the one that removes indented code from
 MDX; this profile is the whole bundle, so the expression is an expression.
 
-Each divergence set is asserted by equality, so a new one fails the run rather than joining the
-list.
-
 GFM's two task-list examples are marked `disabled` upstream and are not executed by cmark-gfm's
 own suite either. They remain corpus inputs with node and depth goldens; only their HTML is
 skipped.
 
 ## The one document github.com renders and this does not
 
-`footnotes-in-constructs` holds `[link[^1]](#)`, a footnote call inside a link label. The pinned
-grammar makes that a link, and so does github.com. `markdown-rs` 1.0.0 does not: the brackets stay
-literal and no link node is built. `[link](#)` and `[a *b* c](#)` are links, so it is the footnote
-call in the label that does it.
+`footnotes-in-constructs` holds `![image[^4]](#)` and `[link[^5]](#)`, a footnote call inside an
+image label and inside a link label. github.com renders an image and a link. pulldown-cmark 0.13.4
+renders neither once the footnotes are defined: the brackets stay literal around the footnote
+reference, and no image or link node is built. `[link](#)` and `[a *b* c](#)` are links, so it is
+the footnote call in the label that does it. The `markdown` crate, which the Markdown profile ran
+before, formed the image and not the link, so the image is a new miss and the link an old one.
 
 This one matters more than a rendering difference, because the scanner reads links. A
 `[see the guide[^1]](./guide.md)` in a repository would go unseen, and the reference it carries
 would be missing from the report rather than wrong in it. That is under-reporting, which is the
 safer direction to fail in but still a hole, and it is disclosed here rather than discovered later.
-It is worth reporting upstream. The conformance test asserts the divergence set is exactly this
-one document.
+It is worth reporting upstream to pulldown-cmark. The conformance test asserts the divergence set
+is exactly this one document.
 
-Comparing against github.com's HTML needs two normalizations, both stated rather than hidden. The
-suite's own compensations for bugs in GitHub's renderer are applied exactly as upstream applies
-them, so that what remains is a difference here rather than a difference there. And a
-back-reference's `aria-label` is erased on both sides: micromark 2.1.0 writes one per reference
-(`Back to reference 1`), `markdown-rs` has a single static string and cannot express that. It is a
-compile option with no parse meaning, and the scanner renders no HTML.
+Comparing against github.com's link surface keeps two of the suite's own compensations, applied
+exactly as upstream applies them, so that what remains is a difference here rather than a
+difference there: the source of an image that points at nothing but a search or a hash is erased
+on the extracted side, since github.com drops it, and in `constructs-in-identifiers` the
+`![image](#)` github.com leaves as text is restored to an image on the published side. The
+`aria-label` erasure the HTML comparison needed is gone with it; the scanner renders no HTML.
 
 ## An upstream bug, and what the contract says to do about it
 
-`markdown-rs` 1.0.0 fails an internal assertion on `a [open <b> close](c) </b> d.`, and on the
-image form of it: a JSX tag that opens inside a link label and closes outside it. Both are
-accepted by the pinned grammar, so this is a bug, not a rejection. It is worth reporting upstream.
+`markdown-rs` 1.0.0, which the MDX profile runs, fails an internal assertion on
+`a [open <b> close](c) </b> d.`, and on the image form of it: a JSX tag that opens inside a link
+label and closes outside it. Both are accepted by the pinned grammar, so this is a bug, not a
+rejection. It is worth reporting upstream.
 
-A repository can therefore hand the scanner a document that panics its parser. The contract
+A repository can therefore hand the scanner an MDX document that panics its parser. The contract
 already has the answer: `PARSER_PANIC` is defined as a caught panic that bypasses the parser's own
 result, which means the engine catches it and reports it rather than dying. So the release profile
 unwinds instead of aborting, the parse is guarded, and those two documents come back as
@@ -290,10 +358,11 @@ charged under all three, so a grammar change anywhere moves the manifest.
 With extraction, span, address, owner, opaque, heading, and raw-HTML-anchor goldens in the
 manifest, every golden family the spec names for this gate is present. What the heading goldens
 do not carry is any renderer's slugging rule, which is pinned separately from this manifest.
-What the corpus still cannot prove is tree-shape equality
-with the frozen Node oracle (nothing upstream publishes mdast node counts), and the two recorded
-parser bugs stand until markdown-rs fixes land: the `[link[^1]](#)` link this parser does not
-form, and the two documents that panic it.
+What the corpus still cannot prove is tree shape against anything upstream: nothing publishes
+node counts, and the Markdown tree is pulldown's, not mdast. The recorded parser gaps stand until
+upstream fixes land: the image and the link around a footnote call that pulldown-cmark does not
+form, the three autolink literal examples linkify reads differently from GFM, and the two MDX
+documents that panic markdown-rs.
 
 The manifest names the families and profiles it covers, so a partial corpus cannot be mistaken
 for a complete one.

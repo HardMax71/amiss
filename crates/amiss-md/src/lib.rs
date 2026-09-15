@@ -4,6 +4,7 @@ pub mod frontmatter;
 mod js;
 pub mod lines;
 pub mod profile;
+mod tree;
 
 pub use accounting::charge;
 pub use amiss_wire::extraction::{

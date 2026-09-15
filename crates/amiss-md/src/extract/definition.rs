@@ -1,10 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use amiss_wire::extraction::{Fault, GovernedDefinition, SemanticCodeBlock, Work};
-use markdown::mdast::Node;
 
 use super::source::definition_destination;
-use super::span::span_of;
+use crate::tree::{Kind, Node};
 
 /// A definition is reserved exactly when its decoded label scalars, before
 /// `CommonMark` whitespace and case normalization, begin with lowercase ASCII
@@ -17,7 +16,7 @@ pub(super) struct Definition {
     pub(super) reserved: bool,
 }
 
-pub(super) type Definitions = HashMap<String, Definition>;
+pub(super) type Definitions = HashMap<usize, Definition>;
 pub(super) type OrphanDefinitions = BTreeMap<(usize, usize), (String, String)>;
 
 pub(super) struct CollectedDefinitions {
@@ -40,47 +39,49 @@ pub(super) fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefiniti
     while let Some((node, depth)) = stack.pop() {
         work.nodes = work.nodes.saturating_add(1);
         work.nesting = work.nesting.max(depth);
-        if let Node::LinkReference(reference) = node {
-            used.insert(reference.identifier.clone());
-        }
-        if let Node::ImageReference(reference) = node {
-            used.insert(reference.identifier.clone());
-        }
-        if let Node::Code(code) = node {
-            code_blocks.push((span_of(node)?, code.value.as_str()));
-        }
-        if let Node::Definition(definition) = node {
-            let span = span_of(node)?;
-            let label = definition
-                .label
-                .as_deref()
-                .unwrap_or(definition.identifier.as_str());
-            let (raw, angled) = definition_destination(suffix, span)?;
-            let reserved = label.starts_with(RESERVED_LABEL_PREFIX);
-            if reserved {
-                governed.push(GovernedDefinition {
-                    span,
-                    url: definition.url.clone(),
-                    title: definition.title.clone(),
-                    label: label.to_owned(),
-                    angled,
-                    previous_code: None,
-                });
+        match &node.kind {
+            Kind::LinkReference(reference) | Kind::ImageReference(reference) => {
+                used.insert(reference.key);
             }
-            out.push((
-                span,
-                definition.identifier.clone(),
-                Definition {
-                    url: definition.url.clone(),
-                    raw,
-                    reserved,
-                },
-            ));
+            Kind::CodeBlock(value) => code_blocks.push((node.span, value.as_str())),
+            Kind::Definition(definition) => {
+                let (raw, angled) = definition_destination(suffix, node.span)?;
+                let reserved = definition.label.starts_with(RESERVED_LABEL_PREFIX);
+                if reserved {
+                    governed.push(GovernedDefinition {
+                        span: node.span,
+                        url: definition.url.clone(),
+                        title: definition.title.clone(),
+                        label: definition.label.clone(),
+                        angled,
+                        previous_code: None,
+                    });
+                }
+                out.push((
+                    node.span,
+                    definition.key,
+                    Definition {
+                        url: definition.url.clone(),
+                        raw,
+                        reserved,
+                    },
+                ));
+            }
+            Kind::Root
+            | Kind::Paragraph
+            | Kind::Heading
+            | Kind::ListItem
+            | Kind::TableCell
+            | Kind::Html
+            | Kind::Mdx { .. }
+            | Kind::Text(_)
+            | Kind::InlineCode(_)
+            | Kind::Link { .. }
+            | Kind::Image { .. }
+            | Kind::Other => {}
         }
-        if let Some(children) = node.children() {
-            let below = depth.saturating_add(1);
-            stack.extend(children.iter().rev().map(|child| (child, below)));
-        }
+        let below = depth.saturating_add(1);
+        stack.extend(node.children.iter().rev().map(|child| (child, below)));
     }
     out.sort_by_key(|(span, _, _)| *span);
     governed.sort_by_key(|definition| definition.span);
@@ -106,9 +107,9 @@ pub(super) fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefiniti
     }
     let mut resolved = HashMap::with_capacity(out.len());
     let mut orphans = BTreeMap::new();
-    for (span, identifier, definition) in out {
-        if used.contains(&identifier) {
-            resolved.entry(identifier).or_insert(definition);
+    for (span, key, definition) in out {
+        if used.contains(&key) {
+            resolved.entry(key).or_insert(definition);
         } else if !definition.reserved {
             orphans.insert(span, (definition.raw, definition.url));
         }

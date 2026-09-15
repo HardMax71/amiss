@@ -1,46 +1,41 @@
 use amiss_wire::controls::SourceConstruct;
 use amiss_wire::extraction::Fault;
-use markdown::mdast::ReferenceKind;
 
-use super::span::span_of;
 use super::{destination_token, skip_code_span, skip_whitespace};
+use crate::tree::ReferenceForm;
 
-pub(super) const fn reference_link(kind: ReferenceKind) -> SourceConstruct {
-    match kind {
-        ReferenceKind::Full => SourceConstruct::FullReferenceLink,
-        ReferenceKind::Collapsed => SourceConstruct::CollapsedReferenceLink,
-        ReferenceKind::Shortcut => SourceConstruct::ShortcutReferenceLink,
+pub(super) const fn reference_link(form: ReferenceForm) -> SourceConstruct {
+    match form {
+        ReferenceForm::Full => SourceConstruct::FullReferenceLink,
+        ReferenceForm::Collapsed => SourceConstruct::CollapsedReferenceLink,
+        ReferenceForm::Shortcut => SourceConstruct::ShortcutReferenceLink,
     }
 }
 
-pub(super) const fn reference_image(kind: ReferenceKind) -> SourceConstruct {
-    match kind {
-        ReferenceKind::Full => SourceConstruct::FullReferenceImage,
-        ReferenceKind::Collapsed => SourceConstruct::CollapsedReferenceImage,
-        ReferenceKind::Shortcut => SourceConstruct::ShortcutReferenceImage,
+pub(super) const fn reference_image(form: ReferenceForm) -> SourceConstruct {
+    match form {
+        ReferenceForm::Full => SourceConstruct::FullReferenceImage,
+        ReferenceForm::Collapsed => SourceConstruct::CollapsedReferenceImage,
+        ReferenceForm::Shortcut => SourceConstruct::ShortcutReferenceImage,
     }
 }
 
 /// Classifies a parsed link by its first source byte: `[` opens an inline
 /// link, `<` an angle autolink, and anything else is a GFM extended autolink
 /// whose final match is the node's own span. All autolink forms share one
-/// construct; span and token distinguish them.
+/// construct; span and token distinguish them. `children_end` is where the
+/// link's last child ends, which is where an inline link's `](` begins.
 pub(super) fn link_destination(
     bytes: &[u8],
     suffix: &str,
     span: (usize, usize),
-    link: &markdown::mdast::Link,
+    children_end: Option<usize>,
 ) -> Result<(SourceConstruct, String), Fault> {
     let first = bytes.get(span.0).copied().ok_or(Fault::InvalidSourceSpan)?;
     match first {
         b'[' => {
-            let children_end = link
-                .children
-                .last()
-                .map_or(Ok(span.0.saturating_add(1)), |child| {
-                    span_of(child).map(|child_span| child_span.1)
-                })?;
-            let token_span = inline_destination(bytes, children_end)?;
+            let token_span =
+                inline_destination(bytes, children_end.unwrap_or(span.0.saturating_add(1)))?;
             Ok((SourceConstruct::InlineLink, token(suffix, token_span)?))
         }
         b'<' => {
