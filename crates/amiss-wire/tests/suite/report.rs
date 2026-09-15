@@ -391,6 +391,27 @@ fn sealed_emission_matches_the_canonical_envelope() {
     );
 }
 
+/// The report spells through the sorted `serde_json` value tree, and that spelling
+/// is the canonicalizer's byte for byte, so the digest a reader recomputes
+/// through RFC 8785 is the digest the writer sealed.
+#[test]
+fn the_sorted_spelling_is_the_canonical_form() {
+    use amiss_wire::envelope::{Payload as _, Spelling};
+    use amiss_wire::report::model::{ReportEnvelope, ReportPayload};
+
+    assert_eq!(<ReportPayload>::SPELLING, Spelling::SortedKeys);
+    for example in [
+        &include_bytes!("../../../../spec/examples/scanner-report.json")[..],
+        &include_bytes!("../../../../spec/examples/scanner-report.frozen-2.json")[..],
+    ] {
+        let envelope: ReportEnvelope = serde_json::from_slice(example).unwrap();
+        assert_eq!(
+            envelope.payload.spell().unwrap(),
+            serde_json_canonicalizer::to_vec(&envelope.payload).unwrap()
+        );
+    }
+}
+
 /// An equal pair is written once as `same` and read back as one occurrence on
 /// both sides; a differing pair whose sides are equal is refused.
 #[test]

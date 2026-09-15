@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::{As, TryFromInto, apply};
 
 use crate::controls::ProjectionSource;
-use crate::envelope::{Envelope, Payload, Sealing};
+use crate::envelope::{Envelope, Payload, Sealing, Spelling};
 use crate::report::{MACHINE_JSON_BYTES, PAYLOAD_SCHEMA, ReportDefect, result_verdict};
 
 use super::{
@@ -73,6 +73,7 @@ where
     const DOMAIN: &'static str = PAYLOAD_SCHEMA;
     const DOCUMENT_BYTES: u64 = MACHINE_JSON_BYTES;
     const SEALING: Sealing = Sealing::Exact;
+    const SPELLING: Spelling = Spelling::SortedKeys;
 
     fn validate(&self) -> Result<(), ReportDefect> {
         result_verdict(&self.result)?;
