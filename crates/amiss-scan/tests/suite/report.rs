@@ -18,9 +18,13 @@ use amiss_scan::{
 use amiss_wire::controls::GitMode;
 
 use amiss_wire::model::{ObjectFormat, Oid, RepoPath};
-use amiss_wire::report::model::{DocumentCounts, FindingCounts, ReferenceCounts, Summary};
+use amiss_wire::report::model::{
+    DocumentCounts, FindingCounts, FindingFactEvidence, ObservationComparison, Occurrence,
+    ReferenceCounts, Sides, Summary, occurrences,
+};
 use amiss_wire::report::{
-    AnalysisErrorCode, EngineProvenance, ErrorDetail, MACHINE_JSON_BYTES, adapter_contract,
+    AnalysisErrorCode, EngineProvenance, ErrorDetail, FindingKind, MACHINE_JSON_BYTES,
+    adapter_contract,
 };
 use tempfile::TempDir;
 
@@ -311,35 +315,38 @@ fn a_complete_report_validates_against_the_schema() {
         !kinds.contains(&"external-out-of-scope"),
         "an external URL is an observation, not a finding"
     );
-    assert_external_destinations(payload);
+    assert_external_destinations(&built.envelope.payload.observations);
 }
 
 /// The engine never fetches an external URL, so it raises no finding and keeps
 /// the destination where it was seen, for the layer that does fetch. Every
 /// external resolution carries one and nothing else does.
-#[expect(
-    clippy::unwrap_used,
-    clippy::indexing_slicing,
-    reason = "test fixture helper"
-)]
-fn assert_external_destinations(payload: &serde_json::Value) {
+fn assert_external_destinations(
+    rows: &[ObservationComparison<RepoPath, amiss_wire::resolution::Resolution<RepoPath>>],
+) {
     let mut external = 0_usize;
-    for row in payload["observations"].as_array().unwrap() {
-        for side in ["base", "candidate"] {
-            let Some(entry) = row[side].as_object() else {
-                continue;
+    for row in rows {
+        let carried: Vec<&Occurrence<RepoPath, amiss_wire::resolution::Resolution<RepoPath>>> =
+            match &row.sides {
+                Sides::Each(pair) => pair.base.iter().chain(&pair.candidate).collect(),
+                Sides::Same(occurrence) => vec![occurrence.as_ref()],
             };
-            if entry["resolution"]["kind"] == "external" {
+        for side in carried {
+            if matches!(
+                side.resolution,
+                amiss_wire::resolution::Resolution::External { .. }
+            ) {
                 external = external.saturating_add(1);
                 assert_eq!(
-                    entry["external_destination"], "https://example.com/x",
+                    side.external_destination.as_deref(),
+                    Some("https://example.com/x"),
                     "an external observation names the destination the source decoded to"
                 );
             } else {
                 assert!(
-                    !entry.contains_key("external_destination"),
-                    "{:?} is not external and names no destination",
-                    entry["resolution"]["kind"]
+                    side.external_destination.is_none(),
+                    "{} is not external and names no destination",
+                    amiss_wire::resolution::ResolutionTag::from(&side.resolution).as_ref()
                 );
             }
         }
@@ -462,23 +469,34 @@ fn an_observation_fact_carries_its_own_comparison_row() {
     git(root, &["add", "."]);
     git(root, &["commit", "-qm", "candidate"]);
     let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
-    let wire: serde_json::Value = crate::support::generated_report(
-        &amiss_scan::report::wire(&report_between(root, &base, &candidate)).unwrap(),
-    )
-    .unwrap();
-    let findings = wire["payload"]["findings"].as_array().unwrap();
+    let built = report_between(root, &base, &candidate);
+    crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
 
-    for kind in ["explicit-reference-removed", "subject-changed"] {
-        let finding = findings
+    for kind in [
+        FindingKind::ExplicitReferenceRemoved,
+        FindingKind::SubjectChanged,
+    ] {
+        let finding = built
+            .envelope
+            .payload
+            .findings
             .iter()
-            .find(|finding| finding["kind"] == kind)
+            .find(|finding| finding.kind == kind)
             .unwrap_or_else(|| panic!("missing {kind} finding"));
-        let observation_id = &finding["observation_ids"][0];
-        let comparison = &finding["candidate_fact"]["evidence"]["comparison"];
-        let primary = comparison["candidate"]["observation_id"]
-            .as_str()
-            .or_else(|| comparison["base"]["observation_id"].as_str());
-        assert_eq!(observation_id.as_str(), primary, "{kind} evidence row");
+        let fact = finding.candidate_fact.as_ref().unwrap();
+        let FindingFactEvidence::Observation { comparison } = &fact.evidence else {
+            panic!("{kind} evidence is an observation comparison");
+        };
+        let sides = occurrences(comparison);
+        let primary = sides
+            .candidate
+            .or(sides.base)
+            .map(|side| side.observation_id);
+        assert_eq!(
+            finding.observation_ids.first().copied(),
+            primary,
+            "{kind} evidence row"
+        );
     }
 }
 
@@ -579,17 +597,68 @@ fn an_observation_row_hashes_the_identity_input_it_renders() {
     setup.base = identity.clone();
     setup.candidate = CandidateBlock::Commit(identity);
     let built = construct(&setup, &discovery, &discovery, comparisons, &[]).unwrap();
-    let envelope: serde_json::Value =
-        crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
-    let row = &envelope["payload"]["observations"][0]["candidate"];
-    let input_bytes = serde_json::to_vec(&row["observation_id_input"]).unwrap();
-    let input = serde_json::from_slice::<serde_json::Value>(&input_bytes).unwrap();
-    let expected = document_digest(OBSERVATION_ID_DOMAIN, &input)
-        .unwrap()
-        .to_string();
+    crate::support::generated_report(&amiss_scan::report::wire(&built).unwrap()).unwrap();
+    let row = built
+        .envelope
+        .payload
+        .observations
+        .iter()
+        .find_map(|row| occurrences(row).candidate)
+        .unwrap();
+    let expected = document_digest(OBSERVATION_ID_DOMAIN, &row.observation_id_input).unwrap();
 
-    assert_ne!(row["observation_id"], wrong.to_string());
-    assert_eq!(row["observation_id"], expected);
+    assert_ne!(row.observation_id, wrong);
+    assert_eq!(row.observation_id, expected);
+}
+
+/// A run whose documents did not change writes each occurrence once: the
+/// row's sides are `same`, and both typed sides are that occurrence.
+#[test]
+fn an_unchanged_run_shares_every_candidate_with_its_base() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(
+        root.join("README.md"),
+        "See [the guide](docs/guide.md) and [home](README.md).\n",
+    )
+    .unwrap();
+    fs::create_dir_all(root.join("docs")).unwrap();
+    fs::write(
+        root.join("docs/guide.md"),
+        "# Guide\n\n[home](../README.md)\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let commit = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+
+    let repo = Repository::open(root, ObjectFormat::Sha1).unwrap();
+    let mut resources = GitResources::new(GitLimits::CONTRACT);
+    let (identity, discovery, base) = snapshot(&repo, &mut resources, &commit);
+    let (_, _, candidate) = snapshot(&repo, &mut resources, &commit);
+    let comparisons = correlate(base, candidate).unwrap();
+    let mut setup = bare_setup(64);
+    setup.base = identity.clone();
+    setup.candidate = CandidateBlock::Commit(identity);
+    let built = construct(&setup, &discovery, &discovery, comparisons, &[]).unwrap();
+
+    let rows = &built.envelope.payload.observations;
+    assert_eq!(rows.len(), 3, "the fixture carries three references");
+    for row in rows {
+        assert!(matches!(row.sides, Sides::Same(_)), "{:?}", row.sides);
+        let sides = occurrences(row);
+        assert_eq!(sides.candidate, sides.base);
+    }
+    let wire = amiss_scan::report::wire(&built).unwrap();
+    crate::support::generated_report(&wire).unwrap();
+    assert_eq!(
+        String::from_utf8_lossy(&wire)
+            .matches("\"sides\":{\"same\":{")
+            .count(),
+        3,
+        "every row spells its sides as same"
+    );
 }
 
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
@@ -952,6 +1021,7 @@ fn an_over_cap_envelope_projects_to_output_limit_exceeded() {
                     let mut alternative = filler.clone();
                     alternative.document =
                         RepoPath::new(format!("{index:03}{slot:02}{}", "a".repeat(4_000))).unwrap();
+                    alternative.external_destination = Some("b".repeat(8_000));
                     alternative
                 })
                 .collect();

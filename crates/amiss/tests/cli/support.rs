@@ -1,6 +1,9 @@
 use std::path::Path;
 use std::process::Command;
 
+use amiss_wire::envelope::Payload as _;
+use amiss_wire::report::model::{ReportEnvelope, ReportPayload};
+
 #[expect(clippy::unwrap_used, reason = "test fixture helper")]
 pub(crate) fn git(dir: &Path, args: &[&str]) -> String {
     amiss_fixtures::git(dir, args).unwrap()
@@ -46,4 +49,10 @@ pub(crate) fn amiss(args: &[&str]) -> (i32, Vec<u8>, String) {
 pub(crate) fn payload(stdout: &[u8]) -> serde_json::Value {
     let envelope: serde_json::Value = serde_json::from_slice(stdout).unwrap();
     envelope.get("payload").cloned().unwrap()
+}
+
+/// The typed report the binary wrote, read back through the production reader.
+#[expect(clippy::unwrap_used, reason = "differential test against the binary")]
+pub(crate) fn report(stdout: &[u8]) -> ReportEnvelope {
+    <ReportPayload>::parse(stdout.strip_suffix(b"\n").unwrap_or(stdout)).unwrap()
 }

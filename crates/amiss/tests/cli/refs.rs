@@ -6,6 +6,11 @@
 use std::fs;
 use std::process::{Command, Stdio};
 
+use amiss_wire::controls::SourceConstruct;
+use amiss_wire::repo_path_text;
+use amiss_wire::report::model::{Occurrence, RepoPath, Resolution};
+use amiss_wire::resolution::{BlobTarget, Target};
+
 use crate::support::{amiss, fixture};
 
 fn report(profile: &str) -> (amiss_fixtures::CommitPair, String, i32) {
@@ -46,16 +51,25 @@ fn json_returns_exact_candidate_occurrences_without_revising_the_verdict() {
         "json",
     ]);
     assert_eq!((code, stderr.as_str()), (0, ""));
-    let rows: serde_json::Value = serde_json::from_slice(&stdout).expect("strict JSON result");
-    let rows = rows.as_array().expect("occurrence array");
-    assert_eq!(rows.len(), 1);
-    let row = &rows[0];
-    assert_eq!(row["document"], "README");
-    assert_eq!(row["intent"]["repository_path"], "docs/guide.md");
-    assert_eq!(row["resolution"]["target"]["path"], "docs/guide.md");
-    assert_eq!(row["source_construct"], "markdown-inline-link");
-    assert!(row["observation_id"].as_str().is_some());
-    assert!(row["source_span"]["start_line"].as_u64().is_some());
+    let rows: Vec<Occurrence> = serde_json::from_slice(&stdout).expect("strict JSON result");
+    let [row] = rows.as_slice() else {
+        panic!("one occurrence: {rows:?}");
+    };
+    let identity = &row.observation_id_input;
+    assert_eq!(identity.document, RepoPath::Text(repo_path_text!("README")));
+    assert_eq!(
+        identity.extracted_intent.repository_path,
+        Some(RepoPath::Text(repo_path_text!("docs/guide.md")))
+    );
+    let Resolution::Resolved {
+        target: Target::Tree { path: target } | Target::Blob(BlobTarget { path: target, .. }),
+    } = &row.resolution
+    else {
+        panic!("the occurrence resolves: {row:?}");
+    };
+    assert_eq!(*target, RepoPath::Text(repo_path_text!("docs/guide.md")));
+    assert_eq!(identity.source_construct, SourceConstruct::InlineLink);
+    assert!(row.source_span.start_line > 0);
 
     let (empty_code, empty, empty_stderr) = amiss(&[
         "refs",

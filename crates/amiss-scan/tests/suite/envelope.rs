@@ -324,7 +324,7 @@ fn prove_binary_error_paths(engine: &EngineProvenance) {
 }
 
 #[expect(clippy::unwrap_used, reason = "allocation assertions")]
-fn prove_streamed_emission<P: serde::Serialize>(
+fn prove_streamed_emission<P: serde::Serialize + PartialEq>(
     maximal: &ReportEnvelope<ReportPayload<P>>,
     wire: &[u8],
 ) {

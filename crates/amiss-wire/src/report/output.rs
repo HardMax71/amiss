@@ -18,6 +18,8 @@ pub fn emit_report<P, R, M, E>(
 ) -> std::io::Result<u64>
 where
     ReportPayload<P, R, M, E>: serde::Serialize,
+    P: PartialEq,
+    R: PartialEq,
 {
     let payload = &envelope.payload;
     if payload.documents.is_empty()

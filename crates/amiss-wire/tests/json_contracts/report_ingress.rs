@@ -60,8 +60,8 @@ fn formatting_and_escaped_members_preserve_report_identity() {
         serde_json::to_string(&report.payload_digest).unwrap(),
     );
     let escaped = reordered.replace(
-        "\"compatibility\":\"1\"",
-        "\"\\u0063ompatibility\" : \"\\u0031\"",
+        "\"compatibility\":\"2\"",
+        "\"\\u0063ompatibility\" : \"\\u0032\"",
     );
     assert_ne!(escaped, reordered);
     for input in [

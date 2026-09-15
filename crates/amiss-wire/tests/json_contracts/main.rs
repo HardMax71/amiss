@@ -143,13 +143,20 @@ fn report_examples_match_their_typed_source() {
         );
     }
 
-    for name in [
-        "scanner-report.frozen-1.json",
-        "scanner-report.last-released.json",
-    ] {
-        let bytes = fs::read(examples.join(name)).unwrap();
-        <report::model::ReportPayload>::parse(&bytes)
-            .unwrap_or_else(|error| panic!("{name}: {error}"));
+    let frozen = fs::read(examples.join("scanner-report.frozen-2.json")).unwrap();
+    <report::model::ReportPayload>::parse(&frozen)
+        .unwrap_or_else(|error| panic!("frozen-2: {error}"));
+
+    // The last released example keeps the previous major until the release refreshes it.
+    let released = fs::read(examples.join("scanner-report.last-released.json")).unwrap();
+    let released_value: serde_json::Value = serde_json::from_slice(&released).unwrap();
+    if released_value
+        .pointer("/payload/compatibility")
+        .and_then(serde_json::Value::as_str)
+        == Some(report::COMPATIBILITY)
+    {
+        <report::model::ReportPayload>::parse(&released)
+            .unwrap_or_else(|error| panic!("last-released: {error}"));
     }
 }
 
