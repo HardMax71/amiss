@@ -75,15 +75,11 @@ fn claim_values(refusals: &mut BTreeSet<Refusal>, gathered: &Gathered) -> Option
 }
 
 fn claim_line(value: &str) -> Validation<u64> {
-    let lawful = !value.is_empty()
-        && value.len() <= 16
-        && !value.starts_with('0')
-        && value.bytes().all(|byte| byte.is_ascii_digit());
     let ceiling = u64::try_from(js_int::MAX_SAFE_INT).ok();
-    lawful
-        .then(|| value.parse::<u64>().ok())
-        .flatten()
-        .filter(|line| Some(*line) <= ceiling)
+    value
+        .parse::<u64>()
+        .ok()
+        .filter(|line| line.to_string() == value && *line >= 1 && Some(*line) <= ceiling)
         .ok_or_else(|| {
             invalid(format!(
                 "--line must be a one-based line number without leading zeros, got {}",
