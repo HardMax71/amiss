@@ -252,7 +252,9 @@ is what makes the token mean this run rather than any run.
 
 The lane requires GitLab 19.3 or newer with Ultimate, because enforced merge trains are what make
 the policy job unavoidable, and they are generally available from 19.3. No live run is recorded yet:
-as of July 2026 the newest release is 19.2.0, so no supported instance exists to run.
+as of July 2026 the newest release is 19.2.0, so no supported instance exists to run. That changed
+in August 2026, when gitlab.com ran `19.3.0-pre` and the lane closed on live evidence; the rows are
+in [Retained provider runs](../provider-evidence.md#august-2026).
 
 The service is
 [`controller/gitlab-service/`](https://github.com/hardmax71/amiss/tree/main/controller/gitlab-service),
@@ -377,5 +379,6 @@ full trust boundary, including which accounts and keys can satisfy the gate with
 boundary that is not written down is a trust boundary nobody checked.
 
 Live runs for GitHub, Gitea 1.27.0, and Forgejo 16.0.1, in both directions, are in
-[Retained provider runs](../provider-evidence.md). The lanes are
+[Retained provider runs](../provider-evidence.md), where the GitLab rows joined them in August
+2026. The lanes are
 [Provider-verified controls](../provider-controls.md).
