@@ -28,6 +28,8 @@ pub(crate) enum Kind {
         name: Option<String>,
         id: Option<String>,
     },
+    /// An ESM block, kept as written for the bindings it declares.
+    MdxEsm(String),
     Text(String),
     InlineCode(String),
     CodeBlock(String),

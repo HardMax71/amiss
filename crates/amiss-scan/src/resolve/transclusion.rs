@@ -62,7 +62,7 @@ pub(super) fn expand<'source>(
         headings: Vec::new(),
         html_anchors: Vec::new(),
         declared_anchors: Vec::new(),
-        complete: adapter == Adapter::Rst,
+        complete: matches!(adapter, Adapter::Mdx | Adapter::Rst),
     };
     expansion.append(path, source, 0);
     Expanded {
