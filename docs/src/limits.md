@@ -157,8 +157,8 @@ exit-2 log says how to unblock the run without this page open.
 - `CONTROL_BINDING_MISMATCH`: an external control is bound to a different repository, ref, or run identity than this evaluation; nothing is applied and the run ends incomplete
 - `EXCEPTION_OVERLAP`: accepted exception items select the same finding more than once; overlap ends evaluation incomplete instead of double-suppressing
 - `UNSUPPORTED_CAPABILITY`: a candidate document declares a reserved amiss: capability this engine does not implement; the run ends incomplete rather than guessing at the claim
-- `GIT_REPOSITORY_UNAVAILABLE`: the --repo path does not open as a Git repository of the declared object format
-- `GIT_OBJECT_MISSING`: a commit, tree, or blob the run needs is absent from the object store; fetch full history or name commits the store holds
+- `GIT_REPOSITORY_UNAVAILABLE`: the --repo path does not open as a Git repository of the declared object format; pass the checkout root from git rev-parse --show-toplevel and match --object-format to git rev-parse --show-object-format
+- `GIT_OBJECT_MISSING`: a commit, tree, or blob the run needs is absent from the object store; fetch full history or name commits the store holds, and for a whole-tree scan pass --base $(git rev-parse HEAD) --index rather than the all-zero or empty-tree id
 - `GIT_OBJECT_WRONG_KIND`: a Git object is not the kind its use requires, as when a named commit resolves to another type
 - `GIT_OBJECT_UNREADABLE`: a Git object exists but its bytes cannot be decoded
 - `GIT_INDEX_INVALID`: the staged index file does not parse under the index grammar
