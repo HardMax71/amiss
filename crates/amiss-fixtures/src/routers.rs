@@ -50,11 +50,12 @@ const ANTORA_COMPONENT: [(&str, Staged<'static>); 8] = [
 /// root, one at the site root, one nowhere, and the `@site/` alias to a static
 /// asset that exists and one that does not, and a URL whose last segment spells
 /// a Markdown file. The repository `README.md` writes
-/// the same destinations from outside the site, where none of them reach, and
-/// beside them the two shapes a docusaurus tree writes that are not paths
-/// under any site: a webpack inline request, and a name that merely carries a
-/// bang.
-const DOCUSAURUS_SITE: [(&str, Staged<'static>); 9] = [
+/// the same destinations from outside the site, where the bare path reaches
+/// nothing and the alias has no site to name, and beside them the shapes a
+/// docusaurus tree writes that are paths under no site at all: a webpack
+/// inline request, a name that merely carries a bang, and a directory whose
+/// own name opens with an at sign.
+const DOCUSAURUS_SITE: [(&str, Staged<'static>); 10] = [
     (
         "website/docusaurus.config.ts",
         Staged::File(b"export default {};\n"),
@@ -86,10 +87,12 @@ const DOCUSAURUS_SITE: [(&str, Staged<'static>); 9] = [
         "README.md",
         Staged::File(
             b"[static](static-assets.mdx) [logo](@site/static/img/logo.png) \
-              [assets](!file-loader!./asset.pdf) [named](weird!name.md)\n",
+              [assets](!file-loader!./asset.pdf) [named](weird!name.md) \
+              [internal](@internal/notes.md)\n",
         ),
     ),
     ("weird!name.md", Staged::File(b"# Weird\n")),
+    ("@internal/notes.md", Staged::File(b"# Notes\n")),
 ];
 
 /// A mkdocs site under `site/`: an index page whose raw HTML writes a

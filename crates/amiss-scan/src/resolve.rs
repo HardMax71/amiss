@@ -18,7 +18,7 @@ use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{Classification, classify};
 use crate::resources::{Aggregate, ScanResources};
-use crate::route::{anchors, candidates, directory};
+use crate::route::{anchors, candidates, directory, generator_alias};
 
 mod anchor;
 mod content;
@@ -324,6 +324,12 @@ fn resolve_destination(
                     fragment,
                 },
                 Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
+            ));
+        }
+        if generator_alias(path_part) {
+            return Ok((
+                unsupported_intent(query, fragment),
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
             ));
         }
         anchors.push((
