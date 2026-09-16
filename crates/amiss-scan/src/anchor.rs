@@ -1,5 +1,7 @@
 mod identity;
 
+use amiss_wire::model::Adapter;
+
 pub use identity::{anchor_set, identities};
 
 /// The Unicode normalization a renderer applies before it reads the text.
@@ -387,5 +389,47 @@ pub const RULES: [AnchorRule; 12] = [
         duplicates: Duplicates::Dash,
         attribute: Attribute::Literal,
         raw_html: RawHtml::Ignored,
+    },
+];
+
+/// One identity a document writes down rather than a renderer deriving it from
+/// heading text: the spelling an author uses, the profiles that read it, and
+/// the file whose presence on the document's ancestor chain turns it on. A
+/// rule declared by nothing is read in every tree.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DeclarationRule {
+    pub name: &'static str,
+    pub spelling: &'static str,
+    pub adapters: &'static [Adapter],
+    pub declared_by: &'static [&'static str],
+}
+
+/// Every way the Markdown and MDX profiles let a document name its own
+/// identities. Each one joins the union beside the renderer rules, so a rule
+/// here can only grow the set an anchor may match.
+pub const DECLARATIONS: [DeclarationRule; 4] = [
+    DeclarationRule {
+        name: "html-id",
+        spelling: "an `id` or `name` attribute on a raw HTML element",
+        adapters: &[Adapter::Markdown],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "attr-list",
+        spelling: "an attribute block alone on a block's last line, `{#id}`",
+        adapters: &[Adapter::Markdown],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "mdx-comment",
+        spelling: "an MDX comment ending a heading, `{/* #id */}`",
+        adapters: &[Adapter::Mdx],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "mdx-heading-id",
+        spelling: "an MDX expression ending a heading, `{#id}`",
+        adapters: &[Adapter::Mdx],
+        declared_by: &[],
     },
 ];

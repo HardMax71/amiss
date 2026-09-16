@@ -141,11 +141,13 @@ fn a_block_declares_the_identity_on_its_own_last_line() {
     );
 }
 
-/// Docusaurus writes the identity as an MDX comment, which the expression
-/// grammar makes opaque, so the heading reads as if it carried none. The
-/// identity is taken as written, case and all.
+/// The attribute spelling is an expression in MDX, which the grammar makes
+/// opaque, so the heading reads as if it carried none. Docusaurus escapes the
+/// classic `{#id}` before the parse and reads it back out of the heading text,
+/// and writes the same identity as a comment where that escape is off. Either
+/// spelling is taken as written, case and all.
 #[test]
-fn an_mdx_comment_names_the_heading_it_ends() {
+fn an_mdx_heading_expression_names_the_heading_it_ends() {
     names_the_heading(
         Adapter::Mdx,
         &[
@@ -156,6 +158,9 @@ fn an_mdx_comment_names_the_heading_it_ends() {
                 "spaced-id",
             ),
             ("## Nested braces {/* #a{b} */}\n", "Nested braces", "a{b}"),
+            ("## Classic {#classic-id}\n", "Classic", "classic-id"),
+            ("## Padded { #padded-id }\n", "Padded", "padded-id"),
+            ("## Cased {#Mixed-Id}\n", "Cased", "Mixed-Id"),
         ],
     );
 }
@@ -168,6 +173,9 @@ fn an_mdx_comment_names_nothing_where_docusaurus_names_nothing() {
         "## Trailing text {/* #id */} after\n",
         "## Empty comment {/* */}\n",
         "## Two words {/* #two words */}\n",
+        "## Trailing classic {#late} after\n",
+        "## Two classic words {#two words}\n",
+        "## No identity {price}\n",
     ] {
         let got = extraction(Adapter::Mdx, source);
         let heading = only(&got);
