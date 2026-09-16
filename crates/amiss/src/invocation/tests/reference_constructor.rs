@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
@@ -584,11 +585,15 @@ fn dialect_default_case(case: &Value, id: &str) {
     }
     let argv: Vec<OsString> = tokens.iter().map(OsString::from).collect();
     if case.pointer("/expected/kind").and_then(Value::as_str) == Some("refused") {
-        let Outcome::Rejected { codes, .. } = parse(&argv) else {
+        let Outcome::Rejected { refusals, .. } = parse(&argv) else {
             panic!("{id}: expected a refusal");
         };
+        let codes: BTreeSet<&str> = refusals
+            .iter()
+            .map(|(code, _reason)| code.as_ref())
+            .collect();
         assert_eq!(
-            codes.iter().map(AsRef::as_ref).collect::<Vec<_>>(),
+            codes.into_iter().collect::<Vec<_>>(),
             vec![
                 case.pointer("/expected/code")
                     .and_then(Value::as_str)

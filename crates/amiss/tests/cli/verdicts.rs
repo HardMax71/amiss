@@ -424,7 +424,7 @@ fn a_formatting_only_change_to_a_target_is_advisory_and_never_a_verdict() {
     assert_eq!(code, 0);
     let human = String::from_utf8_lossy(&human);
     assert!(
-        human.starts_with("amiss: pass (fix 0, check 1, existing 0, errors 0, exit 0)"),
+        human.starts_with("amiss: pass (fix 0, check 1, pre-existing 0, errors 0, exit 0)"),
         "{human}"
     );
     assert!(

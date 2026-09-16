@@ -28,7 +28,8 @@ use std::process::ExitCode;
 use amiss_wire::ExitClass;
 use amiss_wire::model::Oid;
 use amiss_wire::report::model::{
-    ControlsUnavailableReason, ReportEnvelope, ReportPayload, SnapshotUnavailableReason,
+    ControlsUnavailableReason, FindingFactEvidence, ReportEnvelope, ReportPayload,
+    SnapshotUnavailableReason,
 };
 use amiss_wire::report::{self, AnalysisErrorCode, EngineProvenance, ErrorDetail};
 use amiss_wire::requests::{
@@ -36,6 +37,7 @@ use amiss_wire::requests::{
     RequestMode, RequestStreams, SEALED_ENGINE_ARGUMENT, SNAPSHOT_REQUEST_SCHEMA,
     SnapshotMaterialization, SnapshotRequest,
 };
+use amiss_wire::resolution::ResolutionTag;
 use invocation::{CandidateSelector, Code, Invocation, Outcome, OutputFormat, Verb};
 
 /// Self-restriction, in safe Rust only: no child processes (the contract's
@@ -80,33 +82,40 @@ fn main() -> ExitCode {
     }
     let failure = ExitCode::from(ExitClass::Failure.code());
     match invocation::parse(&argv) {
-        Outcome::Help => {
-            println!("{}", invocation::GRAMMAR);
+        Outcome::Help { verb } => {
+            println!(
+                "{}",
+                verb.map_or_else(|| invocation::GRAMMAR.to_owned(), invocation::verb_grammar)
+            );
             ExitCode::from(ExitClass::Success.code())
         }
         Outcome::Version => version(),
-        Outcome::MalformedOutputSelection => {
-            eprint!("{}", invocation::MALFORMED_OUTPUT_LINE);
+        Outcome::MalformedOutputSelection { reason } => {
+            eprintln!("amiss: invalid invocation: {reason}");
             failure
         }
         Outcome::Rejected {
             format: format @ (OutputFormat::Json | OutputFormat::Sarif | OutputFormat::CodeQuality),
-            codes,
+            refusals,
         } => {
+            let codes = refusals.iter().map(|(code, _reason)| *code).collect();
             match machine_refusal(&codes) {
                 Ok(envelope) => {
                     return projection_exit(
                         project(
                             &envelope.payload,
                             format,
-                            false,
-                            false,
+                            human::Options {
+                                explain_scope: false,
+                                full: false,
+                            },
                             &mut reserve,
                             |out| report::emit_report(&envelope, out),
                             |path| {
                                 path.as_str()
                                     .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
                             },
+                            |resolution| render::wire_resolution(resolution, human::engine_path),
                         ),
                         failure,
                     );
@@ -124,11 +133,15 @@ fn main() -> ExitCode {
         }
         Outcome::Rejected {
             format: OutputFormat::Human | OutputFormat::Junit,
-            codes,
+            refusals,
         } => {
-            for code in &codes {
-                eprintln!("amiss: {}", code.as_ref());
-                eprintln!("  {}", code.meaning());
+            let mut named = None;
+            for (code, reason) in &refusals {
+                if named != Some(code) {
+                    eprintln!("amiss: {}", code.as_ref());
+                    named = Some(code);
+                }
+                eprintln!("  {reason}");
             }
             eprintln!("{}", invocation::GRAMMAR);
             failure
@@ -152,15 +165,19 @@ fn main() -> ExitCode {
     }
 }
 
-fn project<P, R, M, E>(
-    payload: &ReportPayload<P, R, M, E>,
+fn project<P, R, M, S, D, F>(
+    payload: &ReportPayload<P, R, M, FindingFactEvidence<P, R, S, D, M>>,
     format: OutputFormat,
-    explain_scope: bool,
-    full_feedback: bool,
+    options: human::Options,
     reserve: &mut BufWriter<Stdout>,
     json: impl FnOnce(&mut BufWriter<Stdout>) -> std::io::Result<u64>,
     path: impl Fn(&P) -> Result<&str, Cow<'_, str>> + Copy,
-) -> std::io::Result<()> {
+    resolution: F,
+) -> std::io::Result<()>
+where
+    P: PartialEq,
+    F: Fn(&R) -> (ResolutionTag, Option<String>),
+{
     match format {
         OutputFormat::Json => {
             json(reserve)?;
@@ -174,18 +191,23 @@ fn project<P, R, M, E>(
             }))?;
         }
         OutputFormat::Junit => junit::write(payload, reserve, |value| path(value).ok())?,
-        OutputFormat::Human => human::report(payload, explain_scope, full_feedback, |value| {
-            value.map_or_else(
-                || "-".to_owned(),
-                |value| match path(value) {
-                    Ok(text) => amiss_wire::human::atom(text),
-                    Err(hex) => hex::decode(hex.as_bytes()).map_or_else(
-                        |_defect| amiss_wire::human::atom(&hex),
-                        |bytes| amiss_wire::human::atom_bytes(&bytes),
-                    ),
-                },
-            )
-        }),
+        OutputFormat::Human => human::report(
+            payload,
+            options,
+            |value| {
+                value.map_or_else(
+                    || "-".to_owned(),
+                    |value| match path(value) {
+                        Ok(text) => amiss_wire::human::atom(text),
+                        Err(hex) => hex::decode(hex.as_bytes()).map_or_else(
+                            |_defect| amiss_wire::human::atom(&hex),
+                            |bytes| amiss_wire::human::atom_bytes(&bytes),
+                        ),
+                    },
+                )
+            },
+            resolution,
+        ),
     }
     Ok(())
 }
@@ -474,8 +496,7 @@ fn run(invocation: &Invocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
         project(
             &built.envelope.payload,
             invocation.format,
-            invocation.explain_scope,
-            false,
+            human_options(invocation),
             reserve,
             |out| {
                 report::emit_sealed(
@@ -489,9 +510,18 @@ fn run(invocation: &Invocation, reserve: &mut BufWriter<Stdout>) -> ExitCode {
                 path.as_str()
                     .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
             },
+            human::engine_resolution,
         ),
         ExitCode::from(built.exit_code),
     )
+}
+
+/// A scan's human output is bounded; only a replay may ask for `--full`.
+fn human_options(invocation: &Invocation) -> human::Options {
+    human::Options {
+        explain_scope: invocation.explain_scope,
+        full: false,
+    }
 }
 
 fn semantic_input(
@@ -565,8 +595,7 @@ fn fatal(
                 project(
                     &built.envelope.payload,
                     invocation.format,
-                    invocation.explain_scope,
-                    false,
+                    human_options(invocation),
                     reserve,
                     |out| {
                         report::emit_sealed(
@@ -580,6 +609,7 @@ fn fatal(
                         path.as_str()
                             .ok_or_else(|| Cow::Owned(hex::encode(path.as_bytes())))
                     },
+                    human::engine_resolution,
                 )
             }),
         ExitCode::from(ExitClass::Failure.code()),

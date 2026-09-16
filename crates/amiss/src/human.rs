@@ -1,9 +1,15 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use amiss_wire::human::{atom, atom_bytes};
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::model::{
-    Evaluation, Feedback, FeedbackAction, FeedbackItem, Occurrence, ReportPayload,
+    Attribution, Evaluation, Feedback, FeedbackAction, FeedbackItem, FindingFactEvidence, Impact,
+    LocationSide, Occurrence, ReportPayload, SourceSpan, occurrences,
+};
+use amiss_wire::report::{Disposition, FindingKind};
+use amiss_wire::resolution::{
+    Missing, MissingTag, Resolution as EngineResolution, ResolutionTag, UnsupportedSemanticsTag,
+    UnsupportedTargetTag, VersionScopeTag,
 };
 
 mod tests;
@@ -26,12 +32,33 @@ macro_rules! say {
     };
 }
 
-pub(crate) fn report<P, R, M, E>(
-    payload: &ReportPayload<P, R, M, E>,
-    explain_scope: bool,
-    full_feedback: bool,
+/// What the caller asked the human projection to add or unbound.
+#[derive(Clone, Copy)]
+pub(crate) struct Options {
+    pub(crate) explain_scope: bool,
+    pub(crate) full: bool,
+}
+
+/// One finding under its feedback row: where it was seen and why it stands.
+struct Place<'report, P> {
+    action: FeedbackAction,
+    target: Option<&'report P>,
+    document: Option<&'report P>,
+    span: Option<SourceSpan>,
+    kind: FindingKind,
+    members: u64,
+    reason: Option<String>,
+}
+
+pub(crate) fn report<P, R, M, S, D, F>(
+    payload: &ReportPayload<P, R, M, FindingFactEvidence<P, R, S, D, M>>,
+    options: Options,
     path_atom: impl Fn(Option<&P>) -> String + Copy,
-) {
+    resolution: F,
+) where
+    P: PartialEq,
+    F: Fn(&R) -> (ResolutionTag, Option<String>),
+{
     let mut out = Channel {
         out: std::io::stdout(),
         open: true,
@@ -51,7 +78,7 @@ pub(crate) fn report<P, R, M, E>(
                 .count();
             say!(
                 &mut out,
-                "amiss: {} (fix {}, check {}, existing {}, errors {}, exit {})",
+                "amiss: {} (fix {}, check {}, pre-existing {}, errors {}, exit {})",
                 result.status.as_ref(),
                 fixes,
                 checks,
@@ -71,7 +98,7 @@ pub(crate) fn report<P, R, M, E>(
             &[]
         }
     };
-    if explain_scope {
+    if options.explain_scope {
         explain(&mut out, payload);
     }
     for row in &payload.errors {
@@ -96,26 +123,48 @@ pub(crate) fn report<P, R, M, E>(
             );
         }
     }
+    let affected = places(payload, &resolution);
     windowed(
         &mut out,
         items
             .iter()
             .filter(|item| item.action != FeedbackAction::Existing),
         "feedback",
-        full_feedback,
+        options.full,
         path_atom,
+        &affected,
     );
     windowed(
         &mut out,
         items
             .iter()
             .filter(|item| item.action == FeedbackAction::Existing),
-        "existing",
-        full_feedback,
+        "pre-existing",
+        options.full,
         path_atom,
+        &affected,
     );
+    let kinds: BTreeSet<FindingKind> = affected.iter().map(|place| place.kind).collect();
+    for kind in kinds {
+        say!(&mut out, "note {}: {}", kind.as_ref(), kind.meaning());
+    }
     notes(&mut out, payload);
     totals(&mut out, payload);
+}
+
+/// An engine path, spelled through the atom law whichever form it took.
+pub(crate) fn engine_path(path: &RepoPath) -> String {
+    path.as_str()
+        .map_or_else(|| atom_bytes(path.as_bytes()), atom)
+}
+
+/// A wire path, spelled the same way from the form a report carries.
+pub(crate) fn wire_path(path: &amiss_wire::report::model::RepoPath) -> String {
+    match path {
+        amiss_wire::report::model::RepoPath::Text(path) => atom(path.as_str()),
+        amiss_wire::report::model::RepoPath::Bytes(path) => hex::decode(&path.bytes_hex)
+            .map_or_else(|_defect| atom(&path.bytes_hex), |bytes| atom_bytes(&bytes)),
+    }
 }
 
 pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
@@ -123,24 +172,17 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
         out: std::io::stdout(),
         open: true,
     };
-    let shown_target = target
-        .as_str()
-        .map_or_else(|| atom_bytes(target.as_bytes()), atom);
     say!(
         &mut out,
-        "amiss refs: target {shown_target} candidate occurrences {}",
+        "amiss refs: target {} candidate occurrences {}",
+        engine_path(target),
         occurrences.len()
     );
     for row in occurrences {
-        let document = match &row.observation_id_input.document {
-            amiss_wire::report::model::RepoPath::Text(path) => atom(path.as_str()),
-            amiss_wire::report::model::RepoPath::Bytes(path) => hex::decode(&path.bytes_hex)
-                .map_or_else(|_defect| atom(&path.bytes_hex), |bytes| atom_bytes(&bytes)),
-        };
         say!(
             &mut out,
             "reference {}:{}:{} {} {} {}",
-            document,
+            wire_path(&row.observation_id_input.document),
             row.source_span.start_line,
             row.source_span.start_column,
             atom(row.observation_id_input.source_construct.as_ref()),
@@ -150,28 +192,221 @@ pub(crate) fn references(target: &RepoPath, occurrences: &[Occurrence]) {
     }
 }
 
-fn windowed<'report, P: 'report>(
+/// The engine's own resolution, spelled for a place line: its tag and,
+/// where the resolution says more, the reason with any nearby spelling.
+pub(crate) fn engine_resolution(
+    resolution: &EngineResolution<RepoPath>,
+) -> (ResolutionTag, Option<String>) {
+    let detail = match resolution {
+        EngineResolution::Missing(missing) => {
+            let near = match missing {
+                Missing::PathNotFound {
+                    near: Some(near), ..
+                } => Some(engine_path(near)),
+                Missing::HeadingAnchorNotFound {
+                    near: Some(near), ..
+                } => Some(atom(near)),
+                Missing::PathNotFound { near: None, .. }
+                | Missing::HeadingAnchorNotFound { near: None, .. }
+                | Missing::LineFragmentOutOfRange { .. }
+                | Missing::LabelNotDeclared => None,
+            };
+            Some(missing_detail(MissingTag::from(missing), near))
+        }
+        EngineResolution::Invalid { reason } => Some(reason.as_ref().to_owned()),
+        EngineResolution::UnsupportedTarget(target) => {
+            Some(UnsupportedTargetTag::from(target).as_ref().to_owned())
+        }
+        EngineResolution::UnsupportedSemantics(semantics) => {
+            Some(UnsupportedSemanticsTag::from(semantics).as_ref().to_owned())
+        }
+        EngineResolution::UnsupportedVersion { scope } => {
+            Some(VersionScopeTag::from(scope).as_ref().to_owned())
+        }
+        EngineResolution::Resolved { .. }
+        | EngineResolution::TypeMismatch { .. }
+        | EngineResolution::DeclaredUntracked(_)
+        | EngineResolution::External { .. } => None,
+    };
+    (ResolutionTag::from(resolution), detail)
+}
+
+pub(crate) fn missing_detail(tag: MissingTag, near: Option<String>) -> String {
+    near.map_or_else(
+        || tag.as_ref().to_owned(),
+        |near| format!("{} near {near}", tag.as_ref()),
+    )
+}
+
+/// The engine groups feedback by action and target; the same grouping over
+/// the findings the report carries puts every place under its row.
+fn places<'report, P, R, M, S, D, F>(
+    payload: &'report ReportPayload<P, R, M, FindingFactEvidence<P, R, S, D, M>>,
+    resolution: &F,
+) -> Vec<Place<'report, P>>
+where
+    F: Fn(&R) -> (ResolutionTag, Option<String>),
+{
+    let mut candidates = BTreeMap::new();
+    for comparison in &payload.observations {
+        let check = comparison.impact == Impact::DependencyChangedSubjectUnchanged;
+        if let Some(candidate) = occurrences(comparison).candidate {
+            candidates.insert(&candidate.observation_id, (candidate, check));
+        }
+        for candidate in &comparison.alternatives.candidate {
+            candidates.insert(&candidate.observation_id, (candidate, false));
+        }
+    }
+    payload
+        .findings
+        .iter()
+        .filter(|finding| finding.effective_disposition != Disposition::Record)
+        .filter_map(|finding| {
+            let candidate = finding
+                .observation_ids
+                .iter()
+                .find_map(|id| candidates.get(id))
+                .copied();
+            let invalid = candidate.is_some_and(|(occurrence, _check)| {
+                resolution(&occurrence.resolution).0 == ResolutionTag::Invalid
+            });
+            let target = if invalid {
+                None
+            } else {
+                match finding.location.side {
+                    LocationSide::Control => finding.location.path.as_ref(),
+                    LocationSide::Global => None,
+                    LocationSide::Base | LocationSide::Candidate => {
+                        candidate.and_then(|(occurrence, _check)| {
+                            occurrence
+                                .observation_id_input
+                                .extracted_intent
+                                .repository_path
+                                .as_ref()
+                        })
+                    }
+                }
+            };
+            let action = if candidate.is_some_and(|(_occurrence, check)| check) {
+                Some(FeedbackAction::Check)
+            } else {
+                attributed(finding.attribution, finding.location.side)
+            };
+            let reason = finding
+                .candidate_fact
+                .as_ref()
+                .or(finding.base_fact.as_ref())
+                .and_then(|fact| evidence_reason(&fact.evidence, resolution))
+                .or_else(|| {
+                    let (tag, detail) = resolution(&candidate?.0.resolution);
+                    (tag != ResolutionTag::Resolved).then(|| spelled((tag, detail)))
+                });
+            Some(Place {
+                action: action?,
+                target,
+                document: finding.location.path.as_ref(),
+                span: finding.location.span,
+                kind: finding.kind,
+                members: finding.aggregation.member_count,
+                reason,
+            })
+        })
+        .collect()
+}
+
+fn attributed(attribution: Attribution, side: LocationSide) -> Option<FeedbackAction> {
+    match attribution {
+        Attribution::Introduced => Some(FeedbackAction::Fix),
+        Attribution::PreExisting => Some(FeedbackAction::Existing),
+        Attribution::Unknown => Some(FeedbackAction::Check),
+        Attribution::Resolved => None,
+        Attribution::NotApplicable => match side {
+            LocationSide::Candidate | LocationSide::Control | LocationSide::Global => {
+                Some(FeedbackAction::Fix)
+            }
+            LocationSide::Base => None,
+        },
+    }
+}
+
+/// What the fact's own evidence says about the place, where it says anything.
+fn evidence_reason<P, R, S, D, M, F>(
+    evidence: &FindingFactEvidence<P, R, S, D, M>,
+    resolution: &F,
+) -> Option<String>
+where
+    F: Fn(&R) -> (ResolutionTag, Option<String>),
+{
+    match evidence {
+        FindingFactEvidence::Reference {
+            resolution: resolved,
+            ..
+        } => Some(spelled(resolution(resolved))),
+        FindingFactEvidence::Claim { observed, .. } => Some(observed.to_string()),
+        FindingFactEvidence::Projection { observed, .. } => Some(observed.as_ref().to_owned()),
+        FindingFactEvidence::BrokenRedirect { reason, .. } => Some(reason.to_string()),
+        FindingFactEvidence::Control { .. }
+        | FindingFactEvidence::Document { .. }
+        | FindingFactEvidence::DuplicateRoute { .. }
+        | FindingFactEvidence::Observation { .. } => None,
+    }
+}
+
+fn spelled((tag, detail): (ResolutionTag, Option<String>)) -> String {
+    detail.unwrap_or_else(|| tag.as_ref().to_owned())
+}
+
+fn windowed<'report, P: 'report + PartialEq>(
     out: &mut Channel,
     items: impl Iterator<Item = &'report FeedbackItem<P>> + Clone,
     label: &str,
     full: bool,
     path_atom: impl Fn(Option<&P>) -> String,
+    places: &[Place<'report, P>],
 ) {
-    let count = items.clone().count();
-    let limit = if full { count } else { 10 };
-    let overflow = count.saturating_sub(limit);
-    for item in items.take(limit) {
-        let mut action = item.action.as_ref().to_owned();
-        if let Some(first) = action.get_mut(0..1) {
-            first.make_ascii_uppercase();
-        }
+    let rows = items.clone().count();
+    let window = if full { usize::MAX } else { 10 };
+    let overflow = rows.saturating_sub(window);
+    for item in items.take(window) {
+        let action = match item.action {
+            FeedbackAction::Fix => "Fix",
+            FeedbackAction::Check => "Check",
+            FeedbackAction::Existing => "Pre-existing",
+        };
         say!(
             out,
-            "{} target {} affected places {}",
-            action,
+            "{action} target {} affected places {}",
             path_atom(item.target.as_ref()),
             item.location_count
         );
+        let under = places
+            .iter()
+            .filter(|place| place.action == item.action && place.target == item.target.as_ref());
+        let shown = under.clone().count();
+        for place in under.take(window) {
+            let at = place.span.map_or_else(String::new, |span| {
+                format!(":{}:{}", span.start_line, span.start_column)
+            });
+            let reason = place
+                .reason
+                .as_ref()
+                .map_or_else(String::new, |reason| format!(" {reason}"));
+            let members = if place.members > 1 {
+                format!(" ({} places)", place.members)
+            } else {
+                String::new()
+            };
+            say!(
+                out,
+                "  {}{at} {}{reason}{members}",
+                path_atom(place.document),
+                place.kind.as_ref()
+            );
+        }
+        let hidden = shown.saturating_sub(window);
+        if hidden > 0 {
+            say!(out, "  places overflow: {hidden} more in the full report");
+        }
     }
     if overflow > 0 {
         say!(out, "{label} overflow: {overflow} more in the full report");
@@ -214,7 +449,7 @@ fn totals<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
     if !declared && references.external_out_of_scope > 0 {
         say!(
             out,
-            "references: without a declared forge identity a same-repository URL counts as external"
+            "references: without --repository <host>/<owner>/<name> --ref refs/heads/<branch> --default-branch-ref refs/heads/<default> (and --forge <dialect> on a self-hosted host) a same-repository URL counts as external"
         );
     }
     let findings = &summary.findings;
@@ -226,6 +461,20 @@ fn totals<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
         findings.warn,
         findings.record
     );
+    let mut records: BTreeMap<FindingKind, u64> = BTreeMap::new();
+    for finding in &payload.findings {
+        if finding.effective_disposition == Disposition::Record {
+            let count = records.entry(finding.kind).or_default();
+            *count = count.saturating_add(1);
+        }
+    }
+    if !records.is_empty() {
+        let listed: Vec<String> = records
+            .iter()
+            .map(|(kind, count)| format!("{} {count}", kind.as_ref()))
+            .collect();
+        say!(out, "records: {}", listed.join(", "));
+    }
 }
 
 fn explain<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
@@ -243,7 +492,8 @@ fn explain<P, R, M, E>(out: &mut Channel, payload: &ReportPayload<P, R, M, E>) {
     );
     say!(
         out,
-        "scope: node_modules, vendor, third_party, dist, build, .next, and target"
+        "scope: {}",
+        amiss_scan::document::EXCLUDED_TREES.join(", ")
     );
     say!(
         out,

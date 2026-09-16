@@ -34,11 +34,12 @@ parent to miss.
 
 The public command line is closed: the grammar below is everything, and anything else
 exits 2 as an invalid invocation. The verb comes first; after it the options come in any
-order, each at most once. Standalone `--help` prints this whole grammar on stdout. A refused
-human invocation prints the violated contracts and then the same grammar on stderr, so the
-binary teaches its own command line on either path. The one exception is a malformed `--format`
-selection, which prints a single `amiss: invalid invocation` line, since the output channel itself
-was never agreed. The copy below is checked against the binary's in CI.
+order, each at most once. Standalone `--help` prints this whole grammar on stdout, and
+`<verb> --help` prints that verb's lines of it. A refused human invocation prints one
+reason line per violated contract, each naming the option and the value it got, then the
+same grammar on stderr, so the binary teaches its own command line on either path. The one
+exception is a malformed `--format` selection, which prints a single line, since the output
+channel itself was never agreed. The copy below is checked against the binary's in CI.
 
 <!-- amiss-doc-contract:invocation-grammar:start -->
 ```text
@@ -183,13 +184,20 @@ parses half a document. JUnit is deliberately absent from `check`: it can only r
 validated report through `render`.
 
 `human` is the default. It prints a status header, one `error` row per retained analysis
-error, at most ten grouped Fix and Check items naming only a target and an affected-place
-count with an overflow line when more exist, then at most ten Existing items with their
-own overflow line, one fixed `note` sentence per error code using the wording from
-[Limits and refusals](limits.md), and three totals lines. Existing items are the
-pre-existing backlog at warn or fail, and the backlog keeps its own window, so introduced
-volume cannot push it off the terminal. The full findings stay in JSON. `--explain-scope` adds six scope lines to that human output, five
-fixed and one naming this run's counts, and changes nothing in JSON, behavior pinned by the
+error, then at most ten grouped Fix and Check rows, each naming a target and an
+affected-place count, with an overflow line when more exist, then at most ten Pre-existing
+rows under their own window. Under each row, one line per affected place names the document,
+its line and column, the finding kind, and the reason the target did not answer, such as
+`path-not-found` with the nearby spelling it almost matched. A row shows ten places and
+counts the rest, unless the report is replayed with `--full`. Then one fixed `note` sentence
+per finding kind the feedback carries, in the wording from
+[Profiles and findings](profiles.md), and one per error code, in the wording from
+[Limits and refusals](limits.md). Three totals lines close the output, and a `records` line
+names the record-only kinds and their counts when the run has any. Pre-existing rows are the
+backlog at warn or fail, and the backlog keeps its own window, so introduced volume cannot
+push it off the terminal. The full findings stay in JSON. `--explain-scope` adds six scope
+lines to that human output, five fixed and one naming this run's counts, and changes nothing
+in JSON, behavior pinned by the
 [CLI tests](https://github.com/HardMax71/amiss/tree/main/crates/amiss/tests/cli).
 
 `amiss render --report <path> --format <human|sarif|codequality|junit>` reopens one JSON report

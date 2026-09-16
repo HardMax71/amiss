@@ -1,44 +1,51 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
+use amiss_wire::human::atom;
 use amiss_wire::model::RepoPath;
 
-use super::super::arguments::{Gathered, Slot};
+use super::super::arguments::{Gathered, Slot, optional, required};
 use super::super::{
     AssessInvocation, Code, Command, OutputFormat, PlanInvocation, RecordSetInvocation,
-    RefsInvocation, RenderInvocation, Verb,
+    RefsInvocation, Refusal, RenderInvocation, Verb,
 };
+use super::{invalid, refuse_foreign};
 
 pub(super) fn classify_report_command(
-    mut codes: BTreeSet<Code>,
+    mut refusals: BTreeSet<Refusal>,
     gathered: &Gathered,
+    verb: Verb,
     format: OutputFormat,
-) -> Result<Command, BTreeSet<Code>> {
-    match gathered.verb {
-        Some(Verb::ExternalPlan) => {
+) -> Result<Command, BTreeSet<Refusal>> {
+    let report = [(&gathered.report, "--report")];
+    match verb {
+        Verb::ExternalPlan => {
             let formats = [OutputFormat::Human, OutputFormat::Json];
-            let report = report_path(codes, gathered, format, &formats, &pure_foreign(gathered))?;
+            let [report] = classify_pure(refusals, gathered, verb, format, &formats, report)?;
             Ok(Command::Plan(PlanInvocation { report, format }))
         }
-        Some(Verb::LocaleAssess) => {
-            let [plan, evidence] = assess_pair(codes, gathered, format)?;
-            Ok(Command::LocaleAssess(AssessInvocation {
+        Verb::LocaleAssess | Verb::ExternalAssess => {
+            let formats = [OutputFormat::Human, OutputFormat::Json];
+            let wanted = [
+                (&gathered.plan, "--plan"),
+                (&gathered.evidence, "--evidence"),
+            ];
+            let [plan, evidence] =
+                classify_pure(refusals, gathered, verb, format, &formats, wanted)?;
+            let assess = AssessInvocation {
                 plan,
                 evidence,
                 format,
-            }))
+            };
+            Ok(if verb == Verb::LocaleAssess {
+                Command::LocaleAssess(assess)
+            } else {
+                Command::Assess(assess)
+            })
         }
-        Some(Verb::ExternalAssess) => {
-            let [plan, evidence] = assess_pair(codes, gathered, format)?;
-            Ok(Command::Assess(AssessInvocation {
-                plan,
-                evidence,
-                format,
-            }))
-        }
-        Some(Verb::Render) => {
+        Verb::Render => {
             if gathered.format.occurrences == 0 {
-                codes.insert(Code::InvalidInvocation);
+                refusals.insert(invalid("--format is required by render".to_owned()));
             }
             let formats = [
                 OutputFormat::Human,
@@ -46,84 +53,76 @@ pub(super) fn classify_report_command(
                 OutputFormat::CodeQuality,
                 OutputFormat::Junit,
             ];
-            let report = report_path(codes, gathered, format, &formats, &pure_foreign(gathered))?;
+            let [report] = classify_pure(refusals, gathered, verb, format, &formats, report)?;
             Ok(Command::Render(RenderInvocation {
                 report,
                 format,
                 full: gathered.full == 1,
             }))
         }
-        Some(Verb::Refs) => classify_refs(codes, gathered, format),
-        Some(Verb::RecordSet) => classify_record_set(codes, gathered, format),
-        Some(
-            Verb::Check
-            | Verb::Fix
-            | Verb::Adopt
-            | Verb::Claim
-            | Verb::PolicyInclude
-            | Verb::LocaleInventory,
-        )
-        | None => {
-            codes.insert(Code::InvalidInvocation);
-            Err(codes)
+        Verb::Refs => classify_refs(refusals, gathered, format),
+        Verb::RecordSet => {
+            let wanted = [(&gathered.evidence, "--evidence")];
+            let formats = [OutputFormat::Human];
+            let [input] = classify_pure(refusals, gathered, verb, format, &formats, wanted)?;
+            Ok(Command::RecordSet(RecordSetInvocation { input }))
+        }
+        Verb::Check
+        | Verb::Fix
+        | Verb::Adopt
+        | Verb::Claim
+        | Verb::PolicyInclude
+        | Verb::LocaleInventory => {
+            refusals.insert(invalid(Code::InvalidInvocation.meaning().to_owned()));
+            Err(refusals)
         }
     }
-}
-
-/// The report-bound forms: one report path, projected through one of the
-/// formats that form admits.
-fn report_path(
-    codes: BTreeSet<Code>,
-    gathered: &Gathered,
-    format: OutputFormat,
-    formats: &[OutputFormat],
-    foreign_pure: &[&Slot],
-) -> Result<PathBuf, BTreeSet<Code>> {
-    let [report] = classify_pure(
-        codes,
-        gathered,
-        format,
-        formats,
-        [&gathered.report],
-        foreign_pure,
-    )?;
-    Ok(report)
-}
-
-/// The paths every report-bound form but `refs` treats as foreign.
-fn pure_foreign(gathered: &Gathered) -> [&Slot; 4] {
-    [
-        &gathered.plan,
-        &gathered.evidence,
-        &gathered.target,
-        &gathered.target_bytes_hex,
-    ]
 }
 
 /// The reference form: one report and exactly one spelling of the target
 /// path, text or raw bytes.
 fn classify_refs(
-    codes: BTreeSet<Code>,
+    refusals: BTreeSet<Refusal>,
     gathered: &Gathered,
     format: OutputFormat,
-) -> Result<Command, BTreeSet<Code>> {
+) -> Result<Command, BTreeSet<Refusal>> {
     let formats = [OutputFormat::Human, OutputFormat::Json];
-    let foreign: [&Slot; 2] = [&gathered.plan, &gathered.evidence];
-    let report = report_path(codes, gathered, format, &formats, &foreign)?;
-    let target = match (
-        gathered.target.unique_value(),
-        gathered.target_bytes_hex.unique_value(),
-    ) {
-        (Some(target), None) => RepoPath::new(target.to_owned()),
-        (None, Some(hex)) if hex.len() <= 8192 && hex.len() % 2 == 0 => hex
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-            .then(|| hex::decode(hex).ok())
+    let wanted = [(&gathered.report, "--report")];
+    let [report] = classify_pure(refusals, gathered, Verb::Refs, format, &formats, wanted)?;
+    let text =
+        optional(&gathered.target, "--target").map_err(|refusal| BTreeSet::from([refusal]))?;
+    let hex = optional(&gathered.target_bytes_hex, "--target-bytes-hex")
+        .map_err(|refusal| BTreeSet::from([refusal]))?;
+    let target = match (text, hex) {
+        (Some(text), None) => RepoPath::new(text.to_owned()).ok_or_else(|| {
+            invalid(format!(
+                "--target must be a repository path, got {}",
+                atom(text)
+            ))
+        }),
+        (None, Some(hex)) => (hex.len() <= 8192 && hex.len() % 2 == 0)
+            .then(|| {
+                hex.bytes()
+                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+                    .then(|| hex::decode(hex).ok())
+                    .flatten()
+                    .and_then(RepoPath::from_bytes)
+            })
             .flatten()
-            .and_then(RepoPath::from_bytes),
-        (Some(_) | None, Some(_)) | (None, None) => None,
+            .ok_or_else(|| {
+                invalid(format!(
+                    "--target-bytes-hex must be lowercase even-length hex spelling a repository path, got {}",
+                    atom(hex)
+                ))
+            }),
+        (Some(_), Some(_)) => Err(invalid(
+            "--target and --target-bytes-hex are exclusive".to_owned(),
+        )),
+        (None, None) => Err(invalid(
+            "one of --target or --target-bytes-hex is required".to_owned(),
+        )),
     }
-    .ok_or_else(|| BTreeSet::from([Code::InvalidInvocation]))?;
+    .map_err(|refusal| BTreeSet::from([refusal]))?;
     Ok(Command::Refs(RefsInvocation {
         report,
         target,
@@ -131,109 +130,51 @@ fn classify_refs(
     }))
 }
 
-/// The shared pair form: one plan and one evidence document, judged offline.
-fn assess_pair(
-    codes: BTreeSet<Code>,
-    gathered: &Gathered,
-    format: OutputFormat,
-) -> Result<[PathBuf; 2], BTreeSet<Code>> {
-    classify_pure(
-        codes,
-        gathered,
-        format,
-        &[OutputFormat::Human, OutputFormat::Json],
-        [&gathered.plan, &gathered.evidence],
-        &[
-            &gathered.report,
-            &gathered.target,
-            &gathered.target_bytes_hex,
-        ],
-    )
-}
-
-fn classify_record_set(
-    mut codes: BTreeSet<Code>,
-    gathered: &Gathered,
-    format: OutputFormat,
-) -> Result<Command, BTreeSet<Code>> {
-    if gathered.format.occurrences > 0 {
-        codes.insert(Code::InvalidInvocation);
-    }
-    let [input] = classify_pure(
-        codes,
-        gathered,
-        format,
-        &[OutputFormat::Human],
-        [&gathered.evidence],
-        &[
-            &gathered.report,
-            &gathered.plan,
-            &gathered.target,
-            &gathered.target_bytes_hex,
-        ],
-    )?;
-    Ok(Command::RecordSet(RecordSetInvocation { input }))
-}
-
 /// The pure-form gate: a report-bound verb reads its own path flags and
-/// projects only through one of its admitted formats; every scan, claim, and
-/// adoption option is foreign, as are the other pure forms' paths. Accepts
-/// with exactly one path per required slot, in order, or carries every code.
+/// projects only through one of its admitted formats; every other option is
+/// foreign. Accepts with exactly one path per wanted slot, in order, or
+/// carries every refusal.
 fn classify_pure<const N: usize>(
-    mut codes: BTreeSet<Code>,
+    mut refusals: BTreeSet<Refusal>,
     gathered: &Gathered,
+    verb: Verb,
     format: OutputFormat,
     formats: &[OutputFormat],
-    required: [&Slot; N],
-    foreign_pure: &[&Slot],
-) -> Result<[PathBuf; N], BTreeSet<Code>> {
-    let foreign = [
-        &gathered.repo,
-        &gathered.object_format,
-        &gathered.base,
-        &gathered.candidate,
-        &gathered.repository,
-        &gathered.ref_name,
-        &gathered.default_branch_ref,
-        &gathered.forge,
-        &gathered.profile,
-        &gathered.floor_digest,
-        &gathered.debt_owner,
-        &gathered.debt_reason,
-        &gathered.created_at,
-        &gathered.expires_at,
-        &gathered.debt_output,
-        &gathered.claim_path,
-        &gathered.claim_line,
-        &gathered.claim_name,
-        &gathered.suffix,
-        &gathered.adapter,
-        &gathered.context,
-        &gathered.semantic_template,
-    ];
-    if foreign
-        .iter()
-        .chain(foreign_pure)
-        .any(|slot| slot.occurrences > 0)
-        || gathered.index > 0
-        || gathered.explain_scope > 0
-        || !formats.contains(&format)
-    {
-        codes.insert(Code::InvalidInvocation);
+    wanted: [(&Slot, &str); N],
+) -> Result<[PathBuf; N], BTreeSet<Refusal>> {
+    let mut owned: Vec<&str> = wanted.iter().map(|(_slot, option)| *option).collect();
+    if verb == Verb::Refs {
+        owned.extend(["--target", "--target-bytes-hex"]);
+    }
+    if verb != Verb::RecordSet {
+        owned.push("--format");
+    }
+    refuse_foreign(&mut refusals, gathered, verb, &owned);
+    if owned.contains(&"--format") && !formats.contains(&format) {
+        let admitted: Vec<&'static str> = formats.iter().map(|format| (*format).into()).collect();
+        refusals.insert(invalid(format!(
+            "--format {} is not admitted by {}, which takes {}",
+            format.as_ref(),
+            verb.as_ref(),
+            admitted.join(", ")
+        )));
     }
     let mut paths = Vec::with_capacity(N);
-    for slot in required {
-        match slot.unique_value() {
-            Some("") | None => {
-                codes.insert(Code::InvalidInvocation);
+    for (slot, option) in wanted {
+        match required(slot, option) {
+            Ok("") => {
+                refusals.insert(invalid(format!("{option} must not be empty")));
             }
-            Some(path) => paths.push(PathBuf::from(path)),
+            Ok(path) => paths.push(PathBuf::from(path)),
+            Err(refusal) => {
+                refusals.insert(refusal);
+            }
         }
     }
-    if !codes.is_empty() {
-        return Err(codes);
+    if !refusals.is_empty() {
+        return Err(refusals);
     }
-    paths
-        .try_into()
-        .map_err(|_mismatch| BTreeSet::from([Code::InvalidInvocation]))
+    paths.try_into().map_err(|_mismatch| {
+        BTreeSet::from([invalid(Code::InvalidInvocation.meaning().to_owned())])
+    })
 }
