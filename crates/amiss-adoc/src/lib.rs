@@ -8,8 +8,9 @@ pub use block::blocks;
 pub use macros::{Reference, ReferenceKind, references};
 
 /// Everything one `AsciiDoc` scan yields: the references it recognised, the
-/// section titles that carry anchor identity, the explicit anchors a document
-/// declares, and the byte intervals it refused to read into.
+/// section titles that carry anchor identity, the identities a document
+/// declares outright or publishes as its own reference text, and the byte
+/// intervals it refused to read into.
 /// One recognized governed carrier: its span, then label, url, and title.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GovernedCarrier {
@@ -30,7 +31,7 @@ pub struct Extraction {
     pub nesting: usize,
 }
 
-/// What a delimited block does to the text inside it. `Verbatim` is listing and
+/// What a block does to the text inside it. `Verbatim` is listing and
 /// literal, whose content is code rather than prose. `Passthrough` and `Comment`
 /// are refused outright and declared. `Compound` is a container whose own
 /// paragraphs are separate blocks, so it is never read directly.
@@ -42,8 +43,9 @@ pub enum Delimiter {
     Compound,
 }
 
-/// One block of a document: its byte span, the delimiter that opened it if any,
-/// how deeply it nests, and whether its first line carries a list marker.
+/// One block of a document: its byte span, what it does to the text inside it,
+/// which a delimiter line or an indented first line fixes, how deeply it
+/// nests, and whether its first line carries a list marker.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Block {
     pub span: (usize, usize),
@@ -111,13 +113,13 @@ fn collect(extraction: &mut Extraction, index: usize, block: &Block, body: &str)
             continue;
         }
         if let Some(title) = macros::title(line, at) {
+            if macros::named_by_reference_text(&title.text) {
+                extraction.anchors.push(title.text.clone());
+            }
             extraction.titles.push(title);
             continue;
         }
-        if let Some(anchor) = macros::declared_anchor(line) {
-            extraction.anchors.push(anchor);
-            continue;
-        }
+        extraction.anchors.extend(macros::declared_anchors(line));
         for mut reference in references(line, at) {
             reference.block = index;
             reference.block_span = block.span;

@@ -13,12 +13,14 @@ const FENCES: [(char, Delimiter); 8] = [
 
 /// Splits a document into blocks. A delimiter line is four or more repeats of
 /// one fence character and nothing else, and it closes on the identical line,
-/// which is what keeps a nested block from ending its parent early.
+/// which is what keeps a nested block from ending its parent early. A
+/// paragraph whose first line is indented and carries no list marker is a
+/// literal paragraph, which reads verbatim like a delimited literal block.
 #[must_use]
 pub fn blocks(text: &str) -> Vec<Block> {
     let mut found: Vec<Block> = Vec::new();
     let mut open: Vec<(String, Delimiter, usize)> = Vec::new();
-    let mut paragraph: Option<(usize, bool, usize)> = None;
+    let mut paragraph: Option<Block> = None;
     let mut offset = 0_usize;
 
     for raw in text.split_inclusive('\n') {
@@ -54,7 +56,14 @@ pub fn blocks(text: &str) -> Vec<Block> {
             continue;
         }
         if paragraph.is_none() {
-            paragraph = Some((start, is_list_item(line), open.len()));
+            let list_item = is_list_item(line);
+            paragraph = Some(Block {
+                span: (start, start),
+                delimiter: (!list_item && line.starts_with([' ', '\t']))
+                    .then_some(Delimiter::Verbatim),
+                depth: open.len(),
+                list_item,
+            });
         }
     }
     flush(&mut found, &mut paragraph, offset);
@@ -70,16 +79,12 @@ pub fn blocks(text: &str) -> Vec<Block> {
     found
 }
 
-fn flush(found: &mut Vec<Block>, paragraph: &mut Option<(usize, bool, usize)>, end: usize) {
-    if let Some((start, list_item, depth)) = paragraph.take()
-        && end > start
+fn flush(found: &mut Vec<Block>, paragraph: &mut Option<Block>, end: usize) {
+    if let Some(mut block) = paragraph.take()
+        && end > block.span.0
     {
-        found.push(Block {
-            span: (start, end),
-            delimiter: None,
-            depth,
-            list_item,
-        });
+        block.span.1 = end;
+        found.push(block);
     }
 }
 

@@ -240,9 +240,45 @@ pub fn title(line: &str, at: usize) -> Option<Title> {
     })
 }
 
-/// An anchor a document declares outright, on its own line, in either spelling.
+/// Whether a natural cross reference can name this title. Asciidoctor looks a
+/// target up by its reference text only where the target carries a space or a
+/// capital, and a section's reference text is its own title.
 #[must_use]
-pub fn declared_anchor(line: &str) -> Option<String> {
+pub fn named_by_reference_text(text: &str) -> bool {
+    text.contains(' ') || text.chars().any(char::is_uppercase)
+}
+
+/// Every identity one line declares: the anchor a line carries alone, in
+/// either spelling, or each anchor written in the flow of its text.
+#[must_use]
+pub fn declared_anchors(line: &str) -> Vec<String> {
+    if let Some(alone) = block_anchor(line) {
+        return vec![alone];
+    }
+    let skips = verbatim_spans(line);
+    let mut found = Vec::new();
+    let mut index = 0;
+    while let Some(open) = line.get(index..).and_then(|tail| tail.find("[[")) {
+        let at = index.saturating_add(open);
+        index = at.saturating_add(2);
+        let opened = !skips.iter().any(|(start, end)| at >= *start && at < *end)
+            && !matches!(
+                line.get(..at).and_then(|before| before.chars().next_back()),
+                Some('\\' | '[')
+            );
+        let Some(close) = line.get(index..).and_then(|tail| tail.find("]]")) else {
+            break;
+        };
+        if opened && let Some(id) = anchor_id(line.get(index..index.saturating_add(close))) {
+            found.push(id);
+        }
+        index = index.saturating_add(close).saturating_add(2);
+    }
+    found
+}
+
+/// An anchor a document declares outright, on its own line, in either spelling.
+fn block_anchor(line: &str) -> Option<String> {
     let trimmed = line.trim();
     let inside = trimmed
         .strip_prefix("[[")
@@ -254,4 +290,19 @@ pub fn declared_anchor(line: &str) -> Option<String> {
         })?;
     let id = inside.split(',').next().unwrap_or_default().trim();
     (!id.is_empty() && !id.contains(char::is_whitespace)).then(|| id.to_owned())
+}
+
+/// Asciidoctor's own ID grammar, which the flow of text needs and a line
+/// carrying nothing else does not: a letter, `_` or `:` opens it, and word
+/// characters, `-`, `:` and `.` carry it on. Reference text after a comma
+/// names no identity.
+fn anchor_id(inside: Option<&str>) -> Option<String> {
+    let id = inside?.split(',').next().unwrap_or_default().trim();
+    let mut characters = id.chars();
+    let opens = characters
+        .next()
+        .is_some_and(|first| first.is_alphabetic() || first == '_' || first == ':');
+    let carries = characters
+        .all(|character| character.is_alphanumeric() || matches!(character, '_' | '-' | ':' | '.'));
+    (opens && carries).then(|| id.to_owned())
 }

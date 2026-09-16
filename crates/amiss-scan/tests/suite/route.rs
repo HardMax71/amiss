@@ -467,6 +467,33 @@ fn a_mkdocs_site_reads_a_raw_html_destination_from_the_published_directory() {
     assert_eq!(outcomes(&chain), want);
 }
 
+/// An `AsciiDoc` document publishes what a cross reference can name: the
+/// identity a block or inline anchor declares, and the reference text a
+/// section title carries where a natural reference could reach it. A title no
+/// document holds and an anchor nothing declares are both missing, and an
+/// indented paragraph is literal text, so the reference spelled inside it is
+/// never read at all.
+#[test]
+fn an_asciidoc_document_publishes_the_identities_a_cross_reference_names() {
+    let chain = amiss_fixtures::asciidoc_identities().expect("the fixture stages");
+    let inline = "docs/inline.adoc";
+    let literal = "docs/literal.adoc";
+    let title = "docs/title.adoc";
+    let want = expected(vec![
+        row(inline, Some(inline), ResolutionTag::Resolved, Some(inline)),
+        row(inline, Some(inline), ResolutionTag::Missing, None),
+        row(
+            literal,
+            Some(literal),
+            ResolutionTag::Resolved,
+            Some(literal),
+        ),
+        row(title, Some(title), ResolutionTag::Resolved, Some(title)),
+        row(title, Some(title), ResolutionTag::Missing, None),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
 /// Under `conf.py`, a source-root-absolute `:doc:` target is the docname
 /// under that directory with the source suffix, from any depth, while a
 /// relative target keeps resolving beside its document and a document with no

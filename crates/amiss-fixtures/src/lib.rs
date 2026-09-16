@@ -1,5 +1,6 @@
 mod audit;
 mod external;
+mod identities;
 mod locale;
 mod native;
 mod publication;
@@ -9,6 +10,7 @@ mod semantic;
 pub mod requests;
 
 pub use external::{external_facts, external_plan, external_report};
+pub use identities::asciidoc_identities;
 pub use locale::{LocaleAuditFixture, locale_audit};
 pub use publication::{PublicationAuditFixture, publication_audit};
 pub use routers::{antora_component, docusaurus_site, mkdocs_site, sphinx_source};

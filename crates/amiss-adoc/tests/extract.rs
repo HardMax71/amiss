@@ -142,7 +142,61 @@ fn titles_and_declared_anchors_carry_their_own_identity() {
         .map(|title| (title.level, title.text.as_str()))
         .collect();
     assert_eq!(levels, vec![(1, "Top"), (2, "Second Level"), (3, "Third")]);
-    assert_eq!(extraction.anchors, vec!["explicit", "hashed"]);
+    assert_eq!(
+        extraction.anchors,
+        vec!["Top", "explicit", "Second Level", "hashed", "Third"]
+    );
+}
+
+/// A natural cross reference names a section by its own title, which
+/// Asciidoctor looks up only where the text carries a space or a capital.
+#[test]
+fn a_title_publishes_the_reference_text_a_natural_reference_can_name() {
+    let extraction =
+        extract(b"== API entrypoints\n\n== Install\n\n== usage\n").expect("utf-8 source");
+    assert_eq!(extraction.anchors, vec!["API entrypoints", "Install"]);
+}
+
+/// An anchor in the flow of text declares an identity where its ID follows
+/// Asciidoctor's own grammar, and the rest of the line is still read.
+#[test]
+fn an_inline_anchor_declares_an_identity_without_taking_the_line() {
+    let extraction =
+        extract(b"* [[remove-refs]]Remove them, see xref:tips.adoc[tips].\n").expect("utf-8");
+    assert_eq!(extraction.anchors, vec!["remove-refs"]);
+    assert_eq!(
+        kinds("* [[remove-refs]]Remove them, see xref:tips.adoc[tips].\n"),
+        vec![(ReferenceKind::CrossReference, "tips.adoc".to_owned())]
+    );
+    for line in [
+        "A substitution [[fig-$1]] is no anchor.\n",
+        "An escaped \\[[escaped]] anchor.\n",
+        "A `[[quoted]]` anchor.\n",
+    ] {
+        assert!(
+            extract(line.as_bytes()).expect("utf-8").anchors.is_empty(),
+            "{line}"
+        );
+    }
+}
+
+/// A paragraph opening with an indented line is literal: it renders as the
+/// text it holds, so nothing inside it is a reference or an anchor.
+#[test]
+fn a_literal_paragraph_holds_no_reference_and_no_anchor() {
+    let source = " $ perl -pe 's!Figure (1)!<<fig-1>>!g' -i out.adoc\n";
+    assert_eq!(kinds(source), Vec::new());
+    assert!(
+        extract(source.as_bytes())
+            .expect("utf-8")
+            .anchors
+            .is_empty()
+    );
+    assert_eq!(
+        kinds(" * xref:tips.adoc[tips]\n"),
+        vec![(ReferenceKind::CrossReference, "tips.adoc".to_owned())],
+        "an indented list item is a list item, not a literal paragraph"
+    );
 }
 
 #[test]
