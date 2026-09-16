@@ -33,7 +33,9 @@ pub(crate) use line::{LineRange, named_region_bytes, safe_line_number, selected_
 
 use anchor::fragment_resolution;
 use content::{CachedContent, read_target};
-use syntax::{normalized_path_under, same_repo_suffix, split_components, unsupported_intent};
+use syntax::{
+    normalized_path_under, same_repo_suffix, split_components, unreadable, unsupported_intent,
+};
 
 pub use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection";
@@ -303,11 +305,8 @@ fn resolve_destination(
         ));
     }
 
-    if path_part.starts_with("//") {
-        return Ok((
-            unsupported_intent(query, fragment),
-            Resolution::UnsupportedSemantics(UnsupportedSemantics::NetworkPath),
-        ));
+    if let Some(resolution) = unreadable(path_part) {
+        return Ok((unsupported_intent(query, fragment), resolution));
     }
     if anchors.is_empty() {
         if let Some(scheme) = scheme(path_part) {

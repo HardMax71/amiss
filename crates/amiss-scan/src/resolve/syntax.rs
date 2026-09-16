@@ -1,10 +1,10 @@
 use amiss_wire::controls::TargetKind;
 use amiss_wire::model::RepoPath;
 use amiss_wire::report::IntentKind;
-use amiss_wire::resolution::InvalidReference;
+use amiss_wire::resolution::{InvalidReference, UnsupportedSemantics};
 use amiss_wire::uri::decode_component;
 
-use crate::route::directory;
+use crate::route::{bundler_request, directory};
 
 use super::{Intent, Resolution};
 
@@ -15,6 +15,19 @@ pub(super) fn same_repo_suffix<'a>(path_part: &'a str, host: &str) -> Option<&'a
         .strip_prefix("https://")?
         .strip_prefix(host)?
         .strip_prefix('/')
+}
+
+/// A destination no tree answers whatever the document above it: a protocol
+/// relative network path, and the inline request syntax a bundler owns.
+pub(super) fn unreadable(path_part: &str) -> Option<Resolution> {
+    if path_part.starts_with("//") {
+        return Some(Resolution::UnsupportedSemantics(
+            UnsupportedSemantics::NetworkPath,
+        ));
+    }
+    bundler_request(path_part).then_some(Resolution::Invalid {
+        reason: InvalidReference::Syntax,
+    })
 }
 
 pub(super) fn unsupported_intent(query: Option<String>, fragment: Option<String>) -> Intent {

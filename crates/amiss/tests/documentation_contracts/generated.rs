@@ -8,7 +8,7 @@ use std::fs;
 
 use amiss_git::GitLimits;
 use amiss_scan::ScanLimits;
-use amiss_scan::route::{ROUTERS, RouteRule};
+use amiss_scan::route::{BUNDLER_REQUESTS, ROUTERS, RouteRule};
 use amiss_wire::controls::{ORGANIZATION_POLICY_ENTRIES_LIMIT, ResourceName};
 use amiss_wire::model::ForgeDialect;
 use amiss_wire::report::{
@@ -187,9 +187,22 @@ fn declared_routers_table(declared: &[&RouteRule]) -> String {
     table
 }
 
-/// The table is generated from the route rules, and every spelling it names
-/// is also explained in the prose around it, so a rule cannot be added to the
-/// table without a paragraph saying what it does.
+fn bundler_requests_table() -> String {
+    let mut table = String::from("| Bundler | Inline request opens with |\n| --- | --- |");
+    for (name, openings) in BUNDLER_REQUESTS {
+        let spelled: Vec<String> = openings
+            .iter()
+            .map(|opening| format!("`{opening}`"))
+            .collect();
+        write!(table, "\n| `{name}` | {} |", spelled.join(", "))
+            .expect("writing to a String is infallible");
+    }
+    table
+}
+
+/// Both tables are generated from the route module, and every spelling the
+/// router table names is also explained in the prose around it, so a rule
+/// cannot be added to the table without a paragraph saying what it does.
 #[test]
 fn documented_declared_routers_are_generated_from_the_route_table() {
     let path = repository_root().join("docs/src/route-spellings.md");
@@ -202,6 +215,12 @@ fn documented_declared_routers_are_generated_from_the_route_table() {
         documented_contract(&document, "declared-routers"),
         declared_routers_table(&declared),
         "{} drifted from amiss_scan::route::ROUTERS",
+        path.display(),
+    );
+    assert_eq!(
+        documented_contract(&document, "bundler-requests"),
+        bundler_requests_table(),
+        "{} drifted from amiss_scan::route::BUNDLER_REQUESTS",
         path.display(),
     );
     for spelling in declared.iter().flat_map(|rule| rule.serves.iter()) {
