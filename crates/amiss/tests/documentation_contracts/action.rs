@@ -476,13 +476,14 @@ fn action_dispatcher_tracks_the_packaged_runtime() {
     );
     assert!(
         runtime.contains("if [ -s \"$report\" ]; then\n            printf 'report=%s\\n' \"$report\"\n          else\n            printf 'report=\\n'"),
-        "the runtime must not export a missing or empty report"
+        "the scan step hands the annotate step an empty path when no report exists"
     );
     assert!(
         runtime.contains("    - id: verdict\n      if: always()\n")
             && runtime.contains("status=\"${STATUS:-2}\"")
-            && runtime.contains("printf 'exit-class=%s\\n' \"$status\""),
-        "the verdict step always runs and exports exit class 2 when the scan never wrote one"
+            && runtime.matches("report=\"${RUNNER_TEMP}/amiss-report.json\"").count() == 2
+            && runtime.contains("[ -s \"$report\" ] || rm -f \"$report\"\n        {\n          printf 'exit-class=%s\\n' \"$status\"\n          printf 'report=%s\\n' \"$report\"\n        } >> \"$GITHUB_OUTPUT\""),
+        "the verdict step always runs, exports exit class 2 when the scan never wrote one, and always names the one report path with an empty file removed"
     );
     assert!(
         runtime.contains("if [ \"${ANNOTATIONS,,}\" != \"true\" ]"),
