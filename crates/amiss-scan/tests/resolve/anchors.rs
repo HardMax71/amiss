@@ -5,7 +5,7 @@ use amiss_scan::{Resolution, ScanLimits, ScanResources, discover};
 use amiss_wire::model::{Adapter, ObjectFormat, Oid, RepoPath};
 use amiss_wire::resolution::{Missing, Target, UnsupportedSemantics};
 
-use crate::support::{ANCHORS, bed, bed_with};
+use crate::support::{ANCHORS, bed, bed_at, bed_with};
 
 /// The identity of a heading belongs to the renderer, so an anchor resolves
 /// when any pinned renderer would publish it. Nothing a repository declares can
@@ -129,6 +129,57 @@ fn distinct_anchors_into_one_target_are_charged_once() {
         u64::try_from(ANCHORS.len()).unwrap_or(u64::MAX),
         "one charge for the one target"
     );
+}
+
+/// Whether one target publishes one fragment, asked the way a reference in
+/// `document` asks it. Anything but a published identity or a proven absence
+/// is a defect in the fixture rather than an answer.
+#[expect(clippy::panic, reason = "test fixture helper")]
+fn publishes(bed: &mut crate::support::Bed, document: &str, target: &str, fragment: &str) -> bool {
+    let destination = format!("{target}#{fragment}");
+    let row = bed
+        .run_as(Adapter::Mdx, None, document, false, &destination)
+        .unwrap_or_else(|_defect| panic!("resolve {destination}"))
+        .1;
+    if let Resolution::Resolved {
+        target: Target::Blob(blob),
+    } = &row
+    {
+        assert_eq!(blob.path.as_str(), Some(target), "{fragment}");
+        return true;
+    }
+    let Resolution::Missing(Missing::HeadingAnchorNotFound { path, .. }) = &row else {
+        panic!("{fragment} is neither published nor proven absent: {row:?}");
+    };
+    assert_eq!(path.as_str(), Some(target), "{fragment}");
+    false
+}
+
+/// Docusaurus escapes the classic `{#id}` before MDX parses the file and reads
+/// the identity back out of the heading text, so an MDX heading publishes what
+/// its expression declares and the slug it replaces is gone. An expression
+/// that declares no identity leaves the slug standing.
+#[test]
+fn an_mdx_heading_publishes_the_identity_its_expression_declares() {
+    let mut bed = bed_at(
+        amiss_fixtures::mdx_identities().expect("the fixture stages"),
+        0,
+        ScanLimits::CONTRACT,
+        GitLimits::CONTRACT,
+    );
+    for (fragment, published) in [
+        ("custom-id", true),
+        ("value", true),
+        ("price", false),
+        ("late", false),
+        ("missing-id", false),
+    ] {
+        assert_eq!(
+            publishes(&mut bed, "guide.mdx", "docs/page.mdx", fragment),
+            published,
+            "{fragment}"
+        );
+    }
 }
 
 /// One frozen tree covering exact, recursive, literal, refused, cyclic, and

@@ -4,7 +4,7 @@ use crate::tree::{Kind, Node};
 
 pub(super) fn markdown_heading(node: &Node) -> Heading {
     let content = text_content(node);
-    let (text, attribute) = mdx_comment_attribute(node).map_or_else(
+    let (text, attribute) = mdx_attribute(node).map_or_else(
         || split_attribute(&content, trailing_text(node)),
         |id| {
             let kept = content.trim_end();
@@ -59,21 +59,23 @@ fn text_content(node: &Node) -> String {
     out
 }
 
-/// Docusaurus writes a heading's identity as an MDX comment, because the
-/// attribute spelling is an expression there. The comment is the heading's last
-/// child and the identity is taken as written, case and all.
-fn mdx_comment_attribute(node: &Node) -> Option<String> {
+/// The identity a heading's own trailing expression declares. In MDX the
+/// attribute spelling is an expression, so Docusaurus reads `{#id}` back out
+/// of the escaped heading text and writes the same identity as an MDX comment
+/// where that escape is off. Either spelling is the heading's last child and
+/// the identity is taken as written, case and all.
+fn mdx_attribute(node: &Node) -> Option<String> {
     let Kind::Mdx {
         expression: Some(expression),
     } = &node.children.last()?.kind
     else {
         return None;
     };
-    let inner = expression
-        .strip_prefix("/*")?
-        .strip_suffix("*/")?
-        .trim()
-        .strip_prefix('#')?;
+    let body = match expression.strip_prefix("/*") {
+        Some(comment) => comment.strip_suffix("*/")?,
+        None => expression.as_str(),
+    };
+    let inner = body.trim().strip_prefix('#')?;
     (!inner.is_empty() && !inner.contains(char::is_whitespace)).then(|| inner.to_owned())
 }
 

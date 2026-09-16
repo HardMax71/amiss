@@ -43,21 +43,39 @@ Two of the rows are configurations rather than renderers. mdBook ships with smar
 punctuation on and MkDocs takes its slug function from `mkdocs.yml`, so both spellings are
 carried rather than one being chosen for the reader.
 
-An identity can also be written down rather than derived. Raw HTML declares one with `id`
-or `name`, and the `attr_list` extension declares one with an attribute block, in any of the
-spellings it accepts: `{#id}`, `{ id="id" }`, `{ id=id }`, among classes, and with
-kramdown's leading colon. A block whose last line is nothing but an attribute block declares
-that identity for itself, which is how `[](){#anchor-point}` and a `{#section}` line under a
-paragraph work; an attribute block trailing other text on the same line declares nothing,
-and one inside a fence is code. The extension reads the block in the
-document's own literal text, so a block inside inline code is code and declares nothing.
-In MDX the attribute spelling is an expression, so Docusaurus writes the identity as a
-comment instead, `### \`noIndex\` {/* #noIndex */}`, and takes it as written with its case
-intact. That comment ends the heading or it declares nothing, which is
-`parseMarkdownHeadingId`'s own rule and the reason `{/* #id */} after` names nothing.
-Every declared identity joins the union whatever the renderer, because it is authored
-rather than derived, and accepting one a given renderer would not publish can only leave a
-finding unreported, never invent one.
+## What a document declares
+
+An identity can also be written down rather than derived, and then it belongs to the
+author rather than to the renderer. Each of these spellings joins the union whatever
+renderer reads the file, because accepting an identity a given renderer would not publish
+can only leave a finding unreported, never invent one.
+
+<!-- amiss-doc-contract:declared-identities:start -->
+| Declaration | Spelling | Read in | Selected by |
+| --- | --- | --- | --- |
+| `html-id` | an `id` or `name` attribute on a raw HTML element | `markdown` | any tree |
+| `attr-list` | an attribute block alone on a block's last line, `{#id}` | `markdown` | any tree |
+| `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
+| `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
+<!-- amiss-doc-contract:declared-identities:end -->
+
+`html-id` is every `id` and `name` a raw HTML region carries, wherever in the document it
+sits. `attr-list` is the extension's own block, in any of the spellings it accepts:
+`{#id}`, `{ id="id" }`, `{ id=id }`, among classes, and with kramdown's leading colon. A
+block whose last line is nothing but an attribute block declares that identity for itself,
+which is how `[](){#anchor-point}` and a `{#section}` line under a paragraph work; an
+attribute block trailing other text on the same line declares nothing, and one inside a
+fence is code. The extension reads the block in the document's own literal text, so a
+block inside inline code is code and declares nothing.
+
+The two MDX rows are the same heading identity written two ways, because the attribute
+spelling is an expression in that grammar. `mdx-heading-id` is the classic
+`### Hello {#hello}`, which Docusaurus escapes before MDX parses the file and then reads
+back out of the heading text; it is on by default and off under
+`future.v4.mdx1CompatDisabledByDefault`. `mdx-comment` is
+`### \`noIndex\` {/* #noIndex */}`, the spelling that needs no escape. Either one ends the
+heading or it declares nothing, which is `parseMarkdownHeadingId`'s own rule and the reason
+`{/* #id */} after` names nothing, and either one is taken as written with its case intact.
 
 A heading can also be written as raw HTML, which many projects do for a centered title.
 github.com anchors those, because its filter runs over the rendered document and sees
@@ -114,10 +132,12 @@ duplicate suffix is visible: that one page publishes fifteen identities twice, s
 into it is ambiguous on Gitea and unique on Forgejo, for the same file.
 
 `probe-mdx-heading.mdx` is the same question in MDX, answered by the function Docusaurus
-parses headings with. Three of its seven headings declare an identity and four do not: one
-whose comment is followed by text, one with no identity in the comment, one whose identity
-carries a space, and the plain `{#id}` spelling, which that syntax does not read. The
-identity `a{b}` is in the set because their expression allows it.
+parses headings with under its `mdx-comment` syntax. Three of its seven headings declare an
+identity to that call and four do not: one whose comment is followed by text, one with no
+identity in the comment, one whose identity carries a space, and the plain `{#id}`
+spelling, which that call alone does not read. Its pair is compared as a subset, since the
+loader runs the classic spelling too and `mdx-heading-id` carries it. The identity `a{b}`
+is in the set because their expression allows it.
 
 `probe-attr.md` is the declared identities: four heading spellings, an empty link carrying
 one, and a paragraph carrying one on its own last line. Five forms declare nothing, and they

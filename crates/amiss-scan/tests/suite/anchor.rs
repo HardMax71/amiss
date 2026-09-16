@@ -182,6 +182,26 @@ fn an_attribute_identity_replaces_the_slug_only_where_the_renderer_honours_it() 
     }
 }
 
+/// The same spelling in MDX, where the braces are an expression rather than
+/// text: the identity replaces the slug under the rules that honour one, and
+/// the rules that read the attribute literally slug the text alone, because
+/// no renderer prints an expression it refused to evaluate.
+#[test]
+fn an_mdx_heading_identity_replaces_the_slug_and_leaves_no_literal_text() {
+    let (headings, _anchors, _declared) = parsed(Adapter::Mdx, "## Explicit {#custom-id}\n");
+    for rule in &RULES {
+        let published = identities(rule, &headings);
+        let want = if rule.attribute == Attribute::Honored {
+            "custom-id"
+        } else if rule.name == "github" {
+            "explicit-"
+        } else {
+            continue;
+        };
+        assert_eq!(published, vec![want.to_owned()], "{}", rule.name);
+    }
+}
+
 #[test]
 fn duplicate_headings_diverge_by_suffix_style() {
     let (headings, _anchors, _declared) = headings("# Same\n\n# Same\n\n# Same\n");

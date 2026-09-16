@@ -8,6 +8,7 @@ use std::fs;
 
 use amiss_git::GitLimits;
 use amiss_scan::ScanLimits;
+use amiss_scan::anchor::{DECLARATIONS, DeclarationRule};
 use amiss_scan::route::{BUNDLER_REQUESTS, ROUTERS, RouteRule};
 use amiss_wire::controls::{ORGANIZATION_POLICY_ENTRIES_LIMIT, ResourceName};
 use amiss_wire::model::ForgeDialect;
@@ -196,6 +197,34 @@ fn bundler_requests_table() -> String {
             .collect();
         write!(table, "\n| `{name}` | {} |", spelled.join(", "))
             .expect("writing to a String is infallible");
+fn declared_identities_table(rules: &[DeclarationRule]) -> String {
+    let mut table = String::from(
+        "| Declaration | Spelling | Read in | Selected by |\n| --- | --- | --- | --- |",
+    );
+    for rule in rules {
+        let read: Vec<String> = rule
+            .adapters
+            .iter()
+            .map(|adapter| format!("`{adapter}`"))
+            .collect();
+        let files: Vec<String> = rule
+            .declared_by
+            .iter()
+            .map(|name| format!("`{name}`"))
+            .collect();
+        let selected = if files.is_empty() {
+            "any tree".to_owned()
+        } else {
+            files.join(", ")
+        };
+        write!(
+            table,
+            "\n| `{}` | {} | {} | {selected} |",
+            rule.name,
+            rule.spelling,
+            read.join(", "),
+        )
+        .expect("writing to a String is infallible");
     }
     table
 }
@@ -203,6 +232,30 @@ fn bundler_requests_table() -> String {
 /// Both tables are generated from the route module, and every spelling the
 /// router table names is also explained in the prose around it, so a rule
 /// cannot be added to the table without a paragraph saying what it does.
+/// The table is generated from the declaration rules, and every rule it names
+/// is also explained in the prose around it, so a spelling cannot be added to
+/// the table without a paragraph saying what reads it.
+#[test]
+fn documented_declared_identities_are_generated_from_the_anchor_table() {
+    let document = fs::read_to_string(repository_root().join("docs/src/anchor-rules.md"))
+        .expect("anchor-rules documentation is readable");
+    for rule in &DECLARATIONS {
+        assert!(
+            document.matches(&format!("`{}`", rule.name)).count() >= 2,
+            "docs/src/anchor-rules.md names {} in the table and explains it in the prose",
+            rule.name,
+        );
+    }
+    assert_eq!(
+        documented_contract(&document, "declared-identities"),
+        declared_identities_table(&DECLARATIONS),
+        "docs/src/anchor-rules.md drifted from amiss_scan::anchor::DECLARATIONS",
+    );
+}
+
+/// The table is generated from the route rules, and every spelling it names
+/// is also explained in the prose around it, so a rule cannot be added to the
+/// table without a paragraph saying what it does.
 #[test]
 fn documented_declared_routers_are_generated_from_the_route_table() {
     let path = repository_root().join("docs/src/route-spellings.md");
