@@ -57,7 +57,7 @@ const DOCUSAURUS: RouteRule = RouteRule {
     serves: &[Spelling::SiteAlias, Spelling::ContentRoot],
 };
 
-const MKDOCS: RouteRule = RouteRule {
+pub(crate) const MKDOCS: RouteRule = RouteRule {
     name: "mkdocs",
     declared_by: &["mkdocs.yml", "mkdocs.yaml"],
     serves: &[Spelling::DirectoryUrl],
@@ -474,7 +474,7 @@ fn sphinx_anchor(
 
 /// The nearest directory on the document's ancestor chain holding one of the
 /// files that declare this rule's generator.
-fn declared_root(
+pub(crate) fn declared_root(
     snapshot: &SnapshotDiscovery,
     document: &[u8],
     rule: &RouteRule,

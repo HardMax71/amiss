@@ -197,6 +197,10 @@ fn bundler_requests_table() -> String {
             .collect();
         write!(table, "\n| `{name}` | {} |", spelled.join(", "))
             .expect("writing to a String is infallible");
+    }
+    table
+}
+
 fn declared_identities_table(rules: &[DeclarationRule]) -> String {
     let mut table = String::from(
         "| Declaration | Spelling | Read in | Selected by |\n| --- | --- | --- | --- |",
@@ -229,9 +233,6 @@ fn declared_identities_table(rules: &[DeclarationRule]) -> String {
     table
 }
 
-/// Both tables are generated from the route module, and every spelling the
-/// router table names is also explained in the prose around it, so a rule
-/// cannot be added to the table without a paragraph saying what it does.
 /// The table is generated from the declaration rules, and every rule it names
 /// is also explained in the prose around it, so a spelling cannot be added to
 /// the table without a paragraph saying what reads it.

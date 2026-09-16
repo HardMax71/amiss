@@ -6,10 +6,8 @@ use amiss_wire::extraction::{Heading, Transclusion, TransclusionKind};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::uri::scheme;
 
-use crate::anchor::MKDOCS_SNIPPET;
-use crate::discovery::{DocumentStatus, Located, SnapshotDiscovery};
+use crate::discovery::{DocumentStatus, SnapshotDiscovery};
 use crate::resources::{Aggregate, ScanResources};
-use crate::route::directory;
 
 use super::syntax::{normalized_native_path, normalized_path_under};
 
@@ -200,41 +198,5 @@ fn snippet_root(
     if adapter != Adapter::Markdown {
         return None;
     }
-    declaring_directory(snapshot, document.as_bytes(), MKDOCS_SNIPPET.declared_by)
-}
-
-/// The nearest directory on the document's ancestor chain holding one of the
-/// files that declare a generator.
-fn declaring_directory(
-    snapshot: &SnapshotDiscovery,
-    document: &[u8],
-    named: &[&str],
-) -> Option<Vec<u8>> {
-    let mut held = directory(document);
-    loop {
-        if named.iter().any(|name| declares(snapshot, held, name)) {
-            return Some(held.to_vec());
-        }
-        if held.is_empty() {
-            return None;
-        }
-        held = directory(held);
-    }
-}
-
-fn declares(snapshot: &SnapshotDiscovery, held: &[u8], name: &str) -> bool {
-    let joined = if held.is_empty() {
-        name.as_bytes().to_vec()
-    } else {
-        [held, b"/", name.as_bytes()].concat()
-    };
-    RepoPath::from_bytes(joined).is_some_and(|path| {
-        matches!(
-            snapshot.locate(&path),
-            Some(Located::Entry(
-                GitMode::RegularFile | GitMode::ExecutableFile,
-                _
-            ))
-        )
-    })
+    crate::route::declared_root(snapshot, document.as_bytes(), &crate::route::MKDOCS)
 }

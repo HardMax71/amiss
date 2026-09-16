@@ -410,14 +410,14 @@ pub(crate) const MKDOCS_SNIPPET: DeclarationRule = DeclarationRule {
     name: "mkdocs-snippet",
     spelling: "a `--8<--` line naming a quoted path, alone on the line",
     adapters: &[Adapter::Markdown],
-    declared_by: &["mkdocs.yml", "mkdocs.yaml"],
+    declared_by: crate::route::MKDOCS.declared_by,
 };
 
 /// Every way a document names its own identities rather than leaving them to a
 /// renderer's slug, grouped by the profile that reads each one. Each joins the
 /// union beside the renderer rules, so a rule here can only grow the set an
 /// anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 10] = [
+pub const DECLARATIONS: [DeclarationRule; 12] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element",
@@ -464,6 +464,18 @@ pub const DECLARATIONS: [DeclarationRule; 10] = [
     DeclarationRule {
         name: "asciidoc-anchor",
         spelling: "a block anchor alone on its line, `[[id]]` or `[#id]`",
+        adapters: &[Adapter::AsciiDoc],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "asciidoc-inline-anchor",
+        spelling: "an anchor in the flow of a line, `[[id]]`",
+        adapters: &[Adapter::AsciiDoc],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "asciidoc-reference-text",
+        spelling: "a section title a natural cross reference names",
         adapters: &[Adapter::AsciiDoc],
         declared_by: &[],
     },

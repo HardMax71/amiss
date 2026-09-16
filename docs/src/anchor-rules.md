@@ -63,6 +63,8 @@ route rules are; the rest are read wherever their profile is.
 | `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
 | `mdx-partial` | a default import of a relative document, rendered as an element | `mdx` | any tree |
 | `asciidoc-anchor` | a block anchor alone on its line, `[[id]]` or `[#id]` | `asciidoc` | any tree |
+| `asciidoc-inline-anchor` | an anchor in the flow of a line, `[[id]]` | `asciidoc` | any tree |
+| `asciidoc-reference-text` | a section title a natural cross reference names | `asciidoc` | any tree |
 | `rst-target` | an internal hyperlink target, `.. _name:` | `rst` | any tree |
 <!-- amiss-doc-contract:declared-identities:end -->
 
@@ -127,10 +129,16 @@ the repository's own contributing guide publishes. Only the single-line form wit
 path is read; a path carrying a section coordinate names part of a file, which this engine
 cannot reproduce, so that edge is refused and absence in the page stays undecided.
 
-The last two rows belong to the other two profiles. `asciidoc-anchor` is the anchor an
+The last rows belong to the other two profiles. `asciidoc-anchor` is the anchor an
 AsciiDoc author writes on a line of its own, `[[id]]` or `[#id]`, in either case with the
 identity being everything before the first comma; a section title that carries one publishes
 it beside the identity the `asciidoctor` rule generates for the title text.
+`asciidoc-inline-anchor` is the same `[[id]]` spelling written in the flow of a line, on a
+list item or mid-paragraph, which Asciidoctor reads as an anchor on the construct it sits in;
+an escaped `\[[` and one inside a verbatim span declare nothing. `asciidoc-reference-text`
+is the section title itself: Asciidoctor resolves a natural cross reference such as
+`<<API entrypoints>>` by looking the target up under its reference text, and a section's
+reference text is its own title, so a title carrying a space or a capital publishes it.
 `rst-target` is the internal hyperlink target, `.. _name:`, which Docutils turns into an
 identity on whatever follows it. That name is also what a Sphinx `:ref:` looks up, and
 [Resolution](resolution.md) describes that lookup, which is a different question from
