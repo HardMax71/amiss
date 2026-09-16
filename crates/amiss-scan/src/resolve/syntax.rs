@@ -4,6 +4,8 @@ use amiss_wire::report::IntentKind;
 use amiss_wire::resolution::InvalidReference;
 use amiss_wire::uri::decode_component;
 
+use crate::route::directory;
+
 use super::{Intent, Resolution};
 
 /// The recognition opening: `https://`, the declared host byte-exact, then
@@ -56,6 +58,16 @@ pub(super) fn normalized_native_path(
     is_image: bool,
     path_part: &str,
 ) -> Result<(RepoPath, TargetKind), Resolution> {
+    normalized_path_under(directory(document_path.as_bytes()), is_image, path_part)
+}
+
+/// A destination relative to one directory: segments decode once and stay
+/// contained while `.` and internal `..` normalize away.
+pub(super) fn normalized_path_under(
+    parent: &[u8],
+    is_image: bool,
+    path_part: &str,
+) -> Result<(RepoPath, TargetKind), Resolution> {
     if path_part.contains('\\') {
         return Err(Resolution::Invalid {
             reason: InvalidReference::BackslashSeparator,
@@ -76,12 +88,6 @@ pub(super) fn normalized_native_path(
         TargetKind::Either
     };
 
-    let raw_document = document_path.as_bytes();
-    let parent = raw_document
-        .iter()
-        .rposition(|byte| *byte == b'/')
-        .and_then(|split| raw_document.get(..split))
-        .unwrap_or_default();
     let mut resolved =
         Vec::with_capacity(parent.len().saturating_add(path.len()).saturating_add(1));
     resolved.extend_from_slice(parent);

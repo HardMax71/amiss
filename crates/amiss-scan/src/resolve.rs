@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use amiss_git::{GitResources, ObjectKind, Repository, ValueCap};
-use amiss_wire::controls::{GitMode, ResourceName, TargetKind};
+use amiss_wire::controls::{GitMode, ResourceName, SourceConstruct, TargetKind};
 use amiss_wire::model::{
     Adapter, BranchRef, ForgeDialect, ObjectFormat, Oid, RepoPath, RepositoryIdentity,
 };
@@ -18,7 +18,7 @@ use crate::declared::Declarations;
 use crate::discovery::{Located, SnapshotDiscovery};
 use crate::document::{Classification, classify};
 use crate::resources::{Aggregate, ScanResources};
-use crate::route::candidates;
+use crate::route::{anchors, candidates, directory};
 
 mod anchor;
 mod content;
@@ -33,7 +33,7 @@ pub(crate) use line::{LineRange, named_region_bytes, safe_line_number, selected_
 
 use anchor::fragment_resolution;
 use content::{CachedContent, read_target};
-use syntax::{normalized_native_path, same_repo_suffix, split_components, unsupported_intent};
+use syntax::{normalized_path_under, same_repo_suffix, split_components, unsupported_intent};
 
 pub use amiss_wire::model::RAW_EVIDENCE_DOMAIN;
 pub const TARGET_PROJECTION_DOMAIN: &str = "amiss/scanner-target-projection";
@@ -139,76 +139,14 @@ impl<'a> Resolver<'a> {
         is_image: bool,
         semantic: &str,
     ) -> Result<(Intent, Resolution), Error> {
-        if adapter == Adapter::AsciiDoc && (is_image || awaits_attribute(semantic)) {
-            let (_, query, fragment) = split_components(semantic);
-            return Ok((
-                unsupported_intent(query, fragment),
-                Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
-            ));
-        }
-        let (path_part, query, fragment) = split_components(semantic);
-
-        if let Some(raw_fragment) = &fragment
-            && decode_fragment(raw_fragment).is_none()
-        {
-            let intent = if path_part.starts_with('/') && !path_part.starts_with("//") {
-                Intent {
-                    kind: IntentKind::SiteRoute,
-                    commit_oid: None,
-                    repository_path: None,
-                    target_kind: None,
-                    external_scheme: None,
-                    query,
-                    fragment,
-                }
-            } else {
-                unsupported_intent(query, fragment)
-            };
-            return Ok((
-                intent,
-                Resolution::Invalid {
-                    reason: InvalidReference::FragmentEncoding,
-                },
-            ));
-        }
-
-        if path_part.starts_with("//") {
-            return Ok((
-                unsupported_intent(query, fragment),
-                Resolution::UnsupportedSemantics(UnsupportedSemantics::NetworkPath),
-            ));
-        }
-        if let Some(scheme) = scheme(path_part) {
-            return absolute(self, context, path_part, scheme, query, fragment);
-        }
-        if path_part.starts_with('/') {
-            return Ok((
-                Intent {
-                    kind: IntentKind::SiteRoute,
-                    commit_oid: None,
-                    repository_path: None,
-                    target_kind: None,
-                    external_scheme: None,
-                    query,
-                    fragment,
-                },
-                Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
-            ));
-        }
-        if adapter == Adapter::AsciiDoc && names_a_page_identity(path_part) {
-            return Ok((
-                unsupported_intent(query, fragment),
-                Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
-            ));
-        }
-        native(
+        resolve_destination(
             self,
+            context,
+            adapter,
             document_path,
+            None,
             is_image,
-            path_part,
-            query,
-            fragment,
-            context.map(|identity| identity.dialect),
+            semantic,
         )
     }
 
@@ -220,14 +158,16 @@ impl<'a> Resolver<'a> {
         document_path: &RepoPath,
         occurrence: &crate::scan::ScannedOccurrence,
     ) -> Result<(Intent, Resolution, Option<String>), Error> {
-        if occurrence.occurrence.construct == amiss_wire::controls::SourceConstruct::RstRefRole {
+        if occurrence.occurrence.construct == SourceConstruct::RstRefRole {
             return self.resolve_label(&occurrence.occurrence.semantic_destination, semantic);
         }
         let is_image = occurrence.occurrence.construct.is_image();
-        let (intent, mut resolution) = self.resolve(
+        let (intent, mut resolution) = resolve_destination(
+            self,
             context,
             adapter,
             document_path,
+            Some(occurrence.occurrence.construct),
             is_image,
             &occurrence.occurrence.semantic_destination,
         )?;
@@ -307,61 +247,182 @@ fn absolute(
     ))
 }
 
-/// Native destinations: empty targets the source document itself; one
-/// terminal slash is an authored directory hint on a link and invalid on an
-/// image; segments decode once and are contained relative to the source
-/// document's parent while normalizing `.` and internal `..`.
+/// One semantic destination against the bound snapshot, with the construct
+/// that wrote it when the caller knows one. A generator declared in the tree
+/// anchors the destination somewhere other than beside the document, and is
+/// asked before the scheme and site-route readings, since an Antora module
+/// coordinate spells like a scheme and a Sphinx docname like a route.
+fn resolve_destination(
+    resolver: &mut Resolver<'_>,
+    context: Option<&ForgeContext>,
+    adapter: Adapter,
+    document_path: &RepoPath,
+    construct: Option<SourceConstruct>,
+    is_image: bool,
+    semantic: &str,
+) -> Result<(Intent, Resolution), Error> {
+    let (path_part, query, fragment) = split_components(semantic);
+    let mut anchors = anchors(
+        resolver.snapshot,
+        adapter,
+        document_path,
+        construct,
+        is_image,
+        path_part,
+    );
+    if adapter == Adapter::AsciiDoc
+        && ((is_image && anchors.is_empty()) || awaits_attribute(semantic))
+    {
+        return Ok((
+            unsupported_intent(query, fragment),
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
+        ));
+    }
+
+    if let Some(raw_fragment) = &fragment
+        && decode_fragment(raw_fragment).is_none()
+    {
+        let intent = if path_part.starts_with('/') && !path_part.starts_with("//") {
+            Intent {
+                kind: IntentKind::SiteRoute,
+                commit_oid: None,
+                repository_path: None,
+                target_kind: None,
+                external_scheme: None,
+                query,
+                fragment,
+            }
+        } else {
+            unsupported_intent(query, fragment)
+        };
+        return Ok((
+            intent,
+            Resolution::Invalid {
+                reason: InvalidReference::FragmentEncoding,
+            },
+        ));
+    }
+
+    if path_part.starts_with("//") {
+        return Ok((
+            unsupported_intent(query, fragment),
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::NetworkPath),
+        ));
+    }
+    if anchors.is_empty() {
+        if let Some(scheme) = scheme(path_part) {
+            return absolute(resolver, context, path_part, scheme, query, fragment);
+        }
+        if path_part.starts_with('/') {
+            return Ok((
+                Intent {
+                    kind: IntentKind::SiteRoute,
+                    commit_oid: None,
+                    repository_path: None,
+                    target_kind: None,
+                    external_scheme: None,
+                    query,
+                    fragment,
+                },
+                Resolution::UnsupportedSemantics(UnsupportedSemantics::SiteRoute),
+            ));
+        }
+        anchors.push((
+            directory(document_path.as_bytes()).to_vec(),
+            path_part.to_owned(),
+        ));
+    }
+    if adapter == Adapter::AsciiDoc && names_a_page_identity(path_part) {
+        return Ok((
+            unsupported_intent(query, fragment),
+            Resolution::UnsupportedSemantics(UnsupportedSemantics::AttributeDependent),
+        ));
+    }
+    let forge = context.map(|identity| identity.dialect);
+    if path_part.is_empty() {
+        let target_kind = if is_image {
+            TargetKind::Blob
+        } else {
+            TargetKind::Either
+        };
+        let row = lookup(
+            resolver,
+            document_path,
+            target_kind,
+            query.as_deref(),
+            fragment.as_deref(),
+            forge,
+        )?;
+        return Ok((
+            repository_intent(document_path.clone(), target_kind, query, fragment),
+            row,
+        ));
+    }
+    native(resolver, is_image, &anchors, query, fragment, forge)
+}
+
+/// Native destinations: one terminal slash is an authored directory hint on a
+/// link and invalid on an image; segments decode once and are contained under
+/// each anchoring directory in turn while normalizing `.` and internal `..`.
+/// The first anchor fixes the intent, and the first one the tree holds, as
+/// written or under a router spelling, is the target that answers.
 fn native(
     resolver: &mut Resolver<'_>,
-    document_path: &RepoPath,
     is_image: bool,
-    path_part: &str,
+    anchors: &[(Vec<u8>, String)],
     query: Option<String>,
     fragment: Option<String>,
     forge: Option<ForgeDialect>,
 ) -> Result<(Intent, Resolution), Error> {
-    let terminal = |resolution: Resolution, query: Option<String>, fragment: Option<String>| {
-        (unsupported_intent(query, fragment), resolution)
-    };
-
-    let (path, target_kind, route) = if path_part.is_empty() {
-        (
-            document_path.clone(),
-            if is_image {
-                TargetKind::Blob
-            } else {
-                TargetKind::Either
-            },
-            None,
-        )
-    } else {
-        let (path, target_kind) = match normalized_native_path(document_path, is_image, path_part) {
+    let mut intent: Option<(RepoPath, TargetKind)> = None;
+    let mut served: Option<RepoPath> = None;
+    for (parent, relative) in anchors {
+        let (path, target_kind) = match normalized_path_under(parent, is_image, relative) {
             Ok(target) => target,
-            Err(resolution) => return Ok(terminal(resolution, query, fragment)),
+            Err(resolution) if intent.is_none() => {
+                return Ok((unsupported_intent(query, fragment), resolution));
+            }
+            Err(_) => continue,
         };
         let route = routed(resolver.snapshot, &path, target_kind);
-        (path, target_kind, Some(route))
+        let located = resolver.snapshot.locate(&route).is_some();
+        if intent.is_none() {
+            intent = Some((path, target_kind));
+        }
+        if located {
+            served = Some(route);
+            break;
+        }
+    }
+    let Some((path, target_kind)) = intent else {
+        return Err(Error::Internal);
     };
     let row = lookup(
         resolver,
-        route.as_ref().unwrap_or(&path),
+        served.as_ref().unwrap_or(&path),
         target_kind,
         query.as_deref(),
         fragment.as_deref(),
         forge,
     )?;
-    Ok((
-        Intent {
-            kind: IntentKind::RepositoryPath,
-            commit_oid: None,
-            repository_path: Some(path),
-            target_kind: Some(target_kind),
-            external_scheme: None,
-            query,
-            fragment,
-        },
-        row,
-    ))
+    Ok((repository_intent(path, target_kind, query, fragment), row))
+}
+
+fn repository_intent(
+    path: RepoPath,
+    target_kind: TargetKind,
+    query: Option<String>,
+    fragment: Option<String>,
+) -> Intent {
+    Intent {
+        kind: IntentKind::RepositoryPath,
+        commit_oid: None,
+        repository_path: Some(path),
+        target_kind: Some(target_kind),
+        external_scheme: None,
+        query,
+        fragment,
+    }
 }
 
 /// A page identity is answered by a site catalogue this engine does not build.

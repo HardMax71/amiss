@@ -1,20 +1,33 @@
-use amiss_wire::model::RepoPath;
+use amiss_wire::controls::{GitMode, SourceConstruct};
+use amiss_wire::model::{Adapter, RepoPath};
+use amiss_wire::uri::scheme;
+
+use crate::discovery::{Located, SnapshotDiscovery};
 
 /// A spelling a router serves for a page whose source file is named
-/// otherwise. Each one was harvested from the router itself.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// otherwise. The first three were harvested from the router itself and hold
+/// in every tree; the rest were read from a generator's own resolver and hold
+/// only under the file that declares that generator.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr)]
+#[strum(serialize_all = "kebab-case")]
 pub enum Spelling {
     Extensionless,
     OutputExtension,
     ReadmeIndex,
+    AntoraResource,
+    SiteAlias,
+    ContentRoot,
+    SourceRoot,
 }
 
 /// One router's route rule: the spellings it serves for a source file beyond
-/// the source path itself. A router that serves none demands the source
-/// spelling and adds nothing.
+/// the source path itself, and the file whose presence on a document's
+/// ancestor chain selects it. A router declared by nothing serves every tree,
+/// and one that serves no spelling demands the source spelling and adds nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RouteRule {
     pub name: &'static str,
+    pub declared_by: &'static [&'static str],
     pub serves: &'static [Spelling],
 }
 
@@ -25,20 +38,48 @@ impl RouteRule {
     }
 }
 
+const ANTORA: RouteRule = RouteRule {
+    name: "antora",
+    declared_by: &["antora.yml"],
+    serves: &[Spelling::AntoraResource],
+};
+
+const DOCUSAURUS: RouteRule = RouteRule {
+    name: "docusaurus",
+    declared_by: &[
+        "docusaurus.config.ts",
+        "docusaurus.config.mts",
+        "docusaurus.config.cts",
+        "docusaurus.config.js",
+        "docusaurus.config.mjs",
+        "docusaurus.config.cjs",
+    ],
+    serves: &[Spelling::SiteAlias, Spelling::ContentRoot],
+};
+
+const SPHINX: RouteRule = RouteRule {
+    name: "sphinx",
+    declared_by: &["conf.py"],
+    serves: &[Spelling::SourceRoot],
+};
+
 /// Every router rule the resolver knows. A spelling reaches a source file only
 /// when that file is in the tree, so a rule can widen what resolves and can
 /// never invent a target.
-pub const ROUTERS: [RouteRule; 4] = [
+pub const ROUTERS: [RouteRule; 7] = [
     RouteRule {
         name: "mdbook",
+        declared_by: &[],
         serves: &[Spelling::OutputExtension, Spelling::ReadmeIndex],
     },
     RouteRule {
         name: "vitepress",
+        declared_by: &[],
         serves: &[Spelling::Extensionless, Spelling::OutputExtension],
     },
     RouteRule {
         name: "vitepress-readme",
+        declared_by: &[],
         serves: &[
             Spelling::Extensionless,
             Spelling::OutputExtension,
@@ -47,8 +88,31 @@ pub const ROUTERS: [RouteRule; 4] = [
     },
     RouteRule {
         name: "mkdocs",
+        declared_by: &[],
         serves: &[],
     },
+    ANTORA,
+    DOCUSAURUS,
+    SPHINX,
+];
+
+/// Antora's resource families: the coordinate an author writes before `$`,
+/// and the module directory the family is stored under.
+const ANTORA_FAMILIES: [(&str, &[u8]); 5] = [
+    ("page", b"pages"),
+    ("partial", b"partials"),
+    ("example", b"examples"),
+    ("attachment", b"attachments"),
+    ("image", b"images"),
+];
+
+/// The plugin content paths Docusaurus reads by default, relative to the site
+/// directory, with `*` standing for one segment.
+const DOCUSAURUS_CONTENT_ROOTS: [&[&str]; 4] = [
+    &["docs"],
+    &["blog"],
+    &["src", "pages"],
+    &["versioned_docs", "*"],
 ];
 
 /// Every source path a modelled router would serve for this destination, in a
@@ -98,6 +162,273 @@ pub fn spellings(rule: &RouteRule, destination: &RepoPath) -> Vec<(Spelling, Rep
         }
     }
     out
+}
+
+/// Where a generator declared in the tree anchors this destination: each
+/// directory to look under, in the generator's own order, paired with the
+/// part of the destination that is relative to it. Empty when no generator on
+/// the document's ancestor chain claims the destination, which leaves it
+/// beside the document. A rule that turns on the construct is not asked
+/// without one.
+#[must_use]
+pub fn anchors(
+    snapshot: &SnapshotDiscovery,
+    adapter: Adapter,
+    document: &RepoPath,
+    construct: Option<SourceConstruct>,
+    is_image: bool,
+    path_part: &str,
+) -> Vec<(Vec<u8>, String)> {
+    match adapter {
+        Adapter::AsciiDoc => antora_anchor(snapshot, document, construct, path_part)
+            .into_iter()
+            .collect(),
+        Adapter::Markdown | Adapter::Mdx => {
+            docusaurus_anchors(snapshot, document, is_image, path_part)
+        }
+        Adapter::Rst => sphinx_anchor(snapshot, document, construct, path_part)
+            .into_iter()
+            .collect(),
+        Adapter::PlainAdvisory => Vec::new(),
+    }
+}
+
+/// The directory a document sits in, without its trailing separator; empty
+/// at the repository root.
+#[must_use]
+pub fn directory(document: &[u8]) -> &[u8] {
+    document
+        .iter()
+        .rposition(|byte| *byte == b'/')
+        .and_then(|split| document.get(..split))
+        .unwrap_or_default()
+}
+
+/// An Antora resource ID, `[module:][family$]relative`, anchored at the family
+/// directory of the named module in the document's own component. A cross
+/// reference defaults to the page family and an image to the image family,
+/// while an include without a family coordinate stays relative to the file
+/// that includes it. A version or component coordinate names a catalogue this
+/// tree does not hold, and a `./` or `../` relative is relative to the page.
+fn antora_anchor(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    construct: Option<SourceConstruct>,
+    path_part: &str,
+) -> Option<(Vec<u8>, String)> {
+    let construct = construct?;
+    let default_family = if construct == SourceConstruct::AsciidocCrossReference {
+        Some("page")
+    } else if construct.is_image() {
+        Some("image")
+    } else if construct == SourceConstruct::AsciidocInclude {
+        None
+    } else {
+        return None;
+    };
+    let (root, own_module) = antora_module(snapshot, document.as_bytes())?;
+    if path_part.contains('@') {
+        return None;
+    }
+    let (module, resource) = match path_part.split_once(':') {
+        None => (own_module, path_part),
+        Some((module, resource))
+            if !module.is_empty() && !module.contains('/') && !resource.contains(':') =>
+        {
+            (module.as_bytes(), resource)
+        }
+        Some(_) => return None,
+    };
+    let (family, relative) = match resource.split_once('$') {
+        Some((family, relative)) => (family, relative),
+        None => (default_family?, resource),
+    };
+    let (_, family_directory) = ANTORA_FAMILIES.iter().find(|(name, _)| *name == family)?;
+    if relative.is_empty()
+        || relative.starts_with('/')
+        || relative.starts_with("./")
+        || relative.starts_with("../")
+    {
+        return None;
+    }
+    let module_directory = join(&join(root, b"modules"), module);
+    Some((
+        join(&module_directory, family_directory),
+        relative.to_owned(),
+    ))
+}
+
+/// The component root and module a document belongs to: the nearest
+/// `modules/<name>/` on its path whose parent directory holds `antora.yml`.
+fn antora_module<'a>(
+    snapshot: &SnapshotDiscovery,
+    document: &'a [u8],
+) -> Option<(&'a [u8], &'a [u8])> {
+    let mut offset = 0_usize;
+    let segments: Vec<(usize, &[u8])> = document
+        .split(|byte| *byte == b'/')
+        .map(|segment| {
+            let start = offset;
+            offset = offset.saturating_add(segment.len()).saturating_add(1);
+            (start, segment)
+        })
+        .collect();
+    segments
+        .iter()
+        .enumerate()
+        .rev()
+        .find_map(|(index, (start, segment))| {
+            if *segment != b"modules" {
+                return None;
+            }
+            let (_, module) = segments.get(index.saturating_add(1))?;
+            segments.get(index.saturating_add(2))?;
+            if module.is_empty() {
+                return None;
+            }
+            let root = document.get(..start.saturating_sub(1))?;
+            ANTORA
+                .declared_by
+                .iter()
+                .any(|name| regular_file(snapshot, join(root, name.as_bytes())))
+                .then_some((root, *module))
+        })
+}
+
+/// A Docusaurus destination under its site directory: the `@site/` alias
+/// names a path from that directory, and a bare Markdown path is tried beside
+/// the document, then under the plugin content path the document sits in,
+/// then under the site directory, which is the order `resolveMarkdownLink`
+/// tries them. A `./` or `../` path is beside the document alone, and a URL
+/// is not a local path whatever its last segment spells.
+fn docusaurus_anchors(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    is_image: bool,
+    path_part: &str,
+) -> Vec<(Vec<u8>, String)> {
+    if scheme(path_part).is_some() {
+        return Vec::new();
+    }
+    let Some(site) = declared_root(snapshot, document.as_bytes(), &DOCUSAURUS) else {
+        return Vec::new();
+    };
+    if let Some(relative) = path_part.strip_prefix("@site/") {
+        return vec![(site, relative.to_owned())];
+    }
+    let bare = !path_part.starts_with('/')
+        && !path_part.starts_with("./")
+        && !path_part.starts_with("../");
+    let markdown = path_part.rsplit('/').next().is_some_and(|last| {
+        let last = last.to_ascii_lowercase();
+        last.as_bytes().ends_with(b".md") || last.as_bytes().ends_with(b".mdx")
+    });
+    if is_image || !bare || !markdown {
+        return Vec::new();
+    }
+    let mut out = vec![(
+        directory(document.as_bytes()).to_vec(),
+        path_part.to_owned(),
+    )];
+    for root in content_root(&site, document.as_bytes())
+        .into_iter()
+        .chain([site])
+    {
+        if !out.iter().any(|(held, _)| *held == root) {
+            out.push((root, path_part.to_owned()));
+        }
+    }
+    out
+}
+
+/// The plugin content path a document sits under, when it sits under one of
+/// the paths Docusaurus reads by default.
+fn content_root(site: &[u8], document: &[u8]) -> Option<Vec<u8>> {
+    let relative = document.strip_prefix(site)?;
+    let relative = if site.is_empty() {
+        relative
+    } else {
+        relative.strip_prefix(b"/")?
+    };
+    let segments: Vec<&[u8]> = relative.split(|byte| *byte == b'/').collect();
+    DOCUSAURUS_CONTENT_ROOTS.iter().find_map(|pattern| {
+        let head = segments.get(..pattern.len())?;
+        let matched = segments.len() > pattern.len()
+            && pattern
+                .iter()
+                .zip(head)
+                .all(|(want, have)| *want == "*" || want.as_bytes() == *have);
+        matched.then(|| join(site, &head.join(&b'/')))
+    })
+}
+
+/// A source-root-absolute `:doc:` target, anchored at the directory holding
+/// `conf.py`, with the source suffix an extensionless docname takes.
+fn sphinx_anchor(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    construct: Option<SourceConstruct>,
+    path_part: &str,
+) -> Option<(Vec<u8>, String)> {
+    if construct? != SourceConstruct::RstDocRole {
+        return None;
+    }
+    let relative = path_part.strip_prefix('/')?;
+    if relative.is_empty() || relative.starts_with('/') {
+        return None;
+    }
+    let root = declared_root(snapshot, document.as_bytes(), &SPHINX)?;
+    let named = relative
+        .rsplit('/')
+        .next()
+        .is_some_and(|last| last.contains('.'));
+    let relative = if named {
+        relative.to_owned()
+    } else {
+        format!("{relative}.rst")
+    };
+    Some((root, relative))
+}
+
+/// The nearest directory on the document's ancestor chain holding one of the
+/// files that declare this rule's generator.
+fn declared_root(
+    snapshot: &SnapshotDiscovery,
+    document: &[u8],
+    rule: &RouteRule,
+) -> Option<Vec<u8>> {
+    let mut end = document.len();
+    loop {
+        let cut = document.get(..end)?.iter().rposition(|byte| *byte == b'/');
+        let directory = cut.and_then(|cut| document.get(..cut)).unwrap_or_default();
+        if rule
+            .declared_by
+            .iter()
+            .any(|name| regular_file(snapshot, join(directory, name.as_bytes())))
+        {
+            return Some(directory.to_vec());
+        }
+        end = cut?;
+    }
+}
+
+fn regular_file(snapshot: &SnapshotDiscovery, path: Vec<u8>) -> bool {
+    RepoPath::from_bytes(path).is_some_and(|path| {
+        matches!(
+            snapshot.locate(&path),
+            Some(Located::Entry(
+                GitMode::RegularFile | GitMode::ExecutableFile,
+                _
+            ))
+        )
+    })
+}
+
+fn join(directory: &[u8], name: &[u8]) -> Vec<u8> {
+    if directory.is_empty() {
+        return name.to_vec();
+    }
+    [directory, b"/", name].concat()
 }
 
 fn output_extension(raw: &[u8]) -> Option<Vec<u8>> {
