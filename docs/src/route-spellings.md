@@ -104,6 +104,13 @@ another directory gets the site-directory step alone, and a localized tree under
 not read. A `./` or `../` destination is beside the document and nowhere else, which is
 Docusaurus's rule too.
 
+Where no `docusaurus.config.*` sits above the document, `@site/` is a destination this run
+cannot answer rather than a missing directory called `@site`: the alias is expanded when the
+site is built, and nothing here says which directory it names. That is
+`unsupported-reference-semantics`, the answer an AsciiDoc `{attribute}` already gets for the
+same reason. Only the opening is read, so a tree with a real `@internal/` directory resolves
+that path as written.
+
 `directory-url` reads a raw HTML destination in a document under a `mkdocs.yml` the way the
 browser does. mkdocs rewrites the destination of a Markdown link and leaves an `<a href>` or
 an `<img src>` written by hand alone, so that one is resolved against the URL the page is

@@ -27,8 +27,9 @@ Each destination then passes through the generic
 trusted absolute forge spellings continue through the private
 [dialect module](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/resolve/forge.rs).
 A relative path resolves from the document's own directory and must stay inside the
-repository; `../../../etc/passwd` is an `invalid-reference`, not a file read. A path beginning
-with `/` is a site route, not a repository-root shorthand. It stays unsupported unless sealed,
+repository; `../../../etc/passwd` is an `invalid-reference`, not a file read, and so is
+`!file-loader!./asset.pdf`, which is a bundler's inline request rather than a path. A path
+beginning with `/` is a site route, not a repository-root shorthand. It stays unsupported unless sealed,
 candidate-bound site-build evidence maps that exact route and optional decoded anchor to a
 published source-backed or generated page, either directly or through a proved fragment-aware
 terminal redirect, or unless it is a Sphinx `:doc:` target under a `conf.py` the tree holds.
@@ -139,7 +140,9 @@ file is in the tree anchors a destination somewhere other than beside the docume
 resource ID at its family directory, a Docusaurus bare path or `@site/` alias at the content
 root or the site directory, a Sphinx `:doc:` target with a leading slash at the directory
 holding `conf.py`, a raw HTML destination under a `mkdocs.yml` at the directory the page is
-published at. The file's presence selects the rule and nothing inside it is read.
+published at. The file's presence selects the rule and nothing inside it is read. An alias
+with no such file above the document is `unsupported-reference-semantics` rather than a
+directory of that name, since the value arrives when the site is built.
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
 they were harvested from, the generator rules and what selects each, and what the union costs.
 

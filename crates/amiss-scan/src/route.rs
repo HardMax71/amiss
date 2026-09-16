@@ -117,6 +117,17 @@ const DOCUSAURUS_CONTENT_ROOTS: [&[&str]; 4] = [
     &["versioned_docs", "*"],
 ];
 
+/// The opening Docusaurus expands to its own site directory, which is the
+/// `site-alias` spelling written out.
+const SITE_ALIAS: &str = "@site/";
+
+/// Whether a generator rule owns this destination's opening. Only the opening
+/// is read, so an ordinary directory named with an at sign is still a path.
+#[must_use]
+pub fn generator_alias(path_part: &str) -> bool {
+    path_part.starts_with(SITE_ALIAS)
+}
+
 /// The openings a bundler's own inline request syntax reserves, which no tree
 /// answers: webpack reads a leading `!` as the loaders it disables and the
 /// rest of the string as a loader chain ending in the resource.
@@ -335,7 +346,7 @@ fn docusaurus_anchors(
     let Some(site) = declared_root(snapshot, document.as_bytes(), &DOCUSAURUS) else {
         return Vec::new();
     };
-    if let Some(relative) = path_part.strip_prefix("@site/") {
+    if let Some(relative) = path_part.strip_prefix(SITE_ALIAS) {
         return vec![(site, relative.to_owned())];
     }
     let bare = !path_part.starts_with('/')
