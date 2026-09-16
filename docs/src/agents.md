@@ -6,7 +6,7 @@ check the agent runs itself before pushing.
 ## The failing gate
 
 When a pull request fails, everything the agent needs travels with the failure.
-Annotations point to introduced Fixes. Grouped Checks and Existing inventory stay in the
+Annotations point to introduced Fixes. Grouped Checks and pre-existing inventory stay in the
 job summary and report, and the exact finding and error rows carry their fixed
 descriptions. Even a rejected invocation teaches: it prints the closed grammar on stderr,
 so an agent with no book at hand can construct a working command from the refusal alone.

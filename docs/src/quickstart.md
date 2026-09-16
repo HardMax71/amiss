@@ -52,7 +52,7 @@ amiss: pass (fix 0, check 0, existing 0, errors 0, exit 0)
 
 A Fix is a reference this change broke; `observe` reports it without blocking, `enforce`
 fails the run on it. A Check is a file that changed under a paragraph that did not, listed
-for a person to read and never a verdict. Existing is the backlog, the problems that were
+for a person to read and never a verdict. Pre-existing is the backlog, the problems that were
 already there before this change. The same Fix counts under both profiles; the exit code
 carries the verdict. 0 means the run completed and nothing blocks, 1 means a finding blocks,
 and 2 means the run itself could not be trusted, so there is no verdict to act on.
@@ -62,7 +62,7 @@ There is no ignore file, no exclude list, and no way to silence one finding. The
 directory names are fixed (`node_modules`, `vendor`, `third_party`, `dist`, `build`, `.next`,
 `target`, `test`, `tests`), and a run always reads the whole repository, so a monorepo cannot
 scope it to one package. The ramp for a repository with a backlog is
-`--profile enforce-introduced`: what a change introduces blocks, the Existing rows stay
+`--profile enforce-introduced`: what a change introduces blocks, the pre-existing rows stay
 warnings, and you work them off on your own clock. External http links are never fetched;
 the report lists them, and [Amiss and link checkers](comparison.md) shows the one pipe that
 hands them to lychee.

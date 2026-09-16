@@ -32,7 +32,7 @@ jobs:
 ```
 
 The published first run uses `observe`: introduced problems appear as Fixes without blocking,
-changed targets appear as summary-only Checks, and pre-existing problems remain Existing
+changed targets appear as summary-only Checks, and pre-existing problems stay as pre-existing
 inventory. An incomplete or untrusted run still fails. Triage the initial report, adopt any
 repository policy it needs, then switch the input to `profile: enforce`. A repository whose
 backlog outlives its first triage can gate the middle of that road with
@@ -256,7 +256,7 @@ is stated there.
 When a run blocks, use the grouped feedback to orient, then read the exact JSON findings for
 repair evidence. The Action and human views show at most ten Fix and Check items combined, in
 engine order, with one overflow line; only a displayed Fix with a candidate text location
-becomes a file annotation, while Checks and Existing inventory stay in the summary and
+becomes a file annotation, while Checks and pre-existing inventory stay in the summary and
 report. If the scan failed, feedback is unavailable and at most ten retained errors are
 annotated instead. The blocking rows remain the report's `errors` and findings whose
 `effective_disposition` is `fail`, and the complete grouped and raw sets always remain in the

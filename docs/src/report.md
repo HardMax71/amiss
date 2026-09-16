@@ -153,7 +153,7 @@ prose become one `check`, and pre-existing failures and warnings become one `exi
 target after them, so the backlog is listed, not only counted; `existing_count` stays the
 number of those grouped subjects. Each item retains its affected-location count and
 contributing finding kinds. A Fix may carry one candidate-side text-path annotation;
-Checks and Existing items never do. The report retains every item. An incomplete
+Checks and pre-existing items never do. The report retains every item. An incomplete
 comparison instead emits exactly `{"status":"unavailable"}`, so scan failure cannot look
 like zero feedback.
 

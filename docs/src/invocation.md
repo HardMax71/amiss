@@ -207,7 +207,7 @@ and a consistent recorded result. A successful projection exits with that record
 a closed stdout does not change it. Invalid, unreadable, or oversized report input exits 2 without
 output. JSON is not an admitted projection because the report file is already canonical JSON;
 requesting it is a grammar refusal and may emit the standard incomplete JSON refusal envelope.
-Human replay additionally accepts `--full`, which prints every Fix, Check, and Existing item in
+Human replay additionally accepts `--full`, which prints every Fix, Check, and pre-existing item in
 the report's canonical order without overflow lines. It changes no facts, totals, notes, or exit
 class; the ordinary human projection keeps the two independent ten-item windows.
 
