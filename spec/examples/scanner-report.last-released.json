@@ -1,6 +1,6 @@
 {
   "payload": {
-    "compatibility": "1",
+    "compatibility": "2",
     "controls": {
       "base_repository_policy_digest": null,
       "candidate_repository_policy_digest": "sha256:bda3f4f2b06e62fc6f36c19d05805edc3fe785ae94401e226ab485da0a263e6d",
@@ -397,139 +397,117 @@
                 "base": [],
                 "candidate": []
               },
-              "base": {
-                "adapter_id": "markdown",
-                "block_kind": "paragraph",
-                "document": "README.md",
-                "intent": {
-                  "external_scheme": null,
-                  "fragment_digest": null,
-                  "kind": "repository-path",
-                  "query_digest": null,
-                  "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
-                  "repository_path": "docs/guide.md",
-                  "target_kind": "either"
-                },
-                "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
-                "observation_id_input": {
-                  "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
-                  "adapter_id": "markdown",
-                  "document": "README.md",
-                  "extracted_intent": {
-                    "external_scheme": null,
-                    "fragment_digest": null,
-                    "kind": "repository-path",
-                    "query_digest": null,
-                    "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
-                    "repository_path": "docs/guide.md",
-                    "target_kind": "either"
-                  },
-                  "schema": "amiss/scanner-observation-id-input",
-                  "source_construct": "markdown-inline-link",
-                  "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
-                  "structural_address": {
-                    "address_kind": "markdown-ast-node-path",
-                    "construct_index": 0,
-                    "duplicate_index": 0,
-                    "node_path": [
-                      1,
-                      1
-                    ],
-                    "schema": "amiss/scanner-structural-address"
-                  }
-                },
-                "resolution": {
-                  "kind": "resolved",
-                  "target": {
-                    "content": {
-                      "kind": "available",
-                      "projection_digest": "sha256:6556b1015ad36159054dc7673b971b92483780f1189ed2df7b3c6ad04106952f",
-                      "raw_digest": "sha256:ef683e51fd120ca8adfff6df4072299f3dc2da292b7ad524cb306100ad7348a1"
-                    },
-                    "kind": "blob",
-                    "mode": "100644",
-                    "path": "docs/guide.md"
-                  }
-                },
-                "source_construct": "markdown-inline-link",
-                "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
-                "source_span": {
-                  "end_byte": 40,
-                  "end_column": 31,
-                  "end_line": 3,
-                  "start_byte": 18,
-                  "start_column": 9,
-                  "start_line": 3
-                }
-              },
-              "candidate": {
-                "adapter_id": "markdown",
-                "block_kind": "paragraph",
-                "document": "README.md",
-                "intent": {
-                  "external_scheme": null,
-                  "fragment_digest": null,
-                  "kind": "repository-path",
-                  "query_digest": null,
-                  "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
-                  "repository_path": "docs/guide.md",
-                  "target_kind": "either"
-                },
-                "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
-                "observation_id_input": {
-                  "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
-                  "adapter_id": "markdown",
-                  "document": "README.md",
-                  "extracted_intent": {
-                    "external_scheme": null,
-                    "fragment_digest": null,
-                    "kind": "repository-path",
-                    "query_digest": null,
-                    "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
-                    "repository_path": "docs/guide.md",
-                    "target_kind": "either"
-                  },
-                  "schema": "amiss/scanner-observation-id-input",
-                  "source_construct": "markdown-inline-link",
-                  "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
-                  "structural_address": {
-                    "address_kind": "markdown-ast-node-path",
-                    "construct_index": 0,
-                    "duplicate_index": 0,
-                    "node_path": [
-                      1,
-                      1
-                    ],
-                    "schema": "amiss/scanner-structural-address"
-                  }
-                },
-                "resolution": {
-                  "kind": "resolved",
-                  "target": {
-                    "content": {
-                      "kind": "available",
-                      "projection_digest": "sha256:2cd361f4d556c37b93c4c07b3a12c85d64f1ce2d84b5c1f4d066e0debbe097ca",
-                      "raw_digest": "sha256:05754ad7db26965dc48e57a662591fd7474500834ed374eb7cef1ff17418452c"
-                    },
-                    "kind": "blob",
-                    "mode": "100644",
-                    "path": "docs/guide.md"
-                  }
-                },
-                "source_construct": "markdown-inline-link",
-                "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
-                "source_span": {
-                  "end_byte": 40,
-                  "end_column": 31,
-                  "end_line": 3,
-                  "start_byte": 18,
-                  "start_column": 9,
-                  "start_line": 3
-                }
-              },
               "correlation": "exact",
               "correlation_reason": "same-extraction-key-and-projection",
               "impact": "dependency-changed-subject-unchanged",
+              "sides": {
+                "each": {
+                  "base": {
+                    "block_kind": "paragraph",
+                    "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
+                    "observation_id_input": {
+                      "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
+                      "adapter_id": "markdown",
+                      "document": "README.md",
+                      "extracted_intent": {
+                        "external_scheme": null,
+                        "fragment_digest": null,
+                        "kind": "repository-path",
+                        "query_digest": null,
+                        "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
+                        "repository_path": "docs/guide.md",
+                        "target_kind": "either"
+                      },
+                      "schema": "amiss/scanner-observation-id-input",
+                      "source_construct": "markdown-inline-link",
+                      "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
+                      "structural_address": {
+                        "address_kind": "markdown-ast-node-path",
+                        "construct_index": 0,
+                        "duplicate_index": 0,
+                        "node_path": [
+                          1,
+                          1
+                        ],
+                        "schema": "amiss/scanner-structural-address"
+                      }
+                    },
+                    "resolution": {
+                      "kind": "resolved",
+                      "target": {
+                        "content": {
+                          "kind": "available",
+                          "projection_digest": "sha256:6556b1015ad36159054dc7673b971b92483780f1189ed2df7b3c6ad04106952f",
+                          "raw_digest": "sha256:ef683e51fd120ca8adfff6df4072299f3dc2da292b7ad524cb306100ad7348a1"
+                        },
+                        "kind": "blob",
+                        "mode": "100644",
+                        "path": "docs/guide.md"
+                      }
+                    },
+                    "source_span": {
+                      "end_byte": 40,
+                      "end_column": 31,
+                      "end_line": 3,
+                      "start_byte": 18,
+                      "start_column": 9,
+                      "start_line": 3
+                    }
+                  },
+                  "candidate": {
+                    "block_kind": "paragraph",
+                    "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
+                    "observation_id_input": {
+                      "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
+                      "adapter_id": "markdown",
+                      "document": "README.md",
+                      "extracted_intent": {
+                        "external_scheme": null,
+                        "fragment_digest": null,
+                        "kind": "repository-path",
+                        "query_digest": null,
+                        "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
+                        "repository_path": "docs/guide.md",
+                        "target_kind": "either"
+                      },
+                      "schema": "amiss/scanner-observation-id-input",
+                      "source_construct": "markdown-inline-link",
+                      "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
+                      "structural_address": {
+                        "address_kind": "markdown-ast-node-path",
+                        "construct_index": 0,
+                        "duplicate_index": 0,
+                        "node_path": [
+                          1,
+                          1
+                        ],
+                        "schema": "amiss/scanner-structural-address"
+                      }
+                    },
+                    "resolution": {
+                      "kind": "resolved",
+                      "target": {
+                        "content": {
+                          "kind": "available",
+                          "projection_digest": "sha256:2cd361f4d556c37b93c4c07b3a12c85d64f1ce2d84b5c1f4d066e0debbe097ca",
+                          "raw_digest": "sha256:05754ad7db26965dc48e57a662591fd7474500834ed374eb7cef1ff17418452c"
+                        },
+                        "kind": "blob",
+                        "mode": "100644",
+                        "path": "docs/guide.md"
+                      }
+                    },
+                    "source_span": {
+                      "end_byte": 40,
+                      "end_column": 31,
+                      "end_line": 3,
+                      "start_byte": 18,
+                      "start_column": 9,
+                      "start_line": 3
+                    }
+                  }
+                }
+              },
               "source_change": "equal",
               "target_change": "changed"
             },
@@ -597,139 +575,117 @@
           "base": [],
           "candidate": []
         },
-        "base": {
-          "adapter_id": "markdown",
-          "block_kind": "paragraph",
-          "document": "README.md",
-          "intent": {
-            "external_scheme": null,
-            "fragment_digest": null,
-            "kind": "repository-path",
-            "query_digest": null,
-            "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
-            "repository_path": "docs/guide.md",
-            "target_kind": "either"
-          },
-          "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
-          "observation_id_input": {
-            "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
-            "adapter_id": "markdown",
-            "document": "README.md",
-            "extracted_intent": {
-              "external_scheme": null,
-              "fragment_digest": null,
-              "kind": "repository-path",
-              "query_digest": null,
-              "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
-              "repository_path": "docs/guide.md",
-              "target_kind": "either"
-            },
-            "schema": "amiss/scanner-observation-id-input",
-            "source_construct": "markdown-inline-link",
-            "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
-            "structural_address": {
-              "address_kind": "markdown-ast-node-path",
-              "construct_index": 0,
-              "duplicate_index": 0,
-              "node_path": [
-                1,
-                1
-              ],
-              "schema": "amiss/scanner-structural-address"
-            }
-          },
-          "resolution": {
-            "kind": "resolved",
-            "target": {
-              "content": {
-                "kind": "available",
-                "projection_digest": "sha256:6556b1015ad36159054dc7673b971b92483780f1189ed2df7b3c6ad04106952f",
-                "raw_digest": "sha256:ef683e51fd120ca8adfff6df4072299f3dc2da292b7ad524cb306100ad7348a1"
-              },
-              "kind": "blob",
-              "mode": "100644",
-              "path": "docs/guide.md"
-            }
-          },
-          "source_construct": "markdown-inline-link",
-          "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
-          "source_span": {
-            "end_byte": 40,
-            "end_column": 31,
-            "end_line": 3,
-            "start_byte": 18,
-            "start_column": 9,
-            "start_line": 3
-          }
-        },
-        "candidate": {
-          "adapter_id": "markdown",
-          "block_kind": "paragraph",
-          "document": "README.md",
-          "intent": {
-            "external_scheme": null,
-            "fragment_digest": null,
-            "kind": "repository-path",
-            "query_digest": null,
-            "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
-            "repository_path": "docs/guide.md",
-            "target_kind": "either"
-          },
-          "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
-          "observation_id_input": {
-            "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
-            "adapter_id": "markdown",
-            "document": "README.md",
-            "extracted_intent": {
-              "external_scheme": null,
-              "fragment_digest": null,
-              "kind": "repository-path",
-              "query_digest": null,
-              "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
-              "repository_path": "docs/guide.md",
-              "target_kind": "either"
-            },
-            "schema": "amiss/scanner-observation-id-input",
-            "source_construct": "markdown-inline-link",
-            "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
-            "structural_address": {
-              "address_kind": "markdown-ast-node-path",
-              "construct_index": 0,
-              "duplicate_index": 0,
-              "node_path": [
-                1,
-                1
-              ],
-              "schema": "amiss/scanner-structural-address"
-            }
-          },
-          "resolution": {
-            "kind": "resolved",
-            "target": {
-              "content": {
-                "kind": "available",
-                "projection_digest": "sha256:2cd361f4d556c37b93c4c07b3a12c85d64f1ce2d84b5c1f4d066e0debbe097ca",
-                "raw_digest": "sha256:05754ad7db26965dc48e57a662591fd7474500834ed374eb7cef1ff17418452c"
-              },
-              "kind": "blob",
-              "mode": "100644",
-              "path": "docs/guide.md"
-            }
-          },
-          "source_construct": "markdown-inline-link",
-          "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
-          "source_span": {
-            "end_byte": 40,
-            "end_column": 31,
-            "end_line": 3,
-            "start_byte": 18,
-            "start_column": 9,
-            "start_line": 3
-          }
-        },
         "correlation": "exact",
         "correlation_reason": "same-extraction-key-and-projection",
         "impact": "dependency-changed-subject-unchanged",
+        "sides": {
+          "each": {
+            "base": {
+              "block_kind": "paragraph",
+              "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
+              "observation_id_input": {
+                "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
+                "adapter_id": "markdown",
+                "document": "README.md",
+                "extracted_intent": {
+                  "external_scheme": null,
+                  "fragment_digest": null,
+                  "kind": "repository-path",
+                  "query_digest": null,
+                  "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
+                  "repository_path": "docs/guide.md",
+                  "target_kind": "either"
+                },
+                "schema": "amiss/scanner-observation-id-input",
+                "source_construct": "markdown-inline-link",
+                "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
+                "structural_address": {
+                  "address_kind": "markdown-ast-node-path",
+                  "construct_index": 0,
+                  "duplicate_index": 0,
+                  "node_path": [
+                    1,
+                    1
+                  ],
+                  "schema": "amiss/scanner-structural-address"
+                }
+              },
+              "resolution": {
+                "kind": "resolved",
+                "target": {
+                  "content": {
+                    "kind": "available",
+                    "projection_digest": "sha256:6556b1015ad36159054dc7673b971b92483780f1189ed2df7b3c6ad04106952f",
+                    "raw_digest": "sha256:ef683e51fd120ca8adfff6df4072299f3dc2da292b7ad524cb306100ad7348a1"
+                  },
+                  "kind": "blob",
+                  "mode": "100644",
+                  "path": "docs/guide.md"
+                }
+              },
+              "source_span": {
+                "end_byte": 40,
+                "end_column": 31,
+                "end_line": 3,
+                "start_byte": 18,
+                "start_column": 9,
+                "start_line": 3
+              }
+            },
+            "candidate": {
+              "block_kind": "paragraph",
+              "observation_id": "sha256:33ea6a56e5d65b60e2bde0e88189dc20421884b09c832284dadd64ec2fba174b",
+              "observation_id_input": {
+                "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
+                "adapter_id": "markdown",
+                "document": "README.md",
+                "extracted_intent": {
+                  "external_scheme": null,
+                  "fragment_digest": null,
+                  "kind": "repository-path",
+                  "query_digest": null,
+                  "raw_destination_digest": "sha256:5a73efe7e01b8c6e1910a9e5010c7121eee714c8de18c67aebee0c254612bb60",
+                  "repository_path": "docs/guide.md",
+                  "target_kind": "either"
+                },
+                "schema": "amiss/scanner-observation-id-input",
+                "source_construct": "markdown-inline-link",
+                "source_projection_digest": "sha256:9d911db1d556c25eef9a8ac38c1129c1dd6e0cdbaa795ad85db3b4009d9c8780",
+                "structural_address": {
+                  "address_kind": "markdown-ast-node-path",
+                  "construct_index": 0,
+                  "duplicate_index": 0,
+                  "node_path": [
+                    1,
+                    1
+                  ],
+                  "schema": "amiss/scanner-structural-address"
+                }
+              },
+              "resolution": {
+                "kind": "resolved",
+                "target": {
+                  "content": {
+                    "kind": "available",
+                    "projection_digest": "sha256:2cd361f4d556c37b93c4c07b3a12c85d64f1ce2d84b5c1f4d066e0debbe097ca",
+                    "raw_digest": "sha256:05754ad7db26965dc48e57a662591fd7474500834ed374eb7cef1ff17418452c"
+                  },
+                  "kind": "blob",
+                  "mode": "100644",
+                  "path": "docs/guide.md"
+                }
+              },
+              "source_span": {
+                "end_byte": 40,
+                "end_column": 31,
+                "end_line": 3,
+                "start_byte": 18,
+                "start_column": 9,
+                "start_line": 3
+              }
+            }
+          }
+        },
         "source_change": "equal",
         "target_change": "changed"
       },
@@ -738,67 +694,58 @@
           "base": [],
           "candidate": []
         },
-        "base": null,
-        "candidate": {
-          "adapter_id": "markdown",
-          "block_kind": "paragraph",
-          "document": "docs/guide.md",
-          "external_destination": "https://example.com/manual",
-          "intent": {
-            "external_scheme": "https",
-            "fragment_digest": null,
-            "kind": "external-url",
-            "query_digest": null,
-            "raw_destination_digest": "sha256:8bfbb43ac5266c06804835200178543c62f66716e0381fca322e0da912725393",
-            "repository_path": null,
-            "target_kind": null
-          },
-          "observation_id": "sha256:b221d9b11578c61424fdee6270d2698b04225958d15525d6f34af7cc3631aa55",
-          "observation_id_input": {
-            "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
-            "adapter_id": "markdown",
-            "document": "docs/guide.md",
-            "extracted_intent": {
-              "external_scheme": "https",
-              "fragment_digest": null,
-              "kind": "external-url",
-              "query_digest": null,
-              "raw_destination_digest": "sha256:8bfbb43ac5266c06804835200178543c62f66716e0381fca322e0da912725393",
-              "repository_path": null,
-              "target_kind": null
-            },
-            "schema": "amiss/scanner-observation-id-input",
-            "source_construct": "markdown-inline-link",
-            "source_projection_digest": "sha256:2dc8f86f12ded921b8b79a58c0dbd620229838ba2f7d4584a931d0393d44762b",
-            "structural_address": {
-              "address_kind": "markdown-ast-node-path",
-              "construct_index": 0,
-              "duplicate_index": 0,
-              "node_path": [
-                4,
-                1
-              ],
-              "schema": "amiss/scanner-structural-address"
-            }
-          },
-          "resolution": {
-            "kind": "external",
-            "reason": "url"
-          },
-          "source_construct": "markdown-inline-link",
-          "source_projection_digest": "sha256:2dc8f86f12ded921b8b79a58c0dbd620229838ba2f7d4584a931d0393d44762b",
-          "source_span": {
-            "end_byte": 196,
-            "end_column": 54,
-            "end_line": 10,
-            "start_byte": 151,
-            "start_column": 9,
-            "start_line": 10
-          }
-        },
         "correlation": "none",
         "correlation_reason": "new-observation",
         "impact": "new-observation",
+        "sides": {
+          "each": {
+            "base": null,
+            "candidate": {
+              "block_kind": "paragraph",
+              "external_destination": "https://example.com/manual",
+              "observation_id": "sha256:b221d9b11578c61424fdee6270d2698b04225958d15525d6f34af7cc3631aa55",
+              "observation_id_input": {
+                "adapter_contract_digest": "sha256:a55b4d13d71658d894bca0602f831fafdbdbe42d68495d26a256a5fbfd463e91",
+                "adapter_id": "markdown",
+                "document": "docs/guide.md",
+                "extracted_intent": {
+                  "external_scheme": "https",
+                  "fragment_digest": null,
+                  "kind": "external-url",
+                  "query_digest": null,
+                  "raw_destination_digest": "sha256:8bfbb43ac5266c06804835200178543c62f66716e0381fca322e0da912725393",
+                  "repository_path": null,
+                  "target_kind": null
+                },
+                "schema": "amiss/scanner-observation-id-input",
+                "source_construct": "markdown-inline-link",
+                "source_projection_digest": "sha256:2dc8f86f12ded921b8b79a58c0dbd620229838ba2f7d4584a931d0393d44762b",
+                "structural_address": {
+                  "address_kind": "markdown-ast-node-path",
+                  "construct_index": 0,
+                  "duplicate_index": 0,
+                  "node_path": [
+                    4,
+                    1
+                  ],
+                  "schema": "amiss/scanner-structural-address"
+                }
+              },
+              "resolution": {
+                "kind": "external",
+                "reason": "url"
+              },
+              "source_span": {
+                "end_byte": 196,
+                "end_column": 54,
+                "end_line": 10,
+                "start_byte": 151,
+                "start_column": 9,
+                "start_line": 10
+              }
+            }
+          }
+        },
         "source_change": "added",
         "target_change": "not-comparable"
       }
@@ -858,6 +805,6 @@
       "unattested_claims": 0
     }
   },
-  "payload_digest": "sha256:eef6601b8c71041e64e95ab983ee3fe72853bf4a161a31c450e7a4a27071fd18",
+  "payload_digest": "sha256:bba7c5a63d9b96b4f89cf9ad31e690ba19211dffcfd185629386372be3f1b02f",
   "schema": "amiss/scanner-report-envelope"
 }
