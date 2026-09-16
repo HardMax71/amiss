@@ -335,17 +335,20 @@ runs:
              end)
         ' "$REPORT"
 
+    # The report output always names the path, so an upload step never sees an
+    # empty input; a run that wrote nothing leaves no file there.
     - id: verdict
       if: always()
       shell: bash
       env:
         STATUS: ${{ steps.scan.outputs.exit-class }}
-        REPORT: ${{ steps.scan.outputs.report }}
       run: |
         set -euo pipefail
         status="${STATUS:-2}"
+        report="${RUNNER_TEMP}/amiss-report.json"
+        [ -s "$report" ] || rm -f "$report"
         {
           printf 'exit-class=%s\n' "$status"
-          printf 'report=%s\n' "$REPORT"
+          printf 'report=%s\n' "$report"
         } >> "$GITHUB_OUTPUT"
         exit "$status"

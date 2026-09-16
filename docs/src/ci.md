@@ -50,7 +50,8 @@ on exit classes 1 and 2. The outputs `exit-class` and `report` expose the verdic
 the JSON report path for anything downstream; the file sits in the runner's temp directory,
 which is why the workflow above uploads it as the `amiss-report` artifact. A run that ends
 before the engine could scan, on an unsupported runner or a checkout missing a commit, reports
-exit class 2 and no report.
+exit class 2, and the path then names a file that was never written, which the upload step's
+`if-no-files-found: ignore` tolerates.
 
 | Input | Default | Role |
 | --- | --- | --- |
@@ -264,10 +265,11 @@ without rerunning anything. One step lists every grouped PR item with its target
 affected-place count:
 
 ```yaml
-- if: always() && steps.amiss.outputs.report != ''
+- if: always()
   env:
     REPORT: ${{ steps.amiss.outputs.report }}
   run: |
+    [ -s "$REPORT" ] || exit 0
     jq -r '.payload.feedback
       | select(.status == "available")
       | .items[]
