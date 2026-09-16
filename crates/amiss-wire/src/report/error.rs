@@ -120,11 +120,11 @@ declare_taxonomy! {
             metadata: Some(&POLICY),
         },
         GitRepositoryUnavailable => {
-            meaning: "the --repo path does not open as a Git repository of the declared object format",
+            meaning: "the --repo path does not open as a Git repository of the declared object format; pass the checkout root from git rev-parse --show-toplevel and match --object-format to git rev-parse --show-object-format",
             metadata: Some(&GIT),
         },
         GitObjectMissing => {
-            meaning: "a commit, tree, or blob the run needs is absent from the object store; fetch full history or name commits the store holds",
+            meaning: "a commit, tree, or blob the run needs is absent from the object store; fetch full history or name commits the store holds, and for a whole-tree scan pass --base $(git rev-parse HEAD) --index rather than the all-zero or empty-tree id",
             metadata: Some(&GIT),
         },
         GitObjectWrongKind => {
