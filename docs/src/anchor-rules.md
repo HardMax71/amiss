@@ -58,6 +58,7 @@ can only leave a finding unreported, never invent one.
 | `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
 | `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
 | `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
+| `mdx-partial` | a default import of a relative document, rendered as an element | `mdx` | any tree |
 <!-- amiss-doc-contract:declared-identities:end -->
 
 `html-id` is every `id` and `name` a raw HTML region carries, wherever in the document it
@@ -85,6 +86,23 @@ read, and every other name is a component. A component's rendered output is unkn
 so an `id` written on one is a prop rather than an identity, and nothing under one is read
 either. That is why the option tables Docusaurus builds with `<APITable>` publish
 identities this check cannot see, and why a link into one stays a finding.
+
+`mdx-partial` is the one rule that reads another file. Docusaurus composes a page out of
+several documents by importing one and rendering it, `import Tags from './_tags.mdx'` and
+then `<Tags />`, and the headings that partial writes are headings of the page. The import
+resolves through the same path rules a link uses, only to a document the tree already
+holds, and only for a default import of a relative `.md` or `.mdx` file rendered as an
+element, so a package, an alias, or a stylesheet declares no edge at all. A partial that
+renders a partial expands too, under the include budget in
+[Resolution](resolution.md), and two documents rendering each other leave the set past the
+cycle undecided rather than recursing.
+
+The identities flow one way. The page publishes what the partial writes, because the
+partial's headings are on the page. A link written inside a partial that names a heading of
+the page rendering it is a different question, and this check does not answer it: the same
+partial can be rendered into several pages, so the identity that link names belongs to a
+rendering context rather than to the file the link sits in. That is a known gap, and on the
+Docusaurus tree it is eight of the findings.
 
 A heading can also be written as raw HTML, which many projects do for a centered title.
 github.com anchors those, because its filter runs over the rendered document and sees

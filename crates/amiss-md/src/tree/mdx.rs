@@ -89,9 +89,8 @@ fn convert(node: &mdast::Node, winners: &HashMap<String, usize>) -> Result<Node,
         mdast::Node::ListItem(_) => Kind::ListItem,
         mdast::Node::TableCell(_) => Kind::TableCell,
         mdast::Node::Html(_) => Kind::Html,
-        mdast::Node::MdxjsEsm(_) | mdast::Node::MdxFlowExpression(_) => {
-            Kind::Mdx { expression: None }
-        }
+        mdast::Node::MdxjsEsm(esm) => Kind::MdxEsm(esm.value.clone()),
+        mdast::Node::MdxFlowExpression(_) => Kind::Mdx { expression: None },
         mdast::Node::MdxJsxFlowElement(element) => {
             element_kind(element.name.as_deref(), &element.attributes)
         }

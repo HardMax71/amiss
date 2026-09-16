@@ -407,7 +407,7 @@ pub struct DeclarationRule {
 /// Every way the Markdown and MDX profiles let a document name its own
 /// identities. Each one joins the union beside the renderer rules, so a rule
 /// here can only grow the set an anchor may match.
-pub const DECLARATIONS: [DeclarationRule; 5] = [
+pub const DECLARATIONS: [DeclarationRule; 6] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element",
@@ -435,6 +435,12 @@ pub const DECLARATIONS: [DeclarationRule; 5] = [
     DeclarationRule {
         name: "jsx-id",
         spelling: "an `id` attribute on a lowercase JSX element",
+        adapters: &[Adapter::Mdx],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "mdx-partial",
+        spelling: "a default import of a relative document, rendered as an element",
         adapters: &[Adapter::Mdx],
         declared_by: &[],
     },

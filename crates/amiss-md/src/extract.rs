@@ -10,6 +10,7 @@ pub use amiss_wire::extraction::{
     Analysis, AnalyzeError, BlockKind, Extraction, Fault, GovernedDefinition, Heading,
     HeadingAttribute, HeadingSource, Occurrence, Opaque, Work,
 };
+use amiss_wire::extraction::{Transclusion, TransclusionKind};
 use amiss_wire::model::Adapter;
 
 use crate::accounting::{parsed, plain};
@@ -95,10 +96,13 @@ fn extract_tree(
         occurrences: Vec::new(),
         headings: Vec::new(),
         declared: Vec::new(),
+        imports: Vec::new(),
+        rendered: Vec::new(),
         mdx: Vec::new(),
         html: Vec::new(),
     };
     sweep_tree(tree, &mut sweep)?;
+    let transclusions = rendered_partials(&sweep);
 
     sweep.occurrences.sort_by(|left, right| {
         left.span
@@ -127,32 +131,14 @@ fn extract_tree(
     let translate =
         |span: (usize, usize)| (span.0.saturating_add(offset), span.1.saturating_add(offset));
     let extraction = Extraction {
-        transclusions: Vec::new(),
-        occurrences: sweep
-            .occurrences
+        transclusions: transclusions
             .into_iter()
-            .map(|entry| Occurrence {
+            .map(|entry| Transclusion {
                 span: translate(entry.span),
-                block_span: translate(entry.block_span),
-                fragment_span: gated_span(
-                    amiss_wire::extraction::fragment_span,
-                    suffix.as_bytes(),
-                    entry.span,
-                    &entry.raw_destination,
-                    entry.construct,
-                )
-                .map(translate),
-                path_span: gated_span(
-                    amiss_wire::extraction::path_span,
-                    suffix.as_bytes(),
-                    entry.span,
-                    &entry.raw_destination,
-                    entry.construct,
-                )
-                .map(translate),
                 ..entry
             })
             .collect(),
+        occurrences: translated_occurrences(sweep.occurrences, suffix, offset),
         opaque: Opaque {
             frontmatter_bytes,
             mdx: opaque.mdx.iter().map(|span| translate(*span)).collect(),
@@ -180,6 +166,42 @@ fn extract_tree(
         declared_anchors: sweep.declared,
     };
     Ok((extraction, work))
+}
+
+/// Every occurrence moved from the post-frontmatter suffix to the raw
+/// document, with the destination spans an edit may claim located under the
+/// wire's own certainty rules.
+fn translated_occurrences(
+    occurrences: Vec<Occurrence>,
+    suffix: &str,
+    offset: usize,
+) -> Vec<Occurrence> {
+    let translate =
+        |span: (usize, usize)| (span.0.saturating_add(offset), span.1.saturating_add(offset));
+    occurrences
+        .into_iter()
+        .map(|entry| Occurrence {
+            span: translate(entry.span),
+            block_span: translate(entry.block_span),
+            fragment_span: gated_span(
+                amiss_wire::extraction::fragment_span,
+                suffix.as_bytes(),
+                entry.span,
+                &entry.raw_destination,
+                entry.construct,
+            )
+            .map(translate),
+            path_span: gated_span(
+                amiss_wire::extraction::path_span,
+                suffix.as_bytes(),
+                entry.span,
+                &entry.raw_destination,
+                entry.construct,
+            )
+            .map(translate),
+            ..entry
+        })
+        .collect()
 }
 
 fn sweep_tree(tree: &Node, sweep: &mut Sweep<'_>) -> Result<(), Fault> {
@@ -223,6 +245,8 @@ struct Sweep<'a> {
     occurrences: Vec<Occurrence>,
     headings: Vec<Heading>,
     declared: Vec<String>,
+    imports: Vec<(String, String)>,
+    rendered: Vec<(String, (usize, usize))>,
     mdx: Vec<(usize, usize)>,
     html: Vec<(usize, usize)>,
 }
@@ -235,9 +259,9 @@ impl Sweep<'_> {
         let bytes = self.suffix.as_bytes();
         let span = node.span;
         match &node.kind {
-            Kind::Mdx { .. } | Kind::MdxElement { .. } => {
+            Kind::Mdx { .. } | Kind::MdxElement { .. } | Kind::MdxEsm(_) => {
                 self.mdx.push(span);
-                mdx_declarations(node, &mut self.declared);
+                mdx_declarations(self, node);
                 return Ok(false);
             }
             Kind::Html => {
@@ -358,21 +382,91 @@ impl Sweep<'_> {
     }
 }
 
-/// The identities one MDX region writes down. JSX reads a lowercase tag as an
-/// HTML element and anything else as a component, whose rendered output this
-/// engine does not know, so the walk stops at a component and reads nothing
-/// from it or under it.
-fn mdx_declarations(root: &Node, declared: &mut Vec<String>) {
+/// What one MDX region writes down: the identity a plain element declares, the
+/// modules the block imports, and the components it renders. JSX reads a
+/// lowercase tag as an HTML element and anything else as a component, whose
+/// rendered output this engine does not know, so the walk stops at a component
+/// and reads nothing from it or under it.
+fn mdx_declarations(sweep: &mut Sweep<'_>, root: &Node) {
     let mut stack = vec![root];
     while let Some(node) = stack.pop() {
-        if let Kind::MdxElement { name, id } = &node.kind {
-            if !plain_element(name.as_deref()) {
+        match &node.kind {
+            Kind::MdxEsm(source) => default_imports(source, &mut sweep.imports),
+            Kind::MdxElement { name, id } if plain_element(name.as_deref()) => {
+                sweep.declared.extend(id.clone());
+            }
+            Kind::MdxElement { name, .. } => {
+                sweep
+                    .rendered
+                    .extend(name.clone().map(|name| (name, node.span)));
                 continue;
             }
-            declared.extend(id.clone());
+            Kind::Root
+            | Kind::Paragraph
+            | Kind::Heading
+            | Kind::ListItem
+            | Kind::TableCell
+            | Kind::Html
+            | Kind::Mdx { .. }
+            | Kind::Text(_)
+            | Kind::InlineCode(_)
+            | Kind::CodeBlock(_)
+            | Kind::Link { .. }
+            | Kind::Image { .. }
+            | Kind::LinkReference(_)
+            | Kind::ImageReference(_)
+            | Kind::Definition(_)
+            | Kind::Other => {}
         }
         stack.extend(node.children.iter().rev());
     }
+}
+
+/// The partials one module imports: a default import of a relative Markdown
+/// document, which is the only specifier that can name a file this tree holds.
+/// A package, an alias, or a stylesheet is not a document and declares no edge.
+fn default_imports(source: &str, out: &mut Vec<(String, String)>) {
+    out.extend(source.lines().filter_map(default_import));
+}
+
+fn default_import(line: &str) -> Option<(String, String)> {
+    let (binding, rest) = line.trim().strip_prefix("import ")?.split_once(" from ")?;
+    let binding = binding.trim();
+    if binding.is_empty() || binding.contains(['{', '}', ',', '*']) {
+        return None;
+    }
+    let quoted = rest.trim().trim_end_matches(';').trim();
+    let specifier = quoted
+        .strip_prefix('"')
+        .and_then(|body| body.strip_suffix('"'))
+        .or_else(|| {
+            quoted
+                .strip_prefix('\'')
+                .and_then(|body| body.strip_suffix('\''))
+        })?;
+    let name = specifier.to_ascii_lowercase();
+    let document = (specifier.starts_with("./") || specifier.starts_with("../"))
+        && (name.as_bytes().ends_with(b".md") || name.as_bytes().ends_with(b".mdx"));
+    document.then(|| (binding.to_owned(), specifier.to_owned()))
+}
+
+/// The partials a document renders, in the order the elements are written, so
+/// an expansion places each one's identities where its element sits.
+fn rendered_partials(sweep: &Sweep<'_>) -> Vec<Transclusion> {
+    let mut out: Vec<Transclusion> = sweep
+        .rendered
+        .iter()
+        .filter_map(|(name, span)| {
+            let (_, target) = sweep.imports.iter().find(|(binding, _)| binding == name)?;
+            Some(Transclusion {
+                target: target.clone(),
+                span: *span,
+                kind: Ok(TransclusionKind::Parsed),
+            })
+        })
+        .collect();
+    out.sort_by_key(|transclusion| transclusion.span);
+    out
 }
 
 /// A member or namespace name is a component whatever its case, and a fragment

@@ -131,11 +131,16 @@ fn distinct_anchors_into_one_target_are_charged_once() {
     );
 }
 
-/// Whether one target publishes one fragment, asked the way a reference in
-/// `document` asks it. Anything but a published identity or a proven absence
-/// is a defect in the fixture rather than an answer.
+/// What one target answers for one fragment, asked the way a reference in
+/// `document` asks it: published, proven absent, or undecided because the
+/// identity set the target could compute is incomplete.
 #[expect(clippy::panic, reason = "test fixture helper")]
-fn publishes(bed: &mut crate::support::Bed, document: &str, target: &str, fragment: &str) -> bool {
+fn publishes(
+    bed: &mut crate::support::Bed,
+    document: &str,
+    target: &str,
+    fragment: &str,
+) -> Option<bool> {
     let destination = format!("{target}#{fragment}");
     let row = bed
         .run_as(Adapter::Mdx, None, document, false, &destination)
@@ -146,23 +151,29 @@ fn publishes(bed: &mut crate::support::Bed, document: &str, target: &str, fragme
     } = &row
     {
         assert_eq!(blob.path.as_str(), Some(target), "{fragment}");
-        return true;
+        return Some(true);
     }
-    let Resolution::Missing(Missing::HeadingAnchorNotFound { path, .. }) = &row else {
-        panic!("{fragment} is neither published nor proven absent: {row:?}");
+    if let Resolution::Missing(Missing::HeadingAnchorNotFound { path, .. }) = &row {
+        assert_eq!(path.as_str(), Some(target), "{fragment}");
+        return Some(false);
+    }
+    let Resolution::UnsupportedSemantics(UnsupportedSemantics::Fragment(_)) = &row else {
+        panic!("{fragment} is not a heading-anchor answer: {row:?}");
     };
-    assert_eq!(path.as_str(), Some(target), "{fragment}");
-    false
+    None
 }
 
-/// One matrix over the MDX identity fixture: every fragment a target publishes
-/// and every one it proves absent. `page.mdx` is the heading expression, where
+/// One matrix over the MDX identity fixture, where each row is published,
+/// proven absent, or undecided. `page.mdx` is the heading expression, where
 /// Docusaurus escapes the classic `{#id}` before MDX parses the file and reads
 /// the identity back out of the heading text, so the identity replaces the slug
 /// and an expression declaring none leaves the slug standing. `element.mdx` is
 /// the JSX `id`, read from a plain element and from one nested inside another,
 /// and never from a component or from under one, because what a component
-/// renders is unknown here.
+/// renders is unknown here. `parent.mdx` is the partial, whose headings and
+/// whose own partial's headings are the page's; the component it imports from a
+/// package is no document, so absence there is still provable. Two documents
+/// rendering each other leave absence undecided past the cycle.
 #[test]
 fn an_mdx_document_publishes_the_identities_it_writes_down() {
     let mut bed = bed_at(
@@ -171,22 +182,31 @@ fn an_mdx_document_publishes_the_identities_it_writes_down() {
         ScanLimits::CONTRACT,
         GitLimits::CONTRACT,
     );
-    for (target, fragment, published) in [
-        ("docs/page.mdx", "custom-id", true),
-        ("docs/page.mdx", "value", true),
-        ("docs/page.mdx", "price", false),
-        ("docs/page.mdx", "late", false),
-        ("docs/page.mdx", "missing-id", false),
-        ("docs/element.mdx", "node-env", true),
-        ("docs/element.mdx", "outer", true),
-        ("docs/element.mdx", "inner", true),
-        ("docs/element.mdx", "component", false),
-        ("docs/element.mdx", "under-component", false),
-        ("docs/element.mdx", "absent", false),
+    for (target, fragment, answer) in [
+        ("docs/page.mdx", "custom-id", Some(true)),
+        ("docs/page.mdx", "value", Some(true)),
+        ("docs/page.mdx", "price", Some(false)),
+        ("docs/page.mdx", "late", Some(false)),
+        ("docs/page.mdx", "missing-id", Some(false)),
+        ("docs/element.mdx", "node-env", Some(true)),
+        ("docs/element.mdx", "outer", Some(true)),
+        ("docs/element.mdx", "inner", Some(true)),
+        ("docs/element.mdx", "component", Some(false)),
+        ("docs/element.mdx", "under-component", Some(false)),
+        ("docs/element.mdx", "absent", Some(false)),
+        ("docs/parent.mdx", "parent-id", Some(true)),
+        ("docs/parent.mdx", "tags-file", Some(true)),
+        ("docs/parent.mdx", "deep-id", Some(true)),
+        ("docs/parent.mdx", "absent", Some(false)),
+        ("docs/_tags.mdx", "tags-file", Some(true)),
+        ("docs/_tags.mdx", "parent-id", Some(false)),
+        ("docs/cycle-a.mdx", "a-id", Some(true)),
+        ("docs/cycle-a.mdx", "b-id", Some(true)),
+        ("docs/cycle-a.mdx", "absent", None),
     ] {
         assert_eq!(
             publishes(&mut bed, "guide.mdx", target, fragment),
-            published,
+            answer,
             "{target}#{fragment}"
         );
     }
