@@ -115,12 +115,14 @@ Committed in [#82](https://github.com/hardmax71/amiss/pull/82) with six rows, gr
 
 A checker that reports references which actually resolve teaches maintainers to ignore it, and a
 muted check is worse than no check because it also consumed the attention it was meant to protect.
-The usual industry answer is a false-positive rate. This project does not have one.
+The usual industry answer is a false-positive rate. This project does not have one for
+`explicit-target-missing` on the reference shapes it supports.
 
 A false `explicit-target-missing` on a supported reference is a resolver defect. It gets a pinned
-test and the accepted count is zero. That distinction is what makes [The scan ledger](../ledger.md)
-readable: a nonzero missing count in a row is either a real break or a named class, never a
-tolerated error margin, so nobody has to guess which.
+test, and the accepted count on supported shapes was zero when the phase closed in July 2026. That
+distinction is what makes [The scan ledger](../ledger.md) readable: a nonzero missing count in a
+row is either a real break or a named class, never a tolerated error margin, so nobody has to
+guess which.
 
 Holding that line costs a large test surface, because every supported reference shape needs a case.
 [`crates/amiss-scan/tests/resolve/`](https://github.com/hardmax71/amiss/tree/main/crates/amiss-scan/tests/resolve)

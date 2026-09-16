@@ -477,7 +477,7 @@ executable outputs and plugins remain external evidence in every design.
 
 The reverse-impact query had no user population to measure on 2026-08-27. It merged in
 [PR #526](https://github.com/HardMax71/amiss/pull/526) on August 24, after
-[v0.25.0](https://github.com/HardMax71/amiss/releases/tag/v0.25.0), the latest release, was
+[v0.25.0](https://github.com/HardMax71/amiss/releases/tag/v0.25.0), then the newest release, was
 cut on August 21. Authenticated GitHub code search for the exact `amiss refs` phrase returned
 six matches, all in this repository, and the issue register held no LSP request. Aggregate clone
 traffic cannot distinguish a command invocation. A source build may have used the query, but

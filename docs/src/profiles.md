@@ -10,10 +10,11 @@ only the effective one decides the exit. `record` is noted, `warn` is shown, `fa
 blocks. The location says where, down to byte offsets. The full row carries more,
 twenty-one members; [The report](report.md) holds the shape.
 
-The profile picks the built-in disposition for each kind. Six kinds flip between the
-columns: the three structural reference failures, both value-claim kinds, and projection drift
-warn under `observe` and fail under `enforce`. Seven control kinds fail under both profiles, one
-kind warns under both, and the remaining thirteen are records. The exact table below copies
+The profile picks the built-in disposition for each kind. Seven kinds flip between the
+columns: the three structural reference failures, both value-claim kinds, projection drift,
+and a site-build defect warn under `observe` and fail under `enforce`. Six control kinds and
+`unsupported-capability` fail under both profiles, one kind warns under both, and the
+remaining thirteen are records. The exact table below copies
 [`FindingKind::built_in_disposition`](https://github.com/HardMax71/amiss/blob/main/crates/amiss-wire/src/report.rs),
 and CI checks the two stay equal.
 
@@ -111,7 +112,7 @@ API described in [Controls and policy](controls.md).
 | `invalid-reference` | `docs/index.md`: `# Index`. | Append a link whose destination is `../../etc/passwd`, which escapes the repository from `docs/`. |
 | `target-declared-untracked` | `docs/index.md`: `# Index`; `docs/settings.md` is absent and `docs/.gitignore` contains `/settings.md`. | Append `[settings](settings.md)` to `docs/index.md`; the target stays absent and the declaration stands. |
 | `unsupported-reference-semantics` | `docs/index.md`: `[setup](guide.md)`; `docs/guide.md` exists. | Change the link to `[setup](/docs/guide.md)`; a leading slash names a site route, which no tree can answer. |
-| `unsupported-document-format` | `docs/spec.rst` is absent. | Add `docs/spec.rst` containing `Title` and an `=====` underline; `.rst` is discovered and has no parser. |
+| `unsupported-document-format` | `notes/plan.org` is absent. | Add `notes/plan.org` containing `* Plan`; `.org` is discovered and has no parser. |
 | `unsupported-target-kind` | `alias` is a Git symlink; `docs/index.md` has no link to it. | Append `[alias](../alias)`; Amiss will not follow the symlink. |
 | `unsupported-version-scope` | Run with forge `github`, repository `github.com/acme/widgets`, candidate ref `refs/heads/feature/x`, and default ref `refs/heads/main`; the link names `blob/feature/x/docs/guide.md`. | Keep that identity context but change the link to name `blob/main/docs/guide.md`. |
 | `unsupported-capability` | `docs/claims.md`: `# Claims`. | Append `[amiss:foo]: <amiss:reference/path-exists?path=docs/a.md>`. |
@@ -133,7 +134,7 @@ API described in [Controls and policy](controls.md).
 | `waiver-invalid` | Waiver expires at `2026-08-01T00:00:00Z`; trusted time is `2026-07-12T10:00:00Z`. | Keep the finding and trusted time unchanged; set `expires_at` to `2026-07-10T00:00:00Z`. |
 | `claim-broken` | `Cargo.toml` line 3 is `version = "0.16.0"` and a claim expects exactly that. | Bump line 3 to `version = "0.17.0"` and leave the claim unchanged. |
 | `claim-target-missing` | A claim names `Cargo.toml` line 3, which exists. | Delete `Cargo.toml` or point the claim at line 9999. |
-| `projection-drift` | A policy assertion selects `examples/request.json` lines 1–12, and the adjacent code block has the same projected bytes. | Change the selected lines without updating the visible code block. |
+| `projection-drift` | A policy assertion selects `examples/request.json` lines 1 to 12, and the adjacent code block has the same projected bytes. | Change the selected lines without updating the visible code block. |
 <!-- amiss-doc-contract:finding-examples:end -->
 
 The control families exist so that loosening the rules and leaning on an invalid waiver
