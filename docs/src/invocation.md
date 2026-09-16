@@ -1,16 +1,36 @@
 # Invocation
 
-Install from [crates.io](https://crates.io), or build from source:
+Install from crates.io with `cargo install --locked amiss`, or take a prebuilt binary from
+the [release page](https://github.com/HardMax71/amiss/releases): the engine and
+[the external prober](external-assessment.md) for Linux x86_64 and aarch64, both macOS
+architectures, and Windows x86_64, beside a `SHA256SUMS` file and the sigstore bundle that
+attests it. `cargo binstall amiss` fetches the same binary. A download arrives without the
+executable bit and under its platform name; [Quickstart](quickstart.md) has the four lines
+that verify, mark, and rename it. `gh attestation verify <binary> --repo HardMax71/amiss`,
+with gh 2.49 or later, matches a downloaded binary against the build that produced it.
+
+The everyday form checks the staged index against the last commit. It names only `HEAD`, so
+it works on a fresh repository and on a depth-1 clone alike:
 
 ```sh
-cargo install amiss
+amiss check --repo . --object-format sha1 \
+  --base "$(git rev-parse HEAD)" --index --profile observe
 ```
 
-Every release also carries the engine and [the external prober](external-assessment.md)
-prebuilt for Linux on x86_64 and arm64, both macOS architectures, and Windows x86_64, with a
-`SHA256SUMS` file and the sigstore bundle that attests it.
-`gh attestation verify <binary> --repo HardMax71/amiss` matches a downloaded binary against the
-build that produced it.
+The commit-pair form compares two committed trees, the shape CI uses:
+
+```sh
+amiss check --repo . --object-format sha1 \
+  --base "$(git rev-parse HEAD~1)" --candidate "$(git rev-parse HEAD)" \
+  --profile observe
+```
+
+Both ids must be full commit ids: forty lowercase hex characters under sha1, sixty-four under
+sha256, never a branch name or a short form, and the two must differ. On a one-commit
+repository or a depth-1 clone, `HEAD~1` names a commit the object store does not hold, so
+`git rev-parse` prints an error and an empty string, and Amiss refuses the empty `--base` as
+an invalid invocation, grammar attached, before any scan starts. The staged form has no
+parent to miss.
 
 The public command line is closed: the grammar below is everything, and anything else
 exits 2 as an invalid invocation. The verb comes first; after it the options come in any
@@ -72,7 +92,7 @@ trust them when the short form reads ambiguous.
 | Flag | Value | Role |
 | --- | --- | --- |
 | `--repo` | path | the repository checkout to read; optional only for a policy-include row without an index preview |
-| `--object-format` | `sha1` or `sha256` | the repository's object format; paired with `--repo` and `--index` in a policy-include preview |
+| `--object-format` | `sha1` or `sha256` | the repository's object format, `sha1` for nearly every repository; `git rev-parse --show-object-format` prints it; paired with `--repo` and `--index` in a policy-include preview |
 | `--base` | full commit ID | the state the comparison starts from |
 | `--candidate` | full commit ID | the state under review; exclusive with `--index` |
 | `--index` | none | checks the staged state against the base, or selects it for a policy-include preview |
@@ -88,7 +108,7 @@ trust them when the short form reads ambiguous.
 | `--path` | repo-relative path | the file an authored claim pins, or the exact root of an authored suffix selector |
 | `--line` | positive line number | the line the claim expects, one-based |
 | `--name` | ASCII claim name, 1 to 120 bytes | the `amiss:` label; starts with a letter or digit, then letters, digits, `.`, `_`, `-` |
-| `--suffix` | dot-prefixed UTF-8 suffix | the exact 2–64 byte tail of an authored tree selector; no slash, backslash, or NUL; glob metacharacters stay literal and no normalization occurs |
+| `--suffix` | dot-prefixed UTF-8 suffix | the exact 2 to 64 byte tail of an authored tree selector; no slash, backslash, or NUL; glob metacharacters stay literal and no normalization occurs |
 | `--adapter` | `asciidoc`, `markdown`, `mdx`, `plain-advisory`, or `rst` | the built-in grammar an authored selector binds to matching paths |
 | `--floor-digest` | `sha256:` and 64 hex | the organization floor the minted debt snapshot binds to |
 | `--debt-owner` | text | the item owner the floor must authorize |

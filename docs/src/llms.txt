@@ -11,6 +11,7 @@ The complete book in one file: https://hardmax71.github.io/amiss/llms-full.txt
 ## Using Amiss
 
 - [Introduction](https://hardmax71.github.io/amiss/introduction.html): what documentation drift the tool catches and how a run is framed
+- [Quickstart](https://hardmax71.github.io/amiss/quickstart.html): install, the one command, what the verdict line and exit code mean, and the CI snippet
 - [Documentation drift](https://hardmax71.github.io/amiss/drift.html): what drift is, the audit evidence behind the tool, and why detection gates while repair stays accountable
 - [Invocation](https://hardmax71.github.io/amiss/invocation.html): the closed command grammar, the identity flags, and the three exit classes
 - [Profiles and findings](https://hardmax71.github.io/amiss/profiles.html): every finding kind with its disposition, its meaning sentence, and a before/after example

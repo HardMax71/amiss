@@ -71,7 +71,7 @@ fn the_llms_index_names_real_chapters_on_the_published_book() {
 fn published_ci_examples_expose_every_moving_release_choice() {
     let root = repository_root();
     let sources = [
-        (root.join("README.md"), 1_usize),
+        (root.join("README.md"), 2_usize),
         (root.join("docs/src/ci.md"), 3_usize),
     ];
     let workspace_major = env!("CARGO_PKG_VERSION")
@@ -86,7 +86,10 @@ fn published_ci_examples_expose_every_moving_release_choice() {
         let mut upstream_references = 0_usize;
         for (line_index, line) in document.lines().enumerate() {
             let trimmed = line.trim();
-            let Some(specification) = trimmed.strip_prefix("- uses: ") else {
+            let Some(specification) = trimmed
+                .strip_prefix("- uses: ")
+                .or_else(|| trimmed.strip_prefix("uses: "))
+            else {
                 continue;
             };
             if specification.starts_with("./") {

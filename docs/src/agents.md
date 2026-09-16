@@ -37,8 +37,8 @@ means the run itself could not be trusted, and the error rows say why. Fix what 
 points at; never weaken `.amiss/scanner-policy.json` to silence a finding.
 ```
 
-The block assumes the binary is installed (`cargo install --locked amiss`); pin the
-version your CI pins.
+The block assumes the binary is installed, by `cargo install --locked amiss` or a release
+binary as in [Quickstart](quickstart.md); pin the version your CI pins.
 
 ## Scheduled repair
 
