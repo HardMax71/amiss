@@ -31,7 +31,8 @@ repository; `../../../etc/passwd` is an `invalid-reference`, not a file read. A 
 with `/` is a site route, not a repository-root shorthand. It stays unsupported unless sealed,
 candidate-bound site-build evidence maps that exact route and optional decoded anchor to a
 published source-backed or generated page, either directly or through a proved fragment-aware
-terminal redirect. Forge URLs need the complete identity group, not only the repository name. When
+terminal redirect, or unless it is a Sphinx `:doc:` target under a `conf.py` the tree holds.
+Forge URLs need the complete identity group, not only the repository name. When
 the invocation provides `--repository`, `--ref`, and `--default-branch-ref` and
 selects a dialect, a URL on the declared host that names the same repository in that
 dialect's spelling is converted to a path when it names the candidate branch or one full lowercase
@@ -133,9 +134,13 @@ documentation router serves: `guide` and `guide.html` for `guide.md`, and a dire
 that file, and the report names the file that answered while the occurrence keeps the
 destination the author wrote. A spelling reaches nothing that is not already in the tree, so
 it can widen what resolves and never invents a target; a promised directory and a
-same-repository forge URL are never re-spelled at all.
+same-repository forge URL are never re-spelled at all. A site generator whose configuration
+file is in the tree anchors a destination somewhere other than beside the document: an Antora
+resource ID at its family directory, a Docusaurus bare path or `@site/` alias at the content
+root or the site directory, a Sphinx `:doc:` target with a leading slash at the directory
+holding `conf.py`. The file's presence selects the rule and nothing inside it is read.
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
-they were harvested from, and what the union costs.
+they were harvested from, the generator rules and what selects each, and what the union costs.
 
 A destination no spelling reaches is `kind: missing` with `reason: path-not-found`, and
 that row carries `near`: the one tracked path equal to the missed one apart from case,
@@ -172,7 +177,11 @@ engine reads two trees, so it is `unsupported-reference-semantics` rather than a
 directory called `{name}`. Across Quarkus that is roughly a quarter of every reference, so
 reporting them as missing would have buried the real breaks. The double-angle shorthand keeps an
 unambiguous `document.adoc#anchor` as an inter-document target rather than turning the entire value
-into a local ID. A heading anchor on an AsciiDoc target resolves through the Asciidoctor rule in
+into a local ID. Inside an Antora component, a document under `modules/<name>/` with
+`antora.yml` at the component root, an xref, a family-qualified include, or an image is read as
+the resource ID Antora reads it as and anchored at the family directory of its module, so
+`xref:index.adoc[]` in `modules/api/nav.adoc` names `modules/api/pages/index.adoc`. A heading
+anchor on an AsciiDoc target resolves through the Asciidoctor rule in
 [What twelve renderers call a heading](anchor-rules.md), which is the only rule whose separator
 is `_` and whose identities all carry a prefix.
 
@@ -180,9 +189,10 @@ A reStructuredText heading anchor resolves through the Docutils rule in
 [What twelve renderers call a heading](anchor-rules.md), and the labels a document declares
 outright with `.. _name:` resolve as themselves. The two Sphinx roles are modelled by
 name, which is why the grammar profile says `docutils-rst-sphinx-refs`. A relative
-`:doc:` target takes the source suffix and resolves like any repository path, while a
-source-root-absolute one stays a declared site route, because the engine does not know
-the Sphinx root. A `:ref:` resolves against the snapshot's label table, built during
+`:doc:` target takes the source suffix and resolves like any repository path. A
+source-root-absolute one resolves under the directory holding `conf.py` when that file sits
+above the document in the tree, and stays a declared site route when nothing names the
+Sphinx root. A `:ref:` resolves against the snapshot's label table, built during
 discovery from every `.. _name:` a scanned reStructuredText document declares and
 bounded by `declared-labels-per-snapshot`: a unique declaration resolves to its
 declaring document, a name nobody declares is a missing target, and a name declared

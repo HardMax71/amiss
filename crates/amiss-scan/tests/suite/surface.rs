@@ -23,7 +23,7 @@ fn git(dir: &Path, args: &[&str]) -> String {
     amiss_fixtures::git(dir, args).unwrap()
 }
 
-fn engine() -> EngineProvenance {
+pub(crate) fn engine() -> EngineProvenance {
     EngineProvenance {
         version: "0.0.0-test".to_owned(),
         digest: amiss_wire::model::Digest::from(
@@ -39,7 +39,7 @@ fn engine() -> EngineProvenance {
 /// The shell a real invocation builds. The frozen grammar has no control-supply
 /// surface, so `amiss check` leaves every control absent, and an empty surface
 /// has to be honest without one.
-fn bare_shell() -> SetupShell {
+pub(crate) fn bare_shell() -> SetupShell {
     SetupShell {
         engine: engine(),
         profile: amiss_wire::controls::Profile::Observe,

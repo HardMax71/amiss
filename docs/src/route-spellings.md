@@ -54,15 +54,81 @@ The vectors also keep a verdict this table does not model. mdbook rewrites a lin
 own source spelling is the single form it fails to serve. The tree holds that file, and a
 file the tree holds resolves without any rule being asked.
 
+## What a generator in the tree anchors
+
+The three spellings hold in every tree, since `guide` reaching `guide.md` costs one 404 on a
+site with no router and nothing more. A second set holds only where the tree carries the
+generator's own configuration file, because each of these moves a destination to another
+directory and would be a guess anywhere else. A rule turns on when one of its files is a blob
+on the document's ancestor chain, nearest directory first. Only the file's presence is read,
+never its contents.
+
+<!-- amiss-doc-contract:declared-routers:start -->
+| Router | Selected by | Serves |
+| --- | --- | --- |
+| `antora` | `antora.yml` | `antora-resource` |
+| `docusaurus` | `docusaurus.config.ts`, `docusaurus.config.mts`, `docusaurus.config.cts`, `docusaurus.config.js`, `docusaurus.config.mjs`, `docusaurus.config.cjs` | `site-alias`, `content-root` |
+| `sphinx` | `conf.py` | `source-root` |
+<!-- amiss-doc-contract:declared-routers:end -->
+
+`antora-resource` reads an AsciiDoc destination as an Antora resource ID,
+`[module:][family$]relative`, in a document under `modules/<name>/` of the component whose
+root holds `antora.yml`. The relative part is anchored at the family directory of the named
+module, or of the document's own module when none is named. So `xref:index.adoc[]` in
+`modules/api/nav.adoc` is `modules/api/pages/index.adoc`, `include::partial$success.adoc[]`
+in a page of that module is `modules/api/partials/success.adoc`, `xref:cli:index.adoc[]` is
+`modules/cli/pages/index.adoc`, and `image::diagram.png[]` is `modules/api/images/diagram.png`.
+The families are `page`, `partial`, `example`, `attachment` and `image`. An xref defaults to
+the page family and an image to the image family. An include without a family coordinate
+stays relative to the file that includes it, which is Antora's own compatibility rule for the
+plain include. This rule replaces the relative reading rather than following it: a page under
+`pages/sub/` that writes `xref:index.adoc[]` means the family root, and Antora never looks
+beside the file. A version coordinate (`2.0@`) or a component coordinate
+(`component:module:page.adoc`) names a catalogue this tree does not hold, so such a
+destination keeps the reading it had before, and a `./` or `../` relative is Antora's own
+page-relative form and stays beside the document.
+
+`site-alias` and `content-root` are the order Docusaurus's `resolveMarkdownLink` tries
+directories in, read from `packages/docusaurus-utils/src/markdownLinks.ts`, for a document
+under the directory holding `docusaurus.config.ts` or its `.mts`, `.cts`, `.js`, `.mjs` and
+`.cjs` spellings, the list the site loader tries. `@site/blog/img/output.png` is
+`blog/img/output.png` under that directory, for a link and for an image. A bare `.md` or
+`.mdx` destination, one starting with neither `./`, `../` nor `/`, is tried beside the
+document first, then under the plugin content path the document sits in, then under the
+site directory. `[static folder](static-assets.mdx)` in `docs/api/themes/configuration.mdx`
+reaches `docs/static-assets.mdx` that way. The content paths read are the plugin defaults,
+`docs`, `blog`, `src/pages` and `versioned_docs/<version>`. A plugin configured to read
+another directory gets the site-directory step alone, and a localized tree under `i18n/` is
+not read. A `./` or `../` destination is beside the document and nowhere else, which is
+Docusaurus's rule too.
+
+`source-root` is Sphinx's `:doc:` role with a leading slash, in a document under the
+directory holding `conf.py`. `` :doc:`/testing` `` in `docs/tutorial/deploy.rst` is
+`docs/testing.rst`: the docname under the source directory, with the `.rst` suffix an
+extensionless name takes, the same suffix the relative form already took. A plain hyperlink
+with a leading slash is still a site route, since Sphinx emits it as written, and a `:doc:`
+target in a tree with no `conf.py` above the document stays the declared site route it was.
+
+Each of these widens what resolves and nothing else, like the three spellings: an anchored
+destination is looked up in the tree and is missing when the tree does not hold it, so
+`xref:load-templates.adoc[]` in `modules/api/pages/index.adoc` is still missing while
+`modules/api/pages/load-templates.adoc` is not there. One thing does move: the intent. A
+routed `guide` keeps `guide` as the path the author meant, while an Antora xref's intent is
+the family path and a Sphinx `:doc:` target's is the docname under `conf.py`, because the
+author never meant a sibling file. A Docusaurus bare path keeps the sibling as its intent,
+because Docusaurus does try the sibling first.
+
 ## What this costs
 
 A repository with no site at all now resolves `./guide` when `guide.md` exists, and on
 github.com that link is a 404. This is the same trade
 [the renderer rules](anchor-rules.md) already make for heading identities, taken for the
 same reason: a false missing target teaches maintainers to ignore the tool, and the union
-of what real renderers do is the honest way to avoid one. Nothing a repository declares
-selects a router, because a configuration file in the tree would be a lever the pull
-request under review could pull.
+of what real renderers do is the honest way to avoid one. The three spellings are selected
+by nothing a repository declares. A generator rule is selected by a configuration file, which
+is a lever the pull request under review can pull, and the lever is bounded the same way the
+spellings are: it can move a destination onto a file the tree already holds, and it cannot
+clear a destination the tree lacks.
 
 Routers outside the table serve spellings this check will not match. Four repositories built
 on them were run on 2026-07-26 to find out what a new row would have to answer, each read
