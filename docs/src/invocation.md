@@ -122,7 +122,7 @@ trust them when the short form reads ambiguous.
 | `--evidence` | path | the external observations `external-assess` judges, or the normalized specialist input `record-set` turns into a semantic template; foreign to every other form |
 | `--context` | path | the locale layout `locale-inventory` reads a tree under: each locale's root, claimed locale, optional filename suffix, and the document suffixes that count as pages; foreign to every other form |
 | `--target` | repo-relative path | the text path whose candidate references `refs` returns |
-| `--target-bytes-hex` | lowercase even-length hex | the raw-byte path whose candidate references `refs` returns; exclusive with `--target` |
+| `--target-bytes-hex` | lowercase hex | the raw-byte path whose candidate references `refs` returns; exclusive with `--target` |
 | `--help` | none | prints the canonical closed grammar; stands alone, with no verb or other flag |
 | `--version` | none | prints this binary's version and engine digest; stands alone, with no `check` and no other flag |
 

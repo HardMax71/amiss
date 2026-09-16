@@ -100,18 +100,14 @@ fn classify_refs(
                 atom(text)
             ))
         }),
-        (None, Some(hex)) => (hex.len() <= 8192 && hex.len() % 2 == 0)
-            .then(|| {
-                hex.bytes()
-                    .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
-                    .then(|| hex::decode(hex).ok())
-                    .flatten()
-                    .and_then(RepoPath::from_bytes)
-            })
+        (None, Some(hex)) => (hex.len() <= 8192)
+            .then(|| hex::decode(hex).ok())
             .flatten()
+            .filter(|bytes| hex::encode(bytes) == *hex)
+            .and_then(RepoPath::from_bytes)
             .ok_or_else(|| {
                 invalid(format!(
-                    "--target-bytes-hex must be lowercase even-length hex spelling a repository path, got {}",
+                    "--target-bytes-hex must be the lowercase hex spelling of a repository path, got {}",
                     atom(hex)
                 ))
             }),
