@@ -10,7 +10,7 @@ pub use amiss_wire::extraction::{
     Analysis, AnalyzeError, BlockKind, Extraction, Fault, GovernedDefinition, Heading,
     HeadingAttribute, HeadingSource, Occurrence, Opaque, Work,
 };
-use amiss_wire::extraction::{Transclusion, TransclusionKind};
+use amiss_wire::extraction::{Transclusion, TransclusionKind, TransclusionRefusal};
 use amiss_wire::model::Adapter;
 
 use crate::accounting::{parsed, plain};
@@ -98,11 +98,12 @@ fn extract_tree(
         declared: Vec::new(),
         imports: Vec::new(),
         rendered: Vec::new(),
+        snippets: Vec::new(),
         mdx: Vec::new(),
         html: Vec::new(),
     };
     sweep_tree(tree, &mut sweep)?;
-    let transclusions = rendered_partials(&sweep);
+    let transclusions = declared_includes(&sweep);
 
     sweep.occurrences.sort_by(|left, right| {
         left.span
@@ -247,6 +248,7 @@ struct Sweep<'a> {
     declared: Vec<String>,
     imports: Vec<(String, String)>,
     rendered: Vec<(String, (usize, usize))>,
+    snippets: Vec<Transclusion>,
     mdx: Vec<(usize, usize)>,
     html: Vec<(usize, usize)>,
 }
@@ -326,8 +328,13 @@ impl Sweep<'_> {
             }
             // A definition nobody references still maintains a destination.
             Kind::Definition(_) => self.orphan(node, path, *owners),
-            Kind::Root | Kind::Text(_) | Kind::InlineCode(_) | Kind::CodeBlock(_) | Kind::Other => {
+            Kind::Text(value) => {
+                if owners.paragraph.is_some() {
+                    self.snippets
+                        .extend(value.lines().filter_map(|line| snippet(line, span)));
+                }
             }
+            Kind::Root | Kind::InlineCode(_) | Kind::CodeBlock(_) | Kind::Other => {}
         }
         Ok(true)
     }
@@ -435,36 +442,57 @@ fn default_import(line: &str) -> Option<(String, String)> {
     if binding.is_empty() || binding.contains(['{', '}', ',', '*']) {
         return None;
     }
-    let quoted = rest.trim().trim_end_matches(';').trim();
-    let specifier = quoted
-        .strip_prefix('"')
-        .and_then(|body| body.strip_suffix('"'))
-        .or_else(|| {
-            quoted
-                .strip_prefix('\'')
-                .and_then(|body| body.strip_suffix('\''))
-        })?;
+    let specifier = quoted(rest.trim().trim_end_matches(';').trim())?;
     let name = specifier.to_ascii_lowercase();
     let document = (specifier.starts_with("./") || specifier.starts_with("../"))
         && (name.as_bytes().ends_with(b".md") || name.as_bytes().ends_with(b".mdx"));
     document.then(|| (binding.to_owned(), specifier.to_owned()))
 }
 
-/// The partials a document renders, in the order the elements are written, so
-/// an expansion places each one's identities where its element sits.
-fn rendered_partials(sweep: &Sweep<'_>) -> Vec<Transclusion> {
-    let mut out: Vec<Transclusion> = sweep
-        .rendered
-        .iter()
-        .filter_map(|(name, span)| {
-            let (_, target) = sweep.imports.iter().find(|(binding, _)| binding == name)?;
-            Some(Transclusion {
-                target: target.clone(),
-                span: *span,
-                kind: Ok(TransclusionKind::Parsed),
-            })
+/// The `pymdownx.snippets` inline include: the marker, then whitespace, then a
+/// quoted path, alone on its line. A path carrying a section coordinate names
+/// part of a file rather than the file, which this engine cannot reproduce, so
+/// the edge is refused instead of claiming the whole of it.
+fn snippet(line: &str, span: (usize, usize)) -> Option<Transclusion> {
+    let rest = line.trim().strip_prefix("--8<--")?;
+    let target = quoted(rest.strip_prefix([' ', '\t'])?.trim())?;
+    if target.is_empty() {
+        return None;
+    }
+    let kind = if target.contains(':') {
+        Err(TransclusionRefusal::Options)
+    } else {
+        Ok(TransclusionKind::Parsed)
+    };
+    Some(Transclusion {
+        target: target.to_owned(),
+        span,
+        kind,
+    })
+}
+
+/// The body of a single- or double-quoted token, both marks the same one.
+fn quoted(text: &str) -> Option<&str> {
+    text.strip_prefix('"')
+        .and_then(|body| body.strip_suffix('"'))
+        .or_else(|| {
+            text.strip_prefix('\'')
+                .and_then(|body| body.strip_suffix('\''))
         })
-        .collect();
+}
+
+/// Every include one document declares, in document order, so an expansion
+/// places each one's identities where its syntax sits.
+fn declared_includes(sweep: &Sweep<'_>) -> Vec<Transclusion> {
+    let mut out = sweep.snippets.clone();
+    out.extend(sweep.rendered.iter().filter_map(|(name, span)| {
+        let (_, target) = sweep.imports.iter().find(|(binding, _)| binding == name)?;
+        Some(Transclusion {
+            target: target.clone(),
+            span: *span,
+            kind: Ok(TransclusionKind::Parsed),
+        })
+    }));
     out.sort_by_key(|transclusion| transclusion.span);
     out
 }

@@ -10,7 +10,7 @@ mod semantic;
 
 pub mod requests;
 
-pub use anchors::mdx_identities;
+pub use anchors::{mdx_identities, mkdocs_snippets};
 pub use external::{external_facts, external_plan, external_report};
 pub use identities::asciidoc_identities;
 pub use locale::{LocaleAuditFixture, locale_audit};

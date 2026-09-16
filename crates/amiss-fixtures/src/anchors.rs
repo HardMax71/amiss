@@ -51,9 +51,45 @@ const MDX_IDENTITIES: [(&str, Staged<'static>); 8] = [
     ),
 ];
 
+/// A mkdocs site under `site/`, where the snippet line is resolved from the
+/// directory holding `mkdocs.yml` rather than from beside the document that
+/// writes it. One page is nothing but a snippet, one carries a section
+/// coordinate this engine cannot reproduce, one names a file the tree does not
+/// hold, and `outside/notes.md` writes the same line where no `mkdocs.yml`
+/// governs it.
+const MKDOCS_SNIPPETS: [(&str, Staged<'static>); 8] = [
+    ("README.md", Staged::File(b"# Widgets\n")),
+    ("site/mkdocs.yml", Staged::File(b"site_name: widgets\n")),
+    (
+        "site/CONTRIBUTING.md",
+        Staged::File(b"## Installing\n\nText.\n"),
+    ),
+    ("site/docs/index.md", Staged::File(b"# Index\n")),
+    (
+        "site/docs/about/contributing.md",
+        Staged::File(b"--8<-- \"CONTRIBUTING.md\"\n"),
+    ),
+    (
+        "site/docs/section.md",
+        Staged::File(b"--8<-- \"CONTRIBUTING.md:install\"\n"),
+    ),
+    ("site/docs/gone.md", Staged::File(b"--8<-- \"absent.md\"\n")),
+    (
+        "outside/notes.md",
+        Staged::File(b"--8<-- \"CONTRIBUTING.md\"\n"),
+    ),
+];
+
 /// # Errors
 ///
 /// Any filesystem failure.
 pub fn mdx_identities() -> std::io::Result<CommitChain> {
     staged_repository(&MDX_IDENTITIES)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn mkdocs_snippets() -> std::io::Result<CommitChain> {
+    staged_repository(&MKDOCS_SNIPPETS)
 }

@@ -59,6 +59,7 @@ can only leave a finding unreported, never invent one.
 | `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
 | `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
 | `mdx-partial` | a default import of a relative document, rendered as an element | `mdx` | any tree |
+| `mkdocs-snippet` | a `--8<--` line naming a quoted path, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 <!-- amiss-doc-contract:declared-identities:end -->
 
 `html-id` is every `id` and `name` a raw HTML region carries, wherever in the document it
@@ -103,6 +104,17 @@ the page rendering it is a different question, and this check does not answer it
 partial can be rendered into several pages, so the identity that link names belongs to a
 rendering context rather than to the file the link sits in. That is a known gap, and on the
 Docusaurus tree it is eight of the findings.
+
+`mkdocs-snippet` does the same composition in Markdown, and it is the one row this table
+gates on a file. The syntax belongs to the `pymdownx.snippets` extension, so the line is
+read only when `mkdocs.yml` or `mkdocs.yaml` sits on the document's ancestor chain, the same
+test [Route spellings](route-spellings.md) applies to a generator's own routes. Without one
+the line is ordinary text and includes nothing, which is what it is. The path is resolved
+from the directory holding that file rather than from beside the document, because that is
+where MkDocs runs, so a page whose whole body is `--8<-- "CONTRIBUTING.md"` publishes what
+the repository's own contributing guide publishes. Only the single-line form with a quoted
+path is read; a path carrying a section coordinate names part of a file, which this engine
+cannot reproduce, so that edge is refused and absence in the page stays undecided.
 
 A heading can also be written as raw HTML, which many projects do for a centered title.
 github.com anchors those, because its filter runs over the rendered document and sees
