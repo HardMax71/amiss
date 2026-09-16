@@ -255,6 +255,29 @@ fn documented_error_meanings_are_generated_from_the_engine_text() {
 }
 
 #[test]
+fn documented_excluded_trees_are_generated_from_the_scanner() {
+    let document = fs::read_to_string(repository_root().join("docs/src/discovery.md"))
+        .expect("discovery documentation is readable");
+    let listed = documented_contract(&document, "excluded-trees");
+    let mut names = listed
+        .lines()
+        .filter(|line| !line.starts_with("```"))
+        .flat_map(str::split_whitespace);
+    for tree in amiss_scan::document::EXCLUDED_TREES {
+        assert_eq!(
+            names.next(),
+            Some(tree),
+            "docs/src/discovery.md drifted from EXCLUDED_TREES"
+        );
+    }
+    assert_eq!(
+        names.next(),
+        None,
+        "docs/src/discovery.md names a tree the scanner does not skip"
+    );
+}
+
+#[test]
 fn documented_grammar_matches_the_refusal_grammar() {
     let path = repository_root().join("docs/src/invocation.md");
     let document = fs::read_to_string(&path).expect("invocation documentation is readable");

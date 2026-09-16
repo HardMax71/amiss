@@ -10,7 +10,7 @@ const EXTENSIONLESS: [&str; 6] = [
     "CODE_OF_CONDUCT",
 ];
 
-const EXCLUDED_TREES: [&str; 9] = [
+pub const EXCLUDED_TREES: [&str; 9] = [
     "node_modules",
     "vendor",
     "third_party",

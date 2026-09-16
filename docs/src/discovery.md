@@ -28,11 +28,14 @@ and dropping a binding while keeping the include is policy weakening under
 other file is a possible reference target, not a built-in document. These rows come directly from the
 [classifier](https://github.com/HardMax71/amiss/blob/main/crates/amiss-scan/src/document.rs).
 
-Nine directory names are always skipped, wherever they appear in a path:
+Nine directory names are always skipped, wherever they appear in a path. The list is the
+scanner's own constant, checked in CI, and `--explain-scope` prints the same one:
 
+<!-- amiss-doc-contract:excluded-trees:start -->
 ```text
 node_modules  vendor  third_party  dist  build  .next  target  test  tests
 ```
+<!-- amiss-doc-contract:excluded-trees:end -->
 
 The names are fixed: no configuration adds one or takes one away. A repository policy can
 still readmit coverage underneath a skipped name, because policy adds coverage and never
