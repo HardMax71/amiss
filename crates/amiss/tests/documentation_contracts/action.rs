@@ -23,16 +23,23 @@ fn assert_action_feedback_contract(dispatcher: &str, runtime: &str) {
         runtime.contains("$p.errors[:10][]"),
         "an unavailable feedback projection must cap error annotations"
     );
+    let (summary_filter, annotation_filter) = action_filters(runtime);
     assert!(
-        !runtime.contains(".payload.findings") && !runtime.contains("$p.findings"),
-        "the Action must consume the feedback projection instead of raw findings"
+        !summary_filter.contains("findings"),
+        "the summary must consume the feedback projection instead of raw findings"
+    );
+    assert!(
+        annotation_filter
+            .contains("select(.location.path == $at.path and .location.span == $at.span)"),
+        "an annotation reads a finding row only at its own location, for the resolution detail"
     );
     for presentation_contract in [
         "$p.feedback.existing_count",
         "amiss \\($p.result.status): scan failed",
         "(($p.feedback.items | length) - 10",
-        "tojson | html",
+        "tojson | .[1:-1] | html",
         "<code>bytes ",
+        ":\\(.annotation.span.start_line)</code>",
     ] {
         assert!(
             runtime.contains(presentation_contract),
@@ -128,8 +135,24 @@ fn action_feedback_item(
     })
 }
 
+fn action_finding_row(
+    annotation: &serde_json::Value,
+    resolution: &serde_json::Value,
+) -> serde_json::Value {
+    serde_json::json!({
+        "kind": "explicit-target-missing",
+        "location": {
+            "path": annotation.get("path"),
+            "side": "candidate",
+            "span": annotation.get("span")
+        },
+        "candidate_fact": { "evidence": { "kind": "reference", "resolution": resolution } }
+    })
+}
+
 fn available_action_payload() -> serde_json::Value {
     let mut items = Vec::new();
+    let mut findings = Vec::new();
     for index in 0_usize..8 {
         let target = match index {
             0 => serde_json::json!("docs/</code>`x&%\n::error::forged.md"),
@@ -142,6 +165,32 @@ fn available_action_payload() -> serde_json::Value {
             format!("docs/fix-{index}.md")
         };
         let annotation = action_annotation(&path);
+        match index {
+            0 => findings.push(action_finding_row(
+                &annotation,
+                &serde_json::json!({
+                    "kind": "missing",
+                    "reason": "heading-anchor-not-found",
+                    "path": "docs/guide.md",
+                    "near": "near\nheading"
+                }),
+            )),
+            1 => findings.push(action_finding_row(
+                &annotation,
+                &serde_json::json!({
+                    "kind": "missing",
+                    "reason": "path-not-found",
+                    "path": { "bytes_hex": "ff" },
+                    "near": { "bytes_hex": "fe" },
+                    "same_object_at": "docs/moved.md"
+                }),
+            )),
+            2 => findings.push(action_finding_row(
+                &action_annotation("docs/fix-2.md#elsewhere"),
+                &serde_json::json!({ "kind": "missing", "reason": "label-not-declared" }),
+            )),
+            _ => {}
+        }
         items.push(action_feedback_item(
             "fix",
             &target,
@@ -170,6 +219,7 @@ fn available_action_payload() -> serde_json::Value {
         "payload": {
             "result": { "status": "pass", "error_count": 1, "exit_code": 0 },
             "feedback": { "status": "available", "items": items, "existing_count": 4 },
+            "findings": findings,
             "errors": [{
                 "phase": "parse",
                 "code": "INVALID_JSON",
@@ -202,17 +252,20 @@ fn action_feedback_filters_execute_the_combined_window_safely() {
     );
     assert!(summary.contains("- 1 more item in report."));
     assert!(
-        summary
-            .contains("<code>&quot;docs/&lt;/code&gt;`x&amp;%\\n::error::forged.md&quot;</code>")
+        summary.contains(
+            "- **Fix** <code>docs/&lt;/code&gt;`x&amp;%\\n::error::forged.md</code> explicit-target-missing at <code>docs/a%:,\\r\\n.md:1</code>, 2 affected places"
+        ),
+        "{summary}"
     );
-    assert!(summary.contains("<code>bytes ff</code>"));
+    assert!(summary.contains("<code>bytes ff</code> explicit-target-missing at <code>docs/fix-1.md:1</code>, 3 affected places"));
+    assert!(summary.contains("- **Check** <code>check-must-not-annotate.md</code> dependency-changed-subject-unchanged, 1 affected place"));
     for forbidden in [
-        "explicit-target-missing",
-        "dependency-changed-subject-unchanged",
         "overflow-must-not-display.md",
         "INVALID_JSON",
         "docs/</code>",
         "\n::error::forged",
+        "&quot;",
+        "\u{2014}",
     ] {
         assert!(
             !summary.contains(forbidden),
@@ -222,13 +275,27 @@ fn action_feedback_filters_execute_the_combined_window_safely() {
 
     let annotations = run_action_jq(annotation_filter, &payload);
     assert_eq!(annotations.lines().count(), 8, "{annotations}");
-    assert!(annotations.contains(
-        "::error file=docs/a%25%3A%2C%0D%0A.md,line=1,endLine=1,col=1,endColumn=3,title=amiss Fix::Fix target docs/</code>`x&%25%0A::error::forged.md; 2 affected places"
-    ));
-    assert!(annotations.contains("target bytes ff"));
+    assert!(
+        annotations.contains(
+            "::error file=docs/a%25%3A%2C%0D%0A.md,line=1,endLine=1,col=1,endColumn=3,title=amiss Fix::Fix explicit-target-missing: target docs/</code>`x&%25%0A::error::forged.md; heading-anchor-not-found, near near%0Aheading; 2 affected places"
+        ),
+        "{annotations}"
+    );
+    assert!(
+        annotations.contains(
+            "::warning file=docs/fix-1.md,line=1,endLine=1,col=1,endColumn=3,title=amiss Fix::Fix explicit-target-missing: target bytes ff; path-not-found, near bytes fe, same bytes at docs/moved.md; 3 affected places"
+        ),
+        "{annotations}"
+    );
+    assert!(
+        annotations.contains(
+            "::warning file=docs/fix-2.md,line=1,endLine=1,col=1,endColumn=3,title=amiss Fix::Fix explicit-target-missing: target docs/target-2.md; 4 affected places"
+        ),
+        "a finding row at another location lends no detail: {annotations}"
+    );
     for forbidden in [
-        "explicit-target-missing",
         "dependency-changed-subject-unchanged",
+        "label-not-declared",
         "check-must-not-annotate.md",
         "null-annotation-target.md",
         "overflow-must-not-display.md",
@@ -279,7 +346,9 @@ fn action_summary_labels_the_existing_backlog() {
         "{summary}"
     );
     assert!(
-        summary.contains("- **Existing** <code>&quot;docs/old.md&quot;</code>"),
+        summary.contains(
+            "- **Existing** <code>docs/old.md</code> dependency-changed-subject-unchanged, 2 affected places"
+        ),
         "the backlog item is labeled as existing, not check: {summary}"
     );
 }
@@ -334,6 +403,53 @@ fn action_unavailable_feedback_groups_errors_and_caps_annotations() {
     assert!(!annotations.contains('\r'));
 }
 
+fn assert_derive_contract(runtime: &str) {
+    for event_contract in [
+        "PR_HEAD: ${{ github.event.pull_request.head.sha }}",
+        "pull_request_target) candidate=\"$PR_HEAD\" ;;",
+        "repo cat-file -e \"$1^{commit}\"",
+        "for oid in \"$base\" \"$candidate\"; do\n          if ! present \"$oid\"; then",
+    ] {
+        assert!(
+            runtime.contains(event_contract),
+            "the runtime must select and require the pull_request_target head commit"
+        );
+    }
+    let fetches = runtime
+        .lines()
+        .filter(|line| {
+            !line.trim_start().starts_with('#')
+                && line.contains("fetch")
+                && !line.contains("fetch-depth")
+        })
+        .count();
+    assert_eq!(
+        fetches, 1,
+        "the one fetch deepens the checkout; nothing else acquires objects"
+    );
+    for deepening_contract in [
+        "[ -z \"$deepened\" ] && [ \"$EVENT_NAME\" != pull_request_target ] || return 1",
+        "[ \"$(repo rev-parse --is-shallow-repository)\" = true ] || return 1",
+        "repo fetch --quiet --deepen=1 origin \"$(repo rev-parse HEAD)\"",
+    ] {
+        assert!(
+            runtime.contains(deepening_contract),
+            "the runtime deepens a shallow checkout once, from its own head, and never on pull_request_target"
+        );
+    }
+    for hint in [
+        "give actions/checkout fetch-depth: 2\"\n          exit 2",
+        "pull_request) hint=\"give actions/checkout fetch-depth: 2\" ;;",
+        "pull_request_target) hint=\"a pull_request_target checkout is the base branch, so give actions/checkout ref: the pull request head sha (github.event.pull_request.head.sha) with fetch-depth: 0\" ;;",
+        "*) hint=\"give actions/checkout fetch-depth: 0\" ;;",
+    ] {
+        assert!(
+            runtime.contains(hint),
+            "a missing commit names the checkout setting that supplies it: {hint}"
+        );
+    }
+}
+
 #[test]
 fn action_dispatcher_tracks_the_packaged_runtime() {
     let root = repository_root();
@@ -353,27 +469,25 @@ fn action_dispatcher_tracks_the_packaged_runtime() {
         !runtime.contains("uses: HardMax71/amiss@"),
         "the generated runtime must never delegate back to the dispatcher"
     );
-    for event_contract in [
-        "PR_HEAD: ${{ github.event.pull_request.head.sha }}",
-        "pull_request_target) candidate=\"$PR_HEAD\" ;;",
-        "git -C \"$INPUT_REPO\" cat-file -e \"${oid}^{commit}\"",
-    ] {
-        assert!(
-            runtime.contains(event_contract),
-            "the runtime must select and require the pull_request_target head commit"
-        );
-    }
-    assert!(
-        !runtime.contains("git fetch"),
-        "the runtime must not acquire untrusted pull request objects"
-    );
+    assert_derive_contract(&runtime);
     assert!(
         runtime.contains("if [[ ! \"$WATCHDOG_SECONDS\" =~ ^[0-9]*[1-9][0-9]*$ ]]; then"),
         "the watchdog input must contain a nonzero digit"
     );
     assert!(
         runtime.contains("if [ -s \"$report\" ]; then\n            printf 'report=%s\\n' \"$report\"\n          else\n            printf 'report=\\n'"),
-        "the runtime must not export a missing or empty report"
+        "the scan step hands the annotate step an empty path when no report exists"
+    );
+    assert!(
+        runtime.contains("    - id: verdict\n      if: always()\n")
+            && runtime.contains("status=\"${STATUS:-2}\"")
+            && runtime.matches("report=\"${RUNNER_TEMP}/amiss-report.json\"").count() == 2
+            && runtime.contains("[ -s \"$report\" ] || rm -f \"$report\"\n        {\n          printf 'exit-class=%s\\n' \"$status\"\n          printf 'report=%s\\n' \"$report\"\n        } >> \"$GITHUB_OUTPUT\""),
+        "the verdict step always runs, exports exit class 2 when the scan never wrote one, and always names the one report path with an empty file removed"
+    );
+    assert!(
+        runtime.contains("if [ \"${ANNOTATIONS,,}\" != \"true\" ]"),
+        "the annotations input is read case-insensitively"
     );
     assert_action_feedback_contract(&dispatcher, &runtime);
 
@@ -408,6 +522,12 @@ fn action_dispatcher_tracks_the_packaged_runtime() {
     for output in ["exit-class", "report"] {
         let forwarding = format!("value: ${{{{ steps.amiss.outputs.{output} }}}}");
         assert_eq!(dispatcher.matches(&forwarding).count(), 1);
+        let exported = format!("value: ${{{{ steps.verdict.outputs.{output} }}}}");
+        assert_eq!(
+            runtime.matches(&exported).count(),
+            1,
+            "the runtime exports {output} from the step that always runs"
+        );
     }
 
     for workflow in [

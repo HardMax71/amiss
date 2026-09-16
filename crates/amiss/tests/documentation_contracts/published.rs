@@ -67,12 +67,50 @@ fn the_llms_index_names_real_chapters_on_the_published_book() {
     );
 }
 
+const SHARED_CI_WORKFLOW: &str = r"```yaml
+name: docs
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  amiss:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+      - id: amiss
+        uses: HardMax71/amiss@v0
+        with:
+          profile: observe
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: amiss-report
+          path: ${{ steps.amiss.outputs.report }}
+          if-no-files-found: ignore
+```
+";
+
+#[test]
+fn the_ci_chapter_carries_the_shared_workflow() {
+    let ci = fs::read_to_string(repository_root().join("docs/src/ci.md"))
+        .expect("CI documentation is readable");
+    assert!(
+        ci.contains(SHARED_CI_WORKFLOW),
+        "the CI chapter opens with the one shared workflow, verbatim"
+    );
+}
+
 #[test]
 fn published_ci_examples_expose_every_moving_release_choice() {
     let root = repository_root();
     let sources = [
         (root.join("README.md"), 2_usize),
-        (root.join("docs/src/ci.md"), 3_usize),
+        (root.join("docs/src/ci.md"), 4_usize),
     ];
     let workspace_major = env!("CARGO_PKG_VERSION")
         .split('.')
@@ -188,6 +226,33 @@ fn assert_pre_commit_rev(ci: &str) {
 }
 
 #[test]
+fn the_pre_commit_hook_takes_its_profile_from_args() {
+    let root = repository_root();
+    let hook = fs::read_to_string(root.join(".pre-commit-hooks.yaml"))
+        .expect("the pre-commit hook definition is readable");
+    for contract in [
+        "--base \"$(git rev-parse HEAD)\" --index \"$@\"' amiss\n",
+        "  args: [--profile, enforce-introduced]\n",
+        "run cargo install --locked amiss",
+        "  always_run: true\n",
+    ] {
+        assert!(
+            hook.contains(contract),
+            "the hook reads its profile from args, defaults to enforce-introduced, and runs on every commit: {contract}"
+        );
+    }
+    assert!(
+        !hook.contains("--profile enforce'"),
+        "no profile is hard-coded inside the entry"
+    );
+    let ci = fs::read_to_string(root.join("docs/src/ci.md")).expect("CI documentation is readable");
+    assert!(
+        ci.contains("      - id: amiss\n        args: [--profile, enforce]\n"),
+        "the CI chapter shows how a consumer picks the enforce profile"
+    );
+}
+
+#[test]
 fn the_gitlab_template_keeps_the_release_choices() {
     let root = repository_root();
     let template = fs::read_to_string(root.join("integrations/gitlab/amiss.gitlab-ci.yml"))
@@ -195,12 +260,36 @@ fn the_gitlab_template_keeps_the_release_choices() {
     assert!(
         template.contains(r#"if [ -z "${AMISS_VERSION}" ]; then"#)
             && template.contains("set AMISS_VERSION to the exact reviewed Amiss release")
-            && template.contains("exit 1"),
-        "the template must refuse to run without a reviewed version, not just say so"
+            && template.contains("exit 2"),
+        "the template must refuse to run without a reviewed version, with the untrusted-run class"
+    );
+    assert!(
+        !template.contains("exit 1"),
+        "a refused run must not read as findings"
+    );
+    let image = template
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("image: "))
+        .expect("the job names an image");
+    let (_, digest) = image
+        .split_once("@sha256:")
+        .expect("the image is pinned by digest");
+    assert!(
+        digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()),
+        "the image digest is a full sha256, found {image}"
     );
     assert!(
         template.contains(r#"exit "$status""#),
-        "the job's verdict is the check's own exit class, emitted after both artifacts exist"
+        "the job's verdict is the check's own exit class, emitted after the artifacts exist"
+    );
+    assert!(
+        template.contains("--format junit > amiss-junit.xml || true")
+            && template.contains("      junit: amiss-junit.xml"),
+        "the JUnit view is rendered from the same report and declared as an artifact"
+    );
+    assert!(
+        template.contains("if [ \"$status\" != 2 ]; then\n        ./amiss-linux-x86_64 render --report amiss-report.json \\\n          --format codequality > gl-code-quality-report.json || true\n      fi"),
+        "an exit-2 run writes no Code Quality rows, so the widget never reads a clean run into it"
     );
     assert_eq!(
         template

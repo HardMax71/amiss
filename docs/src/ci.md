@@ -5,12 +5,30 @@ selected action tree, derives both commits from the triggering event, and turns 
 file feedback on the pull request. It is not the provider-authenticated controller lane:
 
 ```yaml
-- uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
-  with:
-    fetch-depth: 2
-- uses: HardMax71/amiss@v0
-  with:
-    profile: observe
+name: docs
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  amiss:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: ${{ github.event_name == 'pull_request' && 2 || 0 }}
+      - id: amiss
+        uses: HardMax71/amiss@v0
+        with:
+          profile: observe
+      - if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: amiss-report
+          path: ${{ steps.amiss.outputs.report }}
+          if-no-files-found: ignore
 ```
 
 The published first run uses `observe`: introduced problems appear as Fixes without blocking,
@@ -25,13 +43,19 @@ findings stay warnings in the same reports.
 
 Before running anything it verifies the selected binary against the release manifest shipped
 in the same tree. A wall-clock watchdog backstops the engine's resource ceilings, and a scan
-that outlives the window is ended so the job fails with no result, never a verdict. Under the
-default `enforce` profile the job fails on exit classes 1 and 2. The outputs `exit-class` and
-`report` expose the verdict class and the JSON report path for anything downstream.
+that outlives the window is ended so the job fails with no result, never a verdict. The window
+defaults to 120 seconds, far above a real scan: this repository takes 0.26 seconds and a
+1,620-document Docusaurus site 4.2 seconds. Under the default `enforce` profile the job fails
+on exit classes 1 and 2. The outputs `exit-class` and `report` expose the verdict class and
+the JSON report path for anything downstream; the file sits in the runner's temp directory,
+which is why the workflow above uploads it as the `amiss-report` artifact. A run that ends
+before the engine could scan, on an unsupported runner or a checkout missing a commit, reports
+exit class 2, and the path then names a file that was never written, which the upload step's
+`if-no-files-found: ignore` tolerates.
 
 | Input | Default | Role |
 | --- | --- | --- |
-| `profile` | `enforce` | `observe` reports without blocking |
+| `profile` | `enforce` | `observe` reports without blocking, `enforce-introduced` blocks what the change introduces and warns on the backlog, `enforce` blocks every failing finding |
 | `base` | derived | full commit ID, overrides the event derivation |
 | `candidate` | derived | full commit ID, overrides the event derivation |
 | `repo` | `.` | repository root inside the workspace |
@@ -50,9 +74,13 @@ When `base` and `candidate` stay empty, the event supplies them:
 
 The first parent is deliberate: the payload's base tip races the merge ref GitHub rebuilds
 lazily after a base branch moves, while the first parent is exactly the base the test merge
-was built from and is present in any checkout that holds the candidate at all. Both commits
-must exist in the checkout: `fetch-depth: 2` covers the normal merge checkout, and a batched
-push or unusual checkout may need `fetch-depth: 0`.
+was built from. Both commits must exist in the checkout. At the checkout default of depth 1
+the Action deepens the checkout by one commit from its own head before it gives up, which
+reaches the merge commit's parents and a single-commit push, so `fetch-depth: 2` only saves
+a round trip; a push of several commits needs `fetch-depth: 0`, which the workflow above
+gives pushes. A `pull_request_target` checkout is the base branch,
+so the head is absent by design and the Action never fetches it: give actions/checkout
+`ref: ${{ github.event.pull_request.head.sha }}` with `fetch-depth: 0` for that event.
 
 The identity host comes from the event's server URL, so on GitHub Enterprise Server the
 report claims the instance's own host and recognizes that host's blob and tree links, with
@@ -168,7 +196,8 @@ advisory policy.
 
 The SARIF projection turns the same run into GitHub code-scanning alerts, inline on the
 lines the findings name, with fixes rendered as suggested edits and the finding key
-deduplicating alerts across runs. Two steps after any direct invocation:
+deduplicating alerts across runs. Two steps after any direct invocation, in a job whose
+`permissions` block adds `security-events: write` beside `contents: read`:
 
 ```yaml
 - run: amiss check <the check flags above> --format sarif > amiss.sarif
@@ -179,10 +208,10 @@ deduplicating alerts across runs. Two steps after any direct invocation:
 ```
 
 The `category` keeps Amiss's alerts distinct from any other SARIF producer in the
-repository, and the upload needs the workflow's `security-events: write` permission. The
-uploaded rows are ordinary code-scanning alerts, so GitHub's remediation surfaces,
+repository. The uploaded rows are ordinary code-scanning alerts, so GitHub's remediation
+surfaces operate on them directly,
 [agentic autofix](https://github.blog/changelog/2026-07-10-agentic-autofix-for-code-scanning-alerts-in-public-preview/)
-included, operate on them directly. What each result carries is stated in
+included. What each result carries is stated in
 [The report](report.md).
 
 On GitLab the whole job ships as a pinned template. GitLab's CI/CD Catalog only serves
@@ -197,17 +226,20 @@ variables:
   AMISS_VERSION: v<reviewed-version>
 ```
 
-Both pins name the release you reviewed and move together. The
+Both pins name the release you reviewed and move together, and the job's image is pinned by
+digest. The
 [template](https://github.com/HardMax71/amiss/blob/main/integrations/gitlab/amiss.gitlab-ci.yml)
-runs on merge-request pipelines, refuses to run until `AMISS_VERSION` is set, verifies
-the downloaded binary against the release's `SHA256SUMS` before executing it, scans the
-merge request's diff base against its head under `AMISS_PROFILE` (`observe` until the
-first report is triaged, the same ramp as everywhere else), renders Code Quality from that
-same validated report without a second scan, and uploads two artifacts:
-the exact JSON report, and a
+runs on merge-request pipelines, refuses to run with exit 2 until `AMISS_VERSION` is set,
+verifies the downloaded binary against the release's `SHA256SUMS` before executing it, scans
+the merge request's diff base against its head under `AMISS_PROFILE` (`observe` until the
+first report is triaged, the same ramp as everywhere else), renders Code Quality and JUnit
+from that same validated report without a second scan, and uploads three artifacts: the
+exact JSON report, a
 [Code Quality report](https://docs.gitlab.com/ci/testing/code_quality/) rendered in the
-merge-request widget and inline on the diff. The fingerprint is the finding key, so the
-widget's new-versus-resolved diff follows the same identity the report uses. This is
+merge-request widget and inline on the diff, and a JUnit report for the test widget. The
+fingerprint is the finding key, so the widget's new-versus-resolved diff follows the same
+identity the report uses. An exit-2 run writes no Code Quality rows, since the widget would
+read an empty file as a clean run; the JUnit report carries the error instead. This is
 rendering, not the trust lane: a blocking run still fails the job by exit class, and the
 provider-verified gate is [the GitLab policy lane](provider-gitlab.md).
 
@@ -228,17 +260,22 @@ becomes a file annotation, while Checks and Existing inventory stay in the summa
 report. If the scan failed, feedback is unavailable and at most ten retained errors are
 annotated instead. The blocking rows remain the report's `errors` and findings whose
 `effective_disposition` is `fail`, and the complete grouped and raw sets always remain in the
-report. The Action's `report` output names that JSON file, so a later step reads it without
-rerunning anything. One line lists every grouped PR item with its target and affected-place
-count:
+report. The Action's `report` output names that JSON file, so a later step reads it in place
+without rerunning anything. One step lists every grouped PR item with its target and
+affected-place count:
 
-```sh
-jq -r '.payload.feedback
-  | select(.status == "available")
-  | .items[]
-  | [.action, .effective_disposition,
-     ((.target | strings) // "-"), .location_count]
-  | @tsv' amiss-report.json
+```yaml
+- if: always()
+  env:
+    REPORT: ${{ steps.amiss.outputs.report }}
+  run: |
+    [ -s "$REPORT" ] || exit 0
+    jq -r '.payload.feedback
+      | select(.status == "available")
+      | .items[]
+      | [.action, .effective_disposition,
+         ((.target | strings) // "-"), .location_count]
+      | @tsv' "$REPORT"
 ```
 
 ## What this surface is not
@@ -258,8 +295,11 @@ documents the shared retry record; the GitHub lane's own page is
 ## Before a commit exists
 
 The same check runs on the staged index. The repository publishes a
-[pre-commit](https://pre-commit.com) hook that scans the staged state against `HEAD` with an
-installed `amiss` binary:
+[pre-commit](https://pre-commit.com) hook that scans the staged state against `HEAD` with
+the `amiss` binary on the path (`cargo install --locked amiss`, at the version CI reviews).
+The hook runs on every commit, since a staged rename breaks links in files the commit never
+touched, and it runs under `enforce-introduced` unless told otherwise: what the commit
+introduces blocks and an older backlog only warns. `args` picks the profile:
 
 ```yaml
 repos:
@@ -267,6 +307,7 @@ repos:
     rev: v<reviewed-version>
     hooks:
       - id: amiss
+        args: [--profile, enforce]
 ```
 
 Replace `v<reviewed-version>` with the exact release you reviewed, the same convention
