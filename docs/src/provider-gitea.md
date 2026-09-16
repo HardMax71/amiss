@@ -96,7 +96,7 @@ repository and read access to the pinned action repository when that is separate
 must be able to submit official pull-request reviews. Do not use a maintainer's personal account
 or reuse one reviewer for another plan on the same protected branch.
 
-Write access is not enough. On Gitea 1.27.0 and Forgejo 12.0.4,
+Write access is not enough. On Gitea 1.27.0 and Forgejo 16.0.1,
 `/repos/{owner}/{repo}/branch_protections/{rule}` answers a write collaborator with `403`, and the
 branch route leaves `effective_branch_protection_name` empty for anyone below administrator, so
 the lane cannot read the rule it is required to check. The protection rule below binds

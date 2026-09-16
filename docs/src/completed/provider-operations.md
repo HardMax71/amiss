@@ -54,6 +54,9 @@ public interface is a free liveness oracle for anyone who wants one. The endpoin
 
 ## Ten counters, no labels, no cardinality surprise
 
+Ten was the count when this phase closed. Four `external_*` verdict tallies joined in August
+2026, so the live set is fourteen; [Project status](../status.md) carries the current number.
+
 Metrics with provider-supplied labels let a provider decide how much memory the registry uses,
 which turns monitoring into a denial-of-service surface. A metric set that grows as the code
 grows becomes a compatibility surface nobody agreed to maintain.

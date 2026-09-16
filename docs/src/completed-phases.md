@@ -11,8 +11,10 @@ Current work is in the [Roadmap](roadmap.md), the factual boundary of the produc
 
 [Validation and hardening](completed/validation-and-hardening.md) asked whether the engine's claims
 survive contact with repositories nobody here wrote. Generated contract tables, a bound on embedded
-code, ten public repositories scanned and kept, no false-positive rate, one reviewer projection, the
-event shapes the self-scan actually runs, and the first mutation and fuzz baselines.
+code, ten public repositories scanned and kept, zero accepted false `explicit-target-missing`
+findings on supported reference shapes as of July 2026 in place of a false-positive rate, one
+reviewer projection, the event shapes the self-scan actually runs, and the first mutation and fuzz
+baselines.
 
 [Delivery record](completed/delivery-record.md) made a controller that publishes provider verdicts
 survive crashes, retries, and clock movement without losing a verdict or writing two. One atomic
@@ -21,12 +23,13 @@ built from ordinary files with fixed lock growth.
 
 [Provider-verified controls](completed/provider-verified-controls.md) turned the gate into an object
 the provider owns and the checked repository cannot forge. One evaluation contract, a sealed bootstrap
-and runner, exact object acquisition, and three provider lanes with their gates checked rather than
-assumed.
+and runner, exact object acquisition, and three provider lanes, Gitea and Forgejo sharing one, with
+their gates checked rather than assumed.
 
 [Provider operations](completed/provider-operations.md) made a lane deployable, watchable, and
 restartable without losing work. Offline configuration checks, separate liveness and readiness, ten
-label-free counters, a graceful drain, and account-free robustness testing.
+label-free counters (fourteen since August 2026), a graceful drain, and account-free robustness
+testing.
 
 [Reference coverage](completed/reference-coverage.md) answered the four classes the scan ledger had
 measured and named, and refused a fifth. Heading anchors under twelve renderer rules, router
@@ -41,7 +44,8 @@ live-found defects that every fixture had agreed with.
 [A settled wire](completed/a-settled-wire.md) froze the report contract at `1` once its three
 conditions held at once. The wire versioned by its own in-payload field, engine releases decoupled,
 two minor series quiet under a mechanical tripwire, and the first frozen example retained
-permanently to hold every later schema in the major to the additive promise.
+permanently to hold every later schema in the major to the additive promise. The same page records
+the move to `2` in September 2026, the first reshape since the freeze.
 
 [Projection contracts](completed/projection-contracts.md) made exact code, inventory, count, and
 record-set relationships policy-owned scanner facts. Stable identities, complete-input semantics,

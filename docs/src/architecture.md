@@ -1,6 +1,6 @@
 # Architecture
 
-The engine has six production crates, and trust flows in one direction; a seventh exists only
+The engine has eight production crates, and trust flows in one direction; a ninth exists only
 for tests. The unpublished provider-controller crates share the same workspace and depend on the
 engine, never the other way round.
 
@@ -12,13 +12,19 @@ digraph amiss {
   wire  [label = "amiss-wire\nshared typed models,\nvalidation, machine contracts"];
   git   [label = "amiss-git\nobject store, packs, index,\nno-follow handles"];
   md    [label = "amiss-md\npinned document parsers"];
+  adoc  [label = "amiss-adoc\nAsciiDoc extraction"];
+  rst   [label = "amiss-rst\nreStructuredText extraction"];
   scan  [label = "amiss-scan\ndiscovery, resolution,\ncorrelation, evaluation, policy"];
   cli   [label = "amiss\nthe engine binary"];
   boot  [label = "amiss-bootstrap\nverified-run wrapper"];
   git -> wire;
   md -> wire;
+  adoc -> wire;
+  rst -> wire;
   scan -> git;
   scan -> md;
+  scan -> adoc;
+  scan -> rst;
   scan -> wire;
   cli -> scan;
   cli -> git;
@@ -108,19 +114,23 @@ the [MDX](https://mdxjs.com) grammar's own tests. The pin is a checked-in manife
 counts, extraction results, and byte positions for every test case. A parser change that
 moves any of those moves the manifest, and review sees the diff.
 
+`amiss-adoc` and `amiss-rst` hold the AsciiDoc and reStructuredText extractors. Each depends on
+`amiss-wire` alone, and only `amiss-scan` consumes them.
+
 `amiss-scan` is the evaluation itself: discovery, resolution, correlation, the
 base-versus-candidate comparison, policy, and report construction. It is a library that
-does no I/O beyond the store handed to it. It also carries the ten heading-identity rules,
-each pinned against the renderer it models rather than written from its documentation.
+does no I/O beyond the store handed to it. It also carries the twelve heading-identity rules,
+twelve rows for ten renderers since mdBook and MkDocs carry two spellings apiece, every one
+pinned against the renderer it models rather than written from its documentation.
 
-`amiss` is the binary: the closed public command grammar, the in-process run, the two output
+`amiss` is the binary: the closed public command grammar, the in-process run, the five output
 formats, and a private sealed entry reserved for the bootstrap. `amiss-bootstrap` validates a
 pinned action tree and externally supplied constraint as data, validates three canonical
 requests, and launches the verified engine with a cleared environment and a closed stdin
 frame. It is the root production crate allowed to start a process, and the process it starts
 is the binary it just verified. The sealed path exists but is not integrated into the
 published convenience Action; [Project status](status.md) keeps that distinction explicit.
-A seventh crate, `amiss-fixtures`, exists only for tests: it writes hostile Git bytes
+A ninth crate, `amiss-fixtures`, exists only for tests: it writes hostile Git bytes
 straight into test repositories so the same fixtures exist on every platform.
 
 The root [`api/`](https://github.com/HardMax71/amiss/tree/main/api) specialist and
