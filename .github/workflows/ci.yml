@@ -386,8 +386,6 @@ jobs:
           cargo package --locked "${members[@]}"
 
   platform-tests:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -446,17 +444,6 @@ jobs:
         run: cargo nextest run --workspace --locked
       - name: Check release eligibility
         run: cargo nextest run -p amiss-scan --test eligibility --release --locked
-
-  # The ruleset requires this job: a skipped matrix leg reports no per-os check.
-  tests:
-    needs: platform-tests
-    if: always()
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - run: test "$RESULT" = success || test "$RESULT" = skipped
-        env:
-          RESULT: ${{ needs.platform-tests.result }}
 
   coverage:
     needs: changes
