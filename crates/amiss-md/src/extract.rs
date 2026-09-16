@@ -235,8 +235,9 @@ impl Sweep<'_> {
         let bytes = self.suffix.as_bytes();
         let span = node.span;
         match &node.kind {
-            Kind::Mdx { .. } => {
+            Kind::Mdx { .. } | Kind::MdxElement { .. } => {
                 self.mdx.push(span);
+                mdx_declarations(node, &mut self.declared);
                 return Ok(false);
             }
             Kind::Html => {
@@ -355,6 +356,31 @@ impl Sweep<'_> {
             path_span: None,
         });
     }
+}
+
+/// The identities one MDX region writes down. JSX reads a lowercase tag as an
+/// HTML element and anything else as a component, whose rendered output this
+/// engine does not know, so the walk stops at a component and reads nothing
+/// from it or under it.
+fn mdx_declarations(root: &Node, declared: &mut Vec<String>) {
+    let mut stack = vec![root];
+    while let Some(node) = stack.pop() {
+        if let Kind::MdxElement { name, id } = &node.kind {
+            if !plain_element(name.as_deref()) {
+                continue;
+            }
+            declared.extend(id.clone());
+        }
+        stack.extend(node.children.iter().rev());
+    }
+}
+
+/// A member or namespace name is a component whatever its case, and a fragment
+/// renders its children as they are.
+fn plain_element(name: Option<&str>) -> bool {
+    name.is_none_or(|name| {
+        name.starts_with(|first: char| first.is_ascii_lowercase()) && !name.contains(['.', ':'])
+    })
 }
 
 fn destination_token(bytes: &[u8], at: usize) -> Result<(usize, usize), Fault> {

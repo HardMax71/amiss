@@ -89,10 +89,15 @@ fn convert(node: &mdast::Node, winners: &HashMap<String, usize>) -> Result<Node,
         mdast::Node::ListItem(_) => Kind::ListItem,
         mdast::Node::TableCell(_) => Kind::TableCell,
         mdast::Node::Html(_) => Kind::Html,
-        mdast::Node::MdxjsEsm(_)
-        | mdast::Node::MdxFlowExpression(_)
-        | mdast::Node::MdxJsxFlowElement(_)
-        | mdast::Node::MdxJsxTextElement(_) => Kind::Mdx { expression: None },
+        mdast::Node::MdxjsEsm(_) | mdast::Node::MdxFlowExpression(_) => {
+            Kind::Mdx { expression: None }
+        }
+        mdast::Node::MdxJsxFlowElement(element) => {
+            element_kind(element.name.as_deref(), &element.attributes)
+        }
+        mdast::Node::MdxJsxTextElement(element) => {
+            element_kind(element.name.as_deref(), &element.attributes)
+        }
         mdast::Node::MdxTextExpression(expression) => Kind::Mdx {
             expression: Some(expression.value.clone()),
         },
@@ -144,6 +149,25 @@ fn convert(node: &mdast::Node, winners: &HashMap<String, usize>) -> Result<Node,
         | mdast::Node::Yaml(_) => Kind::Other,
     };
     Ok(Node::leaf(kind, span))
+}
+
+/// An element's tag name and the `id` it sets as a literal. An `id` computed
+/// by an expression is a value this engine cannot read, so the element carries
+/// none.
+fn element_kind(name: Option<&str>, attributes: &[mdast::AttributeContent]) -> Kind {
+    let id = attributes.iter().find_map(|attribute| match attribute {
+        mdast::AttributeContent::Property(property) if property.name == "id" => {
+            match property.value.as_ref() {
+                Some(mdast::AttributeValue::Literal(value)) => Some(value.clone()),
+                Some(mdast::AttributeValue::Expression(_)) | None => None,
+            }
+        }
+        mdast::AttributeContent::Property(_) | mdast::AttributeContent::Expression(_) => None,
+    });
+    Kind::MdxElement {
+        name: name.map(str::to_owned),
+        id,
+    }
 }
 
 fn resolved(

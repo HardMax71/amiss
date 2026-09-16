@@ -241,6 +241,29 @@ fn raw_html_publishes_its_id_and_name_attributes() {
     );
 }
 
+/// MDX has no raw HTML, so an element written there is JSX. A lowercase tag
+/// is an HTML element and its `id` reaches the page; anything else is a
+/// component, whose rendered output is unknown, so neither the `id` written on
+/// one nor an `id` under one is an identity this document publishes.
+#[test]
+fn a_plain_jsx_element_publishes_its_id_and_a_component_publishes_none() {
+    let source = concat!(
+        "<details id=\"declared\">\n\nInside.\n\n</details>\n\n",
+        "<div id=\"outer\"><span id=\"inner\" /></div>\n\n",
+        "<Fragment.Slot id=\"member\" />\n\n",
+        "<APITable id=\"component\">\n\n<span id=\"under-component\" />\n\n</APITable>\n",
+    );
+    let got = extraction(Adapter::Mdx, source);
+    assert_eq!(
+        got.declared_anchors,
+        vec![
+            "declared".to_owned(),
+            "outer".to_owned(),
+            "inner".to_owned()
+        ]
+    );
+}
+
 #[test]
 fn an_attribute_name_needs_its_own_word_boundary() {
     let source = "<div data-id=\"skipped\" hidden-name=\"skipped\" id=\"kept\"></div>\n";

@@ -19,12 +19,24 @@ pub(crate) enum Kind {
     ListItem,
     TableCell,
     Html,
-    Mdx { expression: Option<String> },
+    Mdx {
+        expression: Option<String>,
+    },
+    /// A JSX element, with the tag name as written and the literal value of
+    /// its `id` attribute.
+    MdxElement {
+        name: Option<String>,
+        id: Option<String>,
+    },
     Text(String),
     InlineCode(String),
     CodeBlock(String),
-    Link { url: String },
-    Image { url: String },
+    Link {
+        url: String,
+    },
+    Image {
+        url: String,
+    },
     LinkReference(Reference),
     ImageReference(Reference),
     Definition(Definition),

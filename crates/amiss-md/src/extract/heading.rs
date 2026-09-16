@@ -43,6 +43,7 @@ fn text_content(node: &Node) -> String {
             }
             Kind::Html
             | Kind::Mdx { .. }
+            | Kind::MdxElement { .. }
             | Kind::Image { .. }
             | Kind::ImageReference(_)
             | Kind::Definition(_) => {}

@@ -57,6 +57,7 @@ can only leave a finding unreported, never invent one.
 | `attr-list` | an attribute block alone on a block's last line, `{#id}` | `markdown` | any tree |
 | `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
 | `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
+| `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
 <!-- amiss-doc-contract:declared-identities:end -->
 
 `html-id` is every `id` and `name` a raw HTML region carries, wherever in the document it
@@ -76,6 +77,14 @@ back out of the heading text; it is on by default and off under
 `### \`noIndex\` {/* #noIndex */}`, the spelling that needs no escape. Either one ends the
 heading or it declares nothing, which is `parseMarkdownHeadingId`'s own rule and the reason
 `{/* #id */} after` names nothing, and either one is taken as written with its case intact.
+
+`jsx-id` is the MDX answer to `html-id`, because MDX has no raw HTML and `<details id="x">`
+in an MDX file is JSX. The split JSX itself makes is the one this rule uses: a tag name
+starting with a lowercase letter is an HTML element, so its `id` reaches the page and is
+read, and every other name is a component. A component's rendered output is unknown here,
+so an `id` written on one is a prop rather than an identity, and nothing under one is read
+either. That is why the option tables Docusaurus builds with `<APITable>` publish
+identities this check cannot see, and why a link into one stays a finding.
 
 A heading can also be written as raw HTML, which many projects do for a centered title.
 github.com anchors those, because its filter runs over the rendered document and sees
