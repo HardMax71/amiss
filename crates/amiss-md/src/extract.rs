@@ -333,6 +333,9 @@ impl Sweep<'_> {
                     self.snippets
                         .extend(value.lines().filter_map(|line| snippet(line, span)));
                 }
+                if path.last().is_some_and(|index| *index > 0) {
+                    self.declared.extend(heading::inline_attribute(value));
+                }
             }
             Kind::Root | Kind::InlineCode(_) | Kind::CodeBlock(_) | Kind::Other => {}
         }

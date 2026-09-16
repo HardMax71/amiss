@@ -55,6 +55,7 @@ can only leave a finding unreported, never invent one.
 | --- | --- | --- | --- |
 | `html-id` | an `id` or `name` attribute on a raw HTML element | `markdown` | any tree |
 | `attr-list` | an attribute block alone on a block's last line, `{#id}` | `markdown` | any tree |
+| `attr-list-inline` | an attribute block directly after an inline construct, `**text**{#id}` | `markdown` | any tree |
 | `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
 | `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
 | `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
@@ -70,6 +71,13 @@ which is how `[](){#anchor-point}` and a `{#section}` line under a paragraph wor
 attribute block trailing other text on the same line declares nothing, and one inside a
 fence is code. The extension reads the block in the document's own literal text, so a
 block inside inline code is code and declares nothing.
+
+`attr-list-inline` is the extension's other half, the block that attaches to the inline
+construct it directly follows rather than to the block around it. That is how
+`*   **\`locale\`**{ #mkdocs-locale }: the locale used` names a list item's own term while
+the sentence carries on after it, and the identity is the same one the block form declares.
+The block opens the text that follows the construct, because anything between the two
+breaks the pairing.
 
 The two MDX rows are the same heading identity written two ways, because the attribute
 spelling is an expression in that grammar. `mdx-heading-id` is the classic

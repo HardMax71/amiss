@@ -20,7 +20,7 @@ pub(crate) fn git(dir: &Path, args: &[&str]) -> String {
 
 pub(crate) const POINTER: &str = "version https://git-lfs.github.com/spec/v1\noid sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef\nsize 42\n";
 
-pub(crate) const ANCHORS: &[u8] = "# Setup & Config\n\n## Setup & Config\n\n### Résumé draft\n\n<a name=\"declared\"></a>\n\n## Explicit {#custom}\n\n<h2 align=\"center\"><code>tool</code></h2>\n\n[](){#anchor-point}\n\n## Pair { id=\"pair-id\" }\n".as_bytes();
+pub(crate) const ANCHORS: &[u8] = "# Setup & Config\n\n## Setup & Config\n\n### Résumé draft\n\n<a name=\"declared\"></a>\n\n## Explicit {#custom}\n\n<h2 align=\"center\"><code>tool</code></h2>\n\n[](){#anchor-point}\n\n## Pair { id=\"pair-id\" }\n\n*   **`locale`**{ #inline-id }: text after the block.\n*   **`theme`**{ .cls }: a class names nothing.\n".as_bytes();
 
 pub(crate) const MIXED_LINES: &[u8] = b"one\r\ntwo\nthree\rfour";
 

@@ -26,6 +26,7 @@ fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
         "tool",
         "anchor-point",
         "pair-id",
+        "inline-id",
     ] {
         let destination = format!("anchors.md#{fragment}");
         let row = bed
@@ -47,7 +48,7 @@ fn a_heading_anchor_resolves_under_the_union_of_the_renderer_rules() {
         assert_eq!(blob.path.as_str(), Some("docs/anchors.md"));
     }
 
-    for fragment in ["Setup--Config", "setup", "résumé", "customid"] {
+    for fragment in ["Setup--Config", "setup", "résumé", "customid", "cls"] {
         let destination = format!("anchors.md#{fragment}");
         let row = bed
             .run_as(

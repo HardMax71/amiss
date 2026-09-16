@@ -121,9 +121,10 @@ fn every_attribute_spelling_names_the_heading() {
 }
 
 /// A block whose last line is an attribute block declares that identity for
-/// itself. One that trails other text declares nothing, one inside a fence is
-/// code, and so is one inside an inline span, which is where the extension
-/// looks and does not find it.
+/// itself, and one that directly follows an inline construct declares it for
+/// that construct. One that trails other text declares nothing, one inside a
+/// fence is code, and so is one inside an inline span, which is where the
+/// extension looks and does not find it.
 #[test]
 fn a_block_declares_the_identity_on_its_own_last_line() {
     let source = concat!(
@@ -132,12 +133,21 @@ fn a_block_declares_the_identity_on_its_own_last_line() {
         "Trailing on the same line. {#not-an-identity}\n\n",
         "`{#inside-inline-code}`\n\n",
         "A paragraph whose last line is code.\n`{#code-on-the-last-line}`\n\n",
-        "```text\n{#inside-a-fence}\n```\n"
+        "```text\n{#inside-a-fence}\n```\n\n",
+        "*   **`locale`**{ #inline-id }: text after the block.\n",
+        "*   **`theme`**{ .cls }: a class names nothing.\n\n",
+        "Nothing after it **bold**{#at-the-end}\n\n",
+        "{#opens-a-paragraph} and then text.\n"
     );
     let got = extraction(Adapter::Markdown, source);
     assert_eq!(
         got.declared_anchors,
-        vec!["empty-link-id".to_owned(), "standalone-id".to_owned()]
+        vec![
+            "empty-link-id".to_owned(),
+            "standalone-id".to_owned(),
+            "inline-id".to_owned(),
+            "at-the-end".to_owned(),
+        ]
     );
 }
 
