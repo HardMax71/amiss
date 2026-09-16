@@ -231,7 +231,9 @@ Heading evaluation expands the closed local include subset in source order. An A
 literal relative target was already scanned under the same adapter; each nested path is relative to
 the file that includes it. An MDX partial joins the same subset: a default import of a relative
 Markdown document rendered as an element, which is how Docusaurus composes one page out of
-several files, and the identities flow to the page rather than back to the partial.
+several files, and the identities flow to the page rather than back to the partial. So does a
+MkDocs snippet line, `--8<-- "path"`, under a tree that declares MkDocs, resolved from the
+directory holding that declaration rather than from beside the document.
 An option-free `literalinclude` contributes no parsed headings. The graph
 is bounded by `references-per-document`, `parser-nesting`, and
 `aggregate-heading-anchor-evaluation-bytes-per-snapshot`. A cycle, an unscanned or non-local target,

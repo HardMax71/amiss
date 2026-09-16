@@ -137,13 +137,14 @@ fn distinct_anchors_into_one_target_are_charged_once() {
 #[expect(clippy::panic, reason = "test fixture helper")]
 fn publishes(
     bed: &mut crate::support::Bed,
+    adapter: Adapter,
     document: &str,
     target: &str,
     fragment: &str,
 ) -> Option<bool> {
     let destination = format!("{target}#{fragment}");
     let row = bed
-        .run_as(Adapter::Mdx, None, document, false, &destination)
+        .run_as(adapter, None, document, false, &destination)
         .unwrap_or_else(|_defect| panic!("resolve {destination}"))
         .1;
     if let Resolution::Resolved {
@@ -205,7 +206,38 @@ fn an_mdx_document_publishes_the_identities_it_writes_down() {
         ("docs/cycle-a.mdx", "absent", None),
     ] {
         assert_eq!(
-            publishes(&mut bed, "guide.mdx", target, fragment),
+            publishes(&mut bed, Adapter::Mdx, "guide.mdx", target, fragment),
+            answer,
+            "{target}#{fragment}"
+        );
+    }
+}
+
+/// The snippet syntax belongs to a mkdocs extension, so the line is read only
+/// under a tree that declares mkdocs, and the path is resolved from the
+/// directory holding that declaration rather than from beside the document. A
+/// page whose whole body is one snippet publishes what the file it pulls in
+/// publishes. A section coordinate names part of a file this engine cannot
+/// reproduce and a target the tree lacks is unreadable, so both leave absence
+/// undecided; the same line where no `mkdocs.yml` governs it includes nothing,
+/// which leaves that page able to prove absence.
+#[test]
+fn a_mkdocs_snippet_publishes_the_identities_of_the_file_it_pulls_in() {
+    let mut bed = bed_at(
+        amiss_fixtures::mkdocs_snippets().expect("the fixture stages"),
+        0,
+        ScanLimits::CONTRACT,
+        GitLimits::CONTRACT,
+    );
+    for (target, fragment, answer) in [
+        ("site/docs/about/contributing.md", "installing", Some(true)),
+        ("site/docs/about/contributing.md", "absent", Some(false)),
+        ("site/docs/section.md", "installing", None),
+        ("site/docs/gone.md", "installing", None),
+        ("outside/notes.md", "installing", Some(false)),
+    ] {
+        assert_eq!(
+            publishes(&mut bed, Adapter::Markdown, "README.md", target, fragment),
             answer,
             "{target}#{fragment}"
         );

@@ -6,10 +6,12 @@ use amiss_wire::extraction::{Heading, Transclusion, TransclusionKind};
 use amiss_wire::model::{Adapter, RepoPath};
 use amiss_wire::uri::scheme;
 
-use crate::discovery::{DocumentStatus, SnapshotDiscovery};
+use crate::anchor::MKDOCS_SNIPPET;
+use crate::discovery::{DocumentStatus, Located, SnapshotDiscovery};
 use crate::resources::{Aggregate, ScanResources};
+use crate::route::directory;
 
-use super::syntax::normalized_native_path;
+use super::syntax::{normalized_native_path, normalized_path_under};
 
 #[derive(Clone, Copy)]
 pub(super) struct Source<'a> {
@@ -62,7 +64,7 @@ pub(super) fn expand<'source>(
         headings: Vec::new(),
         html_anchors: Vec::new(),
         declared_anchors: Vec::new(),
-        complete: matches!(adapter, Adapter::Mdx | Adapter::Rst),
+        complete: matches!(adapter, Adapter::Markdown | Adapter::Mdx | Adapter::Rst),
     };
     expansion.append(path, source, 0);
     Expanded {
@@ -112,12 +114,17 @@ impl Expansion<'_, '_> {
             self.complete = false;
             return;
         }
+        let root = snippet_root(self.snapshot, self.adapter, path);
+        // A snippet line in a tree no mkdocs declares is ordinary text.
+        if self.adapter == Adapter::Markdown && root.is_none() {
+            return;
+        }
         let Ok(kind) = transclusion.kind else {
             self.complete = false;
             return;
         };
 
-        let Some(target) = local_target(path, &transclusion.target) else {
+        let Some(target) = local_target(root.as_deref(), path, &transclusion.target) else {
             self.complete = false;
             return;
         };
@@ -167,12 +174,67 @@ impl Expansion<'_, '_> {
     }
 }
 
-fn local_target(document: &RepoPath, target: &str) -> Option<RepoPath> {
+fn local_target(root: Option<&[u8]>, document: &RepoPath, target: &str) -> Option<RepoPath> {
     if target.starts_with('/') || target.contains(['%', '?', '#']) || scheme(target).is_some() {
         return None;
     }
-    normalized_native_path(document, false, target)
+    let located = match root {
+        Some(root) => normalized_path_under(root, false, target),
+        None => normalized_native_path(document, false, target),
+    };
+    located
         .ok()
         .filter(|(_, kind)| *kind != TargetKind::Tree)
         .map(|(path, _)| path)
+}
+
+/// The directory a mkdocs snippet is resolved from, which is the one holding
+/// the file that declares mkdocs above the document rather than the document's
+/// own. Every other include stays relative to the file that writes it, so no
+/// root applies to one.
+fn snippet_root(
+    snapshot: &SnapshotDiscovery,
+    adapter: Adapter,
+    document: &RepoPath,
+) -> Option<Vec<u8>> {
+    if adapter != Adapter::Markdown {
+        return None;
+    }
+    declaring_directory(snapshot, document.as_bytes(), MKDOCS_SNIPPET.declared_by)
+}
+
+/// The nearest directory on the document's ancestor chain holding one of the
+/// files that declare a generator.
+fn declaring_directory(
+    snapshot: &SnapshotDiscovery,
+    document: &[u8],
+    named: &[&str],
+) -> Option<Vec<u8>> {
+    let mut held = directory(document);
+    loop {
+        if named.iter().any(|name| declares(snapshot, held, name)) {
+            return Some(held.to_vec());
+        }
+        if held.is_empty() {
+            return None;
+        }
+        held = directory(held);
+    }
+}
+
+fn declares(snapshot: &SnapshotDiscovery, held: &[u8], name: &str) -> bool {
+    let joined = if held.is_empty() {
+        name.as_bytes().to_vec()
+    } else {
+        [held, b"/", name.as_bytes()].concat()
+    };
+    RepoPath::from_bytes(joined).is_some_and(|path| {
+        matches!(
+            snapshot.locate(&path),
+            Some(Located::Entry(
+                GitMode::RegularFile | GitMode::ExecutableFile,
+                _
+            ))
+        )
+    })
 }
