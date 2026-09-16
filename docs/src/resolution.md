@@ -138,7 +138,8 @@ same-repository forge URL are never re-spelled at all. A site generator whose co
 file is in the tree anchors a destination somewhere other than beside the document: an Antora
 resource ID at its family directory, a Docusaurus bare path or `@site/` alias at the content
 root or the site directory, a Sphinx `:doc:` target with a leading slash at the directory
-holding `conf.py`. The file's presence selects the rule and nothing inside it is read.
+holding `conf.py`, a raw HTML destination under a `mkdocs.yml` at the directory the page is
+published at. The file's presence selects the rule and nothing inside it is read.
 [What a documentation router serves](route-spellings.md) holds the spellings, the routers
 they were harvested from, the generator rules and what selects each, and what the union costs.
 

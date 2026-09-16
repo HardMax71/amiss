@@ -47,7 +47,8 @@ documentation:
 
 mkdocs serves none of the three. It demands the source path and warns otherwise, which is
 why a repository it publishes gains nothing here and loses nothing: ruff's 102 missing
-references did not move by one.
+references did not move by one. What it does move is the directory a destination is read
+from, and that is the `directory-url` rule below.
 
 The vectors also keep a verdict this table does not model. mdbook rewrites a link to
 `dir/README.md` into `dir/README.html` while writing that page to `dir/index.html`, so its
@@ -68,6 +69,7 @@ never its contents.
 | --- | --- | --- |
 | `antora` | `antora.yml` | `antora-resource` |
 | `docusaurus` | `docusaurus.config.ts`, `docusaurus.config.mts`, `docusaurus.config.cts`, `docusaurus.config.js`, `docusaurus.config.mjs`, `docusaurus.config.cjs` | `site-alias`, `content-root` |
+| `mkdocs` | `mkdocs.yml`, `mkdocs.yaml` | `directory-url` |
 | `sphinx` | `conf.py` | `source-root` |
 <!-- amiss-doc-contract:declared-routers:end -->
 
@@ -101,6 +103,18 @@ reaches `docs/static-assets.mdx` that way. The content paths read are the plugin
 another directory gets the site-directory step alone, and a localized tree under `i18n/` is
 not read. A `./` or `../` destination is beside the document and nowhere else, which is
 Docusaurus's rule too.
+
+`directory-url` reads a raw HTML destination in a document under a `mkdocs.yml` the way the
+browser does. mkdocs rewrites the destination of a Markdown link and leaves an `<a href>` or
+an `<img src>` written by hand alone, so that one is resolved against the URL the page is
+served at rather than against the source file. A page is published at a directory of its own
+name, or at its own directory when the source is that directory's `index.md` or `README.md`.
+So `<a href="getting-started/">` in `docs/index.md` reaches `docs/getting-started.md`, and
+`<img src="../../img/light.png">` in `docs/user-guide/choosing-your-theme.md`, published at
+`user-guide/choosing-your-theme/`, reaches `docs/img/light.png`. A trailing slash names a page
+here rather than a tree, since every page URL ends in one, so the destination is asked without
+it and the three spellings answer. The document's own directory is tried after the published
+one, so a raw destination that already reached a file beside the source still reaches it.
 
 `source-root` is Sphinx's `:doc:` role with a leading slash, in a document under the
 directory holding `conf.py`. `` :doc:`/testing` `` in `docs/tutorial/deploy.rst` is

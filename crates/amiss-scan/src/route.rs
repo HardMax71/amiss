@@ -18,12 +18,12 @@ pub enum Spelling {
     SiteAlias,
     ContentRoot,
     SourceRoot,
+    DirectoryUrl,
 }
 
 /// One router's route rule: the spellings it serves for a source file beyond
 /// the source path itself, and the file whose presence on a document's
-/// ancestor chain selects it. A router declared by nothing serves every tree,
-/// and one that serves no spelling demands the source spelling and adds nothing.
+/// ancestor chain selects it. A router declared by nothing serves every tree.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RouteRule {
     pub name: &'static str,
@@ -57,6 +57,12 @@ const DOCUSAURUS: RouteRule = RouteRule {
     serves: &[Spelling::SiteAlias, Spelling::ContentRoot],
 };
 
+const MKDOCS: RouteRule = RouteRule {
+    name: "mkdocs",
+    declared_by: &["mkdocs.yml", "mkdocs.yaml"],
+    serves: &[Spelling::DirectoryUrl],
+};
+
 const SPHINX: RouteRule = RouteRule {
     name: "sphinx",
     declared_by: &["conf.py"],
@@ -86,13 +92,9 @@ pub const ROUTERS: [RouteRule; 7] = [
             Spelling::ReadmeIndex,
         ],
     },
-    RouteRule {
-        name: "mkdocs",
-        declared_by: &[],
-        serves: &[],
-    },
     ANTORA,
     DOCUSAURUS,
+    MKDOCS,
     SPHINX,
 ];
 
@@ -184,7 +186,12 @@ pub fn anchors(
             .into_iter()
             .collect(),
         Adapter::Markdown | Adapter::Mdx => {
-            docusaurus_anchors(snapshot, document, is_image, path_part)
+            match mkdocs_anchors(snapshot, document, construct, path_part) {
+                served if served.is_empty() => {
+                    docusaurus_anchors(snapshot, document, is_image, path_part)
+                }
+                served => served,
+            }
         }
         Adapter::Rst => sphinx_anchor(snapshot, document, construct, path_part)
             .into_iter()
@@ -339,6 +346,55 @@ fn docusaurus_anchors(
         }
     }
     out
+}
+
+/// A destination the browser resolves rather than the generator: mkdocs
+/// publishes every page at a directory of its own name and rewrites no
+/// destination written as raw HTML, so such a destination is relative to the
+/// page's directory and its trailing slash names that page rather than a tree.
+/// The document's own directory follows, so a destination that reached a file
+/// beside the source still reaches it.
+fn mkdocs_anchors(
+    snapshot: &SnapshotDiscovery,
+    document: &RepoPath,
+    construct: Option<SourceConstruct>,
+    path_part: &str,
+) -> Vec<(Vec<u8>, String)> {
+    if !matches!(
+        construct,
+        Some(SourceConstruct::HtmlAnchor | SourceConstruct::HtmlImage)
+    ) || path_part.is_empty()
+        || path_part.starts_with('/')
+        || scheme(path_part).is_some()
+        || declared_root(snapshot, document.as_bytes(), &MKDOCS).is_none()
+    {
+        return Vec::new();
+    }
+    let relative = path_part.strip_suffix('/').unwrap_or(path_part);
+    let beside = directory(document.as_bytes());
+    let published = page_directory(document.as_bytes());
+    let mut out = vec![(published, relative.to_owned())];
+    if !out.iter().any(|(held, _)| held == beside) {
+        out.push((beside.to_vec(), relative.to_owned()));
+    }
+    out
+}
+
+/// The directory a page is published at: the source name without its
+/// extension, or the document's own directory when the source is that
+/// directory's index, which is the pair of names mkdocs builds to
+/// `index.html`.
+fn page_directory(document: &[u8]) -> Vec<u8> {
+    let parent = directory(document);
+    let name = document.rsplit(|byte| *byte == b'/').next().unwrap_or(b"");
+    let stem = match name.iter().rposition(|byte| *byte == b'.') {
+        Some(dot) if dot > 0 => name.get(..dot).unwrap_or_default(),
+        Some(_) | None => name,
+    };
+    if stem == b"index" || stem == b"README" {
+        return parent.to_vec();
+    }
+    join(parent, stem)
 }
 
 /// The plugin content path a document sits under, when it sits under one of
