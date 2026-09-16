@@ -416,7 +416,7 @@ pub(crate) const MKDOCS_SNIPPET: DeclarationRule = DeclarationRule {
     declared_by: &["mkdocs.yml", "mkdocs.yaml"],
 };
 
-pub const DECLARATIONS: [DeclarationRule; 7] = [
+pub const DECLARATIONS: [DeclarationRule; 8] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element",
@@ -426,6 +426,12 @@ pub const DECLARATIONS: [DeclarationRule; 7] = [
     DeclarationRule {
         name: "attr-list",
         spelling: "an attribute block alone on a block's last line, `{#id}`",
+        adapters: &[Adapter::Markdown],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "attr-list-inline",
+        spelling: "an attribute block directly after an inline construct, `**text**{#id}`",
         adapters: &[Adapter::Markdown],
         declared_by: &[],
     },

@@ -29,6 +29,19 @@ pub(super) fn paragraph_attribute(node: &Node) -> Option<String> {
     attribute_id(inner)
 }
 
+/// The identity an attribute block declares for the inline construct it
+/// directly follows, which is the other half of what `attr_list` reads. The
+/// block opens the text, because anything between it and the construct breaks
+/// the pairing, and something follows it, because a block that ends its own
+/// block is the one the block rule already names.
+pub(super) fn inline_attribute(text: &str) -> Option<String> {
+    let (inner, rest) = text.strip_prefix('{')?.split_once('}')?;
+    if rest.trim().is_empty() {
+        return None;
+    }
+    attribute_id(inner)
+}
+
 /// The text a renderer slugs a heading by: text with code and math verbatim,
 /// and nothing from an image, raw HTML, MDX, or a footnote call. An image
 /// carries its alt text in an attribute, which is not element text, so no
