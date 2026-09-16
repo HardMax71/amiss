@@ -85,6 +85,38 @@ const DOCUSAURUS_SITE: [(&str, Staged<'static>); 8] = [
     ),
 ];
 
+/// A mkdocs site under `site/`: an index page whose raw HTML writes a
+/// directory URL that the tree answers with a page source and one it answers
+/// with nothing, a markdown link the generator rewrites from the source
+/// instead, and a nested page whose raw image climbs out of its own published
+/// directory. `notes/index.md` writes the same directory URL from outside the
+/// site, where it stays a directory.
+const MKDOCS_SITE: [(&str, Staged<'static>); 6] = [
+    ("site/mkdocs.yml", Staged::File(b"site_name: Widgets\n")),
+    (
+        "site/docs/index.md",
+        Staged::File(
+            b"# Widgets\n\n<a href=\"getting-started/\">Start</a>\n<a href=\"absent/\">Gone</a>\n\n\
+              [start](getting-started.md)\n",
+        ),
+    ),
+    (
+        "site/docs/getting-started.md",
+        Staged::File(b"# Getting started\n"),
+    ),
+    (
+        "site/docs/user-guide/choosing-your-theme.md",
+        Staged::File(
+            b"# Themes\n\n<img src=\"../../img/light.png\">\n<img src=\"../../img/gone.png\">\n",
+        ),
+    ),
+    ("site/docs/img/light.png", Staged::File(b"png\n")),
+    (
+        "notes/index.md",
+        Staged::File(b"# Notes\n\n<a href=\"getting-started/\">Start</a>\n"),
+    ),
+];
+
 /// A Sphinx source tree under `docs/`: `conf.py` beside the index, a nested
 /// page writing the same source-root-absolute `:doc:` targets, one target
 /// that exists and one that does not, and `notes/readme.rst` outside any
@@ -120,6 +152,13 @@ pub fn antora_component() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn docusaurus_site() -> std::io::Result<CommitChain> {
     staged_repository(&DOCUSAURUS_SITE)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn mkdocs_site() -> std::io::Result<CommitChain> {
+    staged_repository(&MKDOCS_SITE)
 }
 
 /// # Errors

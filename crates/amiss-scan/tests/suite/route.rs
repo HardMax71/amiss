@@ -80,15 +80,17 @@ fn the_published_vectors_drive_every_router() {
         }
         asked = asked.saturating_add(1);
         let harvest = case["serves"].as_object().expect("router outcomes");
-        for rule in ROUTERS.iter().filter(|rule| rule.declared_by.is_empty()) {
-            let found = harvest.get(rule.name).expect("every router has a verdict");
+        for (name, found) in harvest {
+            let rule = ROUTERS
+                .iter()
+                .find(|rule| rule.name == name)
+                .unwrap_or_else(|| panic!("{name} is a known router"));
             let want: Option<String> =
                 serde_json::from_value(found.clone()).expect("served source is a string or null");
             assert_eq!(
                 served(rule, destination, &tree),
                 want,
-                "case {id} under {}: destination {destination:?}",
-                rule.name
+                "case {id} under {name}: destination {destination:?}"
             );
         }
     }
@@ -135,8 +137,9 @@ fn a_spelling_never_repeats_the_destination_or_itself() {
     }
 }
 
-/// mkdocs demands the source spelling, which is why a repository it serves
-/// gains nothing here and loses nothing either.
+/// mkdocs demands the source spelling in a link it rewrites, so it offers the
+/// union no candidate: its rule moves where a destination is read from, not
+/// how the source file is named.
 #[test]
 fn a_router_that_serves_no_spelling_offers_no_candidate() {
     let mkdocs = ROUTERS
@@ -398,6 +401,55 @@ fn a_docusaurus_site_answers_bare_paths_from_its_content_root_and_the_site_alias
             Some("@site/static/img/logo.png"),
             ResolutionTag::Missing,
             Some("@site/static/img/logo.png"),
+        ),
+    ]);
+    assert_eq!(outcomes(&chain), want);
+}
+
+/// Under `mkdocs.yml`, a destination written as raw HTML is relative to the
+/// directory the page is published at rather than to the source file, and the
+/// trailing slash it carries names a page: the index page's own directory
+/// answers a directory URL with the page source, a nested page's image climbs
+/// out of the directory its own name opened, a markdown link keeps the
+/// source-relative reading the generator rewrites, and a document with no
+/// `mkdocs.yml` above it keeps the directory it promised.
+#[test]
+fn a_mkdocs_site_reads_a_raw_html_destination_from_the_published_directory() {
+    let chain = amiss_fixtures::mkdocs_site().expect("the fixture stages");
+    let index = "site/docs/index.md";
+    let start = "site/docs/getting-started.md";
+    let themes = "site/docs/user-guide/choosing-your-theme.md";
+    let want = expected(vec![
+        row(
+            index,
+            Some("site/docs/getting-started"),
+            ResolutionTag::Resolved,
+            Some(start),
+        ),
+        row(
+            index,
+            Some("site/docs/absent"),
+            ResolutionTag::Missing,
+            Some("site/docs/absent"),
+        ),
+        row(index, Some(start), ResolutionTag::Resolved, Some(start)),
+        row(
+            themes,
+            Some("site/docs/img/light.png"),
+            ResolutionTag::Resolved,
+            Some("site/docs/img/light.png"),
+        ),
+        row(
+            themes,
+            Some("site/docs/img/gone.png"),
+            ResolutionTag::Missing,
+            Some("site/docs/img/gone.png"),
+        ),
+        row(
+            "notes/index.md",
+            Some("notes/getting-started"),
+            ResolutionTag::Missing,
+            Some("notes/getting-started"),
         ),
     ]);
     assert_eq!(outcomes(&chain), want);
