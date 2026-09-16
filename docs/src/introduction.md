@@ -8,6 +8,9 @@ resolves each against the tree, and reports what broke, what changed under uncha
 and what it could not check. It never reads meaning: it can't tell you whether a sentence
 is true, and it doesn't try.
 
+Just want to run it? [Quickstart](quickstart.md) goes from install to a green run on one
+page.
+
 ```dot process
 digraph introduction {
   rankdir = TB;
@@ -26,28 +29,14 @@ digraph introduction {
 }
 ```
 
-## The supported boundary
-
-Two closed sets draw the line: which files count as documents, and which references count
-at all.
-
-The document set is fixed by name. Markdown and MDX by extension, AsciiDoc and
-reStructuredText the same way, six bare basenames like README, and two advisory files,
-`.cursorrules` and `llms.txt`, whose adapter extracts no references. A notebook or Org
-file is discovered, counted as unsupported, and never read. Everything else is a possible
-reference target, not a document. [Discovery](discovery.md) has the exact rows, and
-repository policy can bind one of the five built-in adapters to any path it names.
-
-"Supported explicit reference" is the second line, and it's hard. Bare path-like prose is
-never inferred. Raw HTML and MDX code regions are opaque. Site routes, code symbols, live URLs,
-and other repositories need information this engine does not have, so they stay visible as
-declared boundaries instead of being guessed at. A line fragment selects bytes, a heading anchor
-is answered against pinned renderer rules, and a destination the tree does not hold is asked again
-under the spellings a pinned router serves. Trusted semantic evidence can additionally map an
-exact candidate site route, anchor, or fragment-aware terminal redirect to the scanned source that produced the
-published page. Every such answer still reaches a file the tree already holds.
-[Resolution](resolution.md) describes the boundary rows, and [Project status](status.md)
-links the classifier and resolver that draw them.
+Two closed sets draw the line. Which files count as documents is fixed by name: Markdown,
+MDX, AsciiDoc and reStructuredText by extension, six bare basenames like README, and two
+advisory files that carry no references; [Discovery](discovery.md) has the exact rows, and
+repository policy can bind one of the five built-in adapters to any path it names. Which
+references count is explicit link syntax only: bare path-like prose is never inferred, and a
+destination the tree alone cannot answer (a site route, a code symbol, a live URL, another
+repository) stays a visible boundary row instead of a guess; [Resolution](resolution.md) has
+those rows.
 
 ## The four questions
 
@@ -94,7 +83,7 @@ Each promise below is pinned by tests:
   engine's graph, so a missing object is a typed refusal, not a fetch.
 - The same repository, commits, and engine binary give the same report bytes, run after
   run, even across a repacked object store.
-- Resource ceilings have names and published values, all forty listed in
+- Resource ceilings have names and published values, all listed in
   [Limits and refusals](limits.md). A measured crossing produces a typed error naming the
   limit and the observed lower bound. Parser CPU spent before node accounting is a
   disclosed limitation in [Security model](security.md), not covered by a stronger
@@ -102,7 +91,7 @@ Each promise below is pinned by tests:
 
 The rest of this book walks those promises in the order a run does: what counts as input,
 what gets scanned, how references resolve, what the report says, and where the boundaries
-sit. Just want to run it? Start with [Invocation](invocation.md).
+sit.
 
 ## Licensing
 

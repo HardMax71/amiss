@@ -4,6 +4,7 @@
 
 # Using Amiss
 
+- [Quickstart](quickstart.md)
 - [Documentation drift](drift.md)
 - [Invocation](invocation.md)
 - [Profiles and findings](profiles.md)
