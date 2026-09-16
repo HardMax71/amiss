@@ -1,6 +1,10 @@
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 
-use super::{OutputFormat, Verb};
+use amiss_wire::human::atom;
+use strum::IntoEnumIterator as _;
+
+use super::{Code, HELP_FLAGS, OutputFormat, Refusal, VERSION_FLAGS, Verb};
 
 #[derive(Default)]
 pub(super) struct Slot {
@@ -59,22 +63,49 @@ pub(super) struct Gathered {
     pub(super) index: usize,
     pub(super) explain_scope: usize,
     pub(super) full: usize,
-    pub(super) lexical_defect: bool,
+    pub(super) refusals: BTreeSet<Refusal>,
 }
 
 pub(super) fn gather(argv: &[OsString]) -> Gathered {
     let mut gathered = Gathered::default();
     let mut tokens = argv.iter().map(|token| token.to_str()).peekable();
-    gathered.verb = tokens.next().flatten().and_then(|token| token.parse().ok());
-    gathered.lexical_defect = gathered.verb.is_none();
+    match tokens.next() {
+        None => {
+            gathered
+                .refusals
+                .insert((Code::InvalidInvocation, "a verb must come first".to_owned()));
+        }
+        Some(None) => {
+            gathered
+                .refusals
+                .insert((Code::InvalidInvocation, "the verb is not UTF-8".to_owned()));
+        }
+        Some(Some(token)) => match token.parse() {
+            Ok(verb) => gathered.verb = Some(verb),
+            Err(_unknown) => {
+                let reason = if HELP_FLAGS.contains(&token) || VERSION_FLAGS.contains(&token) {
+                    format!("{token} stands alone")
+                } else {
+                    format!("unknown verb {}", atom(token))
+                };
+                gathered.refusals.insert((Code::InvalidInvocation, reason));
+            }
+        },
+    }
 
     while let Some(token) = tokens.next() {
         let Some(token) = token else {
-            gathered.lexical_defect = true;
+            gathered.refusals.insert((
+                Code::InvalidInvocation,
+                "an argument is not UTF-8".to_owned(),
+            ));
             continue;
         };
         if !token.starts_with("--") {
-            gathered.lexical_defect = true;
+            gathered.refusals.insert((
+                Code::InvalidInvocation,
+                format!("unexpected argument {}", atom(token)),
+            ));
             continue;
         }
         if token == "--index" {
@@ -90,7 +121,12 @@ pub(super) fn gather(argv: &[OsString]) -> Gathered {
             continue;
         }
         let Some(slot) = slot_for(&mut gathered, token) else {
-            gathered.lexical_defect = true;
+            let reason = if token.contains('=') {
+                format!("options take a separate value, not {}", atom(token))
+            } else {
+                format!("unknown option {}", atom(token))
+            };
+            gathered.refusals.insert((Code::InvalidInvocation, reason));
             continue;
         };
         let value = match tokens.peek() {
@@ -140,47 +176,80 @@ fn slot_for<'a>(gathered: &'a mut Gathered, option: &str) -> Option<&'a mut Slot
     }
 }
 
-pub(super) fn output_selection(format: &Slot) -> Option<OutputFormat> {
-    if format.occurrences > 0 {
-        format.unique_value()?.parse().ok()
-    } else {
-        Some(OutputFormat::Human)
+/// Every option's count beside its spelling, so a form can refuse what it
+/// does not own; `--full` is judged once, before the verb is known.
+pub(super) fn counts(gathered: &Gathered) -> [(usize, &'static str); 30] {
+    [
+        (gathered.repo.occurrences, "--repo"),
+        (gathered.object_format.occurrences, "--object-format"),
+        (gathered.base.occurrences, "--base"),
+        (gathered.candidate.occurrences, "--candidate"),
+        (gathered.repository.occurrences, "--repository"),
+        (gathered.ref_name.occurrences, "--ref"),
+        (
+            gathered.default_branch_ref.occurrences,
+            "--default-branch-ref",
+        ),
+        (gathered.forge.occurrences, "--forge"),
+        (gathered.profile.occurrences, "--profile"),
+        (gathered.format.occurrences, "--format"),
+        (gathered.floor_digest.occurrences, "--floor-digest"),
+        (gathered.debt_owner.occurrences, "--debt-owner"),
+        (gathered.debt_reason.occurrences, "--debt-reason"),
+        (gathered.created_at.occurrences, "--created-at"),
+        (gathered.expires_at.occurrences, "--expires-at"),
+        (gathered.debt_output.occurrences, "--debt-output"),
+        (gathered.claim_path.occurrences, "--path"),
+        (gathered.claim_line.occurrences, "--line"),
+        (gathered.claim_name.occurrences, "--name"),
+        (gathered.suffix.occurrences, "--suffix"),
+        (gathered.adapter.occurrences, "--adapter"),
+        (gathered.report.occurrences, "--report"),
+        (gathered.plan.occurrences, "--plan"),
+        (gathered.evidence.occurrences, "--evidence"),
+        (gathered.context.occurrences, "--context"),
+        (
+            gathered.semantic_template.occurrences,
+            "--semantic-template",
+        ),
+        (gathered.target.occurrences, "--target"),
+        (gathered.target_bytes_hex.occurrences, "--target-bytes-hex"),
+        (gathered.index, "--index"),
+        (gathered.explain_scope, "--explain-scope"),
+    ]
+}
+
+/// An option that may be absent; one that repeats or arrives without its
+/// value is refused by name.
+pub(super) fn optional<'a>(slot: &'a Slot, option: &str) -> Result<Option<&'a str>, Refusal> {
+    match slot.occurrences {
+        0 => Ok(None),
+        1 => slot
+            .unique_value()
+            .map(Some)
+            .ok_or_else(|| (Code::InvalidInvocation, format!("{option} needs a value"))),
+        _ => Err((
+            Code::InvalidInvocation,
+            format!("{option} appears more than once"),
+        )),
     }
 }
 
-pub(super) fn duplicated(gathered: &Gathered) -> bool {
-    gathered.index > 1
-        || gathered.explain_scope > 1
-        || gathered.full > 1
-        || [
-            &gathered.repo,
-            &gathered.object_format,
-            &gathered.base,
-            &gathered.candidate,
-            &gathered.repository,
-            &gathered.ref_name,
-            &gathered.default_branch_ref,
-            &gathered.forge,
-            &gathered.profile,
-            &gathered.floor_digest,
-            &gathered.debt_owner,
-            &gathered.debt_reason,
-            &gathered.created_at,
-            &gathered.expires_at,
-            &gathered.debt_output,
-            &gathered.claim_path,
-            &gathered.claim_line,
-            &gathered.claim_name,
-            &gathered.suffix,
-            &gathered.adapter,
-            &gathered.report,
-            &gathered.plan,
-            &gathered.evidence,
-            &gathered.context,
-            &gathered.semantic_template,
-            &gathered.target,
-            &gathered.target_bytes_hex,
-        ]
-        .iter()
-        .any(|slot| slot.occurrences > 1 || slot.values.len() < slot.occurrences)
+pub(super) fn required<'a>(slot: &'a Slot, option: &str) -> Result<&'a str, Refusal> {
+    optional(slot, option)?
+        .ok_or_else(|| (Code::InvalidInvocation, format!("{option} is required")))
+}
+
+pub(super) fn output_selection(format: &Slot) -> Result<OutputFormat, String> {
+    let Some(value) = optional(format, "--format").map_err(|(_code, reason)| reason)? else {
+        return Ok(OutputFormat::Human);
+    };
+    value.parse().map_err(|_unknown| {
+        let admitted: Vec<&'static str> = OutputFormat::iter().map(Into::into).collect();
+        format!(
+            "--format must be one of {}, got {}",
+            admitted.join(", "),
+            atom(value)
+        )
+    })
 }

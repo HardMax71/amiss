@@ -2,11 +2,14 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use amiss_wire::controls::Profile;
+use amiss_wire::human::atom;
 use amiss_wire::model::{BranchRef, ForgeDialect, ObjectFormat, Oid, RepositoryIdentity};
+use strum::IntoEnumIterator as _;
 
-use super::arguments::{Gathered, Slot, duplicated};
+use super::arguments::{Gathered, Slot, counts, optional, required};
 use super::{
-    Adoption, CandidateSelector, Code, Command, Invocation, OutputFormat, ProviderIdentity, Verb,
+    Adoption, CandidateSelector, Code, Command, Invocation, OutputFormat, ProviderIdentity,
+    Refusal, Verb,
 };
 
 mod authoring;
@@ -17,100 +20,139 @@ use authoring::{classify_claim, classify_policy_include};
 use inventory::classify_locale_inventory;
 use report::classify_report_command;
 
+type Validation<T> = Result<T, Refusal>;
+
+fn invalid(reason: String) -> Refusal {
+    (Code::InvalidInvocation, reason)
+}
+
+fn record<T>(refusals: &mut BTreeSet<Refusal>, validation: Validation<T>) -> Option<T> {
+    validation
+        .map_err(|refusal| {
+            refusals.insert(refusal);
+        })
+        .ok()
+}
+
+/// Refuses every option the form does not own, by name.
+fn refuse_foreign(
+    refusals: &mut BTreeSet<Refusal>,
+    gathered: &Gathered,
+    verb: Verb,
+    owned: &[&str],
+) {
+    for (count, option) in counts(gathered) {
+        if count > 0 && !owned.contains(&option) {
+            refusals.insert(invalid(format!(
+                "{option} is not an option of {}",
+                verb.as_ref()
+            )));
+        }
+    }
+}
+
 /// The refusals a line earns before its verb is known.
-fn lexical(gathered: &Gathered, format: OutputFormat) -> BTreeSet<Code> {
-    let mut codes = BTreeSet::new();
-    if gathered.lexical_defect || duplicated(gathered) {
-        codes.insert(Code::InvalidInvocation);
+fn lexical(gathered: &Gathered, format: OutputFormat) -> BTreeSet<Refusal> {
+    let mut refusals = gathered.refusals.clone();
+    for (count, flag) in [
+        (gathered.index, "--index"),
+        (gathered.explain_scope, "--explain-scope"),
+        (gathered.full, "--full"),
+    ] {
+        if count > 1 {
+            refusals.insert(invalid(format!("{flag} appears more than once")));
+        }
     }
     if gathered.full > 0 && (gathered.verb != Some(Verb::Render) || format != OutputFormat::Human) {
-        codes.insert(Code::InvalidInvocation);
+        refusals.insert(invalid(
+            "--full is only for render --format human".to_owned(),
+        ));
     }
-    codes
+    refusals
 }
 
 pub(super) fn command(
     gathered: &Gathered,
     format: OutputFormat,
-) -> Result<Command, BTreeSet<Code>> {
-    let mut codes = lexical(gathered, format);
-    match gathered.verb {
-        Some(Verb::Claim) => return classify_claim(codes, gathered).map(Command::Author),
-        Some(Verb::LocaleInventory) => {
-            return classify_locale_inventory(codes, gathered, format);
+) -> Result<Command, BTreeSet<Refusal>> {
+    let mut refusals = lexical(gathered, format);
+    let Some(verb) = gathered.verb else {
+        return Err(refusals);
+    };
+    match verb {
+        Verb::Claim => return classify_claim(refusals, gathered).map(Command::Author),
+        Verb::LocaleInventory => {
+            return classify_locale_inventory(refusals, gathered, format);
         }
-        Some(Verb::PolicyInclude) => {
-            return classify_policy_include(codes, gathered).map(Command::PolicyInclude);
+        Verb::PolicyInclude => {
+            return classify_policy_include(refusals, gathered).map(Command::PolicyInclude);
         }
-        Some(
-            Verb::ExternalPlan
-            | Verb::ExternalAssess
-            | Verb::LocaleAssess
-            | Verb::Render
-            | Verb::Refs
-            | Verb::RecordSet,
-        ) => {
-            return classify_report_command(codes, gathered, format);
+        Verb::ExternalPlan
+        | Verb::ExternalAssess
+        | Verb::LocaleAssess
+        | Verb::Render
+        | Verb::Refs
+        | Verb::RecordSet => {
+            return classify_report_command(refusals, gathered, verb, format);
         }
-        Some(Verb::Check | Verb::Fix | Verb::Adopt) | None => {}
+        Verb::Check | Verb::Fix | Verb::Adopt => {}
     }
-    if format == OutputFormat::Junit {
-        codes.insert(Code::InvalidInvocation);
-    }
-    for required in [&gathered.repo, &gathered.object_format, &gathered.base] {
-        if required.occurrences == 0 {
-            codes.insert(Code::InvalidInvocation);
-        }
-    }
-    verb_rules(&mut codes, gathered);
-    if (gathered.candidate.occurrences > 0) == (gathered.index > 0) {
-        codes.insert(Code::InvalidInvocation);
-    }
+    verb_rules(&mut refusals, gathered, verb, format);
 
-    let target = record(&mut codes, classify_target(gathered));
-    let object_format = target.as_ref().ok().map(|(_, format)| *format);
-    let base = record(&mut codes, decode_oid(object_format, &gathered.base));
-    let candidate_oid = record(&mut codes, decode_oid(object_format, &gathered.candidate));
-    if let (Ok(Some(base)), Ok(Some(candidate))) = (&base, &candidate_oid)
+    let repo = record(&mut refusals, classify_repo(gathered));
+    let object_format = record(&mut refusals, classify_object_format(gathered));
+    let base = record(
+        &mut refusals,
+        required(&gathered.base, "--base").and_then(|raw| decode_oid(object_format, "--base", raw)),
+    );
+    let candidate = record(
+        &mut refusals,
+        optional(&gathered.candidate, "--candidate").and_then(|raw| {
+            raw.map(|raw| decode_oid(object_format, "--candidate", raw))
+                .transpose()
+                .map(Option::flatten)
+        }),
+    );
+    if let (Some(Some(base)), Some(Some(candidate))) = (&base, &candidate)
         && base == candidate
     {
-        codes.insert(Code::InvalidInvocation);
+        refusals.insert(invalid(
+            "--candidate and --base name the same commit".to_owned(),
+        ));
     }
 
-    let profile = record(&mut codes, classify_profile(gathered));
-    let adoption = record(&mut codes, classify_adoption(gathered));
-    let identity = record(&mut codes, classify_identity(gathered));
-    let forge = record(&mut codes, classify_forge(gathered, &identity));
-    let semantic_template = record(&mut codes, classify_semantic_template(gathered));
+    let profile = record(&mut refusals, classify_profile(gathered, verb));
+    let adoption = classify_adoption(&mut refusals, gathered, verb);
+    let identity = classify_identity(&mut refusals, gathered);
+    let forge = record(&mut refusals, classify_forge(gathered, identity.as_ref()));
+    let semantic_template = record(&mut refusals, classify_semantic_template(gathered));
 
-    if !codes.is_empty() {
-        return Err(codes);
+    if !refusals.is_empty() {
+        return Err(refusals);
     }
     let (
-        Some(verb),
-        Ok((repo, object_format)),
-        Ok(Some(base)),
-        Ok(candidate_oid),
-        Ok(profile),
-        Ok(adoption),
-        Ok(identity),
-        Ok(forge),
-        Ok(semantic_template),
+        Some(repo),
+        Some(object_format),
+        Some(Some(base)),
+        Some(candidate),
+        Some(profile),
+        Some(forge),
+        Some(semantic_template),
     ) = (
-        gathered.verb,
-        target,
+        repo,
+        object_format,
         base,
-        candidate_oid,
+        candidate,
         profile,
-        adoption,
-        identity,
         forge,
         semantic_template,
     )
     else {
-        return Err(BTreeSet::from([Code::InvalidInvocation]));
+        return Err(BTreeSet::from([invalid(
+            Code::InvalidInvocation.meaning().to_owned(),
+        )]));
     };
-    let candidate = candidate_oid.map_or(CandidateSelector::Index, CandidateSelector::Commit);
+    let candidate = candidate.map_or(CandidateSelector::Index, CandidateSelector::Commit);
     Ok(Command::Scan(Box::new(Invocation {
         verb,
         adoption,
@@ -128,160 +170,174 @@ pub(super) fn command(
 }
 
 fn classify_semantic_template(gathered: &Gathered) -> Validation<Option<PathBuf>> {
-    match gathered.semantic_template.occurrences {
-        0 => Ok(None),
-        1 => gathered
-            .semantic_template
-            .unique_value()
-            .filter(|path| !path.is_empty())
-            .map(PathBuf::from)
-            .map(Some)
-            .ok_or(Code::InvalidInvocation),
-        _ => Err(Code::InvalidInvocation),
+    match optional(&gathered.semantic_template, "--semantic-template")? {
+        None => Ok(None),
+        Some("") => Err(invalid("--semantic-template must not be empty".to_owned())),
+        Some(path) => Ok(Some(PathBuf::from(path))),
     }
 }
 
-fn classify_target(gathered: &Gathered) -> Validation<(PathBuf, ObjectFormat)> {
-    let repo = gathered
-        .repo
-        .unique_value()
-        .filter(|path| !path.is_empty())
-        .map(PathBuf::from)
-        .ok_or(Code::InvalidInvocation)?;
-    let object_format = gathered
-        .object_format
-        .unique_value()
-        .ok_or(Code::InvalidInvocation)?
-        .parse()
-        .map_err(|_unknown| Code::InvalidInvocation)?;
-    Ok((repo, object_format))
+fn classify_repo(gathered: &Gathered) -> Validation<PathBuf> {
+    match required(&gathered.repo, "--repo")? {
+        "" => Err(invalid("--repo must not be empty".to_owned())),
+        path => Ok(PathBuf::from(path)),
+    }
 }
 
-fn classify_profile(gathered: &Gathered) -> Validation<Profile> {
-    if gathered.verb == Some(Verb::Adopt) {
+fn classify_object_format(gathered: &Gathered) -> Validation<ObjectFormat> {
+    let value = required(&gathered.object_format, "--object-format")?;
+    value.parse().map_err(|_unknown| {
+        invalid(format!(
+            "--object-format must be sha1 or sha256, got {}",
+            atom(value)
+        ))
+    })
+}
+
+fn classify_profile(gathered: &Gathered, verb: Verb) -> Validation<Profile> {
+    if verb == Verb::Adopt {
         return Ok(Profile::Enforce);
     }
-    gathered
-        .profile
-        .unique_value()
-        .ok_or(Code::InvalidInvocation)?
-        .parse()
-        .map_err(|_unknown| Code::InvalidProfile)
+    let value = required(&gathered.profile, "--profile")?;
+    value.parse().map_err(|_unknown| {
+        (
+            Code::InvalidProfile,
+            format!(
+                "--profile must be observe, enforce-introduced, or enforce, got {}",
+                atom(value)
+            ),
+        )
+    })
 }
 
-/// The per-verb shape: adoption bakes enforce so the profile is refused
-/// there and required elsewhere, the six adoption values are required there
-/// and refused elsewhere, the repair form is staged-only without report
-/// flags, and the adoption form is commit-pair only without them.
-fn verb_rules(codes: &mut BTreeSet<Code>, gathered: &Gathered) {
-    if [
-        &gathered.report,
-        &gathered.plan,
-        &gathered.evidence,
-        &gathered.context,
-        &gathered.target,
-        &gathered.target_bytes_hex,
-    ]
-    .iter()
-    .any(|slot| slot.occurrences > 0)
-    {
-        codes.insert(Code::InvalidInvocation);
+/// The per-verb shape: adoption bakes enforce and needs the identity
+/// triple, the repair form is staged-only, and every option a verb does not
+/// own is refused by name.
+fn verb_rules(
+    refusals: &mut BTreeSet<Refusal>,
+    gathered: &Gathered,
+    verb: Verb,
+    format: OutputFormat,
+) {
+    if format == OutputFormat::Junit {
+        refusals.insert(invalid("--format junit is only for render".to_owned()));
     }
-    if [
-        &gathered.claim_path,
-        &gathered.claim_line,
-        &gathered.claim_name,
-        &gathered.suffix,
-        &gathered.adapter,
-    ]
-    .iter()
-    .any(|slot| slot.occurrences > 0)
-    {
-        codes.insert(Code::InvalidInvocation);
-    }
-    if gathered.verb == Some(Verb::Adopt) {
-        if gathered.profile.occurrences > 0 {
-            codes.insert(Code::InvalidInvocation);
+    match (gathered.candidate.occurrences > 0, gathered.index > 0) {
+        (true, true) => {
+            refusals.insert(invalid("--candidate and --index are exclusive".to_owned()));
         }
-    } else if gathered.profile.occurrences == 0 {
-        codes.insert(Code::InvalidInvocation);
+        (false, false) => {
+            refusals.insert(invalid(
+                "one of --candidate or --index is required".to_owned(),
+            ));
+        }
+        (true, false) | (false, true) => {}
     }
-    if gathered.semantic_template.occurrences > 0 && gathered.verb != Some(Verb::Check) {
-        codes.insert(Code::InvalidInvocation);
-    }
-    let adoption_slots = [
-        &gathered.floor_digest,
-        &gathered.debt_owner,
-        &gathered.debt_reason,
-        &gathered.created_at,
-        &gathered.expires_at,
-        &gathered.debt_output,
+    let mut owned = vec![
+        "--repo",
+        "--object-format",
+        "--base",
+        "--repository",
+        "--ref",
+        "--default-branch-ref",
+        "--forge",
     ];
-    if gathered.verb == Some(Verb::Adopt) {
-        if adoption_slots.iter().any(|slot| slot.occurrences == 0) {
-            codes.insert(Code::InvalidInvocation);
+    if verb == Verb::Adopt {
+        owned.extend([
+            "--candidate",
+            "--floor-digest",
+            "--debt-owner",
+            "--debt-reason",
+            "--created-at",
+            "--expires-at",
+            "--debt-output",
+        ]);
+        if gathered.repository.occurrences == 0 {
+            refusals.insert(invalid(
+                "adopt needs --repository, --ref, and --default-branch-ref".to_owned(),
+            ));
         }
-    } else if adoption_slots.iter().any(|slot| slot.occurrences > 0) {
-        codes.insert(Code::InvalidInvocation);
+    } else {
+        owned.extend(["--index", "--profile"]);
     }
-    if gathered.verb == Some(Verb::Fix)
-        && (gathered.candidate.occurrences > 0
-            || gathered.format.occurrences > 0
-            || gathered.explain_scope > 0)
-    {
-        codes.insert(Code::InvalidInvocation);
+    if verb == Verb::Check {
+        owned.extend([
+            "--candidate",
+            "--semantic-template",
+            "--explain-scope",
+            "--format",
+        ]);
     }
-    if gathered.verb == Some(Verb::Adopt)
-        && (gathered.index > 0
-            || gathered.format.occurrences > 0
-            || gathered.explain_scope > 0
-            || gathered.repository.occurrences == 0)
-    {
-        codes.insert(Code::InvalidInvocation);
-    }
+    refuse_foreign(refusals, gathered, verb, &owned);
 }
 
 /// Every adoption value is validated where the grammar can see it: the
 /// floor digest by its exact spelling, both instants by the wire's own
 /// clock grammar, and the free-text fields by being nonempty.
-fn classify_adoption(gathered: &Gathered) -> Validation<Option<Adoption>> {
-    if gathered.verb != Some(Verb::Adopt) {
-        return Ok(None);
+fn classify_adoption(
+    refusals: &mut BTreeSet<Refusal>,
+    gathered: &Gathered,
+    verb: Verb,
+) -> Option<Adoption> {
+    if verb != Verb::Adopt {
+        return None;
     }
-    let floor_digest = gathered
-        .floor_digest
-        .unique_value()
-        .and_then(|value| value.parse().ok())
-        .ok_or(Code::InvalidInvocation)?;
-    let instant = |slot: &Slot| {
-        slot.unique_value()
-            .and_then(|value| amiss_wire::model::UtcInstant::new(value.to_owned()))
+    let instant = |slot: &Slot, option: &str| {
+        required(slot, option).and_then(|value| {
+            amiss_wire::model::UtcInstant::new(value.to_owned()).ok_or_else(|| {
+                invalid(format!(
+                    "{option} must be a UTC instant like 2026-01-31T00:00:00Z, got {}",
+                    atom(value)
+                ))
+            })
+        })
     };
-    let nonempty = |slot: &Slot| {
-        slot.unique_value()
-            .filter(|value| !value.is_empty())
-            .map(str::to_owned)
+    let nonempty = |slot: &Slot, option: &str| match required(slot, option)? {
+        "" => Err(invalid(format!("{option} must not be empty"))),
+        value => Ok(value.to_owned()),
     };
-    let owner = gathered
-        .debt_owner
-        .unique_value()
-        .and_then(|value| amiss_wire::model::OwnerId::new(value.to_owned()))
-        .ok_or(Code::InvalidInvocation)?;
-    let reason = nonempty(&gathered.debt_reason).ok_or(Code::InvalidInvocation)?;
-    let created_at = instant(&gathered.created_at).ok_or(Code::InvalidInvocation)?;
-    let expires_at = instant(&gathered.expires_at).ok_or(Code::InvalidInvocation)?;
-    let output = nonempty(&gathered.debt_output).ok_or(Code::InvalidInvocation)?;
-    if created_at >= expires_at {
-        return Err(Code::InvalidInvocation);
+    let floor_digest = record(
+        refusals,
+        required(&gathered.floor_digest, "--floor-digest").and_then(|value| {
+            value.parse().map_err(|_unknown| {
+                invalid(format!(
+                    "--floor-digest must be sha256:<64-hex>, got {}",
+                    atom(value)
+                ))
+            })
+        }),
+    );
+    let owner = record(
+        refusals,
+        required(&gathered.debt_owner, "--debt-owner").and_then(|value| {
+            amiss_wire::model::OwnerId::new(value.to_owned()).ok_or_else(|| {
+                invalid(format!(
+                    "--debt-owner must be team:<name>, service:<name>, or user:<name>, got {}",
+                    atom(value)
+                ))
+            })
+        }),
+    );
+    let reason = record(refusals, nonempty(&gathered.debt_reason, "--debt-reason"));
+    let created_at = record(refusals, instant(&gathered.created_at, "--created-at"));
+    let expires_at = record(refusals, instant(&gathered.expires_at, "--expires-at"));
+    let output = record(refusals, nonempty(&gathered.debt_output, "--debt-output"));
+    if let (Some(created), Some(expires)) = (&created_at, &expires_at)
+        && created >= expires
+    {
+        refusals.insert(invalid(
+            "--expires-at must be after --created-at".to_owned(),
+        ));
+        return None;
     }
-    Ok(Some(Adoption {
-        floor_digest,
-        owner,
-        reason,
-        created_at,
-        expires_at,
-        output: PathBuf::from(output),
-    }))
+    Some(Adoption {
+        floor_digest: floor_digest?,
+        owner: owner?,
+        reason: reason?,
+        created_at: created_at?,
+        expires_at: expires_at?,
+        output: PathBuf::from(output?),
+    })
 }
 
 /// The dialect law: an explicit `--forge` names a grammar the engine knows
@@ -292,30 +348,39 @@ fn classify_adoption(gathered: &Gathered) -> Validation<Option<Adoption>> {
 /// pairing is refused rather than left deterministically dead.
 fn classify_forge(
     gathered: &Gathered,
-    identity: &Validation<Option<ProviderIdentity>>,
+    identity: Option<&ProviderIdentity>,
 ) -> Validation<Option<ForgeDialect>> {
-    let declared = if gathered.forge.occurrences > 0 {
-        Some(
-            gathered
-                .forge
-                .unique_value()
-                .ok_or(Code::InvalidInvocation)?
-                .parse::<ForgeDialect>()
-                .map_err(|_unknown| Code::InvalidInvocation)?,
-        )
-    } else {
-        None
+    let declared = match optional(&gathered.forge, "--forge")? {
+        Some(value) => Some(value.parse::<ForgeDialect>().map_err(|_unknown| {
+            let dialects: Vec<&'static str> = ForgeDialect::iter().map(Into::into).collect();
+            invalid(format!(
+                "--forge must be one of {}, got {}",
+                dialects.join(", "),
+                atom(value)
+            ))
+        })?),
+        None => None,
     };
-    let Some(identity) = identity.as_ref().map_err(|code| *code)? else {
-        return if declared.is_some() {
-            Err(Code::InvalidInvocation)
-        } else {
-            Ok(None)
-        };
+    let Some(identity) = identity else {
+        if declared.is_some() && gathered.repository.occurrences == 0 {
+            return Err(invalid(
+                "--forge needs --repository, --ref, and --default-branch-ref".to_owned(),
+            ));
+        }
+        return Ok(None);
     };
+    let host = identity.repository.host();
     let dialect = declared
-        .or_else(|| ForgeDialect::default_for_host(identity.repository.host()))
-        .ok_or(Code::InvalidEvent)?;
+        .or_else(|| ForgeDialect::default_for_host(host))
+        .ok_or_else(|| {
+            (
+                Code::InvalidEvent,
+                format!(
+                    "--forge must name the dialect of {}, a host outside the known table",
+                    atom(host)
+                ),
+            )
+        })?;
     if matches!(
         dialect,
         ForgeDialect::Github
@@ -324,70 +389,115 @@ fn classify_forge(
             | ForgeDialect::BitbucketDataCenter
     ) && identity.repository.owner().contains('/')
     {
-        Err(Code::InvalidEvent)
+        Err((
+            Code::InvalidEvent,
+            format!(
+                "--forge {} cannot match the nested owner {}",
+                dialect.as_ref(),
+                atom(identity.repository.owner())
+            ),
+        ))
     } else {
         Ok(Some(dialect))
     }
 }
 
-fn decode_oid(object_format: Option<ObjectFormat>, slot: &Slot) -> Validation<Option<Oid>> {
-    let (Some(format), Some(raw)) = (object_format, slot.unique_value()) else {
+/// A commit id is checked only against a declared object format; without
+/// one the format's own refusal already stands.
+fn decode_oid(
+    object_format: Option<ObjectFormat>,
+    option: &str,
+    raw: &str,
+) -> Validation<Option<Oid>> {
+    let Some(format) = object_format else {
         return Ok(None);
     };
-    Oid::new(format, raw.to_owned())
-        .map(Some)
-        .ok_or(Code::InvalidInvocation)
-}
-
-type Validation<T> = Result<T, Code>;
-
-fn record<T>(codes: &mut BTreeSet<Code>, validation: Validation<T>) -> Validation<T> {
-    validation.inspect_err(|code| {
-        codes.insert(*code);
+    Oid::new(format, raw.to_owned()).map(Some).ok_or_else(|| {
+        let digits = match format {
+            ObjectFormat::Sha1 => 40,
+            ObjectFormat::Sha256 => 64,
+        };
+        invalid(format!(
+            "{option} must be the full {digits}-character lowercase hex id of a {format} commit, got {}",
+            atom(raw)
+        ))
     })
 }
 
-fn classify_identity(gathered: &Gathered) -> Validation<Option<ProviderIdentity>> {
-    let present = [
-        gathered.repository.occurrences > 0,
-        gathered.ref_name.occurrences > 0,
-        gathered.default_branch_ref.occurrences > 0,
+/// The identity triple travels together; each member is then validated by
+/// name, the shape as a grammar refusal and the spelling as an event one.
+fn classify_identity(
+    refusals: &mut BTreeSet<Refusal>,
+    gathered: &Gathered,
+) -> Option<ProviderIdentity> {
+    let group = [
+        (&gathered.repository, "--repository"),
+        (&gathered.ref_name, "--ref"),
+        (&gathered.default_branch_ref, "--default-branch-ref"),
     ];
-    if present == [false, false, false] {
-        return Ok(None);
+    let present: Vec<&str> = group
+        .iter()
+        .filter(|(slot, _option)| slot.occurrences > 0)
+        .map(|(_slot, option)| *option)
+        .collect();
+    let missing: Vec<&str> = group
+        .iter()
+        .filter(|(slot, _option)| slot.occurrences == 0)
+        .map(|(_slot, option)| *option)
+        .collect();
+    if present.is_empty() {
+        return None;
     }
-    if present != [true, true, true] {
-        return Err(Code::InvalidInvocation);
+    if !missing.is_empty() {
+        refusals.insert(invalid(format!(
+            "{} needs {}",
+            present.join(" and "),
+            missing.join(" and ")
+        )));
+        return None;
     }
-    let repository = gathered
-        .repository
-        .unique_value()
-        .ok_or(Code::InvalidInvocation)?;
-    let ref_value = gathered
-        .ref_name
-        .unique_value()
-        .ok_or(Code::InvalidInvocation)?;
-    let default_value = gathered
-        .default_branch_ref
-        .unique_value()
-        .ok_or(Code::InvalidInvocation)?;
-    let (host, owner_and_name) = repository.split_once('/').ok_or(Code::InvalidInvocation)?;
-    let (owner, name) = owner_and_name
-        .rsplit_once('/')
-        .ok_or(Code::InvalidInvocation)?;
+    let repository = record(
+        refusals,
+        required(&gathered.repository, "--repository").and_then(identity_of),
+    );
+    let ref_name = record(refusals, branch_of(&gathered.ref_name, "--ref"));
+    let default_branch_ref = record(
+        refusals,
+        branch_of(&gathered.default_branch_ref, "--default-branch-ref"),
+    );
+    Some(ProviderIdentity {
+        repository: repository?,
+        ref_name: ref_name?,
+        default_branch_ref: default_branch_ref?,
+    })
+}
 
-    let identity = RepositoryIdentity::new(host.to_owned(), owner.to_owned(), name.to_owned());
-    let ref_name = BranchRef::try_from(ref_value.to_owned()).ok();
-    let default_branch_ref = BranchRef::try_from(default_value.to_owned()).ok();
-    if let (Some(repository), Some(ref_name), Some(default_branch_ref)) =
-        (identity, ref_name, default_branch_ref)
-    {
-        Ok(Some(ProviderIdentity {
-            repository,
-            ref_name,
-            default_branch_ref,
-        }))
-    } else {
-        Err(Code::InvalidEvent)
-    }
+fn identity_of(value: &str) -> Validation<RepositoryIdentity> {
+    let shape = || {
+        invalid(format!(
+            "--repository must be <host>/<owner>/<name>, got {}",
+            atom(value)
+        ))
+    };
+    let (host, owner_and_name) = value.split_once('/').ok_or_else(shape)?;
+    let (owner, name) = owner_and_name.rsplit_once('/').ok_or_else(shape)?;
+    RepositoryIdentity::new(host.to_owned(), owner.to_owned(), name.to_owned()).ok_or_else(|| {
+        (
+            Code::InvalidEvent,
+            format!(
+                "--repository must be <host>/<owner>/<name> with a lowercase owner and name, got {}",
+                atom(value)
+            ),
+        )
+    })
+}
+
+fn branch_of(slot: &Slot, option: &str) -> Validation<BranchRef> {
+    let value = required(slot, option)?;
+    BranchRef::try_from(value.to_owned()).map_err(|_invalid| {
+        (
+            Code::InvalidEvent,
+            format!("{option} must be refs/heads/<name>, got {}", atom(value)),
+        )
+    })
 }

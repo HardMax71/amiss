@@ -1,10 +1,12 @@
+use std::collections::BTreeMap;
 use std::fs;
 
 use tempfile::TempDir;
 
 use amiss_wire::report::model::occurrences;
+use amiss_wire::report::{Disposition, FindingKind};
 
-use crate::support::{amiss, fixture, git, payload};
+use crate::support::{amiss, fixture, git, payload, report};
 
 #[test]
 fn human_output_projects_the_same_result() {
@@ -25,21 +27,32 @@ fn human_output_projects_the_same_result() {
     assert_eq!(code, 0);
     let text = String::from_utf8_lossy(&stdout);
     assert!(
-        text.starts_with("amiss: pass (fix 1, check 1, existing 0, errors 0, exit 0)"),
+        text.starts_with("amiss: pass (fix 1, check 1, pre-existing 0, errors 0, exit 0)"),
         "got: {text}"
     );
     assert!(
-        text.contains("Fix target \"docs/missing.md\" affected places 1"),
-        "the grouped item names its target and affected-place count: {text}"
+        text.contains(
+            "Fix target \"docs/missing.md\" affected places 1\n  \"docs/guide.md\":3:23 explicit-target-missing path-not-found\n"
+        ),
+        "the row names its target and count, the place under it the document, position, kind, and reason: {text}"
     );
     assert!(
-        text.contains("Check target \"docs/guide.md\" affected places 1"),
-        "the unchanged backlink becomes one check: {text}"
+        text.contains(
+            "Check target \"docs/guide.md\" affected places 1\n  \"README\":1:5 dependency-changed-subject-unchanged\n"
+        ),
+        "the unchanged backlink becomes one check with its place: {text}"
     );
-    assert!(
-        !text.contains("explicit-target-missing"),
-        "internal finding kinds stay out of the focused human projection: {text}"
-    );
+    for kind in [
+        FindingKind::ExplicitTargetMissing,
+        FindingKind::DependencyChangedSubjectUnchanged,
+    ] {
+        assert_eq!(
+            text.matches(&format!("note {}: {}\n", kind.as_ref(), kind.meaning()))
+                .count(),
+            1,
+            "each kind shown is explained once: {text}"
+        );
+    }
     assert!(
         text.contains("references: extracted "),
         "totals close the projection"
@@ -48,6 +61,37 @@ fn human_output_projects_the_same_result() {
     assert!(
         !text.contains("feedback overflow"),
         "two items are not an overflow: {text}"
+    );
+
+    let (_code, json, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "observe",
+        "--format",
+        "json",
+    ]);
+    let mut recorded: BTreeMap<FindingKind, u64> = BTreeMap::new();
+    for finding in &report(&json).payload.findings {
+        if finding.effective_disposition == Disposition::Record {
+            let count = recorded.entry(finding.kind).or_default();
+            *count = count.saturating_add(1);
+        }
+    }
+    let listed: Vec<String> = recorded
+        .iter()
+        .map(|(kind, count)| format!("{} {count}", kind.as_ref()))
+        .collect();
+    assert!(
+        !listed.is_empty() && text.ends_with(&format!("\nrecords: {}\n", listed.join(", "))),
+        "the record-only kinds are named with their counts after the totals: {text}"
     );
 }
 
@@ -123,8 +167,10 @@ fn undeclared_identity_is_named_beside_the_external_count() {
     assert_eq!(code, 0);
     let text = String::from_utf8_lossy(&stdout);
     assert!(
-        text.contains("references: without a declared forge identity a same-repository URL"),
-        "an undeclared identity is named beside the count: {text}"
+        text.contains(
+            "references: without --repository <host>/<owner>/<name> --ref refs/heads/<branch> --default-branch-ref refs/heads/<default> (and --forge <dialect> on a self-hosted host) a same-repository URL counts as external"
+        ),
+        "the missing flags are named beside the count: {text}"
     );
     let declared: Vec<&str> = bare
         .iter()
@@ -146,13 +192,13 @@ fn undeclared_identity_is_named_beside_the_external_count() {
         "the foreign URL stays external: {text}"
     );
     assert!(
-        !text.contains("without a declared forge identity"),
+        !text.contains("--default-branch-ref refs/heads/<default>"),
         "a declared identity silences the line: {text}"
     );
 }
 
 #[test]
-fn pre_existing_findings_render_as_existing_rows_without_fix_or_notes() {
+fn pre_existing_findings_render_as_pre_existing_rows_with_the_kind_note() {
     let fx = fixture();
     let root = fx.root();
     fs::write(root.join("source.rs"), "pub fn untouched() {}\n").unwrap_or_default();
@@ -175,17 +221,20 @@ fn pre_existing_findings_render_as_existing_rows_without_fix_or_notes() {
     assert_eq!(code, 0);
     let text = String::from_utf8_lossy(&stdout);
     assert!(
-        text.starts_with("amiss: pass (fix 0, check 0, existing 1, errors 0, exit 0)"),
+        text.starts_with("amiss: pass (fix 0, check 0, pre-existing 1, errors 0, exit 0)"),
         "got: {text}"
     );
     assert!(
-        text.contains("Existing target \"docs/missing.md\" affected places 1"),
-        "the backlog renders under its own label: {text}"
+        text.contains(
+            "Pre-existing target \"docs/missing.md\" affected places 1\n  \"docs/guide.md\":3:23 explicit-target-missing path-not-found\n"
+        ),
+        "the backlog renders under its own label with its place: {text}"
     );
     assert!(!text.lines().any(|line| line.starts_with("Fix ")), "{text}");
-    assert!(
-        !text.contains("note explicit-target-missing:"),
-        "finding kinds stay out of the note lines: {text}"
+    assert_eq!(
+        text.matches("note explicit-target-missing:").count(),
+        1,
+        "the kind shown is explained once: {text}"
     );
     assert!(
         text.contains("findings: total "),
@@ -194,6 +243,10 @@ fn pre_existing_findings_render_as_existing_rows_without_fix_or_notes() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the window, its places, and the full replay in one run"
+)]
 fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
     let fx = fixture();
     let root = fx.root();
@@ -227,7 +280,7 @@ fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
         "only the first ten grouped feedback items are shown"
     );
     assert!(
-        text.starts_with("amiss: pass (fix 201, check 0, existing 1, errors 0, exit 0)"),
+        text.starts_with("amiss: pass (fix 201, check 0, pre-existing 1, errors 0, exit 0)"),
         "the header counts the complete grouped projection: {text}"
     );
     assert!(
@@ -235,17 +288,24 @@ fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
         "the fix window overflows without counting the backlog: {text}"
     );
     assert!(
-        text.contains("Existing target \"docs/missing.md\" affected places 1"),
+        text.contains("Pre-existing target \"docs/missing.md\" affected places 1"),
         "the backlog window survives two hundred introduced items: {text}"
     );
     assert!(
-        !text.contains("existing overflow"),
+        !text.contains("pre-existing overflow"),
         "one backlog item is not an overflow: {text}"
     );
     assert_eq!(
-        text.matches("explicit-target-missing").count(),
-        0,
-        "machine finding kinds stay out of the focused human projection"
+        text.lines()
+            .filter(|line| line.starts_with("  \"docs/"))
+            .count(),
+        11,
+        "one place under each shown row and no more: {text}"
+    );
+    assert_eq!(
+        text.matches("note explicit-target-missing:").count(),
+        1,
+        "the one kind is explained once however many rows show it: {text}"
     );
 
     let (_code, stdout, _stderr) = amiss(&[
@@ -287,7 +347,7 @@ fn human_feedback_stops_at_ten_items_with_explicit_overflow() {
     let fixes = text.lines().filter(|line| line.starts_with("Fix ")).count();
     let existing = text
         .lines()
-        .filter(|line| line.starts_with("Existing "))
+        .filter(|line| line.starts_with("Pre-existing "))
         .count();
     assert_eq!(
         (fixes, existing),
@@ -331,11 +391,11 @@ fn pre_existing_findings_render_as_existing_items() {
         assert_eq!(code, expected_exit, "profile {profile}");
         let text = String::from_utf8_lossy(&stdout);
         assert!(
-            text.contains("Existing target \"docs/setup.md\" affected places 1"),
+            text.contains("Pre-existing target \"docs/setup.md\" affected places 1"),
             "the backlog names its target under {profile}: {text}"
         );
         assert!(
-            text.contains("existing 1,"),
+            text.contains("pre-existing 1,"),
             "the header count agrees with the listed item under {profile}: {text}"
         );
     }
@@ -379,18 +439,180 @@ fn the_backlog_window_caps_at_ten_with_its_own_overflow() {
     assert_eq!(code, 0);
     let text = String::from_utf8_lossy(&stdout);
     assert!(
-        text.contains("existing 11,"),
+        text.contains("pre-existing 11,"),
         "the header counts all: {text}"
     );
     assert_eq!(
         text.lines()
-            .filter(|line| line.starts_with("Existing "))
+            .filter(|line| line.starts_with("Pre-existing "))
             .count(),
         10,
         "ten backlog rows and no more: {text}"
     );
     assert!(
-        text.contains("existing overflow: 1 more in the full report"),
+        text.contains("pre-existing overflow: 1 more in the full report"),
+        "{text}"
+    );
+}
+
+/// The one-commit README with a dead anchor and a dead path, checked over
+/// its own staged state under enforce: two rows, one place each with its
+/// position and reason, the kind explained once, and nothing else.
+#[test]
+fn every_row_names_its_places_reasons_and_meaning_verbatim() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(
+        root.join("README.md"),
+        "# Setup\n\nSee [steps](#setup-steps) and [the guide](docs/guide.md).\n",
+    )
+    .unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
+    let (code, stdout, stderr) = amiss(&[
+        "check",
+        "--repo",
+        &repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &base,
+        "--index",
+        "--profile",
+        "enforce",
+    ]);
+    assert_eq!((code, stderr.as_str()), (1, ""));
+    let expected = format!(
+        "amiss: fail (fix 0, check 0, pre-existing 2, errors 0, exit 1)\n\
+         Pre-existing target \"README.md\" affected places 1\n\
+         \x20 \"README.md\":3:5 explicit-target-missing heading-anchor-not-found\n\
+         Pre-existing target \"docs/guide.md\" affected places 1\n\
+         \x20 \"README.md\":3:31 explicit-target-missing path-not-found\n\
+         note explicit-target-missing: {}\n\
+         documents: discovered 1 scanned 1 unsupported 0 excluded 0 unlinked 0\n\
+         references: extracted 2 local 2 same-repo 0 external 0 unsupported 0 missing 2\n\
+         findings: total 2 fail 2 warn 0 record 0\n",
+        FindingKind::ExplicitTargetMissing.meaning()
+    );
+    assert_eq!(String::from_utf8(stdout).unwrap(), expected);
+}
+
+/// One target many documents point at is one row, and its places carry
+/// their own ten-line window; a full replay prints all of them.
+#[test]
+fn the_places_under_one_row_window_independently_of_the_rows() {
+    let dir = TempDir::new().unwrap();
+    let root = dir.path();
+    git(root, &["init", "-q"]);
+    fs::write(root.join("README.md"), "# R\n").unwrap();
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "base"]);
+    let base = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    for index in 0..12 {
+        fs::write(
+            root.join(format!("doc-{index}.md")),
+            "# D\n\n[gone](gone.md)\n",
+        )
+        .unwrap();
+    }
+    git(root, &["add", "."]);
+    git(root, &["commit", "-qm", "candidate"]);
+    let candidate = git(root, &["rev-parse", "HEAD"]).trim().to_owned();
+    let repo = amiss_fixtures::path_arg(root);
+    let args = |format: &'static str| {
+        vec![
+            "check".to_owned(),
+            "--repo".to_owned(),
+            repo.clone(),
+            "--object-format".to_owned(),
+            "sha1".to_owned(),
+            "--base".to_owned(),
+            base.clone(),
+            "--candidate".to_owned(),
+            candidate.clone(),
+            "--profile".to_owned(),
+            "observe".to_owned(),
+            "--format".to_owned(),
+            format.to_owned(),
+        ]
+    };
+    let human = args("human");
+    let shown: Vec<&str> = human.iter().map(String::as_str).collect();
+    let (code, stdout, stderr) = amiss(&shown);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    let text = String::from_utf8(stdout).unwrap();
+    assert!(
+        text.contains("Fix target \"gone.md\" affected places 12"),
+        "twelve documents naming one target are one row: {text}"
+    );
+    assert_eq!(
+        text.lines()
+            .filter(|line| line.starts_with("  \"doc-"))
+            .count(),
+        10,
+        "ten places under the row and no more: {text}"
+    );
+    assert!(
+        text.contains("  places overflow: 2 more in the full report"),
+        "the place window states what it hid: {text}"
+    );
+
+    let json = args("json");
+    let shown: Vec<&str> = json.iter().map(String::as_str).collect();
+    let (_code, report, _stderr) = amiss(&shown);
+    let report_path = format!("{repo}/one-target.json");
+    fs::write(&report_path, report).unwrap();
+    let (code, stdout, stderr) = amiss(&[
+        "render",
+        "--report",
+        &report_path,
+        "--format",
+        "human",
+        "--full",
+    ]);
+    assert_eq!((code, stderr.as_str()), (0, ""));
+    let text = String::from_utf8(stdout).unwrap();
+    assert_eq!(
+        text.lines()
+            .filter(|line| line.starts_with("  \"doc-"))
+            .count(),
+        12,
+        "the full replay prints every place: {text}"
+    );
+    assert!(!text.contains(" overflow:"), "{text}");
+}
+
+/// A path that exists under another case is missing, and the place says
+/// which spelling it nearly matched.
+#[test]
+fn a_case_mismatch_names_the_nearby_spelling() {
+    let fx = amiss_fixtures::commit_pair(
+        &[("docs/guide.md", "# Guide\n"), ("README.md", "# R\n")],
+        &[("README.md", "# R\n\n[g](docs/Guide.md)\n")],
+    )
+    .unwrap();
+    let (code, stdout, _stderr) = amiss(&[
+        "check",
+        "--repo",
+        &fx.repo,
+        "--object-format",
+        "sha1",
+        "--base",
+        &fx.base,
+        "--candidate",
+        &fx.candidate,
+        "--profile",
+        "enforce",
+    ]);
+    assert_eq!(code, 1);
+    let text = String::from_utf8_lossy(&stdout);
+    assert!(
+        text.contains(
+            "Fix target \"docs/Guide.md\" affected places 1\n  \"README.md\":3:1 explicit-target-missing path-not-found near \"docs/guide.md\"\n"
+        ),
         "{text}"
     );
 }
@@ -423,7 +645,7 @@ fn enforced_document(name: &str, body: &str, prefix: &str) -> (i32, String, Vec<
     let mut json_args = base_args.to_vec();
     json_args.extend(["--format", "json"]);
     let (_code, stdout, _stderr) = amiss(&json_args);
-    let report = crate::support::report(&stdout);
+    let report = report(&stdout);
     let mut constructs: Vec<String> = report
         .payload
         .observations

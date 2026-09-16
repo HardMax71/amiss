@@ -11,12 +11,13 @@ use amiss_wire::model::{
     BranchRef, Digest, ForgeDialect, ObjectFormat, Oid, OwnerId, RepoPath, RepoPathText,
     RepositoryIdentity, UtcInstant,
 };
-use strum::EnumString;
+use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 
 /// The canonical analysis-error taxonomy used by invocation refusals.
 pub(crate) use amiss_wire::report::AnalysisErrorCode as Code;
 
-pub(crate) const MALFORMED_OUTPUT_LINE: &str = "amiss: invalid invocation\n";
+/// One refused contract: the wire code and the human line naming the option.
+pub(crate) type Refusal = (Code, String);
 
 /// The closed grammar, verbatim. Help prints it directly, while a rejected
 /// human invocation prints it after the code lines; the documentation
@@ -63,10 +64,10 @@ amiss refs --report <path>
 amiss --help
 amiss --version";
 
-const HELP_FLAG: &str = "--help";
-const VERSION_FLAG: &str = "--version";
+const HELP_FLAGS: [&str; 2] = ["--help", "-h"];
+const VERSION_FLAGS: [&str; 2] = ["--version", "-V"];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumString)]
 #[strum(serialize_all = "kebab-case")]
 pub(crate) enum Verb {
     Check,
@@ -83,7 +84,7 @@ pub(crate) enum Verb {
     RecordSet,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, AsRefStr, EnumIter, EnumString, IntoStaticStr)]
 #[strum(serialize_all = "lowercase")]
 pub(crate) enum OutputFormat {
     Human,
@@ -220,35 +221,61 @@ pub(crate) struct Invocation {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Outcome {
-    Help,
+    /// The whole grammar, or one verb's lines of it.
+    Help {
+        verb: Option<Verb>,
+    },
     /// Carries no options, so a second token is an ordinary invalid invocation.
     Version,
-    /// Output selection itself is invalid: empty stdout, one fixed stderr
-    /// line, exit 2, and no envelope may be chosen by conflicting values.
-    MalformedOutputSelection,
+    /// Output selection itself is invalid: empty stdout, one stderr line
+    /// carrying the reason, exit 2, and no envelope may be chosen by
+    /// conflicting values.
+    MalformedOutputSelection {
+        reason: String,
+    },
     Rejected {
         format: OutputFormat,
-        codes: BTreeSet<Code>,
+        refusals: BTreeSet<Refusal>,
     },
     Accepted(Box<Command>),
 }
 
 #[must_use]
 pub(crate) fn parse(argv: &[OsString]) -> Outcome {
-    if let [only] = argv {
-        if only.to_str() == Some(HELP_FLAG) {
-            return Outcome::Help;
+    let words: Vec<Option<&str>> = argv.iter().map(|token| token.to_str()).collect();
+    match words.as_slice() {
+        [Some(flag)] if HELP_FLAGS.contains(flag) => return Outcome::Help { verb: None },
+        [Some(flag)] if VERSION_FLAGS.contains(flag) => return Outcome::Version,
+        [Some(verb), Some(flag)] if HELP_FLAGS.contains(flag) => {
+            if let Ok(verb) = verb.parse() {
+                return Outcome::Help { verb: Some(verb) };
+            }
         }
-        if only.to_str() == Some(VERSION_FLAG) {
-            return Outcome::Version;
-        }
+        _ => {}
     }
     let gathered = arguments::gather(argv);
-    let Some(format) = arguments::output_selection(&gathered.format) else {
-        return Outcome::MalformedOutputSelection;
+    let format = match arguments::output_selection(&gathered.format) {
+        Ok(format) => format,
+        Err(reason) => return Outcome::MalformedOutputSelection { reason },
     };
     match classify::command(&gathered, format) {
         Ok(command) => Outcome::Accepted(Box::new(command)),
-        Err(codes) => Outcome::Rejected { format, codes },
+        Err(refusals) => Outcome::Rejected { format, refusals },
     }
+}
+
+/// The lines of the grammar that spell one verb's form.
+#[must_use]
+pub(crate) fn verb_grammar(verb: Verb) -> String {
+    let mut inside = false;
+    GRAMMAR
+        .lines()
+        .filter(|line| {
+            if let Some(form) = line.strip_prefix("amiss ") {
+                inside = form.split_whitespace().next() == Some(verb.as_ref());
+            }
+            inside
+        })
+        .collect::<Vec<&str>>()
+        .join("\n")
 }

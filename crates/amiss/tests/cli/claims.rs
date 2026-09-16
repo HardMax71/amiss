@@ -72,8 +72,8 @@ fn a_broken_value_claim_warns_under_observe_and_fails_under_enforce() {
     assert_eq!(row["effective_disposition"], "fail");
 }
 
-/// The human projection groups the broken claim into one fix item without
-/// leaking the internal kind name.
+/// The human projection groups the broken claim into one untargeted fix
+/// item, and the place under it says which line the claim watches and why.
 #[test]
 fn a_broken_claim_lands_as_one_fix_item_in_human_output() {
     let fx = claim_fixture();
@@ -93,15 +93,22 @@ fn a_broken_claim_lands_as_one_fix_item_in_human_output() {
     assert_eq!(code, 0);
     let text = String::from_utf8_lossy(&stdout);
     assert!(
-        text.starts_with("amiss: pass (fix 1, check 0, existing 0, errors 0, exit 0)"),
+        text.starts_with("amiss: pass (fix 1, check 0, pre-existing 0, errors 0, exit 0)"),
         "got: {text}"
     );
     assert!(
-        text.contains("Fix target - affected places 1"),
-        "the claim finding groups into one untargeted fix item: {text}"
+        text.contains(
+            "Fix target - affected places 1\n  \"docs/claims.md\":3:1 claim-broken line-differs\n"
+        ),
+        "the claim finding groups into one untargeted fix item with its place: {text}"
     );
-    assert!(
-        !text.contains("claim-broken"),
-        "internal finding kinds stay out of the focused human projection: {text}"
+    assert_eq!(
+        text.matches(&format!(
+            "note claim-broken: {}\n",
+            amiss_wire::report::FindingKind::ClaimBroken.meaning()
+        ))
+        .count(),
+        1,
+        "the kind is explained once: {text}"
     );
 }

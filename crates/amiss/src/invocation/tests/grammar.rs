@@ -1,9 +1,10 @@
+use std::collections::BTreeSet;
 use std::ffi::OsString;
 
 use amiss_wire::controls::Profile;
 use amiss_wire::model::{Adapter, ForgeDialect, ObjectFormat};
 
-use crate::invocation::{CandidateSelector, Code, Outcome, OutputFormat, parse};
+use crate::invocation::{CandidateSelector, Code, Outcome, OutputFormat, Verb, parse};
 
 const BASE_A: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const HEAD_B: &str = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
@@ -52,10 +53,13 @@ fn parse_tokens(tokens: &[String]) -> Outcome {
 
 fn rejected_codes(outcome: Outcome) -> Vec<Code> {
     match outcome {
-        Outcome::Rejected { codes, .. } => codes.into_iter().collect(),
+        Outcome::Rejected { refusals, .. } => {
+            let codes: BTreeSet<Code> = refusals.into_iter().map(|(code, _reason)| code).collect();
+            codes.into_iter().collect()
+        }
         Outcome::Accepted(_)
-        | Outcome::Help
-        | Outcome::MalformedOutputSelection
+        | Outcome::Help { .. }
+        | Outcome::MalformedOutputSelection { .. }
         | Outcome::Version => {
             panic!("expected rejection, got {outcome:?}")
         }
@@ -476,6 +480,20 @@ fn emits_every_applicable_row_together() {
         rejected_codes(parse_tokens(&tokens)),
         vec![Code::InvalidInvocation, Code::InvalidProfile]
     );
+    let Outcome::Rejected { refusals, .. } = parse_tokens(&tokens) else {
+        panic!("expected rejection");
+    };
+    let reasons: Vec<&str> = refusals
+        .iter()
+        .map(|(_code, reason)| reason.as_str())
+        .collect();
+    assert!(
+        reasons.contains(&"unknown option \"--unknown\"")
+            && reasons
+                .iter()
+                .any(|reason| reason.starts_with("--profile must be observe")),
+        "every row carries the line naming its option: {reasons:?}"
+    );
 }
 
 #[test]
@@ -570,9 +588,11 @@ fn output_selection_follows_the_format_law() {
         with(&valid_pair(), &["--format", "json", "--format", "json"]),
         with(&valid_pair(), &["--format", "--explain-scope"]),
     ] {
-        assert_eq!(
-            parse_tokens(&malformed),
-            Outcome::MalformedOutputSelection,
+        assert!(
+            matches!(
+                parse_tokens(&malformed),
+                Outcome::MalformedOutputSelection { .. }
+            ),
             "tokens {malformed:?}"
         );
     }
@@ -945,10 +965,16 @@ fn classifies_the_forge_dialect_grammar() {
     );
 }
 
-/// The standalone forms are whole command lines, not options.
+/// The standalone forms are whole command lines, not options; a verb may
+/// ask for its own lines of the grammar.
 #[test]
 fn standalone_forms_are_the_entire_argument_vector() {
-    for (flag, expected) in [("--help", Outcome::Help), ("--version", Outcome::Version)] {
+    for (flag, expected) in [
+        ("--help", Outcome::Help { verb: None }),
+        ("-h", Outcome::Help { verb: None }),
+        ("--version", Outcome::Version),
+        ("-V", Outcome::Version),
+    ] {
         assert_eq!(parse(&argv(&[flag])), expected);
         for tokens in [
             vec![flag, flag],
@@ -962,6 +988,20 @@ fn standalone_forms_are_the_entire_argument_vector() {
             );
         }
     }
-    assert_ne!(parse(&argv(&["--Help"])), Outcome::Help);
+    for flag in ["--help", "-h"] {
+        assert_eq!(
+            parse(&argv(&["check", flag])),
+            Outcome::Help {
+                verb: Some(Verb::Check)
+            }
+        );
+        assert_eq!(
+            parse(&argv(&["locale-assess", flag])),
+            Outcome::Help {
+                verb: Some(Verb::LocaleAssess)
+            }
+        );
+    }
+    assert_ne!(parse(&argv(&["--Help"])), Outcome::Help { verb: None });
     assert_ne!(parse(&argv(&["--Version"])), Outcome::Version);
 }
