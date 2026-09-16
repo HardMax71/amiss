@@ -1,18 +1,15 @@
 amiss:
-  # The merge-request gate as a pinned remote include: consume from a tagged
-  # URL, set AMISS_VERSION to the exact reviewed release, and the two pins
-  # move together only on review. GIT_DEPTH 0 because the evaluation reads
-  # both commits' objects, not a diff.
-  image: buildpack-deps:stable-scm
+  image: buildpack-deps:stable-scm@sha256:ac978b7836573cd359152b362450d668e0a3e2b146f2348a60156aef043b100a
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   variables:
+    # the evaluation reads both commits' objects, not a diff
     GIT_DEPTH: "0"
   script:
     - |
       if [ -z "${AMISS_VERSION}" ]; then
         echo "set AMISS_VERSION to the exact reviewed Amiss release (vX.Y.Z)"
-        exit 1
+        exit 2
       fi
     - curl -fsSLO "https://github.com/HardMax71/amiss/releases/download/${AMISS_VERSION}/amiss-linux-x86_64"
     - curl -fsSLO "https://github.com/HardMax71/amiss/releases/download/${AMISS_VERSION}/SHA256SUMS"
@@ -25,8 +22,11 @@ amiss:
         --profile "${AMISS_PROFILE:-observe}" --format json > amiss-report.json
       status=$?
       set -e
-      ./amiss-linux-x86_64 render --report amiss-report.json \
-        --format codequality > gl-code-quality-report.json || true
+      ./amiss-linux-x86_64 render --report amiss-report.json --format junit > amiss-junit.xml || true
+      if [ "$status" != 2 ]; then
+        ./amiss-linux-x86_64 render --report amiss-report.json \
+          --format codequality > gl-code-quality-report.json || true
+      fi
       exit "$status"
   artifacts:
     when: always
@@ -34,3 +34,4 @@ amiss:
       - amiss-report.json
     reports:
       codequality: gl-code-quality-report.json
+      junit: amiss-junit.xml
