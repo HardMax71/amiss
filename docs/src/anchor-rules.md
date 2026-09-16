@@ -46,9 +46,10 @@ carried rather than one being chosen for the reader.
 ## What a document declares
 
 An identity can also be written down rather than derived, and then it belongs to the
-author rather than to the renderer. Each of these spellings joins the union whatever
-renderer reads the file, because accepting an identity a given renderer would not publish
-can only leave a finding unreported, never invent one.
+author rather than to the renderer. Each of these spellings joins the union for every
+renderer, because accepting an identity a given renderer would not publish can only leave a
+finding unreported, never invent one. One row is gated on a file in the tree, the way the
+route rules are; the rest are read wherever their profile is.
 
 <!-- amiss-doc-contract:declared-identities:start -->
 | Declaration | Spelling | Read in | Selected by |
@@ -56,11 +57,13 @@ can only leave a finding unreported, never invent one.
 | `html-id` | an `id` or `name` attribute on a raw HTML element | `markdown` | any tree |
 | `attr-list` | an attribute block alone on a block's last line, `{#id}` | `markdown` | any tree |
 | `attr-list-inline` | an attribute block directly after an inline construct, `**text**{#id}` | `markdown` | any tree |
+| `mkdocs-snippet` | a `--8<--` line naming a quoted path, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
 | `mdx-comment` | an MDX comment ending a heading, `{/* #id */}` | `mdx` | any tree |
 | `mdx-heading-id` | an MDX expression ending a heading, `{#id}` | `mdx` | any tree |
 | `jsx-id` | an `id` attribute on a lowercase JSX element | `mdx` | any tree |
 | `mdx-partial` | a default import of a relative document, rendered as an element | `mdx` | any tree |
-| `mkdocs-snippet` | a `--8<--` line naming a quoted path, alone on the line | `markdown` | `mkdocs.yml`, `mkdocs.yaml` |
+| `asciidoc-anchor` | a block anchor alone on its line, `[[id]]` or `[#id]` | `asciidoc` | any tree |
+| `rst-target` | an internal hyperlink target, `.. _name:` | `rst` | any tree |
 <!-- amiss-doc-contract:declared-identities:end -->
 
 `html-id` is every `id` and `name` a raw HTML region carries, wherever in the document it
@@ -123,6 +126,15 @@ where MkDocs runs, so a page whose whole body is `--8<-- "CONTRIBUTING.md"` publ
 the repository's own contributing guide publishes. Only the single-line form with a quoted
 path is read; a path carrying a section coordinate names part of a file, which this engine
 cannot reproduce, so that edge is refused and absence in the page stays undecided.
+
+The last two rows belong to the other two profiles. `asciidoc-anchor` is the anchor an
+AsciiDoc author writes on a line of its own, `[[id]]` or `[#id]`, in either case with the
+identity being everything before the first comma; a section title that carries one publishes
+it beside the identity the `asciidoctor` rule generates for the title text.
+`rst-target` is the internal hyperlink target, `.. _name:`, which Docutils turns into an
+identity on whatever follows it. That name is also what a Sphinx `:ref:` looks up, and
+[Resolution](resolution.md) describes that lookup, which is a different question from
+whether a fragment names an identity.
 
 A heading can also be written as raw HTML, which many projects do for a centered title.
 github.com anchors those, because its filter runs over the rendered document and sees
