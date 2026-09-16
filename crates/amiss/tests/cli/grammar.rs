@@ -1,3 +1,5 @@
+use std::process::{Command, Stdio};
+
 use amiss_wire::report::AnalysisErrorCode;
 
 use crate::support::{amiss, fixture, payload, report};
@@ -93,6 +95,30 @@ fn the_version_query_names_the_engine_that_writes_the_reports() {
         .unwrap();
     assert_eq!(named, format!("amiss {version}"));
     assert_eq!(engine, format!("engine {digest}"));
+}
+
+/// A reader piping the grammar through `head` closes stdout mid-print. The
+/// printing stops; the query still succeeded, and a closed pipe is not a panic.
+#[test]
+fn a_closed_pipe_ends_the_grammar_and_not_the_query() {
+    for argv in [
+        ["--help"].as_slice(),
+        &["--version"],
+        &["check", "--help"],
+        &["render", "-h"],
+    ] {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_amiss"))
+            .args(argv)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn amiss");
+        drop(child.stdout.take());
+        let output = child.wait_with_output().expect("collect amiss");
+        assert_eq!(output.status.code(), Some(0), "{argv:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(!stderr.contains("panicked"), "{argv:?}: {stderr}");
+    }
 }
 
 /// The standalone queries are not flags and carry nothing of their own.

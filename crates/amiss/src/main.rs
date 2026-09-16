@@ -68,11 +68,7 @@ fn apply_sandbox() {
 #[cfg(not(unix))]
 const fn apply_sandbox() {}
 
-#[expect(
-    clippy::print_stderr,
-    clippy::print_stdout,
-    reason = "contract output channels"
-)]
+#[expect(clippy::print_stderr, reason = "the contract diagnostics channel")]
 fn main() -> ExitCode {
     apply_sandbox();
     let mut reserve = BufWriter::with_capacity(report::FATAL_SCRATCH_BYTES, std::io::stdout());
@@ -83,11 +79,7 @@ fn main() -> ExitCode {
     let failure = ExitCode::from(ExitClass::Failure.code());
     match invocation::parse(&argv) {
         Outcome::Help { verb } => {
-            println!(
-                "{}",
-                verb.map_or_else(|| invocation::GRAMMAR.to_owned(), invocation::verb_grammar)
-            );
-            ExitCode::from(ExitClass::Success.code())
+            answer(&verb.map_or_else(|| invocation::GRAMMAR.to_owned(), invocation::verb_grammar))
         }
         Outcome::Version => version(),
         Outcome::MalformedOutputSelection { reason } => {
@@ -629,13 +621,22 @@ fn diagnose_emission(result: std::io::Result<()>) {
 }
 
 /// The second line is the `engine_digest` the release manifest pins and every report carries.
-#[expect(clippy::print_stdout, reason = "the identity query's output channel")]
 fn version() -> ExitCode {
-    println!("amiss {}", env!("CARGO_PKG_VERSION"));
-    match engine_provenance() {
-        Some(engine) => println!("engine {}", engine.digest),
-        None => println!("engine unavailable"),
-    }
+    let engine = engine_provenance().map_or_else(
+        || "engine unavailable".to_owned(),
+        |engine| format!("engine {}", engine.digest),
+    );
+    answer(&format!("amiss {}\n{engine}", env!("CARGO_PKG_VERSION")))
+}
+
+/// A query answers on stdout and succeeds. A consumer closing the pipe, `head`
+/// among them, ends the printing and not the answer.
+fn answer(text: &str) -> ExitCode {
+    use std::io::Write as _;
+
+    let mut out = std::io::stdout();
+    let _closed = writeln!(out, "{text}");
+    let _flushed = out.flush();
     ExitCode::from(ExitClass::Success.code())
 }
 
