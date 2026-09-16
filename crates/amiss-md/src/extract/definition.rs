@@ -74,6 +74,7 @@ pub(super) fn definitions(tree: &Node, suffix: &str) -> Result<CollectedDefiniti
             | Kind::TableCell
             | Kind::Html
             | Kind::Mdx { .. }
+            | Kind::MdxElement { .. }
             | Kind::Text(_)
             | Kind::InlineCode(_)
             | Kind::Link { .. }

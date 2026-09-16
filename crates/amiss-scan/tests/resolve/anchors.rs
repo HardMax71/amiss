@@ -155,29 +155,39 @@ fn publishes(bed: &mut crate::support::Bed, document: &str, target: &str, fragme
     false
 }
 
+/// One matrix over the MDX identity fixture: every fragment a target publishes
+/// and every one it proves absent. `page.mdx` is the heading expression, where
 /// Docusaurus escapes the classic `{#id}` before MDX parses the file and reads
-/// the identity back out of the heading text, so an MDX heading publishes what
-/// its expression declares and the slug it replaces is gone. An expression
-/// that declares no identity leaves the slug standing.
+/// the identity back out of the heading text, so the identity replaces the slug
+/// and an expression declaring none leaves the slug standing. `element.mdx` is
+/// the JSX `id`, read from a plain element and from one nested inside another,
+/// and never from a component or from under one, because what a component
+/// renders is unknown here.
 #[test]
-fn an_mdx_heading_publishes_the_identity_its_expression_declares() {
+fn an_mdx_document_publishes_the_identities_it_writes_down() {
     let mut bed = bed_at(
         amiss_fixtures::mdx_identities().expect("the fixture stages"),
         0,
         ScanLimits::CONTRACT,
         GitLimits::CONTRACT,
     );
-    for (fragment, published) in [
-        ("custom-id", true),
-        ("value", true),
-        ("price", false),
-        ("late", false),
-        ("missing-id", false),
+    for (target, fragment, published) in [
+        ("docs/page.mdx", "custom-id", true),
+        ("docs/page.mdx", "value", true),
+        ("docs/page.mdx", "price", false),
+        ("docs/page.mdx", "late", false),
+        ("docs/page.mdx", "missing-id", false),
+        ("docs/element.mdx", "node-env", true),
+        ("docs/element.mdx", "outer", true),
+        ("docs/element.mdx", "inner", true),
+        ("docs/element.mdx", "component", false),
+        ("docs/element.mdx", "under-component", false),
+        ("docs/element.mdx", "absent", false),
     ] {
         assert_eq!(
-            publishes(&mut bed, "guide.mdx", "docs/page.mdx", fragment),
+            publishes(&mut bed, "guide.mdx", target, fragment),
             published,
-            "{fragment}"
+            "{target}#{fragment}"
         );
     }
 }
