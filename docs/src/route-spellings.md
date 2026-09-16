@@ -132,6 +132,22 @@ the family path and a Sphinx `:doc:` target's is the docname under `conf.py`, be
 author never meant a sibling file. A Docusaurus bare path keeps the sibling as its intent,
 because Docusaurus does try the sibling first.
 
+One opening is not a path under any rule. A bundler's inline request syntax reserves it for
+the loaders the request disables, so `[assets](!file-loader!./asset.pdf)` names a loader chain
+ending in a resource rather than a file. That is an `invalid-reference` and not a missing path
+with a loader name inside it. Only the opening is read, so a name carrying the character
+anywhere else is an ordinary path.
+
+<!-- amiss-doc-contract:bundler-requests:start -->
+| Bundler | Inline request opens with |
+| --- | --- |
+| `webpack` | `!`, `-!` |
+<!-- amiss-doc-contract:bundler-requests:end -->
+
+The two forms webpack documents for its own loaders are both here: `!` disables the
+configured normal loaders and `-!` the pre-loaders, and the `!!` that disables every loader
+opens with the first of them.
+
 ## What this costs
 
 A repository with no site at all now resolves `./guide` when `guide.md` exists, and on

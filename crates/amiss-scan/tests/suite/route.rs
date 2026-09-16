@@ -338,7 +338,9 @@ fn an_antora_component_anchors_resource_ids_at_the_family_directory() {
 /// and images alike, a `./` destination stays beside the document, and a URL
 /// is external whatever its last segment spells. The
 /// intent keeps the spelling the author wrote while the resolution names the
-/// file that answered, and a document outside the site gains nothing.
+/// file that answered, and a document outside the site gains nothing. A
+/// webpack inline request is a path under no site at all, while a name that
+/// carries a bang past its opening is a path like any other.
 #[test]
 fn a_docusaurus_site_answers_bare_paths_from_its_content_root_and_the_site_alias() {
     let chain = amiss_fixtures::docusaurus_site().expect("the fixture stages");
@@ -401,6 +403,13 @@ fn a_docusaurus_site_answers_bare_paths_from_its_content_root_and_the_site_alias
             Some("@site/static/img/logo.png"),
             ResolutionTag::Missing,
             Some("@site/static/img/logo.png"),
+        ),
+        row("README.md", None, ResolutionTag::Invalid, None),
+        row(
+            "README.md",
+            Some("weird!name.md"),
+            ResolutionTag::Resolved,
+            Some("weird!name.md"),
         ),
     ]);
     assert_eq!(outcomes(&chain), want);

@@ -117,6 +117,21 @@ const DOCUSAURUS_CONTENT_ROOTS: [&[&str]; 4] = [
     &["versioned_docs", "*"],
 ];
 
+/// The openings a bundler's own inline request syntax reserves, which no tree
+/// answers: webpack reads a leading `!` as the loaders it disables and the
+/// rest of the string as a loader chain ending in the resource.
+pub const BUNDLER_REQUESTS: [(&str, &[&str]); 1] = [("webpack", &["!", "-!"])];
+
+/// Whether a bundler owns this destination outright. Only the opening is read,
+/// so a file whose name carries the character anywhere else is still a path.
+#[must_use]
+pub fn bundler_request(path_part: &str) -> bool {
+    BUNDLER_REQUESTS
+        .iter()
+        .flat_map(|(_, openings)| openings.iter())
+        .any(|opening| path_part.starts_with(opening))
+}
+
 /// Every source path a modelled router would serve for this destination, in a
 /// fixed order and without the destination itself.
 #[must_use]
