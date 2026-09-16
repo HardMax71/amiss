@@ -404,9 +404,6 @@ pub struct DeclarationRule {
     pub declared_by: &'static [&'static str],
 }
 
-/// Every way the Markdown and MDX profiles let a document name its own
-/// identities. Each one joins the union beside the renderer rules, so a rule
-/// here can only grow the set an anchor may match.
 /// The snippet syntax belongs to a mkdocs extension, so it is read only under
 /// the file that declares mkdocs; without one the line is ordinary text.
 pub(crate) const MKDOCS_SNIPPET: DeclarationRule = DeclarationRule {
@@ -416,7 +413,11 @@ pub(crate) const MKDOCS_SNIPPET: DeclarationRule = DeclarationRule {
     declared_by: &["mkdocs.yml", "mkdocs.yaml"],
 };
 
-pub const DECLARATIONS: [DeclarationRule; 8] = [
+/// Every way a document names its own identities rather than leaving them to a
+/// renderer's slug, grouped by the profile that reads each one. Each joins the
+/// union beside the renderer rules, so a rule here can only grow the set an
+/// anchor may match.
+pub const DECLARATIONS: [DeclarationRule; 10] = [
     DeclarationRule {
         name: "html-id",
         spelling: "an `id` or `name` attribute on a raw HTML element",
@@ -435,6 +436,7 @@ pub const DECLARATIONS: [DeclarationRule; 8] = [
         adapters: &[Adapter::Markdown],
         declared_by: &[],
     },
+    MKDOCS_SNIPPET,
     DeclarationRule {
         name: "mdx-comment",
         spelling: "an MDX comment ending a heading, `{/* #id */}`",
@@ -459,5 +461,16 @@ pub const DECLARATIONS: [DeclarationRule; 8] = [
         adapters: &[Adapter::Mdx],
         declared_by: &[],
     },
-    MKDOCS_SNIPPET,
+    DeclarationRule {
+        name: "asciidoc-anchor",
+        spelling: "a block anchor alone on its line, `[[id]]` or `[#id]`",
+        adapters: &[Adapter::AsciiDoc],
+        declared_by: &[],
+    },
+    DeclarationRule {
+        name: "rst-target",
+        spelling: "an internal hyperlink target, `.. _name:`",
+        adapters: &[Adapter::Rst],
+        declared_by: &[],
+    },
 ];
