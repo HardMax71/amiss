@@ -51,7 +51,7 @@ amiss check --repo . --object-format sha1 \
 
 The first line is the verdict, `amiss: pass (fix 0, check 0, existing 0, errors 0, exit 0)`
 on a repository with nothing wrong. A Fix is a reference this change broke. A Check is a file
-that changed under a paragraph that did not, listed for a person to read. Existing is the
+that changed under a paragraph that did not, listed for a person to read. Pre-existing is the
 backlog, the problems that were already there before this change. Exit 0 means the run
 completed and nothing blocks. Exit 1 means a finding blocks. Exit 2 means the run itself
 could not be trusted, so there is no verdict.
@@ -59,7 +59,7 @@ could not be trusted, so there is no verdict.
 There is no ignore file, no exclude list, and no way to silence one finding. The nine skipped
 directory names (`node_modules`, `vendor`, `target`, `tests` and the rest) are fixed, and a
 run always reads the whole repository. A repository with a backlog ramps with
-`--profile enforce-introduced`, which blocks what a change introduces and keeps the Existing
+`--profile enforce-introduced`, which blocks what a change introduces and keeps the pre-existing
 rows as warnings until they are worked off.
 
 In CI the same engine ships as an action that derives both commits from the event and
