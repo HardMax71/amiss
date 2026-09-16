@@ -189,6 +189,21 @@ anchor on an AsciiDoc target resolves through the Asciidoctor rule in
 [What twelve renderers call a heading](anchor-rules.md), which is the only rule whose separator
 is `_` and whose identities all carry a prefix.
 
+An AsciiDoc document publishes three identities a cross reference can name. A block anchor,
+`[#install]` or `[[install]]` on a line of its own, and an inline anchor, `[[remove-refs]]` in
+the flow of a list item or a paragraph, are identities as written. A section title is the
+reference text a natural cross reference names, so `<<API entrypoints>>` reaches the section
+titled `API entrypoints` however far down the page it sits, which is the reverse lookup
+Asciidoctor runs when the target is no known ID. It runs that lookup only where the target
+carries a space or a capital, so a title carrying neither publishes nothing beyond the
+identity the renderer rules already give it, and an inline anchor is read only where its ID
+follows Asciidoctor's own grammar, since that scan runs over prose rather than over a line
+that carries nothing else. A paragraph whose first line is indented is literal text, rendered
+as the characters it holds, so nothing inside it is a reference or an anchor at all: the
+`s!Figure (\d+)!<<fig-$1>>!g` in a shell command in Asciidoctor's own migration page is not a
+cross reference to `fig-$1`. An indented line carrying a list marker is a list item, which
+Asciidoctor checks first.
+
 A reStructuredText heading anchor resolves through the Docutils rule in
 [What twelve renderers call a heading](anchor-rules.md), and the labels a document declares
 outright with `.. _name:` resolve as themselves. The two Sphinx roles are modelled by
