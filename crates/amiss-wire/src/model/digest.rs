@@ -1,6 +1,5 @@
 use core::{fmt, str::FromStr};
 
-use hex_fmt::HexFmt;
 use serde_with::{DeserializeFromStr, SerializeDisplay};
 
 /// The domain for exact raw evidence bytes, including resolved blobs and build lockfiles.
@@ -38,7 +37,10 @@ impl From<[u8; 32]> for Digest {
 
 impl fmt::Display for Digest {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(formatter, "sha256:{}", HexFmt(self.0))
+        let mut spelled = [0_u8; 64];
+        hex::encode_to_slice(self.0, &mut spelled).map_err(|_defect| fmt::Error)?;
+        formatter.write_str("sha256:")?;
+        formatter.write_str(core::str::from_utf8(&spelled).map_err(|_defect| fmt::Error)?)
     }
 }
 
