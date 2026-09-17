@@ -426,10 +426,7 @@ const MKDOCS_DIRECTIVE: DeclarationRule = DeclarationRule {
     declared_by: crate::route::MKDOCS.declared_by,
 };
 
-/// The file that declares Sphinx, which is what the two `MyST` rows are read
-/// under. `sphinx_governed` answers the same question from the route table,
-/// and a test holds the two spellings together.
-const SPHINX_DECLARED_BY: &[&str] = &["conf.py"];
+const SPHINX_DECLARED_BY: &[&str] = crate::route::SPHINX.declared_by;
 
 /// Every way a document names its own identities rather than leaving them to a
 /// renderer's slug, plus the two spellings a declared generator owns, grouped
