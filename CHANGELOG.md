@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.29.0](https://github.com/HardMax71/amiss/compare/v0.28.0...v0.29.0) - 2026-09-17
+
+### Changes
+
+- quote the verdict line the run actually prints
+- read the mkdocs gate from the rule that already owns it
+- read the classic heading id MDX writes as an expression
+- read a bundler's inline request as the syntax it is
+- let the parser say what a line number spells
+- let the hex library say what a byte path spells
+- let a closed pipe end the grammar and not the query
+- name the refused contract and the affected places
+- bind the skipped directory names to the scanner constant
+- anchor destinations where a declared generator looks
+- *(action)* always name the report path in the report output
+- share one CI workflow, take the hook profile from args, pin GitLab
+- *(action)* deepen shallow checkouts and always export the exit class
+- put a working first screen on the README and a new quickstart
+- give the identity table its AsciiDoc and reStructuredText rows
+- read the attribute block that names an inline construct
+- expand a mkdocs snippet line into the page that carries it
+- expand an MDX partial into the page that renders it
+- publish the id a plain JSX element writes in MDX
+- publish the identities an asciidoc cross reference names
+- say an unexpanded site alias cannot be answered
+- read a raw html destination the way a mkdocs page is served
+- say how to unblock a repository or object-store refusal
+- spell the report through serde_json's sorted value tree
+
 ## [0.28.0](https://github.com/HardMax71/amiss/compare/v0.27.0...v0.28.0) - 2026-09-16
 
 ### Changes
