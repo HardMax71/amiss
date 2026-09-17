@@ -149,8 +149,9 @@ pub struct HeadingAttribute {
     pub suffix: String,
 }
 
-/// Where a heading was written. Only some renderers build an identity from one
-/// written as raw HTML, so the two are kept apart in one ordered list.
+/// Where a heading was written. Renderers disagree about which of these carry
+/// an identity, a raw-HTML heading and a definition-list term above all, so
+/// they are kept apart in one ordered list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, strum::AsRefStr, strum::IntoStaticStr)]
 #[strum(serialize_all = "kebab-case")]
 pub enum HeadingSource {
@@ -159,6 +160,7 @@ pub enum HeadingSource {
     AsciiDoc,
     Rst,
     RawHtml,
+    DefinitionTerm,
 }
 
 /// One heading's rendered text content, in document order with its siblings.

@@ -18,9 +18,10 @@ fn block_and_heading_names_are_nonempty_and_distinct() {
         HeadingSource::AsciiDoc,
         HeadingSource::Rst,
         HeadingSource::RawHtml,
+        HeadingSource::DefinitionTerm,
     ]
     .map(Into::<&'static str>::into);
-    for table in [&blocks, &sources] {
+    for table in [blocks.as_slice(), sources.as_slice()] {
         assert!(table.iter().all(|name| !name.is_empty()));
         let unique: BTreeSet<&str> = table.iter().copied().collect();
         assert_eq!(unique.len(), table.len(), "{table:?}");

@@ -20,12 +20,51 @@ pub(super) fn markdown_heading(node: &Node) -> Heading {
     }
 }
 
-/// The identity a block's own final line declares. `attr_list` applies a block
-/// that stands alone on the last line to the block itself, and applies nothing
-/// to one that merely trails other text, which is what the extension does.
-pub(super) fn paragraph_attribute(node: &Node) -> Option<String> {
-    let last = trailing_text(node)?.trim_end().lines().next_back()?.trim();
-    let inner = last.strip_prefix('{')?.strip_suffix('}')?;
+/// The identities a block's own outer lines declare. `attr_list` applies a
+/// block standing alone on the last line to the block itself, `attrs_block`
+/// applies one standing alone above the block to what follows, and neither
+/// reads one that merely trails other text. A block that is nothing but an
+/// attribute block is its own last line, so it is read once.
+pub(super) fn paragraph_attribute(node: &Node) -> Vec<String> {
+    let above = leading_text(node)
+        .filter(|text| text.lines().nth(1).is_some())
+        .and_then(|text| attribute_line(text.lines().next()));
+    let below =
+        trailing_text(node).and_then(|text| attribute_line(text.trim_end().lines().next_back()));
+    above.into_iter().chain(below).collect()
+}
+
+/// The terms a definition list writes, which Hugo publishes an identity for
+/// under `autoDefinitionTermID`.
+pub(super) fn definition_terms(node: &Node) -> Vec<Heading> {
+    terms(&text_content(node))
+        .into_iter()
+        .map(|text| Heading {
+            text: text.to_owned(),
+            attribute: None,
+            source: HeadingSource::DefinitionTerm,
+            span: node.span,
+        })
+        .collect()
+}
+
+/// Each term is the line above a line opening a definition, so a second
+/// definition under one term names no new term.
+fn terms(content: &str) -> Vec<&str> {
+    let mut found = Vec::new();
+    let mut above: Option<&str> = None;
+    for line in content.lines() {
+        let defines = line.starts_with(": ") || line.starts_with(":\t");
+        if defines && let Some(term) = above.map(str::trim).filter(|term| !term.is_empty()) {
+            found.push(term);
+        }
+        above = (!defines).then_some(line);
+    }
+    found
+}
+
+fn attribute_line(line: Option<&str>) -> Option<String> {
+    let inner = line?.trim().strip_prefix('{')?.strip_suffix('}')?;
     attribute_id(inner)
 }
 
@@ -113,6 +152,16 @@ fn trailing_text(node: &Node) -> Option<&str> {
     }
 }
 
+/// The literal text a block opens with, which is where `attrs_block` writes
+/// the identity of the block under it.
+fn leading_text(node: &Node) -> Option<&str> {
+    if let Kind::Text(value) = &node.children.first()?.kind {
+        Some(value.as_str())
+    } else {
+        None
+    }
+}
+
 /// Splits a trailing attribute block from the heading text. The block is
 /// recognized in the trailing literal text and removed from the flattened
 /// content, so the text a renderer that ignores the syntax reads is `text`
@@ -160,7 +209,9 @@ fn attribute_id(inner: &str) -> Option<String> {
         return None;
     }
     let mut found: Option<String> = None;
-    for item in inner.split_whitespace() {
+    let mut rest = inner;
+    while let Some((item, tail)) = attribute_item(rest) {
+        rest = tail;
         let value = if let Some(bare) = item.strip_prefix('#') {
             bare
         } else if let Some(raw) = item.strip_prefix("id=") {
@@ -176,4 +227,27 @@ fn attribute_id(inner: &str) -> Option<String> {
         found = Some(value.to_owned());
     }
     found
+}
+
+/// One attribute and whatever follows it. A quoted value is one attribute
+/// however many spaces it holds, which is what the extension's own scanner
+/// reads and how `{ #with-pip data-toc-label="with pip" }` keeps its identity.
+fn attribute_item(text: &str) -> Option<(&str, &str)> {
+    let start = text.trim_start();
+    if start.is_empty() {
+        return None;
+    }
+    let quoted = start
+        .split_once('=')
+        .filter(|(key, _)| !key.contains(char::is_whitespace))
+        .and_then(|(key, value)| {
+            let opening = value
+                .chars()
+                .next()
+                .filter(|ch| *ch == '"' || *ch == '\'')?;
+            let closing = value.get(1..)?.find(opening)?;
+            key.len().checked_add(closing)?.checked_add(3)
+        });
+    let width = quoted.unwrap_or_else(|| start.find(char::is_whitespace).unwrap_or(start.len()));
+    Some((start.get(..width)?, start.get(width..)?))
 }

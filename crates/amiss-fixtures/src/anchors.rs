@@ -80,22 +80,37 @@ const MKDOCS_SNIPPETS: [(&str, Staged<'static>); 8] = [
     ),
 ];
 
-/// A mkdocs site under `site/` whose API page is a generator instruction:
-/// one heading the page writes itself and a body the generator fills in.
-/// `README.md` links the heading, an identity only the generator knows, and a
-/// heading an ordinary page never had. `note.md` opens an admonition fence,
-/// which names no generator, and `outside/api.md` writes the same instruction
-/// where no `mkdocs.yml` governs it.
-const MKDOCS_GENERATED: [(&str, Staged<'static>); 6] = [
+/// A mkdocs site under `site/` whose pages take identities from a generator,
+/// a hook and an extension: the API page is an instruction with one heading it
+/// writes itself, `settings.md` is a heading a hook expands, and `tabs.md`
+/// opens a content tab. `README.md` links each of those, an identity only a
+/// plugin knows, and a heading an ordinary page never had. `note.md` opens an
+/// admonition fence, which names no generator, and the two pages under
+/// `outside/` write the same spellings where no `mkdocs.yml` governs them.
+const MKDOCS_GENERATED: [(&str, Staged<'static>); 9] = [
     (
         "README.md",
         Staged::File(
             b"[a](site/docs/api.md#widgets-api)\n\n[b](site/docs/api.md#widgets.core.Widget)\n\n\
               [c](site/docs/guide.md#absent)\n\n[d](site/docs/note.md#absent)\n\n\
-              [e](outside/api.md#widgets.core.Widget)\n",
+              [e](outside/api.md#widgets.core.Widget)\n\n\
+              [f](site/docs/settings.md#config.enabled)\n\n[g](site/docs/tabs.md#tabs-latest)\n\n\
+              [h](outside/tabs.md#tabs-latest)\n",
         ),
     ),
     ("site/mkdocs.yml", Staged::File(b"site_name: widgets\n")),
+    (
+        "site/docs/settings.md",
+        Staged::File(b"# Settings\n\n#### <!-- md:setting config.enabled -->\n\nText.\n"),
+    ),
+    (
+        "site/docs/tabs.md",
+        Staged::File(b"# Tabs\n\n=== \"Latest\"\n\n    Install it.\n"),
+    ),
+    (
+        "outside/tabs.md",
+        Staged::File(b"# Tabs\n\n=== \"Latest\"\n\n    Install it.\n"),
+    ),
     (
         "site/docs/api.md",
         Staged::File(
@@ -110,6 +125,28 @@ const MKDOCS_GENERATED: [(&str, Staged<'static>); 6] = [
     (
         "outside/api.md",
         Staged::File(b"# Widgets API\n\n::: widgets.core\n"),
+    ),
+];
+
+/// A tree whose identities are written as definition-list terms, which one
+/// renderer publishes beside the headings. `README.md` links a term the page
+/// writes, a term it never wrote, and the same identity on a page that holds
+/// no definition list at all.
+const DEFINITION_TERMS: [(&str, Staged<'static>); 3] = [
+    (
+        "README.md",
+        Staged::File(
+            b"[a](docs/options.md#background-color)\n\n[b](docs/options.md#absent-term)\n\n\
+              [c](docs/guide.md#background-color)\n",
+        ),
+    ),
+    (
+        "docs/options.md",
+        Staged::File(b"# Options\n\nbackground color\n: The colour behind the image.\n"),
+    ),
+    (
+        "docs/guide.md",
+        Staged::File(b"# Guide\n\nbackground color is a setting.\n"),
     ),
 ];
 
@@ -160,6 +197,13 @@ pub fn mkdocs_generated() -> std::io::Result<CommitChain> {
 /// Any filesystem failure.
 pub fn sphinx_myst() -> std::io::Result<CommitChain> {
     staged_repository(&SPHINX_MYST)
+}
+
+/// # Errors
+///
+/// Any filesystem failure.
+pub fn definition_terms() -> std::io::Result<CommitChain> {
+    staged_repository(&DEFINITION_TERMS)
 }
 
 /// # Errors
